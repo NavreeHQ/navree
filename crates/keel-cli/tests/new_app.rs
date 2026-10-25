@@ -110,6 +110,24 @@ fn a_published_keel_is_a_version_requirement() {
     );
 }
 
+/// `canonicalize()` on Windows gives verbatim paths (`\\?\C:\..`), which
+/// cargo rejects in a `path` dependency ("invalid path url").
+#[test]
+fn verbatim_windows_paths_become_plain_paths() {
+    for (path, expected) in [
+        (
+            r"\\?\C:\src\keel\crates\keel",
+            r#"{ path = "C:/src/keel/crates/keel" }"#,
+        ),
+        (
+            r"\\?\UNC\server\share\keel\crates\keel",
+            r#"{ path = "//server/share/keel/crates/keel" }"#,
+        ),
+    ] {
+        assert_eq!(KeelSource::Path(PathBuf::from(path)).dependency(), expected);
+    }
+}
+
 #[test]
 fn keel_path_accepts_the_repository_or_the_facade_crate() {
     let repo = std::path::absolute(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();

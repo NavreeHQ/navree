@@ -8,6 +8,7 @@ use std::time::Duration;
 use axum::handler::Handler;
 use axum::routing::{MethodFilter, MethodRouter};
 use http::Method;
+use keel_kernel::ModuleId;
 
 use crate::Guard;
 
@@ -205,6 +206,9 @@ pub struct RouteMeta {
     pub body_limit: Option<usize>,
     /// The module that registered the route (set when mounted).
     pub module: Option<&'static str>,
+    /// The id of that module (set when mounted): [`Scoped`](crate::Scoped)
+    /// resolves providers with its visibility.
+    pub module_id: Option<ModuleId>,
     /// The mounted path, e.g. `/api/v1/deals/{id}` (set when mounted).
     pub full_path: String,
     /// The HTTP method, e.g. `GET`.

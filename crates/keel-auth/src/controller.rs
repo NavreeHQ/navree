@@ -20,8 +20,8 @@ use serde_json::Value;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, NewUser, TokenPair, User,
-    UserResource,
+    AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, LoginOutcome, NewUser, TokenPair,
+    User, UserResource,
 };
 
 /// `POST /auth/register`.
@@ -82,6 +82,42 @@ pub struct LoginResponse {
     pub tokens: TokenPair,
 }
 
+/// The login response of an account with two-factor authentication:
+/// `{"two_factor_required": true, "challenge_token", "expires_in"}`.
+#[derive(Serialize, ToSchema)]
+pub struct TwoFactorChallenge {
+    /// Always `true`.
+    pub two_factor_required: bool,
+    /// The challenge token for `POST /auth/2fa/verify` (not an access token).
+    pub challenge_token: String,
+    /// The challenge token's lifetime in seconds.
+    pub expires_in: u64,
+}
+
+/// The challenge token is a credential: never in debug output.
+impl std::fmt::Debug for TwoFactorChallenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TwoFactorChallenge")
+            .field("challenge_token", &"[redacted]")
+            .field("expires_in", &self.expires_in)
+            .finish()
+    }
+}
+
+/// The documented `POST /auth/login` response (OpenAPI `oneOf`): the user
+/// and tokens, or a [`TwoFactorChallenge`] for accounts with two-factor
+/// authentication, so generated clients see both shapes.
+#[derive(Serialize, ToSchema)]
+#[serde(untagged)]
+pub(crate) enum LoginResult {
+    /// Signed in. (The handler renders this through [`signed_in`], which
+    /// adds the user resource's extension fields.)
+    #[allow(dead_code)]
+    Authenticated(LoginResponse),
+    /// A second factor is needed.
+    TwoFactor(TwoFactorChallenge),
+}
+
 /// The auth routes.
 pub(crate) struct AuthController {
     service: Arc<AuthService>,
@@ -107,7 +143,7 @@ impl Injectable for AuthController {
 }
 
 /// `{"user": <resource>, "access_token", "refresh_token", "token_type", "expires_in"}`.
-async fn signed_in(
+pub(crate) async fn signed_in(
     service: &AuthService,
     user: &User,
     tokens: TokenPair,
@@ -175,11 +211,23 @@ impl Controller for AuthController {
         let login = move |meta: ClientMeta, Valid(Json(input)): Valid<Json<LoginInput>>| {
             let service = service.clone();
             async move {
-                let (user, tokens) = service
-                    .login(&input.email, &input.password, &meta)
+                let outcome = service
+                    .attempt_login(&input.email, &input.password, &meta)
                     .await
                     .map_err(AuthError::into_app_error)?;
-                signed_in(&service, &user, tokens, StatusCode::OK).await
+                match outcome {
+                    LoginOutcome::Authenticated { user, tokens } => {
+                        signed_in(&service, &user, tokens, StatusCode::OK).await
+                    }
+                    LoginOutcome::TwoFactorRequired {
+                        challenge_token, ..
+                    } => Ok(Json(LoginResult::TwoFactor(TwoFactorChallenge {
+                        two_factor_required: true,
+                        challenge_token,
+                        expires_in: service.options().two_factor.challenge_ttl_secs,
+                    }))
+                    .into_response()),
+                }
             }
         };
         routes.push(
@@ -187,8 +235,14 @@ impl Controller for AuthController {
                 .public()
                 .name("auth.login")
                 .api(ApiMeta {
+                    description: Some(
+                        "When the account uses two-factor authentication the answer is a \
+                         `TwoFactorChallenge` (`{two_factor_required: true, challenge_token, \
+                         expires_in}`) instead; finish with `POST /auth/2fa/verify`."
+                            .to_owned(),
+                    ),
                     request: Some(schema_fn::<LoginInput>),
-                    response: Some(schema_fn::<LoginResponse>),
+                    response: Some(schema_fn::<LoginResult>),
                     ..api("Sign in with email and password", &[400, 401, 429])
                 }),
         );
@@ -282,7 +336,7 @@ where
     }
 }
 
-fn api(summary: &str, responses: &[u16]) -> ApiMeta {
+pub(crate) fn api(summary: &str, responses: &[u16]) -> ApiMeta {
     ApiMeta {
         summary: Some(summary.to_owned()),
         tags: vec!["Auth".to_owned()],

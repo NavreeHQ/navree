@@ -8,6 +8,7 @@ use keel_db::ModuleBuilderDbExt;
 use keel_http::{Authenticator, ModuleBuilderHttpExt};
 use keel_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
+use crate::account_controller::AccountController;
 use crate::controller::AuthController;
 use crate::error::map_auth_error;
 use crate::service::clock_of;
@@ -28,16 +29,22 @@ const JWT_KEY_PURPOSE: &str = "keel-auth.jwt";
 ///   `/api/auth`): `POST register` (public; not mounted when
 ///   `auth.registration` is false), `POST login` (public; throttled per
 ///   email and IP), `POST refresh` (public), `POST logout` and `GET me`
-///   (authenticated);
+///   (authenticated), and the account flows: `PATCH me`, `PATCH
+///   me/password`, `POST forgot-password`, `POST reset-password`, `POST
+///   email/verification`, `GET email/verify/{id}/{hash}` (signed link) and
+///   `POST 2fa/{enable,confirm,disable,recovery-codes,verify}` (see the
+///   crate documentation);
 /// - the `auth` migration set (`users`, `refresh_tokens`,
 ///   `password_reset_tokens`); feature modules referencing `users` run
 ///   `.after(["auth"])`;
 /// - the mapping of [`AuthError`]s returned from handlers to error responses.
 ///
 /// The app must include `CryptoModule` (password hashing; the JWT key is
-/// derived from `app.key` unless `auth.jwt.secret` is set) and
-/// `DatabaseModule`; `CacheModule` is optional (the login throttle uses an
-/// in-process cache without it), and a `dyn AuditSink` (keel-audit)
+/// derived from `app.key` unless `auth.jwt.secret` is set; two-factor
+/// secrets are encrypted with its `Encrypter`) and `DatabaseModule`;
+/// `CacheModule` is optional (the login and two-factor throttles use an
+/// in-process cache without it), `MailModule` sends the password reset and
+/// verification mails when present, and a `dyn AuditSink` (keel-audit)
 /// receives the security events when registered. Used plainly
 /// (`.module(AuthModule)`) or through [`from_config`](AuthModule::from_config),
 /// it reads the `auth` configuration section, so the app must include
@@ -150,6 +157,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         }))
         .exports::<dyn Authenticator>()
         .controller::<AuthController>()
+        .controller::<AccountController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
 }

@@ -37,30 +37,45 @@ full = [
     "validation",
     "view",
 ]
-access = ["dep:keel-access"]
-api = ["dep:keel-api"]
-audit = ["dep:keel-audit"]
-auth = ["dep:keel-auth"]
-cache = ["dep:keel-cache"]
-crypto = ["dep:keel-crypto"]
-db = ["dep:keel-db"]
-events = ["dep:keel-events"]
-http = ["dep:keel-http"]
-http-client = ["dep:keel-http-client"]
+# Each module feature turns on the features of the keel crates it builds
+# on (spec §3), so `keel::<dependency>` is always there to name their types.
+## L2
+http = ["dep:keel-http", "dep:axum"]
 log = ["dep:keel-log"]
-mail = ["dep:keel-mail"]
-notify = ["dep:keel-notify"]
-observe = ["dep:keel-observe"]
-queue = ["dep:keel-queue"]
-realtime = ["dep:keel-realtime"]
-schedule = ["dep:keel-schedule"]
-session = ["dep:keel-session"]
-storage = ["dep:keel-storage"]
-testing = ["dep:keel-testing"]
-validation = ["dep:keel-validation"]
+crypto = ["dep:keel-crypto"]
+events = ["dep:keel-events"]
 view = ["dep:keel-view"]
+cache = ["dep:keel-cache"]
+http-client = ["dep:keel-http-client"]
+## L3
+db = ["dep:keel-db", "http"]
+testing = ["dep:keel-testing", "http"]
+observe = ["dep:keel-observe", "http"]
+api = ["dep:keel-api", "http"]
+mail = ["dep:keel-mail", "view"]
+realtime = ["dep:keel-realtime", "http", "crypto"]
+storage = ["dep:keel-storage", "http", "crypto"]
+## L4
+session = ["dep:keel-session", "http", "crypto", "db"]
+validation = ["dep:keel-validation", "http", "db"]
+audit = ["dep:keel-audit", "http", "db"]
+queue = ["dep:keel-queue", "db"]
+schedule = ["dep:keel-schedule", "db"]
+access = ["dep:keel-access", "http", "db"]
+notify = ["dep:keel-notify", "http", "db", "mail"]
+## L5
+auth = [
+    "dep:keel-auth",
+    "http",
+    "db",
+    "crypto",
+    "validation",
+    "cache",
+    "mail",
+    "access",
+]
 ## PostgreSQL driver for keel-db.
-postgres = ["keel-db?/postgres"]
+postgres = ["db", "keel-db/postgres"]
 
 [dependencies]
 keel-config = { workspace = true }
@@ -90,6 +105,10 @@ keel-storage = { workspace = true, optional = true }
 keel-testing = { workspace = true, optional = true }
 keel-validation = { workspace = true, optional = true }
 keel-view = { workspace = true, optional = true }
+
+# Re-exported as `keel::axum` (extractors such as `Path` and `Query`), with
+# the `http` feature.
+axum = { workspace = true, optional = true }
 
 [dev-dependencies]
 chrono = { workspace = true }

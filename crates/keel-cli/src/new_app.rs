@@ -66,7 +66,7 @@ impl KeelSource {
     pub fn dependency(&self) -> String {
         match self {
             KeelSource::Path(path) => {
-                let path = path.to_string_lossy().replace('\\', "/");
+                let path = plain_path(&path.to_string_lossy()).replace('\\', "/");
                 format!("{{ path = {} }}", toml_string(&path))
             }
             KeelSource::Version(version) => toml_string(version),
@@ -96,6 +96,19 @@ fn facade_dir(path: &Path) -> Option<PathBuf> {
         Some(path.to_path_buf())
     } else {
         None
+    }
+}
+
+/// `path` without a Windows verbatim prefix (`\\?\C:\x` is `C:\x`,
+/// `\\?\UNC\server\share` is `\\server\share`), as `canonicalize()`
+/// returns them and cargo rejects them in a `path` dependency.
+fn plain_path(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_owned()
+    } else {
+        path.to_owned()
     }
 }
 
