@@ -58,7 +58,7 @@ L0  keel-kernel                                keel-macros (proc-macro; no runti
 | keel-queue, keel-schedule | kernel, contracts, config, db |
 | keel-access | kernel, contracts, config, http, db, cache |
 | keel-notify | kernel, contracts, config, http, db, mail |
-| keel-auth | kernel, contracts, config, http, db, crypto, session, validation, cache, mail |
+| keel-auth | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access (only for `impl Subject for user::Entity`) |
 | keel | every keel-* runtime crate + keel-macros |
 | keel-cli | — |
 

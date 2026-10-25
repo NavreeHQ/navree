@@ -1,6 +1,6 @@
 [package]
 name = "keel-auth"
-description = "Keel AuthModule: users, session and token authentication, Sanctum-style SPA auth, password reset, TOTP."
+description = "Keel AuthModule: NestJS-style JWT authentication with rotating refresh tokens, Passport-style strategies and user accounts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,10 @@ workspace = true
 axum = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }
+http = { workspace = true }
+jsonwebtoken = { workspace = true }
+# Only for `impl keel_access::Subject for user::Entity` (no module import).
+keel-access = { workspace = true }
 keel-cache = { workspace = true }
 keel-config = { workspace = true }
 keel-contracts = { workspace = true }
@@ -21,8 +25,9 @@ keel-crypto = { workspace = true }
 keel-db = { workspace = true }
 keel-http = { workspace = true }
 keel-kernel = { workspace = true }
+# keel-mail, qrcode2 and totp-rs: the account flows of plan Task 30
+# (password reset mail, TOTP two-factor).
 keel-mail = { workspace = true }
-keel-session = { workspace = true }
 keel-validation = { workspace = true }
 qrcode2 = { workspace = true }
 sea-orm = { workspace = true }
@@ -37,6 +42,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+keel-api = { workspace = true }
+keel-observe = { workspace = true }
 keel-testing = { workspace = true }
-tempfile = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

@@ -77,6 +77,7 @@ const HIERARCHY: &[Rule] = &[
     rule("keel-auth", 5, &[
         "keel-kernel", "keel-contracts", "keel-config", "keel-http", "keel-db",
         "keel-crypto", "keel-session", "keel-validation", "keel-cache", "keel-mail",
+        "keel-access",
     ]),
     // L6
     rule("keel", 6, RUNTIME_CRATES),
@@ -447,6 +448,8 @@ fn allowed_edges_pass() {
     let edges = [
         edge("keel-contracts", "keel-kernel", Kind::Normal),
         edge("keel-auth", "keel-session", Kind::Normal),
+        // `impl keel_access::Subject for keel_auth::user::Entity`.
+        edge("keel-auth", "keel-access", Kind::Normal),
         edge("keel", "keel-auth", Kind::Normal),
         edge("keel", "keel-macros", Kind::Normal),
         edge("crm-api", "keel", Kind::Normal),

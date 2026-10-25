@@ -63,6 +63,8 @@ async fn second_boot_does_not_panic() {
 
 #[tokio::test]
 async fn plain_import_reads_the_log_section() {
+    // Booting applies `keel_plain=debug` to the shared filter.
+    let _serial = SERIAL.lock().await;
     let app = Keel::app()
         .module(ConfigModule::for_root(ConfigSources::new().set(
             "log",
@@ -81,6 +83,7 @@ async fn plain_import_reads_the_log_section() {
 
 #[tokio::test]
 async fn from_config_reads_the_log_section() {
+    let _serial = SERIAL.lock().await;
     let app = Keel::app()
         .module(ConfigModule::for_root(
             ConfigSources::new().env_vars("APP_", [("APP_LOG__SLOW_QUERY_MS", "900")]),
@@ -170,6 +173,7 @@ impl Module for AdminModule {
 
 #[tokio::test]
 async fn log_control_is_global() {
+    let _serial = SERIAL.lock().await;
     let app = Keel::app()
         .module(LoggerModule::for_root(LogOptions::default()))
         .module(AdminModule)

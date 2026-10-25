@@ -20,7 +20,7 @@ pub(crate) struct ActingAs(pub(crate) Principal);
 ///
 /// [`TestApp`](crate::TestApp) installs it when the app has no
 /// authenticator of its own. To replace an app's authenticator (keel-auth's
-/// session and token authentication), use
+/// JWT bearer strategies, which then stop authenticating), use
 /// [`TestAppBuilder::fake_auth`](crate::TestAppBuilder::fake_auth), or
 /// [`install`](TestAuthenticator::install) for an app built elsewhere:
 ///

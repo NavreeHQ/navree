@@ -153,8 +153,9 @@ impl TestClient {
         self.request(Method::DELETE, path)
     }
 
-    /// `GET /sanctum/csrf-cookie`, which sets the `XSRF-TOKEN` cookie (see
-    /// [`TestRequest::xsrf`]).
+    /// `GET /sanctum/csrf-cookie` (served by keel-session's `SessionModule`,
+    /// for cookie-session apps; JWT apps with keel-auth do not need it),
+    /// which sets the `XSRF-TOKEN` cookie (see [`TestRequest::xsrf`]).
     ///
     /// # Panics
     ///
