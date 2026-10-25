@@ -11,17 +11,22 @@
 //!
 //! The generated code names the runtime crates through the `keel` facade when
 //! the crate being compiled depends on it (`::keel::kernel::…`,
-//! `::keel::http::…`, honouring a rename in `Cargo.toml`), and otherwise
-//! through the individual crates (`::keel_kernel::…`, `::keel_http::…`).
-//! Depending on neither is a compile error that names the missing crate.
+//! `::keel::http::…`, `::keel::access::…`, honouring a rename in
+//! `Cargo.toml`), and otherwise through the individual crates
+//! (`::keel_kernel::…`, `::keel_http::…`, `::keel_access::…`). Depending on
+//! neither is a compile error that names the missing crate.
 #![forbid(unsafe_code)]
 
 use proc_macro::TokenStream;
 
 mod attr;
+mod controller;
+mod duration;
 mod injectable;
 mod module;
+mod path;
 mod paths;
+mod route;
 
 /// Implements `Injectable` for a struct by resolving each field from the
 /// container (constructor injection).
@@ -146,4 +151,158 @@ pub fn injectable(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
     module::expand(args.into(), item.into()).into()
+}
+
+/// Implements `keel_http::Controller` for an inherent impl block whose
+/// methods carry route attributes.
+///
+/// ```text
+/// #[controller("/deals")]                      // routes under {api_prefix}/deals
+/// #[controller("/deals", version = "1")]       // under {api_prefix}/v1/deals
+/// #[controller("!/sanctum")]                   // absolute: no API prefix, no version
+/// ```
+///
+/// Each method with `#[get("/p")]`, `#[post]`, `#[put]`, `#[patch]` or
+/// `#[delete]` becomes one `RouteDef` (a missing path means `"/"`; a path
+/// starting with `!` is absolute). Paths use Axum 0.8 captures (`{id}`,
+/// `{*rest}`). The method must be a non-generic `async fn` taking `&self`;
+/// its other arguments are Axum extractors (the body extractor last) and its
+/// return type implements `IntoResponse`. The generated handler captures the
+/// controller (`Arc<Self>`), so handlers use injected fields through `self`.
+/// Methods without a route attribute stay plain methods.
+///
+/// The helper attributes below sit on route methods; those marked "impl"
+/// may also sit on the impl block, **below** `#[controller]`, and then apply
+/// to every route. None of them needs an import: `#[controller]` consumes
+/// them.
+///
+/// | Attribute | On | Becomes |
+/// |---|---|---|
+/// | `#[public]` | fn, impl | `.public()`: no authentication or authorization |
+/// | `#[authenticated]` | fn, impl | `.authenticated()`: any signed-in user |
+/// | `#[roles("admin", "manager")]` | fn, impl | `.roles(..)`: any of the roles |
+/// | `#[permissions("deals.update")]` | fn, impl | `.permissions(..)` |
+/// | `#[can(Update, Deal)]`, `#[can(Update, Deal, from = "id")]` | fn, impl | `.can(<Update as ActionMarker>::NAME, <Deal as Subject>::SUBJECT, from)`; a string (`"publish"`) is used as is |
+/// | `#[guard(expr, ..)]` | fn, impl | `.guard(expr)`; `expr` is an `Arc<impl Guard>` or `Arc<dyn Guard>` and may use `self` |
+/// | `#[throttle(limit = 10, per = "1m")]` | fn, impl | `.throttle(10, 60s)`; a route's own replaces the impl's |
+/// | `#[timeout("5s")]` | fn | `.timeout(5s)` |
+/// | `#[transactional]` | fn | `.transactional()` |
+/// | `#[audit(action = "deal.won")]` | fn | `.audit("deal.won")` |
+/// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
+/// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(404, 422), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `keel_http::schema_fn::<T>` |
+///
+/// Durations are a whole number followed by `ms`, `s`, `m` or `h` (`"500ms"`,
+/// `"5s"`, `"1m"`, `"1h"`). Access declarations on the impl add to a route's
+/// own; impl guards run before the route's guards.
+///
+/// **Deny by default.** A route that declares none of `#[public]`,
+/// `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]` (on itself
+/// or on the impl) does not compile; a `#[guard]` alone does not count.
+/// Other mistakes keel-http would only catch at boot are compile errors too:
+/// `#[public]` combined with another declaration, two `#[can]` on one route,
+/// `from = "id"` naming no path parameter, old `:id` / `*rest` path syntax,
+/// and two routes with the same method and path.
+///
+/// `#[can]` with marker types needs `keel` (or `keel-access`) among the
+/// dependencies; everything else needs `keel` (or `keel-http`). Register the
+/// controller with `#[module(controllers = [DealController])]` or
+/// `ModuleBuilderHttpExt::controller`; it must also be `Injectable` (usually
+/// `#[injectable]`).
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use axum::extract::Path;
+/// use keel_access::{Subject, Update};
+/// use keel_http::{Controller, Json};
+/// use keel_macros::{controller, injectable};
+///
+/// struct Deal;
+///
+/// impl Subject for Deal {
+///     const SUBJECT: &'static str = "Deal";
+///     const PERMISSION_PREFIX: &'static str = "deals";
+/// }
+///
+/// struct Pipeline(&'static str);
+///
+/// #[injectable]
+/// struct DealController {
+///     pipeline: Arc<Pipeline>,
+/// }
+///
+/// #[controller("/deals", version = "1")]
+/// #[authenticated]
+/// impl DealController {
+///     #[get("/")]
+///     #[name("deals.index")]
+///     async fn index(&self) -> Json<&'static str> {
+///         Json(self.pipeline.0)
+///     }
+///
+///     #[patch("/{id}")]
+///     #[can(Update, Deal, from = "id")]
+///     #[transactional]
+///     #[timeout("5s")]
+///     async fn update(&self, Path(id): Path<u64>) -> String {
+///         format!("updated {id}")
+///     }
+/// }
+///
+/// let controller = Arc::new(DealController {
+///     pipeline: Arc::new(Pipeline("sales")),
+/// });
+/// assert_eq!((controller.prefix(), controller.version()), ("/deals", Some("1")));
+/// let routes = controller.routes();
+/// assert_eq!(routes[0].meta.name.as_deref(), Some("deals.index"));
+/// assert_eq!(routes[0].meta.access.describe(), "auth");
+/// assert_eq!(
+///     routes[1].meta.access.describe(),
+///     "auth can:update Deal from id"
+/// );
+/// assert!(routes[1].meta.transactional);
+/// ```
+#[proc_macro_attribute]
+pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::expand(args.into(), item.into()).into()
+}
+
+/// Declares a `GET` route on a method of a [`macro@controller`] impl block:
+/// `#[get("/{id}")]`. `#[controller]` consumes it; anywhere else it is a
+/// compile error.
+#[proc_macro_attribute]
+pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::outside_controller("get", item.into()).into()
+}
+
+/// Declares a `POST` route on a method of a [`macro@controller`] impl block:
+/// `#[post("/")]`. `#[controller]` consumes it; anywhere else it is a compile
+/// error.
+#[proc_macro_attribute]
+pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::outside_controller("post", item.into()).into()
+}
+
+/// Declares a `PUT` route on a method of a [`macro@controller`] impl block:
+/// `#[put("/{id}")]`. `#[controller]` consumes it; anywhere else it is a
+/// compile error.
+#[proc_macro_attribute]
+pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::outside_controller("put", item.into()).into()
+}
+
+/// Declares a `PATCH` route on a method of a [`macro@controller`] impl block:
+/// `#[patch("/{id}")]`. `#[controller]` consumes it; anywhere else it is a
+/// compile error.
+#[proc_macro_attribute]
+pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::outside_controller("patch", item.into()).into()
+}
+
+/// Declares a `DELETE` route on a method of a [`macro@controller`] impl
+/// block: `#[delete("/{id}")]`. `#[controller]` consumes it; anywhere else it
+/// is a compile error.
+#[proc_macro_attribute]
+pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::outside_controller("delete", item.into()).into()
 }

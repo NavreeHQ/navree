@@ -26,6 +26,12 @@ pub(crate) const HTTP: RuntimeCrate = RuntimeCrate {
     facade_module: "http",
 };
 
+/// keel-access: `ActionMarker` and `Subject` (`#[can(Update, Deal)]`).
+pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
+    package: "keel-access",
+    facade_module: "access",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "keel";
 

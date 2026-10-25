@@ -297,6 +297,58 @@ async fn maintenance_mode_returns_503() {
 }
 
 #[tokio::test]
+async fn maintenance_mode_skips_excepted_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("down");
+    std::fs::write(&file, "{}").unwrap();
+    let routes = || {
+        vec![
+            RouteDef::new(Method::GET, "!/health/live", get(|| async { "live" })).public(),
+            RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+            RouteDef::new(Method::GET, "/status", get(|| async { "status" })).public(),
+        ]
+    };
+
+    // By default the liveness probe stays up, so an orchestrator does not
+    // restart instances that are only in maintenance.
+    let app = Setup::new(routes())
+        .options(HttpOptions {
+            maintenance_file: file.clone(),
+            ..options()
+        })
+        .boot()
+        .await;
+    assert_eq!(app.get("/health/live").await.status, StatusCode::OK);
+    app.get("/api/ok").await.assert_problem(503);
+
+    // An explicit list replaces the default; matching is on the exact path.
+    let app = Setup::new(routes())
+        .options(HttpOptions {
+            maintenance_file: file.clone(),
+            maintenance_except: vec!["/api/status".into()],
+            ..options()
+        })
+        .boot()
+        .await;
+    assert_eq!(app.get("/api/status").await.status, StatusCode::OK);
+    app.get("/api/status/").await.assert_problem(503);
+    app.get("/health/live").await.assert_problem(503);
+}
+
+#[test]
+fn maintenance_except_reads_a_comma_separated_environment_value() {
+    let options: HttpOptions = serde_json::from_value(serde_json::json!({
+        "maintenance_except": "/health/live, /up"
+    }))
+    .unwrap();
+    assert_eq!(options.maintenance_except, ["/health/live", "/up"]);
+    assert_eq!(
+        HttpOptions::default().maintenance_except,
+        ["/health/live", "/health/ready", "/metrics"]
+    );
+}
+
+#[tokio::test]
 async fn down_and_up_commands_toggle_maintenance() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("framework").join("down");

@@ -39,6 +39,13 @@ pub struct HttpOptions {
     pub compression: bool,
     /// While this file exists the app answers 503 (default `storage/framework/down`).
     pub maintenance_file: PathBuf,
+    /// Request paths still served during maintenance, matched exactly
+    /// (default `/health/live`, `/health/ready` and `/metrics`, so probes and
+    /// scrapes keep working and an orchestrator does not restart instances
+    /// that are only down for maintenance). From the environment, a
+    /// comma-separated list (`APP_HTTP__MAINTENANCE_EXCEPT=/health/live,/up`).
+    #[serde(deserialize_with = "list_or_comma_separated")]
+    pub maintenance_except: Vec<String>,
     /// Take the client IP from `X-Forwarded-For` / `X-Real-IP` (default `false`;
     /// enable only behind a reverse proxy that sets them).
     pub trust_proxy: bool,
@@ -63,6 +70,9 @@ impl Default for HttpOptions {
             security_headers: true,
             compression: true,
             maintenance_file: PathBuf::from("storage/framework/down"),
+            maintenance_except: ["/health/live", "/health/ready", "/metrics"]
+                .map(str::to_owned)
+                .to_vec(),
             trust_proxy: false,
             signing_key: None,
             shutdown_grace_secs: 30,

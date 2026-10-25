@@ -1,0 +1,17 @@
+error: invalid duration `5 minutes`: expected a whole number followed by `ms`, `s`, `m` or `h`, e.g. "500ms", "5s", "1m" or "1h"
+  --> tests/ui/bad_duration_is_error.rs:10:15
+   |
+10 |     #[timeout("5 minutes")]
+   |               ^^^^^^^^^^^
+
+error: invalid duration `1d`: expected a whole number followed by `ms`, `s`, `m` or `h`, e.g. "500ms", "5s", "1m" or "1h"
+  --> tests/ui/bad_duration_is_error.rs:17:34
+   |
+17 |     #[throttle(limit = 10, per = "1d")]
+   |                                  ^^^^
+
+error: the duration `0s` must be greater than zero
+  --> tests/ui/bad_duration_is_error.rs:24:15
+   |
+24 |     #[timeout("0s")]
+   |               ^^^^

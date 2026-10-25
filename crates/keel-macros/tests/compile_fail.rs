@@ -21,3 +21,25 @@ fn module_rejects_unknown_key() {
 fn module_reports_misuse() {
     trybuild::TestCases::new().compile_fail("tests/ui/module/*.rs");
 }
+
+/// Review Focus 2 (compile-time half): a route with no access declaration
+/// does not compile.
+#[test]
+fn route_without_access_attribute_is_error() {
+    trybuild::TestCases::new().compile_fail("tests/ui/route_without_access_attribute_is_error.rs");
+}
+
+#[test]
+fn guard_alone_is_not_access() {
+    trybuild::TestCases::new().compile_fail("tests/ui/guard_alone_is_not_access.rs");
+}
+
+#[test]
+fn controller_reports_misuse() {
+    trybuild::TestCases::new().compile_fail("tests/ui/controller/*.rs");
+}
+
+#[test]
+fn bad_duration_is_error() {
+    trybuild::TestCases::new().compile_fail("tests/ui/bad_duration_is_error.rs");
+}

@@ -74,7 +74,10 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         router = router.layer(from_fn_with_state(limiter, pipeline::per_ip_rate_limit));
     }
     router = router.layer(from_fn_with_state(
-        server.maintenance.clone(),
+        Arc::new(pipeline::MaintenanceGate {
+            mode: server.maintenance.clone(),
+            except: options.maintenance_except.clone(),
+        }),
         pipeline::maintenance,
     ));
     let mappers = ctx

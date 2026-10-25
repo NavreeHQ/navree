@@ -13,7 +13,6 @@ workspace = true
 [dependencies]
 axum = { workspace = true }
 keel-config = { workspace = true }
-keel-contracts = { workspace = true }
 keel-http = { workspace = true }
 keel-kernel = { workspace = true }
 serde = { workspace = true }
@@ -26,6 +25,7 @@ utoipa-scalar = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }
+keel-contracts = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

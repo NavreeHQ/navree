@@ -1,0 +1,232 @@
+//! The OpenAPI document built from the route table.
+
+use serde_json::{Value, json};
+
+use crate::support::{boot, document};
+
+fn path_params(operation: &Value) -> Vec<(String, Value)> {
+    operation["parameters"]
+        .as_array()
+        .map(|params| {
+            params
+                .iter()
+                .filter(|p| p["in"] == "path")
+                .map(|p| {
+                    (
+                        p["name"].as_str().unwrap().to_owned(),
+                        p["required"].clone(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn document_lists_paths_with_methods_and_params() {
+    let app = boot().await;
+    let doc = document(&app).await;
+
+    assert_eq!(doc["openapi"], "3.1.0");
+    assert_eq!(doc["info"]["title"], "Keel API");
+    assert_eq!(doc["info"]["version"], "1.0.0");
+
+    let paths = doc["paths"].as_object().expect("paths object");
+    let mut listed: Vec<(&str, Vec<&str>)> = paths
+        .iter()
+        .map(|(path, item)| {
+            let mut methods: Vec<&str> = item
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            methods.sort_unstable();
+            (path.as_str(), methods)
+        })
+        .collect();
+    listed.sort_unstable();
+    assert_eq!(
+        listed,
+        [
+            ("/api/v1/deals", vec!["get", "post"]),
+            ("/api/v1/deals/{id}", vec!["get"]),
+            ("/api/v1/deals/{id}/notes/{note_id}", vec!["delete"]),
+            ("/files/{path}", vec!["get"]),
+        ],
+        "the docs routes themselves are not listed"
+    );
+
+    let show = &paths["/api/v1/deals/{id}"]["get"];
+    assert_eq!(path_params(show), [("id".to_owned(), json!(true))]);
+    assert_eq!(show["parameters"][0]["schema"]["type"], "string");
+    assert_eq!(show["operationId"], "deals.show");
+    assert_eq!(show["tags"], json!(["Deals"]));
+
+    let delete = &paths["/api/v1/deals/{id}/notes/{note_id}"]["delete"];
+    assert_eq!(
+        path_params(delete),
+        [
+            ("id".to_owned(), json!(true)),
+            ("note_id".to_owned(), json!(true))
+        ]
+    );
+    assert!(delete.get("operationId").is_none(), "unnamed route");
+
+    let files = &paths["/files/{path}"]["get"];
+    assert_eq!(path_params(files), [("path".to_owned(), json!(true))]);
+
+    let store = &paths["/api/v1/deals"]["post"];
+    assert_eq!(store["summary"], "Create a deal");
+    assert_eq!(store["description"], "Creates a deal owned by the caller.");
+    assert!(path_params(store).is_empty());
+
+    assert_eq!(doc["tags"], json!([{"name": "Deals"}]));
+}
+
+#[tokio::test]
+async fn request_and_response_schemas_registered_as_components() {
+    let app = boot().await;
+    let doc = document(&app).await;
+
+    let store = &doc["paths"]["/api/v1/deals"]["post"];
+    assert_eq!(store["requestBody"]["required"], true);
+    assert_eq!(
+        store["requestBody"]["content"]["application/json"]["schema"],
+        json!({"$ref": "#/components/schemas/CreateDeal"})
+    );
+    let created = &store["responses"]["201"];
+    assert_eq!(created["description"], "Created");
+    assert_eq!(
+        created["content"]["application/json"]["schema"],
+        json!({"$ref": "#/components/schemas/Deal"})
+    );
+    assert!(
+        store["responses"].get("200").is_none(),
+        "the declared success status replaces 200"
+    );
+
+    let show = &doc["paths"]["/api/v1/deals/{id}"]["get"];
+    assert_eq!(
+        show["responses"]["200"]["content"]["application/json"]["schema"],
+        json!({"$ref": "#/components/schemas/Deal"})
+    );
+    let index = &doc["paths"]["/api/v1/deals"]["get"];
+    assert_eq!(index["responses"]["200"], json!({"description": "OK"}));
+    assert!(index.get("requestBody").is_none());
+
+    let schemas = &doc["components"]["schemas"];
+    assert_eq!(
+        schemas["CreateDeal"]["properties"]["title"]["type"],
+        "string"
+    );
+    assert_eq!(schemas["Deal"]["properties"]["title"]["type"], "string");
+    assert_eq!(
+        schemas["Deal"]["properties"]["owner"]["$ref"],
+        "#/components/schemas/Owner"
+    );
+    assert!(
+        schemas["Deal"].get("x-keel-components").is_none(),
+        "referenced schemas are hoisted, not left in the extension"
+    );
+    assert_eq!(schemas["Owner"]["properties"]["name"]["type"], "string");
+}
+
+#[tokio::test]
+async fn non_public_routes_have_security() {
+    let app = boot().await;
+    let doc = document(&app).await;
+    let paths = &doc["paths"];
+    let both = json!([{"cookie": []}, {"bearer": []}]);
+
+    assert_eq!(
+        paths["/api/v1/deals/{id}"]["get"]["security"], both,
+        "authenticated"
+    );
+    assert_eq!(
+        paths["/api/v1/deals"]["post"]["security"], both,
+        "permissions"
+    );
+    assert_eq!(
+        paths["/api/v1/deals/{id}/notes/{note_id}"]["delete"]["security"], both,
+        "roles"
+    );
+    assert!(
+        paths["/api/v1/deals"]["get"].get("security").is_none(),
+        "public"
+    );
+    assert!(
+        paths["/files/{path}"]["get"].get("security").is_none(),
+        "public"
+    );
+    assert!(
+        doc.get("security").is_none(),
+        "no document-wide requirement"
+    );
+
+    let schemes = &doc["components"]["securitySchemes"];
+    assert_eq!(schemes["cookie"]["type"], "apiKey");
+    assert_eq!(schemes["cookie"]["in"], "cookie");
+    assert_eq!(schemes["cookie"]["name"], "keel_session");
+    assert_eq!(schemes["bearer"]["type"], "http");
+    assert_eq!(schemes["bearer"]["scheme"], "bearer");
+}
+
+fn problem_response(description: &str) -> Value {
+    json!({
+        "description": description,
+        "content": {
+            "application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}
+        }
+    })
+}
+
+#[tokio::test]
+async fn error_responses_reference_problem_schema() {
+    let app = boot().await;
+    let doc = document(&app).await;
+    let paths = &doc["paths"];
+
+    let show = &paths["/api/v1/deals/{id}"]["get"]["responses"];
+    assert_eq!(show["404"], problem_response("Not Found"), "listed");
+    assert_eq!(show["401"], problem_response("Unauthorized"), "not public");
+    assert!(show.get("403").is_none(), "no authorization rule to fail");
+
+    let store = &paths["/api/v1/deals"]["post"]["responses"];
+    assert_eq!(store["422"], problem_response("Unprocessable Entity"));
+    assert_eq!(store["401"], problem_response("Unauthorized"));
+    assert_eq!(store["403"], problem_response("Forbidden"), "permissions");
+
+    let delete = &paths["/api/v1/deals/{id}/notes/{note_id}"]["delete"]["responses"];
+    assert_eq!(delete["403"], problem_response("Forbidden"), "roles");
+
+    let index = &paths["/api/v1/deals"]["get"]["responses"];
+    assert_eq!(
+        index.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["200"],
+        "a public route without listed errors documents only its success"
+    );
+
+    let problem = &doc["components"]["schemas"]["Problem"];
+    assert_eq!(problem["type"], "object");
+    for field in ["type", "title", "status", "detail", "request_id", "errors"] {
+        assert!(
+            problem["properties"].get(field).is_some(),
+            "{field}: {problem}"
+        );
+    }
+    let required: Vec<&str> = problem["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert!(
+        required.contains(&"type") && required.contains(&"status"),
+        "{required:?}"
+    );
+    assert_eq!(
+        problem["properties"]["errors"]["additionalProperties"]["type"],
+        "array"
+    );
+}

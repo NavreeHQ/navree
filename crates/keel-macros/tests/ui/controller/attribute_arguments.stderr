@@ -1,0 +1,59 @@
+error: #[public] takes no arguments
+ --> tests/ui/controller/attribute_arguments.rs:9:5
+  |
+9 |     #[public(always)]
+  |     ^^^^^^^^^^^^^^^^^
+
+error: expected #[roles("admin", "manager")]
+  --> tests/ui/controller/attribute_arguments.rs:15:5
+   |
+15 |     #[roles()]
+   |     ^^^^^^^^^^
+
+error: must not be empty
+  --> tests/ui/controller/attribute_arguments.rs:21:19
+   |
+21 |     #[permissions("")]
+   |                   ^^
+
+error: the limit must be a whole number from 1 to 4294967295
+  --> tests/ui/controller/attribute_arguments.rs:28:24
+   |
+28 |     #[throttle(limit = 0, per = "1m")]
+   |                        ^
+
+error: expected #[throttle(limit = 10, per = "1m")]
+  --> tests/ui/controller/attribute_arguments.rs:35:5
+   |
+35 |     #[throttle(limit = 10)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected #[audit(action = "invoice.sent")]
+  --> tests/ui/controller/attribute_arguments.rs:42:5
+   |
+42 |     #[audit("deal.viewed")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected a route name: #[name("deals.show")]
+  --> tests/ui/controller/attribute_arguments.rs:49:5
+   |
+49 |     #[name]
+   |     ^^^^^^^
+
+error: unknown #[api] key `sumary`: expected `summary`, `description`, `tag`, `tags`, `request`, `response`, `responses` or `status`
+  --> tests/ui/controller/attribute_arguments.rs:56:11
+   |
+56 |     #[api(sumary = "typo")]
+   |           ^^^^^^
+
+error: expected an HTTP status code between 100 and 599
+  --> tests/ui/controller/attribute_arguments.rs:63:26
+   |
+63 |     #[api(responses(404, 999))]
+   |                          ^^^
+
+error: expected a path: #[get("/deals/{id}")]
+  --> tests/ui/controller/attribute_arguments.rs:68:5
+   |
+68 |     #[get(42)]
+   |     ^^^^^^^^^^
