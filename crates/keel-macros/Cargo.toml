@@ -20,17 +20,13 @@ quote = { workspace = true }
 syn = { workspace = true }
 
 # Macro tests expand against the runtime crates (allowed as dev-dependencies
-# of keel-macros only; see crates/keel/tests/dependency_graph.rs).
+# of keel-macros only; see crates/keel/tests/dependency_graph.rs). The DI
+# macro tests (Task 12) need the kernel, plus keel-http for
+# `#[module(controllers = [..])]`; the controller macro tests (Task 13) add
+# axum and friends.
 [dev-dependencies]
-axum = { workspace = true }
-http-body-util = { workspace = true }
-keel-config = { workspace = true }
-keel-contracts = { workspace = true }
+http = { workspace = true }
 keel-http = { workspace = true }
 keel-kernel = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 tokio = { workspace = true }
-tower = { workspace = true }
 trybuild = { workspace = true }
-utoipa = { workspace = true }

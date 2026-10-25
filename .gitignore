@@ -1,5 +1,8 @@
 # Rust build output (each agent builds into target/agents/<label>)
 target/
+# trybuild writes failing UI test output next to the crate (accept reviewed
+# snapshots with TRYBUILD=overwrite)
+/crates/*/wip/
 
 # Node / Next.js
 node_modules/

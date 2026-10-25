@@ -2226,29 +2226,15 @@ dependencies = [
 name = "keel-access"
 version = "0.1.0"
 dependencies = [
- "axum",
  "chrono",
- "http",
  "insta",
- "keel-cache",
- "keel-config",
- "keel-contracts",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-testing",
- "moka",
  "proptest",
- "sea-orm",
- "sea-orm-migration",
  "sea-query",
  "serde",
  "serde_json",
  "sqlx",
- "tempfile",
  "thiserror",
  "tokio",
- "tracing",
  "uuid",
 ]
 
@@ -2332,7 +2318,7 @@ dependencies = [
 name = "keel-cache"
 version = "0.1.0"
 dependencies = [
- "futures-util",
+ "bytes",
  "keel-config",
  "keel-contracts",
  "keel-kernel",
@@ -2341,6 +2327,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "uuid",
 ]
@@ -2404,7 +2391,6 @@ dependencies = [
  "keel-config",
  "keel-contracts",
  "keel-kernel",
- "password-hash",
  "rand 0.10.3",
  "serde",
  "serde_json",
@@ -2445,7 +2431,6 @@ dependencies = [
 name = "keel-events"
 version = "0.1.0"
 dependencies = [
- "keel-config",
  "keel-contracts",
  "keel-kernel",
  "serde",
@@ -2460,8 +2445,6 @@ name = "keel-http"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.23.1",
- "bytes",
  "chrono",
  "futures-util",
  "hex",
@@ -2472,20 +2455,15 @@ dependencies = [
  "keel-contracts",
  "keel-kernel",
  "metrics",
- "percent-encoding",
- "pin-project-lite",
  "serde",
  "serde_json",
- "serde_urlencoded",
  "sha2 0.11.1",
- "subtle",
  "tempfile",
- "thiserror",
  "tokio",
- "tokio-util",
  "tower",
  "tower-http 0.7.1",
  "tracing",
+ "tracing-subscriber",
  "utoipa",
  "uuid",
 ]
@@ -2496,7 +2474,6 @@ version = "0.1.0"
 dependencies = [
  "backon",
  "bytes",
- "futures-util",
  "http",
  "ipnet",
  "keel-config",
@@ -2506,9 +2483,11 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
  "wildmatch",
 ]
@@ -2528,7 +2507,6 @@ name = "keel-log"
 version = "0.1.0"
 dependencies = [
  "keel-config",
- "keel-contracts",
  "keel-kernel",
  "serde",
  "serde_json",
@@ -2537,6 +2515,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-appender",
+ "tracing-log",
  "tracing-subscriber",
 ]
 
@@ -2544,22 +2523,15 @@ dependencies = [
 name = "keel-macros"
 version = "0.1.0"
 dependencies = [
- "axum",
- "http-body-util",
- "keel-config",
- "keel-contracts",
+ "http",
  "keel-http",
  "keel-kernel",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "serde",
- "serde_json",
  "syn 3.0.9",
  "tokio",
- "tower",
  "trybuild",
- "utoipa",
 ]
 
 [[package]]
@@ -2811,7 +2783,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "keel-config",
- "keel-contracts",
  "keel-kernel",
  "minijinja",
  "serde",

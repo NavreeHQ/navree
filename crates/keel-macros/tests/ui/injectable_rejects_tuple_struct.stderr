@@ -1,0 +1,5 @@
+error: #[injectable] does not support tuple structs: fields are injected by name; use named fields (`struct Service { repo: Arc<Repo> }`) or a unit struct
+ --> tests/ui/injectable_rejects_tuple_struct.rs:8:15
+  |
+8 | struct Service(Arc<Repo>);
+  |               ^^^^^^^^^^^

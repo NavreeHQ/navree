@@ -1,0 +1,5 @@
+error: unknown #[injectable] argument `scoped`: expected `scope = "singleton" | "request" | "transient"`
+ --> tests/ui/injectable/unknown_argument.rs:3:14
+  |
+3 | #[injectable(scoped = "request")]
+  |              ^^^^^^

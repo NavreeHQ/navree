@@ -45,7 +45,7 @@ mod lifecycle;
 mod module;
 mod resolver;
 
-pub use app::{App, AppBuilder, AppContext, Contributed, Keel, ModuleInfo};
+pub use app::{App, AppBuilder, AppContext, Contributed, Keel, ModuleInfo, WeakAppContext};
 pub use builder::{Factory, ModuleBuilder};
 pub use command::{CommandFn, CommandSpec};
 pub use container::RequestScope;

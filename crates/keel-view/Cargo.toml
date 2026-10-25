@@ -13,14 +13,14 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 keel-config = { workspace = true }
-keel-contracts = { workspace = true }
 keel-kernel = { workspace = true }
 minijinja = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

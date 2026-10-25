@@ -1,0 +1,5 @@
+error: unknown #[module] key `import`: did you mean `imports`? (expected `imports`, `providers`, `controllers`, `exports`, `global` or `register`)
+ --> tests/ui/module_rejects_unknown_key.rs:9:10
+  |
+9 | #[module(import = [DataModule], providers = [Repo])]
+  |          ^^^^^^

@@ -2,7 +2,7 @@
 
 use std::any::TypeId;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
@@ -391,6 +391,15 @@ impl AppContext {
         Self { inner }
     }
 
+    /// A handle that does not keep the app alive. Providers that need the
+    /// app after boot (an event bus, a scheduler) hold this instead of an
+    /// `AppContext`, so an app dropped without `shutdown` is still freed.
+    pub fn downgrade(&self) -> WeakAppContext {
+        WeakAppContext {
+            inner: Arc::downgrade(&self.inner),
+        }
+    }
+
     /// Service locator: resolves the unnamed provider of `T` from any module,
     /// ignoring visibility. Meant for lifecycle hooks, commands and glue code;
     /// providers use constructor injection instead.
@@ -555,6 +564,29 @@ impl fmt::Debug for AppContext {
         f.debug_struct("AppContext")
             .field("modules", &self.inner.graph.modules.len())
             .field("providers", &self.inner.graph.providers.len())
+            .finish()
+    }
+}
+
+/// A weak handle to a booted app ([`AppContext::downgrade`]): it does not
+/// keep the app alive, and [`upgrade`](WeakAppContext::upgrade) returns
+/// `None` once the app is dropped.
+#[derive(Clone)]
+pub struct WeakAppContext {
+    inner: Weak<AppInner>,
+}
+
+impl WeakAppContext {
+    /// The app, if it is still alive.
+    pub fn upgrade(&self) -> Option<AppContext> {
+        self.inner.upgrade().map(AppContext::from_inner)
+    }
+}
+
+impl fmt::Debug for WeakAppContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakAppContext")
+            .field("alive", &(self.inner.strong_count() > 0))
             .finish()
     }
 }

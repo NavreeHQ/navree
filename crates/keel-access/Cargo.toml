@@ -10,31 +10,20 @@ publish.workspace = true
 [lints]
 workspace = true
 
+# The ability engine (plan Task 9) is pure: rules, record checks, CASL JSON and
+# SQL list filters. The AccessModule half (plan Task 22) adds keel-kernel,
+# keel-contracts, keel-config, keel-http, keel-db, keel-cache, axum, sea-orm,
+# moka and friends back when it lands.
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
-http = { workspace = true }
-keel-cache = { workspace = true }
-keel-config = { workspace = true }
-keel-contracts = { workspace = true }
-keel-db = { workspace = true }
-keel-http = { workspace = true }
-keel-kernel = { workspace = true }
-moka = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 sea-query = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
-keel-testing = { workspace = true }
 proptest = { workspace = true }
 sqlx = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
