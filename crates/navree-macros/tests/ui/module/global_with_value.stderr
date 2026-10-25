@@ -1,0 +1,5 @@
+error: `global` is a flag and takes no value: write `global`
+ --> tests/ui/module/global_with_value.rs:3:10
+  |
+3 | #[module(global = true)]
+  |          ^^^^^^

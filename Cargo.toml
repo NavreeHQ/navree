@@ -120,6 +120,8 @@ hex = "0.4.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
+# `log` records into tracing (navree-log installs the bridge with its subscriber).
+tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 

@@ -11,7 +11,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
 serde = { workspace = true }

@@ -1,0 +1,5 @@
+error: expected a list in square brackets: `providers = [...]`
+ --> tests/ui/module/not_a_list.rs:6:22
+  |
+6 | #[module(providers = Repo)]
+  |                      ^^^^

@@ -1,0 +1,5 @@
+error: unknown scope "session": expected "singleton", "request" or "transient"
+ --> tests/ui/injectable/unknown_scope.rs:3:22
+  |
+3 | #[injectable(scope = "session")]
+  |                      ^^^^^^^^^

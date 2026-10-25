@@ -67,3 +67,28 @@ async fn boots_singleton_once_and_shares_arc() {
     ));
     assert_eq!(counter.get(), 1, "Repo is constructed exactly once");
 }
+
+#[tokio::test]
+async fn weak_app_context_does_not_keep_the_app_alive() {
+    let app = Navree::app()
+        .module(AppModule {
+            counter: Arc::new(Counter::default()),
+        })
+        .boot()
+        .await
+        .expect("boot");
+    let weak = app.ctx().downgrade();
+
+    let upgraded = weak.upgrade().expect("the app is alive");
+    upgraded
+        .get::<ServiceA>()
+        .await
+        .expect("resolves through the upgraded handle");
+    drop(upgraded);
+    let copy = weak.clone();
+
+    drop(app);
+
+    assert!(weak.upgrade().is_none(), "the app was dropped");
+    assert!(copy.upgrade().is_none());
+}
