@@ -46,9 +46,20 @@ pub struct HttpOptions {
     /// comma-separated list (`APP_HTTP__MAINTENANCE_EXCEPT=/health/live,/up`).
     #[serde(deserialize_with = "list_or_comma_separated")]
     pub maintenance_except: Vec<String>,
-    /// Take the client IP from `X-Forwarded-For` / `X-Real-IP` (default `false`;
-    /// enable only behind a reverse proxy that sets them).
+    /// Take the client IP from `X-Forwarded-For` / `X-Real-IP` sent by any
+    /// peer (default `false`; enable only when every request comes through
+    /// a reverse proxy that sets them). Prefer `trusted_proxies`.
     pub trust_proxy: bool,
+    /// The reverse proxies (and backends-for-frontends) whose
+    /// `X-Forwarded-For` / `X-Real-IP` name the client: IP addresses or
+    /// CIDR blocks (`127.0.0.1`, `::1`, `10.0.0.0/8`). A request from any
+    /// other peer is identified by its own address, so clients reaching the
+    /// app directly cannot choose theirs. In `X-Forwarded-For`, the client
+    /// is the first address from the right that is not a listed proxy.
+    /// When set, it replaces `trust_proxy`. From the environment, a
+    /// comma-separated list (`APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`).
+    #[serde(deserialize_with = "list_or_comma_separated")]
+    pub trusted_proxies: Vec<String>,
     /// The key for signed URLs. When unset, a key derived from the app key
     /// (`app.key`, or `APP_KEY`) is used; with no app key either, a random
     /// per-process key, so signed URLs do not survive a restart.
@@ -74,6 +85,7 @@ impl Default for HttpOptions {
                 .map(str::to_owned)
                 .to_vec(),
             trust_proxy: false,
+            trusted_proxies: Vec::new(),
             signing_key: None,
             shutdown_grace_secs: 30,
         }
@@ -156,6 +168,13 @@ impl HttpOptions {
         if self.per_ip_rate_limit == Some(0) {
             errors.push("http.per_ip_rate_limit must be at least 1 (or unset)".to_owned());
         }
+        for proxy in &self.trusted_proxies {
+            if crate::extract::IpNetwork::parse(proxy).is_none() {
+                errors.push(format!(
+                    "http.trusted_proxies: `{proxy}` is not an IP address or CIDR block like 10.0.0.0/8"
+                ));
+            }
+        }
         for origin in &self.cors.allowed_origins {
             if origin.trim() == "*" {
                 errors.push(
@@ -204,6 +223,30 @@ mod tests {
         assert_eq!(options.api_prefix, "/api");
         assert!(options.cors.allow_credentials);
         assert_eq!(options.cors.allowed_origins, ["https://a.example"]);
+    }
+
+    #[test]
+    fn trusted_proxies_come_from_a_list_or_the_environment_and_are_checked() {
+        let config = navree_config::Config::load(&navree_config::ConfigSources::new().env_vars(
+            "APP_",
+            [("APP_HTTP__TRUSTED_PROXIES", "127.0.0.1, ::1,10.0.0.0/8")],
+        ))
+        .unwrap();
+        let options = config.typed::<HttpOptions>().unwrap();
+        assert_eq!(options.trusted_proxies, ["127.0.0.1", "::1", "10.0.0.0/8"]);
+        assert!(HttpOptions::default().trusted_proxies.is_empty());
+
+        let options = HttpOptions {
+            trusted_proxies: vec![
+                "127.0.0.1".into(),
+                "proxy.internal".into(),
+                "10.0.0.0/40".into(),
+            ],
+            ..HttpOptions::default()
+        };
+        let errors = options.check().unwrap_err();
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert!(errors[0].contains("proxy.internal"), "{errors:?}");
     }
 
     #[test]

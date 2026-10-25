@@ -43,7 +43,7 @@ use crm_core::CrmCoreModule;
 use navree::prelude::*;
 
 pub use controller::DealsController;
-pub use dto::{BoardFilter, CreateDeal, DealFilter, MoveDeal, UpdateDeal};
+pub use dto::{BoardFilter, CreateDeal, DealFilter, MAX_AMOUNT_CENTS, MoveDeal, UpdateDeal};
 pub use events::{DealAssigned, DealWon};
 pub use notification::{
     Assigned, DealNotice, DealNotification, MAIL_TEMPLATE, NotifyDealOwner, Won,

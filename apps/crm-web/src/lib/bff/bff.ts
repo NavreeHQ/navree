@@ -15,10 +15,14 @@
  *   replaces the cookies and is stripped from the body;
  * - `logout` revokes the refresh token at Navree and clears the cookies;
  * - every non-GET request must come from the app's own origin (403 otherwise),
- *   which is the CSRF defence for the cookie hop.
+ *   which is the CSRF defence for the cookie hop;
+ * - the browser's `X-Forwarded-For` / `X-Real-IP` never reach Navree; the BFF
+ *   sends its own `X-Forwarded-For` only when it knows the client address
+ *   (see `trustedProxyHops`).
  *
  * Kept free of `next/headers` so it can be unit-tested with plain Requests.
  */
+import { isIP } from "node:net";
 import { errorResponse } from "./http-errors";
 
 export const ACCESS_COOKIE = "navree_at";
@@ -50,6 +54,15 @@ export interface BffOptions {
   refreshMaxAge?: number;
   /** How long a completed refresh is remembered for requests still carrying the old cookie. */
   refreshGraceMs?: number;
+  /**
+   * How many reverse proxies in front of this Next.js server append the address they saw to
+   * `X-Forwarded-For` (default 0). Next.js keeps a browser's own `X-Forwarded-For` as is and
+   * gives route handlers no other way to read the connection's address, so without a trusted
+   * proxy the header is the browser's word and the BFF sends Navree no client address (Navree
+   * then sees the BFF's own). With `n` proxies the client is the `n`-th entry from the right:
+   * the one the outermost proxy appended. Next.js must then be reachable only through them.
+   */
+  trustedProxyHops?: number;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -130,6 +143,8 @@ export function createBff(options: BffOptions) {
   const secure = options.secureCookies ?? process.env.NODE_ENV === "production";
   const refreshMaxAge = options.refreshMaxAge ?? 60 * 60 * 24 * 30;
   const refreshGraceMs = options.refreshGraceMs ?? 30_000;
+  const hops = Math.floor(options.trustedProxyHops ?? 0);
+  const trustedProxyHops = Number.isFinite(hops) && hops > 0 ? hops : 0;
 
   /**
    * Refresh tokens rotate and reuse revokes the whole family, so concurrent
@@ -208,11 +223,30 @@ export function createBff(options: BffOptions) {
       if (value) headers.set(name, value);
     }
     if (!headers.has("accept")) headers.set("accept", "application/json");
-    // The BFF is a trusted proxy: pass the client's address along.
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    if (forwardedFor) headers.set("x-forwarded-for", forwardedFor);
+    for (const [name, value] of Object.entries(forwardedFor(request))) headers.set(name, value);
     if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
     return headers;
+  }
+
+  /**
+   * The client's address as the trusted proxies in front of Next.js recorded it, or `null`
+   * when there are none (the browser's own `X-Forwarded-For` is never believed) or their
+   * entry is missing or not an IP address.
+   */
+  function clientAddress(request: Request): string | null {
+    if (trustedProxyHops === 0) return null;
+    const chain = (request.headers.get("x-forwarded-for") ?? "").split(",").map((entry) => entry.trim());
+    const entry = chain.length >= trustedProxyHops ? chain[chain.length - trustedProxyHops] : undefined;
+    return entry && isIP(entry) ? entry : null;
+  }
+
+  /**
+   * `X-Forwarded-For` for Navree, built by the BFF: a single entry, so Navree (which takes the
+   * right-most entry when `http.trust_proxy` is on) sees the client address the BFF vouches for.
+   */
+  function forwardedFor(request: Request): Record<string, string> {
+    const address = clientAddress(request);
+    return address ? { "x-forwarded-for": address } : {};
   }
 
   async function callKeelRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
@@ -232,11 +266,6 @@ export function createBff(options: BffOptions) {
     } catch {
       return null;
     }
-  }
-
-  function forwardedFor(request: Request): Record<string, string> {
-    const value = request.headers.get("x-forwarded-for");
-    return value ? { "x-forwarded-for": value } : {};
   }
 
   /** Single-flight refresh keyed by the refresh token being spent. */

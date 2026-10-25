@@ -12,6 +12,11 @@ use serde::{Deserialize, Deserializer};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+/// The largest `amount_cents` a deal may have: 10^15 cents (ten trillion
+/// in the currency's main unit). Below 2^53, so the web app's JavaScript
+/// numbers stay exact, and sums over many deals stay far from `i64::MAX`.
+pub const MAX_AMOUNT_CENTS: i64 = 1_000_000_000_000_000;
+
 /// The body of `POST /api/v1/deals`.
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 #[schema(as = DealInput)]
@@ -27,9 +32,9 @@ pub struct CreateDeal {
     /// The main contact (must exist).
     #[garde(skip)]
     pub contact_id: Option<Uuid>,
-    /// The value in cents, at least 0.
-    #[garde(required, range(min = 0))]
-    #[schema(value_type = i64, required = true)]
+    /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
+    #[garde(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[schema(value_type = i64, required = true, minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
     /// The ISO 4217 code (default `USD`; stored upper-case).
     #[garde(custom(currency_code))]
@@ -67,8 +72,9 @@ pub struct UpdateDeal {
     #[garde(skip)]
     #[schema(value_type = Option<String>, format = Uuid)]
     pub contact_id: Option<Option<Uuid>>,
-    /// The value in cents, at least 0.
-    #[garde(range(min = 0))]
+    /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
+    #[garde(range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[schema(minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
     /// The ISO 4217 code (stored upper-case).
     #[garde(custom(currency_code))]

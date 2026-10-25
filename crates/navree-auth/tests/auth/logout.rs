@@ -107,3 +107,47 @@ async fn logout_needs_a_bearer_token_and_leaves_other_users_tokens_alone() {
         .assert_status(204);
     refresh(&client, &ada_token).await.assert_status(200);
 }
+
+/// Records `end_user_subscriptions` calls.
+#[derive(Default)]
+struct RecordingBroadcaster(std::sync::Mutex<Vec<uuid::Uuid>>);
+
+impl navree_contracts::Broadcaster for RecordingBroadcaster {
+    fn broadcast(
+        &self,
+        _channels: Vec<String>,
+        _event: String,
+        _data: serde_json::Value,
+    ) -> navree_contracts::BoxFuture<'_, Result<(), navree_contracts::BoxError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn end_user_subscriptions(
+        &self,
+        user_id: uuid::Uuid,
+    ) -> navree_contracts::BoxFuture<'_, Result<(), navree_contracts::BoxError>> {
+        self.0.lock().unwrap().push(user_id);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// Signing out ends the user's real-time subscriptions (PRD "Where rules
+/// are enforced" #5), so channels authorized for the session stop.
+#[tokio::test]
+async fn logout_ends_the_users_realtime_subscriptions() {
+    let broadcaster = Arc::new(RecordingBroadcaster::default());
+    let app = support::builder()
+        .override_value::<dyn navree_contracts::Broadcaster>(broadcaster.clone())
+        .build()
+        .await;
+    let (user, access, token) = signed_in(&app, "ada@example.com").await;
+    assert!(broadcaster.0.lock().unwrap().is_empty());
+    app.client()
+        .post("/api/auth/logout")
+        .bearer(&access)
+        .json(&json!({ "refresh_token": token }))
+        .send()
+        .await
+        .assert_status(204);
+    assert_eq!(*broadcaster.0.lock().unwrap(), [user.id]);
+}

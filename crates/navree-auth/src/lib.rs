@@ -16,7 +16,7 @@
 //!   | `POST /auth/refresh` `{refresh_token}` | public | 200 a new [`TokenPair`]; 401 "Invalid refresh token" |
 //!   | `POST /auth/logout` `{refresh_token?, all?}` | authenticated | 204 |
 //!   | `GET /auth/me` | authenticated | 200 [`UserResource`] |
-//!   | `PATCH /auth/me` `{name?, email?}` | authenticated | 200 [`UserResource`]; a new email is unverified and gets a verification link |
+//!   | `PATCH /auth/me` `{name?, email?, current_password?}` | authenticated | 200 [`UserResource`]; a new email needs `current_password` (400 `errors.current_password`), is unverified, gets a verification link, and the old address is notified |
 //!   | `PATCH /auth/me/password` `{current_password, password}` | authenticated | 200 a new [`TokenPair`] (every other session is signed out); 400 `errors.current_password` |
 //!   | `POST /auth/forgot-password` `{email}` | public | always 202 `{message}`; mails a reset token (SHA-256 at rest, 60 minutes) to registered addresses |
 //!   | `POST /auth/reset-password` `{email, token, password}` | public | 204 (every session is signed out); 400 "Invalid or expired password reset token" |
@@ -139,6 +139,7 @@
 mod account;
 mod account_controller;
 mod controller;
+mod disconnect;
 mod entity;
 mod error;
 mod extract;

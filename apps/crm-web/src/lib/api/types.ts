@@ -182,6 +182,9 @@ export const CONTACT_STATUSES: readonly ContactStatus[] = ["lead", "prospect", "
 export const ACTIVITY_KINDS: readonly ActivityKind[] = ["note", "call", "email", "meeting", "task"];
 export const ROLES: readonly Role[] = ["admin", "manager", "rep"];
 
+/** The largest deal value crm-api accepts, in minor units (OpenAPI `maximum` on `amount_cents`). */
+export const MAX_AMOUNT_CENTS = 1_000_000_000_000_000;
+
 export function stageLabel(stage: DealStage): string {
   return DEAL_STAGES.find((s) => s.stage === stage)?.label ?? stage;
 }

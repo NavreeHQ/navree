@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { OwnerCell } from "@/components/user-avatar";
 import { RecordActivity } from "@/features/activities/components";
 import { DealFormDialog } from "@/features/deals/deal-form";
+import { moveBlockedReason } from "@/features/deals/permissions";
 import { LostReasonDialog } from "@/features/deals/lost-reason-dialog";
 import { useDeal, useDeleteDeal, useMoveDeal } from "@/features/deals/queries";
 import type { Deal, DealStage } from "@/lib/api/types";
@@ -94,7 +95,9 @@ function StageBar({ deal }: { deal: Deal }) {
         })}
       </ol>
       {!canMove ? (
-        <p className="text-xs text-muted-foreground">Only {deal.owner.name} or a manager can move this deal.</p>
+        <p className="text-xs text-muted-foreground">
+          {moveBlockedReason(ability, deal) ?? `Only ${deal.owner.name} or a manager can move this deal.`}
+        </p>
       ) : null}
       <LostReasonDialog
         open={askLost}

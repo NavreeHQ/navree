@@ -73,9 +73,10 @@ async fn won_sets_closed_at() {
     assert_eq!(won["lost_reason"], json!(null));
     assert_eq!(won["updated_at"], "2026-10-26T10:10:00Z");
 
-    // Reordering within won keeps the closing date.
+    // Reordering within won (a manager's move) keeps the closing date.
     crm.clock().advance(Duration::from_secs(60));
-    let still_won = move_deal(&rep, id, json!({ "stage": "won", "position": 0 })).await;
+    let manager = crm.login_as(Role::Manager).await;
+    let still_won = move_deal(&manager, id, json!({ "stage": "won", "position": 0 })).await;
     assert_eq!(still_won["closed_at"], "2026-10-26T10:10:00Z");
     crm.shutdown().await;
 }
@@ -84,6 +85,7 @@ async fn won_sets_closed_at() {
 async fn moving_back_reopens_the_deal() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
+    let manager = crm.login_as(Role::Manager).await;
     let acme = company(&crm, "Acme", rep.id()).await;
     let id = id_of(&create_deal(&rep, new_deal("Acme renewal", acme, 100)).await);
 
@@ -93,14 +95,15 @@ async fn moving_back_reopens_the_deal() {
         json!({ "stage": "lost", "lost_reason": "No budget" }),
     )
     .await;
-    let reopened = move_deal(&rep, id, json!({ "stage": "negotiation" })).await;
+    // Reopening takes a manager (see rep_cannot_reopen_closed_deal_to_delete_it).
+    let reopened = move_deal(&manager, id, json!({ "stage": "negotiation" })).await;
     assert_eq!(reopened["stage"], "negotiation");
     assert_eq!(reopened["probability"], 75);
     assert_eq!(reopened["closed_at"], json!(null));
     assert_eq!(reopened["lost_reason"], json!(null));
 
     move_deal(&rep, id, json!({ "stage": "won" })).await;
-    let reopened = move_deal(&rep, id, json!({ "stage": "lead" })).await;
+    let reopened = move_deal(&manager, id, json!({ "stage": "lead" })).await;
     assert_eq!(reopened["closed_at"], json!(null));
     crm.shutdown().await;
 }
@@ -274,6 +277,65 @@ async fn rep_cannot_delete_won_deal() {
     crm.shutdown().await;
 }
 
+/// Won and lost deals are kept for reporting: a rep cannot get around the
+/// delete rule by moving their closed deal back to an open stage first.
+/// Reopening (any move of a closed deal) takes `manage` on deals.
+#[tokio::test]
+async fn rep_cannot_reopen_closed_deal_to_delete_it() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let manager = crm.login_as(Role::Manager).await;
+    let acme = company(&crm, "Acme", rep.id()).await;
+    let won = id_of(&create_deal(&rep, new_deal("Won", acme, 100)).await);
+    move_deal(&rep, won, json!({ "stage": "won" })).await;
+    let lost = id_of(&create_deal(&rep, new_deal("Lost", acme, 100)).await);
+    move_deal(
+        &rep,
+        lost,
+        json!({ "stage": "lost", "lost_reason": "No budget" }),
+    )
+    .await;
+
+    for id in [won, lost] {
+        let path = format!("/api/v1/deals/{id}");
+        rep.delete(&path).send().await.assert_error(403, None);
+        rep.post(&format!("{path}/move"))
+            .json(&json!({ "stage": "lead" }))
+            .send()
+            .await
+            .assert_error(403, None);
+        rep.patch(&path)
+            .json(&json!({ "stage": "qualified" }))
+            .send()
+            .await
+            .assert_error(403, None);
+        rep.delete(&path).send().await.assert_error(403, None);
+        rep.get(&path).send().await.assert_status(200);
+    }
+    // The rep's abilities say so, so the board does not offer the move.
+    let rules = rep
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert!(
+        rules.as_array().expect("rules").iter().any(|rule| {
+            rule["action"] == "move"
+                && rule["subject"] == "Deal"
+                && rule["inverted"] == json!(true)
+                && rule["conditions"] == json!({ "stage": { "$in": ["won", "lost"] } })
+        }),
+        "{rules}"
+    );
+
+    // Managers (and admins) still reopen closed deals.
+    let reopened = move_deal(&manager, won, json!({ "stage": "negotiation" })).await;
+    assert_eq!(reopened["stage"], "negotiation");
+    assert_eq!(reopened["closed_at"], json!(null));
+    crm.shutdown().await;
+}
+
 #[tokio::test]
 async fn patching_the_stage_follows_the_move_rules() {
     let crm = crm().await;
@@ -308,7 +370,14 @@ async fn patching_the_stage_follows_the_move_rules() {
     assert_eq!(column_titles(&after, "lead"), ["B"]);
     assert_eq!(column_positions(&after, "lead"), [0]);
 
-    let lost = rep
+    // A closed deal changes stage only through a manager.
+    rep.patch(&path)
+        .json(&json!({ "stage": "lost", "lost_reason": "Cancelled" }))
+        .send()
+        .await
+        .assert_error(403, None);
+    let manager = crm.login_as(Role::Manager).await;
+    let lost = manager
         .patch(&path)
         .json(&json!({ "stage": "lost", "lost_reason": "Cancelled" }))
         .send()
@@ -316,7 +385,7 @@ async fn patching_the_stage_follows_the_move_rules() {
         .assert_status(200)
         .json_value();
     assert_eq!(lost["lost_reason"], "Cancelled");
-    let reopened = rep
+    let reopened = manager
         .patch(&path)
         .json(&json!({ "stage": "qualified" }))
         .send()

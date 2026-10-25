@@ -22,7 +22,7 @@ use crm_core::{Activity, Deal, Stage};
 use navree::access::{Accessible, CurrentAccess, Read};
 use navree::contracts::Clock;
 use navree::prelude::*;
-use sea_orm::sea_query::{Expr, Func};
+use sea_orm::sea_query::{Expr, ExprTrait, Func};
 use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder, QuerySelect, Select,
@@ -137,7 +137,9 @@ impl DashboardService {
             / 100;
         let open_deals = OpenDeals {
             count: open.clone().map(|row| row.count).sum(),
-            amount_cents: open.map(|row| row.amount_cents).sum(),
+            amount_cents: open
+                .map(|row| row.amount_cents)
+                .fold(0, i64::saturating_add),
             weighted_amount_cents: i64::try_from(weighted).unwrap_or(i64::MAX),
         };
         let won_this_month = won_between(conn, deals, month_of(now)).await?;
@@ -159,23 +161,36 @@ impl DashboardService {
     }
 }
 
-/// `COUNT(id)` and `CAST(COALESCE(SUM(amount_cents), 0) AS BIGINT)` of the
-/// deals `select` matches (the cast keeps PostgreSQL's `NUMERIC` sums
-/// readable as `i64`).
+/// Amounts are summed in two parts, `amount_cents / 2^32` and
+/// `amount_cents % 2^32`: neither sum can overflow 64 bits for any number
+/// of deals a CRM holds (SQLite fails the whole query when an integer
+/// `SUM` overflows), and [`combine`] puts them back together.
+const AMOUNT_SPLIT: i64 = 1 << 32;
+
+/// `COUNT(id)` and the two parts of the amount sum ([`AMOUNT_SPLIT`]),
+/// each `CAST(COALESCE(SUM(..), 0) AS BIGINT)`, of the deals `select`
+/// matches (the cast keeps PostgreSQL's `NUMERIC` sums readable as `i64`).
 fn with_totals(select: Select<deal::Entity>) -> Select<deal::Entity> {
-    let amount = Func::cast_as(
-        Func::coalesce([
-            Expr::from(Func::sum(Expr::col(deal::Column::AmountCents))),
-            Expr::val(0_i64),
-        ]),
-        "BIGINT",
-    );
+    let sum = |part: Expr| {
+        Expr::from(Func::cast_as(
+            Func::coalesce([Expr::from(Func::sum(part)), Expr::val(0_i64)]),
+            "BIGINT",
+        ))
+    };
+    let amount = || Expr::col(deal::Column::AmountCents);
     select
         .column_as(
             Expr::from(Func::count(Expr::col(deal::Column::Id))),
             "count",
         )
-        .column_as(Expr::from(amount), "amount_cents")
+        .column_as(sum(amount().div(AMOUNT_SPLIT)), "amount_high")
+        .column_as(sum(amount().modulo(AMOUNT_SPLIT)), "amount_low")
+}
+
+/// `high * 2^32 + low` ([`with_totals`]), saturated to `i64`.
+fn combine(high: i64, low: i64) -> i64 {
+    let total = i128::from(high) * i128::from(AMOUNT_SPLIT) + i128::from(low);
+    i64::try_from(total).unwrap_or(if total < 0 { i64::MIN } else { i64::MAX })
 }
 
 /// The count and amount of the deals in each stage that has any.
@@ -187,19 +202,19 @@ async fn stage_totals<C: ConnectionTrait>(
         .apply(deal::Entity::find())
         .select_only()
         .column(deal::Column::Stage);
-    let rows: Vec<(String, i64, i64)> = with_totals(select)
+    let rows: Vec<(String, i64, i64, i64)> = with_totals(select)
         .group_by(deal::Column::Stage)
         .into_tuple()
         .all(conn)
         .await?;
     rows.into_iter()
-        .map(|(stage, count, amount_cents)| {
+        .map(|(stage, count, high, low)| {
             let stage = Stage::from_str(&stage).map_err(|error| DbErr::Type(error.to_string()))?;
             Ok((
                 stage,
                 DealTotals {
                     count,
-                    amount_cents,
+                    amount_cents: combine(high, low),
                 },
             ))
         })
@@ -218,11 +233,11 @@ async fn won_between<C: ConnectionTrait>(
         .filter(deal::Column::Stage.eq(Stage::Won))
         .filter(deal::Column::ClosedAt.gte(start))
         .filter(deal::Column::ClosedAt.lt(end));
-    let totals: Option<(i64, i64)> = with_totals(select).into_tuple().one(conn).await?;
-    let (count, amount_cents) = totals.unwrap_or_default();
+    let totals: Option<(i64, i64, i64)> = with_totals(select).into_tuple().one(conn).await?;
+    let (count, high, low) = totals.unwrap_or_default();
     Ok(DealTotals {
         count,
-        amount_cents,
+        amount_cents: combine(high, low),
     })
 }
 
@@ -307,6 +322,18 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
+
+    #[test]
+    fn split_sums_combine_and_saturate() {
+        let split = |amount: i64| (amount / AMOUNT_SPLIT, amount % AMOUNT_SPLIT);
+        for amount in [0, 1, 333, AMOUNT_SPLIT - 1, AMOUNT_SPLIT, i64::MAX] {
+            let (high, low) = split(amount);
+            assert_eq!(combine(high, low), amount);
+        }
+        let (high, low) = split(i64::MAX);
+        assert_eq!(combine(high * 3, low * 3), i64::MAX);
+        assert_eq!(combine(-high * 3, -low * 3), i64::MIN);
+    }
 
     #[test]
     fn months_run_from_the_first_to_the_first_utc() {

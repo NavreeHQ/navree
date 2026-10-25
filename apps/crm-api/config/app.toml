@@ -12,6 +12,10 @@ url = "http://localhost:3000"
 [http]
 addr = "127.0.0.1:8080"
 api_prefix = "/api"
+# crm-web's BFF calls from here for every browser and names the browser in
+# X-Forwarded-For, so rate limits and the login throttle are per browser.
+# (Also the CRM's built-in default; list the BFF's address in production.)
+trusted_proxies = ["127.0.0.1", "::1"]
 
 [http.cors]
 # crm-web's BFF calls the API server-side; the dev origin is allowed for
@@ -42,6 +46,11 @@ url = "http://localhost:3000/reset-password"
 # ws://127.0.0.1:8080/app/navree-crm-key
 key = "navree-crm-key"
 allowed_origins = ["http://localhost:3000"]
+# queue:work and schedule:work hand their broadcasts (deal notifications,
+# task reminders) to `serve`, which holds the sockets: `auto` posts them to
+# http.addr. Signed with a key derived from APP_KEY (or realtime.secret), so
+# every process needs the same one.
+relay_url = "auto"
 
 [api]
 title = "Navree CRM API"

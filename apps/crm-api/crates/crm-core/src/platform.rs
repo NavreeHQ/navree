@@ -22,12 +22,24 @@ pub const DEALS_CHANNEL: &str = "private-crm.deals";
 /// The event deal changes are broadcast as.
 pub const DEAL_UPDATED: &str = "deal.updated";
 
+/// The proxies whose `X-Forwarded-For` names the client, unless
+/// `http.trusted_proxies` says otherwise: crm-web's backend-for-frontend
+/// calls the API from loopback in the documented setup (spec §7), for
+/// every browser, and names the browser in that header. Without this, all
+/// web users share one per-IP rate limit, and one browser's wrong passwords
+/// throttle everyone's logins to that account. Clients that reach the API
+/// directly from elsewhere cannot set their address. Set
+/// `APP_HTTP__TRUSTED_PROXIES` to the BFF's (and any reverse proxy's)
+/// address when they run elsewhere, or to an empty string to trust none.
+pub const TRUSTED_PROXIES: &str = "127.0.0.1,::1";
+
 /// Defaults the CRM gives settings that the configuration does not set.
 const DEFAULTS: &[(&str, &str)] = &[
     ("realtime.key", REALTIME_KEY),
     ("realtime.app_id", "navree-crm"),
     ("api.title", "Navree CRM API"),
     ("mail.from", "Navree CRM <crm@navree.test>"),
+    ("http.trusted_proxies", TRUSTED_PROXIES),
 ];
 
 /// Adds every platform module the CRM uses to `builder`, configured from
@@ -87,9 +99,11 @@ fn with_defaults(sources: ConfigSources) -> ConfigSources {
     let Ok(config) = Config::load(&sources) else {
         return sources;
     };
+    // Any value counts as set (a list, a number, an empty string).
+    let is_set = |key: &str| config.section::<serde_json::Value>(key).is_ok();
     DEFAULTS
         .iter()
-        .filter(|(key, _)| config.get_string(key).is_none())
+        .filter(|(key, _)| !is_set(key))
         .fold(sources, |sources, (key, value)| sources.set(key, *value))
 }
 
@@ -140,4 +154,41 @@ fn user_channel(
             ChannelDecision::Deny
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn config(sources: ConfigSources) -> Config {
+        Config::load(&with_defaults(sources)).expect("the configuration loads")
+    }
+
+    #[test]
+    fn defaults_fill_only_the_keys_left_unset() {
+        let defaults = config(ConfigSources::new());
+        assert_eq!(
+            defaults.get_string("http.trusted_proxies").as_deref(),
+            Some(TRUSTED_PROXIES)
+        );
+        assert_eq!(
+            defaults.get_string("realtime.key").as_deref(),
+            Some(REALTIME_KEY)
+        );
+
+        // A list is a setting too (not only strings).
+        let listed = config(ConfigSources::new().set("http.trusted_proxies", json!(["10.0.0.5"])));
+        assert_eq!(
+            listed
+                .section::<Vec<String>>("http.trusted_proxies")
+                .unwrap(),
+            ["10.0.0.5"]
+        );
+        // An empty value trusts no proxy.
+        let none =
+            config(ConfigSources::new().env_vars("APP_", [("APP_HTTP__TRUSTED_PROXIES", "")]));
+        assert_eq!(none.get_string("http.trusted_proxies").as_deref(), Some(""));
+    }
 }

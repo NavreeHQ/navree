@@ -21,15 +21,16 @@ use http::header::{
     REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, USER_AGENT, X_CONTENT_TYPE_OPTIONS,
     X_FRAME_OPTIONS,
 };
-use http::{Method, StatusCode};
+use http::{HeaderMap, Method, StatusCode};
 use http_body_util::BodyExt;
-use navree_contracts::{AuthState, RequestId};
+use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, RequestScope};
 use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::error::PendingError;
+use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
 use crate::maintenance::MaintenanceMode;
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
@@ -73,7 +74,7 @@ fn request_id_of(request: &Request) -> Option<RequestId> {
 #[derive(Clone)]
 pub(crate) struct ContextState {
     pub(crate) ctx: AppContext,
-    pub(crate) trust_proxy: bool,
+    pub(crate) proxies: ProxyTrust,
 }
 
 /// Accepts a valid incoming `X-Request-Id` or generates one, records the
@@ -91,7 +92,7 @@ pub(crate) async fn request_context(
     let request_id = RequestId::parse_or_generate(incoming);
     let header = HeaderValue::from_str(request_id.as_str())
         .unwrap_or_else(|_| HeaderValue::from_static("invalid"));
-    let ip = ClientIp::resolve(request.headers(), request.extensions(), state.trust_proxy);
+    let ip = ClientIp::resolve(request.headers(), request.extensions(), &state.proxies);
     request
         .headers_mut()
         .insert(X_REQUEST_ID.clone(), header.clone());
@@ -372,8 +373,14 @@ pub(crate) async fn maintenance(
     }
 }
 
+/// The per-IP limit and where its refusals are audited.
+pub(crate) struct PerIpLimit {
+    pub(crate) limiter: RateLimiter<IpAddr>,
+    pub(crate) audit: Option<Arc<dyn AuditSink>>,
+}
+
 pub(crate) async fn per_ip_rate_limit(
-    State(limiter): State<Arc<RateLimiter<IpAddr>>>,
+    State(limit): State<Arc<PerIpLimit>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -381,13 +388,68 @@ pub(crate) async fn per_ip_rate_limit(
         .extensions()
         .get::<ClientIp>()
         .copied()
-        .unwrap_or_else(|| ClientIp::resolve(request.headers(), request.extensions(), false));
-    match limiter.check(&ip.0) {
+        .unwrap_or_else(|| {
+            ClientIp::resolve(request.headers(), request.extensions(), &ProxyTrust::none())
+        });
+    match limit.limiter.check(&ip.0) {
         Ok(()) => next.run(request).await,
-        Err(retry_after) => {
+        Err(limited) => {
             tracing::warn!(target: "navree::security", ip = %ip.0, "per-IP rate limit exceeded");
-            AppError::too_many_requests(retry_after).into_response()
+            if limited.report
+                && let Some(sink) = &limit.audit
+            {
+                let entry = security_entry(
+                    "http.rate_limited",
+                    request.headers(),
+                    request.extensions(),
+                    ip,
+                    serde_json::json!({
+                        "limit": "per_ip",
+                        "method": request.method().as_str(),
+                        "path": request.uri().path(),
+                        "retry_after_secs": limited.retry_after.as_secs().max(1),
+                    }),
+                );
+                record_security(sink.as_ref(), entry).await;
+            }
+            AppError::too_many_requests(limited.retry_after).into_response()
         }
+    }
+}
+
+/// A security audit entry (`AuditKind::Security`) about the request with
+/// `headers` and `extensions` from `ip`: its request id and user agent,
+/// and the authenticated user when there is one.
+pub(crate) fn security_entry(
+    action: &str,
+    headers: &HeaderMap,
+    extensions: &http::Extensions,
+    ip: ClientIp,
+    metadata: serde_json::Value,
+) -> AuditEntry {
+    let mut entry = AuditEntry::new(AuditKind::Security, action)
+        .ip(ip.0.to_string())
+        .metadata(metadata);
+    if let Some(user) = extensions
+        .get::<AuthState>()
+        .and_then(|state| state.0.as_ref())
+    {
+        entry = entry.actor(user.user_id);
+    }
+    if let Some(request_id) = extensions.get::<RequestId>() {
+        entry = entry.request_id(request_id.as_str());
+    }
+    if let Some(agent) = user_agent(headers) {
+        entry = entry.user_agent(agent);
+    }
+    entry
+}
+
+/// Hands `entry` to `sink`, logging a failure (the response stands).
+pub(crate) async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
+    let action = entry.action.clone();
+    if let Err(error) = sink.record(entry).await {
+        tracing::warn!(target: "navree::audit", %error, %action, "could not write a security audit entry");
     }
 }
 

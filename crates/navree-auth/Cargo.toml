@@ -43,6 +43,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+futures = { workspace = true }
 navree-api = { workspace = true }
 navree-observe = { workspace = true }
 navree-testing = { workspace = true }

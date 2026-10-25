@@ -8,7 +8,7 @@ use crm_core::subjects::COMPANY;
 use crm_core::{OwnerRef, Stage, owner_for};
 use navree::access::{Ability, Accessible, Read};
 use navree::contracts::Clock;
-use navree::db::paginate;
+use navree::db::{eq_ignore_case, paginate};
 use navree::prelude::*;
 use sea_orm::ActiveValue::Set;
 use sea_orm::sea_query::{Alias, Expr, ExprTrait, Func};
@@ -39,11 +39,13 @@ impl CompanyService {
         filters: CompanyFilters,
         page: PageQuery,
     ) -> Result<CompanyPage> {
+        let backend = uow.db().backend();
         let mut select = scope
             .apply(company::Entity::find())
             .filter(company::Column::DeletedAt.is_null());
         if let Some(search) = search_text(filters.search.as_deref()) {
             select = select.filter(any_contains(
+                backend,
                 &[company::Column::Name, company::Column::Domain],
                 search,
             ));
@@ -52,10 +54,11 @@ impl CompanyService {
             select = select.filter(company::Column::OwnerId.eq(owner_id));
         }
         if let Some(industry) = search_text(filters.industry.as_deref()) {
-            select = select.filter(
-                Expr::expr(Func::lower(Expr::col(company::Column::Industry)))
-                    .eq(industry.to_lowercase()),
-            );
+            select = select.filter(eq_ignore_case(
+                backend,
+                Expr::col(company::Column::Industry),
+                industry,
+            ));
         }
         let lower_name = || Expr::expr(Func::lower(Expr::col(company::Column::Name)));
         select = match filters.sort.unwrap_or_default() {

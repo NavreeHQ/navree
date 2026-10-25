@@ -25,12 +25,25 @@
 //!   stays silent is closed with 4201 (reconnect).
 //! - **Broadcast** in-process with [`Realtime::broadcast`] or through the
 //!   `dyn Broadcaster` contract (navree-notify, navree-events listeners).
-//!   [`Realtime::disconnect_user`] closes a user's connections (4009).
+//!   [`Realtime::disconnect_user`] closes a user's connections (4009);
+//!   [`Realtime::end_user_subscriptions`] (and
+//!   `Broadcaster::end_user_subscriptions`, which navree-access and
+//!   navree-auth call when a user's roles change or they sign out) closes
+//!   them with 4200, so clients reconnect and authorize every private
+//!   channel again.
+//! - **Relay** across processes: the sockets live in the `serve` process,
+//!   but queued jobs and scheduled tasks run in `queue:work` and
+//!   `schedule:work`. With [`RealtimeOptions::relay_url`] (`auto`: the
+//!   address in `http.addr`), their `dyn Broadcaster` posts each broadcast
+//!   to the serving process's `POST /apps/{app_id}/events`, signed with a
+//!   key derived from `realtime.secret` or the app key (shared by every
+//!   process; messages older than five minutes are refused).
 //! - **Shutdown**: connections are tracked by the app's task tracker and
 //!   closed with 4200 (reconnect now) when the app shuts down.
 //!
 //! Client events (`client-…`) are not relayed, and there is no Pusher HTTP
-//! publishing API; broadcast from the app instead.
+//! publishing API; broadcast from the app instead. Several `serve`
+//! processes behind a load balancer each reach only their own sockets.
 //!
 //! ```
 //! use std::collections::HashMap;
@@ -85,6 +98,7 @@ mod module;
 mod options;
 mod protocol;
 mod realtime;
+mod relay;
 mod socket;
 
 pub use module::{ChannelDecision, ModuleBuilderRealtimeExt, RealtimeModule};

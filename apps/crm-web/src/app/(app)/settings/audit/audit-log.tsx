@@ -9,6 +9,7 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ACTION_OPTIONS, entryLabel } from "@/features/audit/actions";
 import { useAuditLog } from "@/features/audit/queries";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useUsers } from "@/features/users/queries";
@@ -18,24 +19,6 @@ import type { AuditEntry } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 
 const SUBJECT_TYPES = ["Company", "Contact", "Deal", "Activity", "User"].map((s) => ({ value: s, label: s }));
-/**
- * The actions crm-api records: data changes as `<entity>.created|updated|deleted`,
- * sign-ins as `auth.*`, role changes and refused requests as `access.*`.
- */
-const ACTIONS = [
-  ...["company", "contact", "deal", "activity", "user"].flatMap((entity) =>
-    ["created", "updated", "deleted"].map((verb) => `${entity}.${verb}`),
-  ),
-  "auth.login",
-  "auth.logout",
-  "access.role_assigned",
-  "access.denied",
-].map((a) => ({ value: a, label: actionLabel(a) }));
-
-function actionLabel(action: string): string {
-  const text = action.replace(/[._]/g, " ");
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 function recordHref(type: string | null, id: string | null): string | null {
   if (!type || !id) return null;
@@ -136,7 +119,7 @@ export function AuditLog() {
           <OptionFilter
             value={params.action}
             onChange={(action) => url.set({ action })}
-            options={ACTIONS}
+            options={ACTION_OPTIONS}
             anyLabel="Any action"
             ariaLabel="Filter by action"
           />
@@ -171,7 +154,9 @@ export function AuditLog() {
                       )}
                     </TableCell>
                     <TableCell className="py-2.5 whitespace-nowrap">
-                      <span className="font-medium">{actionLabel(entry.action)}</span>
+                      <span className="font-medium" title={entry.action}>
+                        {entryLabel(entry)}
+                      </span>
                       <span className="block text-xs text-muted-foreground">{entry.kind}</span>
                     </TableCell>
                     <TableCell className="py-2.5 whitespace-nowrap">

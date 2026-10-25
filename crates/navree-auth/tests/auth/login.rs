@@ -110,6 +110,79 @@ async fn login_throttled_after_5_attempts() {
         .assert_status(200);
 }
 
+/// A burst of parallel logins must not get more guesses through than the
+/// limit: each attempt is counted before the password is checked.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn login_throttle_holds_under_concurrency() {
+    let app = support::app().await;
+    support::create_user(&app, "ada@example.com").await;
+    let client = app.client();
+
+    let burst = (0..30).map(|n| {
+        let client = client.clone();
+        async move { login(&client, "ada@example.com", &format!("wrong {n}")).await }
+    });
+    let statuses: Vec<u16> = futures::future::join_all(burst)
+        .await
+        .iter()
+        .map(|response| response.status().as_u16())
+        .collect();
+    let unauthorized = statuses.iter().filter(|s| **s == 401).count();
+    let throttled = statuses.iter().filter(|s| **s == 429).count();
+    assert!(unauthorized <= 5, "{statuses:?}");
+    assert_eq!(unauthorized + throttled, 30, "{statuses:?}");
+
+    // A second burst carrying the right password is refused as a whole.
+    let burst = (0..10).map(|n| {
+        let client = client.clone();
+        let password = if n == 5 {
+            PASSWORD.to_owned()
+        } else {
+            format!("wrong {n}")
+        };
+        async move { login(&client, "ada@example.com", &password).await }
+    });
+    let statuses: Vec<u16> = futures::future::join_all(burst)
+        .await
+        .iter()
+        .map(|response| response.status().as_u16())
+        .collect();
+    assert!(statuses.iter().all(|s| *s == 429), "{statuses:?}");
+}
+
+/// A throttled login is a security event for the audit log too: once per
+/// window (a flood of refusals is one entry), with the email and address.
+#[tokio::test]
+async fn throttled_logins_are_audited_once_per_window() {
+    let sink = Arc::new(RecordingSink::default());
+    let app = support::builder()
+        .override_value::<dyn AuditSink>(sink.clone())
+        .build()
+        .await;
+    support::create_user(&app, "ada@example.com").await;
+    let client = app.client();
+    for _ in 0..5 {
+        login(&client, "ada@example.com", "wrong password")
+            .await
+            .assert_status(401);
+    }
+    assert!(sink.with_action("auth.throttled").is_empty());
+    for _ in 0..3 {
+        login(&client, "Ada@example.com", "wrong password")
+            .await
+            .assert_status(429);
+    }
+    let throttled = sink.with_action("auth.throttled");
+    assert_eq!(throttled.len(), 1, "{throttled:?}");
+    assert_eq!(throttled[0].kind, AuditKind::Security);
+    assert_eq!(
+        throttled[0].metadata,
+        json!({ "flow": "login", "email": "ada@example.com" })
+    );
+    assert_eq!(throttled[0].ip.as_deref(), Some("127.0.0.1"));
+    assert!(throttled[0].request_id.is_some());
+}
+
 #[tokio::test]
 async fn a_successful_login_resets_the_failed_attempts() {
     let app = support::app().await;

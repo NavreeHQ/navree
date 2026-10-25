@@ -96,6 +96,31 @@ export function ListEmpty({
   );
 }
 
+/**
+ * A page number past the last page (an old link, or a list that shrank): the API answers with an
+ * empty page, which isn't the same as an empty list.
+ */
+export function PastEndNotice({ noun, total, onFirstPage }: { noun: string; total: number; onFirstPage: () => void }) {
+  return (
+    <Empty className="py-14">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <SearchXIcon />
+        </EmptyMedia>
+        <EmptyTitle>This page is past the end of the list</EmptyTitle>
+        <EmptyDescription>
+          There are {total} {noun} in all. Go back to the first page to see them.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="outline" size="sm" onClick={onFirstPage}>
+          Go to the first page
+        </Button>
+      </EmptyContent>
+    </Empty>
+  );
+}
+
 /** The bordered surface that holds a filter bar, table and pagination. */
 export function TablePanel({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>{children}</div>;

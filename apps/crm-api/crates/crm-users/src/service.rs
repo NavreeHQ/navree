@@ -5,10 +5,10 @@ use std::sync::Arc;
 use navree::access::{AccessService, Accessible, Read};
 use navree::auth::{AuthService, NewUser, user};
 use navree::contracts::Clock;
-use navree::db::paginate;
+use navree::db::{contains_ignore_case, paginate};
 use navree::prelude::*;
 use sea_orm::ActiveValue::Set;
-use sea_orm::sea_query::{Expr, ExprTrait, Func, LikeExpr};
+use sea_orm::sea_query::Expr;
 use sea_orm::{Condition, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder};
 
 use crate::dto::{CreateUser, UpdateUser, UserFilter};
@@ -36,11 +36,15 @@ impl UserService {
         if let Some(search) = filter.search.as_deref().map(str::trim)
             && !search.is_empty()
         {
-            let pattern = || LikeExpr::new(contains(search)).escape('\\');
+            // Case-insensitive for non-ASCII letters too (SQLite's own
+            // LOWER and LIKE fold ASCII only).
+            let backend = uow.db().backend();
+            let matches =
+                |column: user::Column| contains_ignore_case(backend, Expr::col(column), search);
             select = select.filter(
                 Condition::any()
-                    .add(Expr::expr(Func::lower(Expr::col(user::Column::Name))).like(pattern()))
-                    .add(Expr::expr(Func::lower(Expr::col(user::Column::Email))).like(pattern())),
+                    .add(matches(user::Column::Name))
+                    .add(matches(user::Column::Email)),
             );
         }
         let select = select
@@ -106,18 +110,4 @@ impl UserService {
             .unwrap_or_default();
         Ok(UserView::new(&user, roles))
     }
-}
-
-/// A `LIKE` pattern matching values that contain `search`, lower-cased,
-/// with `%`, `_` and `\` taken literally (escape `\`).
-fn contains(search: &str) -> String {
-    let mut pattern = String::from("%");
-    for ch in search.to_lowercase().chars() {
-        if matches!(ch, '%' | '_' | '\\') {
-            pattern.push('\\');
-        }
-        pattern.push(ch);
-    }
-    pattern.push('%');
-    pattern
 }

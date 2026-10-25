@@ -83,6 +83,40 @@ async fn paginate_meta() {
     assert_eq!(json["data"][0], "note-10");
 }
 
+/// Any page number a client can send is an empty page past the end, not a
+/// panic in the offset arithmetic (`page * per_page` overflowing `u64`, or
+/// an offset above `i64::MAX` for the SQL bind).
+#[tokio::test]
+async fn huge_page_numbers_are_empty_pages() {
+    let temp = TempDb::new();
+    let db = notes_db(&temp).await;
+    create_many(&Numbered, db.conn(), 3).await.unwrap();
+    for (page, per_page) in [
+        (u64::MAX, 100),
+        (100_000_000_000_000_000, 100),
+        (1_152_921_504_606_846_977, 16),
+        (u64::MAX / 15 + 2, 15),
+    ] {
+        let result = paginate(
+            note::Entity::find(),
+            db.conn(),
+            PageQuery::new(page, per_page),
+        )
+        .await
+        .unwrap();
+        assert!(result.data.is_empty(), "page {page}: {:?}", result.data);
+        assert_eq!(result.meta.total, 3);
+        assert_eq!(result.meta.current_page, page);
+    }
+    let query = page_query("/notes?page=18446744073709551615&per_page=100")
+        .await
+        .unwrap();
+    let result = paginate(note::Entity::find(), db.conn(), query)
+        .await
+        .unwrap();
+    assert!(result.data.is_empty());
+}
+
 #[tokio::test]
 async fn paginate_empty_table_has_one_page() {
     let temp = TempDb::new();

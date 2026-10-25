@@ -38,6 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DealFormDialog } from "@/features/deals/deal-form";
+import { moveBlockedReason } from "@/features/deals/permissions";
 import { LostReasonDialog } from "@/features/deals/lost-reason-dialog";
 import { useDealBoard, useMoveDeal } from "@/features/deals/queries";
 import { useUrlState } from "@/hooks/use-url-state";
@@ -68,7 +69,7 @@ function findStage(columns: Columns, id: UniqueIdentifier): DealStage | undefine
 
 // ---- Card ----------------------------------------------------------------------
 
-function DealCardBody({ deal, locked, dragging }: { deal: Deal; locked?: boolean; dragging?: boolean }) {
+function DealCardBody({ deal, lockReason, dragging }: { deal: Deal; lockReason?: string; dragging?: boolean }) {
   const closed = deal.stage === "won" || deal.stage === "lost";
   const due = !closed && deal.expected_close_date ? dueBucket(`${deal.expected_close_date}T23:59:59`) : null;
   return (
@@ -86,11 +87,10 @@ function DealCardBody({ deal, locked, dragging }: { deal: Deal; locked?: boolean
         >
           {deal.title}
         </Link>
-        {locked ? (
-          <LockIcon
-            className="mt-0.5 size-3 shrink-0 text-muted-foreground/70"
-            aria-label={`Owned by ${deal.owner.name}; you can't move it`}
-          />
+        {lockReason ? (
+          <LockIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground/70" aria-label={lockReason}>
+            <title>{lockReason}</title>
+          </LockIcon>
         ) : null}
       </div>
       <span className="truncate text-xs text-muted-foreground">{deal.company.name}</span>
@@ -121,6 +121,7 @@ function DealCardBody({ deal, locked, dragging }: { deal: Deal; locked?: boolean
 
 function SortableDealCard({ deal, canMove }: { deal: Deal; canMove: boolean }) {
   const router = useRouter();
+  const ability = useAbility<AppAbility>();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: deal.id,
     disabled: !canMove,
@@ -150,7 +151,12 @@ function SortableDealCard({ deal, canMove }: { deal: Deal; canMove: boolean }) {
         listeners?.onKeyDown?.(e);
       }}
     >
-      <DealCardBody deal={deal} locked={!canMove} />
+      <DealCardBody
+        deal={deal}
+        lockReason={
+          canMove ? undefined : (moveBlockedReason(ability, deal) ?? `Owned by ${deal.owner.name}; you can't move it`)
+        }
+      />
     </li>
   );
 }

@@ -24,7 +24,7 @@ use tokio::sync::OnceCell;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::throttle::LoginThrottle;
+use crate::throttle::{Attempt, LoginThrottle};
 use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
@@ -123,7 +123,8 @@ impl fmt::Debug for TokenPair {
 ///   always uses its own transaction, so a detected reuse stays revoked
 ///   although the request fails; on SQLite call it before writing through
 ///   the request's unit of work.
-/// - Reads use the connection pool (committed data only).
+/// - Reads use the connection pool, or the task's unit of work when its
+///   transaction is open (`Db::reader`).
 /// - Logins, failed logins, refreshes, detected reuse and logouts are
 ///   written to the `dyn AuditSink` when one is registered.
 pub struct AuthService {
@@ -288,16 +289,16 @@ impl AuthService {
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
         let key = LoginThrottle::key(email, meta.ip.as_deref());
-        if let Err(error) = self.throttle.check(&key).await {
-            if matches!(error, AuthError::TooManyAttempts { .. }) {
-                tracing::warn!(
-                    target: "navree::security",
-                    ip = meta.ip.as_deref().unwrap_or("-"),
-                    "login throttled after too many failed attempts"
-                );
-            }
-            return Err(error);
-        }
+        // Counted before the (slow) password check, so parallel guesses
+        // cannot all pass while the counter is still low.
+        self.throttle_attempt(
+            &self.throttle,
+            &key,
+            meta,
+            None,
+            json!({ "flow": "login", "email": normalize_email(email) }),
+        )
+        .await?;
         match self.check_credentials(email, password).await? {
             Ok(user) => {
                 if let Err(error) = self.throttle.clear(&key).await {
@@ -320,9 +321,6 @@ impl AuthService {
                 Ok(LoginOutcome::Authenticated { user, tokens })
             }
             Err(known_user) => {
-                if let Err(error) = self.throttle.hit(&key).await {
-                    tracing::warn!(target: "navree::auth", %error, "could not count a failed login");
-                }
                 tracing::warn!(
                     target: "navree::security",
                     ip = meta.ip.as_deref().unwrap_or("-"),
@@ -415,7 +413,9 @@ impl AuthService {
     /// Ends sessions of `user_id`: with `all`, every refresh token of the
     /// user; otherwise the family of `refresh_token` when it is the user's
     /// (anything else is ignored). Access tokens are stateless and stay
-    /// valid until they expire. Audited as `auth.logout`.
+    /// valid until they expire. The user's real-time subscriptions end
+    /// (`dyn Broadcaster::end_user_subscriptions`, after the commit).
+    /// Audited as `auth.logout`.
     pub async fn logout(
         &self,
         refresh_token: Option<&str>,
@@ -452,6 +452,7 @@ impl AuthService {
             logout = logout.request_id(request_id);
         }
         self.audit(logout).await;
+        crate::disconnect::end_user_subscriptions(&self.app, user_id).await;
         Ok(())
     }
 
@@ -466,16 +467,22 @@ impl AuthService {
         .await
     }
 
-    /// The user with `id`.
+    /// The user with `id`. Inside a unit of work whose transaction is open
+    /// (a request after a record check, say) it reads through that
+    /// transaction (`Db::reader`), so the request never waits for a second
+    /// pool connection while it holds SQLite's write lock.
     pub async fn find_user(&self, id: Uuid) -> Result<Option<User>, AuthError> {
-        Ok(user::Entity::find_by_id(id).one(self.db.conn()).await?)
+        Ok(user::Entity::find_by_id(id)
+            .one(&self.db.reader().await)
+            .await?)
     }
 
-    /// The user with `email` (compared trimmed and case-insensitively).
+    /// The user with `email` (compared trimmed and case-insensitively);
+    /// read like [`find_user`](AuthService::find_user).
     pub async fn find_by_email(&self, email: &str) -> Result<Option<User>, AuthError> {
         Ok(user::Entity::find()
             .filter(user::Column::Email.eq(normalize_email(email)))
-            .one(self.db.conn())
+            .one(&self.db.reader().await)
             .await?)
     }
 
@@ -808,6 +815,40 @@ impl AuthService {
         if let Some(sink) = self.audit_sink().await {
             record(sink, entry).await;
         }
+    }
+
+    /// Counts an attempt on `throttle` for `key` before a credential is
+    /// checked. A refusal is logged as a security event and, the first
+    /// time in a window (so a flood is one entry), audited as
+    /// `auth.throttled` with `metadata` (the `flow`, plus the email for
+    /// logins); it is [`AuthError::TooManyAttempts`].
+    pub(crate) async fn throttle_attempt(
+        &self,
+        throttle: &LoginThrottle,
+        key: &str,
+        meta: &ClientMeta,
+        actor: Option<Uuid>,
+        metadata: Value,
+    ) -> Result<(), AuthError> {
+        let (retry_after, first) = match throttle.count(key).await? {
+            Attempt::Allowed => return Ok(()),
+            Attempt::Refused { retry_after, first } => (retry_after, first),
+        };
+        tracing::warn!(
+            target: "navree::security",
+            ip = meta.ip.as_deref().unwrap_or("-"),
+            flow = metadata["flow"].as_str().unwrap_or("-"),
+            "throttled after too many failed attempts"
+        );
+        if first {
+            let mut throttled =
+                entry(AuditKind::Security, "auth.throttled", meta).metadata(metadata);
+            if let Some(actor) = actor {
+                throttled = throttled.actor(actor);
+            }
+            self.audit(throttled).await;
+        }
+        Err(AuthError::TooManyAttempts { retry_after })
     }
 }
 

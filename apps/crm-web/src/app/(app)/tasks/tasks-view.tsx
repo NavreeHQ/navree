@@ -3,6 +3,7 @@
 import { Can } from "@casl/react";
 import { ListChecksIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
+import { PastEndNotice } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,8 @@ export function TasksView() {
               <TaskRow key={task.id} task={task} showAssignee={everyone} />
             ))}
           </ul>
+        ) : list.data && list.data.meta.total > 0 ? (
+          <PastEndNotice noun="tasks" total={list.data.meta.total} onFirstPage={() => url.set({ page: undefined })} />
         ) : (
           <Empty className="py-14">
             <EmptyHeader>

@@ -12,9 +12,9 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
-use http::Method;
 use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
 use http::request::Parts;
+use http::{Method, StatusCode};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, BoxError};
 use tower_http::compression::CompressionLayer;
@@ -22,6 +22,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 use crate::controller::ControllerRegistration;
+use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
 use crate::pipeline::{self, ContextState, ErrorState, TimeoutOverride, X_REQUEST_ID};
 use crate::{
@@ -49,11 +50,9 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     let authenticator = ctx.try_get::<dyn Authenticator>().await;
     let authorizer = ctx.try_get::<dyn RouteAuthorizer>().await;
     validate(&routes, authenticator.is_some(), authorizer.is_some())?;
-    let audit = if routes.iter().any(|r| r.meta.audit_action.is_some()) {
-        ctx.try_get::<dyn AuditSink>().await
-    } else {
-        None
-    };
+    // Audit actions, and security events (rate limiting, denials no
+    // `RouteAuthorizer` saw).
+    let audit = ctx.try_get::<dyn AuditSink>().await;
 
     let shared = Shared {
         authorizer,
@@ -70,8 +69,11 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     // Fixed layers, innermost first (`Router::layer` wraps like an onion).
     router = router.layer(DefaultBodyLimit::max(options.body_limit_bytes));
     if let Some(limit) = options.per_ip_rate_limit {
-        let limiter = Arc::new(RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)));
-        router = router.layer(from_fn_with_state(limiter, pipeline::per_ip_rate_limit));
+        let limit = Arc::new(pipeline::PerIpLimit {
+            limiter: RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+            audit: shared.audit.clone(),
+        });
+        router = router.layer(from_fn_with_state(limit, pipeline::per_ip_rate_limit));
     }
     router = router.layer(from_fn_with_state(
         Arc::new(pipeline::MaintenanceGate {
@@ -106,7 +108,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     router = router.layer(from_fn_with_state(
         Arc::new(ContextState {
             ctx: ctx.clone(),
-            trust_proxy: options.trust_proxy,
+            proxies: ProxyTrust::new(options.trust_proxy, &options.trusted_proxies),
         }),
         pipeline::request_context,
     ));
@@ -313,6 +315,7 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
             .audit_action
             .as_ref()
             .and_then(|_| shared.audit.clone()),
+        security: shared.audit.clone(),
         body_limit: meta.body_limit.unwrap_or(shared.body_limit),
         meta: meta.clone(),
     });
@@ -335,7 +338,10 @@ struct RouteRuntime {
     meta: Arc<RouteMeta>,
     throttle: Option<RateLimiter<ThrottleKey>>,
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
+    /// Where the route's audit action goes (only with an audit action).
     audit: Option<Arc<dyn AuditSink>>,
+    /// Where security events go: throttling, 403s from guards and handlers.
+    security: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
 }
 
@@ -373,25 +379,78 @@ impl RouteRuntime {
                 Some(user) => ThrottleKey::User(user),
                 None => ThrottleKey::Ip(client_ip(parts)),
             };
-            if let Err(retry_after) = limiter.check(&key) {
+            if let Err(limited) = limiter.check(&key) {
                 tracing::warn!(
                     target: "navree::security",
                     route = %meta.full_path,
                     user_id = user.map(tracing::field::display),
                     "route throttle exceeded"
                 );
-                return Err(AppError::too_many_requests(retry_after));
+                if limited.report {
+                    self.security_event(
+                        parts,
+                        "http.rate_limited",
+                        serde_json::json!({
+                            "limit": "route",
+                            "retry_after_secs": limited.retry_after.as_secs().max(1),
+                        }),
+                    )
+                    .await;
+                }
+                return Err(AppError::too_many_requests(limited.retry_after));
             }
         }
 
         for guard in &meta.guards {
-            guard.check(parts).await?;
+            if let Err(error) = guard.check(parts).await {
+                if error.status == StatusCode::FORBIDDEN {
+                    self.security_event(
+                        parts,
+                        "access.denied",
+                        serde_json::json!({ "check": "guard" }),
+                    )
+                    .await;
+                }
+                return Err(error);
+            }
         }
 
         if let Some(authorizer) = &self.authorizer {
             authorizer.authorize(parts, meta).await?;
         }
         Ok(user)
+    }
+
+    /// Records a security event about this route (`metadata` plus the
+    /// method and route).
+    async fn security_event(&self, parts: &Parts, action: &str, metadata: serde_json::Value) {
+        let Some(sink) = &self.security else {
+            return;
+        };
+        sink.record(self.security_entry(parts, action, metadata))
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(target: "navree::audit", %error, %action, "could not write a security audit entry");
+            });
+    }
+
+    fn security_entry(
+        &self,
+        parts: &Parts,
+        action: &str,
+        mut metadata: serde_json::Value,
+    ) -> AuditEntry {
+        if let Some(object) = metadata.as_object_mut() {
+            object.insert("method".to_owned(), serde_json::json!(self.meta.method));
+            object.insert("route".to_owned(), serde_json::json!(self.meta.full_path));
+        }
+        pipeline::security_entry(
+            action,
+            &parts.headers,
+            &parts.extensions,
+            ClientIp(client_ip(parts)),
+            metadata,
+        )
     }
 
     /// Writes the route's audit action after a 2xx response.
@@ -435,7 +494,9 @@ fn client_ip(parts: &Parts) -> IpAddr {
         .extensions
         .get::<ClientIp>()
         .copied()
-        .unwrap_or_else(|| ClientIp::resolve(&parts.headers, &parts.extensions, false))
+        .unwrap_or_else(|| {
+            ClientIp::resolve(&parts.headers, &parts.extensions, &ProxyTrust::none())
+        })
         .0
 }
 
@@ -460,6 +521,15 @@ async fn route_pipeline(
         Err(error) => error.into_response(),
         Ok(user) => {
             let audit = runtime.audit_entry(&parts, user);
+            // A 403 the handler returns itself (an ownership rule, a
+            // channel it will not authorize) is a denial no authorizer saw.
+            let denied = runtime.security.as_ref().map(|_| {
+                runtime.security_entry(
+                    &parts,
+                    "access.denied",
+                    serde_json::json!({ "check": "handler" }),
+                )
+            });
             let run = next.run(Request::from_parts(parts, body));
             let response = match meta.timeout {
                 Some(limit) => match tokio::time::timeout(limit, run).await {
@@ -472,6 +542,11 @@ async fn route_pipeline(
                 && response.status().is_success()
             {
                 runtime.audit(entry).await;
+            }
+            if let (Some(entry), Some(sink)) = (denied, &runtime.security)
+                && response.status() == StatusCode::FORBIDDEN
+            {
+                pipeline::record_security(sink.as_ref(), entry).await;
             }
             response
         }

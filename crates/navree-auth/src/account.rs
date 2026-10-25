@@ -44,7 +44,7 @@ impl AuthService {
         let now = self.clock.now();
         let options = &self.options.password_reset;
         let pending = password_reset_token::Entity::find_by_id(user.email.clone())
-            .one(self.db.conn())
+            .one(&self.db.reader().await)
             .await?;
         if let Some(pending) = pending
             && now < after(pending.created_at, options.throttle_secs)
@@ -105,7 +105,7 @@ impl AuthService {
         let presented = sha256_hex(token.as_bytes());
         let now = self.clock.now();
         let pending = password_reset_token::Entity::find_by_id(email.clone())
-            .one(self.db.conn())
+            .one(&self.db.reader().await)
             .await?
             .ok_or(AuthError::InvalidResetToken)?;
         if !constant_time_eq(pending.token_hash.as_bytes(), presented.as_bytes())
@@ -318,10 +318,14 @@ impl AuthService {
 
     /// Changes the name and/or email address of `user_id` (`PATCH
     /// /auth/me`). The name is trimmed and must not be empty; the address
-    /// is stored trimmed and lower-cased, must be free
-    /// ([`AuthError::EmailTaken`]), and a new address is unverified until
-    /// the user follows the verification link mailed to it (when the app
-    /// has a `Mailer`); a pending password reset of the old address is
+    /// is stored trimmed and lower-cased. A new address needs the user's
+    /// `current_password` (a field error on `current_password` when missing
+    /// or wrong, counted by the login throttle), so a stolen access token
+    /// cannot move the account to an address whose password reset mail the
+    /// thief reads. It must be free ([`AuthError::EmailTaken`]) and is
+    /// unverified until the user follows the verification link mailed to
+    /// it; the old address is told about the change (both when the app has
+    /// a `Mailer`), and a pending password reset of the old address is
     /// cancelled. Audited as `auth.profile_updated` with the old and new
     /// values of the changed fields.
     pub async fn update_profile(
@@ -334,13 +338,18 @@ impl AuthService {
             .find_user(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
+        let ProfileUpdate {
+            name,
+            email,
+            current_password,
+        } = update;
         let now = self.clock.now();
         let mut row = user::ActiveModel {
             id: Unchanged(user.id),
             ..Default::default()
         };
         let (mut old, mut new) = (Map::new(), Map::new());
-        if let Some(name) = update.name {
+        if let Some(name) = name {
             let name = name.trim();
             if name.is_empty() {
                 return Err(invalid("name", "required", &[]));
@@ -352,12 +361,19 @@ impl AuthService {
             }
         }
         let mut new_email = None;
-        if let Some(email) = update.email {
+        if let Some(email) = email {
             let email = normalize_email(&email);
             if email.is_empty() || !email.contains('@') {
                 return Err(invalid("email", "email", &[]));
             }
             if email != user.email {
+                // Re-authentication first, so a bearer token alone learns
+                // nothing (not even whether the address is taken).
+                let Some(password) = current_password.as_deref().filter(|p| !p.is_empty()) else {
+                    return Err(invalid("current_password", "required", &[]));
+                };
+                self.confirm_password(&user, password, "current_password", meta)
+                    .await?;
                 old.insert("email".to_owned(), json!(user.email));
                 new.insert("email".to_owned(), json!(email));
                 row.email = Set(email.clone());
@@ -371,6 +387,15 @@ impl AuthService {
         row.updated_at = Set(now);
         let mail = match &new_email {
             Some(email) => self.verification_mail_for(&user, email).await?,
+            None => None,
+        };
+        // The old address hears of the change, so a takeover does not go
+        // unnoticed.
+        let notice = match &new_email {
+            Some(email) => self
+                .mailer()
+                .await
+                .map(|mailer| (mailer, mail::email_changed(&user, email))),
             None => None,
         };
         let audit = entry(AuditKind::Auth, "auth.profile_updated", meta)
@@ -403,6 +428,9 @@ impl AuthService {
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
             }
+            if let Some((mailer, notice)) = notice {
+                send_after_commit(&uow, mailer, notice);
+            }
             self.audit_after_commit(&uow, audit).await;
             Ok(user)
         })
@@ -424,17 +452,26 @@ impl AuthService {
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
         let key = LoginThrottle::key(&user.email, meta.ip.as_deref());
-        self.throttle.check(&key).await?;
+        // Counted before the (slow) check, so parallel guesses cannot all
+        // pass; a correct password gives the slot back.
+        self.throttle_attempt(
+            &self.throttle,
+            &key,
+            meta,
+            Some(user.id),
+            json!({ "flow": "password_confirmation", "field": field }),
+        )
+        .await?;
         let valid = match self.hasher.verify(password, &user.password_hash).await {
             Ok(valid) => valid,
             Err(CryptoError::InvalidHash) => false,
             Err(error) => return Err(error.into()),
         };
         if valid {
+            if let Err(error) = self.throttle.release(&key).await {
+                tracing::warn!(target: "navree::auth", %error, "could not release a password confirmation attempt");
+            }
             return Ok(());
-        }
-        if let Err(error) = self.throttle.hit(&key).await {
-            tracing::warn!(target: "navree::auth", %error, "could not count a failed password confirmation");
         }
         self.audit(
             entry(
@@ -498,12 +535,28 @@ pub(crate) fn send_after_commit(uow: &Uow, mailer: Arc<Mailer>, mail: Box<dyn Ma
 }
 
 /// The changes of [`AuthService::update_profile`]; `None` keeps a field.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct ProfileUpdate {
     /// The new display name.
     pub name: Option<String>,
     /// The new email address.
     pub email: Option<String>,
+    /// The password in use: required when the email address changes.
+    pub current_password: Option<String>,
+}
+
+/// The password is a credential: never in debug output.
+impl std::fmt::Debug for ProfileUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProfileUpdate")
+            .field("name", &self.name)
+            .field("email", &self.email)
+            .field(
+                "current_password",
+                &self.current_password.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 /// Updates a user row through `uow` (recording the change), mapping a

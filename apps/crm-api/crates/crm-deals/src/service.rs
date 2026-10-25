@@ -9,12 +9,12 @@ use crm_core::{DEAL_UPDATED, DEALS_CHANNEL, Deal, Move, Stage, SubjectType, owne
 use navree::access::{Ability, Accessible, ActionMarker, Authorized, Read, Update};
 use navree::auth::user;
 use navree::contracts::{Broadcaster, Clock};
-use navree::db::paginate;
+use navree::db::{contains_ignore_case, paginate};
 use navree::events::EventBus;
 use navree::prelude::*;
 use navree::validation::ValidationErrors;
 use sea_orm::ActiveValue::Set;
-use sea_orm::sea_query::{Expr, ExprTrait, Func, LikeExpr};
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter,
     QueryOrder,
@@ -69,8 +69,13 @@ impl DealService {
         if let Some(search) = filter.search.as_deref().map(str::trim)
             && !search.is_empty()
         {
-            let title = Expr::expr(Func::lower(Expr::col(deal::Column::Title)));
-            select = select.filter(title.like(LikeExpr::new(contains(search)).escape('\\')));
+            // Case-insensitive for non-ASCII letters too (SQLite's own
+            // LOWER and LIKE fold ASCII only).
+            select = select.filter(contains_ignore_case(
+                uow.db().backend(),
+                Expr::col(deal::Column::Title),
+                search,
+            ));
         }
         let select = select
             .order_by_desc(deal::Column::CreatedAt)
@@ -472,29 +477,9 @@ fn currency(code: Option<&str>) -> String {
     code.map_or_else(|| DEFAULT_CURRENCY.to_owned(), str::to_ascii_uppercase)
 }
 
-/// A `LIKE` pattern matching values that contain `search`
-/// (case-insensitive; `%`, `_` and `\` match themselves).
-fn contains(search: &str) -> String {
-    let mut pattern = String::from("%");
-    for ch in search.to_lowercase().chars() {
-        if matches!(ch, '%' | '_' | '\\') {
-            pattern.push('\\');
-        }
-        pattern.push(ch);
-    }
-    pattern.push('%');
-    pattern
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn search_patterns_escape_wildcards() {
-        assert_eq!(contains("Acme"), "%acme%");
-        assert_eq!(contains("50%_off\\"), "%50\\%\\_off\\\\%");
-    }
 
     #[test]
     fn currencies_are_stored_upper_case_with_a_default() {

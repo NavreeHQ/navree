@@ -277,7 +277,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the name or email address */
+        /** Change the name or email address (an email change needs current_password) */
         patch: operations["auth.profile.update"];
         trace?: never;
     };
@@ -2983,7 +2983,7 @@ export interface components {
         DealInput: {
             /**
              * Format: int64
-             * @description The value in cents, at least 0.
+             * @description The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
              */
             amount_cents: number;
             /**
@@ -3063,7 +3063,7 @@ export interface components {
         DealUpdateInput: {
             /**
              * Format: int64
-             * @description The value in cents, at least 0.
+             * @description The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
              */
             amount_cents?: number | null;
             /**
@@ -3308,7 +3308,15 @@ export interface components {
         };
         /** @description `PATCH /auth/me`: the fields to change. */
         UpdateProfileInput: {
-            /** @description The new email address (unverified until the mailed link is followed). */
+            /**
+             * Format: password
+             * @description The password in use: required when `email` changes.
+             */
+            current_password?: string | null;
+            /**
+             * @description The new email address (unverified until the mailed link is
+             *     followed). Changing it requires `current_password`.
+             */
             email?: string | null;
             /** @description The new display name. */
             name?: string | null;
@@ -4217,6 +4225,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

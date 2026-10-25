@@ -102,6 +102,31 @@ pub(crate) fn verification(
     )
 }
 
+/// The notice to `user`'s current (old) address that the account's email
+/// address is now `new_email`.
+pub(crate) fn email_changed(user: &User, new_email: &str) -> Box<dyn Mailable> {
+    let outro = "If you did not make this change, reset your password and contact support \
+                 right away.";
+    Box::new(
+        Message::new()
+            .to(user.email.clone())
+            .subject("Your email address was changed")
+            .text(format!(
+                "Hello {name},\n\nThe email address of your account was changed from {old} to \
+                 {new_email}.\n\n{outro}\n",
+                name = user.name,
+                old = user.email,
+            ))
+            .html(format!(
+                "<p>Hello {name},</p>\n<p>The email address of your account was changed from \
+                 {old} to {new}.</p>\n<p>{outro}</p>\n",
+                name = escape_html(&user.name),
+                old = escape_html(&user.email),
+                new = escape_html(new_email),
+            )),
+    )
+}
+
 /// `url` with `pairs` appended to its query string (URL-encoded).
 pub(crate) fn with_query(url: &str, pairs: &[(&str, &str)]) -> String {
     let query = form_urlencoded::Serializer::new(String::new())

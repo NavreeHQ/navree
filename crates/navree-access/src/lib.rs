@@ -32,6 +32,7 @@ mod authorizer;
 mod commands;
 mod context;
 mod controller;
+mod disconnect;
 mod error;
 mod extract;
 mod factory;

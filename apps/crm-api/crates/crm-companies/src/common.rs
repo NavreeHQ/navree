@@ -2,9 +2,9 @@
 //! `deserialize_with` functions), the `not_blank` rule, case-insensitive
 //! `LIKE` search and the documented page shape.
 
-use navree::db::PageMeta;
-use sea_orm::sea_query::{Expr, ExprTrait, Func, LikeExpr};
-use sea_orm::{ActiveValue, ColumnTrait, Condition};
+use navree::db::{PageMeta, contains_ignore_case};
+use sea_orm::sea_query::Expr;
+use sea_orm::{ActiveValue, ColumnTrait, Condition, DbBackend};
 use serde::de::value::StringDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
@@ -91,25 +91,16 @@ pub(crate) fn not_blank<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::
     }
 }
 
-/// The `LIKE` pattern matching `term` anywhere, lower-cased, with `%`, `_`
-/// and the escape character itself taken literally (escape `\`).
-pub(crate) fn contains_pattern(term: &str) -> LikeExpr {
-    let mut pattern = String::with_capacity(term.len() + 2);
-    pattern.push('%');
-    for c in term.to_lowercase().chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            pattern.push('\\');
-        }
-        pattern.push(c);
-    }
-    pattern.push('%');
-    LikeExpr::new(pattern).escape('\\')
-}
-
-/// `LOWER(column) LIKE '%term%'` for any of `columns`.
-pub(crate) fn any_contains<C: ColumnTrait>(columns: &[C], term: &str) -> Condition {
+/// Any of `columns` contains `term`, ignoring case, non-ASCII letters
+/// included (navree-db's `contains_ignore_case`: SQLite's own `LOWER` and
+/// `LIKE` fold ASCII only). Wildcards in `term` match themselves.
+pub(crate) fn any_contains<C: ColumnTrait>(
+    backend: DbBackend,
+    columns: &[C],
+    term: &str,
+) -> Condition {
     columns.iter().fold(Condition::any(), |condition, column| {
-        condition.add(Expr::expr(Func::lower(Expr::col(*column))).like(contains_pattern(term)))
+        condition.add(contains_ignore_case(backend, Expr::col(*column), term))
     })
 }
 
@@ -174,23 +165,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn like_patterns_escape_wildcards() {
-        let sql = |term: &str| {
-            use sea_orm::sea_query::{Alias, Query, SqliteQueryBuilder};
-            Query::select()
-                .column(Alias::new("name"))
-                .from(Alias::new("t"))
-                .and_where(Expr::col(Alias::new("name")).like(contains_pattern(term)))
-                .to_string(SqliteQueryBuilder)
-        };
+    fn searches_match_any_column_ignoring_case() {
+        use crm_core::entities::company;
+        use sea_orm::sea_query::{Query, SqliteQueryBuilder};
+        let sql = Query::select()
+            .column(company::Column::Name)
+            .from(company::Entity)
+            .cond_where(any_contains(
+                DbBackend::Sqlite,
+                &[company::Column::Name, company::Column::Domain],
+                "É_%",
+            ))
+            .to_string(SqliteQueryBuilder);
         assert!(
-            sql("Acme").contains(r"LIKE '%acme%' ESCAPE '\'"),
-            "{}",
-            sql("Acme")
+            sql.contains(r#"("name" GLOB '*[Éé]_%*') OR ("domain" GLOB '*[Éé]_%*')"#),
+            "{sql}"
         );
-        assert!(sql("100%").contains(r"LIKE '%100\%%'"), "{}", sql("100%"));
-        assert!(sql("a_b").contains(r"LIKE '%a\_b%'"), "{}", sql("a_b"));
-        assert!(sql(r"c:\x").contains(r"LIKE '%c:\\x%'"), "{}", sql(r"c:\x"));
     }
 
     #[test]

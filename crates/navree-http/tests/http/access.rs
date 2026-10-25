@@ -568,3 +568,107 @@ async fn audit_action_recorded_on_success() {
     assert_eq!(entry.user_agent.as_deref(), Some("navree-test/1.0"));
     assert_eq!(entry.metadata["route"], "/api/publish");
 }
+
+/// Security events reach the audit sink as well as the log: rate-limit
+/// refusals (once per client and window, so a flood does not flood the
+/// audit log) and 403s that a handler (or a guard) returns itself, which
+/// no `RouteAuthorizer` saw.
+#[tokio::test]
+async fn security_events_are_audited() {
+    let sink = Arc::new(CapturingSink::default());
+    let registered = sink.clone();
+    let app = Setup::new(vec![
+        ok_route(Method::GET, "/limited")
+            .authenticated()
+            .throttle(1, Duration::from_secs(60)),
+        RouteDef::new(
+            Method::POST,
+            "/owner",
+            post(|| async {
+                Err::<(), _>(
+                    AppError::forbidden().with_detail("Only managers may change the owner"),
+                )
+            }),
+        )
+        .authenticated(),
+        ok_route(Method::GET, "/guarded")
+            .authenticated()
+            .guard(Arc::new(HeaderGuard)),
+    ])
+    .options(navree_http::HttpOptions {
+        per_ip_rate_limit: Some(6),
+        ..crate::support::options()
+    })
+    .authenticated()
+    .register(move |m| {
+        m.value_arc::<dyn AuditSink>(registered.clone());
+    })
+    .boot()
+    .await;
+    let actions = || {
+        sink.entries
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|entry| entry.action.clone())
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        app.send(as_user("GET", "/api/limited", ALICE)).await.status,
+        StatusCode::OK
+    );
+    for _ in 0..2 {
+        app.send(as_user("GET", "/api/limited", ALICE))
+            .await
+            .assert_error(429);
+    }
+    assert_eq!(actions(), ["http.rate_limited"], "once per window");
+    let entry = sink.entries.lock().unwrap()[0].clone();
+    assert_eq!(entry.kind, AuditKind::Security);
+    assert_eq!(entry.actor_id, Some(Uuid::parse_str(ALICE).unwrap()));
+    assert_eq!(entry.metadata["limit"], "route");
+    assert_eq!(entry.metadata["route"], "/api/limited");
+    assert!(entry.request_id.is_some());
+
+    app.send(as_user("POST", "/api/owner", ALICE))
+        .await
+        .assert_error(403);
+    app.send(as_user("GET", "/api/guarded", ALICE))
+        .await
+        .assert_error(403);
+    let entries = sink.entries.lock().unwrap().clone();
+    let denied: Vec<_> = entries
+        .iter()
+        .filter(|entry| entry.action == "access.denied")
+        .collect();
+    assert_eq!(denied.len(), 2, "{entries:?}");
+    assert_eq!(denied[0].kind, AuditKind::Security);
+    assert_eq!(denied[0].metadata["check"], "handler");
+    assert_eq!(denied[0].metadata["route"], "/api/owner");
+    assert_eq!(denied[0].metadata["method"], "POST");
+    assert_eq!(denied[0].actor_id, Some(Uuid::parse_str(ALICE).unwrap()));
+    assert_eq!(denied[1].metadata["check"], "guard");
+
+    // The per-IP limit (6 a minute; 6 used after the next request): the
+    // second refusal is not audited again.
+    app.send(as_user("POST", "/api/owner", BOB))
+        .await
+        .assert_error(403);
+    for _ in 0..2 {
+        app.send(as_user("GET", "/api/guarded", BOB))
+            .await
+            .assert_error(429);
+    }
+    let limited: Vec<_> = sink
+        .entries
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry.action == "http.rate_limited" && entry.metadata["limit"] == "per_ip")
+        .cloned()
+        .collect();
+    assert_eq!(limited.len(), 1, "{limited:?}");
+    assert_eq!(limited[0].metadata["path"], "/api/guarded");
+    assert_eq!(limited[0].ip.as_deref(), Some("0.0.0.0"));
+}

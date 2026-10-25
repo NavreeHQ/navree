@@ -185,6 +185,16 @@ impl Uow {
         }
     }
 
+    /// The transaction when it is open, without beginning one (unlike
+    /// [`tx`](Uow::tx)): `None` before the first `tx` and once the unit of
+    /// work is finished. See [`Db::reader`].
+    pub async fn open_tx(&self) -> Option<Arc<DatabaseTransaction>> {
+        match &*self.inner.tx.lock().await {
+            TxState::Open(tx) => Some(tx.clone()),
+            TxState::Idle | TxState::Done => None,
+        }
+    }
+
     /// The user the work is done for, if any.
     pub fn actor(&self) -> Option<Uuid> {
         self.inner.actor

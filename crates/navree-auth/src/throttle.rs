@@ -12,10 +12,22 @@ use crate::AuthError;
 /// The throttle window.
 const WINDOW: Duration = Duration::from_secs(60);
 
-/// Counts failed logins per (email, client IP) key in the cache, Laravel
-/// `RateLimiter` style: the first failure opens a one-minute window; once
-/// `limit` failures are counted, logins for the key are refused until the
-/// window ends. A successful login clears the key.
+/// Counts attempts per key (failed logins per email and client IP, wrong
+/// two-factor codes per user) in the cache, Laravel `RateLimiter` style:
+/// the first attempt opens a one-minute window; once `limit` attempts are
+/// counted, further ones are refused until the window ends.
+///
+/// An attempt is counted **before** the credential is checked
+/// ([`attempt`](LoginThrottle::attempt) increments atomically and refuses
+/// when the new count is over the limit), so parallel requests cannot all
+/// pass a check made while the counter was still low. A successful attempt
+/// then either clears the key ([`clear`](LoginThrottle::clear), after a
+/// login) or gives its slot back ([`release`](LoginThrottle::release),
+/// after a password confirmation), so only failures use up the window.
+///
+/// Each window has its own counter, named after the time the window ends
+/// (stored under the `:timer` key), so a counter that outlives its window
+/// is never read again.
 pub(crate) struct LoginThrottle {
     cache: Cache,
     limit: u32,
@@ -40,53 +52,107 @@ impl LoginThrottle {
         format!("navree-auth:login:{digest}")
     }
 
-    /// [`AuthError::TooManyAttempts`] when the key has used up its window.
-    pub(crate) async fn check(&self, key: &str) -> Result<(), AuthError> {
+    /// Counts an attempt for `key` before it is made:
+    /// [`AuthError::TooManyAttempts`] (and nothing to check) when the
+    /// window already holds `limit` attempts. (`AuthService` uses
+    /// [`count`](LoginThrottle::count) to audit refusals.)
+    #[cfg(test)]
+    pub(crate) async fn attempt(&self, key: &str) -> Result<(), AuthError> {
+        match self.count(key).await? {
+            Attempt::Allowed => Ok(()),
+            Attempt::Refused { retry_after, .. } => Err(AuthError::TooManyAttempts { retry_after }),
+        }
+    }
+
+    /// Counts an attempt for `key` (see [`attempt`](LoginThrottle::attempt)),
+    /// telling whether a refusal is the window's first.
+    pub(crate) async fn count(&self, key: &str) -> Result<Attempt, AuthError> {
         if self.limit == 0 {
-            return Ok(());
+            return Ok(Attempt::Allowed);
         }
-        let attempts = self.cache.get::<i64>(key).await?.unwrap_or(0);
-        if attempts < i64::from(self.limit) {
-            return Ok(());
+        let now = self.clock.now().timestamp();
+        let available_at = self.window(key, now).await?;
+        let counter = counter_key(key, available_at);
+        self.cache.add(&counter, &0_i64, WINDOW).await?;
+        let attempts = self.cache.increment(&counter, 1).await?;
+        let limit = i64::from(self.limit);
+        if attempts <= limit {
+            return Ok(Attempt::Allowed);
         }
-        let available_at = self
-            .cache
-            .get::<i64>(&timer_key(key))
-            .await?
-            .unwrap_or_default();
-        let wait = available_at.saturating_sub(self.clock.now().timestamp());
-        Err(AuthError::TooManyAttempts {
+        let wait = available_at.saturating_sub(now);
+        Ok(Attempt::Refused {
             retry_after: Duration::from_secs(u64::try_from(wait).unwrap_or(0).max(1)),
+            // The counter is incremented atomically: exactly one attempt
+            // per window sees `limit + 1`.
+            first: attempts == limit + 1,
         })
     }
 
-    /// Counts a failed attempt.
-    pub(crate) async fn hit(&self, key: &str) -> Result<(), AuthError> {
+    /// Gives back the slot of an attempt that succeeded but should not
+    /// count (a correct password confirmation).
+    pub(crate) async fn release(&self, key: &str) -> Result<(), AuthError> {
         if self.limit == 0 {
             return Ok(());
         }
-        let available_at = self.clock.now().timestamp() + WINDOW.as_secs() as i64;
-        self.cache
-            .add(&timer_key(key), &available_at, WINDOW)
-            .await?;
-        self.cache.add(key, &0_i64, WINDOW).await?;
-        self.cache.increment(key, 1).await?;
+        let Some(available_at) = self.cache.get::<i64>(&timer_key(key)).await? else {
+            return Ok(());
+        };
+        let counter = counter_key(key, available_at);
+        if self
+            .cache
+            .get::<i64>(&counter)
+            .await?
+            .is_some_and(|attempts| attempts > 0)
+        {
+            self.cache.decrement(&counter, 1).await?;
+        }
         Ok(())
     }
 
-    /// Forgets the key's failures (after a successful login).
+    /// Forgets the key's attempts (after a successful login).
     pub(crate) async fn clear(&self, key: &str) -> Result<(), AuthError> {
         if self.limit == 0 {
             return Ok(());
         }
-        self.cache.forget(key).await?;
-        self.cache.forget(&timer_key(key)).await?;
+        let timer = timer_key(key);
+        if let Some(available_at) = self.cache.get::<i64>(&timer).await? {
+            self.cache.forget(&counter_key(key, available_at)).await?;
+        }
+        self.cache.forget(&timer).await?;
         Ok(())
     }
+
+    /// When the key's current window ends (unix seconds), opening a new
+    /// window at `now` when there is none.
+    async fn window(&self, key: &str, now: i64) -> Result<i64, AuthError> {
+        let timer = timer_key(key);
+        let opened = now.saturating_add(WINDOW.as_secs() as i64);
+        self.cache.add(&timer, &opened, WINDOW).await?;
+        Ok(self.cache.get::<i64>(&timer).await?.unwrap_or(opened))
+    }
+}
+
+/// The outcome of [`LoginThrottle::count`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Attempt {
+    /// Within the limit: go ahead.
+    Allowed,
+    /// Over the limit.
+    Refused {
+        /// When the window ends.
+        retry_after: Duration,
+        /// The window's first refusal (audit it; skip the rest).
+        first: bool,
+    },
 }
 
 fn timer_key(key: &str) -> String {
     format!("{key}:timer")
+}
+
+/// The attempt counter of the window of `key` ending at `available_at`.
+fn counter_key(key: &str, available_at: i64) -> String {
+    format!("{key}:{available_at}")
 }
 
 #[cfg(test)]
@@ -112,16 +178,15 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn blocks_after_limit_failures_until_the_window_ends() {
+    async fn blocks_after_limit_attempts_until_the_window_ends() {
         let (throttle, clock, _) = throttle(3);
         let key = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
         for _ in 0..3 {
-            throttle.check(&key).await.unwrap();
-            throttle.hit(&key).await.unwrap();
+            throttle.attempt(&key).await.unwrap();
         }
         clock.advance(Duration::from_secs(20));
         tokio::time::advance(Duration::from_secs(20)).await;
-        match throttle.check(&key).await {
+        match throttle.attempt(&key).await {
             Err(AuthError::TooManyAttempts { retry_after }) => {
                 assert_eq!(retry_after, Duration::from_secs(40));
             }
@@ -129,7 +194,40 @@ mod tests {
         }
         clock.advance(Duration::from_secs(41));
         tokio::time::advance(Duration::from_secs(41)).await;
-        throttle.check(&key).await.unwrap();
+        throttle.attempt(&key).await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn parallel_attempts_never_exceed_the_limit() {
+        let (throttle, _, _) = throttle(5);
+        let throttle = Arc::new(throttle);
+        let key = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
+        let tasks: Vec<_> = (0..64)
+            .map(|_| {
+                let (throttle, key) = (throttle.clone(), key.clone());
+                tokio::spawn(async move { throttle.attempt(&key).await.is_ok() })
+            })
+            .collect();
+        let mut allowed = 0;
+        for task in tasks {
+            allowed += usize::from(task.await.unwrap());
+        }
+        assert_eq!(allowed, 5);
+    }
+
+    #[tokio::test]
+    async fn only_the_first_refusal_of_a_window_is_marked() {
+        let (throttle, _, _) = throttle(1);
+        let key = LoginThrottle::key("ada@example.com", None);
+        assert_eq!(throttle.count(&key).await.unwrap(), Attempt::Allowed);
+        let mut marked = Vec::new();
+        for _ in 0..3 {
+            match throttle.count(&key).await.unwrap() {
+                Attempt::Refused { first, .. } => marked.push(first),
+                Attempt::Allowed => panic!("over the limit"),
+            }
+        }
+        assert_eq!(marked, [true, false, false]);
     }
 
     #[tokio::test]
@@ -138,12 +236,25 @@ mod tests {
         let ada = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
         let other_ip = LoginThrottle::key("ada@example.com", Some("10.0.0.1"));
         let grace = LoginThrottle::key("grace@example.com", Some("127.0.0.1"));
-        throttle.hit(&ada).await.unwrap();
-        assert!(throttle.check(&ada).await.is_err());
-        throttle.check(&other_ip).await.unwrap();
-        throttle.check(&grace).await.unwrap();
+        throttle.attempt(&ada).await.unwrap();
+        assert!(throttle.attempt(&ada).await.is_err());
+        throttle.attempt(&other_ip).await.unwrap();
+        throttle.attempt(&grace).await.unwrap();
         throttle.clear(&ada).await.unwrap();
-        throttle.check(&ada).await.unwrap();
+        throttle.attempt(&ada).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn released_attempts_do_not_count() {
+        let (throttle, _, _) = throttle(2);
+        let key = LoginThrottle::key("ada@example.com", None);
+        for _ in 0..5 {
+            throttle.attempt(&key).await.unwrap();
+            throttle.release(&key).await.unwrap();
+        }
+        throttle.attempt(&key).await.unwrap();
+        throttle.attempt(&key).await.unwrap();
+        assert!(throttle.attempt(&key).await.is_err());
     }
 
     #[tokio::test]
@@ -151,9 +262,8 @@ mod tests {
         let (throttle, _, _) = throttle(0);
         let key = LoginThrottle::key("ada@example.com", None);
         for _ in 0..10 {
-            throttle.hit(&key).await.unwrap();
+            throttle.attempt(&key).await.unwrap();
         }
-        throttle.check(&key).await.unwrap();
     }
 
     #[test]
