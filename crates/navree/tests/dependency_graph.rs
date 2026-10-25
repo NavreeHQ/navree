@@ -77,6 +77,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
+        "navree-access",
     ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
@@ -447,6 +448,8 @@ fn allowed_edges_pass() {
     let edges = [
         edge("navree-contracts", "navree-kernel", Kind::Normal),
         edge("navree-auth", "navree-session", Kind::Normal),
+        // `impl navree_access::Subject for navree_auth::user::Entity`.
+        edge("navree-auth", "navree-access", Kind::Normal),
         edge("navree", "navree-auth", Kind::Normal),
         edge("navree", "navree-macros", Kind::Normal),
         edge("crm-api", "navree", Kind::Normal),

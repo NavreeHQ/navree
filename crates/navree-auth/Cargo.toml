@@ -1,6 +1,6 @@
 [package]
 name = "navree-auth"
-description = "Navree AuthModule: users, session and token authentication, Sanctum-style SPA auth, password reset, TOTP."
+description = "Navree AuthModule: NestJS-style JWT authentication with rotating refresh tokens, Passport-style strategies and user accounts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,10 @@ workspace = true
 axum = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }
+http = { workspace = true }
+jsonwebtoken = { workspace = true }
+# Only for `impl navree_access::Subject for user::Entity` (no module import).
+navree-access = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -21,8 +25,9 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# navree-mail, qrcode2 and totp-rs: the account flows of plan Task 30
+# (password reset mail, TOTP two-factor).
 navree-mail = { workspace = true }
-navree-session = { workspace = true }
 navree-validation = { workspace = true }
 qrcode2 = { workspace = true }
 sea-orm = { workspace = true }
@@ -37,6 +42,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+navree-api = { workspace = true }
+navree-observe = { workspace = true }
 navree-testing = { workspace = true }
-tempfile = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
