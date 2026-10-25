@@ -119,8 +119,9 @@ impl Ability {
 
     /// This ability narrowed to what an API token allows: each token
     /// ability is a permission string (`"<prefix>.<action>"`, see
-    /// [`Rules::from_permissions`](super::Rules::from_permissions)) and `"*"`
-    /// keeps everything. Unknown or malformed token abilities grant nothing.
+    /// [`Rules::from_permissions`](super::Rules::from_permissions), where an
+    /// unknown prefix stands for itself) and `"*"` keeps everything.
+    /// Malformed token abilities grant nothing.
     pub fn restrict_to(
         &self,
         token_abilities: &[String],

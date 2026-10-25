@@ -27,7 +27,7 @@ The PRD is a 60-engineer-month plan with 70 parity rows. This build covers the P
 
 ## 3. The hierarchy (what depends on what)
 
-Eight layers. A crate may depend only on crates in lower layers (dev-dependencies included). `crates/keel/tests/dependency_graph.rs` enforces the allowed edges below on every test run.
+Eight layers. A crate may depend only on crates in lower layers (dev-dependencies included). Runtime dependencies must also match the table below. A **dev-dependency** may point at any keel crate in a lower layer (for example keel-view as a dev-dependency of keel-notify or keel-auth, so tests can boot MailModule, which needs ViewModule); the dependency-graph test encodes both rules. `crates/keel/tests/dependency_graph.rs` enforces the allowed edges below on every test run.
 
 ```
 L7  apps/crm-api (Keel app)                   apps/crm-web (Next.js 16)

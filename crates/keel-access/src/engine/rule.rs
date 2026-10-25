@@ -184,9 +184,10 @@ impl Rules {
 
     /// Adds an unconditional `can` rule per permission string
     /// (`"<prefix>.<action>"`, e.g. `posts.publish` → can `publish` `Post`).
-    /// `prefix_to_subject` maps permission prefixes to subject types; an
-    /// action of `*` means `manage`. Unknown prefixes and malformed strings
-    /// are skipped.
+    /// `prefix_to_subject` maps permission prefixes to subject types; a
+    /// prefix it does not know stands for itself (`audit.read` → can `read`
+    /// `audit`), so a route requiring that permission is granted by it. An
+    /// action of `*` means `manage`. Malformed strings are skipped.
     pub fn from_permissions(
         &mut self,
         perms: &[String],
@@ -226,18 +227,19 @@ impl Rules {
 }
 
 /// Splits a permission string `"<prefix>.<action>"` into (action, subject);
-/// `*` as the action means `manage`.
+/// `*` as the action means `manage`, and a prefix without a subject type
+/// stands for itself. `None` for malformed strings.
 pub(crate) fn parse_permission<'a>(
     perm: &'a str,
     prefix_to_subject: &'a BTreeMap<String, String>,
 ) -> Option<(&'a str, &'a str)> {
     let (prefix, action) = perm.rsplit_once('.')?;
-    if action.is_empty() {
+    if prefix.is_empty() || action.is_empty() {
         return None;
     }
-    let subject = prefix_to_subject.get(prefix)?;
+    let subject = prefix_to_subject.get(prefix).map_or(prefix, String::as_str);
     let action = if action == "*" { MANAGE } else { action };
-    Some((action, subject.as_str()))
+    Some((action, subject))
 }
 
 /// Refines the rule just added by [`Rules::can`] or [`Rules::cannot`].

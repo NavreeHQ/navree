@@ -24,11 +24,11 @@ sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 keel-testing = { workspace = true }
-tempfile = { workspace = true }
+# Lower-layer dev-dependency (spec §3): MailModule needs ViewModule in the app.
+keel-view = { workspace = true }
 tokio = { workspace = true }

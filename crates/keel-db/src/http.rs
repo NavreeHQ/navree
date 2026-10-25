@@ -32,8 +32,9 @@ impl<S: Send + Sync> FromRequestParts<S> for Uow {
 /// The [`LayerSlot::Uow`] layer: a lazy [`Uow`] per request with the actor
 /// (from `AuthState`) and the request id. The rest of the pipeline runs in a
 /// task on the app's tracker, so it completes (and commits) even if the
-/// client disconnects. Commits when the status is below 400, rolls back
-/// otherwise; a failed commit becomes an error response.
+/// client disconnects, with the unit of work as [`Uow::current`]. Commits
+/// when the status is below 400, rolls back otherwise; a failed commit
+/// becomes an error response.
 pub(crate) fn uow_layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Uow, "uow", |_ctx, router| {
         let db: Arc<OnceCell<Arc<Db>>> = Arc::new(OnceCell::new());
@@ -67,7 +68,8 @@ async fn unit_of_work(
     request.extensions_mut().insert(uow.clone());
 
     let task = ctx.tracker().spawn(async move {
-        let response = next.run(request).await;
+        // After-commit hooks run outside the scope: by then it is finished.
+        let response = uow.scope(next.run(request)).await;
         finish(&uow, response).await
     });
     match task.await {

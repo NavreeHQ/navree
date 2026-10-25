@@ -14,14 +14,11 @@ workspace = true
 chrono = { workspace = true }
 croner = { workspace = true }
 futures-util = { workspace = true }
-keel-config = { workspace = true }
 keel-contracts = { workspace = true }
 keel-db = { workspace = true }
 keel-kernel = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -29,5 +26,6 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 keel-testing = { workspace = true }
-tempfile = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

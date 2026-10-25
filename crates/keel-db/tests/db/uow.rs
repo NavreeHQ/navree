@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use keel_db::{ChangeEvent, ChangeOp, Db};
+use keel_db::{ChangeEvent, ChangeOp, Db, Uow};
 use sea_orm::{ActiveModelTrait, DbErr, EntityTrait};
 use uuid::Uuid;
 
@@ -183,4 +183,44 @@ async fn concurrent_read_then_write_units_of_work_queue_instead_of_failing() {
         task.await.unwrap().expect("unit of work succeeds");
     }
     assert_eq!(count(&db, "notes").await, 12);
+}
+
+#[tokio::test]
+async fn current_is_the_scoped_unit_of_work() {
+    let temp = TempDb::new();
+    let db = notes_db(&temp).await;
+    assert!(Uow::current().is_none(), "no unit of work outside a scope");
+
+    let uow = db.uow(None, Some("req-1".to_owned())).await;
+    let seen = uow
+        .scope(async { Uow::current().map(|current| current.request_id().map(str::to_owned)) })
+        .await;
+    assert_eq!(seen, Some(Some("req-1".to_owned())));
+    assert!(Uow::current().is_none(), "the scope ends with the future");
+
+    let inside = db
+        .transaction(|uow| async move {
+            let current = Uow::current().expect("Db::transaction scopes its unit of work");
+            assert!(current.same_as(&uow));
+            Ok(current.is_finished().await)
+        })
+        .await
+        .unwrap();
+    assert!(!inside, "unfinished while the closure runs");
+}
+
+#[tokio::test]
+async fn is_finished_after_commit_or_rollback() {
+    let temp = TempDb::new();
+    let db = notes_db(&temp).await;
+    let committed = db.uow(None, None).await;
+    assert!(!committed.is_finished().await);
+    committed.commit().await.unwrap();
+    assert!(committed.is_finished().await);
+
+    let rolled_back = db.uow(None, None).await;
+    rolled_back.tx().await.unwrap();
+    rolled_back.rollback().await.unwrap();
+    assert!(rolled_back.is_finished().await);
+    assert!(!rolled_back.same_as(&committed));
 }

@@ -45,6 +45,20 @@ pub trait SqlColumns {
         let _ = field;
         sql_value(value)
     }
+
+    /// Whether the non-null JSON operand `value` has the JSON type of
+    /// `field`'s column (a number for a numeric column, a boolean for a
+    /// boolean column, ...). The default accepts everything.
+    ///
+    /// A record check never matches across types (`false` is not `<= 0`),
+    /// but SQL may coerce (SQLite stores booleans as integers) or fail
+    /// (PostgreSQL), so a rejected operand compiles as the record check
+    /// evaluates it: `$eq` and the range operators are `FALSE`, `$ne` is
+    /// `TRUE`, and `$in` / `$nin` ignore it.
+    fn accepts(&self, field: &str, value: &Value) -> bool {
+        let _ = (field, value);
+        true
+    }
 }
 
 /// [`SqlColumns`] with the default mapping.
@@ -147,17 +161,24 @@ where
 {
     let column = columns.column(field);
     let value = |v: &Value| Expr::val(columns.value(field, v));
+    // A non-null operand of another type than the column never compares
+    // equal or ordered (see `SqlColumns::accepts`).
+    let foreign = |v: &Value| !v.is_null() && !columns.accepts(field, v);
     match cond {
         Cond::Eq(Value::Null) => column.is_null(),
+        Cond::Eq(v) if foreign(v) => boolean(false),
         Cond::Eq(v) => column.eq(value(v)),
         Cond::Ne(Value::Null) => column.is_not_null(),
+        Cond::Ne(v) if foreign(v) => boolean(true),
         Cond::Ne(v) => column.binary(BinOper::Custom("IS DISTINCT FROM"), value(v)),
+        Cond::Lt(v) | Cond::Lte(v) | Cond::Gt(v) | Cond::Gte(v) if foreign(v) => boolean(false),
         Cond::Lt(v) => column.lt(value(v)),
         Cond::Lte(v) => column.lte(value(v)),
         Cond::Gt(v) => column.gt(value(v)),
         Cond::Gte(v) => column.gte(value(v)),
         Cond::In(items) => {
-            let (has_null, values) = split_null(items);
+            let (has_null, mut values) = split_null(items);
+            values.retain(|v| !foreign(v));
             let listed =
                 (!values.is_empty()).then(|| column.clone().is_in(values.into_iter().map(value)));
             match (listed, has_null) {
@@ -168,7 +189,8 @@ where
             }
         }
         Cond::Nin(items) => {
-            let (has_null, values) = split_null(items);
+            let (has_null, mut values) = split_null(items);
+            values.retain(|v| !foreign(v));
             let unlisted = (!values.is_empty())
                 .then(|| column.clone().is_not_in(values.into_iter().map(value)));
             match (unlisted, has_null) {

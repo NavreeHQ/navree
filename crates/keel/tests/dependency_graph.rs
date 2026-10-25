@@ -5,7 +5,10 @@
 //! table of `docs/superpowers/specs/2026-10-25-keel-framework-design.md`.
 //!
 //! Two exceptions, both for dev-dependencies only:
-//! - `keel-testing` may be a dev-dependency of any crate in layer 4 or above.
+//! - A dev-dependency may point at any keel crate in a lower layer (spec §3),
+//!   so tests can boot lower-layer modules (keel-notify's tests need
+//!   ViewModule for MailModule). This covers `keel-testing` (L3) for every
+//!   crate in layer 4 or above.
 //! - `keel-macros` tests expand the macros against the runtime crates, so
 //!   `keel-macros` may dev-depend on any runtime crate (layers 0 to 5).
 //!
@@ -289,8 +292,9 @@ fn violation(edge: &Edge) -> Option<String> {
         return None;
     }
     if *kind == Kind::Dev {
-        // keel-testing is the test kit for every crate in layer 4 and above.
-        if to == "keel-testing" && from_rule.layer >= 4 {
+        // Tests may use any keel crate in a lower layer (spec §3); this is how
+        // keel-testing (L3) serves every crate in layer 4 and above.
+        if to_rule.layer < from_rule.layer {
             return None;
         }
         // Proc-macro tests expand against the runtime crates they target.
@@ -481,6 +485,27 @@ fn keel_testing_is_an_allowed_dev_dependency_from_layer_4_up() {
         edge("crm-api", "keel-testing", Kind::Dev),
     ];
     assert_eq!(violations(&edges), Vec::<String>::new());
+}
+
+#[test]
+fn dev_dependency_on_any_lower_layer_crate_is_allowed() {
+    // Spec §3: tests may boot lower-layer modules (MailModule needs ViewModule).
+    let edges = [
+        edge("keel-notify", "keel-view", Kind::Dev),
+        edge("keel-auth", "keel-view", Kind::Dev),
+        edge("keel-session", "keel-cache", Kind::Dev),
+    ];
+    assert_eq!(violations(&edges), Vec::<String>::new());
+}
+
+#[test]
+fn dev_dependency_within_the_same_layer_or_upwards_is_reported() {
+    let found = violations(&[
+        edge("keel-notify", "keel-queue", Kind::Dev),
+        edge("keel-view", "keel-http", Kind::Dev),
+        edge("keel-session", "keel-auth", Kind::Dev),
+    ]);
+    assert_eq!(found.len(), 3, "{found:?}");
 }
 
 #[test]

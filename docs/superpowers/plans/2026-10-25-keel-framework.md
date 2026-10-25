@@ -489,10 +489,48 @@ UowLayer (`LayerSlot::Uow`): build `Uow` with actor from `AuthState` and the req
 
 ## Wave 4 — Identity & tooling
 
-### Task 28: keel-auth core (agent `auth-core`)
+### Task 28: keel-auth core — NestJS-style JWT auth (agent `auth-core`)
 
-**Produces:** `AuthModule::for_root(AuthOptions { registration: bool /* true */, login_throttle_per_minute: 5, password_min_length: 8, routes_prefix: "/auth", token_expiration_days: Option<u32> })` / `from_config()` (section `auth`), global, exports `AuthService`, `TokenService`; registers `dyn Authenticator`. Tables (`MigrationSet { module: "auth" }`): `users(id, name, email UNIQUE, password_hash, email_verified_at, two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at, created_at, updated_at)`, `personal_access_tokens(id, user_id, name, token_hash UNIQUE, abilities, last_used_at, expires_at, created_at)`, `password_reset_tokens(email PK, token_hash, created_at)`. Public entity module `keel_auth::user::{Entity, Model, Column}` (`User` model; `password_hash` never serialised — `#[serde(skip)]`), `impl Subject for user::Entity { SUBJECT = "User", PERMISSION_PREFIX = "users" }`, `UserResource` (`{__type:"User", id, name, email, email_verified_at, created_at}`). `AuthService::{register(&Uow, NewUser) -> User, attempt(email, password) -> Result<User, AuthError>, login(&Session, &User) /* regenerate session, store auth.user_id */, logout(&Session), find_user(id), update_password}` (Argon2id via `Hasher`, rehash on login when `needs_rehash`). `TokenService::{create(user_id, name, abilities, expires_at) -> NewToken { plain_text: "<id>|<40 random>", token }, find(plain) -> Option<Token>, revoke(id), list(user_id)}` (SHA-256 at rest; constant-time compare). Authenticator: `Authorization: Bearer` → token (updates `last_used_at`, rejects expired) → `Principal { via: Token, token_abilities }`; otherwise session `auth.user_id` → `Principal { via: Session, session_id }`. Extractor `CurrentUser(User)` (401 if none). Routes under `{api_prefix}{routes_prefix}`: `POST register` (public; disabled → 404), `POST login` (public; throttle 5/min per email+IP → 429; 422 `errors.email` "These credentials do not match our records."), `POST logout`, `GET user`, `GET/POST/DELETE tokens`. Security audit entries (`auth.login`, `auth.login_failed`, `auth.logout`, `auth.token_created`). Seeder helper `AuthService::create_user(name, email, password)`.
-- [ ] Tests: `register_hashes_password_and_logs_in`, `login_rotates_session_id`, `bad_credentials_422_and_audited`, `login_throttled_after_5_attempts`, `logout_invalidates_session`, `user_endpoint_401_when_guest`, `token_auth_sets_principal_with_abilities`, `expired_token_rejected`, `token_hash_only_at_rest`, `password_hash_never_serialized`, `spa_flow_csrf_cookie_login_then_post` (full Sanctum flow through TestClient).
+> **Direction change (user, 2026-10-25): auth and the API follow the NestJS approach, not Laravel Sanctum.** No Sanctum SPA cookie flow, no `/sanctum/csrf-cookie`, no personal access tokens, no session-based login. Authentication is stateless JWT bearer access tokens with rotating refresh tokens, Passport-style strategies, a global guard with `#[public]` opt-out (keel-http's deny-by-default already is NestJS's global `APP_GUARD` + `@Public()` pattern), and a `CurrentUser` extractor (NestJS `@CurrentUser()`). keel-auth does not use keel-session; keel-session stays an optional module.
+
+**Produces:** `AuthModule::for_root(AuthOptions)` / `from_config()` (section `auth`), global, exports `AuthService`, `JwtService`; registers `dyn Authenticator` (runs the registered strategies in order).
+
+```rust
+#[derive(Clone, Debug, Deserialize)] #[serde(default)] pub struct AuthOptions { pub jwt: JwtOptions, pub registration: bool /* true */, pub login_throttle_per_minute: u32 /* 5 */, pub password_min_length: usize /* 8 */, pub routes_prefix: String /* "/auth" */ }
+#[derive(Clone, Debug, Deserialize)] #[serde(default)] pub struct JwtOptions { pub secret: Option<Secret<String>> /* falls back to config "app.key" */, pub issuer: String /* "keel" */, pub audience: Option<String>, pub access_ttl_secs: u64 /* 900 */, pub refresh_ttl_secs: u64 /* 2_592_000 */ }
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)] pub struct Claims { pub sub: Uuid, pub iat: i64, pub exp: i64, pub iss: String, #[serde(skip_serializing_if = "Option::is_none")] pub aud: Option<String>, pub jti: String, pub typ: TokenType }
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)] #[serde(rename_all = "snake_case")] pub enum TokenType { Access, TwoFactorChallenge }
+impl JwtService { pub fn sign(&self, user_id: Uuid, typ: TokenType, ttl: Duration) -> Result<String, AuthError>; pub fn verify(&self, token: &str, expected: TokenType) -> Result<Claims, AuthError>; }
+// HS256 via jsonwebtoken 11 with default-features = false, features = ["rust_crypto"] (no aws-lc); leeway 30 s
+pub trait Strategy: Send + Sync + 'static { fn name(&self) -> &'static str; fn authenticate<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<Option<Principal>, AppError>>; }
+// Passport-style; multi-binding `dyn Strategy`; built-in JwtStrategy ("jwt": `Authorization: Bearer <access token>`) → Principal { via: AuthVia::Token, token_abilities: None, session_id: None }.
+// A present-but-invalid/expired bearer token → 401 (never silently anonymous).
+#[derive(Clone, Debug, Serialize)] pub struct TokenPair { pub access_token: String, pub refresh_token: String, pub token_type: &'static str /* "Bearer" */, pub expires_in: u64 }
+impl AuthService {
+    pub async fn register(&self, uow: &Uow, input: NewUser) -> Result<User, AuthError>;
+    pub async fn validate_user(&self, email: &str, password: &str) -> Result<User, AuthError>; // LocalStrategy
+    pub async fn issue_tokens(&self, user: &User, meta: ClientMeta) -> Result<TokenPair, AuthError>;
+    pub async fn refresh(&self, refresh_token: &str, meta: ClientMeta) -> Result<TokenPair, AuthError>;
+    pub async fn logout(&self, refresh_token: Option<&str>, user_id: Uuid, all: bool) -> Result<(), AuthError>;
+    pub async fn find_user(&self, id: Uuid) -> Result<Option<User>, AuthError>;
+    pub async fn create_user(&self, name: &str, email: &str, password: &str) -> Result<User, AuthError>; // seeders
+    pub async fn update_password(&self, user_id: Uuid, new_password: &str) -> Result<(), AuthError>;
+}
+pub struct CurrentUser(pub User); // extractor (NestJS @CurrentUser()): loads the user for the Principal; 401 if none
+```
+
+Refresh tokens are opaque (`<id>.<48 random base62>`), stored as SHA-256 in `refresh_tokens(id, user_id, family_id, token_hash UNIQUE, expires_at, revoked_at, replaced_by, ip, user_agent, created_at)`; every refresh rotates (old row revoked and `replaced_by` set), and presenting an already-revoked token revokes the whole family (reuse detection). Tables (`MigrationSet { module: "auth" }`): `users(id, name, email UNIQUE, password_hash, email_verified_at, two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at, created_at, updated_at)`, `refresh_tokens`, `password_reset_tokens(email PK, token_hash, created_at)`. Public entity module `keel_auth::user::{Entity, Model, Column}` (`password_hash` and 2FA columns never serialised), `impl Subject for user::Entity { SUBJECT = "User", PERMISSION_PREFIX = "users" }`, `UserResource` (`{__type:"User", id, name, email, email_verified_at, created_at}`). Argon2id via `Hasher`, rehash on login when `needs_rehash`.
+
+Routes under `{api_prefix}{routes_prefix}` (NestJS docs style):
+- `POST /auth/register` (public; 404 when disabled) → 201 `{user, access_token, refresh_token, token_type, expires_in}`
+- `POST /auth/login` (public; body `{email, password}`; throttle 5/min per email+IP → 429) → 200 `{user, access_token, refresh_token, token_type, expires_in}`; bad credentials → 401 "Invalid credentials" (UnauthorizedException style)
+- `POST /auth/refresh` (public; body `{refresh_token}`) → 200 new pair; invalid, expired or reused → 401
+- `POST /auth/logout` (authenticated; body `{refresh_token?, all?: bool}`) → 204
+- `GET /auth/me` (authenticated) → `UserResource`
+
+Security audit entries: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.refresh`, `auth.refresh_reuse_detected`.
+
+- [ ] Tests: `register_hashes_password_and_returns_tokens`, `login_returns_token_pair_and_user`, `bad_credentials_401_and_audited`, `login_throttled_after_5_attempts`, `bearer_access_token_sets_principal`, `expired_or_tampered_access_token_is_401`, `refresh_rotates_and_old_token_stops_working`, `reused_refresh_token_revokes_family`, `logout_revokes_refresh_token`, `logout_all_revokes_every_session`, `me_401_when_guest`, `public_route_works_without_token`, `refresh_token_hash_only_at_rest`, `password_hash_never_serialized`, `custom_strategy_via_multi_binding` (an API-key strategy registered by a test module).
 
 ### Task 29: keel-cli (agent `cli`)
 
@@ -505,17 +543,24 @@ UowLayer (`LayerSlot::Uow`): build `Uow` with actor from `AuthState` and the req
 
 ## Wave 5 — Assembly
 
-### Task 30: keel-auth extras (agent `auth-extras`)
+### Task 30: keel-auth extras — NestJS-style account flows (agent `auth-extras`)
 
-Adds to keel-auth: `POST forgot-password` (always 202; mail via `Mailer` when registered; token SHA-256 at rest, 60 min expiry), `POST reset-password` (422 on bad/expired token; rotates sessions), email verification (`POST email/verification-notification`, `GET verify-email/{id}/{hash}` with `UrlSigner`), `PUT user/password` (current password required), `PUT user/profile-information`, TOTP two-factor (totp-rs: `POST user/two-factor-authentication` enable → secret encrypted with `Encrypter`, `GET user/two-factor-qr-code` (SVG), `POST user/confirmed-two-factor-authentication {code}`, `DELETE user/two-factor-authentication`, `GET/POST user/two-factor-recovery-codes`, login returns `{two_factor: true}` and `POST two-factor-challenge {code | recovery_code}` completes it; recovery codes single-use). Audit entries for each.
-- [ ] Tests: `forgot_password_always_202_and_sends_mail_for_known_email`, `reset_password_with_valid_token`, `reset_token_expires`, `verify_email_signed_link`, `two_factor_enable_confirm_and_challenge_flow`, `recovery_code_single_use`, `wrong_totp_code_rejected`, `update_password_requires_current`.
+Adds to keel-auth (all JSON, bearer-token based, no sessions):
+- `POST /auth/forgot-password {email}`: always 202; mail via `Mailer` when registered; token SHA-256 at rest, 60 min expiry.
+- `POST /auth/reset-password {email, token, password}`: 400 on bad/expired token; revokes all refresh tokens.
+- `POST /auth/email/verification` (authenticated; sends a signed link) and `GET /auth/email/verify/{id}/{hash}` (`UrlSigner`).
+- `PATCH /auth/me/password {current_password, password}`, `PATCH /auth/me {name?, email?}`.
+- TOTP two-factor (totp-rs): `POST /auth/2fa/enable` → `{secret, otpauth_url, qr_svg}` (secret encrypted with `Encrypter`); `POST /auth/2fa/confirm {code}` → `{recovery_codes}`; `POST /auth/2fa/disable {password}`; `POST /auth/2fa/recovery-codes` (regenerate). When 2FA is on, `POST /auth/login` returns `{two_factor_required: true, challenge_token}` (a short-lived JWT with `typ = two_factor_challenge`, 5 min) and `POST /auth/2fa/verify {challenge_token, code | recovery_code}` returns the token pair; recovery codes are single-use.
+- Audit entries for each.
+
+- [ ] Tests: `forgot_password_always_202_and_sends_mail_for_known_email`, `reset_password_with_valid_token_revokes_refresh_tokens`, `reset_token_expires`, `verify_email_signed_link`, `two_factor_enable_confirm_and_login_challenge_flow`, `challenge_token_cannot_be_used_as_access_token`, `recovery_code_single_use`, `wrong_totp_code_rejected`, `update_password_requires_current`.
 
 ### Task 31: keel facade + full-stack tests (agent `facade`)
 
 **Files:** `crates/keel/src/lib.rs`, `crates/keel/Cargo.toml` (features: `default = ["full"]`, one feature per module crate), `crates/keel/tests/{fullstack_blog.rs, macros_end_to_end.rs, dependency_graph.rs}`.
 
 **Produces:** `pub use keel_kernel::{self as kernel, Keel, Module, ...}`, `pub mod http { pub use keel_http::*; }` (and one module per crate: `config, log, crypto, db, validation, session, auth, access, audit, cache, events, queue, schedule, view, mail, notify, storage, http_client, api, observe, realtime, testing, contracts`), macros re-exported at the root (`keel::module`, `keel::injectable`, `keel::controller`, …), `pub mod prelude` (common types: `Keel, Module, Injectable, Arc, AppError, Result, Json, Created, NoContent, Uow, Page, PageQuery, Valid, CurrentUser, Authorized, Accessible, Abilities, Read, Create, Update, Delete, Manage, Subject, ActionMarker, Rules, AbilityCtx, field`, the module types), `pub type Result<T, E = keel_http::AppError>`.
-- [ ] Tests: `fullstack_blog` — a mini app using **only** the facade and macros (posts module with `#[module]`, `#[injectable]`, `#[controller]`, SeaORM entity, migration, `#[can(Update, Post, from = "id")]`, `Accessible`, validation, queued mail on publish, audit, session + token auth) exercised through `TestApp`: guest list sees only published posts, author updates own post, other user gets 403, invalid input 422, publish queues mail, audit rows written, `/api/openapi.json` lists the routes, `/api/me/abilities` matches CASL format; `check` command passes; a wiring mistake fails boot with a readable error.
+- [ ] Tests: `fullstack_blog` — a mini app using **only** the facade and macros (posts module with `#[module]`, `#[injectable]`, `#[controller]`, SeaORM entity, migration, `#[can(Update, Post, from = "id")]`, `Accessible`, validation, queued mail on publish, audit, JWT login + refresh) exercised through `TestApp`: guest list sees only published posts, author updates own post, other user gets 403, invalid input 422, publish queues mail, audit rows written, `/api/openapi.json` lists the routes, `/api/me/abilities` matches CASL format; `check` command passes; a wiring mistake fails boot with a readable error.
 
 ### Task 31b: Wave 5 integrator (agent `w5-review`) — commit `feat: keel facade, auth extras, full-stack tests`.
 
