@@ -14,8 +14,8 @@ use keel::validation::{Messages, ValidationErrors};
 use sea_orm::ActiveValue::Set;
 use sea_orm::sea_query::{Expr, Func};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, Order, QueryFilter, QueryOrder,
-    Select,
+    ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, IntoActiveModel, Order, QueryFilter,
+    QueryOrder, Select,
 };
 use uuid::Uuid;
 
@@ -45,7 +45,7 @@ impl ContactService {
         filters: ContactFilters,
         page: PageQuery,
     ) -> Result<ContactPage> {
-        let select = filtered(scope, &filters);
+        let select = filtered(scope, &filters, uow.db().backend());
         let tx = uow.tx().await?;
         let Page { data, meta } = paginate(select, &*tx, page).await?;
         Ok(ContactPage {
@@ -63,7 +63,9 @@ impl ContactService {
         filters: ContactFilters,
     ) -> Result<Vec<ContactResource>> {
         let tx = uow.tx().await?;
-        let contacts = filtered(scope, &filters).all(&*tx).await?;
+        let contacts = filtered(scope, &filters, uow.db().backend())
+            .all(&*tx)
+            .await?;
         present_all(&*tx, contacts).await
     }
 
@@ -118,7 +120,12 @@ impl ContactService {
     ) -> Result<ContactResource> {
         let contact = live(contact)?;
         let owner_id = owner_for(ability, CONTACT, me, Some(contact.owner_id), input.owner_id)?;
-        if let Some(company_id) = input.company_id {
+        // Only a new company is checked: an edit form sending back a
+        // company deleted since stays valid.
+        if let Some(company_id) = input
+            .company_id
+            .filter(|company_id| *company_id != contact.company_id)
+        {
             self.check_company(uow, company_id).await?;
         }
         let new_owner = (owner_id != contact.owner_id).then_some(owner_id);
@@ -172,6 +179,7 @@ impl ContactService {
 fn filtered(
     scope: Accessible<contact::Entity, Read>,
     filters: &ContactFilters,
+    backend: DbBackend,
 ) -> Select<contact::Entity> {
     let mut select = scope
         .apply(contact::Entity::find())
@@ -179,6 +187,7 @@ fn filtered(
     if let Some(search) = search_text(filters.search.as_deref()) {
         for term in search.split_whitespace().take(MAX_SEARCH_TERMS) {
             select = select.filter(any_contains(
+                backend,
                 &[
                     contact::Column::FirstName,
                     contact::Column::LastName,

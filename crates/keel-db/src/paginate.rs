@@ -169,7 +169,8 @@ impl<T: Serialize> IntoResponse for Page<T> {
 }
 
 /// Runs `select` for page `q` (one `COUNT(*)` and one `LIMIT/OFFSET`
-/// query). Order `select` yourself for stable pages.
+/// query). Order `select` yourself for stable pages. A page past the end
+/// (any page number, however large) is empty; its rows are not queried.
 pub async fn paginate<E, C>(
     select: Select<E>,
     conn: &C,
@@ -183,7 +184,16 @@ where
     let q = PageQuery::new(q.page, q.per_page);
     let paginator = select.paginate(conn, q.per_page);
     let total = paginator.num_items().await?;
-    let data = paginator.fetch_page(q.page - 1).await?;
+    // Only offsets below `total` reach SeaORM, whose `page * per_page`
+    // would overflow (and whose SQL bind panics above `i64::MAX`).
+    let past_the_end = (q.page - 1)
+        .checked_mul(q.per_page)
+        .is_none_or(|offset| offset >= total);
+    let data = if past_the_end {
+        Vec::new()
+    } else {
+        paginator.fetch_page(q.page - 1).await?
+    };
     Ok(Page::new(data, q, total))
 }
 

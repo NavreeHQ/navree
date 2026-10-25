@@ -402,6 +402,102 @@ async fn two_factor_verify_is_throttled() {
     .assert_error(429, None);
 }
 
+/// Parallel wrong codes must not get past the per-minute limit, which is
+/// all that protects the 6-digit code space.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn two_factor_throttle_holds_under_concurrency() {
+    let (app, clock, _) = clocked_app().await;
+    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let client = app.client();
+    let challenge_token = challenge(&client, "ada@example.com").await;
+    let wrong = wrong_code(&enabled.secret, &clock);
+
+    let burst = (0..30).map(|_| {
+        let client = client.clone();
+        let body = json!({ "challenge_token": challenge_token, "code": wrong });
+        async move { verify(&client, body).await }
+    });
+    let statuses: Vec<u16> = futures::future::join_all(burst)
+        .await
+        .iter()
+        .map(|response| response.status().as_u16())
+        .collect();
+    let unauthorized = statuses.iter().filter(|s| **s == 401).count();
+    assert!(unauthorized <= 5, "{statuses:?}");
+    assert_eq!(
+        unauthorized + statuses.iter().filter(|s| **s == 429).count(),
+        30,
+        "{statuses:?}"
+    );
+    verify(
+        &client,
+        json!({ "challenge_token": challenge_token, "code": code_at(&enabled.secret, &clock) }),
+    )
+    .await
+    .assert_error(429, None);
+}
+
+/// Parallel wrong passwords on a re-authenticated route count like
+/// failed logins.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn password_confirmation_throttle_holds_under_concurrency() {
+    let (app, clock, _) = clocked_app().await;
+    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let client = app.client();
+    let burst = (0..20).map(|n| {
+        let client = client.clone();
+        let access = enabled.access.clone();
+        async move {
+            post(
+                &client,
+                "disable",
+                &access,
+                json!({ "password": format!("wrong {n}") }),
+            )
+            .await
+        }
+    });
+    let statuses: Vec<u16> = futures::future::join_all(burst)
+        .await
+        .iter()
+        .map(|response| response.status().as_u16())
+        .collect();
+    let refused = statuses.iter().filter(|s| **s == 400).count();
+    assert!(refused <= 5, "{statuses:?}");
+    assert_eq!(
+        refused + statuses.iter().filter(|s| **s == 429).count(),
+        20,
+        "{statuses:?}"
+    );
+}
+
+/// A correct password confirmation does not use up a failed attempt.
+#[tokio::test]
+async fn a_correct_password_confirmation_is_not_counted() {
+    let (app, clock, _) = clocked_app().await;
+    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let client = app.client();
+    for _ in 0..6 {
+        post(&client, "disable", &access, json!({ "password": PASSWORD }))
+            .await
+            .assert_status(204);
+    }
+    for _ in 0..5 {
+        post(
+            &client,
+            "disable",
+            &access,
+            json!({ "password": "wrong password" }),
+        )
+        .await
+        .assert_validation_error("password");
+    }
+    post(&client, "disable", &access, json!({ "password": PASSWORD }))
+        .await
+        .assert_error(429, None);
+    let _ = clock;
+}
+
 #[tokio::test]
 async fn disable_requires_the_password() {
     let (app, clock, sink) = clocked_app().await;

@@ -102,9 +102,11 @@ export interface AuditRow {
 }
 
 /**
- * The audit `kind` and `action` crm-api records: data changes are
- * `<entity>.created|updated|deleted` (completing a task is an update),
- * sign-ins `auth.login` / `auth.logout` without a subject.
+ * The audit `kind` and `action` crm-api records (see `src/features/audit/actions.ts`):
+ * data changes are `<entity>.created|updated|deleted` (completing a task is an
+ * update, deleting a company or contact sets `deleted_at`), sign-ins `auth.login` /
+ * `auth.logout` without a subject, role changes `access.role_assigned` /
+ * `access.user_roles_synced` about a `user`.
  */
 export function auditAction(
   kind: string,
@@ -112,6 +114,7 @@ export function auditAction(
   subjectType: string | null,
 ): { kind: string; action: string; subject: boolean } {
   if (kind === "auth") return { kind: "auth", action: `auth.${action}`, subject: false };
+  if (kind === "access") return { kind: "access", action: `access.${action}`, subject: true };
   const verb = action === "completed" ? "updated" : action;
   return { kind: "data", action: `${(subjectType ?? "record").toLowerCase()}.${verb}`, subject: true };
 }
@@ -679,7 +682,7 @@ export function createSeed(now: Date = new Date()): MockDatabase {
     const actor = users.find((u) => u.id === c.owner_id)!;
     pushAudit(actor, 60 * 24 * (3 + i), "updated", "Contact", c.id, { status: "lead" }, { status: c.status });
   });
-  pushAudit(admin, 60 * 24 * 9, "role_assigned", "User", rep2.id, { roles: [] }, { roles: ["rep"] }, "access");
+  pushAudit(admin, 60 * 24 * 9, "role_assigned", "user", rep2.id, null, { role: "rep" }, "access");
   audit.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return { users, companies, contacts, deals, activities, notifications, audit };

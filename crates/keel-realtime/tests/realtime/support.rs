@@ -45,6 +45,7 @@ pub fn options() -> RealtimeOptions {
         secret: Secret::new(SECRET.to_owned()),
         allowed_origins: vec![ORIGIN.to_owned()],
         activity_timeout_secs: 120,
+        ..RealtimeOptions::default()
     }
 }
 

@@ -14,18 +14,26 @@
 //! Company, Contact, Deal and Activity; update and delete the Companies,
 //! Contacts and Activities they own (`owner_id`); complete Activities
 //! assigned to them (`assignee_id`) or owned by them; update, move and
-//! delete the Deals they own; and, last (the last matching rule wins),
-//! `cannot delete Deal` when `stage` is `won` or `lost`.
+//! delete the Deals they own; for users who cannot `manage` deals,
+//! `cannot move Deal` when `stage` is `won` or `lost` (reopening a closed
+//! deal takes a manager, or a rep could reopen it and then delete it);
+//! and, last (the last matching rule wins), `cannot delete Deal` when
+//! `stage` is `won` or `lost`.
 
 use keel::access::{AbilityCtx, AccessOptions, CREATE, DELETE, READ, Rules, UPDATE, field};
 
 use crate::actions::{COMPLETE, MOVE};
 use crate::enums::Stage;
+use crate::permissions::DEALS_MANAGE;
 use crate::roles::{ADMIN, MANAGER, REP};
 use crate::subjects::{ACTIVITY, COMPANY, CONTACT, DEAL, USER};
 
 /// Why won and lost deals cannot be deleted (the CASL rule's `reason`).
 pub const CLOSED_DEAL_REASON: &str = "Won and lost deals are kept for reporting.";
+
+/// Why reps cannot move won and lost deals (the CASL rule's `reason`).
+pub const CLOSED_DEAL_MOVE_REASON: &str =
+    "Won and lost deals are kept for reporting; only managers reopen them.";
 
 /// The CRM's rules for `ctx`; see the [module docs](self).
 pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
@@ -55,10 +63,27 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
     rules.can(UPDATE, DEAL).when(own());
     rules.can(MOVE, DEAL).when(own());
     rules.can(DELETE, DEAL).when(own());
+    let closed = || field("stage").is_in([Stage::Won.as_str(), Stage::Lost.as_str()]);
+    if !manages_deals(ctx) {
+        // The delete rule below looks at the current stage only: moving a
+        // closed deal back to an open stage would get around it.
+        rules
+            .cannot(MOVE, DEAL)
+            .when(closed())
+            .because(CLOSED_DEAL_MOVE_REASON);
+    }
     rules
         .cannot(DELETE, DEAL)
-        .when(field("stage").is_in([Stage::Won.as_str(), Stage::Lost.as_str()]))
+        .when(closed())
         .because(CLOSED_DEAL_REASON);
+}
+
+/// Whether `ctx`'s permissions include `manage` on deals (`deals.manage`
+/// or `deals.*`), as the `manager` role's do.
+fn manages_deals(ctx: &AbilityCtx) -> bool {
+    ctx.permissions
+        .iter()
+        .any(|permission| permission == DEALS_MANAGE || permission == "deals.*")
 }
 
 /// The access module's options: [`define`], with `admin` as the
@@ -220,6 +245,10 @@ mod tests {
         ("update",   "Deal",     Rec::OwnWon,   [Y, Y, Y, N, N]),
         ("move",     "Deal",     Rec::Own,      [Y, Y, Y, N, N]),
         ("move",     "Deal",     Rec::Other,    [Y, Y, N, N, N]),
+        // Reopening a closed deal (any move of it) takes a manager.
+        ("move",     "Deal",     Rec::OwnWon,   [Y, Y, N, N, N]),
+        ("move",     "Deal",     Rec::OwnLost,  [Y, Y, N, N, N]),
+        ("move",     "Deal",     Rec::OwnNegotiation, [Y, Y, Y, N, N]),
         ("delete",   "Deal",     Rec::Own,      [Y, Y, Y, N, N]),
         ("delete",   "Deal",     Rec::OwnNegotiation, [Y, Y, Y, N, N]),
         ("delete",   "Deal",     Rec::Other,    [Y, Y, N, N, N]),

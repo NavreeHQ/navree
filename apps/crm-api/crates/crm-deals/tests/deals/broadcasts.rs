@@ -3,7 +3,9 @@
 
 use std::time::Duration;
 
-use crm_testkit::Role;
+use crm_deals::DealsModule;
+use crm_testkit::{Role, TestCrm};
+use keel::config::Config;
 use serde_json::json;
 
 use crate::support::{
@@ -62,5 +64,101 @@ async fn deal_update_broadcasts() {
     assert_eq!(deleted.data, json!({ "deal": moved }));
 
     board.close().await;
+    crm.shutdown().await;
+}
+
+/// Deal notifications come from a queued listener, so in production they
+/// run in `queue:work`: a process without the WebSocket server. The worker
+/// relays its broadcasts to the process serving the sockets (here: another
+/// app on the same database, as `serve` and `queue:work` share one).
+#[tokio::test]
+async fn notifications_from_a_worker_process_reach_the_socket() {
+    let key = keel::crypto::generate_key();
+    let server = TestCrm::builder()
+        .module(DealsModule)
+        .config("app.key", key.clone())
+        .build()
+        .await;
+    let addr = serve(&server).await;
+    let url = server
+        .get::<Config>()
+        .await
+        .get_string("database.url")
+        .expect("the database url");
+    let worker = TestCrm::builder()
+        .module(DealsModule)
+        .config("app.key", key)
+        .config("database.url", url)
+        .config("realtime.relay_url", format!("http://{addr}"))
+        .build()
+        .await;
+
+    let rep = server.login_as(Role::Rep1).await;
+    let manager = server.login_as(Role::Manager).await;
+    let acme = company(&server, "Acme", manager.id()).await;
+    let channel = format!("private-users.{}", rep.id());
+    let mut socket = Socket::connect(addr).await;
+    socket.join(&rep, &channel).await;
+
+    let mut input = new_deal("Acme renewal", acme, 100);
+    input["owner_id"] = json!(rep.id());
+    let deal = create_deal(&manager, input).await;
+    // The serving process does not run the queue.
+    socket.expect_silence(Duration::from_millis(300)).await;
+
+    let stats = worker.run_queue().await;
+    assert!(stats.processed >= 1, "{stats:?}");
+    let frame = socket.expect("notification.created").await;
+    assert_eq!(frame.channel.as_deref(), Some(channel.as_str()));
+    assert_eq!(frame.data["data"]["deal_id"], deal["id"]);
+
+    socket.close().await;
+    worker.shutdown().await;
+    server.shutdown().await;
+}
+
+/// PRD "Where rules are enforced" #5: when a user's roles change or they
+/// sign out, their sockets close (code 4200: reconnect and authorize
+/// again), so subscriptions authorized under the old access end.
+#[tokio::test]
+async fn role_changes_and_logout_end_the_users_subscriptions() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let manager = crm.login_as(Role::Manager).await;
+    let admin = crm.login_as(Role::Admin).await;
+    let acme = company(&crm, "Acme", manager.id()).await;
+    let addr = serve(&crm).await;
+    let mut rep_board = Socket::connect(addr).await;
+    rep_board.join(&rep, CHANNEL).await;
+    let mut manager_board = Socket::connect(addr).await;
+    manager_board.join(&manager, CHANNEL).await;
+
+    // The rep loses every role.
+    admin
+        .put(&format!("/api/access/users/{}/roles", rep.id()))
+        .json(&json!({ "roles": [] }))
+        .send()
+        .await
+        .assert_status(200);
+    let closed = rep_board.expect("pusher:error").await;
+    assert_eq!(closed.data["code"], 4200, "{closed:?}");
+    // Re-authorizing fails now, and changes no longer reach the rep.
+    rep.post("/broadcasting/auth")
+        .json(&json!({ "socket_id": "123.456", "channel_name": CHANNEL }))
+        .send()
+        .await
+        .assert_status(403);
+    create_deal(&manager, new_deal("Acme renewal", acme, 100)).await;
+    manager_board.expect(EVENT).await;
+
+    // Signing out ends the manager's subscriptions too.
+    manager
+        .post("/api/auth/logout")
+        .json(&json!({ "refresh_token": manager.refresh_token() }))
+        .send()
+        .await
+        .assert_status(204);
+    let closed = manager_board.expect("pusher:error").await;
+    assert_eq!(closed.data["code"], 4200, "{closed:?}");
     crm.shutdown().await;
 }

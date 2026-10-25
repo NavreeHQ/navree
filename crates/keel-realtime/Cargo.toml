@@ -21,6 +21,9 @@ keel-crypto = { workspace = true }
 keel-http = { workspace = true }
 keel-kernel = { workspace = true }
 rand = { workspace = true }
+# The relay: workers post broadcasts to the process serving the sockets.
+reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
@@ -28,6 +31,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 futures-util = { workspace = true }

@@ -12,7 +12,7 @@ use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use crate::options::url_password;
-use crate::{ChangeObserver, DbOptions, Uow};
+use crate::{ChangeObserver, DbOptions, Reader, Uow};
 
 /// How long SQLite waits for a lock before failing with `SQLITE_BUSY`.
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
@@ -28,7 +28,9 @@ pub struct Db {
 }
 
 struct DbInner {
-    conn: DatabaseConnection,
+    /// Shared by every handle on the same pool ([`Db::with_app`] included),
+    /// so [`Db::reader`] can tell whether a unit of work uses this pool.
+    conn: Arc<DatabaseConnection>,
     /// The app whose `dyn ChangeObserver` multi-bindings see every commit.
     app: Option<WeakAppContext>,
     observers: OnceCell<Vec<Arc<dyn ChangeObserver>>>,
@@ -61,7 +63,7 @@ impl Db {
 
     /// Wraps an existing SeaORM connection (no change observers).
     pub fn from_connection(conn: DatabaseConnection) -> Db {
-        Self::build(conn, None)
+        Self::build(Arc::new(conn), None)
     }
 
     /// The same pool, reporting commits to the `dyn ChangeObserver`
@@ -70,7 +72,7 @@ impl Db {
         Self::build(self.inner.conn.clone(), Some(app))
     }
 
-    fn build(conn: DatabaseConnection, app: Option<WeakAppContext>) -> Db {
+    fn build(conn: Arc<DatabaseConnection>, app: Option<WeakAppContext>) -> Db {
         Self {
             inner: Arc::new(DbInner {
                 conn,
@@ -88,6 +90,28 @@ impl Db {
     /// The database backend.
     pub fn backend(&self) -> DbBackend {
         self.inner.conn.get_database_backend()
+    }
+
+    /// The connection to read with: the open transaction of the task's
+    /// unit of work on this pool ([`Uow::current`], e.g. the request's once
+    /// a record check or a write began it), else the pool.
+    ///
+    /// Use it for reads in services that take no `&Uow`. On SQLite an open
+    /// unit of work holds the write lock on one pool connection; waiting
+    /// for a second connection while holding it deadlocks the pool as soon
+    /// as about `max_connections` requests run together (the others hold
+    /// connections while they wait for the lock, and fail with "database
+    /// is locked"). Reading through the transaction also sees its own
+    /// uncommitted writes. Drop the reader before the unit of work commits
+    /// (use it as a temporary: `.one(&db.reader().await)`).
+    pub async fn reader(&self) -> Reader<'_> {
+        if let Some(uow) = Uow::current()
+            && Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn)
+            && let Some(tx) = uow.open_tx().await
+        {
+            return Reader::Transaction(tx);
+        }
+        Reader::Pool(&self.inner.conn)
     }
 
     /// A new, lazy unit of work for `actor` (jobs, commands, tests; HTTP

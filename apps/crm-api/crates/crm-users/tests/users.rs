@@ -342,6 +342,33 @@ async fn user_routes_are_documented_with_their_schemas() {
     crm.shutdown().await;
 }
 
+/// User search ignores case for non-ASCII letters too.
+#[tokio::test]
+async fn user_search_ignores_case_beyond_ascii() {
+    let crm = crm().await;
+    let admin = crm.login_as(Role::Admin).await;
+    let mut input = new_user("ozlem@keel.test", "rep");
+    input["name"] = json!("Özlem Çelik");
+    admin
+        .post("/api/v1/users")
+        .json(&input)
+        .send()
+        .await
+        .assert_status(201);
+    for term in ["Özlem", "özlem", "ÇELIK", "çelik"] {
+        let page = admin
+            .get("/api/v1/users")
+            .query(&[("search", term)])
+            .send()
+            .await
+            .assert_status(200)
+            .json_value();
+        assert_eq!(page["meta"]["total"], json!(1), "search {term}: {page}");
+        assert_eq!(page["data"][0]["name"], json!("Özlem Çelik"));
+    }
+    crm.shutdown().await;
+}
+
 #[tokio::test]
 async fn user_search_takes_wildcards_literally() {
     let crm = crm().await;

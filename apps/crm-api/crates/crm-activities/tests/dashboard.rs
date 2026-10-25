@@ -109,6 +109,38 @@ async fn seeded() -> TestCrm {
     crm
 }
 
+/// Amounts whose sum does not fit in 64 bits (rows from before the input
+/// cap, or very many capped deals) saturate instead of failing the
+/// dashboard for the whole team.
+#[tokio::test]
+async fn huge_amounts_do_not_break_the_dashboard() {
+    let crm = crm_at(now()).await;
+    let rep1 = crm.user_id(Role::Rep1);
+    let acme = company(&crm, rep1, "Acme").await;
+    for new in [
+        NewDeal::open("Huge A", Stage::Lead, i64::MAX),
+        NewDeal::open("Huge B", Stage::Lead, i64::MAX),
+        NewDeal::open("Small", Stage::Lead, 100),
+        NewDeal::open("Huge C", Stage::Qualified, i64::MAX),
+        NewDeal::closed("Won A", Stage::Won, i64::MAX, at("2026-10-05T12:00:00Z")),
+        NewDeal::closed("Won B", Stage::Won, i64::MAX, at("2026-10-06T12:00:00Z")),
+    ] {
+        deal(&crm, rep1, acme.id, new).await;
+    }
+    let body = dashboard(&crm, Role::Manager).await;
+    assert_eq!(
+        body["pipeline"][0],
+        json!({ "stage": "lead", "count": 3, "amount_cents": i64::MAX })
+    );
+    assert_eq!(
+        body["won_this_month"],
+        json!({ "count": 2, "amount_cents": i64::MAX })
+    );
+    assert_eq!(body["open_deals"]["count"], 4);
+    assert_eq!(body["open_deals"]["amount_cents"], json!(i64::MAX));
+    crm.shutdown().await;
+}
+
 async fn dashboard(crm: &TestCrm, role: Role) -> Value {
     crm.login_as(role)
         .await

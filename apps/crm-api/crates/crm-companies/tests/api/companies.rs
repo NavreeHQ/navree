@@ -343,6 +343,46 @@ async fn company_validation_errors_are_400() {
     crm.shutdown().await;
 }
 
+/// Search and the industry filter ignore case for non-ASCII letters too
+/// (SQLite's own `LOWER` and `LIKE` fold ASCII only).
+#[tokio::test]
+async fn search_and_industry_ignore_case_beyond_ascii() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    create_company(
+        &rep,
+        json!({ "name": "Équipe Lyon", "industry": "Énergie" }),
+    )
+    .await;
+    create_company(
+        &rep,
+        json!({ "name": "Øresund Ünited", "industry": "Shipping" }),
+    )
+    .await;
+    create_company(&rep, json!({ "name": "Plain Ltd", "industry": "energie" })).await;
+
+    let names = async |query: &[(&str, &str)]| list(&rep, "/api/v1/companies", query, "name").await;
+    for term in ["Équipe", "équipe", "ÉQUIPE", "lyon"] {
+        assert_eq!(names(&[("search", term)]).await, ["Équipe Lyon"], "{term}");
+    }
+    for term in ["Øresund", "øresund", "ünited"] {
+        assert_eq!(
+            names(&[("search", term)]).await,
+            ["Øresund Ünited"],
+            "{term}"
+        );
+    }
+    for industry in ["Énergie", "énergie", "ÉNERGIE"] {
+        assert_eq!(
+            names(&[("industry", industry)]).await,
+            ["Équipe Lyon"],
+            "{industry}"
+        );
+    }
+    assert_eq!(names(&[("industry", "ENERGIE")]).await, ["Plain Ltd"]);
+    crm.shutdown().await;
+}
+
 #[tokio::test]
 async fn search_and_filters() {
     let crm = crm().await;

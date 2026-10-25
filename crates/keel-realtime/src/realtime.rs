@@ -8,6 +8,7 @@ use axum::extract::ws::Utf8Bytes;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use keel_contracts::{Broadcaster, Principal, Secret};
+use keel_http::{AppError, HttpServer};
 use keel_kernel::{AppContext, BoxError, BoxFuture, Contributed};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -15,10 +16,12 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+use uuid::Uuid;
 
 use crate::channel::{ChannelKind, ChannelPattern, is_valid_name, unprefixed};
 use crate::module::{ChannelAuthorizer, ChannelRegistration};
 use crate::protocol::{self, ClientMessage, frame};
+use crate::relay::{self, RelayClient, RelayMessage};
 use crate::{ChannelDecision, RealtimeOptions};
 
 /// Frames queued for one connection before it counts as too slow.
@@ -55,6 +58,11 @@ pub enum RealtimeError {
 /// Fan-out is in-process and never waits for a client: every connection has
 /// a bounded outbox, and a connection that falls behind is closed (code 4100,
 /// reconnect after a back-off) rather than slowing the broadcaster down.
+///
+/// Processes that do not serve the sockets (`queue:work`, `schedule:work`,
+/// commands) reach them through the relay (`realtime.relay_url`): their
+/// `dyn Broadcaster` posts each broadcast to the serving process's
+/// `POST /apps/{app_id}/events`.
 pub struct Realtime {
     options: RealtimeOptions,
     secret: Secret<Vec<u8>>,
@@ -64,6 +72,18 @@ pub struct Realtime {
     channels: DashMap<String, ChannelState>,
     shutdown: CancellationToken,
     tracker: TaskTracker,
+    relay: Relay,
+}
+
+/// The relay settings of a process (see [`crate::relay`]).
+#[derive(Default)]
+pub(crate) struct Relay {
+    /// Verifies relayed messages; `None`: the endpoint answers 404.
+    pub(crate) key: Option<Secret<Vec<u8>>>,
+    /// Sends this process's broadcasts to the serving process.
+    pub(crate) client: Option<RelayClient>,
+    /// The app's HTTP server: the process serving it delivers itself.
+    pub(crate) server: Option<Arc<HttpServer>>,
 }
 
 /// A registered channel authorizer with its parsed pattern.
@@ -135,7 +155,28 @@ impl Realtime {
             channels: DashMap::new(),
             shutdown,
             tracker,
+            relay: Relay::default(),
         })
+    }
+
+    /// Sets the relay of this process.
+    pub(crate) fn with_relay(mut self, relay: Relay) -> Self {
+        self.relay = relay;
+        self
+    }
+
+    /// Where this process's broadcasts go when it does not deliver them
+    /// itself: the relay, unless the process serves HTTP (or holds
+    /// connections), in which case its own subscribers are the audience.
+    fn relay_target(&self) -> Option<&RelayClient> {
+        let client = self.relay.client.as_ref()?;
+        let serving = self
+            .relay
+            .server
+            .as_ref()
+            .is_some_and(|server| server.local_addr().is_some())
+            || !self.connections.is_empty();
+        (!serving).then_some(client)
     }
 
     /// The options the server runs with.
@@ -178,13 +219,7 @@ impl Realtime {
         I: IntoIterator,
         I::Item: AsRef<str>,
     {
-        if event.is_empty()
-            || event.len() > MAX_EVENT_NAME
-            || event.starts_with("pusher:")
-            || event.starts_with("pusher_internal:")
-        {
-            return Err(RealtimeError::InvalidEvent(event.to_owned()));
-        }
+        check_event(event)?;
         let data = serde_json::to_string(&data)?;
         let mut delivered = 0;
         for channel in channels {
@@ -210,25 +245,86 @@ impl Realtime {
     /// channel for it on their behalf, it joined a presence channel as them,
     /// or its handshake request was authenticated.
     pub fn disconnect_user(&self, user_id: impl fmt::Display) -> usize {
-        let user_id = user_id.to_string();
+        self.close_user(&user_id.to_string(), CloseReason::DISCONNECTED)
+    }
+
+    /// Ends every subscription of the user `user_id` in this process: their
+    /// connections close with code 4200 ("reconnect"), so clients connect
+    /// again and authorize each private channel with their current
+    /// credentials; channels they may no longer join stay closed. Used
+    /// when a user's roles change or they sign out
+    /// (`Broadcaster::end_user_subscriptions`, which also reaches the
+    /// serving process from workers). Returns the number of connections
+    /// closed.
+    pub fn end_user_subscriptions(&self, user_id: impl fmt::Display) -> usize {
+        self.close_user(&user_id.to_string(), CloseReason::RESUBSCRIBE)
+    }
+
+    fn close_user(&self, user_id: &str, reason: CloseReason) -> usize {
         let targets: Vec<Arc<Connection>> = self
             .connections
             .iter()
-            .filter(|entry| entry.value().user().as_deref() == Some(user_id.as_str()))
+            .filter(|entry| entry.value().user().as_deref() == Some(user_id))
             .map(|entry| entry.value().clone())
             .collect();
         for connection in &targets {
-            connection.close(CloseReason::DISCONNECTED);
+            connection.close(reason);
         }
         if !targets.is_empty() {
             tracing::info!(
                 target: "keel::realtime",
                 user_id = %user_id,
                 connections = targets.len(),
-                "disconnected the user's realtime connections"
+                code = reason.code,
+                "closed the user's realtime connections"
             );
         }
         targets.len()
+    }
+
+    /// Handles a message relayed by another process of the app
+    /// (`POST /apps/{app_id}/events`): 404 for another app or when this
+    /// process has no relay key, 401 for a missing, wrong or stale
+    /// signature, 400 for a malformed message; otherwise it is applied to
+    /// this process's connections.
+    pub(crate) fn receive_relayed(
+        &self,
+        app_id: &str,
+        signature: Option<&str>,
+        body: &[u8],
+    ) -> Result<Value, AppError> {
+        let Some(key) = self
+            .relay
+            .key
+            .as_ref()
+            .filter(|_| app_id == self.options.app_id)
+        else {
+            return Err(AppError::not_found());
+        };
+        let signed = signature.is_some_and(|signature| {
+            relay::verify(key.expose(), signature, body, relay::unix_now())
+        });
+        if !signed {
+            tracing::warn!(target: "keel::security", "relayed realtime message with a bad signature");
+            return Err(AppError::unauthenticated().with_detail("Invalid relay signature"));
+        }
+        let message: RelayMessage = serde_json::from_slice(body)
+            .map_err(|_| AppError::bad_request("The relayed message is malformed"))?;
+        match message {
+            RelayMessage::Broadcast {
+                channels,
+                event,
+                data,
+            } => {
+                let delivered = self
+                    .broadcast(channels, &event, data)
+                    .map_err(|error| AppError::bad_request(error.to_string()))?;
+                Ok(json!({ "delivered": delivered }))
+            }
+            RelayMessage::EndUserSubscriptions { user_id } => {
+                Ok(json!({ "closed": self.end_user_subscriptions(user_id) }))
+            }
+        }
     }
 
     /// The `auth` value for subscribing socket `socket_id` to `channel`
@@ -575,6 +671,9 @@ impl Realtime {
     }
 }
 
+/// In the process serving the sockets (or without a relay), events go to
+/// this process's subscribers; elsewhere (`queue:work`, `schedule:work`,
+/// commands) they are posted to the serving process through the relay.
 impl Broadcaster for Realtime {
     fn broadcast(
         &self,
@@ -582,11 +681,52 @@ impl Broadcaster for Realtime {
         event: String,
         data: Value,
     ) -> BoxFuture<'_, Result<(), BoxError>> {
-        let result = Realtime::broadcast(self, channels, &event, data)
-            .map(drop)
-            .map_err(BoxError::from);
-        Box::pin(async move { result })
+        Box::pin(async move {
+            check_event(&event)?;
+            match self.relay_target() {
+                Some(relay) => {
+                    relay
+                        .send(&RelayMessage::Broadcast {
+                            channels,
+                            event,
+                            data,
+                        })
+                        .await
+                }
+                None => Realtime::broadcast(self, channels, &event, data)
+                    .map(drop)
+                    .map_err(BoxError::from),
+            }
+        })
     }
+
+    fn end_user_subscriptions(&self, user_id: Uuid) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            match self.relay_target() {
+                Some(relay) => {
+                    relay
+                        .send(&RelayMessage::EndUserSubscriptions { user_id })
+                        .await
+                }
+                None => {
+                    Realtime::end_user_subscriptions(self, user_id);
+                    Ok(())
+                }
+            }
+        })
+    }
+}
+
+/// [`RealtimeError::InvalidEvent`] unless `event` is a name apps may send.
+fn check_event(event: &str) -> Result<(), RealtimeError> {
+    if event.is_empty()
+        || event.len() > MAX_EVENT_NAME
+        || event.starts_with("pusher:")
+        || event.starts_with("pusher_internal:")
+    {
+        return Err(RealtimeError::InvalidEvent(event.to_owned()));
+    }
+    Ok(())
 }
 
 impl fmt::Debug for Realtime {
@@ -647,6 +787,11 @@ impl CloseReason {
     pub(crate) const DISCONNECTED: CloseReason = CloseReason {
         code: protocol::UNAUTHORIZED,
         message: "You got disconnected by the app.",
+    };
+    /// [`Realtime::end_user_subscriptions`].
+    pub(crate) const RESUBSCRIBE: CloseReason = CloseReason {
+        code: protocol::RECONNECT,
+        message: "Your access changed; reconnect and subscribe again",
     };
     /// The outbox overflowed.
     pub(crate) const OVER_CAPACITY: CloseReason = CloseReason {

@@ -15,7 +15,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { CompanyRef, Deal, DealInput, DealStage } from "@/lib/api/types";
-import { DEAL_STAGES } from "@/lib/api/types";
+import { DEAL_STAGES, MAX_AMOUNT_CENTS } from "@/lib/api/types";
 import type { AppAbility } from "@/lib/casl/ability";
 import { centsToInput, parseMoneyToCents } from "@/lib/format";
 import { useCreateDeal, useUpdateDeal } from "./queries";
@@ -41,6 +41,8 @@ const schema = z
     const cents = parseMoneyToCents(v.amount, v.currency);
     if (v.amount && (cents === null || cents < 0)) {
       ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount of 0 or more, like 12,500." });
+    } else if (cents !== null && cents > MAX_AMOUNT_CENTS) {
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "That amount is larger than the API accepts." });
     }
   });
 type Values = z.infer<typeof schema>;

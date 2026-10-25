@@ -77,8 +77,10 @@ mod migrate;
 mod module;
 mod options;
 mod paginate;
+mod reader;
 mod repo;
 mod seed;
+mod text;
 mod uow;
 
 pub use db::Db;
@@ -90,8 +92,10 @@ pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
     cursor_paginate, cursor_paginate_desc, paginate,
 };
+pub use reader::Reader;
 pub use repo::Repo;
 pub use seed::{Factory, Seeder, create, create_many, run_seeders};
+pub use text::{contains_ignore_case, eq_ignore_case};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
 pub use sea_orm;

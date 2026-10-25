@@ -37,7 +37,7 @@ test("an admin adds a user with a role, and the audit log shows it", async ({ pa
   await expect(rows.first()).toBeVisible();
   expect(await rows.count()).toBeGreaterThan(1);
   await expect(rows.filter({ hasText: "User created" }).filter({ hasText: email }).first()).toBeVisible();
-  await expect(rows.filter({ hasText: "Access role assigned" }).first()).toBeVisible();
+  await expect(rows.filter({ hasText: "Role assigned" }).first()).toBeVisible();
 
   // Filtering by action narrows the log to that action.
   await page.getByRole("combobox", { name: "Filter by action" }).click();

@@ -10,4 +10,5 @@ mod module;
 mod paginate;
 mod repo;
 mod seed;
+mod text;
 mod uow;

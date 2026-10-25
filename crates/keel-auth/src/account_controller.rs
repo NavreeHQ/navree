@@ -61,16 +61,22 @@ pub struct ChangePasswordInput {
 }
 
 /// `PATCH /auth/me`: the fields to change.
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+#[derive(Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateProfileInput {
     /// The new display name.
     #[garde(length(min = 1, max = 255))]
     #[serde(default)]
     pub name: Option<String>,
-    /// The new email address (unverified until the mailed link is followed).
+    /// The new email address (unverified until the mailed link is
+    /// followed). Changing it requires `current_password`.
     #[garde(email, length(max = 255))]
     #[serde(default)]
     pub email: Option<String>,
+    /// The password in use: required when `email` changes.
+    #[garde(length(max = 1024))]
+    #[schema(format = Password)]
+    #[serde(default)]
+    pub current_password: Option<String>,
 }
 
 /// `POST /auth/2fa/confirm`.
@@ -113,6 +119,19 @@ impl fmt::Debug for ResetPasswordInput {
             .field("email", &self.email)
             .field("token", &REDACTED)
             .field("password", &REDACTED)
+            .finish()
+    }
+}
+
+impl fmt::Debug for UpdateProfileInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UpdateProfileInput")
+            .field("name", &self.name)
+            .field("email", &self.email)
+            .field(
+                "current_password",
+                &self.current_password.as_ref().map(|_| REDACTED),
+            )
             .finish()
     }
 }
@@ -376,6 +395,7 @@ impl Controller for AccountController {
                     let update = ProfileUpdate {
                         name: input.name,
                         email: input.email,
+                        current_password: input.current_password,
                     };
                     let user = service
                         .update_profile(user.id, update, &meta)
@@ -395,7 +415,10 @@ impl Controller for AccountController {
                 .api(ApiMeta {
                     request: Some(schema_fn::<UpdateProfileInput>),
                     response: Some(schema_fn::<UserResource>),
-                    ..api("Change the name or email address", &[400, 401, 409])
+                    ..api(
+                        "Change the name or email address (an email change needs current_password)",
+                        &[400, 401, 409, 429],
+                    )
                 }),
         );
 

@@ -186,13 +186,24 @@ impl AuthService {
             return Err(AuthError::TwoFactorNotEnabled);
         }
         let key = throttle_key(user.id);
-        self.two_factor_throttle.check(&key).await?;
+        // Counted before the code is checked (parallel guesses included);
+        // a correct code gives the slot back.
+        self.throttle_attempt(
+            &self.two_factor_throttle,
+            &key,
+            meta,
+            Some(user.id),
+            json!({ "flow": "two_factor_confirmation" }),
+        )
+        .await?;
         if !self.check_totp(&user, code).await? {
-            self.two_factor_throttle.hit(&key).await?;
             return Err(AuthError::Invalid {
                 field: "code",
                 message: "code is invalid".to_owned(),
             });
+        }
+        if let Err(error) = self.two_factor_throttle.release(&key).await {
+            tracing::warn!(target: "keel::auth", %error, "could not release a two-factor attempt");
         }
         let (codes, stored) = self.new_recovery_codes()?;
         let now = self.clock.now();
@@ -309,7 +320,16 @@ impl AuthService {
             .jwt
             .verify(challenge_token, TokenType::TwoFactorChallenge)?;
         let key = throttle_key(claims.sub);
-        self.two_factor_throttle.check(&key).await?;
+        // Counted before the code is checked, so parallel guesses cannot
+        // get past the limit (all that guards the 6-digit code space).
+        self.throttle_attempt(
+            &self.two_factor_throttle,
+            &key,
+            meta,
+            Some(claims.sub),
+            json!({ "flow": "two_factor" }),
+        )
+        .await?;
         let user = self
             .find_user(claims.sub)
             .await?
@@ -324,9 +344,6 @@ impl AuthService {
             TwoFactorProof::RecoveryCode(code) => self.use_recovery_code(&user, code).await?,
         };
         if !valid {
-            if let Err(error) = self.two_factor_throttle.hit(&key).await {
-                tracing::warn!(target: "keel::auth", %error, "could not count a failed two-factor code");
-            }
             tracing::warn!(
                 target: "keel::security",
                 user_id = %user.id,

@@ -49,5 +49,15 @@ export function rulesFor(user: Pick<UserRow, "id" | "role">): CaslRule[] {
     inverted: true,
     reason: "Won and lost deals are kept for reporting.",
   });
+  if (user.role !== "manager") {
+    // crm-api: reps can't reopen a closed deal (so they can't reopen it and then delete it).
+    rules.push({
+      action: "move",
+      subject: "Deal",
+      conditions: { stage: { $in: ["won", "lost"] } },
+      inverted: true,
+      reason: "Only a manager can reopen a won or lost deal.",
+    });
+  }
   return rules;
 }

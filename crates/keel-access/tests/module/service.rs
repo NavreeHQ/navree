@@ -296,3 +296,102 @@ async fn denial_audit_does_not_wait_for_the_request_transaction() {
         .unwrap();
     assert_eq!(row.try_get::<i64>("", "n").unwrap(), 1);
 }
+
+/// Records `end_user_subscriptions` calls.
+#[derive(Default)]
+struct RecordingBroadcaster(std::sync::Mutex<Vec<Uuid>>);
+
+impl RecordingBroadcaster {
+    fn take(&self) -> Vec<Uuid> {
+        let mut ended = std::mem::take(&mut *self.0.lock().unwrap());
+        ended.sort();
+        ended
+    }
+}
+
+impl keel_contracts::Broadcaster for RecordingBroadcaster {
+    fn broadcast(
+        &self,
+        _channels: Vec<String>,
+        _event: String,
+        _data: serde_json::Value,
+    ) -> keel_contracts::BoxFuture<'_, Result<(), keel_contracts::BoxError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn end_user_subscriptions(
+        &self,
+        user_id: Uuid,
+    ) -> keel_contracts::BoxFuture<'_, Result<(), keel_contracts::BoxError>> {
+        self.0.lock().unwrap().push(user_id);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// PRD "Where rules are enforced" #5: a user whose access changes, or the
+/// members of a role that loses permissions, get their real-time
+/// subscriptions ended once the change commits (never for a rolled-back
+/// change, and not for changes that only widen a role).
+#[tokio::test]
+async fn access_changes_end_the_affected_users_subscriptions() {
+    let audit = crate::support::RecordingAudit::default();
+    let broadcaster = Arc::new(RecordingBroadcaster::default());
+    let app = crate::support::builder(&audit)
+        .override_value::<dyn keel_contracts::Broadcaster>(broadcaster.clone())
+        .build()
+        .await;
+    let (ada, bob, cy) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    give_role(&app, ada, "writer", &["posts.create"]).await;
+    give_role(&app, bob, "writer", &[]).await;
+    give_role(&app, cy, "editor", &["posts.publish"]).await;
+    let mut assigned = vec![ada, bob, cy];
+    assigned.sort();
+    assert_eq!(broadcaster.take(), assigned, "role assignments");
+
+    // Widening a role ends nothing.
+    in_uow(&app, |service, uow| async move {
+        service.grant(&uow, "writer", "posts.update").await
+    })
+    .await;
+    assert!(broadcaster.take().is_empty());
+
+    // Narrowing it ends its members' subscriptions.
+    in_uow(&app, |service, uow| async move {
+        service.revoke(&uow, "writer", "posts.create").await
+    })
+    .await;
+    let mut writers = vec![ada, bob];
+    writers.sort();
+    assert_eq!(broadcaster.take(), writers);
+    in_uow(&app, |service, uow| async move {
+        service
+            .sync_role_permissions(&uow, "writer", ["posts.update"])
+            .await
+    })
+    .await;
+    assert!(broadcaster.take().is_empty(), "nothing changed");
+
+    // User-level changes.
+    in_uow(&app, |service, uow| async move {
+        service.sync_user_roles(&uow, ada, ["editor"]).await
+    })
+    .await;
+    assert_eq!(broadcaster.take(), [ada]);
+
+    // A rolled-back change ends nothing.
+    let db = app.get::<Db>().await;
+    let service = app.get::<AccessService>().await;
+    let uow = db.uow(None, None).await;
+    service.remove_role(&uow, cy, "editor").await.unwrap();
+    uow.rollback().await.unwrap();
+    assert!(broadcaster.take().is_empty());
+
+    // Deleting a role ends every member's subscriptions.
+    in_uow(&app, |service, uow| async move {
+        service.delete_role(&uow, "editor").await
+    })
+    .await;
+    let mut editors = vec![ada, cy];
+    editors.sort();
+    assert_eq!(broadcaster.take(), editors);
+}

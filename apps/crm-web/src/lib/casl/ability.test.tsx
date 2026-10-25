@@ -18,6 +18,7 @@ const repRules: CaslRule[] = [
   { action: ["update", "move"], subject: "Deal", conditions: { owner_id: REP1 } },
   { action: "delete", subject: "Deal", conditions: { owner_id: REP1 } },
   { action: "delete", subject: "Deal", conditions: { stage: { $in: ["won", "lost"] } }, inverted: true },
+  { action: "move", subject: "Deal", conditions: { stage: { $in: ["won", "lost"] } }, inverted: true },
 ];
 
 function deal(overrides: Partial<Deal> = {}): Deal {
@@ -68,6 +69,17 @@ describe("CASL ability", () => {
     expect(ability.can("update", theirs)).toBe(false);
     expect(ability.can("move", theirs)).toBe(false);
     expect(ability.can("read", theirs)).toBe(true);
+  });
+
+  it("does not let a rep reopen (move) a won or lost deal, even their own", () => {
+    const ability = createAppAbility(repRules);
+
+    expect(ability.can("move", deal({ stage: "negotiation" }))).toBe(true);
+    expect(ability.can("move", deal({ stage: "won" }))).toBe(false);
+    expect(ability.can("move", deal({ stage: "lost" }))).toBe(false);
+    expect(ability.can("update", deal({ stage: "won" }))).toBe(true);
+    const managerRules = createAppAbility(rulesFor({ id: "m1", role: "manager" }));
+    expect(managerRules.can("move", deal({ stage: "won", owner_id: REP2 }))).toBe(true);
   });
 
   it("does not let a rep delete a won or lost deal, even their own (last rule wins)", () => {

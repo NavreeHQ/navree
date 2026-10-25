@@ -4,7 +4,7 @@ import { Can } from "@casl/react";
 import { Building2Icon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ListEmpty, SkeletonRows, SortableHead, TablePanel } from "@/components/data-table";
+import { ListEmpty, PastEndNotice, SkeletonRows, SortableHead, TablePanel } from "@/components/data-table";
 import { OptionFilter, OwnerFilter, SearchFilter } from "@/components/filters";
 import { PageHeader } from "@/components/page-header";
 import { PaginationBar } from "@/components/pagination-bar";
@@ -138,13 +138,21 @@ export function CompaniesView() {
             ) : (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={6}>
-                  <ListEmpty
-                    filtered={filtered}
-                    noun="companies"
-                    icon={<Building2Icon />}
-                    onClear={() => url.set({ search: undefined, owner: undefined, industry: undefined })}
-                    action={<NewCompanyButton />}
-                  />
+                  {companies.data && companies.data.meta.total > 0 ? (
+                    <PastEndNotice
+                      noun="companies"
+                      total={companies.data.meta.total}
+                      onFirstPage={() => url.set({ page: undefined })}
+                    />
+                  ) : (
+                    <ListEmpty
+                      filtered={filtered}
+                      noun="companies"
+                      icon={<Building2Icon />}
+                      onClear={() => url.set({ search: undefined, owner: undefined, industry: undefined })}
+                      action={<NewCompanyButton />}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             )}

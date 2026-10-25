@@ -142,15 +142,21 @@ async fn update_profile_changes_name_and_email() {
         .assert_json_path("email", json!("ada@example.com"));
     assert!(sent_mail(&app).await.is_empty());
 
-    // A new address must be verified again; the link goes to it.
-    update_profile(&client, &access, json!({ "email": "Ada.King@Example.com" }))
-        .await
-        .assert_status(200)
-        .assert_json_path("email", json!("ada.king@example.com"))
-        .assert_json_path("email_verified_at", Value::Null);
+    // A new address must be verified again; the link goes to it, and the
+    // old address is told.
+    update_profile(
+        &client,
+        &access,
+        json!({ "email": "Ada.King@Example.com", "current_password": PASSWORD }),
+    )
+    .await
+    .assert_status(200)
+    .assert_json_path("email", json!("ada.king@example.com"))
+    .assert_json_path("email_verified_at", Value::Null);
     let sent = sent_mail(&app).await;
-    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent.len(), 2, "{sent:?}");
     assert_eq!(sent[0].to, vec!["ada.king@example.com".to_owned()]);
+    assert_eq!(sent[1].to, vec!["ada@example.com".to_owned()]);
     let link = first_url(sent[0].text.as_deref().unwrap()).unwrap();
     client
         .get(link.strip_prefix("https://app.example.com").unwrap())
@@ -182,10 +188,14 @@ async fn update_profile_rejects_a_taken_email_and_invalid_input() {
     let (_, access, _) = signed_in(&app, "ada@example.com").await;
     let client = app.client();
 
-    update_profile(&client, &access, json!({ "email": "Grace@Example.com" }))
-        .await
-        .assert_status(400)
-        .assert_json_path("errors.email.0", json!("email has already been taken"));
+    update_profile(
+        &client,
+        &access,
+        json!({ "email": "Grace@Example.com", "current_password": PASSWORD }),
+    )
+    .await
+    .assert_status(400)
+    .assert_json_path("errors.email.0", json!("email has already been taken"));
     update_profile(&client, &access, json!({ "name": "   " }))
         .await
         .assert_validation_error("name");
@@ -198,6 +208,79 @@ async fn update_profile_rejects_a_taken_email_and_invalid_input() {
         .send()
         .await
         .assert_error(401, None);
+}
+
+/// A bearer token alone must not move the account to another address
+/// (which forgot-password would then turn into a password reset): the
+/// current password is required, and the old address is told.
+#[tokio::test]
+async fn changing_email_requires_current_password() {
+    let sink = Arc::new(RecordingSink::default());
+    let app = support::mail_builder()
+        .config("auth.verification.base_url", "https://app.example.com")
+        .override_value::<dyn AuditSink>(sink.clone())
+        .build()
+        .await;
+    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let client = app.client();
+
+    update_profile(&client, &access, json!({ "email": "mallory@example.com" }))
+        .await
+        .assert_validation_error("current_password");
+    update_profile(
+        &client,
+        &access,
+        json!({ "email": "mallory@example.com", "current_password": "wrong password" }),
+    )
+    .await
+    .assert_validation_error("current_password");
+    // A taken address is not revealed without the password either.
+    support::create_user(&app, "grace@example.com").await;
+    update_profile(&client, &access, json!({ "email": "grace@example.com" }))
+        .await
+        .assert_validation_error("current_password");
+    assert!(sent_mail(&app).await.is_empty());
+    client
+        .post("/api/auth/forgot-password")
+        .json(&json!({ "email": "mallory@example.com" }))
+        .send()
+        .await
+        .assert_status(202);
+    assert!(
+        sent_mail(&app).await.is_empty(),
+        "nothing for an unknown address"
+    );
+    assert_eq!(
+        sink.with_action("auth.password_confirmation_failed").len(),
+        1
+    );
+
+    // A name change alone needs no password.
+    update_profile(&client, &access, json!({ "name": "Ada King" }))
+        .await
+        .assert_status(200);
+
+    update_profile(
+        &client,
+        &access,
+        json!({ "email": "ada.king@example.com", "current_password": PASSWORD }),
+    )
+    .await
+    .assert_status(200)
+    .assert_json_path("email", json!("ada.king@example.com"));
+    let sent = sent_mail(&app).await;
+    let to_old: Vec<_> = sent
+        .iter()
+        .filter(|mail| mail.to == vec!["ada@example.com".to_owned()])
+        .collect();
+    assert_eq!(to_old.len(), 1, "{sent:?}");
+    let text = to_old[0].text.as_deref().unwrap();
+    assert!(text.contains("ada.king@example.com"), "{text}");
+    assert!(
+        sent.iter()
+            .any(|mail| mail.to == vec!["ada.king@example.com".to_owned()]),
+        "the verification link goes to the new address: {sent:?}"
+    );
 }
 
 /// A reset token is keyed by the address it was mailed to: once the user
@@ -220,9 +303,13 @@ async fn an_email_change_cancels_a_pending_reset() {
     let link = first_url(sent[0].text.as_deref().unwrap()).unwrap();
     let token = support::link_param(&link, "token").unwrap();
 
-    update_profile(&client, &access, json!({ "email": "ada.king@example.com" }))
-        .await
-        .assert_status(200);
+    update_profile(
+        &client,
+        &access,
+        json!({ "email": "ada.king@example.com", "current_password": PASSWORD }),
+    )
+    .await
+    .assert_status(200);
     // Someone else signs up with the freed address.
     support::create_user(&app, "ada@example.com").await;
 

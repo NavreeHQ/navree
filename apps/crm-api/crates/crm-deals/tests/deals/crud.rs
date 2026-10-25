@@ -160,6 +160,58 @@ async fn create_validates_the_input() {
     crm.shutdown().await;
 }
 
+/// Amounts are capped (10^15 cents): sums over many deals stay within
+/// 64 bits and the web app's JavaScript numbers stay exact.
+#[tokio::test]
+async fn amounts_are_capped() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let acme = company(&crm, "Acme", rep.id()).await;
+
+    for amount in [json!(i64::MAX), json!(1_000_000_000_000_001_i64)] {
+        let mut input = new_deal("Huge", acme, 0);
+        input["amount_cents"] = amount;
+        let response = rep
+            .post("/api/v1/deals")
+            .json(&input)
+            .send()
+            .await
+            .assert_validation_error("amount_cents");
+        assert_eq!(
+            response.json_value()["errors"]["amount_cents"],
+            json!(["amount_cents must not be greater than 1000000000000000"])
+        );
+    }
+    let deal = create_deal(&rep, new_deal("Biggest", acme, 1_000_000_000_000_000)).await;
+    rep.patch(&format!("/api/v1/deals/{}", id_of(&deal)))
+        .json(&json!({ "amount_cents": i64::MAX }))
+        .send()
+        .await
+        .assert_validation_error("amount_cents");
+    crm.shutdown().await;
+}
+
+/// Deal search ignores case for non-ASCII letters too.
+#[tokio::test]
+async fn deal_search_ignores_case_beyond_ascii() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let acme = company(&crm, "Acme", rep.id()).await;
+    create_deal(&rep, new_deal("Ölwechsel Rahmenvertrag", acme, 100)).await;
+    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    for term in ["Ölwechsel", "ölwechsel", "ÖLWECHSEL", "rahmenvertrag"] {
+        let page = rep
+            .get("/api/v1/deals")
+            .query(&json!({ "search": term }))
+            .send()
+            .await
+            .assert_status(200)
+            .json_value();
+        assert_eq!(titles(&page), ["Ölwechsel Rahmenvertrag"], "{term}");
+    }
+    crm.shutdown().await;
+}
+
 #[tokio::test]
 async fn new_deals_join_the_end_of_their_stage() {
     let crm = crm().await;

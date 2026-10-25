@@ -172,6 +172,78 @@ async fn contact_validation_errors_are_400() {
     crm.shutdown().await;
 }
 
+/// The edit form sends `company_id` back unchanged: a contact whose company
+/// was deleted since stays editable. Moving it to another deleted company
+/// is still refused.
+#[tokio::test]
+async fn contact_of_a_deleted_company_stays_editable() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let company = create_company(&rep, json!({ "name": "Soon Gone Ltd" })).await;
+    let company_id = id_of(&company);
+    let contact = create_contact(
+        &rep,
+        json!({ "first_name": "Ada", "last_name": "Byte", "company_id": company_id }),
+    )
+    .await;
+    let other = create_company(&rep, json!({ "name": "Also Gone" })).await;
+    for gone in [&company_id, &id_of(&other)] {
+        rep.delete(&format!("/api/v1/companies/{gone}"))
+            .send()
+            .await
+            .assert_status(204);
+    }
+    let path = format!("/api/v1/contacts/{}", id_of(&contact));
+
+    // Exactly what the web form sends, with only the phone changed.
+    rep.patch(&path)
+        .json(&json!({
+            "first_name": "Ada",
+            "last_name": "Byte",
+            "email": null,
+            "phone": "+1 555 0100",
+            "title": null,
+            "status": "lead",
+            "company_id": company_id,
+        }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("phone", json!("+1 555 0100"))
+        .assert_json_path("company_id", json!(company_id));
+    rep.patch(&path)
+        .json(&json!({ "company_id": id_of(&other) }))
+        .send()
+        .await
+        .assert_error(400, "company_id does not exist");
+    crm.shutdown().await;
+}
+
+/// Contact search ignores case for non-ASCII letters too.
+#[tokio::test]
+async fn contact_search_ignores_case_beyond_ascii() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    create_contact(
+        &rep,
+        json!({ "first_name": "Élodie", "last_name": "Åberg" }),
+    )
+    .await;
+    create_contact(
+        &rep,
+        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+    )
+    .await;
+    for term in ["Élodie", "élodie", "Åberg", "åberg", "ÉLODIE ÅBERG"] {
+        assert_eq!(
+            list(&rep, "/api/v1/contacts", &[("search", term)], "full_name").await,
+            ["Élodie Åberg"],
+            "{term}"
+        );
+    }
+    crm.shutdown().await;
+}
+
 #[tokio::test]
 async fn rep_cannot_update_other_reps_contact_or_assign_contacts() {
     let crm = crm().await;

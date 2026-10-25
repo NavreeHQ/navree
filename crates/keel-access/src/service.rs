@@ -19,7 +19,7 @@ use crate::engine::Rule;
 use crate::entity::{role, role_permission, user_permission, user_role};
 use crate::error::{AccessError, check_permission, check_role_name};
 use crate::factory::AbilityFactory;
-use crate::store;
+use crate::{disconnect, store};
 
 /// A role with its permissions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -46,7 +46,10 @@ pub struct RoleInfo {
 /// when an `AuditSink` is registered. Writes that change nothing (granting
 /// a permission the role already has) do neither and return `false`.
 ///
-/// Reads use the connection pool, so they see committed data only.
+/// Reads use the connection pool (committed data), or, inside a unit of
+/// work whose transaction is open, that transaction (`Db::reader`): a
+/// request holding SQLite's write lock must not wait for a second pool
+/// connection. (Cached abilities are always built from the pool.)
 pub struct AccessService {
     db: Arc<Db>,
     factory: Arc<AbilityFactory>,
@@ -95,6 +98,8 @@ impl AccessService {
         let tx = uow.tx().await?;
         let role = existing_role(&*tx, name).await?;
         let permissions = store::role_permissions(&*tx, role.id).await?;
+        let members = disconnect::role_members(&*tx, role.id).await?;
+        disconnect::end_subscriptions_after_commit(&self.app, uow, members).await;
         role_permission::Entity::delete_many()
             .filter(role_permission::Column::RoleId.eq(role.id))
             .exec(&*tx)
@@ -416,12 +421,12 @@ impl AccessService {
 
     /// Role `name` with its permissions, if it exists.
     pub async fn role(&self, name: &str) -> Result<Option<RoleInfo>, AccessError> {
-        role_info(self.db.conn(), name).await
+        role_info(&self.db.reader().await, name).await
     }
 
     /// Every role with its permissions, by name.
     pub async fn roles(&self) -> Result<Vec<RoleInfo>, AccessError> {
-        let conn = self.db.conn();
+        let conn = &self.db.reader().await;
         let mut roles = Vec::new();
         for role in store::all_roles(conn).await? {
             let permissions = store::role_permissions(conn, role.id).await?;
@@ -432,17 +437,17 @@ impl AccessService {
 
     /// The global role names of `user`, sorted.
     pub async fn roles_of(&self, user: Uuid) -> Result<Vec<String>, AccessError> {
-        Ok(store::roles_of(self.db.conn(), user).await?)
+        Ok(store::roles_of(&self.db.reader().await, user).await?)
     }
 
     /// The permissions of `user` (through roles and directly), sorted.
     pub async fn permissions_of(&self, user: Uuid) -> Result<Vec<String>, AccessError> {
-        Ok(store::permissions_of(self.db.conn(), user).await?)
+        Ok(store::permissions_of(&self.db.reader().await, user).await?)
     }
 
     /// The access version, bumped by every change.
     pub async fn version(&self) -> Result<i64, AccessError> {
-        Ok(store::version(self.db.conn()).await?)
+        Ok(store::version(&self.db.reader().await).await?)
     }
 
     /// Why `user` may or may not do `action` on `subject` (the record with
@@ -517,6 +522,10 @@ impl AccessService {
         mut entry: AuditEntry,
     ) -> Result<(), AccessError> {
         store::bump_version(conn).await?;
+        // Subscriptions authorized under the old access end (see
+        // `crate::disconnect`).
+        let affected = disconnect::affected_users(conn, &entry).await?;
+        disconnect::end_subscriptions_after_commit(&self.app, uow, affected).await;
         let Some(ctx) = self.app.upgrade() else {
             return Ok(());
         };

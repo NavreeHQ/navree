@@ -28,7 +28,15 @@ import type {
   SubjectName,
   User,
 } from "@/lib/api/types";
-import { ACTIVITY_KINDS, COMPANY_SIZES, CONTACT_STATUSES, DEAL_STAGES, OPEN_STAGES, ROLES } from "@/lib/api/types";
+import {
+  ACTIVITY_KINDS,
+  COMPANY_SIZES,
+  CONTACT_STATUSES,
+  DEAL_STAGES,
+  MAX_AMOUNT_CENTS,
+  OPEN_STAGES,
+  ROLES,
+} from "@/lib/api/types";
 import { rulesFor } from "./abilities";
 import { db, failedAttempts, persist, recordFailedAttempt, sessionUserId, setSessionUser } from "./db";
 import {
@@ -480,6 +488,8 @@ function validateDeal(body: Record<string, unknown>, partial: boolean): Partial<
     else if (typeof amount !== "number" || !Number.isInteger(amount))
       add(errors, "amount_cents", "The amount must be a whole number of cents.");
     else if (amount < 0) add(errors, "amount_cents", "The amount must be at least 0.");
+    else if (amount > MAX_AMOUNT_CENTS)
+      add(errors, "amount_cents", `amount_cents must not be greater than ${MAX_AMOUNT_CENTS}`);
     else out.amount_cents = amount;
   }
   if ("currency" in body || !partial) {
@@ -784,7 +794,8 @@ export const handlers = [
         created_at: nowIso(),
       };
       db.users.push(row);
-      audit(ctx, "created", "User", row.id, null, { name: row.name, email: row.email, roles: [row.role] });
+      audit(ctx, "created", "User", row.id, null, { name: row.name, email: row.email });
+      audit(ctx, "role_assigned", "user", row.id, null, { role: row.role }, "access");
       persist();
       return HttpResponse.json(toUser(row), { status: 201 });
     }),
@@ -809,19 +820,10 @@ export const handlers = [
         else row.role = role as Role;
       }
       invalid(errors);
-      const changed = diff({ name: before.name, roles: before.roles.join(",") }, { name: row.name, roles: row.role });
-      if (changed) {
-        const [oldValues, newValues] = changed;
-        const list = (v: unknown) => (v === undefined ? undefined : String(v).split(",").filter(Boolean));
-        audit(
-          ctx,
-          before.roles[0] !== row.role ? "role_assigned" : "updated",
-          "User",
-          row.id,
-          { ...oldValues, ...(oldValues.roles !== undefined ? { roles: list(oldValues.roles) } : {}) },
-          { ...newValues, ...(newValues.roles !== undefined ? { roles: list(newValues.roles) } : {}) },
-          "access",
-        );
+      // Like crm-api: a new name is a `user.updated` row, a new role keel-access's `access.user_roles_synced`.
+      if (before.name !== row.name) audit(ctx, "updated", "User", row.id, { name: before.name }, { name: row.name });
+      if (before.roles[0] !== row.role) {
+        audit(ctx, "user_roles_synced", "user", row.id, { roles: before.roles }, { roles: [row.role] }, "access");
       }
       persist();
       return HttpResponse.json(toUser(row));
@@ -908,7 +910,8 @@ export const handlers = [
       const row = findCompany(ctx.params.id);
       authorize(ctx, "delete", as("Company", row));
       row.deleted_at = nowIso();
-      audit(ctx, "deleted", "Company", row.id, { name: row.name }, null);
+      // A soft delete: crm-api records it as an update of `deleted_at`.
+      audit(ctx, "updated", "Company", row.id, { deleted_at: null }, { deleted_at: row.deleted_at });
       persist();
       return new HttpResponse(null, { status: 204 });
     }),
@@ -1017,7 +1020,8 @@ export const handlers = [
       const row = findContact(ctx.params.id);
       authorize(ctx, "delete", as("Contact", row));
       row.deleted_at = nowIso();
-      audit(ctx, "deleted", "Contact", row.id, { name: fullName(row) }, null);
+      // A soft delete: crm-api records it as an update of `deleted_at`.
+      audit(ctx, "updated", "Contact", row.id, { deleted_at: null }, { deleted_at: row.deleted_at });
       persist();
       return new HttpResponse(null, { status: 204 });
     }),
@@ -1120,6 +1124,8 @@ export const handlers = [
       const input = validateDeal(ctx.body, true);
       assertCanAssign(ctx, "Deal", input.owner_id);
       const { stage, ...rest } = input;
+      // Changing the stage through PATCH needs `move` too (reps can't reopen closed deals).
+      if (stage && stage !== row.stage) authorize(ctx, "move", as("Deal", row));
       Object.assign(row, rest);
       if (stage && stage !== row.stage) {
         const source = stageDeals(row.stage, row.id);

@@ -604,3 +604,94 @@ describe("BFF keeps tokens out of proxied responses", () => {
     expect(setCookies(response)[ACCESS_COOKIE].value).toBe("AT10");
   });
 });
+
+describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => {
+  // What a browser can send. Next.js keeps a client's X-Forwarded-For as is (it only fills the header in when
+  // it is missing), so these values reach the route handlers untouched.
+  const spoofed = { "x-forwarded-for": "6.6.6.6", "x-real-ip": "6.6.6.6" };
+  const everyRoute = () =>
+    fakeKeel({
+      "GET /api/v1/me": () => Response.json({ id: "u1" }),
+      "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }),
+      "POST /api/auth/refresh": () => Response.json(tokens(2)),
+      "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(3) }),
+      "POST /api/auth/logout": () => new Response(null, { status: 204 }),
+    });
+
+  /** Every upstream call the BFF makes for one browser request of each kind. */
+  async function callEverything(bff: ReturnType<typeof createBff>, headers: Record<string, string>) {
+    await bff.proxy(request("/api/v1/me", { headers, cookies: { [REFRESH_COOKIE]: "RT1" } }), "/api/v1/me");
+    await bff.login(
+      request("/api/auth/login", { method: "POST", headers, body: { email: "rep1@keel.test", password: "x" } }),
+    );
+    await bff.verifyTwoFactor(
+      request("/api/auth/2fa/verify", {
+        method: "POST",
+        headers,
+        cookies: { [CHALLENGE_COOKIE]: "CHALLENGE" },
+        body: { code: "123456" },
+      }),
+    );
+    await bff.logout(request("/api/auth/logout", { method: "POST", headers, cookies: { [REFRESH_COOKIE]: "RT5" } }));
+  }
+
+  it("never passes a browser's X-Forwarded-For or X-Real-IP on to Keel when no trusted proxy is configured", async () => {
+    const keel = everyRoute();
+    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+
+    await callEverything(bff, spoofed);
+
+    expect(keel.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
+      "POST /api/auth/refresh",
+      "GET /api/v1/me",
+      "POST /api/auth/login",
+      "POST /api/auth/2fa/verify",
+      "POST /api/auth/refresh",
+      "POST /api/auth/logout",
+    ]);
+    for (const call of keel.calls) {
+      expect(call.headers.get("x-forwarded-for")).toBeNull();
+      expect(call.headers.get("x-real-ip")).toBeNull();
+    }
+  });
+
+  it("behind trusted proxies, sends Keel only the address the outermost trusted proxy saw", async () => {
+    // One proxy in front of Next.js: it appended the real client (203.0.113.7) to what the browser sent.
+    const one = everyRoute();
+    await callEverything(createBff({ apiUrl: API, fetch: one.fetch, trustedProxyHops: 1 }), {
+      "x-forwarded-for": "6.6.6.6, 203.0.113.7",
+      "x-real-ip": "6.6.6.6",
+    });
+    expect(one.calls).toHaveLength(6);
+    for (const call of one.calls) {
+      expect(call.headers.get("x-forwarded-for")).toBe("203.0.113.7");
+      expect(call.headers.get("x-real-ip")).toBeNull();
+    }
+
+    // A CDN and a load balancer: the CDN saw the client, the load balancer appended the CDN's address.
+    const two = fakeKeel({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+    await createBff({ apiUrl: API, fetch: two.fetch, trustedProxyHops: 2 }).proxy(
+      request("/api/v1/me", { headers: { "x-forwarded-for": "6.6.6.6,2001:db8::7 , 10.0.0.2" } }),
+      "/api/v1/me",
+    );
+    expect(two.calls[0].headers.get("x-forwarded-for")).toBe("2001:db8::7");
+  });
+
+  it("sends no address when the trusted proxies' entry is missing or not an IP address", async () => {
+    const cases: [number, string | undefined][] = [
+      [1, undefined],
+      [1, "not-an-ip"],
+      [1, "6.6.6.6, "],
+      [2, "203.0.113.7"],
+    ];
+    for (const [trustedProxyHops, forwardedFor] of cases) {
+      const keel = fakeKeel({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+      const headers: Record<string, string> = forwardedFor === undefined ? {} : { "x-forwarded-for": forwardedFor };
+      await createBff({ apiUrl: API, fetch: keel.fetch, trustedProxyHops }).proxy(
+        request("/api/v1/me", { headers }),
+        "/api/v1/me",
+      );
+      expect(keel.calls[0].headers.get("x-forwarded-for"), `${trustedProxyHops} hop(s), ${forwardedFor}`).toBeNull();
+    }
+  });
+});

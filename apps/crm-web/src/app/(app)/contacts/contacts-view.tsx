@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ListEmpty, SkeletonRows, TablePanel } from "@/components/data-table";
+import { ListEmpty, PastEndNotice, SkeletonRows, TablePanel } from "@/components/data-table";
 import { OptionFilter, OwnerFilter, SearchFilter } from "@/components/filters";
 import { PageHeader } from "@/components/page-header";
 import { PaginationBar } from "@/components/pagination-bar";
@@ -194,15 +194,23 @@ export function ContactsView() {
             ) : (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={6}>
-                  <ListEmpty
-                    filtered={filtered}
-                    noun="contacts"
-                    icon={<UsersIcon />}
-                    onClear={() =>
-                      url.set({ search: undefined, status: undefined, owner: undefined, company: undefined })
-                    }
-                    action={<NewContactButton />}
-                  />
+                  {contacts.data && contacts.data.meta.total > 0 ? (
+                    <PastEndNotice
+                      noun="contacts"
+                      total={contacts.data.meta.total}
+                      onFirstPage={() => url.set({ page: undefined })}
+                    />
+                  ) : (
+                    <ListEmpty
+                      filtered={filtered}
+                      noun="contacts"
+                      icon={<UsersIcon />}
+                      onClear={() =>
+                        url.set({ search: undefined, status: undefined, owner: undefined, company: undefined })
+                      }
+                      action={<NewContactButton />}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             )}

@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer};
 /// secret = "change-me"          # signs private and presence subscriptions
 /// allowed_origins = ["http://localhost:3000"]
 /// activity_timeout_secs = 120
+/// relay_url = "auto"            # workers hand broadcasts to `serve`
 /// ```
 ///
 /// `Debug` redacts the secret.
@@ -40,6 +41,17 @@ pub struct RealtimeOptions {
     /// 120, sent to clients as `activity_timeout`). A client that then stays
     /// silent for another `min(activity_timeout, 30 s)` is disconnected.
     pub activity_timeout_secs: u64,
+    /// Where a process that does not serve the WebSockets (`queue:work`,
+    /// `schedule:work`, a command) sends its broadcasts: the base URL of
+    /// the `serve` process, e.g. `http://127.0.0.1:8080`, whose
+    /// `POST /apps/{app_id}/events` delivers them to its connections.
+    /// `auto` means `http://` plus `http.addr` (a wildcard address as
+    /// loopback). Empty (the default): broadcasts stay in the process,
+    /// which only reaches sockets when it serves them itself. Relayed
+    /// messages are signed with a key derived from `realtime.secret`, or
+    /// from the app key when there is no secret, so every process of the
+    /// app must share one of them.
+    pub relay_url: String,
 }
 
 impl Default for RealtimeOptions {
@@ -50,6 +62,7 @@ impl Default for RealtimeOptions {
             secret: Secret::default(),
             allowed_origins: Vec::new(),
             activity_timeout_secs: 120,
+            relay_url: String::new(),
         }
     }
 }
@@ -79,6 +92,16 @@ impl RealtimeOptions {
         }
         if self.activity_timeout_secs == 0 {
             errors.push("realtime.activity_timeout_secs must be at least 1".to_owned());
+        }
+        let relay = self.relay_url.trim();
+        if !(relay.is_empty()
+            || relay == "auto"
+            || ((relay.starts_with("http://") || relay.starts_with("https://"))
+                && relay.len() > "https://".len()))
+        {
+            errors.push(format!(
+                "realtime.relay_url must be empty, `auto` or a URL like http://127.0.0.1:8080 (got `{relay}`)"
+            ));
         }
         for origin in &self.allowed_origins {
             let valid = origin == "*"
@@ -188,6 +211,10 @@ mod tests {
             (
                 serde_json::json!({"allowed_origins": ["localhost:3000"]}),
                 "realtime.allowed_origins",
+            ),
+            (
+                serde_json::json!({"relay_url": "127.0.0.1:8080"}),
+                "realtime.relay_url",
             ),
         ] {
             let error = load(ConfigSources::new().set("realtime", section.clone()))

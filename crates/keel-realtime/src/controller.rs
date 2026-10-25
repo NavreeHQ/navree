@@ -1,5 +1,6 @@
-//! The realtime routes: the WebSocket (`GET /app/{key}`) and the channel
-//! auth endpoint (`POST /broadcasting/auth`).
+//! The realtime routes: the WebSocket (`GET /app/{key}`), the channel
+//! auth endpoint (`POST /broadcasting/auth`) and the relay endpoint
+//! (`POST /apps/{app_id}/events`).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -20,6 +21,7 @@ use serde_json::Value;
 use crate::Realtime;
 use crate::protocol;
 use crate::realtime::AuthFailure;
+use crate::relay::SIGNATURE_HEADER;
 use crate::socket::{self, Admission, MAX_MESSAGE_BYTES};
 
 /// Serves the realtime routes.
@@ -88,7 +90,35 @@ impl Controller for RealtimeController {
             ..ApiMeta::default()
         });
 
-        vec![connect, auth]
+        let realtime = self.realtime.clone();
+        let relay = RouteDef::on(
+            Method::POST,
+            "!/apps/{app_id}/events",
+            move |Path(app_id): Path<String>, headers: HeaderMap, body: Bytes| {
+                let realtime = realtime.clone();
+                async move {
+                    let signature = headers
+                        .get(SIGNATURE_HEADER)
+                        .and_then(|value| value.to_str().ok());
+                    realtime
+                        .receive_relayed(&app_id, signature, &body)
+                        .map(Json)
+                }
+            },
+        )
+        // Signed with the relay key instead (see `crate::relay`).
+        .public()
+        .name("realtime.relay")
+        .api(ApiMeta {
+            summary: Some(
+                "Deliver a broadcast relayed by another process of the app (signed)".to_owned(),
+            ),
+            tags: vec!["realtime".to_owned()],
+            responses: vec![400, 401, 404],
+            ..ApiMeta::default()
+        });
+
+        vec![connect, auth, relay]
     }
 }
 

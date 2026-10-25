@@ -6,4 +6,5 @@ mod channels;
 mod connection;
 mod lifecycle;
 mod presence;
+mod relay;
 mod support;

@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use keel_config::ModuleBuilderConfigExt;
 use keel_contracts::{Broadcaster, Principal};
-use keel_http::{HttpOptions, ModuleBuilderHttpExt};
+use keel_crypto::Encrypter;
+use keel_http::{HttpOptions, HttpServer, ModuleBuilderHttpExt};
 use keel_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
     Resolver,
@@ -15,6 +16,8 @@ use keel_kernel::{
 use serde_json::Value;
 
 use crate::controller::RealtimeController;
+use crate::realtime::Relay;
+use crate::relay::{self, RelayClient};
 use crate::{Realtime, RealtimeOptions};
 
 /// The realtime module: a Pusher-protocol (version 7) WebSocket server in
@@ -22,9 +25,11 @@ use crate::{Realtime, RealtimeOptions};
 /// unchanged.
 ///
 /// Global; provides and exports [`Realtime`] and `dyn Broadcaster` (the same
-/// instance), and mounts two routes:
+/// instance), and mounts three routes:
 ///
 /// - `GET /app/{key}` (public; the `Origin` is checked): the WebSocket;
+/// - `POST /apps/{app_id}/events` (public; signed): broadcasts relayed by
+///   the app's other processes (`realtime.relay_url`);
 /// - `POST /broadcasting/auth` (authenticated; form or JSON `socket_id`,
 ///   `channel_name`): signs private and presence subscriptions after the
 ///   channel authorizer registered with [`ModuleBuilderRealtimeExt::channel`]
@@ -119,7 +124,8 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
                 app.contributions::<ChannelRegistration>(),
                 app.shutdown_token(),
                 app.tracker(),
-            )?;
+            )?
+            .with_relay(relay_of(&options, &app).await?);
             Ok(Arc::new(realtime))
         })
         .deps(vec![ProviderKey::of::<RealtimeOptions>()]),
@@ -134,6 +140,39 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
     )
     .exports::<dyn Broadcaster>()
     .controller::<RealtimeController>();
+}
+
+/// The relay of this process: the key (from `realtime.secret`, else the
+/// app key) and, with `realtime.relay_url`, the client that posts
+/// broadcasts to the serving process.
+async fn relay_of(options: &RealtimeOptions, app: &AppContext) -> Result<Relay, BoxError> {
+    let encrypter = app.try_get::<Encrypter>().await;
+    let key = relay::relay_key(options.secret.expose(), encrypter.as_deref());
+    let server = app.try_get::<HttpServer>().await;
+    let url = match options.relay_url.trim() {
+        "" => None,
+        "auto" => server
+            .as_ref()
+            .map(|server| relay::auto_url(&server.options().addr)),
+        url => Some(url.to_owned()),
+    };
+    let client = match (url, &key) {
+        (Some(url), Some(key)) => Some(RelayClient::new(&url, &options.app_id, key.clone())?),
+        (Some(url), None) => {
+            tracing::warn!(
+                target: "keel::realtime",
+                relay_url = %url,
+                "realtime.relay_url is set, but there is neither realtime.secret nor an app key to sign relayed broadcasts with; broadcasts stay in this process"
+            );
+            None
+        }
+        (None, _) => None,
+    };
+    Ok(Relay {
+        key,
+        client,
+        server,
+    })
 }
 
 /// What a channel authorizer decides for a private or presence channel.

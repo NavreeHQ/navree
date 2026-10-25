@@ -224,3 +224,54 @@ async fn is_finished_after_commit_or_rollback() {
     assert!(rolled_back.is_finished().await);
     assert!(!rolled_back.same_as(&committed));
 }
+
+/// `Db::reader` reads through the current unit of work's open transaction:
+/// with a pool of one connection, a read while the unit of work holds that
+/// connection would otherwise wait for the pool until the acquire timeout.
+#[tokio::test]
+async fn reader_uses_the_open_transaction_of_the_current_unit_of_work() {
+    let temp = TempDb::new();
+    let db = Db::connect(&keel_db::DbOptions {
+        max_connections: 1,
+        connect_timeout_secs: 1,
+        ..temp.options()
+    })
+    .await
+    .expect("connects");
+    sea_orm_migration::MigrationTrait::up(
+        &crate::fixtures::CreateNotes,
+        &sea_orm_migration::SchemaManager::new(db.conn()),
+    )
+    .await
+    .expect("creates tables");
+    assert!(!db.reader().await.in_transaction(), "no unit of work");
+
+    let started = std::time::Instant::now();
+    let found = db
+        .transaction(|uow| {
+            let db = db.clone();
+            async move {
+                assert!(!db.reader().await.in_transaction(), "not begun yet");
+                let tx = uow.tx().await?;
+                new_note("uncommitted").insert(&*tx).await?;
+                drop(tx);
+                let reader = db.reader().await;
+                assert!(reader.in_transaction());
+                let found = note::Entity::find().all(&reader).await?;
+                Ok(found.len())
+            }
+        })
+        .await
+        .expect("the read does not wait for a second connection");
+    assert_eq!(found, 1, "sees the unit of work's own write");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+    // A finished unit of work reads from the pool again.
+    let uow = db.uow(None, None).await;
+    uow.tx().await.expect("tx");
+    uow.rollback().await.expect("rollback");
+    let in_tx = uow
+        .scope(async { db.reader().await.in_transaction() })
+        .await;
+    assert!(!in_tx);
+}

@@ -53,6 +53,14 @@ The Next.js server is a backend-for-frontend (spec §7, §10). The browser only 
 - `POST /api/auth/logout` revokes the refresh token at Keel and clears the cookies.
 - Non-GET requests whose `Origin` isn't this app get 403 (CSRF defence for the cookie hop).
 - Responses (status, body, content type, including `text/csv`) are streamed through.
+- Client address: the browser's own `X-Forwarded-For` and `X-Real-IP` never reach Keel (Next.js keeps a client's
+  `X-Forwarded-For` as is, so it is the browser's word). By default Keel therefore sees every web user at the BFF's
+  address, and its login throttle and per-IP rate limit are shared by all of them. In production, put Next.js behind
+  a reverse proxy that appends the client to `X-Forwarded-For`, make Next.js reachable only through it, and set
+  `KEEL_TRUSTED_PROXY_HOPS` to the number of such proxies: the BFF then sends Keel a single
+  `X-Forwarded-For: <client>` (the entry the outermost proxy added). crm-api believes it only from peers listed in
+  `APP_HTTP__TRUSTED_PROXIES` (default `127.0.0.1,::1`, enough for a BFF on the same host); in production, list the
+  BFF's address there.
 
 Errors follow the NestJS format `{statusCode, message, error}`; 400 validation errors carry `errors: {field: [..]}`,
 which forms show next to the fields. See `.env.example` for every setting. Mock data lives in the tab's
@@ -64,7 +72,7 @@ sessionStorage; run `__keelMock.reset()` in the console (or open a new tab) to s
 ```bash
 pnpm lint        # ESLint (next/core-web-vitals + TypeScript)
 pnpm typecheck   # tsc --noEmit
-pnpm test        # Vitest: BFF route handlers, API client + error mapping, CASL, formatting
+pnpm test        # Vitest: BFF route handlers, API client + error mapping, CASL, formatting, audit actions, mock API
 pnpm build
 pnpm e2e         # Playwright smoke test; starts `next dev` with the mock API on :3000
 E2E_REAL_API=1 pnpm e2e   # the whole system: real crm-api + production build, every spec

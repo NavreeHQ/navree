@@ -7,9 +7,9 @@ use std::sync::Arc;
 use axum::http::Method;
 use keel_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
-    field,
+    UPDATE, Update, field,
 };
-use keel_auth::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, user};
+use keel_auth::{CurrentUser, USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, user};
 use keel_contracts::BoxFuture;
 use keel_db::Db;
 use keel_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -119,4 +119,79 @@ async fn users_load_for_can_checks_and_users_permissions_apply() {
         .await
         .assert_status(200)
         .assert_json_path("email", json!("grace@example.com"));
+}
+
+/// `PATCH /api/people/{id}`: a record check (which begins the request's
+/// transaction) plus `CurrentUser`.
+struct EditorController;
+
+impl Injectable for EditorController {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(EditorController) })
+    }
+}
+
+async fn edit(
+    person: Authorized<user::Entity, Update>,
+    CurrentUser(me): CurrentUser,
+) -> Json<serde_json::Value> {
+    Json(json!({ "person": person.into_inner().id, "me": me.id }))
+}
+
+impl Controller for EditorController {
+    fn prefix(&self) -> &'static str {
+        "/people"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![RouteDef::on(Method::PATCH, "/{id}", edit).can(UPDATE, USER_SUBJECT, Some("id"))]
+    }
+}
+
+struct EditorModule;
+
+impl Module for EditorModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(AccessModule::for_feature::<user::Entity>())
+            .controller::<EditorController>();
+    }
+}
+
+/// Users update their own record.
+fn self_editing(ctx: &AbilityCtx, rules: &mut Rules) {
+    if let Some(user) = &ctx.user {
+        rules
+            .can(UPDATE, USER_SUBJECT)
+            .when(field("id").eq(user.id));
+    }
+}
+
+/// Once the record check has begun the request's transaction (on SQLite:
+/// holding the write lock on one pool connection), `CurrentUser` reads
+/// through it instead of waiting for a second connection. With a pool of
+/// one, waiting would only end at the acquire timeout; under load it
+/// starves the pool.
+#[tokio::test]
+async fn current_user_after_a_record_check_needs_no_second_connection() {
+    let app = support::builder()
+        .config("database.max_connections", 1)
+        .config("database.connect_timeout_secs", 1)
+        .module(AccessModule::for_root(AccessOptions {
+            abilities: self_editing,
+            super_admin_role: None,
+        }))
+        .module(EditorModule)
+        .build()
+        .await;
+    let (ada, access, _) = signed_in(&app, "ada@example.com").await;
+    let started = std::time::Instant::now();
+    app.client()
+        .patch(&format!("/api/people/{}", ada.id))
+        .bearer(&access)
+        .json(&json!({}))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("me", json!(ada.id));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }

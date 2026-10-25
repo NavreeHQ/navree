@@ -19,18 +19,20 @@ export function PaginationBar({
   if (!meta || meta.total === 0) return null;
   const first = (meta.current_page - 1) * meta.per_page + 1;
   const last = Math.min(meta.total, meta.current_page * meta.per_page);
+  const pastEnd = meta.current_page > meta.last_page;
   return (
     <nav aria-label="Pagination" className="flex items-center justify-between gap-4 border-t px-4 py-2.5 text-sm">
       <p className="text-muted-foreground figures">
-        {first === last ? formatNumber(first) : `${formatNumber(first)}–${formatNumber(last)}`} of{" "}
-        {formatNumber(meta.total)} {noun}
+        {pastEnd
+          ? `${formatNumber(meta.total)} ${noun} on ${formatNumber(meta.last_page)} ${meta.last_page === 1 ? "page" : "pages"}`
+          : `${first === last ? formatNumber(first) : `${formatNumber(first)}–${formatNumber(last)}`} of ${formatNumber(meta.total)} ${noun}`}
       </p>
-      <div className={cn("flex items-center gap-1", meta.last_page <= 1 && "hidden")}>
+      <div className={cn("flex items-center gap-1", meta.last_page <= 1 && !pastEnd && "hidden")}>
         <Button
           variant="ghost"
           size="sm"
           disabled={meta.current_page <= 1}
-          onClick={() => onPageChange(meta.current_page - 1)}
+          onClick={() => onPageChange(Math.min(meta.current_page - 1, meta.last_page))}
         >
           <ChevronLeftIcon data-icon="inline-start" />
           Previous

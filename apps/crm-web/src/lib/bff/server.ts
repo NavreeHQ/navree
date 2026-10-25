@@ -16,4 +16,7 @@ export const bff = createBff({
   allowedOrigins: process.env.APP_ORIGINS?.split(",")
     .map((o) => o.trim())
     .filter(Boolean),
+  // Reverse proxies in front of this server that append the client to X-Forwarded-For (default 0: the
+  // browser's own header is never passed on, and Keel sees every web user at the BFF's address).
+  trustedProxyHops: Number.parseInt(process.env.KEEL_TRUSTED_PROXY_HOPS ?? "0", 10) || 0,
 });
