@@ -86,7 +86,7 @@ Every wave ends with an integrator agent: full workspace test + clippy + depende
 - Versions: use the PRD's versions (they match crates.io on 2026-10-25: axum 0.8.9, tower-http 0.7.1, sea-orm 2.0.4, garde 0.23.0, croner 4.0.2, utoipa 6.0.0, minijinja 3.0.3, …). All external versions live in root `[workspace.dependencies]`; crates use `dep = { workspace = true }`.
 - TLS: rustls with the `ring` provider wherever a crate offers the choice (aws-lc-sys may need cmake/NASM on Windows).
 - Time: `chrono` (SeaORM's `with-chrono`). IDs: UUID v7 (`uuid` with `v7`, `serde`).
-- Errors: `thiserror` per crate; `keel_kernel::BoxError` across boundaries; HTTP errors are `keel_http::AppError` rendered as RFC 9457 problem+json.
+- Errors: `thiserror` per crate; `keel_kernel::BoxError` across boundaries; HTTP errors are `keel_http::AppError` rendered in the NestJS error format (see §10).
 - Database: SeaORM 2.0 with `sqlx-sqlite` (tests and dev) and `sqlx-postgres` behind a `postgres` feature. Tests use a fresh temporary SQLite **file** per test (in-memory SQLite gives every pool connection its own database).
 - Configuration: `.env` + TOML files + environment variables. Keys are nested with `__`, prefix `APP_` (e.g. `APP_DATABASE__URL` → `database.url`). Keel's own `.env` parser never calls `std::env::set_var` (unsafe in edition 2024); `.env` entries are fed to config-rs as a source.
 - Framework crates do **not** use keel-macros; they hand-write `impl Module` / `impl Injectable` / `impl Controller` (the PRD's escape hatch). Apps and the facade's tests use the macros. This lets every crate build before the macros exist.
@@ -119,15 +119,16 @@ Every wave ends with an integrator agent: full workspace test + clippy + depende
 
 ## 7. CRM API contract (crm-web builds against this; crm-api must match it)
 
-Conventions: JSON; UUID ids; RFC 3339 UTC timestamps; money as integer `amount_cents` + `currency`. Every resource carries `"__type"` (`"Company" | "Contact" | "Deal" | "Activity" | "User"`) for CASL. Lists return `{ "data": [...], "meta": { "current_page", "per_page", "total", "last_page" } }` with `page` (default 1) and `per_page` (default 15, max 100) query params. Errors are problem+json: `{ "type", "title", "status", "detail"?, "request_id", "errors"?: { "field": ["message"] } }`; statuses 401, 403, 404, 419 (CSRF), 422 (validation), 429.
+Conventions: JSON; UUID ids; RFC 3339 UTC timestamps; money as integer `amount_cents` + `currency`. Every resource carries `"__type"` (`"Company" | "Contact" | "Deal" | "Activity" | "User"`) for CASL. Lists return `{ "data": [...], "meta": { "current_page", "per_page", "total", "last_page" } }` with `page` (default 1) and `per_page` (default 15, max 100) query params. Errors use the NestJS format: `{ "statusCode", "message" (string or string[]), "error" (reason phrase) }`, content type `application/json`; validation failures are 400 with `message: string[]` plus `errors: { "field": ["message"] }`; statuses 400, 401, 403, 404, 409, 429; the request id is in the `X-Request-Id` response header.
 
-Auth is Sanctum-style cookie auth: `GET /sanctum/csrf-cookie` → 204 and an `XSRF-TOKEN` cookie; every non-GET request sends `X-XSRF-TOKEN: <decoded cookie value>`, `Accept: application/json`, and credentials. crm-web proxies `/api/*`, `/sanctum/*` and `/broadcasting/*` to the API (`http://127.0.0.1:8080`) through Next.js rewrites, so cookies are first-party.
+Auth is NestJS-style JWT (see §10). The browser never holds tokens: crm-web's Next.js server is a backend-for-frontend (BFF). Its route handlers forward `/api/*` and `/broadcasting/*` to the Keel API (`KEEL_API_URL`, default `http://127.0.0.1:8080`) with `Authorization: Bearer <access token>` taken from an httpOnly cookie; `POST /api/auth/login` through the BFF stores the access and refresh tokens in httpOnly cookies and returns only `{user}`; on a 401 the BFF calls `POST /api/auth/refresh` once, updates the cookies and retries; logout revokes the refresh token and clears the cookies. The BFF rejects non-GET requests whose `Origin` is not its own (CSRF defence for the cookie hop).
 
 | Method & path | Body / query | Response |
 |---|---|---|
-| POST /api/auth/login | `{email, password, remember?}` | 200 `{user: User, two_factor: false}`; 422 with `errors.email` on bad credentials; 429 when throttled |
-| POST /api/auth/logout | — | 204 |
-| GET /api/auth/user | — | 200 `User` or 401 |
+| POST /api/auth/login | `{email, password}` | 200 `{user: User, access_token, refresh_token, token_type: "Bearer", expires_in}` (the BFF keeps the tokens and returns `{user}`); 401 "Invalid credentials"; 429 when throttled |
+| POST /api/auth/refresh | `{refresh_token}` | 200 new token pair (rotated); 401 when invalid, expired or reused |
+| POST /api/auth/logout | `{refresh_token?, all?}` (bearer required) | 204 |
+| GET /api/auth/me | — | 200 `User` or 401 |
 | GET /api/me/abilities | — | 200 CASL rule array `[{action, subject, conditions?, fields?, inverted?}]`, with ETag |
 | GET /api/v1/me | — | `{id, name, email, roles: string[]}` |
 | GET /api/v1/users | `search?` | Page of `User` (any signed-in user; for owner pickers) |
@@ -169,7 +170,7 @@ Resource shapes:
 
 CASL subjects and actions used by the UI: `Company`, `Contact`, `Deal`, `Activity`, `User` with `read`, `create`, `update`, `delete`, `manage`, plus `move` on `Deal` and `export` on `Contact`. Conditions use `owner_id` and `stage`.
 
-Real-time: Pusher protocol served by the CRM API on `ws://127.0.0.1:8080/app/keel-crm-key`; private channels authorise via `POST /broadcasting/auth` (session cookie + X-XSRF-TOKEN). Channels: `private-crm.deals` (event `deal.updated`, data `{deal: Deal}`), `private-users.{id}` (event `notification.created`).
+Real-time: Pusher protocol served by the CRM API on `ws://127.0.0.1:8080/app/keel-crm-key`; private channels authorise via `POST /broadcasting/auth` (through the BFF, which adds the bearer token). Channels: `private-crm.deals` (event `deal.updated`, data `{deal: Deal}`), `private-users.{id}` (event `notification.created`).
 
 ## 8. What is left to the builders
 
@@ -188,3 +189,11 @@ These are binding for crm-api as well:
 7. Notification `data` shape: `{title, message, url, deal_id?}`; the same object is the `notification.created` broadcast payload.
 8. Real-time event names are un-namespaced (`deal.updated`, `notification.created`); `/broadcasting/auth` accepts JSON `{socket_id, channel_name}` as well as form encoding.
 9. crm-web test hooks to keep stable: `data-testid="deal-card"` (with `data-stage`), `column-count`, `task-row`, `user-row`, `audit-row`.
+
+## 10. Direction change: NestJS approach for auth and API errors (user decision, 2026-10-25)
+
+The user decided that auth and the API follow the NestJS approach, not Laravel Sanctum. Everything else (pagination shape, Pusher-protocol real-time, queues, scheduler, events) stays as designed.
+
+1. **Auth = NestJS-style JWT** (plan Task 28/30): stateless JWT access tokens (HS256, 15 min) and opaque rotating refresh tokens (30 days, SHA-256 at rest, reuse detection revokes the token family); Passport-style `Strategy` trait with a built-in JWT strategy; global guard with `#[public]` opt-out (already keel-http's deny-by-default); `CurrentUser` extractor. Routes: `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`. No Sanctum CSRF-cookie endpoint, no personal access tokens, no session login. keel-session remains an optional module that the CRM does not import.
+2. **Web token storage = Next.js server (BFF)**, as described in §7: tokens live in httpOnly cookies on the Next.js side and are forwarded as `Authorization: Bearer`.
+3. **Error format = NestJS**: every error body is `{"statusCode": 404, "message": "Not Found", "error": "Not Found"}` (`message` may be a custom string); validation failures are `400` with `{"statusCode": 400, "message": ["email must be a valid email address", ...], "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}`; 500 bodies never leak internals (`"Internal server error"`); content type `application/json`; the request id stays in the `X-Request-Id` header. keel-session's CSRF failure becomes 403 `"Invalid CSRF token"`. 422 and 419 are no longer used.

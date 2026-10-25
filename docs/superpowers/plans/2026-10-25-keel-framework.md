@@ -18,7 +18,7 @@
 - `chrono` for time, UUID v7 for ids (`Uuid::now_v7()`).
 - Crate dependency edges must match the table in spec §3 (enforced by `crates/keel/tests/dependency_graph.rs`).
 - Framework crates never use keel-macros.
-- Problem+json body: `{"type","title","status","detail"?,"request_id","errors"?}`, content type `application/problem+json`; CSRF failure status 419.
+- Error body (NestJS format, user decision 2026-10-25, spec §10): `{"statusCode": <u16>, "message": <string | string[]>, "error": <reason phrase>}`, content type `application/json`; validation failures are 400 with `message: string[]` and an `errors: {field: [messages]}` map; CSRF failure (optional keel-session) is 403 "Invalid CSRF token"; 500 bodies say "Internal server error". 422 and 419 are not used. Auth is NestJS-style JWT (Task 28), not Sanctum.
 - Request IDs: accept incoming `X-Request-Id` only if ≤ 64 chars of `[A-Za-z0-9_-]`, otherwise generate a UUID v7; echo in the response header.
 - Config env mapping: prefix `APP_`, nesting separator `__`, keys lower-cased (`APP_DATABASE__URL` → `database.url`).
 - Pagination defaults: `page` 1, `per_page` 15, max 100; meta keys `current_page, per_page, total, last_page`.
@@ -28,8 +28,8 @@
 
 1. **Module wiring mistakes** (missing provider, provider not exported, import cycle, singleton → request-scoped edge, a module configured twice): boot must fail before binding a port, naming the module and the type. Owned by Task 2 (tests listed there).
 2. **A route with no access declaration**: must not be reachable. Compile error from `#[controller]` (Task 13, trybuild compile-fail test) and boot error from keel-http for hand-built `RouteDef`s (Task 4 test `boot_fails_for_route_without_access_declaration`).
-3. **CSRF on cookie-authenticated writes**: a POST with a valid session cookie but no/incorrect `X-XSRF-TOKEN` must get 419, while bearer-token requests and GETs pass. Task 19 tests.
-4. **Error responses keep CORS + request id**: a handler panic, a timeout, a 404 and a 422 must all carry `X-Request-Id` and the CORS headers for an allowed origin. Task 4 tests.
+3. **CSRF on cookie-authenticated writes**: a POST with a valid session cookie but no/incorrect `X-XSRF-TOKEN` must get 403 "Invalid CSRF token", while bearer-token requests and GETs pass (keel-session is optional; the CRM uses JWT and does not import it). Task 19 tests.
+4. **Error responses keep CORS + request id**: a handler panic, a timeout, a 404 and a 400 validation error must all carry `X-Request-Id` and the CORS headers for an allowed origin. Task 4 tests.
 5. **Last-match-wins authorization parity between record checks and list filters**: for any rule set, `ability.can(action, record)` must equal "record is in `Accessible` list query". Task 9 property test (`proptest`) and Task 22 SQL test.
 
 ---
@@ -488,6 +488,20 @@ UowLayer (`LayerSlot::Uow`): build `Uow` with actor from `AuthState` and the req
 ---
 
 ## Wave 4 — Identity & tooling
+
+### Task 28a: NestJS error format across the framework (agent `errors`)
+
+User decision (spec §10): replace RFC 9457 problem+json with the NestJS error format everywhere.
+
+**Owns:** `crates/keel-http/src` error rendering and every crate's tests/assertions that depend on the error body or on 422/419 (keel-http, keel-validation, keel-session, keel-db, keel-access, keel-audit, keel-api, keel-notify, keel-realtime, keel-storage, keel-testing, keel-observe, keel-macros, keel-mail, keel-kernel, keel-contracts as needed). Do not touch keel-auth or keel-cli (other agents are building them now).
+
+**Produces:**
+- `AppError` keeps its Rust API (constructors, `with_detail`, `with_header`, `with_source`) but renders `{"statusCode", "message", "error"}` (+ `"errors"` for validation) with `application/json`. `message` = the detail when given, else the reason phrase; `error` = the reason phrase. `AppError::validation(errors)` → 400 with `message` = every field message flattened in field order (each prefixed by nothing; messages already read like "email must be a valid email address") and `errors` = the map. `AppError::csrf_mismatch()` → 403 "Invalid CSRF token". `AppError::internal` → 500 "Internal server error" (source logged, never rendered). Replace the `problem()` method with `fn body(&self) -> serde_json::Value`.
+- keel-validation: messages become NestJS/class-validator style sentences without the Laravel "The x field" phrasing (e.g. "email must be a valid email address", "name should not be empty", "name must be shorter than or equal to 255 characters"); status 400.
+- keel-api: the OpenAPI error component becomes `HttpError {statusCode: integer, message: string | string[], error: string, errors?: object}` and documented error responses use 400 instead of 422.
+- keel-testing: `TestResponse::assert_error(status: u16, message: Option<&str>)` replaces `assert_problem` (keep `assert_problem` as a deprecated alias calling it); `assert_validation_error(field)` asserts 400 and a key in `errors`.
+- Rename tests whose names mention problem/422/419 (e.g. `problem_json_shape_and_content_type` → `nest_error_shape_and_content_type`, `invalid_json_is_422_with_body_error` → `invalid_json_is_400_with_body_error`, `post_with_session_without_xsrf_is_419` → `post_with_session_without_xsrf_is_403`).
+- [ ] TDD: first change the keel-http shape test to the new format and watch it fail; implement; then sweep every crate (`grep -rn "problem\|422\|419\|UNPROCESSABLE" crates`) updating code and tests; `cargo test --workspace` (excluding nothing) green, clippy clean.
 
 ### Task 28: keel-auth core — NestJS-style JWT auth (agent `auth-core`)
 
