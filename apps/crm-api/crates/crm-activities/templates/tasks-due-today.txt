@@ -1,0 +1,8 @@
+Hello {{ name }},
+
+{{ summary }}
+{%- for task in tasks %}
+- {{ task.subject }}, due {{ task.due }} UTC
+{%- endfor %}
+
+Open your tasks: {{ url }}

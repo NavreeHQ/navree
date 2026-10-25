@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <body style="font-family: system-ui, sans-serif; color: #18181b; line-height: 1.5">
+    <p>Hello {{ name }},</p>
+    <p>{{ summary }}</p>
+    <ul>
+      {%- for task in tasks %}
+      <li>{{ task.subject }}, due {{ task.due }} UTC</li>
+      {%- endfor %}
+    </ul>
+    <p><a href="{{ url }}">Open your tasks</a></p>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+[package]
+name = "crm-deals"
+description = "Keel CRM: DealsModule (`/api/v1/deals`, the board, moves, deal notifications and broadcasts)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+crm-core = { path = "../crm-core" }
+garde = { workspace = true }
+keel = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+crm-testkit = { path = "../crm-testkit" }
+futures-util = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }

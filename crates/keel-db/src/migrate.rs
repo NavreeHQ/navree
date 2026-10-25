@@ -487,43 +487,81 @@ fn quote(identifier: &str) -> String {
 
 /// Drops every table of the database (`migrate:fresh`).
 async fn drop_all_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
-    let backend = conn.get_database_backend();
-    let (list, drop_suffix) = match backend {
-        DbBackend::Sqlite => (
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-            "",
-        ),
-        DbBackend::Postgres => (
-            "SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()",
-            " CASCADE",
-        ),
-        _ => {
-            return Err(DbErr::BackendNotSupported {
-                db: "MySQL",
-                ctx: "migrate:fresh",
-            });
+    match conn.get_database_backend() {
+        DbBackend::Sqlite => drop_all_sqlite_tables(conn).await,
+        DbBackend::Postgres => {
+            let tables: Vec<String> = conn
+                .query_all_raw(Statement::from_string(
+                    DbBackend::Postgres,
+                    "SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()",
+                ))
+                .await?
+                .iter()
+                .map(|row| row.try_get::<String>("", "name"))
+                .collect::<Result<_, _>>()?;
+            let tx = conn.begin().await?;
+            for table in &tables {
+                tx.execute_unprepared(&format!("DROP TABLE IF EXISTS {} CASCADE", quote(table)))
+                    .await?;
+            }
+            tx.commit().await
         }
+        _ => Err(DbErr::BackendNotSupported {
+            db: "MySQL",
+            ctx: "migrate:fresh",
+        }),
+    }
+}
+
+/// SQLite's half of [`drop_all_tables`], on one connection taken out of the
+/// pool with `PRAGMA foreign_keys = OFF`.
+///
+/// With foreign keys on, `DROP TABLE` first runs an implicit `DELETE`, and
+/// its `ON DELETE CASCADE` actions fail once a table they touch references
+/// a table already dropped ("no such table: main.roles" for keel-access's
+/// `role_permissions`), whatever `defer_foreign_keys` says. The pragma has
+/// no effect inside a transaction, so it is set before `BEGIN`, and the
+/// connection is closed afterwards (also on error) rather than going back
+/// to the pool with foreign keys off.
+async fn drop_all_sqlite_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    use sea_orm::sqlx::{self, AssertSqlSafe, Connection as _};
+    use sea_orm::{DatabaseConnectionType, RuntimeErr};
+
+    let DatabaseConnectionType::SqlxSqlitePoolConnection(_) = &conn.inner else {
+        return Err(DbErr::BackendNotSupported {
+            db: "SQLite without an SQLx pool",
+            ctx: "migrate:fresh",
+        });
     };
-    let tables: Vec<String> = conn
-        .query_all_raw(Statement::from_string(backend, list))
-        .await?
-        .iter()
-        .map(|row| row.try_get::<String>("", "name"))
-        .collect::<Result<_, _>>()?;
-    let tx = conn.begin().await?;
-    if backend == DbBackend::Sqlite {
-        // Foreign keys are checked at commit, when every table is gone.
-        tx.execute_unprepared("PRAGMA defer_foreign_keys = ON")
-            .await?;
-    }
+    let exec = |error: sqlx::Error| DbErr::Exec(RuntimeErr::SqlxError(Arc::new(error)));
+    let mut dedicated = conn
+        .get_sqlite_connection_pool()
+        .acquire()
+        .await
+        .map_err(|error| DbErr::Conn(RuntimeErr::SqlxError(Arc::new(error))))?;
+    dedicated.close_on_drop();
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *dedicated)
+        .await
+        .map_err(exec)?;
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_all(&mut *dedicated)
+    .await
+    .map_err(|error| DbErr::Query(RuntimeErr::SqlxError(Arc::new(error))))?;
+    let mut tx = dedicated.begin().await.map_err(exec)?;
     for table in &tables {
-        tx.execute_unprepared(&format!(
-            "DROP TABLE IF EXISTS {}{drop_suffix}",
+        sqlx::query(AssertSqlSafe(format!(
+            "DROP TABLE IF EXISTS {}",
             quote(table)
-        ))
-        .await?;
+        )))
+        .execute(&mut *tx)
+        .await
+        .map_err(exec)?;
     }
-    tx.commit().await
+    tx.commit().await.map_err(exec)?;
+    dedicated.close().await.map_err(exec)
 }
 
 #[cfg(test)]

@@ -83,43 +83,32 @@ const HIERARCHY: &[Rule] = &[
     rule("keel", 6, RUNTIME_CRATES),
     rule("keel-cli", 6, &[]),
     // L7 (apps): anything below, except the CLI binary.
-    rule("crm-api", 7, APP_DEPENDENCIES),
+    // The CRM (plan "Wave 6 layout"): its crates use only the `keel` facade.
+    // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
+    // of the crates above it); the feature crates build on crm-core; the
+    // crm-api binary assembles them.
+    rule("crm-core", 7, &["keel"]),
+    rule("crm-testkit", 8, &["keel", "crm-core"]),
+    rule("crm-users", 9, &["keel", "crm-core"]),
+    rule("crm-companies", 9, &["keel", "crm-core"]),
+    rule("crm-deals", 9, &["keel", "crm-core"]),
+    rule("crm-activities", 9, &["keel", "crm-core"]),
+    rule("crm-api", 10, CRM_API_DEPENDENCIES),
+];
+
+/// What the crm-api binary may depend on: the facade and the CRM crates.
+const CRM_API_DEPENDENCIES: &[&str] = &[
+    "keel",
+    "crm-core",
+    "crm-users",
+    "crm-companies",
+    "crm-deals",
+    "crm-activities",
 ];
 
 /// Every runtime crate (layers 0 to 5) plus keel-macros: what the facade may
 /// re-export and what keel-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
-    "keel-kernel",
-    "keel-macros",
-    "keel-contracts",
-    "keel-config",
-    "keel-http",
-    "keel-log",
-    "keel-crypto",
-    "keel-events",
-    "keel-view",
-    "keel-cache",
-    "keel-http-client",
-    "keel-db",
-    "keel-testing",
-    "keel-observe",
-    "keel-api",
-    "keel-mail",
-    "keel-realtime",
-    "keel-storage",
-    "keel-session",
-    "keel-validation",
-    "keel-queue",
-    "keel-audit",
-    "keel-access",
-    "keel-schedule",
-    "keel-notify",
-    "keel-auth",
-];
-
-/// What an application crate may depend on: the facade and every runtime crate.
-const APP_DEPENDENCIES: &[&str] = &[
-    "keel",
     "keel-kernel",
     "keel-macros",
     "keel-contracts",

@@ -1001,22 +1001,121 @@ dependencies = [
 ]
 
 [[package]]
+name = "crm-activities"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crm-core",
+ "crm-testkit",
+ "garde",
+ "keel",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "crm-api"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
+ "crm-activities",
+ "crm-companies",
+ "crm-core",
+ "crm-deals",
+ "crm-testkit",
+ "crm-users",
+ "keel",
+ "sea-orm",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "crm-companies"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crm-core",
+ "crm-testkit",
  "csv",
  "garde",
+ "keel",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "crm-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
  "keel",
  "sea-orm",
  "sea-orm-migration",
  "serde",
  "serde_json",
- "tempfile",
- "thiserror",
  "tokio",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "crm-deals"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crm-core",
+ "crm-testkit",
+ "futures-util",
+ "garde",
+ "keel",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
  "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "crm-testkit"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crm-core",
+ "keel",
+ "sea-orm",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "crm-users"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crm-core",
+ "crm-testkit",
+ "garde",
+ "keel",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tokio",
  "utoipa",
  "uuid",
 ]
