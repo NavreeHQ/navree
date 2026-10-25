@@ -1,0 +1,234 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/crm-api"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.dependencies]
+# ---------------------------------------------------------------------------
+# Navree crates (paths; members use `{ workspace = true }`)
+# ---------------------------------------------------------------------------
+navree = { path = "crates/navree", version = "0.1.0" }
+navree-kernel = { path = "crates/navree-kernel", version = "0.1.0" }
+navree-contracts = { path = "crates/navree-contracts", version = "0.1.0" }
+navree-macros = { path = "crates/navree-macros", version = "0.1.0" }
+navree-config = { path = "crates/navree-config", version = "0.1.0" }
+navree-log = { path = "crates/navree-log", version = "0.1.0" }
+navree-crypto = { path = "crates/navree-crypto", version = "0.1.0" }
+navree-http = { path = "crates/navree-http", version = "0.1.0" }
+navree-events = { path = "crates/navree-events", version = "0.1.0" }
+navree-view = { path = "crates/navree-view", version = "0.1.0" }
+navree-cache = { path = "crates/navree-cache", version = "0.1.0" }
+navree-http-client = { path = "crates/navree-http-client", version = "0.1.0" }
+navree-db = { path = "crates/navree-db", version = "0.1.0" }
+navree-testing = { path = "crates/navree-testing", version = "0.1.0" }
+navree-observe = { path = "crates/navree-observe", version = "0.1.0" }
+navree-api = { path = "crates/navree-api", version = "0.1.0" }
+navree-mail = { path = "crates/navree-mail", version = "0.1.0" }
+navree-realtime = { path = "crates/navree-realtime", version = "0.1.0" }
+navree-storage = { path = "crates/navree-storage", version = "0.1.0" }
+navree-session = { path = "crates/navree-session", version = "0.1.0" }
+navree-validation = { path = "crates/navree-validation", version = "0.1.0" }
+navree-queue = { path = "crates/navree-queue", version = "0.1.0" }
+navree-audit = { path = "crates/navree-audit", version = "0.1.0" }
+navree-access = { path = "crates/navree-access", version = "0.1.0" }
+navree-schedule = { path = "crates/navree-schedule", version = "0.1.0" }
+navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
+navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
+
+# ---------------------------------------------------------------------------
+# Runtime, async and HTTP (Tokio family)
+# ---------------------------------------------------------------------------
+tokio = { version = "1.54.1", features = ["full"] }
+tokio-util = { version = "0.7.20", features = ["rt", "io"] }
+tokio-stream = { version = "0.1.19", features = ["sync"] }
+futures = "0.3.34"
+futures-util = "0.3.34"
+pin-project-lite = "0.2.17"
+bytes = "1.12.1"
+http = "1.5.0"
+http-body-util = "0.1.5"
+hyper = "1.12.0"
+axum = { version = "0.8.9", features = ["http2", "macros", "multipart", "ws"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
+tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
+tower-http = { version = "0.7.1", features = [
+    "add-extension",
+    "catch-panic",
+    "compression-br",
+    "compression-gzip",
+    "cors",
+    "limit",
+    "map-request-body",
+    "map-response-body",
+    "propagate-header",
+    "request-id",
+    "sensitive-headers",
+    "set-header",
+    "timeout",
+    "trace",
+    "util",
+] }
+cookie = { version = "0.18.2", features = ["percent-encode"] }
+percent-encoding = "2.3.2"
+url = "2.5.8"
+mime = "0.3.17"
+mime_guess = "2.0.5"
+infer = "0.22.0"
+# TLS: rustls with the ring provider only (no aws-lc, no OpenSSL).
+rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std", "tls12"] }
+reqwest = { version = "0.13.5", default-features = false, features = [
+    "charset",
+    "form",
+    "http2",
+    "json",
+    "query",
+    "rustls-no-provider",
+    "stream",
+] }
+backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
+ipnet = "2.12.2"
+tokio-tungstenite = "0.30.0"
+
+# ---------------------------------------------------------------------------
+# Serialization, errors, ids, time
+# ---------------------------------------------------------------------------
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_urlencoded = "0.7.1"
+serde_path_to_error = "0.1.20"
+toml = "1.1.8"
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+base64 = "0.23.1"
+hex = "0.4.3"
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
+metrics = "0.24.6"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+config = { version = "0.15.27", default-features = false, features = ["convert-case", "json", "toml"] }
+
+# ---------------------------------------------------------------------------
+# Database (SeaORM 2 on SQLx 0.9; SQLite bundled, rustls+ring for Postgres)
+# ---------------------------------------------------------------------------
+sea-orm = { version = "2.0.4", default-features = false, features = [
+    "macros",
+    "runtime-tokio-rustls",
+    "sqlite-use-returning-for-3_35",
+    "sqlx-sqlite",
+    "with-chrono",
+    "with-json",
+    "with-uuid",
+] }
+sea-orm-migration = { version = "2.0.4", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "sqlite-use-returning-for-3_35",
+    "sqlx-sqlite",
+    "with-chrono",
+    "with-json",
+    "with-uuid",
+] }
+sea-query = { version = "1.0.2", default-features = false, features = [
+    "backend-postgres",
+    "backend-sqlite",
+    "derive",
+    "with-chrono",
+    "with-json",
+    "with-uuid",
+] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled"] }
+
+# ---------------------------------------------------------------------------
+# Security and crypto (RustCrypto 2026 wave: argon2 0.6, hmac 0.13, sha2 0.11)
+# ---------------------------------------------------------------------------
+aes-gcm = "0.11.1"
+argon2 = "0.6.0"
+password-hash = { version = "0.6.1", features = ["alloc", "getrandom"] }
+hmac = "0.13.0"
+sha2 = "0.11.1"
+subtle = "2.6.1"
+rand = "0.10.3"
+totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
+qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
+
+# ---------------------------------------------------------------------------
+# Module capabilities
+# ---------------------------------------------------------------------------
+garde = { version = "0.23.0", features = ["derive", "email", "regex", "serde", "unicode", "url"] }
+minijinja = { version = "3.0.3", features = ["json", "loop_controls", "serde", "urlencode"] }
+lettre = { version = "0.11.23", default-features = false, features = [
+    "builder",
+    "hostname",
+    "pool",
+    "ring",
+    "smtp-transport",
+    "tokio1",
+    "tokio1-rustls",
+    "tracing",
+    "webpki-roots",
+] }
+croner = "4.0.2"
+moka = { version = "0.12.16", features = ["future"] }
+dashmap = "6.2.1"
+wildmatch = "2.7.0"
+utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_path_order", "uuid"] }
+utoipa-scalar = { version = "0.4.0", features = ["axum"] }
+object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
+csv = "1.4.0"
+
+# ---------------------------------------------------------------------------
+# Tooling: proc macros and CLI
+# ---------------------------------------------------------------------------
+syn = { version = "3.0.9", features = ["extra-traits", "full", "visit-mut"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
+proc-macro-crate = "3.5.0"
+clap = { version = "4.6.7", features = ["derive"] }
+notify = "8.2.1"
+notify-debouncer-mini = "0.7.0"
+heck = "0.5.0"
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+tempfile = "3.27.0"
+trybuild = "1.0.122"
+insta = { version = "1.49.0", features = ["json"] }
+proptest = "1.12.0"
+
+# Keep debug info small: less memory, faster links (many agents build at once).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Argon2id is unbearably slow unoptimised; tests hash passwords.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+[profile.test]
+debug = "line-tables-only"

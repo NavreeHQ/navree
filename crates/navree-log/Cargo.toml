@@ -1,0 +1,26 @@
+[package]
+name = "navree-log"
+description = "Navree LoggerModule: tracing subscriber, JSON or pretty output, redaction, rotating files and runtime level control."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true }

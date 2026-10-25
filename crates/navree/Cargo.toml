@@ -1,0 +1,104 @@
+[package]
+name = "navree"
+description = "Navree: a Laravel-class, NestJS-structured application framework on Rust and Tokio (facade crate)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["full"]
+## Every module crate.
+full = [
+    "access",
+    "api",
+    "audit",
+    "auth",
+    "cache",
+    "crypto",
+    "db",
+    "events",
+    "http",
+    "http-client",
+    "log",
+    "mail",
+    "notify",
+    "observe",
+    "queue",
+    "realtime",
+    "schedule",
+    "session",
+    "storage",
+    "testing",
+    "validation",
+    "view",
+]
+access = ["dep:navree-access"]
+api = ["dep:navree-api"]
+audit = ["dep:navree-audit"]
+auth = ["dep:navree-auth"]
+cache = ["dep:navree-cache"]
+crypto = ["dep:navree-crypto"]
+db = ["dep:navree-db"]
+events = ["dep:navree-events"]
+http = ["dep:navree-http"]
+http-client = ["dep:navree-http-client"]
+log = ["dep:navree-log"]
+mail = ["dep:navree-mail"]
+notify = ["dep:navree-notify"]
+observe = ["dep:navree-observe"]
+queue = ["dep:navree-queue"]
+realtime = ["dep:navree-realtime"]
+schedule = ["dep:navree-schedule"]
+session = ["dep:navree-session"]
+storage = ["dep:navree-storage"]
+testing = ["dep:navree-testing"]
+validation = ["dep:navree-validation"]
+view = ["dep:navree-view"]
+## PostgreSQL driver for navree-db.
+postgres = ["navree-db?/postgres"]
+
+[dependencies]
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+
+navree-access = { workspace = true, optional = true }
+navree-api = { workspace = true, optional = true }
+navree-audit = { workspace = true, optional = true }
+navree-auth = { workspace = true, optional = true }
+navree-cache = { workspace = true, optional = true }
+navree-crypto = { workspace = true, optional = true }
+navree-db = { workspace = true, optional = true }
+navree-events = { workspace = true, optional = true }
+navree-http = { workspace = true, optional = true }
+navree-http-client = { workspace = true, optional = true }
+navree-log = { workspace = true, optional = true }
+navree-mail = { workspace = true, optional = true }
+navree-notify = { workspace = true, optional = true }
+navree-observe = { workspace = true, optional = true }
+navree-queue = { workspace = true, optional = true }
+navree-realtime = { workspace = true, optional = true }
+navree-schedule = { workspace = true, optional = true }
+navree-session = { workspace = true, optional = true }
+navree-storage = { workspace = true, optional = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true, optional = true }
+navree-view = { workspace = true, optional = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+garde = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }

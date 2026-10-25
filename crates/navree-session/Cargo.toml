@@ -1,0 +1,39 @@
+[package]
+name = "navree-session"
+description = "Navree SessionModule: encrypted session cookies, memory and database stores, CSRF protection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+cookie = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+percent-encoding = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+wildmatch = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }

@@ -1,0 +1,35 @@
+[package]
+name = "navree-realtime"
+description = "Navree RealtimeModule: Pusher-protocol WebSocket server with public, private and presence channels."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+dashmap = { workspace = true }
+futures-util = { workspace = true }
+hex = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+tower = { workspace = true }

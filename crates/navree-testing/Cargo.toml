@@ -1,0 +1,33 @@
+[package]
+name = "navree-testing"
+description = "Navree testing kit: TestApp, in-process TestClient with cookies and XSRF helpers, fakes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+cookie = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
