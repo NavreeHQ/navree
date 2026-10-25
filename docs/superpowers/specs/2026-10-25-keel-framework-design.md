@@ -174,3 +174,17 @@ Real-time: Pusher protocol served by the CRM API on `ws://127.0.0.1:8080/app/kee
 ## 8. What is left to the builders
 
 Internal module layout inside each crate, private helper names, test case selection beyond the tests the plan names, exact log message wording, the CRM's visual design (follow the `frontend-design:frontend-design` skill: a clean, professional sales tool, not a template look).
+
+## 9. Contract clarifications (settled while building crm-web)
+
+These are binding for crm-api as well:
+
+1. Completing a task is its own action: `complete` on `Activity`. Reps may `complete` an activity when `assignee_id = me` or `owner_id = me`; managers and admins may complete any. `POST /api/v1/activities/{id}/complete` checks `#[can(Complete, Activity, from = "id")]`; the UI checks `can('complete', activity)`.
+2. Managers get the base rules plus `manage` on Company/Contact/Deal/Activity from their permissions; the final rule `cannot delete Deal when stage $in [won, lost]` applies to everyone except admin (super-admin).
+3. Owner pickers are shown only to users who can `manage` the record type; otherwise the creator owns the record (`owner_id` defaults to the current user; reps sending another `owner_id` get 403).
+4. `position` in `POST /deals/{id}/move` is a 0-based index within the target stage; other deals in that stage shift.
+5. `due` filter: `overdue` = `kind = task`, not completed, `due_at` before the start of today (UTC); `today` = `due_at` within today (UTC); `upcoming` = `due_at` after today.
+6. Dashboard: `pipeline`, `won_this_month`, `open_deals` are team-wide; `tasks` counts are for the current user (assignee, or owner when unassigned); amounts are summed across currencies.
+7. Notification `data` shape: `{title, message, url, deal_id?}`; the same object is the `notification.created` broadcast payload.
+8. Real-time event names are un-namespaced (`deal.updated`, `notification.created`); `/broadcasting/auth` accepts JSON `{socket_id, channel_name}` as well as form encoding.
+9. crm-web test hooks to keep stable: `data-testid="deal-card"` (with `data-stage`), `column-count`, `task-row`, `user-row`, `audit-row`.

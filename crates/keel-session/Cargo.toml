@@ -1,0 +1,39 @@
+[package]
+name = "keel-session"
+description = "Keel SessionModule: encrypted session cookies, memory and database stores, CSRF protection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+cookie = { workspace = true }
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-crypto = { workspace = true }
+keel-db = { workspace = true }
+keel-http = { workspace = true }
+keel-kernel = { workspace = true }
+percent-encoding = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+wildmatch = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+keel-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }

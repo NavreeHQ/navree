@@ -1,0 +1,33 @@
+[package]
+name = "keel-crypto"
+description = "Keel CryptoModule: AES-256-GCM Encrypter with key rotation, Argon2id Hasher and token helpers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aes-gcm = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-kernel = { workspace = true }
+password-hash = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

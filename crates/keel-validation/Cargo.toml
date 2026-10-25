@@ -1,0 +1,38 @@
+[package]
+name = "keel-validation"
+description = "Keel ValidationModule: Valid<T> extractors on garde, Laravel-style messages, async unique/exists rules."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+garde = { workspace = true }
+http = { workspace = true }
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-db = { workspace = true }
+keel-http = { workspace = true }
+keel-kernel = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+serde_urlencoded = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+keel-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }

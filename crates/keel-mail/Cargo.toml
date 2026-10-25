@@ -1,0 +1,26 @@
+[package]
+name = "keel-mail"
+description = "Keel MailModule: mailables rendered from templates, SMTP/log/array/failover transports, queued sending."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-kernel = { workspace = true }
+keel-view = { workspace = true }
+lettre = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

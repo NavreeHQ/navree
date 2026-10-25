@@ -1,0 +1,104 @@
+[package]
+name = "keel"
+description = "Keel: a Laravel-class, NestJS-structured application framework on Rust and Tokio (facade crate)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["full"]
+## Every module crate.
+full = [
+    "access",
+    "api",
+    "audit",
+    "auth",
+    "cache",
+    "crypto",
+    "db",
+    "events",
+    "http",
+    "http-client",
+    "log",
+    "mail",
+    "notify",
+    "observe",
+    "queue",
+    "realtime",
+    "schedule",
+    "session",
+    "storage",
+    "testing",
+    "validation",
+    "view",
+]
+access = ["dep:keel-access"]
+api = ["dep:keel-api"]
+audit = ["dep:keel-audit"]
+auth = ["dep:keel-auth"]
+cache = ["dep:keel-cache"]
+crypto = ["dep:keel-crypto"]
+db = ["dep:keel-db"]
+events = ["dep:keel-events"]
+http = ["dep:keel-http"]
+http-client = ["dep:keel-http-client"]
+log = ["dep:keel-log"]
+mail = ["dep:keel-mail"]
+notify = ["dep:keel-notify"]
+observe = ["dep:keel-observe"]
+queue = ["dep:keel-queue"]
+realtime = ["dep:keel-realtime"]
+schedule = ["dep:keel-schedule"]
+session = ["dep:keel-session"]
+storage = ["dep:keel-storage"]
+testing = ["dep:keel-testing"]
+validation = ["dep:keel-validation"]
+view = ["dep:keel-view"]
+## PostgreSQL driver for keel-db.
+postgres = ["keel-db?/postgres"]
+
+[dependencies]
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-kernel = { workspace = true }
+keel-macros = { workspace = true }
+
+keel-access = { workspace = true, optional = true }
+keel-api = { workspace = true, optional = true }
+keel-audit = { workspace = true, optional = true }
+keel-auth = { workspace = true, optional = true }
+keel-cache = { workspace = true, optional = true }
+keel-crypto = { workspace = true, optional = true }
+keel-db = { workspace = true, optional = true }
+keel-events = { workspace = true, optional = true }
+keel-http = { workspace = true, optional = true }
+keel-http-client = { workspace = true, optional = true }
+keel-log = { workspace = true, optional = true }
+keel-mail = { workspace = true, optional = true }
+keel-notify = { workspace = true, optional = true }
+keel-observe = { workspace = true, optional = true }
+keel-queue = { workspace = true, optional = true }
+keel-realtime = { workspace = true, optional = true }
+keel-schedule = { workspace = true, optional = true }
+keel-session = { workspace = true, optional = true }
+keel-storage = { workspace = true, optional = true }
+keel-testing = { workspace = true, optional = true }
+keel-validation = { workspace = true, optional = true }
+keel-view = { workspace = true, optional = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+garde = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }

@@ -1,0 +1,36 @@
+[package]
+name = "keel-macros"
+description = "Keel attribute macros: #[module], #[injectable], #[controller] and route attributes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+proc-macro-crate = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+
+# Macro tests expand against the runtime crates (allowed as dev-dependencies
+# of keel-macros only; see crates/keel/tests/dependency_graph.rs).
+[dev-dependencies]
+axum = { workspace = true }
+http-body-util = { workspace = true }
+keel-config = { workspace = true }
+keel-contracts = { workspace = true }
+keel-http = { workspace = true }
+keel-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+trybuild = { workspace = true }
+utoipa = { workspace = true }
