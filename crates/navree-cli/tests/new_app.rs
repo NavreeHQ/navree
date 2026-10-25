@@ -110,6 +110,24 @@ fn a_published_navree_is_a_version_requirement() {
     );
 }
 
+/// `canonicalize()` on Windows gives verbatim paths (`\\?\C:\..`), which
+/// cargo rejects in a `path` dependency ("invalid path url").
+#[test]
+fn verbatim_windows_paths_become_plain_paths() {
+    for (path, expected) in [
+        (
+            r"\\?\C:\src\navree\crates\navree",
+            r#"{ path = "C:/src/navree/crates/navree" }"#,
+        ),
+        (
+            r"\\?\UNC\server\share\navree\crates\navree",
+            r#"{ path = "//server/share/navree/crates/navree" }"#,
+        ),
+    ] {
+        assert_eq!(NavreeSource::Path(PathBuf::from(path)).dependency(), expected);
+    }
+}
+
 #[test]
 fn navree_path_accepts_the_repository_or_the_facade_crate() {
     let repo = std::path::absolute(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();

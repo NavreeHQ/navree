@@ -22,12 +22,10 @@ use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
 
+/// The workspace root. `std::path::absolute`, not `canonicalize`, which
+/// gives verbatim `\\?\C:\..` paths on Windows.
 fn workspace() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .canonicalize()
-        .unwrap()
+    std::path::absolute(Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")).unwrap()
 }
 
 fn name(s: &str) -> Name {

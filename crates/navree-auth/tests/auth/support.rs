@@ -13,7 +13,9 @@ use navree_crypto::{CryptoModule, generate_key};
 use navree_db::DatabaseModule;
 use navree_http::{Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
+use navree_view::{ViewModule, ViewOptions};
 use serde_json::{Value, json};
 
 /// A strong enough password for every test.
@@ -37,6 +39,57 @@ pub fn builder() -> TestAppBuilder {
 /// [`builder`], booted.
 pub async fn app() -> TestApp {
     builder().build().await
+}
+
+/// [`builder`] plus ViewModule and MailModule with the array transport, so
+/// the account flows send mail the tests can read with [`sent_mail`].
+pub fn mail_builder() -> TestAppBuilder {
+    builder()
+        .module(ViewModule::for_root(ViewOptions {
+            dirs: vec![],
+            reload: false,
+        }))
+        .module(MailModule::for_root(MailOptions {
+            transport: TransportConfig::Array,
+            ..MailOptions::default()
+        }))
+}
+
+/// Every message the array transport recorded so far.
+pub async fn sent_mail(app: &TestApp) -> Vec<Message> {
+    app.get::<Mailer>()
+        .await
+        .array_transport()
+        .expect("the array transport")
+        .sent()
+}
+
+/// The value of query parameter `name` in the first link of `text` that
+/// carries it (URL-decoded).
+pub fn link_param(text: &str, name: &str) -> Option<String> {
+    let marker = format!("{name}=");
+    let start = text.find(&marker)? + marker.len();
+    let raw: String = text[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace() && *c != '&' && *c != '"' && *c != '<')
+        .collect();
+    Some(
+        form_urlencoded::parse(format!("v={raw}").as_bytes())
+            .next()
+            .map(|(_, value)| value.into_owned())
+            .unwrap_or_default(),
+    )
+}
+
+/// The first `http(s)://` URL in `text`.
+pub fn first_url(text: &str) -> Option<String> {
+    let start = text.find("http://").or_else(|| text.find("https://"))?;
+    Some(
+        text[start..]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '"' && *c != '<')
+            .collect(),
+    )
 }
 
 /// Creates a user through the service (as a seeder would).

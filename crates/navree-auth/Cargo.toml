@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
+form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
@@ -45,4 +46,6 @@ uuid = { workspace = true }
 navree-api = { workspace = true }
 navree-observe = { workspace = true }
 navree-testing = { workspace = true }
+# Tests boot MailModule, which needs ViewModule.
+navree-view = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

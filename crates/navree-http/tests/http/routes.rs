@@ -310,3 +310,64 @@ async fn signed_urls_survive_a_restart_when_the_app_key_is_set() {
         UrlSigner::new(b"test-signing-key").sign("/x", expires)
     );
 }
+
+/// How many [`PerRequest`] values were built.
+#[derive(Default)]
+struct Built {
+    count: std::sync::atomic::AtomicUsize,
+}
+
+/// A request-scoped provider (`Scope::Request`).
+struct PerRequest {
+    id: usize,
+}
+
+#[tokio::test]
+async fn scoped_extractor_builds_request_scoped_providers_once_per_request() {
+    use navree_http::Scoped;
+    use navree_kernel::{Factory, ProviderKey, Resolver, Scope};
+    use std::sync::atomic::Ordering;
+
+    let app = Setup::new(vec![
+        RouteDef::on(
+            Method::GET,
+            "/",
+            |a: Scoped<PerRequest>, b: Scoped<PerRequest>, built: Scoped<Built>| async move {
+                Json(serde_json::json!({
+                    "a": a.id,
+                    "same": Arc::ptr_eq(&a.0, &b.0),
+                    "built": built.count.load(Ordering::SeqCst),
+                }))
+            },
+        )
+        .public(),
+        RouteDef::on(Method::GET, "/missing", |_: Scoped<ClientIp>| async {
+            "unreachable"
+        })
+        .public(),
+    ])
+    .prefix("/scoped")
+    .register(|m| {
+        m.value(Built::default()).factory(
+            Factory::<PerRequest>::new(|r: Resolver| async move {
+                let built = r.get::<Built>().await?;
+                let id = built.count.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(Arc::new(PerRequest { id }))
+            })
+            .scope(Scope::Request)
+            .deps(vec![ProviderKey::of::<Built>()]),
+        );
+    })
+    .boot()
+    .await;
+
+    // Two extractions in one request share one instance...
+    assert_eq!(
+        app.get("/api/scoped").await.json(),
+        serde_json::json!({ "a": 1, "same": true, "built": 1 })
+    );
+    // ...and the next request builds a new one.
+    assert_eq!(app.get("/api/scoped").await.json()["a"], 2);
+    // A provider the route's module cannot resolve is a 500.
+    app.get("/api/scoped/missing").await.assert_error(500);
+}

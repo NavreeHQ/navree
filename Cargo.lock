@@ -2375,6 +2375,7 @@ dependencies = [
 name = "navree"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
  "garde",
  "navree-access",
@@ -2490,6 +2491,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "form_urlencoded",
  "garde",
  "http",
  "jsonwebtoken",
@@ -2506,6 +2508,7 @@ dependencies = [
  "navree-observe",
  "navree-testing",
  "navree-validation",
+ "navree-view",
  "qrcode2",
  "sea-orm",
  "sea-orm-migration",

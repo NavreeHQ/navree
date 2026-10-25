@@ -24,7 +24,7 @@ use http::header::{
 use http::{Method, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthState, RequestId};
-use navree_kernel::AppContext;
+use navree_kernel::{AppContext, RequestScope};
 use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -98,6 +98,8 @@ pub(crate) async fn request_context(
     request.extensions_mut().insert(request_id.clone());
     request.extensions_mut().insert(ip);
     request.extensions_mut().insert(state.ctx.clone());
+    // Request-scoped providers are built once per request (see `Scoped`).
+    request.extensions_mut().insert(RequestScope::new());
 
     let method = request.method().clone();
     // Every log line inside the request carries these fields; `user_id` is

@@ -154,6 +154,7 @@ async fn collect_routes(ctx: &AppContext, options: &HttpOptions) -> Result<Vec<M
             );
             meta.method = method.to_string();
             meta.module = Some(registration.module.name);
+            meta.module_id = Some(registration.value.module);
             mounted.push(Mounted {
                 controller: short_name(controller.type_name),
                 handler,

@@ -8,7 +8,8 @@ use http::header::WWW_AUTHENTICATE;
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
 use navree_http::AppError;
-use navree_kernel::BoxError;
+use navree_kernel::{BoxError, KernelError};
+use navree_mail::MailError;
 use sea_orm::DbErr;
 
 /// An auth-module error. Returned from handlers with `?`, it becomes an
@@ -55,6 +56,41 @@ pub enum AuthError {
     /// No such user.
     #[error("user not found")]
     UserNotFound,
+    /// The password reset token is unknown, wrong, used or expired.
+    #[error("invalid or expired password reset token")]
+    InvalidResetToken,
+    /// The email verification link is not for this user's current address.
+    #[error("invalid verification link")]
+    InvalidVerificationLink,
+    /// The password was right but the account uses two-factor
+    /// authentication: [`AuthService::login`](crate::AuthService::login)
+    /// cannot finish; use
+    /// [`attempt_login`](crate::AuthService::attempt_login) and
+    /// [`verify_two_factor`](crate::AuthService::verify_two_factor).
+    #[error("two-factor authentication required")]
+    TwoFactorRequired,
+    /// Two-factor authentication is already enabled (disable it first).
+    #[error("two-factor authentication is already enabled")]
+    TwoFactorAlreadyEnabled,
+    /// Two-factor authentication is not enabled, or not confirmed yet.
+    #[error("two-factor authentication is not enabled")]
+    TwoFactorNotEnabled,
+    /// A wrong or reused TOTP code or recovery code at a two-factor login.
+    #[error("invalid two-factor code")]
+    InvalidTwoFactorCode,
+    /// The TOTP secret, its URL or its QR code could not be built.
+    #[error("two-factor error: {0}")]
+    TwoFactor(String),
+    /// A mail could not be rendered or sent.
+    #[error("auth mail error: {0}")]
+    Mail(#[from] MailError),
+    /// A provider the flow needs (the URL signer, the HTTP options) could
+    /// not be resolved.
+    #[error("auth provider error: {0}")]
+    Kernel(#[from] KernelError),
+    /// The application has shut down (the service outlived it).
+    #[error("the application has shut down")]
+    ShutDown,
     /// A token could not be signed.
     #[error("could not sign a token: {0}")]
     Signing(String),
@@ -94,11 +130,33 @@ impl AuthError {
                 Some(AppError::unauthenticated().with_detail("Invalid refresh token"))
             }
             AuthError::UserNotFound => Some(AppError::not_found()),
+            AuthError::InvalidResetToken => Some(AppError::bad_request(
+                "Invalid or expired password reset token",
+            )),
+            AuthError::InvalidVerificationLink => {
+                Some(AppError::forbidden().with_detail("Invalid verification link"))
+            }
+            AuthError::TwoFactorRequired => {
+                Some(AppError::unauthenticated().with_detail("Two-factor authentication required"))
+            }
+            AuthError::TwoFactorAlreadyEnabled => Some(AppError::conflict(
+                "Two-factor authentication is already enabled",
+            )),
+            AuthError::TwoFactorNotEnabled => Some(AppError::bad_request(
+                "Two-factor authentication is not enabled",
+            )),
+            AuthError::InvalidTwoFactorCode => {
+                Some(AppError::unauthenticated().with_detail("Invalid two-factor code"))
+            }
             AuthError::Db(error) => navree_db::map_db_error(error),
             AuthError::Signing(_)
             | AuthError::Crypto(_)
             | AuthError::Cache(_)
-            | AuthError::Extension(_) => None,
+            | AuthError::Extension(_)
+            | AuthError::TwoFactor(_)
+            | AuthError::Mail(_)
+            | AuthError::Kernel(_)
+            | AuthError::ShutDown => None,
         }
     }
 
@@ -196,6 +254,50 @@ mod tests {
             error.body()["message"],
             json!(["password must be longer than or equal to 8 characters"])
         );
+    }
+
+    #[test]
+    fn account_flow_errors_map_to_nest_responses() {
+        let cases = [
+            (
+                AuthError::InvalidResetToken,
+                400,
+                "Invalid or expired password reset token",
+            ),
+            (
+                AuthError::InvalidVerificationLink,
+                403,
+                "Invalid verification link",
+            ),
+            (
+                AuthError::TwoFactorRequired,
+                401,
+                "Two-factor authentication required",
+            ),
+            (
+                AuthError::TwoFactorAlreadyEnabled,
+                409,
+                "Two-factor authentication is already enabled",
+            ),
+            (
+                AuthError::TwoFactorNotEnabled,
+                400,
+                "Two-factor authentication is not enabled",
+            ),
+            (
+                AuthError::InvalidTwoFactorCode,
+                401,
+                "Invalid two-factor code",
+            ),
+        ];
+        for (error, status, message) in cases {
+            let error = error.into_app_error();
+            assert_eq!(error.status.as_u16(), status, "{message}");
+            assert_eq!(error.body()["message"], message);
+        }
+        let error = AuthError::TwoFactor("secret=JBSWY3DP".to_owned()).into_app_error();
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!error.body().to_string().contains("JBSWY3DP"));
     }
 
     #[test]

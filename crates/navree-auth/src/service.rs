@@ -8,7 +8,7 @@ use std::time::Duration;
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
-use navree_crypto::{CryptoError, Hasher, constant_time_eq, random_token};
+use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
 use navree_db::{Db, Repo, Uow};
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
@@ -26,6 +26,7 @@ use uuid::Uuid;
 
 use crate::throttle::LoginThrottle;
 use crate::token::RefreshSecret;
+use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
     AuthError, AuthOptions, JwtService, User, UserResource, UserResourceExtension, refresh_token,
     user,
@@ -126,13 +127,16 @@ impl fmt::Debug for TokenPair {
 /// - Logins, failed logins, refreshes, detected reuse and logouts are
 ///   written to the `dyn AuditSink` when one is registered.
 pub struct AuthService {
-    db: Arc<Db>,
-    hasher: Arc<Hasher>,
-    jwt: Arc<JwtService>,
-    options: Arc<AuthOptions>,
-    throttle: LoginThrottle,
-    clock: Arc<dyn Clock>,
-    app: WeakAppContext,
+    pub(crate) db: Arc<Db>,
+    pub(crate) hasher: Arc<Hasher>,
+    pub(crate) encrypter: Arc<Encrypter>,
+    pub(crate) jwt: Arc<JwtService>,
+    pub(crate) options: Arc<AuthOptions>,
+    pub(crate) cache: Cache,
+    pub(crate) throttle: LoginThrottle,
+    pub(crate) two_factor_throttle: LoginThrottle,
+    pub(crate) clock: Arc<dyn Clock>,
+    pub(crate) app: WeakAppContext,
     dummy_hash: OnceCell<String>,
     extensions: OnceCell<Vec<Arc<dyn UserResourceExtension>>>,
 }
@@ -142,6 +146,7 @@ impl Injectable for AuthService {
         vec![
             ProviderKey::of::<Db>(),
             ProviderKey::of::<Hasher>(),
+            ProviderKey::of::<Encrypter>(),
             ProviderKey::of::<JwtService>(),
             ProviderKey::of::<AuthOptions>(),
         ]
@@ -151,6 +156,7 @@ impl Injectable for AuthService {
         Box::pin(async move {
             let db = r.get::<Db>().await?;
             let hasher = r.get::<Hasher>().await?;
+            let encrypter = r.get::<Encrypter>().await?;
             let jwt = r.get::<JwtService>().await?;
             let options = r.get::<AuthOptions>().await?;
             let app = r.app();
@@ -161,14 +167,25 @@ impl Injectable for AuthService {
                 None => Cache::memory(),
             };
             let clock = clock_of(&app).await;
-            let throttle =
-                LoginThrottle::new(cache, options.login_throttle_per_minute, clock.clone());
+            let throttle = LoginThrottle::new(
+                cache.clone(),
+                options.login_throttle_per_minute,
+                clock.clone(),
+            );
+            let two_factor_throttle = LoginThrottle::new(
+                cache.clone(),
+                options.two_factor.max_attempts_per_minute,
+                clock.clone(),
+            );
             Ok(AuthService {
                 db,
                 hasher,
+                encrypter,
                 jwt,
                 options,
+                cache,
                 throttle,
+                two_factor_throttle,
                 clock,
                 app: app.downgrade(),
                 dummy_hash: OnceCell::new(),
@@ -239,19 +256,37 @@ impl AuthService {
             .map_err(|_| AuthError::InvalidCredentials)
     }
 
-    /// The login flow behind `POST /auth/login`: the per email and IP
-    /// throttle ([`AuthError::TooManyAttempts`] once
-    /// `auth.login_throttle_per_minute` failures are counted; a successful
-    /// login resets it), [`validate_user`](AuthService::validate_user),
-    /// then [`issue_tokens`](AuthService::issue_tokens). Audited as
-    /// `auth.login` or `auth.login_failed` (with the email, never the
-    /// password).
+    /// Signs in without a second factor: [`attempt_login`](AuthService::attempt_login)
+    /// for accounts without two-factor authentication;
+    /// [`AuthError::TwoFactorRequired`] for the others (the HTTP route
+    /// answers those with a challenge instead).
     pub async fn login(
         &self,
         email: &str,
         password: &str,
         meta: &ClientMeta,
     ) -> Result<(User, TokenPair), AuthError> {
+        match self.attempt_login(email, password, meta).await? {
+            LoginOutcome::Authenticated { user, tokens } => Ok((user, tokens)),
+            LoginOutcome::TwoFactorRequired { .. } => Err(AuthError::TwoFactorRequired),
+        }
+    }
+
+    /// The login flow behind `POST /auth/login`: the per email and IP
+    /// throttle ([`AuthError::TooManyAttempts`] once
+    /// `auth.login_throttle_per_minute` failures are counted; a successful
+    /// login resets it), [`validate_user`](AuthService::validate_user),
+    /// then [`issue_tokens`](AuthService::issue_tokens), or, when the user
+    /// has confirmed two-factor authentication, a challenge token for
+    /// [`verify_two_factor`](AuthService::verify_two_factor) instead.
+    /// Audited as `auth.login`, `auth.two_factor_challenge` or
+    /// `auth.login_failed` (with the email, never the password).
+    pub async fn attempt_login(
+        &self,
+        email: &str,
+        password: &str,
+        meta: &ClientMeta,
+    ) -> Result<LoginOutcome, AuthError> {
         let key = LoginThrottle::key(email, meta.ip.as_deref());
         if let Err(error) = self.throttle.check(&key).await {
             if matches!(error, AuthError::TooManyAttempts { .. }) {
@@ -268,10 +303,21 @@ impl AuthService {
                 if let Err(error) = self.throttle.clear(&key).await {
                     tracing::warn!(target: "navree::auth", %error, "could not reset the login throttle");
                 }
+                if two_factor_enabled(&user) {
+                    let challenge_token = self.sign_challenge(&user)?;
+                    self.audit(
+                        entry(AuditKind::Auth, "auth.two_factor_challenge", meta).actor(user.id),
+                    )
+                    .await;
+                    return Ok(LoginOutcome::TwoFactorRequired {
+                        user,
+                        challenge_token,
+                    });
+                }
                 let tokens = self.issue_tokens(&user, meta.clone()).await?;
                 self.audit(entry(AuditKind::Auth, "auth.login", meta).actor(user.id))
                     .await;
-                Ok((user, tokens))
+                Ok(LoginOutcome::Authenticated { user, tokens })
             }
             Err(known_user) => {
                 if let Err(error) = self.throttle.hit(&key).await {
@@ -515,7 +561,11 @@ impl AuthService {
         }
     }
 
-    async fn set_password_hash(&self, user_id: Uuid, hash: String) -> Result<User, AuthError> {
+    pub(crate) async fn set_password_hash(
+        &self,
+        user_id: Uuid,
+        hash: String,
+    ) -> Result<User, AuthError> {
         let now = self.clock.now();
         self.write(Some(user_id), |uow| async move {
             let row = user::ActiveModel {
@@ -671,7 +721,7 @@ impl AuthService {
         ))
     }
 
-    fn check_password(&self, password: &str) -> Result<(), AuthError> {
+    pub(crate) fn check_password(&self, password: &str) -> Result<(), AuthError> {
         let min = self.options.password_min_length;
         if password.chars().count() < min {
             return Err(invalid(
@@ -685,7 +735,7 @@ impl AuthService {
 
     /// Runs `f` in the task's unfinished unit of work, or else in a new one
     /// committed when `f` succeeds.
-    async fn write<T, F, Fut>(&self, actor: Option<Uuid>, f: F) -> Result<T, AuthError>
+    pub(crate) async fn write<T, F, Fut>(&self, actor: Option<Uuid>, f: F) -> Result<T, AuthError>
     where
         F: FnOnce(Uow) -> Fut,
         Fut: Future<Output = Result<T, AuthError>>,
@@ -750,11 +800,11 @@ impl AuthService {
         Ok(extensions)
     }
 
-    async fn audit_sink(&self) -> Option<Arc<dyn AuditSink>> {
+    pub(crate) async fn audit_sink(&self) -> Option<Arc<dyn AuditSink>> {
         self.app.upgrade()?.try_get::<dyn AuditSink>().await
     }
 
-    async fn audit(&self, entry: AuditEntry) {
+    pub(crate) async fn audit(&self, entry: AuditEntry) {
         if let Some(sink) = self.audit_sink().await {
             record(sink, entry).await;
         }
@@ -776,7 +826,7 @@ enum Rotation {
     Invalid,
 }
 
-async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
+pub(crate) async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
     let action = entry.action.clone();
     if let Err(error) = sink.record(entry).await {
         tracing::warn!(target: "navree::audit", %error, action, "could not write an auth audit entry");
@@ -784,7 +834,7 @@ async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
 }
 
 /// An audit entry with the client's address, user agent and request id.
-fn entry(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
+pub(crate) fn entry(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
     let mut entry = AuditEntry::new(kind, action);
     if let Some(ip) = &meta.ip {
         entry = entry.ip(ip.clone());
@@ -816,7 +866,7 @@ async fn revoke_family<C: ConnectionTrait>(
     Ok(result.rows_affected)
 }
 
-async fn revoke_user<C: ConnectionTrait>(
+pub(crate) async fn revoke_user<C: ConnectionTrait>(
     conn: &C,
     user_id: Uuid,
     now: DateTime<Utc>,
@@ -835,7 +885,7 @@ pub(crate) fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
-fn truncate_user_agent(user_agent: &str) -> String {
+pub(crate) fn truncate_user_agent(user_agent: &str) -> String {
     match user_agent.char_indices().nth(MAX_USER_AGENT) {
         Some((end, _)) => user_agent[..end].to_owned(),
         None => user_agent.to_owned(),
@@ -843,7 +893,7 @@ fn truncate_user_agent(user_agent: &str) -> String {
 }
 
 /// [`AuthError::Invalid`] with navree-validation's default message for `rule`.
-fn invalid(field: &'static str, rule: &str, params: &[(&str, String)]) -> AuthError {
+pub(crate) fn invalid(field: &'static str, rule: &str, params: &[(&str, String)]) -> AuthError {
     AuthError::Invalid {
         field,
         message: Messages::default().render(field, rule, params),
