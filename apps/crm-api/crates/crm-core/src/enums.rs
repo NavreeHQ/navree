@@ -33,7 +33,10 @@ macro_rules! string_enum {
     (
         $(#[$meta:meta])*
         $name:ident, $kind:literal, db_type = $db_type:literal {
-            $( $(#[$vmeta:meta])* $variant:ident => $value:literal ),+ $(,)?
+            // `tt`, not `literal`: a `literal` fragment reaches the derives
+            // wrapped in an invisible group, which utoipa does not see through,
+            // so the OpenAPI enum would list the variant names instead.
+            $( $(#[$vmeta:meta])* $variant:ident => $value:tt ),+ $(,)?
         }
     ) => {
         $(#[$meta])*
@@ -263,6 +266,42 @@ mod tests {
         assert_eq!("company".parse::<SubjectType>(), Ok(SubjectType::Company));
         assert!("Deal".parse::<SubjectType>().is_err());
         assert_eq!(Stage::Proposal.to_string(), "proposal");
+    }
+
+    /// The OpenAPI document must list the strings the API sends, not the
+    /// Rust variant names (crm-web generates its types from it).
+    #[test]
+    fn openapi_schemas_list_the_contract_strings() {
+        fn values<T: utoipa::PartialSchema>() -> serde_json::Value {
+            serde_json::to_value(T::schema()).unwrap()["enum"].clone()
+        }
+        assert_eq!(
+            values::<CompanySize>(),
+            json!(["1-10", "11-50", "51-200", "201-1000", "1000+"])
+        );
+        assert_eq!(
+            values::<ContactStatus>(),
+            json!(["lead", "prospect", "customer", "churned"])
+        );
+        assert_eq!(
+            values::<Stage>(),
+            json!([
+                "lead",
+                "qualified",
+                "proposal",
+                "negotiation",
+                "won",
+                "lost"
+            ])
+        );
+        assert_eq!(
+            values::<ActivityKind>(),
+            json!(["note", "call", "email", "meeting", "task"])
+        );
+        assert_eq!(
+            values::<SubjectType>(),
+            json!(["company", "contact", "deal"])
+        );
     }
 
     #[test]
