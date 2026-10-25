@@ -1,0 +1,5 @@
+Hi {{ name }},
+
+{{ message }}
+
+Open the deal: {{ url }}

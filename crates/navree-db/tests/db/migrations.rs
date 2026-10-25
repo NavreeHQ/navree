@@ -169,6 +169,58 @@ async fn fresh_drops_and_reruns() {
     );
 }
 
+/// A join table whose two parents both cascade deletes (navree-access's
+/// `role_permissions`): SQLite's implicit `DELETE` before `DROP TABLE` on
+/// the second parent cascades into the join table, whose other parent is
+/// already gone ("no such table: main.roles"), unless foreign keys are off.
+#[tokio::test]
+async fn fresh_drops_join_tables_with_two_cascading_parents() {
+    let temp = TempDb::new();
+    let app = boot(&temp, true).await;
+    Migrator::up(app.ctx()).await.unwrap();
+    let db = db(&app).await;
+    db.conn()
+        .execute_unprepared(
+            "CREATE TABLE roles (id TEXT PRIMARY KEY);
+             CREATE TABLE permissions (id TEXT PRIMARY KEY);
+             CREATE TABLE role_permissions (
+                 role_id TEXT NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
+                 permission_id TEXT NOT NULL REFERENCES permissions (id) ON DELETE CASCADE,
+                 PRIMARY KEY (role_id, permission_id)
+             );
+             INSERT INTO roles (id) VALUES ('admin');
+             INSERT INTO permissions (id) VALUES ('deals.manage');
+             INSERT INTO role_permissions (role_id, permission_id) VALUES ('admin', 'deals.manage');
+             INSERT INTO users (id, title) VALUES ('0199a7a0-0000-7000-8000-000000000001', 'ann');
+             INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'acme', '0199a7a0-0000-7000-8000-000000000001');",
+        )
+        .await
+        .unwrap();
+
+    Migrator::fresh(app.ctx())
+        .await
+        .expect("fresh drops every table");
+    assert_eq!(
+        tables(&db).await,
+        ["companies", "navree_migrations", "tags", "users"]
+    );
+    assert_eq!(count(&db, "users").await, 0);
+
+    // Every pooled connection still enforces foreign keys afterwards.
+    for _ in 0..4 {
+        let row = db
+            .conn()
+            .query_one_raw(sea_orm::Statement::from_string(
+                db.backend(),
+                "PRAGMA foreign_keys",
+            ))
+            .await
+            .unwrap()
+            .expect("a row");
+        assert_eq!(row.try_get_by_index::<i32>(0).unwrap(), 1);
+    }
+}
+
 /// `a` after `b` and `b` after `a`.
 struct CycleA;
 struct CycleB;

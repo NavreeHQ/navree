@@ -1,0 +1,274 @@
+//! The CRM's closed value sets. Each is stored as a string column and sent
+//! over the API as the same string (spec §7), and parses back with
+//! [`FromStr`].
+
+use std::fmt;
+use std::str::FromStr;
+
+use sea_orm::entity::prelude::*;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+/// A value that is not one of an enum's strings.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownValue {
+    /// The enum, e.g. `stage`.
+    pub kind: &'static str,
+    /// The rejected input.
+    pub value: String,
+}
+
+impl fmt::Display for UnknownValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown {} `{}`", self.kind, self.value)
+    }
+}
+
+impl std::error::Error for UnknownValue {}
+
+/// Declares a string enum: the SeaORM active enum (string column), serde
+/// and OpenAPI with the same strings, `ALL` in declaration order,
+/// `as_str`, `Display` and `FromStr`.
+macro_rules! string_enum {
+    (
+        $(#[$meta:meta])*
+        $name:ident, $kind:literal, db_type = $db_type:literal {
+            $( $(#[$vmeta:meta])* $variant:ident => $value:literal ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(
+            Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord,
+            EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+        )]
+        #[sea_orm(rs_type = "String", db_type = $db_type)]
+        pub enum $name {
+            $(
+                $(#[$vmeta])*
+                #[sea_orm(string_value = $value)]
+                #[serde(rename = $value)]
+                $variant,
+            )+
+        }
+
+        impl $name {
+            /// Every value, in declaration order.
+            pub const ALL: &'static [$name] = &[$($name::$variant),+];
+
+            /// The string stored and sent for this value.
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $($name::$variant => $value,)+
+                }
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = UnknownValue;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                $name::ALL
+                    .iter()
+                    .copied()
+                    .find(|candidate| candidate.as_str() == value)
+                    .ok_or_else(|| UnknownValue {
+                        kind: $kind,
+                        value: value.to_owned(),
+                    })
+            }
+        }
+    };
+}
+
+string_enum! {
+    /// A company's head count (`companies.size`).
+    CompanySize, "company size", db_type = "String(StringLen::N(16))" {
+        /// 1 to 10 people.
+        Tiny => "1-10",
+        /// 11 to 50 people.
+        Small => "11-50",
+        /// 51 to 200 people.
+        Medium => "51-200",
+        /// 201 to 1000 people.
+        Large => "201-1000",
+        /// More than 1000 people.
+        Huge => "1000+",
+    }
+}
+
+string_enum! {
+    /// Where a contact is in the customer life cycle (`contacts.status`).
+    #[derive(Default)]
+    ContactStatus, "contact status", db_type = "String(StringLen::N(16))" {
+        /// Not qualified yet (the default).
+        #[default]
+        Lead => "lead",
+        /// Qualified, talking to us.
+        Prospect => "prospect",
+        /// Buys from us.
+        Customer => "customer",
+        /// Stopped buying.
+        Churned => "churned",
+    }
+}
+
+string_enum! {
+    /// A deal's pipeline stage (`deals.stage`), in board order; new deals
+    /// start as `lead`.
+    #[derive(Default)]
+    Stage, "stage", db_type = "String(StringLen::N(16))" {
+        /// 10% (the default).
+        #[default]
+        Lead => "lead",
+        /// 25%.
+        Qualified => "qualified",
+        /// 50%.
+        Proposal => "proposal",
+        /// 75%.
+        Negotiation => "negotiation",
+        /// Closed won, 100%.
+        Won => "won",
+        /// Closed lost, 0%.
+        Lost => "lost",
+    }
+}
+
+impl Stage {
+    /// The chance of winning a deal in this stage, in percent.
+    pub const fn probability(self) -> u8 {
+        match self {
+            Stage::Lead => 10,
+            Stage::Qualified => 25,
+            Stage::Proposal => 50,
+            Stage::Negotiation => 75,
+            Stage::Won => 100,
+            Stage::Lost => 0,
+        }
+    }
+
+    /// The column title on the board.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Stage::Lead => "Lead",
+            Stage::Qualified => "Qualified",
+            Stage::Proposal => "Proposal",
+            Stage::Negotiation => "Negotiation",
+            Stage::Won => "Won",
+            Stage::Lost => "Lost",
+        }
+    }
+
+    /// Won or lost: the deal is closed (`closed_at` is set).
+    pub const fn is_closed(self) -> bool {
+        matches!(self, Stage::Won | Stage::Lost)
+    }
+}
+
+string_enum! {
+    /// What an activity records (`activities.kind`); only tasks have due
+    /// dates that matter and can be completed.
+    ActivityKind, "activity kind", db_type = "String(StringLen::N(16))" {
+        /// A note.
+        Note => "note",
+        /// A phone call.
+        Call => "call",
+        /// An email.
+        Email => "email",
+        /// A meeting.
+        Meeting => "meeting",
+        /// A to-do with a due date.
+        Task => "task",
+    }
+}
+
+string_enum! {
+    /// The kind of record an activity is attached to
+    /// (`activities.subject_type`).
+    SubjectType, "subject type", db_type = "String(StringLen::N(16))" {
+        /// A company.
+        Company => "company",
+        /// A contact.
+        Contact => "contact",
+        /// A deal.
+        Deal => "deal",
+    }
+}
+
+impl SubjectType {
+    /// The access subject (CASL subject type) of records of this type.
+    pub const fn subject(self) -> &'static str {
+        match self {
+            SubjectType::Company => crate::subjects::COMPANY,
+            SubjectType::Contact => crate::subjects::CONTACT,
+            SubjectType::Deal => crate::subjects::DEAL,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn stages_run_in_board_order_with_their_probabilities_and_labels() {
+        let stages: Vec<(&str, &str, u8)> = Stage::ALL
+            .iter()
+            .map(|stage| (stage.as_str(), stage.label(), stage.probability()))
+            .collect();
+        assert_eq!(
+            stages,
+            [
+                ("lead", "Lead", 10),
+                ("qualified", "Qualified", 25),
+                ("proposal", "Proposal", 50),
+                ("negotiation", "Negotiation", 75),
+                ("won", "Won", 100),
+                ("lost", "Lost", 0),
+            ]
+        );
+        assert!(Stage::Won.is_closed() && Stage::Lost.is_closed());
+        assert!(Stage::ALL[..4].iter().all(|stage| !stage.is_closed()));
+    }
+
+    #[test]
+    fn values_serialize_as_the_contract_strings() {
+        assert_eq!(json!(Stage::Negotiation), json!("negotiation"));
+        assert_eq!(json!(CompanySize::Huge), json!("1000+"));
+        assert_eq!(json!(CompanySize::Small), json!("11-50"));
+        assert_eq!(json!(ContactStatus::default()), json!("lead"));
+        assert_eq!(json!(ActivityKind::Meeting), json!("meeting"));
+        assert_eq!(json!(SubjectType::Deal), json!("deal"));
+        let size: CompanySize = serde_json::from_value(json!("201-1000")).unwrap();
+        assert_eq!(size, CompanySize::Large);
+        assert!(serde_json::from_value::<Stage>(json!("closed")).is_err());
+    }
+
+    #[test]
+    fn values_parse_from_their_strings() {
+        assert_eq!("won".parse::<Stage>(), Ok(Stage::Won));
+        assert_eq!("1-10".parse::<CompanySize>(), Ok(CompanySize::Tiny));
+        assert_eq!(
+            "churned".parse::<ContactStatus>(),
+            Ok(ContactStatus::Churned)
+        );
+        assert_eq!("task".parse::<ActivityKind>(), Ok(ActivityKind::Task));
+        assert_eq!("company".parse::<SubjectType>(), Ok(SubjectType::Company));
+        assert!("Deal".parse::<SubjectType>().is_err());
+        assert_eq!(Stage::Proposal.to_string(), "proposal");
+    }
+
+    #[test]
+    fn activity_subject_types_name_their_access_subjects() {
+        assert_eq!(SubjectType::Company.subject(), "Company");
+        assert_eq!(SubjectType::Contact.subject(), "Contact");
+        assert_eq!(SubjectType::Deal.subject(), "Deal");
+    }
+}

@@ -16,22 +16,18 @@ path = "src/main.rs"
 unsafe_code = "forbid"
 
 [dependencies]
-anyhow = { workspace = true }
 chrono = { workspace = true }
-csv = { workspace = true }
-garde = { workspace = true }
+crm-activities = { path = "crates/crm-activities" }
+crm-companies = { path = "crates/crm-companies" }
+crm-core = { path = "crates/crm-core" }
+crm-deals = { path = "crates/crm-deals" }
+crm-users = { path = "crates/crm-users" }
 navree = { workspace = true }
 sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
-tempfile = { workspace = true }
+crm-testkit = { path = "crates/crm-testkit" }
 tokio = { workspace = true }

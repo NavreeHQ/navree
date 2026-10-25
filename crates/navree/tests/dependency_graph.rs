@@ -83,43 +83,32 @@ const HIERARCHY: &[Rule] = &[
     rule("navree", 6, RUNTIME_CRATES),
     rule("navree-cli", 6, &[]),
     // L7 (apps): anything below, except the CLI binary.
-    rule("crm-api", 7, APP_DEPENDENCIES),
+    // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
+    // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
+    // of the crates above it); the feature crates build on crm-core; the
+    // crm-api binary assembles them.
+    rule("crm-core", 7, &["navree"]),
+    rule("crm-testkit", 8, &["navree", "crm-core"]),
+    rule("crm-users", 9, &["navree", "crm-core"]),
+    rule("crm-companies", 9, &["navree", "crm-core"]),
+    rule("crm-deals", 9, &["navree", "crm-core"]),
+    rule("crm-activities", 9, &["navree", "crm-core"]),
+    rule("crm-api", 10, CRM_API_DEPENDENCIES),
+];
+
+/// What the crm-api binary may depend on: the facade and the CRM crates.
+const CRM_API_DEPENDENCIES: &[&str] = &[
+    "navree",
+    "crm-core",
+    "crm-users",
+    "crm-companies",
+    "crm-deals",
+    "crm-activities",
 ];
 
 /// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
 /// re-export and what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
-    "navree-kernel",
-    "navree-macros",
-    "navree-contracts",
-    "navree-config",
-    "navree-http",
-    "navree-log",
-    "navree-crypto",
-    "navree-events",
-    "navree-view",
-    "navree-cache",
-    "navree-http-client",
-    "navree-db",
-    "navree-testing",
-    "navree-observe",
-    "navree-api",
-    "navree-mail",
-    "navree-realtime",
-    "navree-storage",
-    "navree-session",
-    "navree-validation",
-    "navree-queue",
-    "navree-audit",
-    "navree-access",
-    "navree-schedule",
-    "navree-notify",
-    "navree-auth",
-];
-
-/// What an application crate may depend on: the facade and every runtime crate.
-const APP_DEPENDENCIES: &[&str] = &[
-    "navree",
     "navree-kernel",
     "navree-macros",
     "navree-contracts",

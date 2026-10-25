@@ -1,0 +1,50 @@
+# Navree CRM API: development settings.
+#
+# Read from the working directory (run the API from apps/crm-api), after
+# `.env` and before `APP_*` environment variables, which override any key:
+# `APP_DATABASE__URL` -> database.url. Secrets (APP_KEY, the JWT secret,
+# SMTP passwords) belong in `.env`, never here; see `.env.example`.
+
+[app]
+# crm-web, the browser-facing app (mail links, email verification).
+url = "http://localhost:3000"
+
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+
+[http.cors]
+# crm-web's BFF calls the API server-side; the dev origin is allowed for
+# tools and direct calls.
+allowed_origins = ["http://localhost:3000"]
+
+[database]
+url = "sqlite://storage/crm.db?mode=rwc"
+# Development convenience: pending migrations run when the app boots.
+migrate_on_boot = true
+
+[mail]
+from = "Navree CRM <crm@navree.test>"
+# Mails are written to the log in development.
+transport = "log"
+
+[queue]
+driver = "database"
+
+[auth]
+# Accounts are created by admins (POST /api/v1/users); no public sign-up.
+registration = false
+
+[auth.password_reset]
+url = "http://localhost:3000/reset-password"
+
+[realtime]
+# ws://127.0.0.1:8080/app/navree-crm-key
+key = "navree-crm-key"
+allowed_origins = ["http://localhost:3000"]
+
+[api]
+title = "Navree CRM API"
+
+[log]
+level = "info"
