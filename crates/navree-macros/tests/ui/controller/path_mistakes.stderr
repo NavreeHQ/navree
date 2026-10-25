@@ -1,0 +1,29 @@
+error: path segment `:id` uses the old capture syntax: write `{id}`
+ --> tests/ui/controller/path_mistakes.rs:8:11
+  |
+8 |     #[get("/:id")]
+  |           ^^^^^^
+
+error: path segment `*rest` uses the old capture syntax: write `{*rest}`
+  --> tests/ui/controller/path_mistakes.rs:14:11
+   |
+14 |     #[get("/files/*rest")]
+   |           ^^^^^^^^^^^^^^
+
+error: path segment `{id` has unbalanced braces
+  --> tests/ui/controller/path_mistakes.rs:20:11
+   |
+20 |     #[get("/{id")]
+   |           ^^^^^^
+
+error: `from = "id"` names no parameter of the route path `/deals/{deal}`: the record id must come from a path parameter such as `{id}`
+  --> tests/ui/controller/path_mistakes.rs:27:36
+   |
+27 |     #[can("update", "Deal", from = "id")]
+   |                                    ^^^^
+
+error: `from = "team"` names no parameter of the route path `!/archive/{id}`: the record id must come from a path parameter such as `{team}`
+  --> tests/ui/controller/path_mistakes.rs:47:37
+   |
+47 |     #[can("archive", "Team", from = "team")]
+   |                                     ^^^^^^

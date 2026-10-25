@@ -1,0 +1,15 @@
+error: #[get] only works on a method of an impl block marked #[controller("/prefix")]
+ --> tests/ui/controller/route_outside_controller.rs:6:5
+  |
+6 |     #[get("/")]
+  |     ^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `get` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[delete] only works on a method of an impl block marked #[controller("/prefix")]
+  --> tests/ui/controller/route_outside_controller.rs:12:1
+   |
+12 | #[delete("/{id}")]
+   | ^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `delete` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -136,8 +136,9 @@ impl RouteDef {
         self
     }
 
-    /// Marks the handler as running in the request's unit of work; read by
-    /// the unit-of-work layer through the route metadata.
+    /// Marks the handler as transactional. Informational (route table,
+    /// OpenAPI, logs): navree-db runs every request in a lazy unit of work
+    /// whatever this flag says.
     pub fn transactional(mut self) -> Self {
         self.meta.transactional = true;
         self
@@ -194,7 +195,7 @@ pub struct RouteMeta {
     pub throttle: Option<Throttle>,
     /// Request timeout override.
     pub timeout: Option<Duration>,
-    /// Runs in the request's unit of work.
+    /// Declared transactional (informational; see [`RouteDef::transactional`]).
     pub transactional: bool,
     /// OpenAPI metadata.
     pub api: Option<ApiMeta>,

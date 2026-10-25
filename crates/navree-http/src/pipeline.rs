@@ -359,12 +359,23 @@ fn needs_normalizing(response: &Response) -> bool {
 // Maintenance mode and per-IP rate limit
 // ---------------------------------------------------------------------------
 
+/// The state of the maintenance layer: the mode and the paths it never blocks.
+pub(crate) struct MaintenanceGate {
+    pub(crate) mode: Arc<MaintenanceMode>,
+    /// `HttpOptions::maintenance_except`: exact request paths.
+    pub(crate) except: Vec<String>,
+}
+
 pub(crate) async fn maintenance(
-    State(mode): State<Arc<MaintenanceMode>>,
+    State(gate): State<Arc<MaintenanceGate>>,
     request: Request,
     next: Next,
 ) -> Response {
-    match mode.current().await {
+    let path = request.uri().path();
+    if gate.except.iter().any(|except| except == path) {
+        return next.run(request).await;
+    }
+    match gate.mode.current().await {
         Some(info) => info.error().into_response(),
         None => next.run(request).await,
     }

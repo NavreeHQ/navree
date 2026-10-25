@@ -1,0 +1,29 @@
+error: unknown #[controller] key `versoin`: expected `version = "1"`
+ --> tests/ui/controller/controller_arguments.rs:6:20
+  |
+6 | #[controller("/a", versoin = "1")]
+  |                    ^^^^^^^
+
+error: invalid API version `v/1`: expected letters, digits, `.`, `-` or `_`, e.g. version = "1" (mounted under /v1)
+  --> tests/ui/controller/controller_arguments.rs:18:30
+   |
+18 | #[controller("/b", version = "v/1")]
+   |                              ^^^^^
+
+error: path segment `:id` uses the old capture syntax: write `{id}`
+  --> tests/ui/controller/controller_arguments.rs:30:14
+   |
+30 | #[controller("/c/:id")]
+   |              ^^^^^^^^
+
+error: #[controller] goes on an inherent impl block (`impl DealController { .. }`), not on a trait impl
+  --> tests/ui/controller/controller_arguments.rs:47:6
+   |
+47 | impl Named for D {
+   |      ^^^^^
+
+error: #[controller] goes on an impl block: `#[controller("/deals")] impl DealController { .. }`
+  --> tests/ui/controller/controller_arguments.rs:54:1
+   |
+54 | struct E;
+   | ^^^^^^

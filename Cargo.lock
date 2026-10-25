@@ -2408,7 +2408,6 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "chrono",
- "futures-util",
  "http",
  "http-body-util",
  "navree-config",
@@ -2424,6 +2423,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -2523,15 +2523,24 @@ dependencies = [
 name = "navree-macros"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "http",
+ "http-body-util",
+ "navree-access",
+ "navree-contracts",
  "navree-http",
  "navree-kernel",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
+ "serde",
+ "serde_json",
  "syn 3.0.9",
  "tokio",
+ "tower",
  "trybuild",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
@@ -2548,6 +2557,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -2580,6 +2591,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "http",
  "http-body-util",
  "navree-config",
  "navree-contracts",
@@ -2589,9 +2601,11 @@ dependencies = [
  "metrics-exporter-prometheus",
  "serde",
  "serde_json",
+ "subtle",
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2627,6 +2641,7 @@ dependencies = [
  "dashmap",
  "futures-util",
  "hex",
+ "http",
  "http-body-util",
  "navree-config",
  "navree-contracts",
@@ -2636,12 +2651,14 @@ dependencies = [
  "rand 0.10.3",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tokio-util",
  "tower",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2720,7 +2737,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "tokio-util",
  "tower",
  "tracing",
 ]
@@ -2731,6 +2747,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "bytes",
+ "chrono",
  "cookie",
  "http",
  "http-body-util",
@@ -2738,11 +2755,10 @@ dependencies = [
  "navree-contracts",
  "navree-http",
  "navree-kernel",
- "percent-encoding",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "tempfile",
- "thiserror",
  "tokio",
  "tower",
  "uuid",

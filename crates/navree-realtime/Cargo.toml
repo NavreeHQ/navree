@@ -13,8 +13,8 @@ workspace = true
 [dependencies]
 axum = { workspace = true }
 dashmap = { workspace = true }
-futures-util = { workspace = true }
 hex = { workspace = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
@@ -23,13 +23,16 @@ navree-kernel = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 http-body-util = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 tower = { workspace = true }
+uuid = { workspace = true }

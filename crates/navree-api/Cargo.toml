@@ -13,7 +13,6 @@ workspace = true
 [dependencies]
 axum = { workspace = true }
 navree-config = { workspace = true }
-navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 serde = { workspace = true }
@@ -26,6 +25,7 @@ utoipa-scalar = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }
+navree-contracts = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

@@ -1,0 +1,17 @@
+error: route `index` is #[public] but also declares #[roles]: a public route needs no authentication or authorization; remove one of them
+  --> tests/ui/controller/public_with_other_access.rs:10:5
+   |
+10 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: route `store` is #[public] but also declares #[permissions]: a public route needs no authentication or authorization; remove one of them
+  --> tests/ui/controller/public_with_other_access.rs:28:5
+   |
+28 |     #[permissions("open.write")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the impl block is #[public] but also declares #[authenticated]: a public route needs no authentication or authorization; remove one of them
+  --> tests/ui/controller/public_with_other_access.rs:39:1
+   |
+39 | #[authenticated]
+   | ^^^^^^^^^^^^^^^^
