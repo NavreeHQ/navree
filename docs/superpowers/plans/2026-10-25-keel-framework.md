@@ -582,6 +582,24 @@ Adds to keel-auth (all JSON, bearer-token based, no sessions):
 
 ## Wave 6 — CRM API (`apps/crm-api`)
 
+### Wave 6 layout (amended 2026-10-25, supersedes the file lists in Tasks 32–36)
+
+The CRM API is split into crates so that three agents can build feature modules in parallel without breaking each other's compiles (PRD: "a module can ship as its own crate"). Root `Cargo.toml` members gain `apps/crm-api/crates/*`. Every CRM crate uses only the `keel` facade and its macros, as an app would. Auth is NestJS-style JWT and errors use the NestJS format (spec §10). Pagination keeps the `{data, meta: {current_page, per_page, total, last_page}}` shape.
+
+| Crate | Owner | Contents |
+|---|---|---|
+| `apps/crm-api/crates/crm-core` | crm-scaffold | SeaORM entities for `companies`, `contacts`, `deals`, `activities` (UUID v7 keys, `owner_id` → users, timestamps, `deleted_at` on companies/contacts); enums `CompanySize`, `ContactStatus`, `Stage` (with `probability()` and `label()`), `ActivityKind`, `SubjectType`; one `MigrationSet { module: "crm", after: ["auth", "access"] }` creating all CRM tables and indexes; `Subject` impls (`Company`/companies, `Contact`/contacts, `Deal`/deals, `Activity`/activities) and action markers `Move` ("move"), `Export` ("export"), `Complete` ("complete"); `abilities::define` implementing spec §6 + §9 exactly; role and permission constants; embed types `OwnerRef {id, name}`, `CompanyRef {id, name}`, `ContactRef {id, full_name}`; `CrmCoreModule` (registers the migrations and `AccessModule::for_feature` for every CRM entity and for `keel_auth::user::Entity`); `platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder` adding every platform module the CRM uses (Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail, Queue, Schedule, Validation, Auth with `registration = false`, Access with `abilities::define` and super-admin role `admin`, Audit, Notify, Realtime with key `keel-crm-key` and channels `crm.deals` / `users.{id}`, Api, Observe) |
+| `apps/crm-api/crates/crm-testkit` | crm-scaffold | `TestCrm::builder().module(m).build().await -> TestCrm` (temp SQLite, platform + `CrmCoreModule` + the given feature modules, mail array transport, queue memory or database driver, fast hashing, per-IP limit off, `FixedClock` override), seeds roles/permissions and the four demo users (admin, manager, rep1, rep2; password `password123`); `TestCrm::login_as(Role) -> TestClient` (real `POST /api/auth/login`, then bearer); `TestCrm::user_id(Role)`, `TestCrm::clock()`, `TestCrm::run_queue()` |
+| `apps/crm-api/crates/crm-users` | crm-scaffold | `UsersModule`: `GET /api/v1/me`, `GET/POST/PATCH /api/v1/users` (spec §7), and a `UserResourceExtension` adding `roles` to `/api/auth/me` and the login `user` |
+| `apps/crm-api/crates/crm-companies` | crm-companies | `CompaniesModule`, `ContactsModule` (Task 33) |
+| `apps/crm-api/crates/crm-deals` | crm-deals | `DealsModule` (Task 34): events `DealAssigned`, `DealWon`; queued listener sending `DealNotification` (database + mail); `deal.updated` broadcasts |
+| `apps/crm-api/crates/crm-activities` | crm-activities | `ActivitiesModule`, `DashboardModule`, the daily `crm:task-reminders` schedule, `audit:prune` daily (Task 35) |
+| `apps/crm-api` (bin `crm-api` + lib `crm_api`) | crm-scaffold, then crm-integrate | `crm_api::app(sources) -> AppBuilder` = `crm_core::platform` + every feature module; `main.rs`; the `crm-demo` seeder (spec §6 volumes); `.env.example`, `config/app.toml` (dev: SQLite `storage/crm.db`, `http.addr = "127.0.0.1:8080"`, realtime allowed origin `http://localhost:3000`, `auth.password_reset.url = "http://localhost:3000/reset-password"`, `app.url = "http://localhost:3000"`); end-to-end tests across modules |
+
+Before the feature agents start, the scaffold leaves every crate compiling, with empty feature modules already wired into `crm_api::app`, so the feature agents only fill in their own crate.
+
+
+
 ### Task 32: CRM scaffold (agent `crm-scaffold`)
 
 **Files:** `apps/crm-api/{Cargo.toml, .env.example, config/app.toml, src/main.rs, src/app.rs (pub fn app() -> AppBuilder used by main and tests), src/abilities.rs, src/common/{mod.rs, owner.rs (OwnerRef {id,name}), stages.rs}, src/modules/{users,companies,contacts,deals,activities,dashboard}/mod.rs, src/seed.rs, tests/support/mod.rs}`.
@@ -592,11 +610,11 @@ Adds to keel-auth (all JSON, bearer-token based, no sessions):
 ### Task 33: Companies + Contacts (agent `crm-companies`)
 
 Entities, migrations (`after: ["auth"]`), DTOs with garde rules, services using `Repo`, controllers exactly per spec §7 (filters, sort, search on name/domain/email via `LIKE`, soft delete with `deleted_at`, `__type`, `owner` embed, CSV export with `csv` crate for admin/manager via `#[can(Export, Contact)]`). Subjects `Company` (`companies`), `Contact` (`contacts`).
-- [ ] Tests: CRUD happy paths, `rep_cannot_update_other_reps_company` (403), `rep_can_update_own`, validation 422 (missing name, bad email, unknown company_id via `exists`), `search_and_filters`, `soft_deleted_hidden`, `export_csv_header_and_rows`, `rep_cannot_export`.
+- [ ] Tests: CRUD happy paths, `rep_cannot_update_other_reps_company` (403), `rep_can_update_own`, validation 400 (missing name, bad email, unknown company_id via `exists`), `search_and_filters`, `soft_deleted_hidden`, `export_csv_header_and_rows`, `rep_cannot_export`.
 
 ### Task 34: Deals (agent `crm-deals`)
 
-Entity (stage enum string, probability derived), list/board/CRUD/move per spec §7; move rules: `lost` requires `lost_reason` (422), `won`/`lost` set `closed_at`, moving back reopens (`closed_at = null`); `position` reorders within the stage; reassigning owner or winning emits `DealAssigned` / `DealWon` events → queued listener sends `DealNotification` (database + mail) to the owner; every change broadcasts `deal.updated` on `private-crm.deals` through `dyn Broadcaster`. Subject `Deal` (`deals`), custom action `Move` (`move`).
+Entity (stage enum string, probability derived), list/board/CRUD/move per spec §7; move rules: `lost` requires `lost_reason` (400), `won`/`lost` set `closed_at`, moving back reopens (`closed_at = null`); `position` reorders within the stage; reassigning owner or winning emits `DealAssigned` / `DealWon` events → queued listener sends `DealNotification` (database + mail) to the owner; every change broadcasts `deal.updated` on `private-crm.deals` through `dyn Broadcaster`. Subject `Deal` (`deals`), custom action `Move` (`move`).
 - [ ] Tests: `board_groups_by_stage_with_totals`, `move_to_lost_requires_reason`, `won_sets_closed_at`, `rep_cannot_move_others_deal`, `rep_cannot_delete_won_deal`, `manager_can_reassign_and_owner_notified` (notification row + array mail after `run_pending`), `deal_update_broadcasts`.
 
 ### Task 35: Activities + Dashboard (agent `crm-activities`)
