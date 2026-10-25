@@ -98,7 +98,8 @@ impl Db {
 
     /// Runs `f` in a new unit of work (no actor): commits when it returns
     /// `Ok` (running change observers and after-commit hooks), rolls back
-    /// when it returns `Err`.
+    /// when it returns `Err`. While `f` runs, the unit of work is
+    /// [`Uow::current`].
     ///
     /// ```no_run
     /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
@@ -119,7 +120,7 @@ impl Db {
         Fut: Future<Output = Result<T, DbErr>>,
     {
         let uow = self.uow(None, None).await;
-        match f(uow.clone()).await {
+        match uow.scope(f(uow.clone())).await {
             Ok(value) => {
                 uow.commit().await?;
                 Ok(value)

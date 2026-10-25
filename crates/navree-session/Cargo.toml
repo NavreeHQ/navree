@@ -28,12 +28,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }
 wildmatch = { workspace = true }
 
 [dev-dependencies]
-http-body-util = { workspace = true }
 navree-testing = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
-tower = { workspace = true }
+uuid = { workspace = true }

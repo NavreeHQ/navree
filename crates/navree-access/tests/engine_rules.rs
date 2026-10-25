@@ -458,9 +458,10 @@ fn from_permissions_maps_prefix_to_subject() {
     assert!(!ability.can(READ, COMMENT, None));
     // `posts.*` is `manage Post`.
     assert!(ability.has_unconditional("archive", POST));
-    // Unknown prefixes and malformed strings grant nothing.
+    // An unknown prefix stands for itself; malformed strings grant nothing.
     assert!(!ability.can("export", "Invoice", None));
-    assert_eq!(ability.rules().len(), 3);
+    assert!(ability.has_unconditional("export", "invoices"));
+    assert_eq!(ability.rules().len(), 4);
 }
 
 #[test]
@@ -513,6 +514,8 @@ fn restrict_to_token_abilities() {
     assert!(!narrowed.can(UPDATE, POST, None));
     assert!(!narrowed.can(READ, COMMENT, None));
     assert!(!narrowed.can(READ, "Invoice", None));
+    // An unknown prefix stands for itself, as in `from_permissions`.
+    assert!(narrowed.can(READ, "unknown", None));
 
     // No token abilities: nothing.
     let none = admin.restrict_to(&[], &prefixes());

@@ -10,20 +10,30 @@ publish.workspace = true
 [lints]
 workspace = true
 
-# The ability engine (plan Task 9) is pure: rules, record checks, CASL JSON and
-# SQL list filters. The AccessModule half (plan Task 22) adds navree-kernel,
-# navree-contracts, navree-config, navree-http, navree-db, navree-cache, axum, sea-orm,
-# moka and friends back when it lands.
+# The ability engine (`src/engine`) is pure: rules, record checks, CASL JSON
+# and SQL list filters. The AccessModule half adds the database tables,
+# services, the route authorizer, extractors, endpoints and commands.
 [dependencies]
+axum = { workspace = true }
 chrono = { workspace = true }
+http = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+moka = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
 sea-query = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+navree-testing = { workspace = true }
 proptest = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }

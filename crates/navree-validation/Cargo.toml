@@ -14,10 +14,10 @@ workspace = true
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
-navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
@@ -27,12 +27,8 @@ serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-http-body-util = { workspace = true }
 navree-testing = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
-tower = { workspace = true }

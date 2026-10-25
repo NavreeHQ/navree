@@ -5,7 +5,7 @@ use navree_access::engine::{
     ALL, Ability, Cond, Conditions, DELETE, MANAGE, READ, Rule, Rules, SqlColumns, UPDATE, field,
 };
 use sea_query::{Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn ability(define: impl FnOnce(&mut Rules)) -> Ability {
     let mut rules = Rules::new();
@@ -193,6 +193,49 @@ fn sql_filter_with_custom_columns_and_values() {
     assert_eq!(
         values.0,
         vec![sea_query::Value::from(user), sea_query::Value::from(1_i64)]
+    );
+}
+
+#[test]
+fn operands_a_column_does_not_accept_compile_like_record_checks() {
+    // `flag` is a boolean column, `rank` a numeric one.
+    struct Typed;
+    impl SqlColumns for Typed {
+        fn accepts(&self, field: &str, value: &Value) -> bool {
+            match field {
+                "flag" => value.is_boolean(),
+                "rank" => value.is_number(),
+                _ => true,
+            }
+        }
+    }
+    let filter = |conditions: Conditions| {
+        let ability = ability(|r| {
+            r.can(READ, "Post").when(conditions);
+        });
+        where_clause(ability.sql_filter_with(READ, "Post", &Typed))
+    };
+
+    // A record check never matches across types, so neither does SQL
+    // (SQLite would otherwise compare `false` as `0`).
+    let never = r#"(CASE WHEN (FALSE) THEN TRUE ELSE FALSE END)"#;
+    let always = r#"(CASE WHEN (TRUE) THEN TRUE ELSE FALSE END)"#;
+    assert_eq!(filter(field("flag").lte(0)), never);
+    assert_eq!(filter(field("rank").eq("3")), never);
+    assert_eq!(filter(field("rank").ne("3")), always);
+    assert_eq!(filter(field("rank").not_in([json!("1")])), always);
+    assert_eq!(
+        filter(field("rank").is_in([json!(1), json!("1")])),
+        r#"(CASE WHEN ("rank" IN (1)) THEN TRUE ELSE FALSE END)"#
+    );
+    assert_eq!(
+        filter(field("flag").is_in([json!(1), Value::Null])),
+        r#"(CASE WHEN ("flag" IS NULL) THEN TRUE ELSE FALSE END)"#
+    );
+    // Accepted operands compile as before.
+    assert_eq!(
+        filter(field("flag").eq(true)),
+        r#"(CASE WHEN ("flag" = TRUE) THEN TRUE ELSE FALSE END)"#
     );
 }
 
@@ -481,7 +524,8 @@ mod properties {
                     } else {
                         token_action
                     };
-                    prefixes.get(prefix).is_some_and(|s| s == subject)
+                    // An unknown prefix stands for itself.
+                    prefixes.get(prefix).map_or(prefix, String::as_str) == subject
                         && (token_action == action || token_action == MANAGE)
                 });
             let record = item.map(|item| item.json(1));

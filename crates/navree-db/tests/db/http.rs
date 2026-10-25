@@ -161,6 +161,17 @@ impl Controller for NotesController {
                 },
             )
             .public(),
+            RouteDef::on(Method::GET, "/current", |uow: Uow| async move {
+                let current = Uow::current();
+                Json(json!({
+                    "same": current.as_ref().is_some_and(|current| current.same_as(&uow)),
+                    "finished": match current {
+                        Some(current) => Some(current.is_finished().await),
+                        None => None,
+                    },
+                }))
+            })
+            .public(),
             RouteDef::on(Method::GET, "/whoami", |uow: Uow| async move {
                 Json(json!({
                     "actor": uow.actor(),
@@ -278,6 +289,17 @@ async fn uow_commits_on_2xx_and_rolls_back_on_error() {
         "the database is not left locked"
     );
     assert_eq!(count(&s.db, "notes").await, 2);
+}
+
+#[tokio::test]
+async fn handlers_run_with_the_request_uow_as_current() {
+    let s = setup().await;
+    let request = Request::get("/api/notes/current")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = send(&s.router, request).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({ "same": true, "finished": false }));
 }
 
 #[tokio::test]

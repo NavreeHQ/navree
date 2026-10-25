@@ -1,6 +1,7 @@
 //! [`Uow`]: the unit of work, plus [`ChangeEvent`]s and [`ChangeObserver`]s.
 
 use std::fmt;
+use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use navree_kernel::BoxFuture;
@@ -102,6 +103,13 @@ enum TxState {
 /// units of work queue on the write lock (up to `busy_timeout`) instead of
 /// failing when a reader later writes. On PostgreSQL the actor and request id
 /// are set as `navree.actor` and `navree.request_id` for the transaction.
+///
+/// **Current unit of work.** While a request's handler runs (and inside
+/// [`Db::transaction`] or [`scope`](Uow::scope)), [`Uow::current`] returns
+/// the unit of work of the task. Code that cannot take a `&Uow` parameter
+/// (`dyn Dispatcher`, notifications) uses it to write in the same
+/// transaction: on SQLite a write through another pool connection would
+/// wait for this transaction's write lock until `busy_timeout`.
 #[derive(Clone)]
 pub struct Uow {
     inner: Arc<UowInner>,
@@ -116,7 +124,37 @@ struct UowInner {
     after_commit: Mutex<Vec<AfterCommit>>,
 }
 
+tokio::task_local! {
+    /// The unit of work of the running task (see [`Uow::current`]).
+    static CURRENT: Uow;
+}
+
 impl Uow {
+    /// The unit of work of the current task: the request's while its
+    /// handler runs, the one [`Db::transaction`] or [`scope`](Uow::scope)
+    /// runs a future with; `None` elsewhere (spawned tasks do not inherit
+    /// it). It may already be finished (a handler can commit early): check
+    /// [`is_finished`](Uow::is_finished) before writing through it.
+    pub fn current() -> Option<Uow> {
+        CURRENT.try_with(Uow::clone).ok()
+    }
+
+    /// Runs `future` with this unit of work as [`Uow::current`].
+    pub async fn scope<F: Future>(&self, future: F) -> F::Output {
+        CURRENT.scope(self.clone(), future).await
+    }
+
+    /// Whether the unit of work has committed or rolled back (or is
+    /// committing): its transaction can no longer be used.
+    pub async fn is_finished(&self) -> bool {
+        matches!(*self.inner.tx.lock().await, TxState::Done)
+    }
+
+    /// Whether `self` and `other` are handles to the same unit of work.
+    pub fn same_as(&self, other: &Uow) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub(crate) fn new(db: Db, actor: Option<Uuid>, request_id: Option<String>) -> Self {
         Self {
             inner: Arc::new(UowInner {
