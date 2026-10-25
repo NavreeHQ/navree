@@ -170,35 +170,44 @@ async fn non_public_routes_have_security() {
     assert_eq!(schemes["cookie"]["name"], "navree_session");
     assert_eq!(schemes["bearer"]["type"], "http");
     assert_eq!(schemes["bearer"]["scheme"], "bearer");
+    assert_eq!(
+        schemes["bearer"]["bearerFormat"], "JWT",
+        "navree-auth access tokens"
+    );
+    let description = schemes["bearer"]["description"].as_str().unwrap();
+    assert!(
+        description.contains("JWT access token") && !description.contains("personal access"),
+        "{description}"
+    );
 }
 
-fn problem_response(description: &str) -> Value {
+fn error_response(description: &str) -> Value {
     json!({
         "description": description,
         "content": {
-            "application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}
+            "application/json": {"schema": {"$ref": "#/components/schemas/HttpError"}}
         }
     })
 }
 
 #[tokio::test]
-async fn error_responses_reference_problem_schema() {
+async fn error_responses_reference_http_error_schema() {
     let app = boot().await;
     let doc = document(&app).await;
     let paths = &doc["paths"];
 
     let show = &paths["/api/v1/deals/{id}"]["get"]["responses"];
-    assert_eq!(show["404"], problem_response("Not Found"), "listed");
-    assert_eq!(show["401"], problem_response("Unauthorized"), "not public");
+    assert_eq!(show["404"], error_response("Not Found"), "listed");
+    assert_eq!(show["401"], error_response("Unauthorized"), "not public");
     assert!(show.get("403").is_none(), "no authorization rule to fail");
 
     let store = &paths["/api/v1/deals"]["post"]["responses"];
-    assert_eq!(store["422"], problem_response("Unprocessable Entity"));
-    assert_eq!(store["401"], problem_response("Unauthorized"));
-    assert_eq!(store["403"], problem_response("Forbidden"), "permissions");
+    assert_eq!(store["400"], error_response("Bad Request"));
+    assert_eq!(store["401"], error_response("Unauthorized"));
+    assert_eq!(store["403"], error_response("Forbidden"), "permissions");
 
     let delete = &paths["/api/v1/deals/{id}/notes/{note_id}"]["delete"]["responses"];
-    assert_eq!(delete["403"], problem_response("Forbidden"), "roles");
+    assert_eq!(delete["403"], error_response("Forbidden"), "roles");
 
     let index = &paths["/api/v1/deals"]["get"]["responses"];
     assert_eq!(
@@ -207,26 +216,72 @@ async fn error_responses_reference_problem_schema() {
         "a public route without listed errors documents only its success"
     );
 
-    let problem = &doc["components"]["schemas"]["Problem"];
-    assert_eq!(problem["type"], "object");
-    for field in ["type", "title", "status", "detail", "request_id", "errors"] {
-        assert!(
-            problem["properties"].get(field).is_some(),
-            "{field}: {problem}"
-        );
-    }
-    let required: Vec<&str> = problem["required"]
+    let schemas = &doc["components"]["schemas"];
+    assert!(schemas.get("Problem").is_none(), "no RFC 9457 schema");
+    let error = &schemas["HttpError"];
+    assert_eq!(error["type"], "object");
+    let mut properties: Vec<&String> = error["properties"].as_object().unwrap().keys().collect();
+    properties.sort();
+    assert_eq!(properties, ["error", "errors", "message", "statusCode"]);
+    let mut required: Vec<&str> = error["required"]
         .as_array()
         .unwrap()
         .iter()
         .map(|v| v.as_str().unwrap())
         .collect();
-    assert!(
-        required.contains(&"type") && required.contains(&"status"),
-        "{required:?}"
-    );
+    required.sort_unstable();
     assert_eq!(
-        problem["properties"]["errors"]["additionalProperties"]["type"],
-        "array"
+        required,
+        ["error", "message", "statusCode"],
+        "errors is optional"
     );
+    assert_eq!(error["properties"]["statusCode"]["type"], "integer");
+    assert_eq!(error["properties"]["error"]["type"], "string");
+    assert_eq!(
+        error["properties"]["message"]["oneOf"],
+        json!([
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}},
+        ]),
+        "message: string | string[]: {error}"
+    );
+    let errors = &error["properties"]["errors"];
+    assert_eq!(errors["additionalProperties"]["type"], "array", "{errors}");
+    assert_eq!(errors["additionalProperties"]["items"]["type"], "string");
+}
+
+#[test]
+fn http_error_describes_the_rendered_error_body() {
+    use std::collections::BTreeMap;
+
+    use navree_api::{HttpError, HttpErrorMessage};
+    use navree_http::AppError;
+
+    let not_found: HttpError = serde_json::from_value(AppError::not_found().body()).unwrap();
+    assert_eq!(
+        not_found,
+        HttpError {
+            status_code: 404,
+            message: HttpErrorMessage::One("Not Found".to_owned()),
+            error: "Not Found".to_owned(),
+            errors: None,
+        }
+    );
+
+    let errors = BTreeMap::from([(
+        "email".to_owned(),
+        vec!["email must be a valid email address".to_owned()],
+    )]);
+    let invalid = AppError::validation(errors.clone()).body();
+    let parsed: HttpError = serde_json::from_value(invalid.clone()).unwrap();
+    assert_eq!(
+        parsed,
+        HttpError {
+            status_code: 400,
+            message: HttpErrorMessage::Many(vec!["email must be a valid email address".to_owned()]),
+            error: "Bad Request".to_owned(),
+            errors: Some(errors),
+        }
+    );
+    assert_eq!(serde_json::to_value(&parsed).unwrap(), invalid);
 }

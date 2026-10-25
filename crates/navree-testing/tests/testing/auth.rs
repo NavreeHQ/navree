@@ -32,7 +32,7 @@ async fn acting_as_sets_principal() {
         .get("/api/profile/me")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
 }
 
 #[tokio::test]
@@ -76,7 +76,7 @@ async fn a_client_can_switch_identity_and_keep_its_cookies() {
         .get("/api/profile/me")
         .send()
         .await
-        .assert_problem(401, None);
+        .assert_error(401, None);
 }
 
 /// Authenticates requests carrying `x-user-id: <uuid>`.
@@ -158,7 +158,7 @@ async fn fake_auth_replaces_the_apps_authenticator() {
         .header("x-user-id", ALICE.to_string())
         .send()
         .await
-        .assert_problem(401, None);
+        .assert_error(401, None);
 }
 
 #[tokio::test]

@@ -15,10 +15,10 @@ async fn confirmed_rule() {
         .json(&json!({ "password": "correct horse", "password_confirmation": "battery staple" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "password": ["The password field confirmation does not match."] })
+        &json!({ "password": ["password confirmation does not match"] })
     );
 
     app.client()
@@ -40,13 +40,13 @@ async fn uuid_date_and_one_of_rules() {
         .json(&json!({ "owner_id": "nope", "due_on": "2024-02-30", "stage": "closed" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
         &json!({
-            "owner_id": ["The owner id field must be a valid UUID."],
-            "due_on": ["The due on field must match the format Y-m-d."],
-            "stage": ["The selected stage is invalid."],
+            "owner_id": ["owner_id must be a UUID"],
+            "due_on": ["due_on must be a valid date in the format YYYY-MM-DD"],
+            "stage": ["stage must be one of the following values: lead, won"],
         })
     );
 
@@ -62,10 +62,10 @@ async fn uuid_date_and_one_of_rules() {
             .json(&json!({ "owner_id": owner, "due_on": due_on, "stage": "won" }))
             .send()
             .await
-            .assert_problem(422, "validation_failed");
+            .assert_error(400, None);
         assert_eq!(
             errors(&response.json_value()),
-            &json!({ "due_on": ["The due on field must match the format Y-m-d."] }),
+            &json!({ "due_on": ["due_on must be a valid date in the format YYYY-MM-DD"] }),
             "{due_on}"
         );
     }
@@ -86,7 +86,7 @@ async fn uuid_date_and_one_of_rules() {
         .json(&json!({ "owner_id": simple, "due_on": null, "stage": "lead" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
 }
 
 #[tokio::test]
@@ -104,12 +104,12 @@ async fn app_rules_use_the_message_table_or_their_own_text() {
         .json(&body)
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
         &json!({
-            "even": ["The even field is invalid."],
-            "odd": ["The odd number is not odd."],
+            "even": ["even is invalid"],
+            "odd": ["odd must be an odd number"],
         })
     );
 
@@ -128,7 +128,7 @@ async fn app_rules_use_the_message_table_or_their_own_text() {
         .json(&body)
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value())["even"],
         json!(["3 is not even."])

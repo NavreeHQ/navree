@@ -1,7 +1,7 @@
 //! # navree-http
 //!
-//! `HttpModule`: Axum integration, the default Tower layer stack, RFC 9457
-//! problem+json errors, controllers and route metadata.
+//! `HttpModule`: Axum integration, the default Tower layer stack,
+//! NestJS-format errors, controllers and route metadata.
 //!
 //! - Modules contribute routes with [`Controller`]s
 //!   ([`ModuleBuilderHttpExt::controller`]); each [`RouteDef`] carries a
@@ -14,15 +14,19 @@
 //! - [`build_router`] assembles the app. Request pipeline, outermost first:
 //!   request id → tracing and request log → CORS → panic catcher → timeout →
 //!   security headers → compression (not for `text/event-stream`) →
-//!   problem rendering → maintenance mode → per-IP rate limit → body limit →
+//!   error rendering → maintenance mode → per-IP rate limit → body limit →
 //!   [`LayerSlot::Session`] → [`LayerSlot::AuthContext`] (the registered
 //!   [`Authenticator`] runs first) → [`LayerSlot::Uow`] → router → per-route:
 //!   authentication → per-user throttle → [`Guard`]s → [`RouteAuthorizer`]
 //!   → route timeout → handler → audit action.
-//! - Every error is an [`AppError`] rendered as problem+json
-//!   (`{"type","title","status","detail"?,"request_id","errors"?}`), including
-//!   panics, timeouts, 404s and framework rejections, and every response
-//!   carries `X-Request-Id` and, for allowed origins, the CORS headers.
+//! - Every error is an [`AppError`] rendered in the NestJS format, as
+//!   `application/json`: `{"statusCode": 404, "message": "Not Found",
+//!   "error": "Not Found"}`; validation errors are 400s whose `message` lists
+//!   every field message and whose `errors` maps fields to their messages.
+//!   This covers panics (`"Internal server error"`, nothing leaked),
+//!   timeouts, 404s and framework rejections (Axum's 422 becomes a 400), and
+//!   every response carries `X-Request-Id` and, for allowed origins, the
+//!   CORS headers.
 //!
 //! ```
 //! use std::sync::Arc;
@@ -91,7 +95,7 @@ mod signed;
 pub use auth::{Authenticator, CurrentPrincipal, Guard, RouteAuthorizer};
 pub use axum::Json;
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
-pub use error::{AppError, ErrorMapper, PROBLEM_JSON, Result};
+pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
 pub use extract::{ClientIp, Created, NoContent};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};

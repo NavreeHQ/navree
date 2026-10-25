@@ -106,13 +106,14 @@ impl TestResponse {
         String::from_utf8_lossy(&self.body).into_owned()
     }
 
-    /// Asserts a problem+json response with `status` and returns its body.
-    pub fn problem(&self, status: u16) -> serde_json::Value {
+    /// Asserts a NestJS-format error response with `status` and returns its
+    /// body.
+    pub fn error(&self, status: u16) -> serde_json::Value {
         assert_eq!(self.status.as_u16(), status, "body: {}", self.text());
-        assert_eq!(
-            self.header("content-type"),
-            Some("application/problem+json")
-        );
-        serde_json::from_slice(&self.body).unwrap()
+        assert_eq!(self.header("content-type"), Some("application/json"));
+        let body: serde_json::Value = serde_json::from_slice(&self.body).unwrap();
+        assert_eq!(body["statusCode"], status, "{body}");
+        assert!(body["error"].is_string(), "{body}");
+        body
     }
 }

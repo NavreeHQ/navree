@@ -93,7 +93,7 @@ async fn endpoints_list_count_and_mark_read_only_own() {
         .post(&format!("/api/notifications/{bobs}/read"))
         .send()
         .await
-        .assert_problem(404, "not_found");
+        .assert_error(404, None);
     as_bob
         .get("/api/notifications/unread-count")
         .send()
@@ -174,11 +174,8 @@ async fn list_pages_and_validates_the_unread_flag() {
         .get("/api/notifications?unread=maybe")
         .send()
         .await
-        .assert_problem(422, "validation_failed")
-        .assert_json_path(
-            "errors.unread.0",
-            json!("The unread field must be true or false."),
-        );
+        .assert_validation_error("unread")
+        .assert_error(400, "unread must be a boolean value");
     let all = as_alice
         .get("/api/notifications?unread=false")
         .send()
@@ -196,7 +193,7 @@ async fn a_malformed_id_is_not_found() {
         .post("/api/notifications/not-a-uuid/read")
         .send()
         .await
-        .assert_problem(404, "not_found");
+        .assert_error(404, None);
 }
 
 #[tokio::test]
@@ -209,13 +206,13 @@ async fn guests_are_unauthenticated() {
             .get(path)
             .send()
             .await
-            .assert_problem(401, "unauthenticated");
+            .assert_error(401, "Unauthorized");
     }
     guest
         .post("/api/notifications/read-all")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
 }
 
 #[tokio::test]

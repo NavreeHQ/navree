@@ -1,10 +1,13 @@
-//! The message table: Laravel's English validation messages, keyed by rule,
-//! and [`Messages`], the table an app actually uses (defaults plus
-//! overrides from [`ValidationOptions`](crate::ValidationOptions)).
+//! The message table: English validation messages in the NestJS
+//! (class-validator) style, keyed by rule, and [`Messages`], the table an
+//! app actually uses (defaults plus overrides from
+//! [`ValidationOptions`](crate::ValidationOptions)).
 //!
-//! Templates use Laravel's placeholders: `:attribute` (the field's display
-//! name, `:Attribute` capitalised) and rule parameters such as `:min`,
-//! `:max`, `:other`, `:values` and `:format`.
+//! Messages name the field by its property path and have no trailing period
+//! (`"email must be a valid email address"`, `"items.1.quantity must not be
+//! less than 1"`). Templates use placeholders: `:attribute` (the field's
+//! path or configured display name, `:Attribute` capitalised) and rule
+//! parameters such as `:min`, `:max`, `:other`, `:values` and `:format`.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
@@ -14,83 +17,62 @@ use std::sync::{Arc, LazyLock};
 pub const DEFAULT_MESSAGES: &[(&str, &str)] = &[
     (
         "alpha_num",
-        "The :attribute field must only contain letters and numbers.",
+        ":attribute must contain only letters and numbers",
     ),
-    ("array", "The :attribute field must be an array."),
-    (
-        "ascii",
-        "The :attribute field must only contain single-byte alphanumeric characters and symbols.",
-    ),
-    ("boolean", "The :attribute field must be true or false."),
-    (
-        "confirmed",
-        "The :attribute field confirmation does not match.",
-    ),
-    ("contains", "The :attribute field must contain :value."),
-    (
-        "credit_card",
-        "The :attribute field must be a valid credit card number.",
-    ),
-    ("date", "The :attribute field must be a valid date."),
+    ("array", ":attribute must be an array"),
+    ("ascii", ":attribute must contain only ASCII characters"),
+    ("boolean", ":attribute must be a boolean value"),
+    ("confirmed", ":attribute confirmation does not match"),
+    ("contains", ":attribute must contain a :value string"),
+    ("credit_card", ":attribute must be a credit card"),
+    ("date", ":attribute must be a valid ISO 8601 date string"),
     (
         "date_format",
-        "The :attribute field must match the format :format.",
+        ":attribute must be a valid date in the format :format",
     ),
+    ("email", ":attribute must be a valid email address"),
+    ("ends_with", ":attribute must end with :values"),
+    ("exists", ":attribute does not exist"),
     (
-        "email",
-        "The :attribute field must be a valid email address.",
+        "in",
+        ":attribute must be one of the following values: :values",
     ),
-    (
-        "ends_with",
-        "The :attribute field must end with one of the following: :values.",
-    ),
-    ("exists", "The selected :attribute is invalid."),
-    ("in", "The selected :attribute is invalid."),
-    ("integer", "The :attribute field must be an integer."),
-    ("invalid", "The :attribute field is invalid."),
-    ("ip", "The :attribute field must be a valid IP address."),
-    ("ipv4", "The :attribute field must be a valid IPv4 address."),
-    ("ipv6", "The :attribute field must be a valid IPv6 address."),
-    ("json", "The :attribute field must be a valid JSON string."),
+    ("integer", ":attribute must be an integer number"),
+    ("invalid", ":attribute is invalid"),
+    ("ip", ":attribute must be an ip address"),
+    ("ipv4", ":attribute must be an IPv4 address"),
+    ("ipv6", ":attribute must be an IPv6 address"),
+    ("json", ":attribute must be a valid JSON string"),
     (
         "max.array",
-        "The :attribute field must not have more than :max items.",
+        ":attribute must contain no more than :max elements",
     ),
-    (
-        "max.numeric",
-        "The :attribute field must not be greater than :max.",
-    ),
+    ("max.numeric", ":attribute must not be greater than :max"),
     (
         "max.string",
-        "The :attribute field must not be greater than :max characters.",
+        ":attribute must be shorter than or equal to :max characters",
     ),
     (
         "min.array",
-        "The :attribute field must have at least :min items.",
+        ":attribute must contain at least :min elements",
     ),
-    ("min.numeric", "The :attribute field must be at least :min."),
+    ("min.numeric", ":attribute must not be less than :min"),
     (
         "min.string",
-        "The :attribute field must be at least :min characters.",
+        ":attribute must be longer than or equal to :min characters",
     ),
-    ("numeric", "The :attribute field must be a number."),
-    ("object", "The :attribute field must be an object."),
-    (
-        "phone",
-        "The :attribute field must be a valid phone number.",
-    ),
-    ("prohibited", "The :attribute field is prohibited."),
-    ("regex", "The :attribute field format is invalid."),
-    ("required", "The :attribute field is required."),
-    ("same", "The :attribute field must match :other."),
-    (
-        "starts_with",
-        "The :attribute field must start with one of the following: :values.",
-    ),
-    ("string", "The :attribute field must be a string."),
-    ("unique", "The :attribute has already been taken."),
-    ("url", "The :attribute field must be a valid URL."),
-    ("uuid", "The :attribute field must be a valid UUID."),
+    ("numeric", ":attribute must be a number"),
+    ("object", ":attribute must be an object"),
+    ("phone", ":attribute must be a valid phone number"),
+    ("prohibited", "property :attribute should not exist"),
+    ("regex", ":attribute must match :pattern regular expression"),
+    ("required", ":attribute should not be empty"),
+    ("same", ":attribute must match :other"),
+    ("starts_with", ":attribute must start with :values"),
+    ("string", ":attribute must be a string"),
+    ("unique", ":attribute has already been taken"),
+    ("url", ":attribute must be a URL address"),
+    ("uuid", ":attribute must be a UUID"),
 ];
 
 /// The rule whose template is used when a rule key has none.
@@ -99,10 +81,10 @@ const FALLBACK_RULE: &str = "invalid";
 /// The validation messages of an app: [`DEFAULT_MESSAGES`] plus overrides.
 ///
 /// - Message overrides are keyed by rule (`"required"`, `"min.string"`) or,
-///   for one field only, by `"<field>.<rule>"` (`"email.unique"`), like
-///   Laravel's custom messages.
-/// - Attribute names replace a field's display name (`"first_name"` shows
-///   as `first name` unless `attributes` says otherwise).
+///   for one field only, by `"<field>.<rule>"` (`"email.unique"`).
+/// - Attribute names replace a field's display name (a field shows as its
+///   path, `first_name` or `items.0.sku`, unless `attributes` says
+///   otherwise).
 ///
 /// `ValidationModule` provides it; without the module the extractors use
 /// the defaults.
@@ -119,7 +101,7 @@ const FALLBACK_RULE: &str = "invalid";
 /// );
 /// assert_eq!(
 ///     messages.render("first_name", "min.string", &[("min", "2".into())]),
-///     "The first name field must be at least 2 characters."
+///     "first_name must be longer than or equal to 2 characters"
 /// );
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -167,16 +149,16 @@ impl Messages {
             .or_else(|| default_template(rule))
             .or_else(|| self.overrides.get(FALLBACK_RULE).map(String::as_str))
             .or_else(|| default_template(FALLBACK_RULE))
-            .unwrap_or("The :attribute field is invalid.")
+            .unwrap_or(":attribute is invalid")
     }
 
     /// The display name of `field`: its configured attribute name, else the
-    /// field in snake case with underscores as spaces (`firstName` and
-    /// `first_name` both show as `first name`).
+    /// field path itself (`first_name`, `items.0.sku`), as class-validator
+    /// names properties.
     pub fn attribute(&self, field: &str) -> String {
         match self.attributes.get(field) {
             Some(name) => name.clone(),
-            None => snake_case(field).replace('_', " "),
+            None => field.to_owned(),
         }
     }
 
@@ -232,25 +214,6 @@ fn interpolate(template: &str, values: &[(&str, String)]) -> String {
     out
 }
 
-/// `firstName` → `first_name` (ASCII letters only; other characters kept).
-fn snake_case(field: &str) -> String {
-    let mut out = String::with_capacity(field.len() + 4);
-    let mut previous_lower = false;
-    for c in field.chars() {
-        if c.is_ascii_uppercase() {
-            if previous_lower {
-                out.push('_');
-            }
-            out.push(c.to_ascii_lowercase());
-            previous_lower = false;
-        } else {
-            out.push(c);
-            previous_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
-        }
-    }
-    out
-}
-
 fn upper_first(text: &str) -> String {
     let mut chars = text.chars();
     match chars.next() {
@@ -271,7 +234,7 @@ mod tests {
         );
         assert_eq!(
             default_template("email"),
-            Some("The :attribute field must be a valid email address.")
+            Some(":attribute must be a valid email address")
         );
         assert_eq!(default_template("nope"), None);
     }
@@ -286,17 +249,54 @@ mod tests {
     }
 
     #[test]
-    fn attributes_are_humanised() {
+    fn attributes_are_property_paths() {
         let messages = Messages::default();
-        assert_eq!(messages.attribute("first_name"), "first name");
-        assert_eq!(messages.attribute("firstName"), "first name");
-        assert_eq!(
-            messages.attribute("items.0.unitPrice"),
-            "items.0.unit price"
-        );
-        assert_eq!(messages.attribute("HTTPCode"), "httpcode");
+        assert_eq!(messages.attribute("first_name"), "first_name");
+        assert_eq!(messages.attribute("firstName"), "firstName");
+        assert_eq!(messages.attribute("items.0.unitPrice"), "items.0.unitPrice");
         let messages = messages.with_attribute("email", "e-mail");
         assert_eq!(messages.attribute("email"), "e-mail");
+    }
+
+    #[test]
+    fn defaults_read_like_class_validator() {
+        let messages = Messages::default();
+        let min = [("min", "2".to_owned())];
+        let max = [("max", "255".to_owned())];
+        assert_eq!(
+            messages.render("email", "email", &[]),
+            "email must be a valid email address"
+        );
+        assert_eq!(
+            messages.render("name", "required", &[]),
+            "name should not be empty"
+        );
+        assert_eq!(
+            messages.render("name", "max.string", &max),
+            "name must be shorter than or equal to 255 characters"
+        );
+        assert_eq!(
+            messages.render("name", "min.string", &min),
+            "name must be longer than or equal to 2 characters"
+        );
+        assert_eq!(
+            messages.render("tags", "min.array", &min),
+            "tags must contain at least 2 elements"
+        );
+        assert_eq!(
+            messages.render("age", "min.numeric", &min),
+            "age must not be less than 2"
+        );
+        assert_eq!(
+            messages.render("extra", "prohibited", &[]),
+            "property extra should not exist"
+        );
+        for (rule, template) in DEFAULT_MESSAGES {
+            assert!(
+                !template.starts_with("The ") && !template.ends_with('.'),
+                "{rule}: {template}"
+            );
+        }
     }
 
     #[test]
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(messages.render("name", "required", &[]), "Need name.");
         assert_eq!(
             messages.render("name", "no_such_rule", &[]),
-            "The name field is invalid."
+            "name is invalid"
         );
     }
 
@@ -321,7 +321,7 @@ mod tests {
                 "same",
                 &[("other", "password_confirmation".into())]
             ),
-            "Password must match password confirmation."
+            "Password must match password_confirmation."
         );
     }
 }

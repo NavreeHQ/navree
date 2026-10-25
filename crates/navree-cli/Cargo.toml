@@ -7,6 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# The generators, the dev loop and the forwarding live in a library so the
+# integration tests can drive them without spawning the binary.
+[lib]
+name = "navree_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "navree"
 path = "src/main.rs"

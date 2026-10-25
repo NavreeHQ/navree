@@ -1,5 +1,5 @@
 //! Rules garde lacks, as functions for `#[garde(custom(...))]`, with
-//! Laravel's messages (`uuid`, `date_format`, `in`, `confirmed`).
+//! table-driven messages (`uuid`, `date_format`, `in`, `confirmed`).
 //!
 //! ```
 //! use garde::Validate;
@@ -65,7 +65,7 @@ impl<T: RuleInput> RuleInput for Option<T> {
     }
 }
 
-/// A UUID in the hyphenated form (`018f…-…`), as Laravel's `uuid` rule.
+/// A UUID in the hyphenated form (`018f…-…`) (message key `uuid`).
 pub fn uuid<T: RuleInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Result {
     match value.rule_str() {
         Some(text) if !is_uuid(text) => Err(rule_error("uuid", &[])),
@@ -80,11 +80,13 @@ fn is_uuid(text: &str) -> bool {
         && uuid::Uuid::try_parse(text).is_ok()
 }
 
-/// A calendar date written exactly `YYYY-MM-DD` (Laravel's
-/// `date_format:Y-m-d`).
+/// A calendar date written exactly `YYYY-MM-DD` (message key
+/// `date_format`, with `:format` = `YYYY-MM-DD`).
 pub fn date_ymd<T: RuleInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Result {
     match value.rule_str() {
-        Some(text) if !is_date_ymd(text) => Err(rule_error("date_format", &[("format", &"Y-m-d")])),
+        Some(text) if !is_date_ymd(text) => {
+            Err(rule_error("date_format", &[("format", &"YYYY-MM-DD")]))
+        }
         _ => Ok(()),
     }
 }
@@ -99,7 +101,8 @@ fn is_date_ymd(text: &str) -> bool {
     shaped && NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
 }
 
-/// One of `allowed` (Laravel's `in`).
+/// One of `allowed` (message key `in`, with `:values` = the allowed
+/// values).
 pub fn one_of<'a, T: RuleInput + ?Sized, C: ?Sized>(
     allowed: &'a [&'a str],
 ) -> impl FnOnce(&T, &C) -> garde::Result + 'a {
@@ -111,7 +114,7 @@ pub fn one_of<'a, T: RuleInput + ?Sized, C: ?Sized>(
     }
 }
 
-/// The field equals its confirmation (Laravel's `confirmed`, as in
+/// The field equals its confirmation (message key `confirmed`, as in
 /// `password` / `password_confirmation`). The error is on the field itself.
 pub fn confirmed<'a, V, W, C>(confirmation: &'a W) -> impl FnOnce(&V, &C) -> garde::Result + 'a
 where

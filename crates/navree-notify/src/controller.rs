@@ -63,7 +63,7 @@ impl Controller for NotificationsController {
             .name("notifications.index")
             .api(api(
                 "List the signed-in user's notifications, newest first",
-                &[401, 422],
+                &[400, 401],
                 Some(notification_page_schema),
             )),
             RouteDef::on(
@@ -166,7 +166,7 @@ impl Notifiable for SignedIn {
 }
 
 /// `?unread=true|1` keeps unread notifications only; `false`, `0` or no
-/// value keeps all. Anything else is a 422.
+/// value keeps all. Anything else is a 400.
 struct UnreadFilter(bool);
 
 #[derive(Deserialize)]
@@ -185,7 +185,7 @@ impl<S: Send + Sync> FromRequestParts<S> for UnreadFilter {
             Some("true" | "1") => Ok(UnreadFilter(true)),
             Some(_) => Err(AppError::validation(BTreeMap::from([(
                 "unread".to_owned(),
-                vec!["The unread field must be true or false.".to_owned()],
+                vec!["unread must be a boolean value".to_owned()],
             )]))),
         }
     }

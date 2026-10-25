@@ -19,7 +19,7 @@ use crate::log::kind_str;
 ///
 /// As an extractor it reads `?actor_id=&subject_type=&subject_id=&action=&kind=`
 /// (other parameters are ignored) and rejects a malformed `actor_id` or an
-/// unknown `kind` with a 422.
+/// unknown `kind` with a 400.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AuditFilter {
     /// Entries by this user.
@@ -103,7 +103,7 @@ impl<S: Send + Sync> FromRequestParts<S> for AuditFilter {
             Err(_) => {
                 errors.insert(
                     "actor_id".to_owned(),
-                    vec!["The actor id must be a valid UUID.".to_owned()],
+                    vec!["actor_id must be a UUID".to_owned()],
                 );
                 None
             }
@@ -114,7 +114,8 @@ impl<S: Send + Sync> FromRequestParts<S> for AuditFilter {
                 errors.insert(
                     "kind".to_owned(),
                     vec![
-                        "The kind must be one of: data, auth, access, security, custom.".to_owned(),
+                        "kind must be one of the following values: data, auth, access, security, custom"
+                            .to_owned(),
                     ],
                 );
                 None

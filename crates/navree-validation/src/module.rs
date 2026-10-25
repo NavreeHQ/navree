@@ -17,8 +17,8 @@ pub const CONFIG_SECTION: &str = "validation";
 ///
 /// ```toml
 /// [validation.messages]
-/// required = "Le champ :attribute est obligatoire."
-/// "email.unique" = "This e-mail is already registered."
+/// required = ":attribute est obligatoire"
+/// "email.unique" = "This e-mail is already registered"
 ///
 /// [validation.attributes]
 /// first_name = "first name"
@@ -102,7 +102,8 @@ fn flat_strings<'de, D: Deserializer<'de>>(
 pub struct ValidationModule;
 
 impl ValidationModule {
-    /// The module with the built-in (Laravel English) messages.
+    /// The module with the built-in (class-validator style English)
+    /// messages.
     pub fn for_root() -> impl Module {
         Self::with_options(ValidationOptions::default())
     }

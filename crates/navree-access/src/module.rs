@@ -25,7 +25,7 @@ use crate::subject::{SubjectRegistration, Subjects};
 ///
 /// Global; provides and exports [`AccessService`] and [`AbilityFactory`],
 /// registers the app's `dyn RouteAuthorizer` ([`AccessAuthorizer`](crate::AccessAuthorizer)),
-/// the `access` migrations (after `auth`) and the `AccessError` → problem
+/// the `access` migrations (after `auth`) and the `AccessError` → error
 /// mapping. Needs `DatabaseModule`.
 ///
 /// ```no_run

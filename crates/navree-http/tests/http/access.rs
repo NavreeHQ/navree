@@ -155,10 +155,11 @@ async fn non_public_route_returns_401_without_principal() {
     .boot()
     .await;
 
-    app.get("/api/plain").await.assert_problem(401);
+    app.get("/api/plain").await.assert_error(401);
     let response = app.get("/api/me").await;
-    let body = response.assert_problem(401);
-    assert_eq!(body["type"], "unauthenticated");
+    let body = response.assert_error(401);
+    assert_eq!(body["message"], "Unauthorized");
+    assert_eq!(body["error"], "Unauthorized");
     assert_eq!(calls.get(), 0, "the handler never runs for guests");
 
     let response = app.send(as_user("GET", "/api/me", ALICE)).await;
@@ -173,8 +174,8 @@ async fn unknown_path_is_404_not_401() {
         .boot()
         .await;
 
-    app.get("/api/nothing-here").await.assert_problem(404);
-    app.get("/api/private/deeper").await.assert_problem(404);
+    app.get("/api/nothing-here").await.assert_error(404);
+    app.get("/api/private/deeper").await.assert_error(404);
     // A known path with the wrong method is 405, not 401.
     app.send(
         http::Request::delete("/api/private")
@@ -182,7 +183,7 @@ async fn unknown_path_is_404_not_401() {
             .unwrap(),
     )
     .await
-    .assert_problem(405);
+    .assert_error(405);
 }
 
 /// An authenticator that rejects every request with a custom error.
@@ -205,8 +206,9 @@ async fn authenticator_errors_are_returned_to_the_client() {
         })
         .boot()
         .await;
-    let body = app.get("/api/open").await.assert_problem(401);
-    assert_eq!(body["detail"], "The token has expired.");
+    let body = app.get("/api/open").await.assert_error(401);
+    assert_eq!(body["message"], "The token has expired.");
+    assert_eq!(body["error"], "Unauthorized");
 }
 
 // ---------------------------------------------------------------------------
@@ -286,8 +288,9 @@ async fn authorizer_called_with_route_meta() {
     .await;
 
     let response = app.send(as_user("POST", "/api/v1/reports/7", ALICE)).await;
-    let body = response.assert_problem(403);
-    assert_eq!(body["detail"], "Admins only.");
+    let body = response.assert_error(403);
+    assert_eq!(body["message"], "Admins only.");
+    assert_eq!(body["error"], "Forbidden");
     assert_eq!(calls.get(), 0);
     assert_eq!(
         authorizer.seen.lock().unwrap().clone(),
@@ -314,7 +317,7 @@ async fn authorizer_called_with_route_meta() {
             .unwrap(),
     )
     .await
-    .assert_problem(401);
+    .assert_error(401);
     assert_eq!(
         app.send(as_user("GET", "/api/v1/mine", ALICE)).await.text(),
         "ok"
@@ -357,8 +360,8 @@ async fn guard_runs_before_handler() {
     .boot()
     .await;
 
-    let body = app.get("/api/guarded").await.assert_problem(403);
-    assert_eq!(body["detail"], "Guard says no.");
+    let body = app.get("/api/guarded").await.assert_error(403);
+    assert_eq!(body["message"], "Guard says no.");
     assert_eq!(calls.get(), 0, "handler not called");
 
     let response = app
@@ -393,7 +396,7 @@ async fn per_user_throttle() {
         assert_eq!(response.status, StatusCode::OK);
     }
     let response = app.send(as_user("GET", "/api/limited", ALICE)).await;
-    response.assert_problem(429);
+    response.assert_error(429);
     assert!(response.header("retry-after").is_some());
 
     // Other users and other routes have their own budgets.
@@ -408,7 +411,7 @@ async fn per_user_throttle() {
 
     // Guests are throttled by client IP.
     assert_eq!(app.get("/api/public-limited").await.status, StatusCode::OK);
-    app.get("/api/public-limited").await.assert_problem(429);
+    app.get("/api/public-limited").await.assert_error(429);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +486,7 @@ async fn global_layers_applied_in_slot_order() {
         "slots outermost first, module order within a slot, navree's authentication first in AuthContext"
     );
     // Global layers also wrap the 404 fallback.
-    app.get("/api/missing").await.assert_problem(404);
+    app.get("/api/missing").await.assert_error(404);
 }
 
 #[tokio::test]
@@ -553,7 +556,7 @@ async fn audit_action_recorded_on_success() {
     assert_eq!(response.status, StatusCode::OK);
     app.send(as_user("POST", "/api/fail", ALICE))
         .await
-        .assert_problem(409);
+        .assert_error(409);
 
     let entries = sink.entries.lock().unwrap().clone();
     assert_eq!(entries.len(), 1, "only 2xx responses are audited");

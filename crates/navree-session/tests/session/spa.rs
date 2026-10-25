@@ -107,7 +107,7 @@ async fn spa_flow_through_an_authenticator_reading_the_session() {
         .json(&json!({ "user_id": user }))
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     client
         .post("/api/auth/login")
         .xsrf()
@@ -134,7 +134,7 @@ async fn spa_flow_through_an_authenticator_reading_the_session() {
         .post("/api/auth/logout")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     client.get("/api/auth/user").send().await.assert_status(200);
 
     let token_before = client.cookie(XSRF).unwrap();
@@ -148,7 +148,7 @@ async fn spa_flow_through_an_authenticator_reading_the_session() {
         .get("/api/auth/user")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
     assert_ne!(client.cookie(XSRF).unwrap(), token_before);
 
     // The fresh token after logout lets the user sign in again.

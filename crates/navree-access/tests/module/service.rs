@@ -124,7 +124,7 @@ async fn denial_writes_security_audit_entry() {
         .header("user-agent", "probe/1.0")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     app.acting_as(principal(other))
         .get("/admin/dashboard")
         .send()
@@ -279,7 +279,7 @@ async fn denial_audit_does_not_wait_for_the_request_transaction() {
         .json(&json!({ "title": "Stolen" }))
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     assert!(
         started.elapsed() < std::time::Duration::from_secs(2),
         "the denial took {:?}",

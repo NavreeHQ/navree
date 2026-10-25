@@ -1,6 +1,6 @@
 //! The fixed global layers of the request pipeline. Outermost first: request
 //! context (request id, client ip, tracing span, request log and metrics),
-//! CORS, panic catcher, timeout, security headers, compression, problem
+//! CORS, panic catcher, timeout, security headers, compression, error
 //! rendering, maintenance mode, per-IP rate limit, body limit; then the
 //! [`LayerSlot`](crate::LayerSlot)s (navree's authentication runs first in the
 //! `AuthContext` slot) and the router.
@@ -29,7 +29,7 @@ use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
-use crate::error::{PROBLEM_JSON, PendingProblem};
+use crate::error::PendingError;
 use crate::limiter::RateLimiter;
 use crate::maintenance::MaintenanceMode;
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
@@ -37,7 +37,7 @@ use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
 /// The request id header.
 pub(crate) static X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
-/// Plain-text error bodies up to this size are turned into problem details.
+/// Plain-text error bodies up to this size are turned into error bodies.
 const MAX_NORMALIZED_BODY: u64 = 16 * 1024;
 
 /// The authenticated user, recorded on the response for the request log.
@@ -145,10 +145,10 @@ pub(crate) async fn request_context(
 }
 
 // ---------------------------------------------------------------------------
-// Panic catcher and timeout (outside the problem layer: they render themselves)
+// Panic catcher and timeout (outside the error layer: they render themselves)
 // ---------------------------------------------------------------------------
 
-/// Turns a panicking handler or layer into a 500 problem.
+/// Turns a panicking handler or layer into a 500 error.
 pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
     let request_id = request_id_of(&request);
     match AssertUnwindSafe(next.run(request)).catch_unwind().await {
@@ -161,8 +161,7 @@ pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
                 panic = %message,
                 "request handler panicked"
             );
-            AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-                .render(request_id.as_ref().map(RequestId::as_str))
+            AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR).render()
         }
     }
 }
@@ -207,7 +206,7 @@ pub(crate) async fn timeout(
                     request_id = request_id.as_ref().map(tracing::field::display),
                     "request timed out"
                 );
-                return timeout_error().render(request_id.as_ref().map(RequestId::as_str));
+                return timeout_error().render();
             }
         }
     }
@@ -244,18 +243,18 @@ pub(crate) async fn security_headers(request: Request, next: Next) -> Response {
 }
 
 // ---------------------------------------------------------------------------
-// Problem rendering
+// Error rendering
 // ---------------------------------------------------------------------------
 
-pub(crate) struct ProblemState {
+pub(crate) struct ErrorState {
     pub(crate) mappers: Vec<ErrorMapper>,
 }
 
-/// Renders every error response as problem+json with the request id:
-/// [`AppError`]s (mapped by the contributed [`ErrorMapper`]s, 5xx logged) and
+/// Renders every error response in the NestJS format: [`AppError`]s (mapped
+/// by the contributed [`ErrorMapper`]s, 5xx logged with the request id) and
 /// plain-text or empty error responses from Axum and Tower layers.
-pub(crate) async fn problems(
-    State(state): State<Arc<ProblemState>>,
+pub(crate) async fn errors(
+    State(state): State<Arc<ErrorState>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -282,7 +281,7 @@ async fn finalize(
 ) -> Response {
     let pending = response
         .extensions_mut()
-        .remove::<PendingProblem>()
+        .remove::<PendingError>()
         .and_then(|pending| pending.take());
     let error = match pending {
         Some(error) => error,
@@ -292,15 +291,7 @@ async fn finalize(
                 Ok(collected) => String::from_utf8_lossy(&collected.to_bytes()).into_owned(),
                 Err(_) => String::new(),
             };
-            let mut error = AppError::from_status(parts.status);
-            let text = text.trim();
-            if !text.is_empty() {
-                if parts.status.is_server_error() {
-                    error.source = Some(text.to_owned().into());
-                } else {
-                    error.detail = Some(text.to_owned());
-                }
-            }
+            let error = AppError::rejection(parts.status, text);
             response = Response::from_parts(parts, Body::empty());
             error
         }
@@ -323,7 +314,7 @@ async fn finalize(
         );
     }
 
-    let rendered = error.render(request_id.map(RequestId::as_str));
+    let rendered = error.render();
     let (mut parts, _) = response.into_parts();
     let (rendered_parts, body) = rendered.into_parts();
     parts.status = rendered_parts.status;
@@ -343,9 +334,7 @@ fn needs_normalizing(response: &Response) -> bool {
     }
     let plain = match response.headers().get(CONTENT_TYPE) {
         None => true,
-        Some(value) => value
-            .to_str()
-            .is_ok_and(|v| v.starts_with("text/plain") && !v.starts_with(PROBLEM_JSON)),
+        Some(value) => value.to_str().is_ok_and(|v| v.starts_with("text/plain")),
     };
     let small = response
         .body()

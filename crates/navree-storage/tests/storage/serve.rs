@@ -48,11 +48,14 @@ async fn temporary_url_valid_then_expired() {
     assert_eq!(app.get(&url).await.status, 200, "still valid");
 
     clock.advance(Duration::from_secs(1));
-    let expired = app.get(&url).await.problem(403);
-    assert_eq!(expired["type"], "invalid_signature");
-    assert!(
-        expired["detail"].as_str().unwrap().contains("expired"),
-        "{expired}"
+    let expired = app.get(&url).await.error(403);
+    assert_eq!(
+        expired,
+        serde_json::json!({
+            "statusCode": 403,
+            "message": "The link has expired.",
+            "error": "Forbidden",
+        })
     );
 }
 
@@ -83,8 +86,8 @@ async fn tampered_or_unsigned_urls_are_forbidden() {
         url.replace("signature=", "signature=zz"),
     ];
     for uri in tampered {
-        let body = app.get(&uri).await.problem(403);
-        assert_eq!(body["type"], "invalid_signature", "{uri}");
+        let body = app.get(&uri).await.error(403);
+        assert_eq!(body["message"], "Invalid signature.", "{uri}");
     }
 }
 
@@ -101,7 +104,7 @@ async fn signed_url_for_missing_file_is_not_found() {
         .unwrap()
         .temporary_url("gone.txt", expires_at)
         .unwrap();
-    app.get(&url).await.problem(404);
+    app.get(&url).await.error(404);
 
     // Without a valid signature nothing is revealed: an unknown disk or a
     // traversal attempt looks like a forged link.
@@ -110,8 +113,8 @@ async fn signed_url_for_missing_file_is_not_found() {
         "/storage/local/..%2F..%2Fsecret.txt?expires=99999999999&signature=00",
         "/storage/local/a%5C..%5C..%5Csecret.txt?expires=99999999999&signature=00",
     ] {
-        let body = app.get(uri).await.problem(403);
-        assert_eq!(body["type"], "invalid_signature", "{uri}");
+        let body = app.get(uri).await.error(403);
+        assert_eq!(body["message"], "Invalid signature.", "{uri}");
     }
 }
 

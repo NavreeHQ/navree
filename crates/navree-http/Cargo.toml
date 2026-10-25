@@ -1,6 +1,6 @@
 [package]
 name = "navree-http"
-description = "Navree HttpModule: Axum integration, default Tower layers, problem+json errors, controllers and route metadata."
+description = "Navree HttpModule: Axum integration, default Tower layers, NestJS-format errors, controllers and route metadata."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -514,13 +514,13 @@ impl Realtime {
         if !protocol::is_valid_socket_id(socket_id) {
             return Err(AuthFailure::Invalid {
                 field: "socket_id",
-                message: "The socket_id must look like 1234.5678.",
+                message: "socket_id must look like 1234.5678",
             });
         }
         if !is_valid_name(channel) {
             return Err(AuthFailure::Invalid {
                 field: "channel_name",
-                message: "The channel_name is not a valid channel name.",
+                message: "channel_name must be a valid channel name",
             });
         }
         let kind = ChannelKind::of(channel);
@@ -604,7 +604,7 @@ impl fmt::Debug for Realtime {
 /// Why the auth endpoint refuses.
 #[derive(Debug)]
 pub(crate) enum AuthFailure {
-    /// A malformed request field (422).
+    /// A malformed request field (400).
     Invalid {
         field: &'static str,
         message: &'static str,

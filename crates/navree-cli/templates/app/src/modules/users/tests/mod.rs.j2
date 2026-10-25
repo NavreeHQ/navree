@@ -1,0 +1,83 @@
+//! Tests of the users module: each one boots the module with a fresh SQLite
+//! database and calls its routes in-process.
+
+use navree::db::DatabaseModule;
+use navree::testing::{TestApp, principal};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use super::UsersModule;
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(DatabaseModule)
+        .module(UsersModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_must_sign_in() {
+    let app = app().await;
+    app.client()
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn a_new_user_sees_the_default_profile() {
+    let app = app().await;
+    let me = Uuid::now_v7();
+    app.acting_as(principal(me))
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user_id", json!(me))
+        .assert_json_path("timezone", json!("UTC"));
+}
+
+#[tokio::test]
+async fn users_update_their_own_profile() {
+    let app = app().await;
+    let me = app.acting_as(principal(Uuid::now_v7()));
+    me.put("/api/v1/profile")
+        .json(&json!({ "bio": "Rustacean", "timezone": "Europe/Paris" }))
+        .send()
+        .await
+        .assert_status(200);
+    me.put("/api/v1/profile")
+        .json(&json!({ "bio": "Still a Rustacean" }))
+        .send()
+        .await
+        .assert_status(200);
+    me.get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("bio", json!("Still a Rustacean"))
+        .assert_json_path("timezone", json!("Europe/Paris"));
+
+    let someone_else = app.acting_as(principal(Uuid::now_v7()));
+    someone_else
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_json_path("bio", Value::Null);
+}
+
+#[tokio::test]
+async fn invalid_input_is_rejected() {
+    let app = app().await;
+    // A 400 in the NestJS error format, with the messages under `errors.timezone`.
+    app.acting_as(principal(Uuid::now_v7()))
+        .put("/api/v1/profile")
+        .json(&json!({ "timezone": "" }))
+        .send()
+        .await
+        .assert_validation_error("timezone");
+}

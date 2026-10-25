@@ -21,7 +21,7 @@
 //!   with a content type guessed from its extension.
 //! - [`store_upload`] streams a multipart file field to a disk under a random
 //!   name, with the size limit and allowed types of [`UploadRules`], sniffing
-//!   the type from the content (413 / 422 problem responses).
+//!   the type from the content (413 / 400 error responses).
 //! - A `storage` readiness check (`dyn HealthCheck`) writes, reads and
 //!   deletes a probe file on every disk.
 //!

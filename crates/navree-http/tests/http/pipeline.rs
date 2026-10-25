@@ -94,28 +94,37 @@ async fn cors_headers_on_error_responses() {
         ("/api/slow-route", 503, "route timeout"),
         ("/api/slow", 503, "global timeout"),
         ("/api/nope", 404, "404"),
-        ("/api/invalid", 422, "422"),
+        ("/api/invalid", 400, "400"),
     ];
     for (path, status, what) in cases {
         let response = app.send(from_origin("GET", path, ORIGIN)).await;
-        response.assert_problem(status);
+        response.assert_error(status);
         assert_cors(&response, what);
     }
 }
 
 #[tokio::test]
-async fn panics_and_timeouts_are_problem_json() {
+async fn panics_and_timeouts_are_nest_errors() {
     let app = Setup::new(error_routes()).boot().await;
 
-    let body = app.get("/api/panic").await.assert_problem(500);
-    assert!(
-        body.get("detail").is_none(),
-        "panic message not sent: {body}"
+    let body = app.get("/api/panic").await.assert_error(500);
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "statusCode": 500,
+            "message": "Internal server error",
+            "error": "Internal Server Error",
+        }),
+        "panic message not sent"
     );
 
     let response = app.get("/api/slow-route").await;
-    let body = response.assert_problem(503);
-    assert_eq!(body["type"], "request_timeout");
+    let body = response.assert_error(503);
+    assert_eq!(body["error"], "Service Unavailable");
+    assert_eq!(
+        body["message"],
+        "The server did not finish the request in time."
+    );
 }
 
 #[tokio::test]
@@ -127,7 +136,7 @@ async fn cors_rejects_unknown_origin() {
         .await;
     // Without Access-Control-Allow-Origin the browser blocks the response.
     assert_eq!(response.header("access-control-allow-origin"), None);
-    response.assert_problem(422);
+    response.assert_error(400);
 
     let preflight = Request::builder()
         .method(Method::OPTIONS)
@@ -289,9 +298,9 @@ async fn maintenance_mode_returns_503() {
     .await;
 
     let response = app.send(from_origin("GET", "/api/ok", ORIGIN)).await;
-    let body = response.assert_problem(503);
-    assert_eq!(body["type"], "maintenance");
-    assert_eq!(body["detail"], "Back soon.");
+    let body = response.assert_error(503);
+    assert_eq!(body["message"], "Back soon.");
+    assert_eq!(body["error"], "Service Unavailable");
     assert_eq!(response.header("retry-after"), Some("120"));
     assert_eq!(response.header("access-control-allow-origin"), Some(ORIGIN));
 }
@@ -319,7 +328,7 @@ async fn maintenance_mode_skips_excepted_paths() {
         .boot()
         .await;
     assert_eq!(app.get("/health/live").await.status, StatusCode::OK);
-    app.get("/api/ok").await.assert_problem(503);
+    app.get("/api/ok").await.assert_error(503);
 
     // An explicit list replaces the default; matching is on the exact path.
     let app = Setup::new(routes())
@@ -331,8 +340,8 @@ async fn maintenance_mode_skips_excepted_paths() {
         .boot()
         .await;
     assert_eq!(app.get("/api/status").await.status, StatusCode::OK);
-    app.get("/api/status/").await.assert_problem(503);
-    app.get("/health/live").await.assert_problem(503);
+    app.get("/api/status/").await.assert_error(503);
+    app.get("/health/live").await.assert_error(503);
 }
 
 #[test]
@@ -369,7 +378,7 @@ async fn down_and_up_commands_toggle_maintenance() {
         .unwrap();
     assert!(file.exists());
     let response = app.get("/api/ok").await;
-    response.assert_problem(503);
+    response.assert_error(503);
     assert_eq!(response.header("retry-after"), Some("30"));
 
     app.app.run_command("up", vec![]).await.unwrap();
@@ -392,8 +401,9 @@ async fn per_ip_rate_limit_returns_429_with_retry_after() {
     assert_eq!(app.get("/api/ok").await.status, StatusCode::OK);
     assert_eq!(app.get("/api/ok").await.status, StatusCode::OK);
     let response = app.send(from_origin("GET", "/api/ok", ORIGIN)).await;
-    let body = response.assert_problem(429);
-    assert_eq!(body["type"], "too_many_requests");
+    let body = response.assert_error(429);
+    assert_eq!(body["message"], "Too Many Requests");
+    assert_eq!(body["error"], "Too Many Requests");
     let retry_after: u64 = response.header("retry-after").unwrap().parse().unwrap();
     assert!((1..=60).contains(&retry_after), "retry after {retry_after}");
     assert_eq!(response.header("access-control-allow-origin"), Some(ORIGIN));
@@ -435,8 +445,8 @@ async fn body_limit_returns_413() {
         .header("content-length", "100")
         .body(Body::from(bytes(100)))
         .unwrap();
-    let body = app.send(declared).await.assert_problem(413);
-    assert_eq!(body["type"], "payload_too_large");
+    let body = app.send(declared).await.assert_error(413);
+    assert_eq!(body["error"], "Payload Too Large");
 
     // Streamed body without a length: the extractor's limit applies.
     let streamed = Request::post("/api/echo")
@@ -447,7 +457,7 @@ async fn body_limit_returns_413() {
             bytes(100),
         )])))
         .unwrap();
-    app.send(streamed).await.assert_problem(413);
+    app.send(streamed).await.assert_error(413);
 
     // Under the limit, and a route with a larger limit.
     let small = Request::post("/api/echo")

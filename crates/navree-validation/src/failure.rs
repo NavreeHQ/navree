@@ -87,7 +87,7 @@ pub(crate) fn scope<R>(f: impl FnOnce() -> R) -> R {
 ///
 /// A rule key without a template (default or override) renders the
 /// `invalid` template. Custom rules may also return plain text with an
-/// `:attribute` placeholder (`garde::Error::new("The :attribute is odd.")`).
+/// `:attribute` placeholder (`garde::Error::new(":attribute must be odd")`).
 ///
 /// Outside navree's extractors the message is rendered at once from the
 /// default table, for a field called `value`.
@@ -245,8 +245,8 @@ fn dotted(path: &garde::Path) -> String {
 /// `required` and an unknown one `prohibited` (both at the field's own
 /// path), a `null` is `required`, a wrong type names the expected type
 /// (`string`, `integer`, `numeric`, `boolean`, `array`, `object`), an
-/// unknown enum variant is `in`, a bad UUID `uuid`, a bad date `date`;
-/// anything else is `invalid`.
+/// unknown enum variant is `in` (listing the variants as `:values`), a bad
+/// UUID `uuid`, a bad date `date`; anything else is `invalid`.
 pub(crate) fn from_serde(path: &serde_path_to_error::Path, message: &str) -> Failure {
     let base = serde_path(path);
     if let Some(field) = backticked(message, "missing field `") {
@@ -261,7 +261,31 @@ pub(crate) fn from_serde(path: &serde_path_to_error::Path, message: &str) -> Fai
         };
         return Failure::keyed(path, "prohibited");
     }
+    if message.starts_with("unknown variant `") {
+        return Failure {
+            path: base,
+            rule: Rule::Keyed {
+                key: "in".to_owned(),
+                params: vec![("values".to_owned(), expected_variants(message))],
+            },
+        };
+    }
     Failure::keyed(base, classify(message))
+}
+
+/// The variants serde expected, as `a, b, c`: from "unknown variant `x`,
+/// expected `a` or `b`" or "..., expected one of `a`, `b`, `c`". The list
+/// comes last; the rejected input before it may contain anything.
+fn expected_variants(message: &str) -> String {
+    let Some((_, expected)) = message.rsplit_once(", expected ") else {
+        return String::new();
+    };
+    expected
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The dotted path of a serde error (`items.0.quantity`).
@@ -503,6 +527,46 @@ mod tests {
     }
 
     #[test]
+    fn unknown_variants_list_the_allowed_values() {
+        #[derive(Debug, serde::Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        #[allow(dead_code)]
+        enum Stage {
+            Lead,
+            Won,
+            Lost,
+        }
+        let error =
+            serde_path_to_error::deserialize::<_, Stage>(serde_json::json!("closed")).unwrap_err();
+        assert_eq!(
+            from_serde(error.path(), &error.inner().to_string()).rule,
+            Rule::Keyed {
+                key: "in".into(),
+                params: vec![("values".into(), "lead, won, lost".into())],
+            }
+        );
+        assert_eq!(
+            expected_variants("unknown variant `x`, expected `lead` or `won`"),
+            "lead, won"
+        );
+        assert_eq!(
+            expected_variants("unknown variant `x`, expected `lead`"),
+            "lead"
+        );
+        // The rejected input is echoed first; only serde's list counts.
+        let error =
+            serde_path_to_error::deserialize::<_, Stage>(serde_json::json!("a, expected `admin`"))
+                .unwrap_err();
+        assert_eq!(
+            from_serde(error.path(), &error.inner().to_string()).rule,
+            Rule::Keyed {
+                key: "in".into(),
+                params: vec![("values".into(), "lead, won, lost".into())],
+            }
+        );
+    }
+
+    #[test]
     fn lookup_follows_objects_and_arrays() {
         let input = serde_json::json!({"items": [{"sku": "a"}]});
         assert_eq!(lookup(&input, "items.0.sku"), Some(&serde_json::json!("a")));
@@ -513,7 +577,7 @@ mod tests {
     #[test]
     fn rule_error_outside_scope_renders_defaults() {
         let error = rule_error("uuid", &[]);
-        assert_eq!(error.message(), "The value field must be a valid UUID.");
+        assert_eq!(error.message(), "value must be a UUID");
         let inside = scope(|| rule_error("uuid", &[]));
         assert_eq!(
             decode(inside.message()),

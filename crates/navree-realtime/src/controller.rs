@@ -84,7 +84,7 @@ impl Controller for RealtimeController {
         .api(ApiMeta {
             summary: Some("Authorize a private or presence channel subscription".to_owned()),
             tags: vec!["realtime".to_owned()],
-            responses: vec![401, 403, 422],
+            responses: vec![400, 401, 403],
             ..ApiMeta::default()
         });
 
@@ -146,7 +146,7 @@ struct AuthRequest {
 }
 
 /// `POST /broadcasting/auth`: `{auth}` / `{auth, channel_data}`, 403 when the
-/// channel's authorizer denies (or none matches), 422 for malformed fields.
+/// channel's authorizer denies (or none matches), 400 for malformed fields.
 async fn authorize(
     realtime: &Realtime,
     ctx: &AppContext,
@@ -176,7 +176,7 @@ async fn authorize(
         if value.is_none() {
             errors.insert(
                 field.to_owned(),
-                vec![format!("The {field} field is required.")],
+                vec![format!("{field} should not be empty")],
             );
         }
         value.unwrap_or_default()

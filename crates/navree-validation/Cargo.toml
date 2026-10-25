@@ -1,6 +1,6 @@
 [package]
 name = "navree-validation"
-description = "Navree ValidationModule: Valid<T> extractors on garde, Laravel-style messages, async unique/exists rules."
+description = "Navree ValidationModule: Valid<T> extractors on garde, NestJS (class-validator) style messages, async unique/exists rules."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

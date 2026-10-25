@@ -19,7 +19,7 @@ use crate::{
     AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
 };
 
-/// The HTTP module: Axum server, default layer stack, problem+json errors,
+/// The HTTP module: Axum server, default layer stack, NestJS-format errors,
 /// controllers. Global; provides and exports [`HttpOptions`], [`HttpServer`]
 /// and [`UrlSigner`]; registers the commands `serve`, `routes`, `down` and
 /// `up`; and checks every route at boot (access declarations, duplicate
@@ -100,10 +100,10 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
             .deps(vec![ProviderKey::of::<HttpOptions>()]),
         )
         .exports::<UrlSigner>()
-        .map_error::<JsonRejection>(|r| Some(rejection(r.status(), r.body_text())))
-        .map_error::<FormRejection>(|r| Some(rejection(r.status(), r.body_text())))
-        .map_error::<QueryRejection>(|r| Some(rejection(r.status(), r.body_text())))
-        .map_error::<PathRejection>(|r| Some(rejection(r.status(), r.body_text())))
+        .map_error::<JsonRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
+        .map_error::<FormRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
+        .map_error::<QueryRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
+        .map_error::<PathRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
         .command(CommandSpec::new(
             "serve",
             "Start the HTTP server ([--addr HOST:PORT])",
@@ -124,17 +124,6 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
             "Bring the app out of maintenance mode",
             up,
         ));
-}
-
-/// An Axum extractor rejection propagated with `?`: its own status, and its
-/// message as the detail of client errors.
-fn rejection(status: http::StatusCode, text: String) -> AppError {
-    let error = AppError::from_status(status);
-    if status.is_client_error() {
-        error.with_detail(text)
-    } else {
-        error.with_source(text)
-    }
 }
 
 /// The signer for `http.signing_key`; else a key derived from the app key

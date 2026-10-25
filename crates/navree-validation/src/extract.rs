@@ -21,8 +21,10 @@ use crate::{AsyncRule, AsyncRules, Messages};
 /// Validated input: `Valid<Json<T>>`, `Valid<Query<T>>` or `Valid<Form<T>>`
 /// deserializes `T`, then runs its garde rules.
 ///
-/// Every failure is a 422 problem with field errors
-/// (`{"errors": {"email": ["The email field must be a valid email address."]}}`):
+/// Every failure is a 400 error with field errors
+/// (`{"statusCode": 400, "message": ["email must be a valid email address"],
+/// "error": "Bad Request", "errors": {"email": ["email must be a valid email
+/// address"]}}`):
 /// malformed JSON (on `body`), serde errors (at the serde path: a missing
 /// field is `required`, a wrong type is `string`, `integer`, ...) and garde
 /// rules, with messages from the app's [`Messages`].
@@ -142,8 +144,8 @@ where
 /// Validated input with database rules: like [`Valid`], then, once the
 /// garde rules pass, the [`AsyncRules`] of `T` (`unique`, `exists`) run in
 /// the request's unit of work ([`Uow`], so the app needs `DatabaseModule`).
-/// Failed rules are 422 field errors (`"The email has already been
-/// taken."`); a rule that cannot run (a bad identifier, a database error)
+/// Failed rules are 400 field errors (`"email has already been
+/// taken"`); a rule that cannot run (a bad identifier, a database error)
 /// is a 500.
 ///
 /// See the [crate example](crate) and [`AsyncRule::ignore_path_param`] for
@@ -244,7 +246,7 @@ impl RuleRequest {
         }
     }
 
-    /// Runs `rules` in the unit of work; failures are a 422.
+    /// Runs `rules` in the unit of work; failures are a 400.
     async fn check(self, rules: Vec<AsyncRule>) -> Result<(), AppError> {
         // Bad identifiers fail even when no query is needed; null values pass.
         for rule in &rules {
@@ -306,7 +308,7 @@ impl Invalid {
         Self::new(failures, None, "query")
     }
 
-    /// The 422 problem, with the app's messages.
+    /// The 400 error, with the app's messages.
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
         let messages = messages(ctx).await;
         failure::render(&self.failures, &messages, self.input.as_ref(), self.root).into_app_error()
@@ -423,7 +425,7 @@ fn is_json(headers: &HeaderMap) -> bool {
         || (essence.starts_with("application/") && essence.ends_with("+json"))
 }
 
-/// An extractor rejection as a problem.
+/// An extractor rejection as an error.
 fn rejected(status: StatusCode, text: String) -> AppError {
     let error = AppError::from_status(status);
     if status.is_client_error() {

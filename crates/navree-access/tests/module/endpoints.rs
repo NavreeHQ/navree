@@ -74,7 +74,7 @@ async fn abilities_endpoint_returns_casl_json_with_etag_and_304() {
         .get("/api/me/abilities")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
 }
 
 #[tokio::test]
@@ -88,19 +88,19 @@ async fn management_routes_need_the_roles_manage_permission() {
         .get("/api/access/roles")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     client
         .post("/api/access/roles")
         .json(&json!({ "name": "sneaky" }))
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     client
         .put(&format!("/api/access/users/{user}/roles"))
         .json(&json!({ "roles": ["writer"] }))
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]
@@ -124,13 +124,13 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .json(&json!({ "name": "support" }))
         .send()
         .await
-        .assert_problem(409, "conflict");
+        .assert_error(409, None);
     client
         .post("/api/access/roles")
         .json(&json!({ "name": "has space" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_validation_error("name");
 
     client
         .put("/api/access/roles/support/permissions")
@@ -144,7 +144,7 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .json(&json!({ "permissions": [] }))
         .send()
         .await
-        .assert_problem(404, "not_found");
+        .assert_error(404, "The role `nobody` does not exist.");
 
     client
         .put(&format!("/api/access/users/{member}/roles"))
@@ -159,8 +159,8 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .json(&json!({ "roles": ["support", "ghost"] }))
         .send()
         .await
-        .assert_problem(422, "validation_failed")
-        .assert_json_path("errors.roles.0", json!("The role `ghost` does not exist."));
+        .assert_validation_error("roles")
+        .assert_error(400, "The role `ghost` does not exist.");
 
     let service = app.get::<AccessService>().await;
     assert_eq!(
@@ -187,5 +187,5 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .delete("/api/access/roles/support")
         .send()
         .await
-        .assert_problem(404, "not_found");
+        .assert_error(404, None);
 }

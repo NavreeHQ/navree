@@ -32,7 +32,7 @@ async fn versioned_controller_mounts_under_v1() {
 
     assert_eq!(app.get("/api/v1/companies/42").await.text(), "company 42");
     assert_eq!(app.get("/api/v1/companies").await.text(), "index");
-    app.get("/api/companies/42").await.assert_problem(404);
+    app.get("/api/companies/42").await.assert_error(404);
 }
 
 #[tokio::test]
@@ -253,14 +253,13 @@ async fn signed_url_guard_in_the_pipeline() {
     let body = app
         .get(&url.replace("/verify-email/7", "/verify-email/8"))
         .await
-        .assert_problem(401);
-    assert_eq!(body["type"], "invalid_signature");
-    app.get("/verify-email/7?hash=abc")
-        .await
-        .assert_problem(401);
+        .assert_error(401);
+    assert_eq!(body["message"], "Invalid signature.");
+    assert_eq!(body["error"], "Unauthorized");
+    app.get("/verify-email/7?hash=abc").await.assert_error(401);
 
     clock.advance(std::time::Duration::from_secs(61 * 60));
-    app.get(&url).await.assert_problem(401);
+    app.get(&url).await.assert_error(401);
 }
 
 /// The app's `UrlSigner` after booting with `sources`.

@@ -1,0 +1,8 @@
+import { proxy } from "@/lib/bff";
+
+// Every other `/api/*` request goes to Navree with the access token.
+export const GET = proxy;
+export const POST = proxy;
+export const PUT = proxy;
+export const PATCH = proxy;
+export const DELETE = proxy;

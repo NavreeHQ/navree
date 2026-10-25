@@ -181,16 +181,16 @@ async fn list_requires_the_audit_read_permission() {
         .get("/api/audit")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
     app.acting_as(principal(alice))
         .get("/api/audit")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]
-async fn malformed_filters_are_422() {
+async fn malformed_filters_are_400() {
     let (app, admin, _alice, _bob) = seeded().await;
     let response = app
         .acting_as(principal(admin))
@@ -198,10 +198,15 @@ async fn malformed_filters_are_422() {
         .query(&[("actor_id", "nope"), ("kind", "other")])
         .send()
         .await
-        .assert_problem(422, "validation_failed");
-    let body = response.json_value();
-    assert!(body["errors"]["actor_id"].is_array(), "{body}");
-    assert!(body["errors"]["kind"].is_array(), "{body}");
+        .assert_validation_error("actor_id")
+        .assert_validation_error("kind");
+    assert_eq!(
+        response.json_value()["message"],
+        serde_json::json!([
+            "actor_id must be a UUID",
+            "kind must be one of the following values: data, auth, access, security, custom",
+        ])
+    );
 }
 
 #[tokio::test]

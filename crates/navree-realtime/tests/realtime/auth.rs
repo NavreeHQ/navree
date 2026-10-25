@@ -30,7 +30,8 @@ async fn auth_endpoint_signs_for_authorized_channel_and_403_otherwise() {
     assert_eq!(reply.json["auth"], signature(SOCKET, &own, None));
     let reply = server.auth(Some(stranger), SOCKET, &own).await;
     assert_eq!(reply.status, StatusCode::FORBIDDEN, "{}", reply.json);
-    assert_eq!(reply.json["status"], 403, "problem+json: {}", reply.json);
+    assert_eq!(reply.json["statusCode"], 403, "error body: {}", reply.json);
+    assert_eq!(reply.json["error"], "Forbidden", "{}", reply.json);
     assert!(reply.json.get("auth").is_none());
 
     // No authorizer matches, or the channel is public: nothing to sign.
@@ -70,21 +71,18 @@ async fn auth_endpoint_accepts_json_and_validates_fields() {
     );
 
     let reply = server.auth_json(user, json!({})).await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.json);
     assert_eq!(
-        reply.status,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "{}",
-        reply.json
-    );
-    assert!(
-        reply.json["errors"]["socket_id"].is_array(),
-        "{}",
-        reply.json
-    );
-    assert!(
-        reply.json["errors"]["channel_name"].is_array(),
-        "{}",
-        reply.json
+        reply.json,
+        json!({
+            "statusCode": 400,
+            "message": ["channel_name should not be empty", "socket_id should not be empty"],
+            "error": "Bad Request",
+            "errors": {
+                "channel_name": ["channel_name should not be empty"],
+                "socket_id": ["socket_id should not be empty"],
+            },
+        })
     );
 
     let reply = server
@@ -93,16 +91,10 @@ async fn auth_endpoint_accepts_json_and_validates_fields() {
             json!({"socket_id": "abc", "channel_name": "private-crm.deals"}),
         )
         .await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.json);
     assert_eq!(
-        reply.status,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "{}",
-        reply.json
-    );
-    assert!(
-        reply.json["errors"]["socket_id"].is_array(),
-        "{}",
-        reply.json
+        reply.json["errors"],
+        json!({"socket_id": ["socket_id must look like 1234.5678"]})
     );
 
     let reply = server
@@ -111,16 +103,10 @@ async fn auth_endpoint_accepts_json_and_validates_fields() {
             json!({"socket_id": SOCKET, "channel_name": "private-bad name"}),
         )
         .await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.json);
     assert_eq!(
-        reply.status,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "{}",
-        reply.json
-    );
-    assert!(
-        reply.json["errors"]["channel_name"].is_array(),
-        "{}",
-        reply.json
+        reply.json["errors"],
+        json!({"channel_name": ["channel_name must be a valid channel name"]})
     );
 }
 

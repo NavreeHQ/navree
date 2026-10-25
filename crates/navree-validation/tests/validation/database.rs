@@ -22,10 +22,10 @@ async fn unique_rule_rejects_existing_and_ignores_self() {
         .json(&json!({ "email": "alice@example.com" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "email": ["The email has already been taken."] })
+        &json!({ "email": ["email has already been taken"] })
     );
     app.client()
         .post("/db/users")
@@ -46,7 +46,7 @@ async fn unique_rule_rejects_existing_and_ignores_self() {
         .json(&json!({ "email": "alice@example.com" }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
 
     // The same through the API, with an explicit id to ignore.
     let db = app.get::<Db>().await;
@@ -82,10 +82,10 @@ async fn exists_rule() {
         .json(&json!({ "title": "Big deal", "company_id": Uuid::now_v7() }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "company_id": ["The selected company id is invalid."] })
+        &json!({ "company_id": ["company_id does not exist"] })
     );
 }
 
@@ -100,10 +100,10 @@ async fn garde_rules_run_before_async_rules() {
         .json(&json!({ "title": "", "company_id": Uuid::now_v7() }))
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "title": ["The title field must be at least 1 characters."] })
+        &json!({ "title": ["title must be longer than or equal to 1 characters"] })
     );
 }
 
@@ -136,7 +136,7 @@ async fn rejects_bad_identifier_in_rule() {
         .json(&json!({ "name": "Acme" }))
         .send()
         .await
-        .assert_problem(500, "internal_error");
+        .assert_error(500, "Internal server error");
     db.conn()
         .execute_unprepared("SELECT count(*) FROM companies")
         .await
@@ -162,10 +162,10 @@ async fn async_rules_on_query_and_form() {
         .query(&[("title", "x"), ("company_id", &missing)])
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "company_id": ["The selected company id is invalid."] })
+        &json!({ "company_id": ["company_id does not exist"] })
     );
 
     app.client()
@@ -179,7 +179,7 @@ async fn async_rules_on_query_and_form() {
         .form(&[("title", "x"), ("company_id", &missing)])
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
 }
 
 #[tokio::test]
@@ -191,7 +191,7 @@ async fn async_rules_without_database_module_are_a_server_error() {
         .json(&json!({ "title": "x", "company_id": Uuid::now_v7() }))
         .send()
         .await
-        .assert_problem(500, "internal_error");
+        .assert_error(500, "Internal server error");
     // No rule to run, no unit of work needed.
     app.client()
         .post("/db/deals")

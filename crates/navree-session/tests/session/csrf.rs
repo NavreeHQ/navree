@@ -1,4 +1,4 @@
-//! CSRF protection: the `XSRF-TOKEN` cookie endpoint and the 419 check on
+//! CSRF protection: the `XSRF-TOKEN` cookie endpoint and the 403 check on
 //! cookie-authenticated writes.
 
 use navree_testing::cookie::SameSite;
@@ -52,7 +52,7 @@ async fn csrf_cookie_endpoint_sets_xsrf_token() {
 }
 
 #[tokio::test]
-async fn post_with_session_without_xsrf_is_419() {
+async fn post_with_session_without_xsrf_is_403() {
     let app = support::app().await;
     let client = app.client();
     client.csrf_cookie().await;
@@ -62,15 +62,16 @@ async fn post_with_session_without_xsrf_is_419() {
         .json(&json!({}))
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
-    let body = response.json_value();
-    assert_eq!(body["title"], "CSRF token mismatch.");
-    assert!(body["request_id"].is_string(), "{body}");
+        .assert_error(403, "Invalid CSRF token");
+    assert_eq!(
+        response.json_value(),
+        json!({"statusCode": 403, "message": "Invalid CSRF token", "error": "Forbidden"})
+    );
     assert!(response.header("x-request-id").is_some());
 }
 
 #[tokio::test]
-async fn post_with_wrong_xsrf_is_419() {
+async fn post_with_wrong_xsrf_is_403() {
     let app = support::app().await;
     let client = app.client();
     let token = client.csrf_cookie().await.set_cookie(XSRF).unwrap();
@@ -89,7 +90,7 @@ async fn post_with_wrong_xsrf_is_419() {
             .header(header, value)
             .send()
             .await
-            .assert_problem(419, "csrf_token_mismatch");
+            .assert_error(403, "Invalid CSRF token");
     }
 
     // Another session's token does not fit this session.
@@ -100,7 +101,7 @@ async fn post_with_wrong_xsrf_is_419() {
         .header("x-xsrf-token", other_token.value())
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
 }
 
 #[tokio::test]
@@ -156,7 +157,7 @@ async fn every_unsafe_method_is_checked() {
             .request(method.parse().unwrap(), "/api/probe/write")
             .send()
             .await
-            .assert_problem(419, "csrf_token_mismatch");
+            .assert_error(403, "Invalid CSRF token");
     }
 }
 
@@ -176,13 +177,13 @@ async fn bearer_request_skips_csrf() {
         .header("authorization", "Basic dXNlcjpwYXNz")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     client
         .post("/api/probe/write")
         .header("authorization", "Bearer ")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
 }
 
 #[tokio::test]
@@ -235,7 +236,7 @@ async fn a_stale_session_cookie_still_needs_the_token() {
         .post("/api/probe/write")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     // The handshake replaces the stale cookie, and the write then passes.
     client.csrf_cookie().await;
     client
@@ -271,7 +272,7 @@ async fn csrf_except_path_skips() {
         .post("/api/probe/write")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
 }
 
 #[tokio::test]
@@ -284,7 +285,7 @@ async fn a_failed_check_does_not_save_the_session() {
         .json(&json!({ "key": "k", "value": 1 }))
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     assert!(response.set_cookie(COOKIE).is_none());
     let (_, value) = support::get(&client, "k").await;
     assert_eq!(value, json!(null), "the handler did not run");
@@ -314,7 +315,7 @@ async fn cross_site_browser_writes_without_a_session_are_rejected() {
         .header("origin", "https://evil.example")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     assert!(response.set_cookie(COOKIE).is_none());
 
     // An allowed front-end origin, same-site and same-origin requests,

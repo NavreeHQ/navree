@@ -1,4 +1,4 @@
-//! problem+json errors and request ids.
+//! NestJS-format errors and request ids.
 
 use std::collections::BTreeMap;
 
@@ -8,6 +8,7 @@ use axum::routing::{get, post};
 use http::{Method, Request};
 use navree_http::{AppError, ModuleBuilderHttpExt, RouteDef};
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::support::{Setup, json_request};
 
@@ -18,8 +19,15 @@ fn validation_route() -> RouteDef {
         post(|| async {
             let mut errors = BTreeMap::new();
             errors.insert(
+                "name".to_owned(),
+                vec![
+                    "name should not be empty".to_owned(),
+                    "name must be a string".to_owned(),
+                ],
+            );
+            errors.insert(
                 "email".to_owned(),
-                vec!["The email field is required.".to_owned()],
+                vec!["email must be a valid email address".to_owned()],
             );
             Err::<(), _>(AppError::validation(errors))
         }),
@@ -28,38 +36,68 @@ fn validation_route() -> RouteDef {
 }
 
 #[tokio::test]
-async fn problem_json_shape_and_content_type() {
+async fn nest_error_shape_and_content_type() {
     let app = Setup::new(vec![validation_route()]).boot().await;
 
     let response = app
         .send(Request::post("/api/validate").body(Body::empty()).unwrap())
         .await;
 
-    let body = response.assert_problem(422);
-    assert_eq!(body["type"], "validation_failed");
-    assert_eq!(body["title"], "The given data was invalid.");
+    let body = response.assert_error(400);
     assert_eq!(
-        body["errors"]["email"],
-        serde_json::json!(["The email field is required."])
-    );
-    assert!(body.get("detail").is_none(), "no detail key: {body}");
-    assert_eq!(
-        body.as_object().unwrap().len(),
-        5,
-        "no other members: {body}"
+        body,
+        json!({
+            "statusCode": 400,
+            "message": [
+                "email must be a valid email address",
+                "name should not be empty",
+                "name must be a string",
+            ],
+            "error": "Bad Request",
+            "errors": {
+                "email": ["email must be a valid email address"],
+                "name": ["name should not be empty", "name must be a string"],
+            },
+        })
     );
     let text = response.text();
-    let positions: Vec<usize> = [
-        "\"type\"",
-        "\"title\"",
-        "\"status\"",
-        "\"request_id\"",
-        "\"errors\"",
-    ]
-    .iter()
-    .map(|key| text.find(key).expect(key))
-    .collect();
-    assert!(positions.is_sorted(), "RFC 9457 member order: {text}");
+    let positions: Vec<usize> = ["\"statusCode\"", "\"message\"", "\"error\"", "\"errors\""]
+        .iter()
+        .map(|key| text.find(key).expect(key))
+        .collect();
+    assert!(positions.is_sorted(), "NestJS member order: {text}");
+}
+
+#[tokio::test]
+async fn plain_errors_carry_message_and_reason_phrase() {
+    let app = Setup::new(vec![
+        RouteDef::on(Method::GET, "/missing", || async {
+            Err::<(), _>(AppError::not_found())
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/custom", || async {
+            Err::<(), _>(AppError::not_found().with_detail("Deal not found"))
+        })
+        .public(),
+    ])
+    .boot()
+    .await;
+
+    let body = app.get("/api/missing").await.assert_error(404);
+    assert_eq!(
+        body,
+        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+    );
+    let body = app.get("/api/custom").await.assert_error(404);
+    assert_eq!(
+        body,
+        json!({"statusCode": 404, "message": "Deal not found", "error": "Not Found"})
+    );
+    let body = app.get("/api/no-such-route").await.assert_error(404);
+    assert_eq!(
+        body,
+        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+    );
 }
 
 #[tokio::test]
@@ -72,7 +110,7 @@ async fn request_id_is_generated_and_echoed() {
     let generated = response.header("x-request-id").expect("generated id");
     assert_eq!(generated.len(), 32, "a UUID v7 in simple form: {generated}");
     assert!(generated.bytes().all(|b| b.is_ascii_hexdigit()));
-    response.assert_problem(422);
+    response.assert_error(400);
 
     let response = app
         .send(
@@ -83,7 +121,7 @@ async fn request_id_is_generated_and_echoed() {
         )
         .await;
     assert_eq!(response.header("x-request-id"), Some("client-id_123"));
-    assert_eq!(response.json()["request_id"], "client-id_123");
+    response.assert_error(400);
 }
 
 #[tokio::test]
@@ -106,7 +144,7 @@ async fn forged_request_id_is_replaced() {
         let echoed = response.header("x-request-id").unwrap();
         assert_ne!(echoed, forged);
         assert_eq!(echoed.len(), 32, "replaced by a generated id");
-        response.assert_problem(422);
+        response.assert_error(400);
     }
 }
 
@@ -136,9 +174,15 @@ async fn internal_errors_hide_their_detail() {
 
     for path in ["/api/io", "/api/question-mark"] {
         let response = app.get(path).await;
-        let body = response.assert_problem(500);
-        assert_eq!(body["type"], "internal_error");
-        assert!(body.get("detail").is_none(), "detail hidden: {body}");
+        let body = response.assert_error(500);
+        assert_eq!(
+            body,
+            json!({
+                "statusCode": 500,
+                "message": "Internal server error",
+                "error": "Internal Server Error",
+            })
+        );
         assert!(!response.text().contains("secret"));
     }
 }
@@ -150,7 +194,7 @@ struct NewThing {
 }
 
 #[tokio::test]
-async fn framework_rejections_become_problem_json() {
+async fn framework_rejections_become_nest_errors() {
     let app = Setup::new(vec![
         RouteDef::new(
             Method::POST,
@@ -162,7 +206,7 @@ async fn framework_rejections_become_problem_json() {
     .boot()
     .await;
 
-    // Missing field: axum's JSON rejection (422, text/plain) is normalised.
+    // Missing field: axum's JSON rejection (422, text/plain) becomes a 400.
     let response = app
         .send(json_request(
             "POST",
@@ -170,15 +214,35 @@ async fn framework_rejections_become_problem_json() {
             serde_json::json!({"other": 1}),
         ))
         .await;
-    let body = response.assert_problem(422);
+    let body = response.assert_error(400);
+    assert_eq!(body["error"], "Bad Request");
     assert!(
-        body["detail"].as_str().unwrap().contains("name"),
-        "detail explains the rejection: {body}"
+        body["message"].as_str().unwrap().contains("name"),
+        "the message explains the rejection: {body}"
     );
+
+    // Malformed JSON: 400.
+    let response = app
+        .send(
+            Request::post("/api/things")
+                .header("content-type", "application/json")
+                .body(Body::from("{not json"))
+                .unwrap(),
+        )
+        .await;
+    response.assert_error(400);
+
+    // No JSON content type: 415.
+    let response = app
+        .send(Request::post("/api/things").body(Body::from("x")).unwrap())
+        .await;
+    let body = response.assert_error(415);
+    assert_eq!(body["error"], "Unsupported Media Type");
 
     // Wrong method: 405 keeps its Allow header.
     let response = app.get("/api/things").await;
-    response.assert_problem(405);
+    let body = response.assert_error(405);
+    assert_eq!(body["error"], "Method Not Allowed");
     assert!(response.header("allow").unwrap().contains("POST"));
 }
 
@@ -213,8 +277,11 @@ async fn contributed_error_mapper_maps_typed_errors() {
     let response = app
         .send(Request::post("/api/dup").body(Body::empty()).unwrap())
         .await;
-    let body = response.assert_problem(409);
-    assert_eq!(body["detail"], "The record already exists.");
+    let body = response.assert_error(409);
+    assert_eq!(
+        body,
+        json!({"statusCode": 409, "message": "The record already exists.", "error": "Conflict"})
+    );
 }
 
 #[tokio::test]
@@ -245,6 +312,7 @@ async fn rejections_propagated_with_question_mark_keep_their_status() {
     .boot()
     .await;
 
+    // axum's 422 JSON data rejection is a 400, like every input error.
     let response = app
         .send(json_request(
             "POST",
@@ -252,12 +320,9 @@ async fn rejections_propagated_with_question_mark_keep_their_status() {
             serde_json::json!({"x": 1}),
         ))
         .await;
-    let body = response.assert_problem(422);
-    assert!(body["detail"].as_str().unwrap().contains("name"), "{body}");
+    let body = response.assert_error(400);
+    assert!(body["message"].as_str().unwrap().contains("name"), "{body}");
 
-    let body = app
-        .get("/api/things/not-a-number")
-        .await
-        .assert_problem(400);
-    assert!(body["detail"].is_string(), "{body}");
+    let body = app.get("/api/things/not-a-number").await.assert_error(400);
+    assert!(body["message"].is_string(), "{body}");
 }

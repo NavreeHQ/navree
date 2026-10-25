@@ -12,9 +12,11 @@
 //! - Routes describe themselves with [`ApiMeta`](navree_http::ApiMeta)
 //!   (`#[api(...)]` in controllers): request and response schemas come from
 //!   [`navree_http::schema_fn`], and the schemas they reference become
-//!   component schemas. Error statuses render as problem+json responses with
-//!   the [`Problem`] schema; non-public routes carry the `cookie` (session)
-//!   and `bearer` (token) security schemes. See [`openapi_document`] for the
+//!   component schemas. Error statuses render as `application/json`
+//!   responses with the [`HttpError`] schema (the NestJS error format:
+//!   `statusCode`, `message`, `error`, and `errors` for validation errors);
+//!   non-public routes carry the `cookie` (session)
+//!   and `bearer` (JWT access token) security schemes. See [`openapi_document`] for the
 //!   full mapping.
 //! - Documentation mistakes stop the boot: two different schemas with one
 //!   name ([`ApiError::SchemaConflict`]) or a reference to a schema nothing
@@ -51,7 +53,9 @@ mod module;
 mod options;
 mod resource;
 
-pub use document::{ApiError, DEFAULT_SESSION_COOKIE, Problem, openapi_document};
+pub use document::{
+    ApiError, DEFAULT_SESSION_COOKIE, HttpError, HttpErrorMessage, openapi_document,
+};
 pub use ext::ModuleBuilderApiExt;
 pub use module::{ApiDocs, ApiModule};
 pub use options::ApiOptions;

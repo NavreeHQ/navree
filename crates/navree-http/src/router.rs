@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::controller::ControllerRegistration;
 use crate::limiter::RateLimiter;
-use crate::pipeline::{self, ContextState, ProblemState, TimeoutOverride, X_REQUEST_ID};
+use crate::pipeline::{self, ContextState, ErrorState, TimeoutOverride, X_REQUEST_ID};
 use crate::{
     AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
     HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
@@ -86,8 +86,8 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         .map(|c| (*c.value).clone())
         .collect();
     router = router.layer(from_fn_with_state(
-        Arc::new(ProblemState { mappers }),
-        pipeline::problems,
+        Arc::new(ErrorState { mappers }),
+        pipeline::errors,
     ));
     if options.compression {
         router = router.layer(CompressionLayer::new());

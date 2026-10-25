@@ -89,10 +89,10 @@ pub struct StoredFile {
 /// otherwise) when it is UTF-8 text, else `application/octet-stream`; so an
 /// SVG or other markup is never accepted as an image.
 ///
-/// Errors (as problem+json):
-/// - 422 `validation_failed`, keyed by the field name, for an empty file or
+/// Errors (in the NestJS error format):
+/// - 400 validation errors, keyed by the field name, for an empty file or
 ///   a type `rules` does not allow (nothing is written);
-/// - 413 `payload_too_large` for a file over `rules.max_bytes`, detected
+/// - 413 for a file over `rules.max_bytes`, detected
 ///   while streaming (the partial file is discarded) or a request body over
 ///   the route's body limit;
 /// - 400 for a malformed multipart body, 500 for a storage failure.
@@ -106,7 +106,7 @@ pub struct StoredFile {
 ///     let field = form
 ///         .next_field()
 ///         .await?
-///         .ok_or_else(|| AppError::bad_request("The avatar is missing."))?;
+///         .ok_or_else(|| AppError::bad_request("avatar should not be empty"))?;
 ///     let rules = UploadRules::new(2 * 1024 * 1024, ["image/png", "image/jpeg"]);
 ///     Ok(Json(store_upload(field, disk, "avatars", rules).await?))
 /// }
@@ -122,7 +122,7 @@ pub async fn store_upload(
     let dir = normalize(dir, true).map_err(AppError::internal)?;
     let too_large = || {
         AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE).with_detail(format!(
-            "The {field_name} must not be larger than {} bytes.",
+            "{field_name} must not be larger than {} bytes",
             rules.max_bytes
         ))
     };
@@ -145,7 +145,7 @@ pub async fn store_upload(
     if head.is_empty() {
         return Err(invalid(
             &field_name,
-            format!("The {field_name} must not be empty."),
+            format!("{field_name} should not be empty"),
         ));
     }
     let sniffed = sniff(&head, original_name.as_deref());
@@ -153,7 +153,7 @@ pub async fn store_upload(
         return Err(invalid(
             &field_name,
             format!(
-                "The {field_name} must be a file of type: {}.",
+                "{field_name} must be a file of type: {}",
                 rules.allowed_mime.join(", ")
             ),
         ));
@@ -284,13 +284,13 @@ fn limited<'a>(
     )
 }
 
-/// A 422 with one message for `field`.
+/// A 400 with one message for `field`.
 fn invalid(field: &str, message: String) -> AppError {
     AppError::validation(BTreeMap::from([(field.to_owned(), vec![message])]))
 }
 
 /// A multipart parsing failure: its own status (400, 413, ...), and its
-/// message as the detail of client errors.
+/// message as the error message of client errors.
 fn multipart_error(error: MultipartError) -> AppError {
     match client_error(&error) {
         Some(app_error) => app_error,
