@@ -1,0 +1,50 @@
+//! Request and response bodies of `/api/v1/profile`.
+
+use garde::Validate;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use super::entity::Model;
+
+/// The time zone of users who have not chosen one.
+pub const DEFAULT_TIMEZONE: &str = "UTC";
+
+/// The body of `PUT /api/v1/profile`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateProfile {
+    /// At most 1000 characters.
+    #[garde(length(max = 1000))]
+    pub bio: Option<String>,
+    /// 1 to 64 characters, e.g. `Europe/Paris`.
+    #[garde(length(min = 1, max = 64))]
+    pub timezone: Option<String>,
+}
+
+/// A profile as the API returns it.
+#[derive(Debug, Serialize)]
+pub struct ProfileResponse {
+    pub user_id: Uuid,
+    pub bio: Option<String>,
+    pub timezone: String,
+}
+
+impl ProfileResponse {
+    /// The profile of a user who has not saved one yet.
+    pub fn empty(user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            bio: None,
+            timezone: DEFAULT_TIMEZONE.to_owned(),
+        }
+    }
+}
+
+impl From<Model> for ProfileResponse {
+    fn from(profile: Model) -> Self {
+        Self {
+            user_id: profile.user_id,
+            bio: profile.bio,
+            timezone: profile.timezone,
+        }
+    }
+}

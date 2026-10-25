@@ -1,0 +1,34 @@
+//! Request bodies of the {{ module_words }} API, with their validation rules
+//! (checked by the `Valid` extractor before the handler runs).
+
+use garde::Validate;
+use serde::Deserialize;
+
+/// The body of `POST /api/v1/{{ route }}`.
+#[derive(Debug, Deserialize, Validate)]
+pub struct Create{{ entity_pascal }} {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: String,
+}
+{% if crud %}
+
+/// The body of `PATCH /api/v1/{{ route }}/{id}`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct Update{{ entity_pascal }} {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: Option<String>,
+}
+
+impl Update{{ entity_pascal }} {
+    /// The fields this update changes, for field-level ability checks.
+    pub fn changed_fields(&self) -> Vec<&'static str> {
+        let mut fields = Vec::new();
+        if self.name.is_some() {
+            fields.push("name");
+        }
+        fields
+    }
+}
+{% endif %}

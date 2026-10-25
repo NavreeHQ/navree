@@ -152,16 +152,20 @@ async fn upload_rejects_wrong_mime_and_too_large() {
             ),
         )
         .await;
-        assert_eq!(status, 422, "{body}");
-        assert_eq!(body["type"], "validation_failed");
+        assert_eq!(status, 400, "{body}");
         assert_eq!(
-            body["errors"]["avatar"][0],
-            "The avatar must be a file of type: image/png, image/jpeg."
+            body,
+            serde_json::json!({
+                "statusCode": 400,
+                "message": ["avatar must be a file of type: image/png, image/jpeg"],
+                "error": "Bad Request",
+                "errors": {"avatar": ["avatar must be a file of type: image/png, image/jpeg"]},
+            })
         );
 
         // An executable claiming to be a JPEG.
         let (status, body) = send(&router, multipart("avatar", "cat.jpg", "image/jpeg", EXE)).await;
-        assert_eq!(status, 422, "{body}");
+        assert_eq!(status, 400, "{body}");
 
         // A real PNG over the limit, detected while streaming.
         let (status, body) = send(
@@ -170,10 +174,13 @@ async fn upload_rejects_wrong_mime_and_too_large() {
         )
         .await;
         assert_eq!(status, 413, "{body}");
-        assert_eq!(body["type"], "payload_too_large");
         assert_eq!(
-            body["detail"],
-            "The avatar must not be larger than 16384 bytes."
+            body,
+            serde_json::json!({
+                "statusCode": 413,
+                "message": "avatar must not be larger than 16384 bytes",
+                "error": "Payload Too Large",
+            })
         );
         let (status, _) = send(
             &router,
@@ -290,8 +297,8 @@ async fn wildcard_types_and_empty_files() {
     assert_eq!(status, 200, "{body}");
 
     let (status, body) = send(&router, multipart("photo", "a.png", "image/png", b"")).await;
-    assert_eq!(status, 422, "{body}");
-    assert_eq!(body["errors"]["photo"][0], "The photo must not be empty.");
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(body["errors"]["photo"][0], "photo should not be empty");
 }
 
 #[test]

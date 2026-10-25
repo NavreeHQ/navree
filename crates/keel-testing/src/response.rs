@@ -146,15 +146,16 @@ impl TestResponse {
         );
     }
 
-    /// Asserts an RFC 9457 problem response: `status`, content type
-    /// `application/problem+json`, a matching `status` member, a `title`,
-    /// a `request_id` equal to the `X-Request-Id` header and, when `code` is
-    /// given, the problem `type` (e.g. `"validation_failed"`).
+    /// Asserts a NestJS-format error response: `status`, content type
+    /// `application/json`, a body `{"statusCode", "message", "error"}` with a
+    /// matching `statusCode`, an `X-Request-Id` header and, when `message`
+    /// is given, that message (`message` is a string, or for validation
+    /// errors a list that must contain it).
     ///
     /// ```no_run
     /// # fn demo(response: keel_testing::TestResponse) {
-    /// response.clone().assert_problem(422, "validation_failed");
-    /// response.assert_problem(404, None);
+    /// response.clone().assert_error(404, "Not Found");
+    /// response.assert_error(404, None);
     /// # }
     /// ```
     ///
@@ -162,37 +163,36 @@ impl TestResponse {
     ///
     /// When any of those does not hold (the message shows the body).
     #[track_caller]
-    pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
+    pub fn assert_error<'a>(self, status: u16, message: impl Into<Option<&'a str>>) -> Self {
         let this = self.assert_status(status);
         let content_type = this.header(CONTENT_TYPE.as_str()).unwrap_or("<none>");
-        if content_type != keel_http::PROBLEM_JSON {
+        if content_type != keel_http::ERROR_CONTENT_TYPE {
             panic!(
                 "expected content type {}, got {content_type}\n{}",
-                keel_http::PROBLEM_JSON,
+                keel_http::ERROR_CONTENT_TYPE,
                 this.describe()
             );
         }
         let body = this.json_value();
-        let request_id = this.header("x-request-id");
-        let problem = if body["status"] != status {
+        let problem = if body["statusCode"] != status {
             Some(format!(
-                "expected problem status {status}, got {}",
-                compact(&body["status"])
+                "expected statusCode {status}, got {}",
+                compact(&body["statusCode"])
             ))
-        } else if !body["title"].is_string() {
-            Some("the problem has no `title`".to_owned())
-        } else if request_id.is_none() || body["request_id"].as_str() != request_id {
-            Some(format!(
-                "the problem's request_id {} does not match the X-Request-Id header {request_id:?}",
-                compact(&body["request_id"])
-            ))
+        } else if !body["error"].is_string() {
+            Some("the error body has no `error` reason phrase".to_owned())
+        } else if !is_message(&body["message"]) {
+            Some("the error body has no `message` (a string or a list of strings)".to_owned())
+        } else if this.header("x-request-id").is_none() {
+            Some("the response has no X-Request-Id header".to_owned())
         } else {
-            code.into()
-                .filter(|code| body["type"] != *code)
-                .map(|code| {
+            message
+                .into()
+                .filter(|expected| !has_message(&body["message"], expected))
+                .map(|expected| {
                     format!(
-                        "expected problem type \"{code}\", got {}",
-                        compact(&body["type"])
+                        "expected message \"{expected}\", got {}",
+                        compact(&body["message"])
                     )
                 })
         };
@@ -200,6 +200,54 @@ impl TestResponse {
             panic!("{problem}\n{}", this.describe());
         }
         this
+    }
+
+    /// Asserts a 400 validation error (see [`assert_error`](Self::assert_error))
+    /// with at least one message for `field` (a dotted path) in `errors`.
+    ///
+    /// ```no_run
+    /// # fn demo(response: keel_testing::TestResponse) {
+    /// response
+    ///     .assert_validation_error("email")
+    ///     .assert_error(400, "email must be a valid email address");
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// When the response is not a 400 error or has no message for `field`
+    /// (the message shows the body).
+    #[track_caller]
+    pub fn assert_validation_error(self, field: &str) -> Self {
+        let this = self.assert_error(400, None);
+        let body = this.json_value();
+        let messages = body["errors"].get(field).and_then(Value::as_array);
+        if !messages.is_some_and(|messages| !messages.is_empty()) {
+            panic!(
+                "no validation error for `{field}`; errors: {}\n{}",
+                compact(&body["errors"]),
+                this.describe()
+            );
+        }
+        this
+    }
+
+    /// The former RFC 9457 assertion, kept for existing tests: asserts an
+    /// error response with `status` like
+    /// [`assert_error(status, None)`](Self::assert_error). Error bodies no
+    /// longer carry a machine-readable code, so `code` is ignored.
+    ///
+    /// # Panics
+    ///
+    /// Like [`assert_error`](Self::assert_error).
+    #[deprecated(
+        since = "0.1.0",
+        note = "errors use the NestJS format; use `assert_error(status, message)`"
+    )]
+    #[track_caller]
+    pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
+        let _ignored = code.into();
+        self.assert_error(status, None)
     }
 
     /// The status and the (possibly shortened) body, for failure messages.
@@ -233,6 +281,24 @@ fn lookup<'v>(root: &'v Value, path: &str) -> Result<&'v Value, String> {
         node = next.ok_or_else(|| walked.join("."))?;
     }
     Ok(node)
+}
+
+/// A NestJS `message`: a string, or a list of strings.
+fn is_message(message: &Value) -> bool {
+    match message {
+        Value::String(_) => true,
+        Value::Array(items) => items.iter().all(Value::is_string),
+        _ => false,
+    }
+}
+
+/// Whether `message` is `expected`, or a list containing it.
+fn has_message(message: &Value, expected: &str) -> bool {
+    match message {
+        Value::String(message) => message == expected,
+        Value::Array(items) => items.iter().any(|item| item == expected),
+        _ => false,
+    }
 }
 
 /// `value` as compact JSON.

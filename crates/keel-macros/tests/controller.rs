@@ -569,7 +569,7 @@ mod documented {
             tag = "Deals",
             request = CreateDeal,
             response = DealDto,
-            responses(404, 422),
+            responses(400, 404),
             status = 201,
         )]
         async fn store(&self) -> http::StatusCode {
@@ -615,7 +615,7 @@ async fn api_meta_populated() {
         Some("Creates a deal in the first stage.")
     );
     assert_eq!(store.tags, ["Deals"]);
-    assert_eq!(store.responses, [404, 422]);
+    assert_eq!(store.responses, [400, 404]);
     assert_eq!(store.success_status, 201);
     let (request_name, request_schema) = store.request.expect("request schema")();
     assert_eq!(request_name, "CreateDeal");

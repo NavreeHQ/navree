@@ -110,44 +110,126 @@ async fn json_deserializes_typed_bodies() {
 }
 
 #[tokio::test]
-async fn assert_problem_checks_status_type_and_request_id() {
+async fn assert_error_checks_status_message_and_shape() {
     let app = TestApp::builder().module(DemoModule).build().await;
     let response = app
         .client()
         .get("/api/nowhere")
         .send()
         .await
-        .assert_problem(404, "not_found");
+        .assert_error(404, "Not Found");
     assert!(response.header("x-request-id").is_some());
 
     let response = app.client().get("/api/nowhere").send().await;
-    response.clone().assert_problem(404, None);
+    response.clone().assert_error(404, None);
 
-    let wrong_code = panic_message(|| {
-        response.clone().assert_problem(404, "forbidden");
+    let wrong_message = panic_message(|| {
+        response.clone().assert_error(404, "Deal not found");
     });
     assert!(
-        wrong_code.contains(r#"expected problem type "forbidden""#)
-            && wrong_code.contains("not_found"),
-        "{wrong_code}"
+        wrong_message.contains(r#"expected message "Deal not found""#)
+            && wrong_message.contains(r#""message":"Not Found""#),
+        "{wrong_message}"
     );
 
-    let not_a_problem = panic_message(|| {
-        plain_json_response().assert_problem(200, None);
+    let wrong_status = panic_message(|| {
+        response.clone().assert_error(403, None);
     });
     assert!(
-        not_a_problem.contains("application/problem+json"),
-        "{not_a_problem}"
+        wrong_status.contains("expected status 403"),
+        "{wrong_status}"
+    );
+
+    let not_an_error = panic_message(|| {
+        plain_json_response().assert_error(200, None);
+    });
+    assert!(not_an_error.contains("statusCode"), "{not_an_error}");
+
+    let wrong_type = panic_message(|| {
+        TestResponse::from_parts(
+            http::StatusCode::NOT_FOUND,
+            http::HeaderMap::new(),
+            r#"{"statusCode":404,"message":"Not Found","error":"Not Found"}"#.into(),
+        )
+        .assert_error(404, None);
+    });
+    assert!(wrong_type.contains("application/json"), "{wrong_type}");
+}
+
+#[tokio::test]
+async fn assert_error_matches_one_of_several_messages() {
+    let app = TestApp::builder().module(DemoModule).build().await;
+    let response = app.client().post("/api/demo/invalid").send().await;
+    response
+        .clone()
+        .assert_error(400, "name should not be empty")
+        .assert_error(400, "email must be a valid email address");
+
+    let missing = panic_message(|| {
+        response.clone().assert_error(400, "phone is required");
+    });
+    assert!(
+        missing.contains(r#"expected message "phone is required""#),
+        "{missing}"
     );
 }
 
-/// A plain JSON (not problem+json) response.
-fn plain_json_response() -> TestResponse {
+#[tokio::test]
+async fn assert_validation_error_checks_400_and_the_field() {
+    let app = TestApp::builder().module(DemoModule).build().await;
+    let response = app.client().post("/api/demo/invalid").send().await;
+    response
+        .clone()
+        .assert_validation_error("email")
+        .assert_validation_error("name");
+
+    let missing = panic_message(|| {
+        response.clone().assert_validation_error("phone");
+    });
+    assert!(
+        missing.contains("no validation error for `phone`") && missing.contains("email"),
+        "{missing}"
+    );
+
+    let not_validation = panic_message(|| {
+        not_found_response().assert_validation_error("email");
+    });
+    assert!(
+        not_validation.contains("expected status 400"),
+        "{not_validation}"
+    );
+}
+
+#[tokio::test]
+#[allow(deprecated)]
+async fn assert_problem_is_a_deprecated_alias_of_assert_error() {
+    let app = TestApp::builder().module(DemoModule).build().await;
+    app.client()
+        .get("/api/nowhere")
+        .send()
+        .await
+        .assert_problem(404, "not_found")
+        .assert_problem(404, None);
+}
+
+/// A 404 error response like the one an app returns for unknown paths.
+fn not_found_response() -> TestResponse {
+    let mut headers = http::HeaderMap::new();
+    headers.insert("content-type", "application/json".parse().unwrap());
+    headers.insert("x-request-id", "abc".parse().unwrap());
     TestResponse::from_parts(
-        http::StatusCode::OK,
-        http::HeaderMap::new(),
-        r#"{"ok":true}"#.into(),
+        http::StatusCode::NOT_FOUND,
+        headers,
+        r#"{"statusCode":404,"message":"Not Found","error":"Not Found"}"#.into(),
     )
+}
+
+/// A plain JSON (not an error) response.
+fn plain_json_response() -> TestResponse {
+    let mut headers = http::HeaderMap::new();
+    headers.insert("content-type", "application/json".parse().unwrap());
+    headers.insert("x-request-id", "abc".parse().unwrap());
+    TestResponse::from_parts(http::StatusCode::OK, headers, r#"{"ok":true}"#.into())
 }
 
 #[tokio::test]

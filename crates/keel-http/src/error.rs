@@ -1,4 +1,4 @@
-//! [`AppError`]: every HTTP error, rendered as RFC 9457 problem+json.
+//! [`AppError`]: every HTTP error, rendered in the NestJS error format.
 
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
@@ -14,39 +14,56 @@ use keel_kernel::BoxError;
 use serde::Serialize;
 
 /// The content type of every error response.
-pub const PROBLEM_JSON: &str = "application/problem+json";
+pub const ERROR_CONTENT_TYPE: &str = "application/json";
+
+/// The default message of a 500: internals never reach the client.
+const INTERNAL_MESSAGE: &str = "Internal server error";
 
 /// The result type of handlers: `Result<T>` fails with an [`AppError`].
 pub type Result<T, E = AppError> = std::result::Result<T, E>;
 
 /// An HTTP error. Handlers, extractors, guards and layers return it; it
-/// renders as an RFC 9457 problem+json body:
+/// renders in the NestJS error format, as `application/json`:
 ///
 /// ```json
-/// {"type": "validation_failed", "title": "The given data was invalid.", "status": 422,
-///  "request_id": "0192...", "errors": {"email": ["The email field is required."]}}
+/// {"statusCode": 404, "message": "Deal not found", "error": "Not Found"}
 /// ```
 ///
-/// `type` is the machine-readable [`code`](AppError::code) (a relative URI
-/// reference), `detail` and `errors` are omitted when empty, and `request_id`
-/// is filled in by the request pipeline. Any error type converts into a 500
-/// with `?` (its message is logged, never sent); modules turn their own error
-/// types into specific statuses with
-/// [`ModuleBuilderHttpExt::map_error`](crate::ModuleBuilderHttpExt::map_error).
+/// - `statusCode` is the HTTP status.
+/// - `message` is the [`detail`](AppError::detail) when there is one, else
+///   the [`title`](AppError::title) (the reason phrase by default, and
+///   `"Internal server error"` for 500s). For validation errors it is every
+///   field message, flattened in field order.
+/// - `error` is the reason phrase of the status (`"Not Found"`).
+/// - `errors` (validation errors only) maps fields to their messages:
+///
+/// ```json
+/// {"statusCode": 400, "message": ["email must be a valid email address"],
+///  "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}
+/// ```
+///
+/// The request id is in the `X-Request-Id` response header, not the body.
+/// Any error type converts into a 500 with `?` (its message is logged,
+/// never sent); modules turn their own error types into specific statuses
+/// with [`ModuleBuilderHttpExt::map_error`](crate::ModuleBuilderHttpExt::map_error).
 ///
 /// `AppError` deliberately does not implement `std::error::Error`, which is
 /// what makes the blanket `From<E: Into<BoxError>>` conversion possible.
 pub struct AppError {
     /// The HTTP status.
     pub status: StatusCode,
-    /// A short machine-readable code, rendered as the problem `type`.
+    /// A short machine-readable code (`"not_found"`, `"validation_failed"`)
+    /// for logs, tests and error mappers; not rendered.
     pub code: String,
-    /// A short human-readable summary.
+    /// The default message, rendered as `message` when there is no
+    /// [`detail`](AppError::detail): the reason phrase for statuses built
+    /// with [`from_status`](AppError::from_status).
     pub title: String,
-    /// A human-readable explanation of this occurrence (sent to the client).
+    /// A human-readable explanation of this occurrence, rendered as
+    /// `message`.
     pub detail: Option<String>,
-    /// Field errors (`{"field.path": ["message"]}`), for 422 responses.
-    /// Boxed, like `headers`, to keep `Result<T, AppError>` small.
+    /// Field errors (`{"field.path": ["message"]}`), for 400 validation
+    /// responses. Boxed, like `headers`, to keep `Result<T, AppError>` small.
     pub errors: Option<Box<BTreeMap<String, Vec<String>>>>,
     /// Extra response headers (`Retry-After`, `WWW-Authenticate`, ...).
     pub headers: Box<HeaderMap>,
@@ -55,7 +72,8 @@ pub struct AppError {
 }
 
 impl AppError {
-    /// An error with an explicit status, code and title.
+    /// An error with an explicit status, code and title (the default
+    /// message).
     pub fn new(status: StatusCode, code: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             status,
@@ -68,32 +86,18 @@ impl AppError {
         }
     }
 
-    /// The default error for `status` (code and title derived from it).
+    /// The default error for `status`: its reason phrase as the title, and
+    /// a code derived from it.
     pub fn from_status(status: StatusCode) -> Self {
-        let (code, title) = match status.as_u16() {
-            400 => ("bad_request", "Bad Request"),
-            401 => ("unauthenticated", "Unauthenticated."),
-            403 => ("forbidden", "This action is unauthorized."),
-            404 => ("not_found", "Not Found"),
-            405 => ("method_not_allowed", "Method Not Allowed"),
-            408 => ("request_timeout", "Request Timeout"),
-            409 => ("conflict", "Conflict"),
-            413 => ("payload_too_large", "Payload Too Large"),
-            415 => ("unsupported_media_type", "Unsupported Media Type"),
-            419 => ("csrf_token_mismatch", "CSRF token mismatch."),
-            422 => ("validation_failed", "The given data was invalid."),
-            429 => ("too_many_requests", "Too Many Attempts."),
-            500 => ("internal_error", "Server Error"),
-            503 => ("service_unavailable", "Service Unavailable"),
-            _ => {
-                let title = status.canonical_reason().unwrap_or("Error");
-                return Self::new(status, slug(title), title);
-            }
-        };
-        Self::new(status, code, title)
+        let reason = status.canonical_reason().unwrap_or("Error");
+        match status.as_u16() {
+            401 => Self::new(status, "unauthenticated", reason),
+            500 => Self::new(status, "internal_error", INTERNAL_MESSAGE),
+            _ => Self::new(status, slug(reason), reason),
+        }
     }
 
-    /// 400 with a detail message.
+    /// 400 with a message.
     pub fn bad_request(detail: impl Into<String>) -> Self {
         Self::from_status(StatusCode::BAD_REQUEST).with_detail(detail)
     }
@@ -113,19 +117,25 @@ impl AppError {
         Self::from_status(StatusCode::NOT_FOUND)
     }
 
-    /// 409 with a detail message.
+    /// 409 with a message.
     pub fn conflict(detail: impl Into<String>) -> Self {
         Self::from_status(StatusCode::CONFLICT).with_detail(detail)
     }
 
-    /// 419: the CSRF token is missing or does not match the session.
+    /// 403 `"Invalid CSRF token"`: the CSRF token is missing or does not
+    /// match the session.
     pub fn csrf_mismatch() -> Self {
-        Self::from_status(csrf_status())
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "csrf_token_mismatch",
+            "Invalid CSRF token",
+        )
     }
 
-    /// 422 with field errors (`{"field.path": ["message"]}`).
+    /// 400 with field errors (`{"field.path": ["message"]}`): `message` is
+    /// every field message, flattened in field order, and `errors` the map.
     pub fn validation(errors: BTreeMap<String, Vec<String>>) -> Self {
-        let mut error = Self::from_status(StatusCode::UNPROCESSABLE_ENTITY);
+        let mut error = Self::new(StatusCode::BAD_REQUEST, "validation_failed", "Bad Request");
         error.errors = Some(Box::new(errors));
         error
     }
@@ -143,19 +153,20 @@ impl AppError {
             .with_header(RETRY_AFTER, HeaderValue::from(secs))
     }
 
-    /// 503 with a detail message.
+    /// 503 with a message.
     pub fn service_unavailable(detail: impl Into<String>) -> Self {
         Self::from_status(StatusCode::SERVICE_UNAVAILABLE).with_detail(detail)
     }
 
-    /// 500 caused by `err`. The client sees no detail; the error is logged.
+    /// 500 caused by `err`. The client sees `"Internal server error"`; the
+    /// error is logged.
     pub fn internal(err: impl Into<BoxError>) -> Self {
         let mut error = Self::from_status(StatusCode::INTERNAL_SERVER_ERROR);
         error.source = Some(err.into());
         error
     }
 
-    /// Sets the detail message.
+    /// Sets the message.
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
@@ -173,39 +184,63 @@ impl AppError {
         self
     }
 
-    /// The problem+json body, with `request_id` when known.
-    pub fn problem(&self, request_id: Option<&str>) -> serde_json::Value {
-        serde_json::to_value(self.body(request_id)).unwrap_or_default()
+    /// The response body:
+    /// `{"statusCode", "message", "error"}`, plus `"errors"` for validation
+    /// errors.
+    pub fn body(&self) -> serde_json::Value {
+        serde_json::to_value(self.wire()).unwrap_or_default()
     }
 
-    fn body<'a>(&'a self, request_id: Option<&'a str>) -> ProblemBody<'a> {
-        ProblemBody {
-            kind: if self.code.is_empty() {
-                "about:blank"
-            } else {
-                &self.code
-            },
-            title: &self.title,
-            status: self.status.as_u16(),
-            detail: self.detail.as_deref(),
-            request_id,
-            errors: self.errors.as_deref(),
+    fn wire(&self) -> ErrorBody<'_> {
+        let errors = self.errors.as_deref();
+        let message = match errors {
+            Some(errors) if !errors.is_empty() => {
+                Message::Many(errors.values().flatten().map(String::as_str).collect())
+            }
+            _ => Message::One(self.detail.as_deref().unwrap_or(&self.title)),
+        };
+        ErrorBody {
+            status_code: self.status.as_u16(),
+            message,
+            error: self.status.canonical_reason().unwrap_or(&self.title),
+            errors,
         }
     }
 
-    /// Renders the response. `request_id` goes into the body; the pipeline
-    /// sets the `X-Request-Id` header itself.
-    pub(crate) fn render(&self, request_id: Option<&str>) -> Response {
-        let body = serde_json::to_vec(&self.body(request_id)).unwrap_or_default();
+    /// Renders the response (the pipeline sets `X-Request-Id` itself).
+    pub(crate) fn render(&self) -> Response {
+        let body = serde_json::to_vec(&self.wire()).unwrap_or_default();
         let mut response = Response::new(Body::from(body));
         *response.status_mut() = self.status;
         let headers = response.headers_mut();
         for (name, value) in self.headers.iter() {
             headers.insert(name, value.clone());
         }
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static(PROBLEM_JSON));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static(ERROR_CONTENT_TYPE));
         headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
         response
+    }
+
+    /// An Axum extractor rejection (or a plain-text error response) with
+    /// `status` and `text`: a client error shows `text` as its message, a
+    /// server error logs it. Axum's 422 (well-formed JSON of the wrong
+    /// shape) is a 400, like every other input error.
+    pub(crate) fn rejection(status: StatusCode, text: impl Into<String>) -> Self {
+        let status = if status == StatusCode::UNPROCESSABLE_ENTITY {
+            StatusCode::BAD_REQUEST
+        } else {
+            status
+        };
+        let error = Self::from_status(status);
+        let text = text.into();
+        let text = text.trim();
+        if text.is_empty() {
+            error
+        } else if status.is_client_error() {
+            error.with_detail(text)
+        } else {
+            error.with_source(text.to_owned())
+        }
     }
 
     /// The error and its source chain, for logs.
@@ -228,11 +263,6 @@ impl AppError {
     }
 }
 
-/// The 419 status Laravel uses for CSRF failures.
-fn csrf_status() -> StatusCode {
-    StatusCode::from_u16(419).unwrap_or(StatusCode::FORBIDDEN)
-}
-
 /// `Retry-After` in whole seconds, rounded up, at least 1.
 pub(crate) fn retry_after_secs(d: Duration) -> u64 {
     let secs = d.as_secs() + u64::from(d.subsec_nanos() > 0);
@@ -253,17 +283,23 @@ fn slug(title: &str) -> String {
         .collect()
 }
 
+/// The wire format, in NestJS member order.
 #[derive(Serialize)]
-struct ProblemBody<'a> {
-    #[serde(rename = "type")]
-    kind: &'a str,
-    title: &'a str,
-    status: u16,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    detail: Option<&'a str>,
-    request_id: Option<&'a str>,
+#[serde(rename_all = "camelCase")]
+struct ErrorBody<'a> {
+    status_code: u16,
+    message: Message<'a>,
+    error: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     errors: Option<&'a BTreeMap<String, Vec<String>>>,
+}
+
+/// `message`: one string, or every validation message.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Message<'a> {
+    One(&'a str),
+    Many(Vec<&'a str>),
 }
 
 impl fmt::Debug for AppError {
@@ -297,23 +333,23 @@ impl<E: Into<BoxError>> From<E> for AppError {
 }
 
 /// The rendered response carries the error itself, so the pipeline can map
-/// it, log it and add the request id.
+/// and log it.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let mut response = self.render(None);
+        let mut response = self.render();
         response
             .extensions_mut()
-            .insert(PendingProblem(Arc::new(Mutex::new(Some(self)))));
+            .insert(PendingError(Arc::new(Mutex::new(Some(self)))));
         response
     }
 }
 
-/// An [`AppError`] travelling in response extensions until the problem layer
-/// renders it with the request id.
+/// An [`AppError`] travelling in response extensions until the error layer
+/// maps, logs and renders it.
 #[derive(Clone)]
-pub(crate) struct PendingProblem(Arc<Mutex<Option<AppError>>>);
+pub(crate) struct PendingError(Arc<Mutex<Option<AppError>>>);
 
-impl PendingProblem {
+impl PendingError {
     pub(crate) fn take(&self) -> Option<AppError> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner).take()
     }
@@ -382,12 +418,103 @@ mod tests {
 
     #[test]
     fn statuses_have_codes_and_titles() {
-        assert_eq!(AppError::csrf_mismatch().status.as_u16(), 419);
-        assert_eq!(AppError::csrf_mismatch().title, "CSRF token mismatch.");
         assert_eq!(AppError::unauthenticated().status, StatusCode::UNAUTHORIZED);
+        assert_eq!(AppError::unauthenticated().title, "Unauthorized");
         assert_eq!(AppError::forbidden().code, "forbidden");
+        assert_eq!(AppError::forbidden().title, "Forbidden");
+        assert_eq!(
+            AppError::from_status(StatusCode::TOO_MANY_REQUESTS).title,
+            "Too Many Requests"
+        );
         let teapot = AppError::from_status(StatusCode::IM_A_TEAPOT);
         assert_eq!(teapot.code, "i_m_a_teapot");
+        assert_eq!(teapot.title, "I'm a teapot");
+    }
+
+    #[test]
+    fn csrf_mismatch_is_403_invalid_csrf_token() {
+        let error = AppError::csrf_mismatch();
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "csrf_token_mismatch");
+        assert_eq!(
+            error.body(),
+            serde_json::json!({
+                "statusCode": 403,
+                "message": "Invalid CSRF token",
+                "error": "Forbidden",
+            })
+        );
+    }
+
+    #[test]
+    fn body_uses_detail_as_message_and_reason_phrase_as_error() {
+        assert_eq!(
+            AppError::not_found().body(),
+            serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        );
+        assert_eq!(
+            AppError::conflict("Email taken").body(),
+            serde_json::json!({"statusCode": 409, "message": "Email taken", "error": "Conflict"})
+        );
+        let custom = AppError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_signature",
+            "Invalid signature.",
+        );
+        assert_eq!(
+            custom.body(),
+            serde_json::json!({
+                "statusCode": 401,
+                "message": "Invalid signature.",
+                "error": "Unauthorized",
+            })
+        );
+        let odd = AppError::from_status(StatusCode::from_u16(599).unwrap());
+        assert_eq!(odd.body()["error"], "Error", "no reason phrase");
+    }
+
+    #[test]
+    fn validation_is_400_with_flattened_messages_in_field_order() {
+        let errors = BTreeMap::from([
+            (
+                "name".to_owned(),
+                vec!["name should not be empty".to_owned()],
+            ),
+            (
+                "email".to_owned(),
+                vec![
+                    "email must be a valid email address".to_owned(),
+                    "email must be shorter than or equal to 255 characters".to_owned(),
+                ],
+            ),
+        ]);
+        let error = AppError::validation(errors.clone()).with_detail("ignored when rendering");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.code, "validation_failed");
+        assert_eq!(
+            error.body(),
+            serde_json::json!({
+                "statusCode": 400,
+                "message": [
+                    "email must be a valid email address",
+                    "email must be shorter than or equal to 255 characters",
+                    "name should not be empty",
+                ],
+                "error": "Bad Request",
+                "errors": errors,
+            })
+        );
+        let empty = AppError::validation(BTreeMap::new());
+        assert_eq!(empty.body()["message"], "Bad Request");
+        assert_eq!(empty.body()["errors"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn rendered_errors_are_application_json() {
+        let response = AppError::not_found().render();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.headers()[CONTENT_TYPE], ERROR_CONTENT_TYPE);
+        assert_eq!(ERROR_CONTENT_TYPE, "application/json");
     }
 
     #[test]
@@ -401,10 +528,14 @@ mod tests {
     #[test]
     fn internal_keeps_source_but_renders_no_detail() {
         let error = AppError::internal(std::io::Error::other("db password=hunter2"));
-        let body = error.problem(Some("abc"));
-        assert_eq!(body["status"], 500);
-        assert_eq!(body["request_id"], "abc");
-        assert!(body.get("detail").is_none());
+        assert_eq!(
+            error.body(),
+            serde_json::json!({
+                "statusCode": 500,
+                "message": "Internal server error",
+                "error": "Internal Server Error",
+            })
+        );
         assert!(error.log_chain().contains("hunter2"), "logged, not sent");
     }
 

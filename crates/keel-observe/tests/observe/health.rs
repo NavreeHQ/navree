@@ -64,12 +64,12 @@ async fn ready_aggregates_checks_and_returns_503_when_one_down() {
         "{}",
         response.text()
     );
-    assert_eq!(
-        response.header("content-type"),
-        Some("application/json"),
-        "a health report, not a problem"
-    );
+    assert_eq!(response.header("content-type"), Some("application/json"),);
     let body = response.json();
+    assert!(
+        body.get("statusCode").is_none(),
+        "a health report, not an error body: {body}"
+    );
     assert_eq!(body["status"], "down");
     assert_eq!(body["checks"]["database"]["status"], "up");
     assert_eq!(body["checks"]["cache"]["status"], "down");

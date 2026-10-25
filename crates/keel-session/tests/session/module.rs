@@ -126,7 +126,7 @@ async fn the_extractor_needs_the_session_module() {
         .get("/api/needs/required")
         .send()
         .await
-        .assert_problem(500, "internal_error");
+        .assert_error(500, "Internal server error");
 
     let with = support::base()
         .module(SessionModule::for_root(SessionOptions::default()))
@@ -166,7 +166,7 @@ async fn without_an_app_key_sessions_cannot_be_written() {
         .json(&json!({ "key": "k", "value": 1 }))
         .send()
         .await
-        .assert_problem(500, "internal_error");
+        .assert_error(500, "Internal server error");
     assert!(response.set_cookie(COOKIE).is_none());
     assert!(
         store.is_empty(),
@@ -200,7 +200,7 @@ async fn csrf_failures_are_audited() {
         .header("user-agent", "curl/8")
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
 
     let entries = recorder.0.lock().unwrap().clone();
     assert_eq!(entries.len(), 1, "{entries:?}");
@@ -224,7 +224,7 @@ async fn csrf_failures_are_audited() {
         .header("x-xsrf-token", "wrong")
         .send()
         .await
-        .assert_status(419);
+        .assert_status(403);
     let entries = recorder.0.lock().unwrap().clone();
     assert_eq!(entries[1].metadata["reason"], Value::from("mismatch"));
 }

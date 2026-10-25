@@ -1,5 +1,5 @@
 //! HTTP integration: the unit-of-work layer, the [`Uow`] extractor and the
-//! mapping of database errors to problem responses.
+//! mapping of database errors to error responses.
 
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use tokio::sync::OnceCell;
 use crate::{Db, Uow};
 
 /// The unit of work of the current request, opened by the `DatabaseModule`
-/// layer. A 500 problem when `DatabaseModule` is not in the app.
+/// layer. A 500 error when `DatabaseModule` is not in the app.
 impl<S: Send + Sync> FromRequestParts<S> for Uow {
     type Rejection = AppError;
 
@@ -93,7 +93,7 @@ async fn finish(uow: &Uow, response: Response) -> Response {
     }
 }
 
-/// The problem response for a database error, used by `DatabaseModule` for
+/// The error response for a database error, used by `DatabaseModule` for
 /// errors returned from handlers with `?`: `RecordNotFound` and
 /// `RecordNotUpdated` → 404, unique and foreign-key violations → 409,
 /// anything else stays a 500. No SQL detail reaches the client.

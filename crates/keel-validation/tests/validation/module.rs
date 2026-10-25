@@ -37,13 +37,13 @@ async fn messages_are_overridable_via_options() {
         .json(&bad_user())
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
         &json!({
             "name": ["Name too short (2)."],
             "email": ["Bad email!"],
-            "tags": ["The labels field must have at least 1 items."],
+            "tags": ["labels must contain at least 1 elements"],
         })
     );
 }
@@ -70,13 +70,13 @@ async fn messages_come_from_the_validation_config_section() {
         .json(&bad_user())
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
         &json!({
             "name": ["Name: 2+ chars."],
-            "email": ["The e-mail address field must be a valid email address."],
-            "tags": ["The tags field must have at least 1 items."],
+            "email": ["e-mail address must be a valid email address"],
+            "tags": ["tags must contain at least 1 elements"],
         })
     );
     assert_eq!(
@@ -100,29 +100,45 @@ async fn for_root_uses_the_built_in_messages() {
         .json(&bad_user())
         .send()
         .await
-        .assert_problem(422, "validation_failed");
+        .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value())["email"],
-        json!(["The email field must be a valid email address."])
+        json!(["email must be a valid email address"])
     );
     assert_eq!(*app.get::<Messages>().await, Messages::default());
 }
 
 #[tokio::test]
-async fn the_problem_detail_summarises_like_laravel() {
+async fn message_lists_every_error_in_field_order() {
     let app = TestApp::builder()
         .module(ValidationTestModule)
         .build()
         .await;
 
-    app.client()
+    let response = app
+        .client()
         .post("/v/users")
         .json(&bad_user())
         .send()
         .await
-        .assert_problem(422, "validation_failed")
-        .assert_json_path(
-            "detail",
-            json!("The email field must be a valid email address. (and 2 more errors)"),
-        );
+        .assert_validation_error("email")
+        .assert_validation_error("name")
+        .assert_validation_error("tags");
+    assert_eq!(
+        response.json_value(),
+        json!({
+            "statusCode": 400,
+            "message": [
+                "email must be a valid email address",
+                "name must be longer than or equal to 2 characters",
+                "tags must contain at least 1 elements",
+            ],
+            "error": "Bad Request",
+            "errors": {
+                "email": ["email must be a valid email address"],
+                "name": ["name must be longer than or equal to 2 characters"],
+                "tags": ["tags must contain at least 1 elements"],
+            },
+        })
+    );
 }

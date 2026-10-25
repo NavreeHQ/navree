@@ -63,7 +63,7 @@ async fn regenerate_changes_id_keeps_data() {
         .header("x-xsrf-token", old_token.as_str())
         .send()
         .await
-        .assert_problem(419, "csrf_token_mismatch");
+        .assert_error(403, "Invalid CSRF token");
     client
         .post("/api/probe/write")
         .xsrf()

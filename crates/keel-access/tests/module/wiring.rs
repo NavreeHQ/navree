@@ -101,7 +101,7 @@ async fn plain_access_module_grants_permissions_only() {
         .get("/api/posts")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]
@@ -140,7 +140,7 @@ async fn for_subject_maps_its_permission_prefix() {
         .get("/api/reports/export")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]

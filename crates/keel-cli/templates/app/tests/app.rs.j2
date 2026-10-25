@@ -1,0 +1,63 @@
+//! Boots the whole app, as `main` does, on a temporary database.
+
+use keel::config::ConfigSources;
+use keel::crypto::generate_key;
+use keel::testing::{TempDirGuard, TestApp, TestAuthenticator, principal, temp_sqlite_url};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+/// Hermetic settings: no `.env`, a fresh database, fast password hashing.
+fn sources() -> (ConfigSources, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("http.per_ip_rate_limit", Value::Null)
+        .set("mail.transport", "array")
+        .set("observe.metrics", false)
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1);
+    (sources, guard)
+}
+
+/// The booted app; requests made with `acting_as` are signed in.
+async fn app() -> (TestApp, TempDirGuard) {
+    let (sources, guard) = sources();
+    let app = TestApp::from_builder(TestAuthenticator::install({{ crate_name }}::app(sources))).await;
+    (app, guard)
+}
+
+#[test]
+fn module_graph_is_valid() {
+    let (sources, _guard) = sources();
+    {{ crate_name }}::app(sources)
+        .validate()
+        .expect("every module's imports and providers line up");
+}
+
+#[tokio::test]
+async fn health_check_is_up() {
+    let (app, _guard) = app().await;
+    app.client()
+        .get("/health/live")
+        .send()
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn profile_needs_a_signed_in_user() {
+    let (app, _guard) = app().await;
+    app.client()
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(401);
+    app.acting_as(principal(Uuid::now_v7()))
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("timezone", json!("UTC"));
+}

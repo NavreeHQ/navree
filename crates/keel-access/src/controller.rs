@@ -188,12 +188,12 @@ impl Controller for AccessAdminController {
                 .name("access.roles.store")
                 .api(ApiMeta {
                     success_status: 201,
-                    ..api("Create a role", &[401, 403, 409, 422])
+                    ..api("Create a role", &[400, 401, 403, 409])
                 }),
             RouteDef::on(Method::PUT, "/roles/{role}/permissions", sync_permissions)
                 .permissions(&[MANAGE_ROLES])
                 .name("access.roles.permissions")
-                .api(api("Replace a role's permissions", &[401, 403, 404, 422])),
+                .api(api("Replace a role's permissions", &[400, 401, 403, 404])),
             RouteDef::on(Method::DELETE, "/roles/{role}", delete)
                 .permissions(&[MANAGE_ROLES])
                 .name("access.roles.destroy")
@@ -204,7 +204,7 @@ impl Controller for AccessAdminController {
             RouteDef::on(Method::PUT, "/users/{user}/roles", sync_roles)
                 .permissions(&[MANAGE_ROLES])
                 .name("access.users.roles")
-                .api(api("Replace a user's roles", &[401, 403, 422])),
+                .api(api("Replace a user's roles", &[400, 401, 403])),
         ]
     }
 }

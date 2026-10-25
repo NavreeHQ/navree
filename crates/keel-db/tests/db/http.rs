@@ -334,8 +334,14 @@ async fn unique_violation_maps_to_409() {
     );
     let (status, body) = send(&s.router, post("/api/notes/same")).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
-    assert_eq!(body["type"], "conflict");
-    assert_eq!(body["status"], 409);
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "statusCode": 409,
+            "message": "A record with the same unique value already exists.",
+            "error": "Conflict",
+        })
+    );
     assert!(
         !body
             .to_string()
@@ -357,7 +363,10 @@ async fn record_not_found_maps_to_404() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
-    assert_eq!(body["type"], "not_found");
+    assert_eq!(
+        body,
+        serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+    );
 }
 
 #[tokio::test]
@@ -433,5 +442,5 @@ async fn uow_extractor_without_database_module_is_500() {
     )
     .await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
-    assert_eq!(body["type"], "internal_error");
+    assert_eq!(body["message"], "Internal server error");
 }

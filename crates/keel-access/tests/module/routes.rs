@@ -23,12 +23,12 @@ async fn role_route_allows_matching_role_and_denies_other() {
         .get("/admin/dashboard")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     app.client()
         .get("/admin/dashboard")
         .send()
         .await
-        .assert_problem(401, "unauthenticated");
+        .assert_error(401, "Unauthorized");
 }
 
 #[tokio::test]
@@ -45,7 +45,7 @@ async fn permission_route_requires_unconditional_rule() {
         .post(&path)
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     app.acting_as(principal(publisher))
         .post(&path)
         .send()
@@ -73,7 +73,7 @@ async fn can_from_loads_record_and_checks_conditions() {
         .json(&json!({ "title": "Stolen" }))
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 
     // The handler receives the record the authorizer loaded.
     app.acting_as(principal(owner))
@@ -88,7 +88,7 @@ async fn can_from_loads_record_and_checks_conditions() {
         .get(&path)
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn can_from_missing_record_is_404() {
             .get(&format!("/api/posts/{id}"))
             .send()
             .await
-            .assert_problem(404, "not_found");
+            .assert_error(404, None);
     }
 }
 
@@ -114,7 +114,7 @@ async fn type_level_denial_comes_before_loading_the_record() {
         .post(&format!("/api/posts/{}/archive", Uuid::now_v7()))
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]
@@ -128,11 +128,8 @@ async fn check_fields_rejects_fields_the_rule_does_not_cover() {
         .json(&json!({ "title": "Moved", "author_id": Uuid::now_v7() }))
         .send()
         .await
-        .assert_problem(403, "forbidden")
-        .assert_json_path(
-            "detail",
-            json!("You may not change these fields: author_id."),
-        );
+        .assert_error(403, "You may not change these fields: author_id.")
+        .assert_json_path("error", json!("Forbidden"));
 }
 
 #[tokio::test]
@@ -180,7 +177,7 @@ async fn token_principal_restricted_to_token_abilities() {
         .post(&publish)
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     app.acting_as(token(user, &["posts.read"]))
         .get(&format!("/api/posts/{}", post.id))
         .send()
@@ -225,7 +222,7 @@ async fn permission_of_an_unregistered_prefix_is_granted_by_holding_it() {
         .get("/reports/sales")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
     app.acting_as(token(analyst, &["reports.view"]))
         .get("/reports/sales")
         .send()
@@ -240,7 +237,7 @@ async fn permission_of_an_unregistered_prefix_is_granted_by_holding_it() {
         .get("/reports/sales")
         .send()
         .await
-        .assert_problem(403, "forbidden");
+        .assert_error(403, None);
 }
 
 #[tokio::test]

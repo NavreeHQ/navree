@@ -1,0 +1,46 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+interface Profile {
+  user_id: string;
+  bio: string | null;
+  timezone: string;
+}
+
+export default function Home() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [signedOut, setSignedOut] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/v1/profile").then(async (response) => {
+      if (response.status === 401) setSignedOut(true);
+      else if (response.ok) setProfile((await response.json()) as Profile);
+    });
+  }, []);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setProfile(null);
+    setSignedOut(true);
+  }
+
+  return (
+    <main>
+      <h1>{{ title }}</h1>
+      {signedOut && (
+        <p>
+          You are signed out. <Link href="/login">Sign in</Link>
+        </p>
+      )}
+      {profile && (
+        <>
+          <p>Signed in as {profile.user_id}.</p>
+          <p>Time zone: {profile.timezone}</p>
+          <button onClick={logout}>Sign out</button>
+        </>
+      )}
+    </main>
+  );
+}

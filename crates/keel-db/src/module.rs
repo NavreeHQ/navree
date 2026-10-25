@@ -18,7 +18,7 @@ use crate::{ChangeObserver, Db, DbOptions, Seeder};
 
 /// The database module. Global; provides and exports [`Db`] and
 /// [`DbOptions`]; contributes the unit-of-work layer
-/// ([`LayerSlot::Uow`](keel_http::LayerSlot::Uow)), the `DbErr` → problem
+/// ([`LayerSlot::Uow`](keel_http::LayerSlot::Uow)), the `DbErr` → error
 /// mapping and the `database` health check (a `dyn HealthCheck`
 /// multi-binding); registers the commands `migrate`, `migrate:rollback`,
 /// `migrate:fresh [--seed]`, `migrate:status` and `db:seed`; closes the

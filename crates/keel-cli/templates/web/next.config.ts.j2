@@ -1,0 +1,13 @@
+import type { NextConfig } from "next";
+
+/**
+ * The browser only talks to this Next.js server. Route handlers under
+ * `app/api` are a backend-for-frontend (see `lib/bff.ts`): they keep the
+ * Keel JWTs in httpOnly cookies and forward requests to `KEEL_API_URL` with
+ * `Authorization: Bearer`.
+ */
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+};
+
+export default nextConfig;

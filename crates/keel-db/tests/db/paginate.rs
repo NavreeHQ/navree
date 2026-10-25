@@ -120,11 +120,22 @@ async fn page_query_clamps_per_page() {
         "/x?per_page=-1",
     ] {
         let error = page_query(uri).await.unwrap_err();
-        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY, "{uri}");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST, "{uri}");
         assert!(error.errors.is_some(), "{uri}: field errors");
     }
-    let error = page_query("/x?page=0").await.unwrap_err();
-    assert!(error.errors.unwrap().contains_key("page"));
+    let error = page_query("/x?page=0&per_page=x").await.unwrap_err();
+    assert_eq!(
+        error.body(),
+        json!({
+            "statusCode": 400,
+            "message": ["page must be a positive integer", "per_page must be a positive integer"],
+            "error": "Bad Request",
+            "errors": {
+                "page": ["page must be a positive integer"],
+                "per_page": ["per_page must be a positive integer"],
+            },
+        })
+    );
 }
 
 #[tokio::test]
@@ -219,8 +230,15 @@ async fn cursor_query_validates_and_clamps() {
     assert_eq!(cursor_query("/x?limit=1000").await.unwrap().limit, 100);
     for uri in ["/x?cursor=not-a-cursor", "/x?limit=0", "/x?limit=x"] {
         let error = cursor_query(uri).await.unwrap_err();
-        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY, "{uri}");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST, "{uri}");
     }
+    let error = cursor_query("/x?cursor=not-a-cursor&limit=0")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.body()["message"],
+        json!(["cursor is invalid", "limit must be a positive integer"])
+    );
 
     let temp = TempDb::new();
     let db = notes_db(&temp).await;

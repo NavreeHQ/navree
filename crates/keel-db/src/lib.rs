@@ -29,7 +29,7 @@
 //!   pages (`{"data", "meta": {"current_page", "per_page", "total",
 //!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
 //!   page by a UUID v7 key.
-//! - Database errors returned from handlers with `?` map to problem
+//! - Database errors returned from handlers with `?` map to error
 //!   responses: record not found → 404, unique or foreign-key violation →
 //!   409, anything else → 500 ([`map_db_error`]).
 //!

@@ -1,0 +1,26 @@
+//! The `{{ name }}` notification of the {{ module_words }} module.
+
+use keel::notify::{Channel, Notifiable, Notification};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+/// {{ title }}. Send it with `Notifier::send(&user, notification)`: it is
+/// stored for the user's notification list and broadcast to their private
+/// channel. Add `Channel::Mail` and `to_mail` to email it too.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{ pascal }} {
+    /// What happened, for the notification list.
+    pub message: String,
+}
+
+impl Notification for {{ pascal }} {
+    const TYPE: &'static str = "{{ name }}";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Broadcast]
+    }
+
+    fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
+        Some(json!({ "title": "{{ title }}", "message": self.message }))
+    }
+}

@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, HashSet};
 
 use axum::http::StatusCode;
-use keel_http::{PROBLEM_JSON, RouteMeta, SchemaFn, schema_fn};
+use keel_http::{ERROR_CONTENT_TYPE, RouteMeta, SchemaFn, schema_fn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
+use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, OneOfBuilder, Schema, Type};
 
 use crate::ApiOptions;
 
@@ -70,8 +71,8 @@ fn missing_message(missing: &[(String, String)]) -> String {
 /// - The route name is the `operationId`; [`ApiMeta`](keel_http::ApiMeta)
 ///   gives tags, summary, description, the JSON request body, the success
 ///   status (default 200) with its JSON response body, and the documented
-///   error statuses, rendered as `application/problem+json` responses with
-///   the [`Problem`] schema.
+///   error statuses, rendered as `application/json` responses with the
+///   [`HttpError`] schema (the NestJS error format).
 /// - Non-public routes require the `cookie` or the `bearer` security
 ///   scheme and document 401; routes checked by the route authorizer
 ///   (roles, permissions, abilities) also document 403.
@@ -108,7 +109,7 @@ pub(crate) fn build(
         let body = Body::collect(*f, label, &mut schemas)?;
         schemas.register(body.name, body.schema, label)?;
     }
-    let problem = Body::collect(schema_fn::<Problem>, "error responses", &mut schemas)?;
+    let error = Body::collect(schema_fn::<HttpError>, "error responses", &mut schemas)?;
     let mut bodies = Vec::with_capacity(routes.len());
     for (route, _) in &routes {
         let label = format!("{} {}", route.method, route.full_path);
@@ -124,7 +125,7 @@ pub(crate) fn build(
 
     let mut builder = Builder {
         schemas,
-        problem,
+        error,
         operation_ids: HashSet::new(),
         tags: Vec::new(),
     };
@@ -194,60 +195,82 @@ fn method_of(route: &RouteMeta) -> Option<String> {
     }
 }
 
-/// The `cookie` (first-party session) and `bearer` (personal access token)
-/// security schemes.
+/// The `cookie` (first-party session, keel-session) and `bearer` (JWT
+/// access token, keel-auth) security schemes.
 fn security_schemes(session_cookie: &str) -> Value {
     json!({
         "cookie": {
             "type": "apiKey",
             "in": "cookie",
             "name": session_cookie,
-            "description": "The session cookie of a first-party app. Unsafe methods (POST, PUT, PATCH, DELETE) also need the XSRF-TOKEN cookie's value in the X-XSRF-TOKEN header.",
+            "description": "The session cookie of a first-party app (apps using keel-session). Unsafe methods (POST, PUT, PATCH, DELETE) also need the XSRF-TOKEN cookie's value in the X-XSRF-TOKEN header.",
         },
         "bearer": {
             "type": "http",
             "scheme": "bearer",
-            "description": "A personal access token: `Authorization: Bearer <token>`.",
+            "bearerFormat": "JWT",
+            "description": "A JWT access token from `POST /api/auth/login` or `/api/auth/refresh`: `Authorization: Bearer <token>`.",
         },
     })
 }
 
-/// An RFC 9457 problem details body, as every Keel error response carries
-/// it (content type `application/problem+json`). Documented as the
-/// `Problem` component schema.
+/// The body of every Keel error response, in the NestJS error format
+/// (content type `application/json`). Documented as the `HttpError`
+/// component schema.
 ///
 /// ```json
-/// {"type": "validation_failed", "title": "The given data was invalid.", "status": 422,
-///  "request_id": "0192...", "errors": {"email": ["The email field is required."]}}
+/// {"statusCode": 404, "message": "Not Found", "error": "Not Found"}
+/// {"statusCode": 400, "message": ["email must be a valid email address"],
+///  "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}
 /// ```
+///
+/// The request id is in the `X-Request-Id` response header.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[schema(
-    description = "An RFC 9457 problem details body (`application/problem+json`), as every error response carries it."
+    description = "The NestJS error format, as every error response carries it (`application/json`)."
 )]
-pub struct Problem {
-    /// A stable error code, e.g. `not_found` or `validation_failed`.
-    #[serde(rename = "type")]
-    pub kind: String,
-    /// A short, human-readable summary.
-    pub title: String,
+pub struct HttpError {
     /// The HTTP status code.
-    pub status: u16,
-    /// Details about this occurrence (never present on 5xx responses).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-    /// The request id (also in the `X-Request-Id` header).
-    #[schema(required = true)]
-    #[serde(default)]
-    pub request_id: Option<String>,
-    /// Validation messages per field (422 responses).
+    pub status_code: u16,
+    /// What went wrong: one message, or every validation message.
+    #[schema(schema_with = message_schema)]
+    pub message: HttpErrorMessage,
+    /// The reason phrase of the status (`Not Found`, `Bad Request`).
+    pub error: String,
+    /// Validation messages per field (400 validation errors only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub errors: Option<BTreeMap<String, Vec<String>>>,
+}
+
+/// The `message` of an [`HttpError`]: a string, or a list of strings (every
+/// validation message).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum HttpErrorMessage {
+    /// One message (`"Not Found"`, `"Deal not found"`).
+    One(String),
+    /// Every validation message, in field order.
+    Many(Vec<String>),
+}
+
+/// The schema of `message`: `string | string[]`.
+fn message_schema() -> Schema {
+    let string = || ObjectBuilder::new().schema_type(Type::String);
+    OneOfBuilder::new()
+        .item(string())
+        .item(ArrayBuilder::new().items(string()))
+        .description(Some(
+            "What went wrong: one message, or every validation message.",
+        ))
+        .build()
+        .into()
 }
 
 /// Describes operations, collecting component schemas, operation ids and tags.
 struct Builder {
     schemas: Schemas,
-    problem: Body,
+    error: Body,
     operation_ids: HashSet<String>,
     tags: Vec<String>,
 }
@@ -351,10 +374,11 @@ impl Builder {
             let mut response = Map::new();
             response.insert("description".into(), json!(reason(status)));
             if status >= 400 {
-                let problem = self
-                    .schemas
-                    .use_body(self.problem.clone(), "error responses");
-                response.insert("content".into(), json!({PROBLEM_JSON: {"schema": problem}}));
+                let error = self.schemas.use_body(self.error.clone(), "error responses");
+                response.insert(
+                    "content".into(),
+                    json!({ERROR_CONTENT_TYPE: {"schema": error}}),
+                );
             }
             responses.insert(status.to_string(), Value::Object(response));
         }

@@ -1,4 +1,4 @@
-//! [`ValidationErrors`]: field errors, rendered as a 422 problem.
+//! [`ValidationErrors`]: field errors, rendered as a 400 error.
 
 use std::collections::BTreeMap;
 
@@ -8,21 +8,30 @@ use serde::{Deserialize, Serialize};
 
 /// Field errors: `{"field.path": ["message", ...]}`, fields in sorted order.
 ///
-/// Converts into a 422 [`AppError`] (`type` `validation_failed`, the errors
-/// in `errors` and, like Laravel, the first message plus a count of the rest
-/// as `detail`), which is what the extractors reject with.
+/// Converts into a 400 [`AppError`] (code `validation_failed`), which is
+/// what the extractors reject with. It renders in the NestJS format:
+/// `message` lists every message in field order and `errors` maps each
+/// field to its messages.
 ///
 /// ```
 /// use keel_validation::ValidationErrors;
 ///
 /// let mut errors = ValidationErrors::new();
-/// errors.add("email", "The email has already been taken.");
-/// errors.add("name", "The name field is required.");
-/// let problem = errors.into_app_error();
-/// assert_eq!(problem.status.as_u16(), 422);
+/// errors.add("name", "name should not be empty");
+/// errors.add("email", "email has already been taken");
+/// let error = errors.into_app_error();
+/// assert_eq!(error.status.as_u16(), 400);
 /// assert_eq!(
-///     problem.detail.as_deref(),
-///     Some("The email has already been taken. (and 1 more error)")
+///     error.body(),
+///     serde_json::json!({
+///         "statusCode": 400,
+///         "message": ["email has already been taken", "name should not be empty"],
+///         "error": "Bad Request",
+///         "errors": {
+///             "email": ["email has already been taken"],
+///             "name": ["name should not be empty"],
+///         },
+///     })
 /// );
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,7 +89,8 @@ impl ValidationErrors {
         self.0
     }
 
-    /// Laravel's summary: the first message, plus `(and N more errors)`.
+    /// A one-line summary (for logs): the first message, plus `(and N more
+    /// errors)`.
     pub fn summary(&self) -> Option<String> {
         let mut all = self.0.values().flatten();
         let first = all.next()?;
@@ -92,14 +102,9 @@ impl ValidationErrors {
         })
     }
 
-    /// The 422 problem for these errors.
+    /// The 400 error for these errors.
     pub fn into_app_error(self) -> AppError {
-        let summary = self.summary();
-        let error = AppError::validation(self.0);
-        match summary {
-            Some(detail) => error.with_detail(detail),
-            None => error,
-        }
+        AppError::validation(self.0)
     }
 }
 

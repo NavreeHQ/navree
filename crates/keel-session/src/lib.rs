@@ -26,8 +26,8 @@
 //! `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie and
 //! no `Authorization: Bearer` token must send the session's CSRF token in
 //! `X-XSRF-TOKEN` (the URL-decoded `XSRF-TOKEN` cookie, as Axios and
-//! Laravel Echo send it) or `X-CSRF-TOKEN`; otherwise it fails with a 419
-//! `csrf_token_mismatch` problem before the handler runs, is logged on
+//! Laravel Echo send it) or `X-CSRF-TOKEN`; otherwise it fails with a 403
+//! `"Invalid CSRF token"` error before the handler runs, is logged on
 //! target `keel::security` and, when the app has a `dyn AuditSink`, written
 //! to the audit trail (`csrf.mismatch`). Such a request *without* the
 //! session cookie has no token to send and passes, unless the browser marks

@@ -189,7 +189,7 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `#[transactional]` | fn | `.transactional()` |
 /// | `#[audit(action = "deal.won")]` | fn | `.audit("deal.won")` |
 /// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
-/// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(404, 422), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `keel_http::schema_fn::<T>` |
+/// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(400, 404), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `keel_http::schema_fn::<T>` |
 ///
 /// Durations are a whole number followed by `ms`, `s`, `m` or `h` (`"500ms"`,
 /// `"5s"`, `"1m"`, `"1h"`). Access declarations on the impl add to a route's

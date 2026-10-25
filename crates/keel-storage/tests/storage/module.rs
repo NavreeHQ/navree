@@ -243,12 +243,9 @@ async fn storage_errors_map_to_http_statuses() {
     disk.put("hello.txt", "hi").await.unwrap();
 
     assert_eq!(app.get("/files/hello.txt").await.text(), "hi");
-    app.get("/files/missing.txt").await.problem(404);
-    let body = app
-        .get("/files/a%5C..%5C..%5Csecret.txt")
-        .await
-        .problem(400);
-    assert_eq!(body["detail"], "Invalid file path.");
+    app.get("/files/missing.txt").await.error(404);
+    let body = app.get("/files/a%5C..%5C..%5Csecret.txt").await.error(400);
+    assert_eq!(body["message"], "Invalid file path.");
 }
 
 #[tokio::test]
@@ -380,8 +377,8 @@ async fn multipart_errors_in_handlers_keep_their_status() {
 
     // Over the route's body limit: multer fails in `next_field()?`.
     png.resize(64 * 1024, 0);
-    let body = app.send(multipart_request(&png)).await.problem(413);
-    assert_eq!(body["type"], "payload_too_large");
+    let body = app.send(multipart_request(&png)).await.error(413);
+    assert_eq!(body["error"], "Payload Too Large");
 
     // A body that ends early.
     let truncated = Request::post("/upload")
@@ -390,7 +387,7 @@ async fn multipart_errors_in_handlers_keep_their_status() {
             "--XyZ\r\nContent-Disposition: form-data; name=\"f\"",
         ))
         .unwrap();
-    app.send(truncated).await.problem(400);
+    app.send(truncated).await.error(400);
 }
 
 #[test]

@@ -79,7 +79,7 @@ impl Controller for DealsController {
                     summary: Some("Create a deal".to_owned()),
                     description: Some("Creates a deal owned by the caller.".to_owned()),
                     tags: vec!["Deals".to_owned()],
-                    responses: vec![422],
+                    responses: vec![400],
                     success_status: 201,
                     request: Some(schema_fn::<CreateDeal>),
                     response: Some(schema_fn::<Deal>),

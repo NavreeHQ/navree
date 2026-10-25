@@ -142,7 +142,7 @@ fn is_odd(value: &u32, _: &()) -> garde::Result {
     if !value.is_multiple_of(2) {
         Ok(())
     } else {
-        Err(garde::Error::new("The :attribute number is not odd."))
+        Err(garde::Error::new(":attribute must be an odd number"))
     }
 }
 
@@ -394,7 +394,7 @@ pub async fn app_with(module: impl Module) -> TestApp {
         .await
 }
 
-/// The `errors` member of a problem body.
+/// The `errors` member of an error body.
 pub fn errors(body: &Value) -> &Value {
     &body["errors"]
 }

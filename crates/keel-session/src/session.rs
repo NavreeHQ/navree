@@ -235,7 +235,7 @@ impl fmt::Debug for Session {
     }
 }
 
-/// The session of the request; a 500 problem when `SessionModule` is not in
+/// The session of the request; a 500 error when `SessionModule` is not in
 /// the app.
 impl<S: Send + Sync> FromRequestParts<S> for Session {
     type Rejection = AppError;

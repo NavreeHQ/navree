@@ -32,10 +32,10 @@ fn assert_unauthorized(response: &TestResponse) {
         "{}",
         response.text()
     );
-    assert_eq!(
-        response.header("content-type"),
-        Some("application/problem+json")
-    );
+    assert_eq!(response.header("content-type"), Some("application/json"));
+    let body = response.json();
+    assert_eq!(body["statusCode"], 401, "{body}");
+    assert_eq!(body["error"], "Unauthorized", "{body}");
     assert_eq!(response.header("www-authenticate"), Some("Bearer"));
     assert!(
         !response.text().contains("http_requests_total"),

@@ -76,7 +76,7 @@
 //!     .get("/api/me")
 //!     .send()
 //!     .await
-//!     .assert_problem(401, "unauthenticated");
+//!     .assert_error(401, "Unauthorized");
 //! # }
 //! ```
 #![forbid(unsafe_code)]

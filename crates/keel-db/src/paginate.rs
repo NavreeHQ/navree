@@ -25,7 +25,7 @@ pub const MAX_PER_PAGE: u64 = 100;
 /// `?page=&per_page=` (defaults 1 and 15; `per_page` is clamped to 100).
 ///
 /// As an extractor it ignores other query parameters and rejects a `page`
-/// or `per_page` that is not a positive integer with a 422.
+/// or `per_page` that is not a positive integer with a 400.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PageQuery {
@@ -77,14 +77,14 @@ impl<S: Send + Sync> FromRequestParts<S> for PageQuery {
             raw.page.as_deref(),
             1,
             "page",
-            "The page must be an integer of at least 1.",
+            "page must be a positive integer",
             &mut errors,
         );
         let per_page = positive(
             raw.per_page.as_deref(),
             DEFAULT_PER_PAGE,
             "per_page",
-            "The per page must be an integer of at least 1.",
+            "per_page must be a positive integer",
             &mut errors,
         );
         if errors.is_empty() {
@@ -189,7 +189,7 @@ where
 
 /// `?cursor=&limit=` for cursor pagination (`limit` defaults to 15 and is
 /// clamped to 100). As an extractor it rejects a malformed cursor or a
-/// non-positive limit with a 422.
+/// non-positive limit with a 400.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CursorQuery {
@@ -235,17 +235,14 @@ impl<S: Send + Sync> FromRequestParts<S> for CursorQuery {
             raw.limit.as_deref(),
             DEFAULT_PER_PAGE,
             "limit",
-            "The limit must be an integer of at least 1.",
+            "limit must be a positive integer",
             &mut errors,
         );
         let cursor = raw.cursor.filter(|c| !c.trim().is_empty());
         if let Some(cursor) = &cursor
             && decode_cursor(cursor).is_none()
         {
-            errors.insert(
-                "cursor".to_owned(),
-                vec!["The cursor is invalid.".to_owned()],
-            );
+            errors.insert("cursor".to_owned(), vec!["cursor is invalid".to_owned()]);
         }
         if errors.is_empty() {
             Ok(CursorQuery::new(cursor, limit))

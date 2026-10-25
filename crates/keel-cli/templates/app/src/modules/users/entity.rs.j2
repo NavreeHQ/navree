@@ -1,0 +1,25 @@
+//! The `user_profiles` table: what users say about themselves (one row per
+//! user, created on the first update).
+
+use sea_orm::entity::prelude::*;
+use serde::Serialize;
+
+/// A user's profile.
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+#[sea_orm(table_name = "user_profiles")]
+pub struct Model {
+    /// The user's id (`users.id`).
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub user_id: Uuid,
+    /// A short biography.
+    pub bio: Option<String>,
+    /// An IANA time zone, e.g. `Europe/Paris`.
+    pub timezone: String,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}

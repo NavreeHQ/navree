@@ -283,20 +283,28 @@ impl TestResponse {
         self.headers.get(name).and_then(|v| v.to_str().ok())
     }
 
-    /// Asserts a problem+json response with `status`, carrying the request id.
-    pub fn assert_problem(&self, status: u16) -> serde_json::Value {
+    /// Asserts a NestJS-format error response (`{"statusCode", "message",
+    /// "error"}`, `application/json`) with `status` and an `X-Request-Id`
+    /// header, and returns the body.
+    pub fn assert_error(&self, status: u16) -> serde_json::Value {
         assert_eq!(self.status.as_u16(), status, "body: {}", self.text());
         assert_eq!(
             self.header("content-type"),
-            Some("application/problem+json"),
+            Some("application/json"),
             "content type of a {status} response"
         );
         let body = self.json();
-        assert_eq!(body["status"], status);
-        assert!(body["type"].is_string(), "type: {body}");
-        assert!(body["title"].is_string(), "title: {body}");
-        let request_id = self.header("x-request-id").expect("x-request-id header");
-        assert_eq!(body["request_id"], request_id, "body request_id: {body}");
+        assert_eq!(body["statusCode"], status, "statusCode: {body}");
+        assert!(
+            body["message"].is_string() || body["message"].is_array(),
+            "message: {body}"
+        );
+        assert!(body["error"].is_string(), "error: {body}");
+        assert!(body.get("request_id").is_none(), "no request_id: {body}");
+        assert!(
+            self.header("x-request-id").is_some(),
+            "x-request-id header on a {status} response"
+        );
         body
     }
 }

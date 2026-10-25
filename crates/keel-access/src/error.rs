@@ -7,9 +7,9 @@ use sea_orm::DbErr;
 
 use crate::engine::RuleError;
 
-/// An access-module error. Returned from handlers with `?`, it becomes a
-/// problem response: unknown role → 404, existing role → 409, invalid names
-/// or unknown roles in a request body → 422, database errors as keel-db maps
+/// An access-module error. Returned from handlers with `?`, it becomes an
+/// error response: unknown role → 404, existing role → 409, invalid names
+/// or unknown roles in a request body → 400, database errors as keel-db maps
 /// them, anything else 500.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -52,7 +52,7 @@ pub enum AccessError {
     Db(#[from] DbErr),
 }
 
-/// The problem response for an [`AccessError`] (registered with
+/// The error response for an [`AccessError`] (registered with
 /// `map_error`), `None` for errors that stay a 500.
 pub(crate) fn map_access_error(error: &AccessError) -> Option<AppError> {
     match error {

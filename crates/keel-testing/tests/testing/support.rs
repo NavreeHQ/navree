@@ -12,6 +12,8 @@
 //! - `GET|POST|PUT|PATCH|DELETE /api/demo/method` (public): `{"method"}`
 //! - `GET /api/demo/ip` (public): `{"ip"}`, the client IP keel-http sees
 //! - `GET /api/demo/query` (public): `{"query"}`, the raw query string
+//! - `POST /api/demo/invalid` (public): a 400 validation error for `email`
+//!   and `name`
 //!
 //! and, in [`ProfileModule`], `GET /api/profile/me` (authenticated): the principal.
 
@@ -24,7 +26,7 @@ use axum::Json;
 use axum::response::{IntoResponse, Response};
 use http::header::{COOKIE, SET_COOKIE};
 use http::{HeaderMap, Method, StatusCode};
-use keel_http::{ClientIp, Controller, CurrentPrincipal, ModuleBuilderHttpExt, RouteDef};
+use keel_http::{AppError, ClientIp, Controller, CurrentPrincipal, ModuleBuilderHttpExt, RouteDef};
 use keel_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use serde_json::{Value, json};
 
@@ -63,6 +65,7 @@ impl Controller for DemoController {
             RouteDef::on(Method::PUT, "/method", method).public(),
             RouteDef::on(Method::PATCH, "/method", method).public(),
             RouteDef::on(Method::DELETE, "/method", method).public(),
+            RouteDef::on(Method::POST, "/invalid", invalid).public(),
         ]
     }
 }
@@ -203,4 +206,17 @@ async fn ip(ClientIp(ip): ClientIp) -> Json<Value> {
 
 async fn query(uri: http::Uri) -> Json<Value> {
     Json(json!({ "query": uri.query() }))
+}
+
+async fn invalid() -> AppError {
+    AppError::validation(BTreeMap::from([
+        (
+            "email".to_owned(),
+            vec!["email must be a valid email address".to_owned()],
+        ),
+        (
+            "name".to_owned(),
+            vec!["name should not be empty".to_owned()],
+        ),
+    ]))
 }

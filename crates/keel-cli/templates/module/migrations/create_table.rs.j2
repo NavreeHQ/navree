@@ -1,0 +1,66 @@
+//! Creates the `{{ table }}` table.
+
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table({{ table_iden }}::Table)
+                    .col(ColumnDef::new({{ table_iden }}::Id).uuid().not_null().primary_key())
+{% if crud %}
+                    .col(ColumnDef::new({{ table_iden }}::OwnerId).uuid().null())
+{% endif %}
+                    .col(ColumnDef::new({{ table_iden }}::Name).string().not_null())
+                    .col(
+                        ColumnDef::new({{ table_iden }}::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new({{ table_iden }}::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+{% if crud %}
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_{{ table }}_owner_id")
+                    .table({{ table_iden }}::Table)
+                    .col({{ table_iden }}::OwnerId)
+                    .to_owned(),
+            )
+            .await
+{% else %}
+            .await
+{% endif %}
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table({{ table_iden }}::Table).to_owned())
+            .await
+    }
+}
+
+/// The table and column names (`{{ table_iden }}::Table` is `{{ table }}`).
+#[derive(DeriveIden)]
+enum {{ table_iden }} {
+    Table,
+    Id,
+{% if crud %}
+    OwnerId,
+{% endif %}
+    Name,
+    CreatedAt,
+    UpdatedAt,
+}

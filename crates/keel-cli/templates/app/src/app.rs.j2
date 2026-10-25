@@ -1,0 +1,51 @@
+//! The root module: every module the app uses, each configured once.
+
+use keel::access::{AccessModule, AccessOptions};
+use keel::api::ApiModule;
+use keel::auth::AuthModule;
+use keel::cache::CacheModule;
+use keel::config::{ConfigModule, ConfigSources};
+use keel::crypto::CryptoModule;
+use keel::db::DatabaseModule;
+use keel::events::EventsModule;
+use keel::http::HttpModule;
+use keel::kernel::{AppBuilder, Keel};
+use keel::log::LoggerModule;
+use keel::mail::MailModule;
+use keel::observe::ObserveModule;
+use keel::queue::QueueModule;
+use keel::validation::ValidationModule;
+use keel::view::ViewModule;
+
+use crate::{abilities, modules};
+
+/// The app, configured from `sources`. Each `from_config()` module reads its
+/// section (`http`, `database`, `mail`, ...) at boot.
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Keel::app()
+        // Platform
+        .module(ConfigModule::for_root(sources))
+        .module(LoggerModule::from_config())
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(CacheModule::from_config())
+        .module(EventsModule::for_root())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(QueueModule::from_config())
+        .module(ValidationModule::from_config())
+        // Identity and access: JWT bearer tokens (`/api/auth/*`), roles,
+        // permissions and abilities (`GET /api/me/abilities`).
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions {
+            abilities: abilities::define,
+            super_admin_role: Some("admin".to_owned()),
+        }))
+        // OpenAPI (`/api/openapi.json`, `/api/docs`), health and metrics.
+        .module(ApiModule::from_config())
+        .module(ObserveModule::from_config())
+        // Feature modules (`keel make:module` adds new ones above the marker).
+        .module(modules::users::UsersModule)
+    // keel:modules
+}

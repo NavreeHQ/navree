@@ -1,0 +1,68 @@
+//! {{ title }}.
+
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+{% if create_table %}
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table({{ table_iden }}::Table)
+                    .col(ColumnDef::new({{ table_iden }}::Id).uuid().not_null().primary_key())
+                    .col(
+                        ColumnDef::new({{ table_iden }}::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new({{ table_iden }}::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table({{ table_iden }}::Table).to_owned())
+            .await
+    }
+}
+
+/// The table and column names (`{{ table_iden }}::Table` is `{{ table }}`).
+#[derive(DeriveIden)]
+enum {{ table_iden }} {
+    Table,
+    Id,
+    CreatedAt,
+    UpdatedAt,
+}
+{% else %}
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Change the schema, for example:
+        // manager
+        //     .alter_table(
+        //         Table::alter()
+        //             .table("posts")
+        //             .add_column(ColumnDef::new("slug").string().null())
+        //             .to_owned(),
+        //     )
+        //     .await
+        let _ = manager;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Undo `up`, for example by dropping the column it added.
+        let _ = manager;
+        Ok(())
+    }
+}
+{% endif %}

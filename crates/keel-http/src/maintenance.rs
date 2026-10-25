@@ -24,7 +24,7 @@ pub struct MaintenanceInfo {
     /// Seconds clients should wait before retrying (`Retry-After`).
     #[serde(default)]
     pub retry: Option<u64>,
-    /// The message shown as the problem `detail`.
+    /// The message shown as the error `message`.
     #[serde(default)]
     pub message: Option<String>,
 }

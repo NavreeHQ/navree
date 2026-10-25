@@ -1,17 +1,18 @@
 //! # keel-validation
 //!
 //! `ValidationModule`: validated extractors on [garde](https://docs.rs/garde),
-//! Laravel-style messages and database `unique` / `exists` rules.
+//! NestJS (class-validator) style messages and database `unique` / `exists`
+//! rules.
 //!
 //! - [`Valid`] wraps `Json<T>`, `Query<T>` or `Form<T>` (`T:
 //!   garde::Validate<Context = ()> + DeserializeOwned`). Every failure is a
-//!   422 problem whose `errors` map dotted field paths to Laravel's messages:
-//!   malformed JSON (`{"body": ["The body field must be a valid JSON
-//!   string."]}`), serde errors at their path (a missing field is
-//!   `required`, a wrong type `string` / `integer` / ..., an unknown enum
-//!   variant `in`) and garde rules (`"The email field must be a valid email
-//!   address."`, `"The items.1.quantity field must be at least 1."`).
-//!   The problem `detail` is Laravel's summary (`"... (and 2 more errors)"`).
+//!   400 error in the NestJS format: `message` lists every message and
+//!   `errors` maps dotted field paths to their messages: malformed JSON
+//!   (`{"body": ["body must be a valid JSON string"]}`), serde errors at
+//!   their path (a missing field is `required`, `"title should not be
+//!   empty"`; a wrong type `string` / `integer` / ...; an unknown enum
+//!   variant `in`) and garde rules (`"email must be a valid email
+//!   address"`, `"items.1.quantity must not be less than 1"`).
 //! - [`ValidAsync`] then runs the DTO's [`AsyncRules`] ([`AsyncRule::unique`],
 //!   [`AsyncRule::exists`]) in the request's unit of work, as parameterised
 //!   `SELECT 1 ... LIMIT 1` queries on validated identifiers.

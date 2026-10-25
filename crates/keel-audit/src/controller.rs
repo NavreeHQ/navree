@@ -55,7 +55,7 @@ impl Controller for AuditController {
             .api(ApiMeta {
                 summary: Some("List audit entries, newest first".to_owned()),
                 tags: vec!["Audit".to_owned()],
-                responses: vec![403, 422],
+                responses: vec![400, 403],
                 response: Some(audit_page_schema),
                 ..ApiMeta::default()
             }),

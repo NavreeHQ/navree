@@ -1,0 +1,12 @@
+//! {{ title }}: a Keel app.
+//!
+//! [`app`] assembles the root module; `src/main.rs` runs it and the tests in
+//! `tests/` boot it. Features live in `src/modules/<name>/`
+//! (`keel make:module <name> --crud` adds one).
+
+pub mod abilities;
+pub mod modules;
+
+mod app;
+
+pub use app::app;

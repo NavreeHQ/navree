@@ -1,0 +1,474 @@
+---
+source: crates/keel-cli/tests/make_module.rs
+expression: files.to_string()
+---
+==> posts/mod.rs <==
+//! The posts module: the `posts` table, its service and its JSON
+//! API under `/api/v1/posts`.
+//!
+//! ```text
+//! posts/
+//! ├── mod.rs           # PostsModule: what the module provides and imports
+//! ├── controller.rs    # PostController: the HTTP routes
+//! ├── service.rs       # PostService: the business logic
+//! ├── entity.rs        # the `posts` table (SeaORM entity)
+//! ├── dto.rs           # request bodies and their validation rules
+//! ├── migrations/      # migrations owned by this module
+//! └── tests/           # tests on a fresh database
+//! ```
+
+mod controller;
+pub mod dto;
+pub mod entity;
+mod migrations;
+mod service;
+#[cfg(test)]
+mod tests;
+
+use keel::access::AccessModule;
+use keel::db::ModuleBuilderDbExt;
+use keel::kernel::ModuleBuilder;
+use keel::module;
+
+pub use controller::PostController;
+pub use entity::Post;
+pub use service::PostService;
+
+/// Posts: CRUD under `/api/v1/posts`.
+///
+/// Every route checks the caller's abilities on `Post`. Grant them
+/// with permissions (`posts.read`, `.create`, `.update`, `.delete`, or
+/// `posts.manage` for all) or with rules in the app's abilities function.
+#[module(
+    imports = [AccessModule::for_feature::<entity::Entity>()],
+    providers = [PostService],
+    controllers = [PostController],
+    exports = [PostService],
+    register = Self::wire,
+)]
+pub struct PostsModule;
+
+impl PostsModule {
+    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// listeners, commands, templates). `keel make:*` adds its lines above
+    /// the `keel:wire` marker.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        // keel:wire
+    }
+}
+
+==> posts/controller.rs <==
+//! The posts JSON API: `/api/v1/posts`.
+
+use std::sync::Arc;
+
+use keel::access::{Accessible, Authorized, Create, Delete, Read, Update};
+use keel::db::{Page, PageQuery, Uow};
+use keel::http::{Created, Json, NoContent, Result};
+use keel::validation::Valid;
+use keel::{controller, injectable};
+
+use super::dto::{CreatePost, UpdatePost};
+use super::entity::{Model, Post};
+use super::service::PostService;
+
+/// The routes of the posts resource. Each one checks the
+/// caller's abilities on `Post` before the handler runs; routes with
+/// `from = "id"` load the record first (404 when it does not exist).
+#[injectable]
+pub struct PostController {
+    posts: Arc<PostService>,
+}
+
+#[controller("/posts", version = "1")]
+impl PostController {
+    /// Lists the posts the user may read, newest first
+    /// (`?page=2&per_page=50`).
+    #[get("/")]
+    #[can(Read, Post)]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Post, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Model>> {
+        Ok(self.posts.list(&uow, scope, page).await?)
+    }
+
+    /// Shows one post.
+    #[get("/{id}")]
+    #[can(Read, Post, from = "id")]
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
+        Json(post.into_inner())
+    }
+
+    /// Creates a post owned by the caller.
+    #[post("/")]
+    #[can(Create, Post)]
+    async fn store(
+        &self,
+        uow: Uow,
+        Valid(Json(input)): Valid<Json<CreatePost>>,
+    ) -> Result<Created<Model>> {
+        let post = self.posts.create(&uow, input).await?;
+        Ok(Created(format!("/api/v1/posts/{}", post.id), post))
+    }
+
+    /// Updates the fields present in the body.
+    #[patch("/{id}")]
+    #[can(Update, Post, from = "id")]
+    async fn update(
+        &self,
+        uow: Uow,
+        post: Authorized<Post, Update>,
+        Valid(Json(input)): Valid<Json<UpdatePost>>,
+    ) -> Result<Json<Model>> {
+        post.check_fields(&input.changed_fields())?;
+        let post = self.posts.update(&uow, post.into_inner(), input).await?;
+        Ok(Json(post))
+    }
+
+    /// Deletes a post.
+    #[delete("/{id}")]
+    #[can(Delete, Post, from = "id")]
+    async fn destroy(&self, uow: Uow, post: Authorized<Post, Delete>) -> Result<NoContent> {
+        self.posts.delete(&uow, post.into_inner()).await?;
+        Ok(NoContent)
+    }
+}
+
+==> posts/service.rs <==
+//! The business logic of the posts module.
+
+use chrono::Utc;
+use keel::access::{Accessible, Read};
+use keel::db::{Page, PageQuery, Repo, Uow, paginate};
+use keel::injectable;
+use sea_orm::{ActiveValue::Set, DbErr, EntityTrait, QueryOrder};
+use uuid::Uuid;
+
+use super::dto::{CreatePost, UpdatePost};
+use super::entity::{ActiveModel, Column, Entity, Model};
+
+/// Lists, creates, updates and deletes posts.
+///
+/// Writes go through `Repo` inside the caller's unit of work: they commit
+/// with the request (or roll back with it) and record change events for the
+/// audit log and change observers.
+#[injectable]
+pub struct PostService;
+
+impl PostService {
+    /// One page of the posts `scope` lets the user read, newest first.
+    pub async fn list(
+        &self,
+        uow: &Uow,
+        scope: Accessible<Entity, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Model>, DbErr> {
+        let select = scope.apply(Entity::find().order_by_desc(Column::CreatedAt));
+        paginate(select, &*uow.tx().await?, page).await
+    }
+
+    /// Creates a post owned by the acting user.
+    pub async fn create(&self, uow: &Uow, input: CreatePost) -> Result<Model, DbErr> {
+        let now = Utc::now();
+        let post = ActiveModel {
+            id: Set(Uuid::now_v7()),
+            owner_id: Set(uow.actor()),
+            name: Set(input.name),
+            created_at: Set(now),
+            updated_at: Set(now),
+        };
+        Repo::<Entity>::insert(uow, post).await
+    }
+
+    /// Applies the fields present in `input`.
+    pub async fn update(&self, uow: &Uow, post: Model, input: UpdatePost) -> Result<Model, DbErr> {
+        let mut active: ActiveModel = post.into();
+        if let Some(name) = input.name {
+            active.name = Set(name);
+        }
+        active.updated_at = Set(Utc::now());
+        Repo::<Entity>::update(uow, active).await
+    }
+
+    /// Deletes `post`.
+    pub async fn delete(&self, uow: &Uow, post: Model) -> Result<(), DbErr> {
+        Repo::<Entity>::delete(uow, post).await
+    }
+}
+
+==> posts/entity.rs <==
+//! The `posts` table.
+
+use keel::access::Subject;
+use sea_orm::entity::prelude::*;
+use serde::Serialize;
+
+/// A post. Serialized as is in API responses: keep secrets out
+/// of it (or skip them with `#[serde(skip)]`).
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+#[sea_orm(table_name = "posts")]
+pub struct Model {
+    /// A UUID v7, so ids sort by creation time.
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+    /// The user who created it (abilities can test `owner_id`).
+    pub owner_id: Option<Uuid>,
+    pub name: String,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
+/// The access subject: rules name it `Post`, permissions
+/// `posts.<action>` (`posts.update`, `posts.manage`, ...).
+impl Subject for Entity {
+    const SUBJECT: &'static str = "Post";
+    const PERMISSION_PREFIX: &'static str = "posts";
+}
+
+/// The subject in route attributes and extractors: `#[can(Read, Post)]`,
+/// `Authorized<Post, Update>`.
+pub type Post = Entity;
+
+==> posts/dto.rs <==
+//! Request bodies of the posts API, with their validation rules
+//! (checked by the `Valid` extractor before the handler runs).
+
+use garde::Validate;
+use serde::Deserialize;
+
+/// The body of `POST /api/v1/posts`.
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreatePost {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: String,
+}
+
+/// The body of `PATCH /api/v1/posts/{id}`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdatePost {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: Option<String>,
+}
+
+impl UpdatePost {
+    /// The fields this update changes, for field-level ability checks.
+    pub fn changed_fields(&self) -> Vec<&'static str> {
+        let mut fields = Vec::new();
+        if self.name.is_some() {
+            fields.push("name");
+        }
+        fields
+    }
+}
+
+==> posts/migrations/mod.rs <==
+//! The migrations of the posts module. `keel migrate` runs every
+//! module's set in dependency order and each set in name order;
+//! `keel make:migration posts <name>` adds one here.
+
+use keel::db::MigrationSet;
+
+mod m20261025_143005_create_posts_table;
+
+/// The module's migration set, recorded under `posts` in `keel_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("posts")
+        .migration(m20261025_143005_create_posts_table::Migration)
+}
+
+==> posts/migrations/m20261025_143005_create_posts_table.rs <==
+//! Creates the `posts` table.
+
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(Posts::Table)
+                    .col(ColumnDef::new(Posts::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Posts::OwnerId).uuid().null())
+                    .col(ColumnDef::new(Posts::Name).string().not_null())
+                    .col(
+                        ColumnDef::new(Posts::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Posts::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_posts_owner_id")
+                    .table(Posts::Table)
+                    .col(Posts::OwnerId)
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(Posts::Table).to_owned())
+            .await
+    }
+}
+
+/// The table and column names (`Posts::Table` is `posts`).
+#[derive(DeriveIden)]
+enum Posts {
+    Table,
+    Id,
+    OwnerId,
+    Name,
+    CreatedAt,
+    UpdatedAt,
+}
+
+==> posts/tests/mod.rs <==
+//! Tests of the posts module: each one boots the module with a fresh
+//! SQLite database and calls its routes in-process.
+
+use keel::access::{
+    AbilityCtx, AccessModule, AccessOptions, CREATE, DELETE, READ, Rules, UPDATE, field,
+};
+use keel::db::DatabaseModule;
+use keel::testing::{TestApp, principal};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use super::PostsModule;
+
+/// Test abilities: signed-in users read and create posts, and
+/// update or delete their own.
+fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    rules.can(READ, "Post");
+    rules.can(CREATE, "Post");
+    rules
+        .can(UPDATE, "Post")
+        .when(field("owner_id").eq(user.id));
+    rules
+        .can(DELETE, "Post")
+        .when(field("owner_id").eq(user.id));
+}
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(DatabaseModule)
+        .module(AccessModule::for_root(AccessOptions {
+            abilities,
+            super_admin_role: None,
+        }))
+        .module(PostsModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_must_sign_in() {
+    let app = app().await;
+    app.client()
+        .get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn create_show_update_list_and_delete() {
+    let app = app().await;
+    let user = app.acting_as(principal(Uuid::now_v7()));
+
+    let created = user
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "First" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let path = format!("/api/v1/posts/{}", created["id"].as_str().unwrap());
+
+    user.get(&path)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("name", json!("First"));
+    user.patch(&path)
+        .json(&json!({ "name": "Renamed" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("name", json!("Renamed"));
+    user.get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(1))
+        .assert_json_path("data.0.name", json!("Renamed"));
+    user.delete(&path).send().await.assert_status(204);
+    user.get(&path).send().await.assert_status(404);
+}
+
+#[tokio::test]
+async fn only_the_owner_may_update_or_delete() {
+    let app = app().await;
+    let owner = app.acting_as(principal(Uuid::now_v7()));
+    let created = owner
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "Mine" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let path = format!("/api/v1/posts/{}", created["id"].as_str().unwrap());
+
+    let other = app.acting_as(principal(Uuid::now_v7()));
+    other.get(&path).send().await.assert_status(200);
+    other
+        .patch(&path)
+        .json(&json!({ "name": "Taken" }))
+        .send()
+        .await
+        .assert_status(403);
+    other.delete(&path).send().await.assert_status(403);
+}
+
+#[tokio::test]
+async fn invalid_input_is_rejected() {
+    let app = app().await;
+    // A 400 in the NestJS error format, with the messages under `errors.name`.
+    app.acting_as(principal(Uuid::now_v7()))
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "" }))
+        .send()
+        .await
+        .assert_validation_error("name");
+}
