@@ -286,3 +286,24 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
         .await
         .assert_status(200);
 }
+
+#[test]
+fn requested_workspace_reads_the_configured_resolvers_without_loading_anything() {
+    use navree_workspace::{ResolverKind, WorkspaceConfig, requested_workspace};
+
+    let parts = |request: http::request::Builder| request.body(()).unwrap().into_parts().0;
+    let config = WorkspaceConfig::default();
+
+    let header = parts(http::Request::builder().uri("/api/deals").header("X-Workspace", "acme"));
+    assert_eq!(
+        requested_workspace(&config, &header),
+        Some((ResolverKind::Header, "acme".to_owned()))
+    );
+    let path = parts(http::Request::builder().uri("/api/w/globex/deals"));
+    assert_eq!(
+        requested_workspace(&config, &path),
+        Some((ResolverKind::Path, "globex".to_owned()))
+    );
+    let none = parts(http::Request::builder().uri("/api/deals"));
+    assert_eq!(requested_workspace(&config, &none), None);
+}

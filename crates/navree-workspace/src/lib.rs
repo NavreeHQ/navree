@@ -92,6 +92,7 @@ pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};
 pub use migration::WORKSPACE_MIGRATIONS;
 pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
+pub use resolve::requested_workspace;
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use tenant::WorkspaceDatabases;
 pub use workspaces::{MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify};
