@@ -92,6 +92,15 @@ where
             Value::from(meta.target()),
             Value::Object(fields),
         )?;
+        // Inside a request or job with a trace: its trace and span ids.
+        if let Some((trace_id, span_id)) = crate::telemetry::current_ids() {
+            write!(
+                writer,
+                ",\"trace_id\":{},\"span_id\":{}",
+                Value::String(trace_id),
+                Value::String(span_id)
+            )?;
+        }
         if let Some(scope) = ctx.event_scope() {
             let spans: Vec<Value> = scope
                 .from_root()

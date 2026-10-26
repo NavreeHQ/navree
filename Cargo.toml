@@ -22,6 +22,7 @@ missing_docs = "warn"
 navree = { path = "crates/navree", version = "0.1.0" }
 navree-kernel = { path = "crates/navree-kernel", version = "0.1.0" }
 navree-contracts = { path = "crates/navree-contracts", version = "0.1.0" }
+navree-telemetry = { path = "crates/navree-telemetry", version = "0.1.0" }
 navree-macros = { path = "crates/navree-macros", version = "0.1.0" }
 navree-config = { path = "crates/navree-config", version = "0.1.0" }
 navree-log = { path = "crates/navree-log", version = "0.1.0" }
@@ -136,6 +137,22 @@ tracing-appender = "0.2.5"
 tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+# OTLP export of spans (navree-observe's optional `otel` feature): gRPC on
+# tonic with rustls + ring, HTTP/protobuf on reqwest. Never `tls-aws-lc`.
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = [
+    "grpc-tonic",
+    "http-proto",
+    "reqwest-client",
+    "tls-ring",
+    "tls-webpki-roots",
+    "trace",
+] }
+# Test receivers for the OTLP export (dev-dependencies only): the protobuf
+# messages, decoded by in-process OTLP/HTTP and OTLP/gRPC receivers on axum.
+opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
+prost = "0.14.4"
 
 # ---------------------------------------------------------------------------
 # Configuration
