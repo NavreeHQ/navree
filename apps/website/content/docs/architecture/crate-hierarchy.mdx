@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
 L7  packages built on other packages
-L6  navree-social  navree-webhooks  navree-flags (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-flags  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -56,6 +56,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
+| L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
@@ -82,6 +83,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
+| `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | No Navree crate: everything it knows about the framework is in the code it generates |
 
