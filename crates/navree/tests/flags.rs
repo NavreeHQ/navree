@@ -8,7 +8,8 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use navree::access::Subject;
+use navree::access::{AccessService, Subject};
+use navree::db::Db;
 use navree::flags::{FlagScope, Flags, FlagsFake, PlanResolver, Rollout, flag};
 use navree::testing::{TestApp, TestAppBuilder, principal};
 use navree::workspace::{NewWorkspace, Workspaces};
@@ -155,8 +156,8 @@ fn deals_app() -> TestAppBuilder {
 
 async fn reader(app: &TestApp) -> Uuid {
     let user = Uuid::now_v7();
-    let access = app.get::<navree::access::AccessService>().await;
-    let db = app.get::<navree::db::Db>().await;
+    let access = app.get::<AccessService>().await;
+    let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     access
         .grant_to_user(&uow, user, "deals.read")
@@ -173,7 +174,7 @@ async fn the_docs_examples_run_through_the_facade() {
     let rep = reader(&app).await;
     let (ada, grace) = (Uuid::now_v7(), Uuid::now_v7());
     let workspaces = app.get::<Workspaces>().await;
-    let db = app.get::<navree::db::Db>().await;
+    let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     let acme = workspaces
         .create(&uow, ada, NewWorkspace::named("Acme"))
@@ -311,22 +312,41 @@ async fn the_docs_examples_run_through_the_facade() {
 
 #[tokio::test]
 async fn the_testing_examples_run_through_the_facade() {
-    // The memory store, and the flags each test needs.
-    let app = deals_app().config("flags.store", "memory").build().await;
-    let rep = reader(&app).await;
-    let client = app.acting_as(principal(rep));
-    client
-        .get("/api/v1/deals/forecast")
+    // The memory store, and the flags each test needs (as the docs page
+    // writes it).
+    let app = TestApp::builder()
+        .temp_database()
+        .config("flags.store", "memory")
+        .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(DealsModule)
+        .module(FlagsModule::from_config())
+        .build()
+        .await;
+
+    // A rep who may read deals (the route's `#[can(Read, Deal)]`).
+    let rep_id = Uuid::now_v7();
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    app.get::<AccessService>()
+        .await
+        .grant_to_user(&uow, rep_id, "deals.read")
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+    let rep = app.acting_as(principal(rep_id));
+
+    rep.get("/api/v1/deals/forecast")
         .send()
         .await
         .assert_error(404, None);
+
     app.get::<Flags>()
         .await
-        .activate::<NewPipeline>(FlagScope::user(rep))
+        .activate::<NewPipeline>(FlagScope::user(rep_id))
         .await
         .unwrap();
-    client
-        .get("/api/v1/deals/forecast")
+
+    rep.get("/api/v1/deals/forecast")
         .send()
         .await
         .assert_status(200)
