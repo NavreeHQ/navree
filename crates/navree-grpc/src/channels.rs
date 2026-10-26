@@ -172,7 +172,10 @@ impl GrpcChannel {
                 headers.insert(X_REQUEST_ID.clone(), value);
             }
         }
-        let remaining = deadline.saturating_duration_since(now).as_millis().clamp(1, 99_999_999);
+        let remaining = deadline
+            .saturating_duration_since(now)
+            .as_millis()
+            .clamp(1, 99_999_999);
         if let Ok(value) = HeaderValue::from_str(&format!("{remaining}m")) {
             headers.insert(GRPC_TIMEOUT.clone(), value);
         }
@@ -227,17 +230,24 @@ mod tests {
 
     #[tokio::test]
     async fn outgoing_requests_carry_the_current_context() {
-        let channel = GrpcChannel::connect_lazy("deals", &ClientOptions::new("http://127.0.0.1:1")).unwrap();
+        let channel =
+            GrpcChannel::connect_lazy("deals", &ClientOptions::new("http://127.0.0.1:1")).unwrap();
         let mut headers = http::HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer user-token"));
         headers.insert(&X_WORKSPACE, HeaderValue::from_static("acme"));
-        headers.insert(&TRACEPARENT, HeaderValue::from_static("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"));
+        headers.insert(
+            &TRACEPARENT,
+            HeaderValue::from_static("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+        );
         let request_id = navree_contracts::RequestId::parse_or_generate(None);
         let deadline = Instant::now() + Duration::from_millis(1500);
         let context = CallContext::of(&headers, Some(&request_id), Some(deadline));
 
         let mut request = http::Request::new(tonic::body::Body::empty());
-        context.clone().scope(async { channel.apply(&mut request) }).await;
+        context
+            .clone()
+            .scope(async { channel.apply(&mut request) })
+            .await;
         let sent = request.headers();
         assert_eq!(sent[AUTHORIZATION], "Bearer user-token");
         assert_eq!(sent[&X_WORKSPACE], "acme");
@@ -250,7 +260,10 @@ mod tests {
         let mut request = http::Request::new(tonic::body::Body::empty());
         channel.apply(&mut request);
         assert!(!request.headers().contains_key(AUTHORIZATION));
-        assert_eq!(grpc_timeout(request.headers()), Some(Duration::from_millis(5000)));
+        assert_eq!(
+            grpc_timeout(request.headers()),
+            Some(Duration::from_millis(5000))
+        );
 
         // Without forward_auth, the authorization stays home.
         let mut private = ClientOptions::new("http://127.0.0.1:1");

@@ -128,7 +128,8 @@ fn grpc_request(
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
     headers.insert("te", HeaderValue::from_static("trailers"));
     if let Some(timeout) = timeout
-        && let Ok(value) = HeaderValue::from_str(&format!("{}m", timeout.as_millis().min(99_999_999)))
+        && let Ok(value) =
+            HeaderValue::from_str(&format!("{}m", timeout.as_millis().min(99_999_999)))
     {
         headers.insert("grpc-timeout", value);
     }
@@ -193,7 +194,10 @@ async fn try_unary(
         Some(method) => json_to_proto(&method.input(), &bytes)?,
         None => bytes,
     };
-    let grpc = grpc_request(parts, tonic::body::Body::new(http_body_util::Full::new(frame(0, &message))))?;
+    let grpc = grpc_request(
+        parts,
+        tonic::body::Body::new(http_body_util::Full::new(frame(0, &message))),
+    )?;
     let response = core
         .oneshot(grpc)
         .await
@@ -330,21 +334,31 @@ fn error_json(status: &Status) -> serde_json::Value {
 fn json_to_proto(input: &MessageDescriptor, json: &[u8]) -> Result<Bytes, Status> {
     let mut deserializer = serde_json::Deserializer::from_slice(json);
     let options = DeserializeOptions::new().deny_unknown_fields(false);
-    let message = DynamicMessage::deserialize_with_options(input.clone(), &mut deserializer, &options)
-        .and_then(|message| deserializer.end().map(|()| message))
-        .map_err(|error| {
-            Status::invalid_argument(format!("the JSON is not a valid {}: {error}", input.full_name()))
-        })?;
+    let message =
+        DynamicMessage::deserialize_with_options(input.clone(), &mut deserializer, &options)
+            .and_then(|message| deserializer.end().map(|()| message))
+            .map_err(|error| {
+                Status::invalid_argument(format!(
+                    "the JSON is not a valid {}: {error}",
+                    input.full_name()
+                ))
+            })?;
     Ok(Bytes::from(message.encode_to_vec()))
 }
 
 fn proto_to_json(output: &MessageDescriptor, proto: &[u8]) -> Result<Bytes, Status> {
-    let message = DynamicMessage::decode(output.clone(), proto)
-        .map_err(|error| Status::internal(format!("the response is not a valid {}: {error}", output.full_name())))?;
+    let message = DynamicMessage::decode(output.clone(), proto).map_err(|error| {
+        Status::internal(format!(
+            "the response is not a valid {}: {error}",
+            output.full_name()
+        ))
+    })?;
     let mut serializer = serde_json::Serializer::new(Vec::new());
     message
         .serialize_with_options(&mut serializer, &SerializeOptions::new())
-        .map_err(|error| Status::internal(format!("encoding the response as JSON failed: {error}")))?;
+        .map_err(|error| {
+            Status::internal(format!("encoding the response as JSON failed: {error}"))
+        })?;
     Ok(Bytes::from(serializer.into_inner()))
 }
 
@@ -359,7 +373,9 @@ pub(crate) async fn streaming(
     let path = parts.uri.path().to_owned();
     let failed = |status: Status| stream_response(codec, HeaderMap::new(), end_only(&status));
     if parts.method != Method::POST {
-        return failed(Status::unimplemented("Connect streaming calls are POST requests"));
+        return failed(Status::unimplemented(
+            "Connect streaming calls are POST requests",
+        ));
     }
     if compressed(&parts.headers, "connect-content-encoding") {
         return failed(Status::unimplemented(
@@ -562,7 +578,8 @@ impl http_body::Body for ConnectStream {
                             match message {
                                 Ok(message) => this.queue.push_back(frame(0, &message)),
                                 Err(status) => {
-                                    this.queue.push_back(end_message(Some(&status), &HeaderMap::new()));
+                                    this.queue
+                                        .push_back(end_message(Some(&status), &HeaderMap::new()));
                                     *this.finished = true;
                                     break;
                                 }
@@ -572,14 +589,16 @@ impl http_body::Body for ConnectStream {
                     Err(received) => {
                         if let Ok(trailers) = received.into_trailers() {
                             let status = Status::from_header_map(&trailers);
-                            this.queue.push_back(end_message(status.as_ref(), &trailers));
+                            this.queue
+                                .push_back(end_message(status.as_ref(), &trailers));
                             *this.finished = true;
                         }
                     }
                 },
                 Some(Err(error)) => {
                     let status = Status::internal(format!("the response failed: {error}"));
-                    this.queue.push_back(end_message(Some(&status), &HeaderMap::new()));
+                    this.queue
+                        .push_back(end_message(Some(&status), &HeaderMap::new()));
                     *this.finished = true;
                 }
                 None => {
@@ -602,7 +621,10 @@ mod tests {
         assert_eq!(code_name(Code::Cancelled), "canceled");
         assert_eq!(http_status(Code::NotFound), StatusCode::NOT_FOUND);
         assert_eq!(http_status(Code::Unauthenticated), StatusCode::UNAUTHORIZED);
-        assert_eq!(http_status(Code::FailedPrecondition), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            http_status(Code::FailedPrecondition),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(http_status(Code::Cancelled).as_u16(), 499);
     }
 

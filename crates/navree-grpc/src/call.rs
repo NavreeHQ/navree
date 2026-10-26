@@ -114,10 +114,7 @@ impl ServiceRuntime {
                 )
             })
             .collect();
-        Self {
-            name,
-            methods,
-        }
+        Self { name, methods }
     }
 
     /// The metadata of `method`, its full path set from the call's.
@@ -281,7 +278,9 @@ where
                 request_id = request_id.as_ref().map(tracing::field::display),
                 "the call's deadline passed"
             );
-            Err(CallError::Status(Status::deadline_exceeded("Deadline exceeded")))
+            Err(CallError::Status(Status::deadline_exceeded(
+                "Deadline exceeded",
+            )))
         }
     };
     result.map_err(|error| info.runtime.status_of(error, request_id.as_ref()))
@@ -381,7 +380,8 @@ where
         }
         (Err(error), uow) => {
             rollback(uow.as_ref()).await;
-            if let (Some(entry), Some(sink), true) = (denied, &runtime.audit, error.is_forbidden()) {
+            if let (Some(entry), Some(sink), true) = (denied, &runtime.audit, error.is_forbidden())
+            {
                 record_security(sink.as_ref(), entry).await;
             }
             Err(error)
@@ -460,9 +460,17 @@ fn record_router(param: &str) -> axum::Router {
 struct PartsSlot(Arc<Mutex<Option<Parts>>>);
 
 /// Characters escaped in a record id put in a path segment.
-const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
+const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~');
 
-async fn put_record_id(parts: &mut Parts, router: &axum::Router, id: &str) -> Result<(), CallError> {
+async fn put_record_id(
+    parts: &mut Parts,
+    router: &axum::Router,
+    id: &str,
+) -> Result<(), CallError> {
     let path = std::mem::take(&mut parts.uri);
     let slot = PartsSlot::default();
     let mut moved = std::mem::replace(parts, http::Request::new(()).into_parts().0);
@@ -485,11 +493,12 @@ async fn put_record_id(parts: &mut Parts, router: &axum::Router, id: &str) -> Re
 
 /// An `access.denied` security entry about this call.
 fn security_entry(parts: &Parts, meta: &RouteMeta, check: &str) -> AuditEntry {
-    let mut entry = AuditEntry::new(AuditKind::Security, "access.denied").metadata(serde_json::json!({
-        "check": check,
-        "method": meta.method,
-        "route": meta.full_path,
-    }));
+    let mut entry =
+        AuditEntry::new(AuditKind::Security, "access.denied").metadata(serde_json::json!({
+            "check": check,
+            "method": meta.method,
+            "route": meta.full_path,
+        }));
     if let Some(user) = parts
         .extensions
         .get::<AuthState>()

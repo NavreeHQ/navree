@@ -166,9 +166,7 @@ impl ClientOptions {
         }
         let configured = self.tls.ca.is_some() || self.tls.cert.is_some() || self.tls.key.is_some();
         if configured && !tls && !url.is_empty() {
-            problems.push(format!(
-                "{key}.tls is set but {key}.url is not https://"
-            ));
+            problems.push(format!("{key}.tls is set but {key}.url is not https://"));
         }
         if self.tls.cert.is_some() != self.tls.key.is_some() {
             problems.push(format!(
@@ -195,7 +193,9 @@ pub struct ClientTlsOptions {
 
 /// An address, or none for a missing or empty value (what an empty
 /// environment variable holds).
-fn optional_addr<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<SocketAddr>, D::Error> {
+fn optional_addr<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<SocketAddr>, D::Error> {
     let value: Option<String> = Option::deserialize(deserializer)?;
     match value.as_deref().map(str::trim) {
         None | Some("") => Ok(None),
@@ -240,7 +240,9 @@ mod tests {
 
         let empty: GrpcOptions = serde_json::from_value(serde_json::json!({ "addr": "" })).unwrap();
         assert_eq!(empty.addr, None);
-        assert!(serde_json::from_value::<GrpcOptions>(serde_json::json!({ "addr": "nope" })).is_err());
+        assert!(
+            serde_json::from_value::<GrpcOptions>(serde_json::json!({ "addr": "nope" })).is_err()
+        );
     }
 
     #[test]
@@ -250,15 +252,29 @@ mod tests {
             ..GrpcOptions::default()
         };
         options.clients.insert("a".into(), ClientOptions::default());
-        options.clients.insert("b".into(), ClientOptions::new("ftp://x"));
+        options
+            .clients
+            .insert("b".into(), ClientOptions::new("ftp://x"));
         let mut tls = ClientOptions::new("http://c:1");
         tls.tls.cert = Some("client.pem".into());
         options.clients.insert("c".into(), tls);
         let problems = options.check().unwrap_err().join("\n");
         assert!(problems.contains("grpc.max_message_bytes"), "{problems}");
-        assert!(problems.contains("grpc.clients.a.url is required"), "{problems}");
-        assert!(problems.contains("grpc.clients.b.url must start with"), "{problems}");
-        assert!(problems.contains("grpc.clients.c.tls is set but"), "{problems}");
-        assert!(problems.contains("grpc.clients.c.tls.cert and grpc.clients.c.tls.key"), "{problems}");
+        assert!(
+            problems.contains("grpc.clients.a.url is required"),
+            "{problems}"
+        );
+        assert!(
+            problems.contains("grpc.clients.b.url must start with"),
+            "{problems}"
+        );
+        assert!(
+            problems.contains("grpc.clients.c.tls is set but"),
+            "{problems}"
+        );
+        assert!(
+            problems.contains("grpc.clients.c.tls.cert and grpc.clients.c.tls.key"),
+            "{problems}"
+        );
     }
 }

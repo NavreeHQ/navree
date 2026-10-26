@@ -101,7 +101,9 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     ctx.grant_permissions(rules);
     if let Some(user) = &ctx.user {
         rules.can(READ, "Deal").when(field("owner_id").eq(user.id));
-        rules.can("move", "Deal").when(field("owner_id").eq(user.id));
+        rules
+            .can("move", "Deal")
+            .when(field("owner_id").eq(user.id));
     }
 }
 
@@ -251,7 +253,9 @@ impl Deals for DealsGrpc {
         &self,
         _request: Request<navree::grpc::Streaming<pb::Deal>>,
     ) -> Result<Response<pb::ImportDealsResponse>> {
-        Err(AppError::from_status(navree::axum::http::StatusCode::NOT_IMPLEMENTED))
+        Err(AppError::from_status(
+            navree::axum::http::StatusCode::NOT_IMPLEMENTED,
+        ))
     }
 
     type EchoStream = DealEvents;
@@ -293,7 +297,9 @@ pub struct DealLookup {
 impl DealLookup {
     pub async fn get(&self, id: Uuid) -> Result<pb::Deal> {
         let mut deals = pb::deals_client::DealsClient::new(self.channels.get("deals")?);
-        let reply = deals.get_deal(pb::GetDealRequest { id: id.to_string() }).await?;
+        let reply = deals
+            .get_deal(pb::GetDealRequest { id: id.to_string() })
+            .await?;
         Ok(reply.into_inner())
     }
 }
@@ -379,17 +385,22 @@ async fn get_deal_checks_access() {
         .into_inner();
     assert_eq!(list.total, 1);
 
-    let status = pb::deals_client::DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)))
-        .get_deal(request())
-        .await
-        .unwrap_err();
+    let status =
+        pb::deals_client::DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)))
+            .get_deal(request())
+            .await
+            .unwrap_err();
     assert_eq!(status.code(), Code::FailedPrecondition, "the interceptor");
 
     // The client example, outside any call: no credentials to forward.
     let lookup = DealLookup {
         channels: app.get::<GrpcChannels>().await,
     };
-    let error = lookup.get(deal_id).await.err().expect("no client named deals");
+    let error = lookup
+        .get(deal_id)
+        .await
+        .err()
+        .expect("no client named deals");
     assert_eq!(error.status.as_u16(), 500);
 
     app.shutdown().await.unwrap();

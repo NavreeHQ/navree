@@ -45,7 +45,11 @@ impl ReadinessHealth {
                 }
             }
         });
-        if futures_util::future::join_all(runs).await.into_iter().all(|up| up) {
+        if futures_util::future::join_all(runs)
+            .await
+            .into_iter()
+            .all(|up| up)
+        {
             ServingStatus::Serving
         } else {
             ServingStatus::NotServing
@@ -86,8 +90,9 @@ impl Health for ReadinessHealth {
     ) -> Result<Response<Self::WatchStream>, Status> {
         let service = request.into_inner().service;
         if !self.knows(&service) {
-            let unknown = futures_util::stream::once(async { Ok(response(ServingStatus::ServiceUnknown)) })
-                .chain(futures_util::stream::pending());
+            let unknown =
+                futures_util::stream::once(async { Ok(response(ServingStatus::ServiceUnknown)) })
+                    .chain(futures_util::stream::pending());
             return Ok(Response::new(Box::pin(unknown)));
         }
         let checks = self.checks.clone();
@@ -152,7 +157,12 @@ mod tests {
         let up = health(vec![Arc::new(Fixed("database", true))]);
         let status = up.check(ask("")).await.unwrap().into_inner().status;
         assert_eq!(status, ServingStatus::Serving as i32);
-        let status = up.check(ask("crm.deals.v1.Deals")).await.unwrap().into_inner().status;
+        let status = up
+            .check(ask("crm.deals.v1.Deals"))
+            .await
+            .unwrap()
+            .into_inner()
+            .status;
         assert_eq!(status, ServingStatus::Serving as i32);
 
         let down = health(vec![

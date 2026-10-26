@@ -119,11 +119,15 @@ async fn valid_messages_report_every_broken_rule() {
         .unwrap_err();
     assert_eq!(status.code(), Code::InvalidArgument);
     assert!(
-        status.message().contains("position must not be less than 0"),
+        status
+            .message()
+            .contains("position must not be less than 0"),
         "{}",
         status.message()
     );
-    let bad_request = status.get_details_bad_request().expect("a BadRequest detail");
+    let bad_request = status
+        .get_details_bad_request()
+        .expect("a BadRequest detail");
     let fields: Vec<&str> = bad_request
         .field_violations
         .iter()
@@ -178,7 +182,10 @@ async fn app_errors_become_statuses_of_the_same_meaning() {
     let mut client = PingClient::new(TestChannel::new(&app));
 
     let status = client.ping(ping("conflict")).await.unwrap_err();
-    assert_eq!((status.code(), status.message()), (Code::AlreadyExists, "already pinged"));
+    assert_eq!(
+        (status.code(), status.message()),
+        (Code::AlreadyExists, "already pinged")
+    );
 
     let status = client.ping(ping("boom")).await.unwrap_err();
     assert_eq!(
@@ -202,9 +209,13 @@ async fn app_errors_become_statuses_of_the_same_meaning() {
 async fn the_request_id_is_kept_or_generated_and_returned() {
     let app = ping_app().build().await;
 
-    let mut client = PingClient::new(TestChannel::new(&app).metadata("x-request-id", "req-123_abc"));
+    let mut client =
+        PingClient::new(TestChannel::new(&app).metadata("x-request-id", "req-123_abc"));
     let response = client.ping(ping("hi")).await.unwrap();
-    assert_eq!(response.metadata().get("x-request-id").unwrap(), "req-123_abc");
+    assert_eq!(
+        response.metadata().get("x-request-id").unwrap(),
+        "req-123_abc"
+    );
     assert_eq!(response.into_inner().request_id, "req-123_abc");
 
     let mut client = PingClient::new(TestChannel::new(&app));
@@ -219,9 +230,13 @@ async fn the_request_id_is_kept_or_generated_and_returned() {
     assert_eq!(returned.len(), 32, "a generated UUID v7");
     assert_eq!(response.into_inner().request_id, returned);
 
-    let mut client = PingClient::new(TestChannel::new(&app).metadata("x-request-id", "no spaces allowed"));
+    let mut client =
+        PingClient::new(TestChannel::new(&app).metadata("x-request-id", "no spaces allowed"));
     let response = client.ping(ping("hi")).await.unwrap();
-    assert_ne!(response.metadata().get("x-request-id").unwrap(), "no spaces allowed");
+    assert_ne!(
+        response.metadata().get("x-request-id").unwrap(),
+        "no spaces allowed"
+    );
 }
 
 #[tokio::test]
@@ -243,7 +258,10 @@ async fn bearer_credentials_go_through_the_apps_authenticator() {
     );
 
     let mut guest = PingClient::new(TestChannel::new(&app));
-    assert_eq!(guest.ping(ping("hi")).await.unwrap().into_inner().user_id, "");
+    assert_eq!(
+        guest.ping(ping("hi")).await.unwrap().into_inner().user_id,
+        ""
+    );
 }
 
 #[tokio::test]
@@ -259,11 +277,18 @@ async fn interceptors_run_first_and_guards_after_authentication() {
 
     let mut guest = PingClient::new(TestChannel::new(&app));
     let status = guest.ping(ping("hi")).await.unwrap_err();
-    assert_eq!(status.code(), Code::FailedPrecondition, "the interceptor ran first");
+    assert_eq!(
+        status.code(),
+        Code::FailedPrecondition,
+        "the interceptor ran first"
+    );
     assert_eq!(status.message(), "x-client-version is required");
 
     let mut guest = PingClient::new(TestChannel::new(&app).metadata("x-client-version", "1.4"));
-    assert_eq!(guest.ping(ping("hi")).await.unwrap_err().code(), Code::Unauthenticated);
+    assert_eq!(
+        guest.ping(ping("hi")).await.unwrap_err().code(),
+        Code::Unauthenticated
+    );
 
     let versioned = || TestChannel::new(&app).metadata("x-client-version", "1.4");
     let mut user_without_version = PingClient::new(versioned().acting_as(principal(user)));
@@ -302,7 +327,11 @@ async fn deadlines_cut_calls_off() {
     let started = Instant::now();
     let status = client.ping(request).await.unwrap_err();
     assert_eq!(status.code(), Code::DeadlineExceeded);
-    assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
 
     // Without grpc-timeout, grpc.timeout_secs applies.
     let started = Instant::now();
@@ -315,5 +344,8 @@ async fn deadlines_cut_calls_off() {
         .unwrap_err();
     assert_eq!(status.code(), Code::DeadlineExceeded);
     let elapsed = started.elapsed();
-    assert!(elapsed >= Duration::from_millis(900) && elapsed < Duration::from_secs(4), "{elapsed:?}");
+    assert!(
+        elapsed >= Duration::from_millis(900) && elapsed < Duration::from_secs(4),
+        "{elapsed:?}"
+    );
 }

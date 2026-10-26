@@ -46,10 +46,7 @@ pub fn status_from_error(error: &AppError) -> Status {
             .map(String::as_str)
             .collect::<Vec<_>>()
             .join("; "),
-        None => error
-            .detail
-            .clone()
-            .unwrap_or_else(|| error.title.clone()),
+        None => error.detail.clone().unwrap_or_else(|| error.title.clone()),
     };
     match fields {
         Some(errors) if code == Code::InvalidArgument => {
@@ -129,8 +126,16 @@ mod tests {
     #[test]
     fn app_errors_become_the_status_of_the_same_meaning() {
         let cases = [
-            (AppError::bad_request("bad id"), Code::InvalidArgument, "bad id"),
-            (AppError::unauthenticated(), Code::Unauthenticated, "Unauthorized"),
+            (
+                AppError::bad_request("bad id"),
+                Code::InvalidArgument,
+                "bad id",
+            ),
+            (
+                AppError::unauthenticated(),
+                Code::Unauthenticated,
+                "Unauthorized",
+            ),
             (AppError::forbidden(), Code::PermissionDenied, "Forbidden"),
             (AppError::not_found(), Code::NotFound, "Not Found"),
             (AppError::conflict("taken"), Code::AlreadyExists, "taken"),
@@ -149,7 +154,11 @@ mod tests {
                 Code::Unimplemented,
                 "Not Implemented",
             ),
-            (AppError::service_unavailable("db down"), Code::Unavailable, "db down"),
+            (
+                AppError::service_unavailable("db down"),
+                Code::Unavailable,
+                "db down",
+            ),
             (
                 AppError::from_status(StatusCode::GATEWAY_TIMEOUT),
                 Code::DeadlineExceeded,
@@ -168,7 +177,11 @@ mod tests {
         ];
         for (error, code, message) in cases {
             let status = status_from_error(&error);
-            assert_eq!((status.code(), status.message()), (code, message), "{error}");
+            assert_eq!(
+                (status.code(), status.message()),
+                (code, message),
+                "{error}"
+            );
         }
     }
 
@@ -193,7 +206,10 @@ mod tests {
         let violations = &details.bad_request().unwrap().field_violations;
         assert_eq!(violations.len(), 2);
         assert_eq!(violations[0].field, "position");
-        assert_eq!(violations[0].description, "position must not be less than 0");
+        assert_eq!(
+            violations[0].description,
+            "position must not be less than 0"
+        );
 
         // And back: an upstream INVALID_ARGUMENT with field violations is a
         // validation error with the same fields.

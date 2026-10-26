@@ -23,14 +23,24 @@ fn generate(out: &Path) {
         [&proto_root],
     )
     .expect("protox compiles the protos");
-    std::fs::write(out.join("deals_descriptor.bin"), fds.encode_to_vec()).expect("descriptor set written");
+    std::fs::write(out.join("deals_descriptor.bin"), fds.encode_to_vec())
+        .expect("descriptor set written");
     tonic_prost_build::configure()
         .out_dir(out)
         .emit_rerun_if_changed(false)
-        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(garde::Validate)]")
+        .type_attribute(
+            ".crm.deals.v1.MoveDealRequest",
+            "#[derive(garde::Validate)]",
+        )
         .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[garde(length(min = 1))]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[garde(range(min = 0))]")
+        .field_attribute(
+            ".crm.deals.v1.MoveDealRequest.stage",
+            "#[garde(length(min = 1))]",
+        )
+        .field_attribute(
+            ".crm.deals.v1.MoveDealRequest.position",
+            "#[garde(range(min = 0))]",
+        )
         .field_attribute(
             ".crm.deals.v1.MoveDealRequest.lost_reason",
             "#[garde(length(chars, max = 1000))]",
@@ -42,7 +52,9 @@ fn generate(out: &Path) {
 fn normalized(path: &Path) -> Vec<u8> {
     let bytes = std::fs::read(path).unwrap_or_default();
     if path.extension().is_some_and(|e| e == "rs") {
-        String::from_utf8_lossy(&bytes).replace("\r\n", "\n").into_bytes()
+        String::from_utf8_lossy(&bytes)
+            .replace("\r\n", "\n")
+            .into_bytes()
     } else {
         bytes
     }
@@ -58,7 +70,11 @@ fn generated_code_is_current() {
     }
     let fresh = tempfile::tempdir().unwrap();
     generate(fresh.path());
-    for name in ["crm.deals.v1.rs", "navree.test.v1.rs", "deals_descriptor.bin"] {
+    for name in [
+        "crm.deals.v1.rs",
+        "navree.test.v1.rs",
+        "deals_descriptor.bin",
+    ] {
         assert!(
             normalized(&fresh.path().join(name)) == normalized(&checked_in.join(name)),
             "tests/support/pb/{name} is stale: run NAVREE_GRPC_REGENERATE=1 cargo test -p navree-grpc --test codegen"

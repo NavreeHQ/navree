@@ -111,7 +111,10 @@ mod tests {
     async fn the_context_is_the_tasks() {
         assert!(CallContext::current().is_none());
         let mut headers = HeaderMap::new();
-        headers.insert(http::header::AUTHORIZATION, HeaderValue::from_static("Bearer t"));
+        headers.insert(
+            http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer t"),
+        );
         headers.insert(&X_WORKSPACE, HeaderValue::from_static("acme"));
         let id = RequestId::parse_or_generate(Some("req-1"));
         let context = CallContext::of(&headers, Some(&id), None);

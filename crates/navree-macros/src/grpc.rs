@@ -83,7 +83,10 @@ impl Parse for Args {
                 "server" if server.is_none() => server = Some(input.parse()?),
                 "interceptor" if interceptor.is_none() => interceptor = Some(input.parse()?),
                 "server" | "interceptor" => {
-                    return Err(syn::Error::new(key.span(), format!("duplicate `{key}` key")));
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("duplicate `{key}` key"),
+                    ));
                 }
                 _ => {
                     return Err(syn::Error::new(
@@ -312,7 +315,14 @@ fn parse_signature(method: &ImplItemFn) -> syn::Result<Signature> {
             "a gRPC method returns `Result<Response<T>>` (an `AppError`) or `Result<Response<T>, Status>`",
         )
     })?;
-    Ok((request_ty, message_ty, (pat, ty, valid), extractors, ok_ty, output))
+    Ok((
+        request_ty,
+        message_ty,
+        (pat, ty, valid),
+        extractors,
+        ok_ty,
+        output,
+    ))
 }
 
 /// `T` when `ty` is `Name<T>` (the last path segment is `name`, with one

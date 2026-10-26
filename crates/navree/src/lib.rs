@@ -172,12 +172,12 @@ pub use navree_workspace as workspace;
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
+#[cfg(feature = "grpc")]
+pub use navree_grpc as grpc;
 #[cfg(feature = "oauth")]
 pub use navree_oauth as oauth;
 #[cfg(feature = "social")]
 pub use navree_social as social;
-#[cfg(feature = "grpc")]
-pub use navree_grpc as grpc;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]
