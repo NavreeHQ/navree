@@ -3191,6 +3191,7 @@ dependencies = [
  "navree-kernel",
  "navree-macros",
  "navree-mail",
+ "navree-observe",
  "navree-testing",
  "navree-validation",
  "navree-view",
