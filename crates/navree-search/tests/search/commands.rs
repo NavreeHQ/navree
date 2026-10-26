@@ -1,10 +1,19 @@
 //! `search:import`, `search:flush`, `search:settings` and `search:status`,
 //! and the fresh-import swap.
 
-use navree_db::{Db, Repo};
-use navree_search::Search;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use navree_db::{DatabaseModule, Db, Repo};
+use navree_kernel::BoxFuture;
+use navree_search::{
+    Document, Engine, EngineQuery, EngineResults, IndexSettings, MemoryEngine, Search,
+    SearchEngine, SearchError, SearchModule, SearchOptions, SyncMode,
+};
+use navree_testing::TestApp;
 use sea_orm::ActiveValue::Set;
 use sea_orm::IntoActiveModel;
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::support::{self, Contact, Deal, deal, insert_contacts, new_contact};
@@ -127,4 +136,150 @@ async fn commands_name_unknown_entities() {
     assert!(error.to_string().contains("Invoice"), "{error}");
     let error = app.run_command("search:import", &[]).await.unwrap_err();
     assert!(error.to_string().contains("usage"), "{error}");
+}
+
+/// The memory engine, with the first write into a staged (`__fresh`)
+/// index held until the test releases it.
+struct Gated {
+    inner: MemoryEngine,
+    armed: AtomicBool,
+    reached: Notify,
+    release: Notify,
+}
+
+impl SearchEngine for Gated {
+    fn name(&self) -> &'static str {
+        "gated"
+    }
+
+    fn prepare<'a>(
+        &'a self,
+        index: &'a str,
+        settings: &'a IndexSettings,
+    ) -> BoxFuture<'a, Result<(), SearchError>> {
+        self.inner.prepare(index, settings)
+    }
+
+    fn upsert<'a>(
+        &'a self,
+        index: &'a str,
+        settings: &'a IndexSettings,
+        documents: Vec<Document>,
+    ) -> BoxFuture<'a, Result<(), SearchError>> {
+        Box::pin(async move {
+            if index.ends_with("__fresh") && self.armed.swap(false, Ordering::SeqCst) {
+                self.reached.notify_one();
+                self.release.notified().await;
+            }
+            self.inner.upsert(index, settings, documents).await
+        })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        index: &'a str,
+        ids: &'a [String],
+    ) -> BoxFuture<'a, Result<(), SearchError>> {
+        self.inner.delete(index, ids)
+    }
+
+    fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
+        self.inner.flush(index)
+    }
+
+    fn drop_index<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
+        self.inner.drop_index(index)
+    }
+
+    fn swap<'a>(
+        &'a self,
+        index: &'a str,
+        staged: &'a str,
+    ) -> BoxFuture<'a, Result<(), SearchError>> {
+        self.inner.swap(index, staged)
+    }
+
+    fn search<'a>(
+        &'a self,
+        index: &'a str,
+        query: EngineQuery<'a>,
+    ) -> BoxFuture<'a, Result<EngineResults, SearchError>> {
+        self.inner.search(index, query)
+    }
+
+    fn count<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<u64, SearchError>> {
+        self.inner.count(index)
+    }
+
+    fn contains<'a>(
+        &'a self,
+        index: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<bool, SearchError>> {
+        self.inner.contains(index, id)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
+    let gated = Arc::new(Gated {
+        inner: MemoryEngine::new(),
+        armed: AtomicBool::new(true),
+        reached: Notify::new(),
+        release: Notify::new(),
+    });
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(SearchModule::for_root(SearchOptions {
+            engine: Engine::custom(gated.clone()),
+            sync: SyncMode::Inline,
+            ..SearchOptions::default()
+        }))
+        .module(support::CrmModule)
+        .build()
+        .await;
+    let db = app.get::<Db>().await;
+    let search = app.get::<Search>().await;
+    let rows = insert_contacts(
+        &db,
+        vec![
+            new_contact("Ada", "Lovelace"),
+            new_contact("Grace", "Hopper"),
+        ],
+    )
+    .await;
+    support::settle(&app).await;
+    let ada = rows[0].id.to_string();
+
+    // The import has read the rows and waits to write the staged index.
+    let importer = tokio::spawn({
+        let search = search.clone();
+        async move { search.import_fresh::<Contact>().await }
+    });
+    gated.reached.notified().await;
+
+    // Searches keep answering from the live index...
+    let found = search.query::<Contact>("lovelace").ids(10).await.unwrap();
+    assert_eq!(found, [ada.clone()]);
+    // ...and writes keep syncing into it.
+    let mut renamed = rows[0].clone().into_active_model();
+    renamed.last_name = Set("Byron".into());
+    support::in_uow(&db, async |uow| {
+        Repo::<Contact>::update(uow, renamed).await.unwrap()
+    })
+    .await;
+    support::settle(&app).await;
+    let found = search.query::<Contact>("byron").ids(10).await.unwrap();
+    assert_eq!(found, [ada.clone()]);
+
+    // The staged index holds the rows as they were read; records synced
+    // meanwhile are synced again after the swap.
+    gated.release.notify_one();
+    let report = importer.await.unwrap().unwrap();
+    assert_eq!(report.documents, 2);
+    let found = search.query::<Contact>("byron").ids(10).await.unwrap();
+    assert_eq!(found, [ada], "the write made during the import survives");
+    let stale = search.query::<Contact>("lovelace").ids(10).await.unwrap();
+    assert!(stale.is_empty(), "{stale:?}");
 }

@@ -57,6 +57,10 @@ pub(crate) struct Inner {
     pub(crate) app: WeakAppContext,
     pub(crate) vectors: Option<Vectors>,
     prepared: Mutex<HashSet<String>>,
+    /// Indexes with a fresh import running → the syncs made meanwhile,
+    /// run again once the new index is swapped in (the import may have
+    /// read those rows before they changed).
+    fresh: Mutex<HashMap<String, Vec<SyncDocuments>>>,
     inline: InlineSyncs,
     warned_no_queue: AtomicBool,
 }
@@ -171,6 +175,7 @@ impl Search {
                 db,
                 vectors,
                 prepared: Mutex::new(HashSet::new()),
+                fresh: Mutex::new(HashMap::new()),
                 inline: InlineSyncs::default(),
                 warned_no_queue: AtomicBool::new(false),
             }),
@@ -479,6 +484,9 @@ impl Search {
     /// records that exist, deletes the others.
     pub(crate) async fn sync_documents(&self, job: &SyncDocuments) -> Result<(), SearchError> {
         let entry = self.entry_named(&job.index)?;
+        if let Some(synced) = lock(&self.inner.fresh).get_mut(&entry.index) {
+            synced.push(job.clone());
+        }
         let workspace = job
             .workspace
             .as_deref()
@@ -574,7 +582,27 @@ impl Search {
 
     /// Imports every row of `entry` (into a new index swapped in at the end
     /// when `fresh`), calling `progress(done, total)` after each batch.
+    ///
+    /// Records synced while a fresh import runs are synced again after the
+    /// swap: the import may have read their rows before the change.
     pub(crate) async fn import_entry(
+        &self,
+        entry: &Entry,
+        fresh: bool,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<ImportReport, SearchError> {
+        if !fresh {
+            return self.import_rows(entry, false, progress).await;
+        }
+        let watch = FreshImport::start(&self.inner, &entry.index);
+        let report = self.import_rows(entry, true, progress).await?;
+        for job in watch.finish() {
+            self.sync_documents(&job).await?;
+        }
+        Ok(report)
+    }
+
+    async fn import_rows(
         &self,
         entry: &Entry,
         fresh: bool,
@@ -820,6 +848,64 @@ fn make_engine(
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// A running fresh import of one index: syncs of that index are recorded
+/// until [`finish`](FreshImport::finish) (or until it is dropped, when the
+/// import fails).
+struct FreshImport<'a> {
+    inner: &'a Inner,
+    index: String,
+}
+
+impl<'a> FreshImport<'a> {
+    fn start(inner: &'a Inner, index: &str) -> Self {
+        lock(&inner.fresh).insert(index.to_owned(), Vec::new());
+        Self {
+            inner,
+            index: index.to_owned(),
+        }
+    }
+
+    /// Stops recording and returns the syncs made meanwhile, merged per
+    /// workspace.
+    fn finish(self) -> Vec<SyncDocuments> {
+        let synced = lock(&self.inner.fresh)
+            .remove(&self.index)
+            .unwrap_or_default();
+        let mut merged: Vec<(SyncDocuments, HashSet<String>)> = Vec::new();
+        for job in synced {
+            let position = merged
+                .iter()
+                .position(|(m, _)| m.index == job.index && m.workspace == job.workspace);
+            let (into, seen) = match position {
+                Some(position) => &mut merged[position],
+                None => {
+                    merged.push((
+                        SyncDocuments {
+                            index: job.index.clone(),
+                            ids: Vec::new(),
+                            workspace: job.workspace.clone(),
+                        },
+                        HashSet::new(),
+                    ));
+                    merged.last_mut().expect("just pushed")
+                }
+            };
+            for id in job.ids {
+                if seen.insert(id.clone()) {
+                    into.ids.push(id);
+                }
+            }
+        }
+        merged.into_iter().map(|(job, _)| job).collect()
+    }
+}
+
+impl Drop for FreshImport<'_> {
+    fn drop(&mut self) {
+        lock(&self.inner.fresh).remove(&self.index);
+    }
 }
 
 /// Inline syncs run one at a time, in commit order, on one background
