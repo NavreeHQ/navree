@@ -80,6 +80,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
 
 The facade's root also has:
 
@@ -102,6 +103,7 @@ The facade's root also has:
 | Database | `DatabaseModule`, `Uow`, `Repo`, `Page`, `PageQuery`, `MigrationSet`, `ModelFactory` |
 | Validation | `Valid`, `ValidAsync`, `ValidationModule` |
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
+| MCP (with `mcp`) | `McpModule` (and `m.mcp_server::<S>()`) |
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule` |
 
@@ -115,7 +117,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ones: ecosystem packages such as `mcp`, which you turn on by name (`features = ["mcp"]`, next to the defaults). To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -136,6 +138,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
+| `mcp` (opt-in) | `http`, `cache`, `db`, `testing`, `validation`, `access`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
@@ -156,7 +159,7 @@ Turning a feature off removes the module's crate from the build, along with its 
 2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
 3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
 
-`#[controller]` needs navree-http, and `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access; with the facade, that means the `http` and `access` features.
+`#[controller]` needs navree-http, and `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access; with the facade, that means the `http` and `access` features. `#[mcp_server]` names `::navree::mcp` (or `::navree_mcp`), so it needs the `mcp` feature; import it from `navree::mcp`.
 
 ## Using a crate on its own
 
