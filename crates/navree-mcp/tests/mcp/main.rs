@@ -7,6 +7,7 @@ mod support;
 mod boot;
 mod http;
 mod notifications;
+mod observability;
 mod prompts;
 mod resources;
 mod stdio;
