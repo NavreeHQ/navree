@@ -1,7 +1,6 @@
 ---
 title: "Billing"
 description: "Subscriptions, trials, seats, metered usage, invoices and the customer portal for users or workspaces, with Stripe or Paddle and verified webhooks processed on the queue."
-status: "planned"
 ---
 
 ## Introduction
@@ -21,14 +20,14 @@ Card numbers never touch your servers: checkout and the portal are hosted by the
 
 ## Installation
 
-Turn on the `billing` feature of the `navree` facade. It brings `navree-billing` and the [webhooks](/docs/packages/webhooks/) package it verifies incoming events with:
+Turn on the `billing` feature of the `navree` facade. It brings `navree-billing`, and with it the auth, workspace, database, events, HTTP client and scheduling features it builds on. Billing is opt-in: the default `full` feature leaves it out.
 
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["billing"] }
 ```
 
-Add `BillingModule` to your app root. It needs the database, the queue (webhook events and usage reports run as jobs), the events bus, the HTTP client (it calls the provider's API) and auth:
+Add `BillingModule` to your app root. It needs the database. Its routes need an authenticator (auth) and, for workspace billing, access control and workspaces. The queue runs the webhook jobs, the scheduler reports metered usage, the events bus delivers the billing events, and the HTTP client calls the provider's API (a default client is built when `HttpClientModule` is not in the app):
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
@@ -36,27 +35,29 @@ use navree::prelude::*;
 pub fn app(sources: ConfigSources) -> AppBuilder {
     Navree::app()
         .module(ConfigModule::for_root(sources))
+        .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(QueueModule::from_config())
         .module(ScheduleModule::for_root()) // reports metered usage every minute
         .module(HttpClientModule::from_config())
         .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
         .module(BillingModule::from_config()) // section `billing`
         .module(SettingsModule)
 }
 ```
 
-The module contributes the migration set `billing`, which runs after `auth` and `workspaces` and creates the tables in [the tables](#the-tables). `navree migrate` runs it with your own migrations.
+The module contributes the migration set `billing`, which runs after `auth` and `workspace` and creates the tables in [the tables](#the-tables). `navree migrate` runs it with your own migrations.
 
 ## Configuration
 
-Choose a provider and list your plans in the `billing` section. Each plan has a key you use in code (`pro`) and the provider's price ids:
+Choose a provider and list your plans in the `billing` section. Each plan has a key you use in code (`pro`; lower-case letters, digits, `_` and `-`) and the provider's price ids:
 
 ```toml title="config/app.toml"
 [billing]
-provider = "stripe"                               # stripe | paddle
+provider = "stripe"                               # stripe | paddle | fake
 return_url = "https://app.acme.test/settings/billing"
 
 [billing.plans.starter]
@@ -84,7 +85,9 @@ APP_BILLING__STRIPE__SECRET_KEY=sk_live_51Q8...
 APP_BILLING__STRIPE__WEBHOOK_SECRET=whsec_Jx2...
 ```
 
-Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select the `checkout.session.*`, `customer.*`, `customer.subscription.*` and `invoice.*` events, or run `navree billing:webhook` to create the endpoint with the right events through the API.
+Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select the `checkout.session.*`, `customer.*`, `customer.subscription.*` and `invoice.*` events, or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
+
+Every request is pinned to Stripe API version `2025-03-31.basil` (`navree::billing::STRIPE_API_VERSION`) with the `Stripe-Version` header, and `billing:webhook` creates the endpoint on the same version, so the payloads have the shape Navree reads.
 
 </Tab>
 <Tab label="Paddle">
@@ -96,12 +99,14 @@ APP_BILLING__PADDLE__WEBHOOK_SECRET=pdl_ntfset_01j...
 APP_BILLING__PADDLE__ENVIRONMENT=production
 ```
 
-`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*`, `transaction.*` and `customer.*` events. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
+`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*`, `transaction.*` and `customer.*` events, or run `navree billing:webhook <url>`. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
+
+Paddle's checkout is a transaction opened on your account's default payment link, so set one in the Paddle dashboard. A few checkout options work differently on Paddle: the trial is the trial period of the price in Paddle (a checkout's `trial_days` is not sent), `coupon` is a discount id, and the customer returns to the URLs configured on the payment link rather than `success_url` and `cancel_url`.
 
 </Tab>
 </Tabs>
 
-Every key also comes from the environment with the `APP_` prefix and `__` between levels: `APP_BILLING__PLANS__PRO__TRIAL_DAYS=30`. A plan without a monthly or yearly price, an unknown provider or a missing secret key fails the boot, naming the key; secrets are never printed. To configure the module in code, pass `BillingOptions` to `BillingModule::for_root`.
+Every key also comes from the environment with the `APP_` prefix and `__` between levels: `APP_BILLING__PLANS__PRO__TRIAL_DAYS=30`. A plan without a monthly or yearly price, an unknown provider or a missing secret fails the boot, naming the key; secrets are never printed. The secret key (`billing.stripe.secret_key` or `billing.paddle.api_key`) is always required for its provider, the webhook secret while `billing.webhook_route` is on. To configure the module in code, pass `BillingOptions` to `BillingModule::for_root`.
 
 ## Billable models
 
@@ -144,7 +149,9 @@ impl Billable for Organization {
 }
 ```
 
-`billing_email` may return `None`; the checkout then asks for one, and Navree prefills it with the email of the user who started the checkout. The provider's customer is created on the first checkout and linked to the billable in `billing_customers`.
+`billing_email` may return `None` (a workspace has no email of its own); the checkout then uses the email passed to `customer_email`, which the [built-in routes](#built-in-routes) fill with the signed-in user's, or the provider's checkout asks for one. The provider's customer is created on the first checkout and linked to the billable in `billing_customers`; on Paddle, which needs an email for a customer, a checkout without one links the customer when the payment's webhook arrives.
+
+A type of your own works with every `Billing` method. To use it on routes (the [built-in routes](#built-in-routes) and the `Subscribed` extractor), also implement `Billable::from_request`, which finds the request's billable; the built-in billables resolve it from `CurrentWorkspace` and `CurrentUser`.
 
 ## Checkout
 
@@ -170,6 +177,7 @@ pub struct BillingController {
 }
 
 #[controller("/billing/upgrade", version = "1")]
+#[guard(InWorkspace::guard())] // `billing.manage` is checked in the workspace
 impl BillingController {
     /// `POST /api/v1/billing/upgrade`: a checkout URL for the current workspace.
     #[post("/")]
@@ -202,20 +210,20 @@ The front end redirects the browser to `url`. When the customer pays, the provid
 
 | Builder method | Effect |
 |---|---|
-| `yearly()`, `monthly()` | Which of the plan's prices to charge (monthly by default) |
+| `yearly()`, `monthly()`, `interval(i)` | Which of the plan's prices to charge (monthly by default) |
 | `trial_days(n)` | Overrides the plan's `trial_days`; `0` skips the trial |
-| `quantity(n)` | Seats; with `seats = true` the default is the workspace's member count |
-| `coupon(code)` | A provider coupon or promotion code |
-| `allow_promotion_codes()` | Lets the customer type a code on the checkout page |
+| `quantity(n)` | Seats; with `seats = true` the default is the workspace's member count, otherwise 1 |
+| `coupon(code)` | A provider coupon or promotion code (Stripe: a coupon id or a `promo_...` id; Paddle: a discount id) |
+| `allow_promotion_codes()` | Lets the customer type a code on the checkout page (Stripe) |
 | `customer_email(email)` | Prefills the email when the billable has none |
 | `success_url(url)`, `cancel_url(url)` | Where the customer returns; both default to `billing.return_url` |
 | `metadata(key, value)` | Stored on the provider's subscription |
 
-An unknown plan key is `BillingError::UnknownPlan`, a 400 in a handler. A billable that already has a valid subscription gets a 409: change its plan with `swap` instead.
+`create` returns a `Checkout` (`id`, `url`, `plan`, `interval`, `quantity`, `trial_days`), which converts into the `CheckoutUrl` response. An unknown plan key is `BillingError::UnknownPlan`, a 400 in a handler (`errors.plan`); a plan without a price for the interval is `BillingError::NoPrice` (`errors.interval`). A billable that already has a valid subscription gets a 409: change its plan with `swap` instead.
 
 ## Checking subscriptions
 
-`subscription` reads the local copy, so it costs one indexed query:
+`subscription` reads the local copy, so it costs one indexed query. It returns the billable's valid subscription, else its latest one that has not ended, else its latest one:
 
 ```rust
 let subscription = billing.subscription(&workspace).await?;
@@ -240,12 +248,14 @@ if billing.subscribed(&workspace, "pro").await? {
 | `quantity` | Seats |
 | `trial_ends_at`, `ends_at`, `current_period_end` | UTC timestamps; `ends_at` is set once it is canceled |
 | `valid()` | Trialing, active, on its grace period after a cancellation, or past due for less than `billing.past_due_grace_days` |
-| `on_trial()`, `on_grace_period()`, `canceled()`, `past_due()`, `paused()` | What they say |
+| `on_trial()`, `on_grace_period()`, `canceled()`, `past_due()`, `paused()`, `ended()` | What they say |
 | `on_plan(plan)` | Whether it is on that plan key |
+
+The checks are evaluated at the time the subscription was read, with the app's `dyn Clock`. `subscriptions(&billable)` lists every subscription, newest first.
 
 ### Requiring a subscription on a route
 
-The `Subscribed` extractor answers 402 unless the request's billable (the `CurrentWorkspace`, or the `CurrentUser` when you bill users) has a valid subscription. It derefs to the `Subscription`:
+The `Subscribed` extractor answers 402 unless the request's billable (the `CurrentWorkspace`, or the `CurrentUser` when you bill users) has a valid subscription or a [trial without one](#trials). It derefs to the `Subscription`:
 
 ```rust
 use navree::billing::Subscribed;
@@ -264,7 +274,7 @@ async fn summarize(&self, subscription: Subscribed, Path(id): Path<Uuid>) -> Res
 { "statusCode": 402, "message": "This workspace needs an active subscription", "error": "Payment Required" }
 ```
 
-To show a feature to some plans before you gate it, combine billing with [feature flags](/docs/packages/feature-flags/).
+`billing.access(&billable)` gives the same answer outside a request. To show a feature to some plans before you gate it, combine billing with [feature flags](/docs/packages/feature-flags/).
 
 ## Changing subscriptions
 
@@ -279,15 +289,15 @@ billing.pause(&workspace).await?;                // stop charging, keep it
 billing.unpause(&workspace).await?;
 ```
 
-Every call updates the provider first and the local copy after it, inside one unit of work. The webhook that follows confirms the change and is a no-op when nothing differs.
+Every call updates the provider first and the local copy after it, in the current unit of work (the request's in a handler) or its own, and returns the updated `Subscription`. The webhook that follows confirms the change and is a no-op when nothing differs. A billable without a subscription gets `BillingError::NoSubscription`, a 404.
 
-- **Proration.** Swaps and quantity changes are prorated and charged on the next invoice. `swap_with(&workspace, "business", Proration::InvoiceNow)` charges the difference at once; `Proration::None` doesn't prorate.
-- **Seats.** For a plan with `seats = true`, Navree listens to the workspace events `MemberAdded` and `MemberRemoved` and updates the quantity when someone joins or leaves. Set `seats = false` and call `update_quantity` yourself to bill something else per unit.
+- **Proration.** Swaps and quantity changes are prorated and charged on the next invoice (`Proration::NextInvoice`). `swap_with(&workspace, "business", Proration::InvoiceNow)` charges the difference at once; `Proration::None` doesn't prorate. `swap` keeps the current interval; `swap_monthly`, `swap_yearly` and `swap_to(&workspace, plan, Some(interval), proration)` choose it. Metered prices follow the new plan's meters.
+- **Seats.** For a plan with `seats = true`, Navree listens to the workspace events `MemberAdded` and `MemberRemoved` (a queued listener) and updates the quantity when someone joins or leaves; a swap onto such a plan takes the member count. Set `seats = false` and call `update_quantity` yourself to bill something else per unit.
 - **Grace period.** After `cancel`, `valid()` stays true until `ends_at`, the end of the paid period. `resume` works until then.
 
 ## Trials
 
-A plan's `trial_days` applies to every checkout of that plan. Pass `.trial_days(n)` to override it for one checkout. The provider collects the card at checkout and charges it when the trial ends; three days before, it sends a "trial ending" webhook and Navree emits `TrialEnding`.
+A plan's `trial_days` applies to every checkout of that plan. Pass `.trial_days(n)` to override it for one checkout. The provider collects the card at checkout and charges it when the trial ends; on Stripe, three days before, it sends a "trial ending" webhook and Navree emits `TrialEnding`. Paddle sends no such webhook, so `TrialEnding` is not emitted there.
 
 To let a new workspace try the product before it enters a card, start a trial without a subscription:
 
@@ -299,7 +309,7 @@ billing.on_trial(&workspace).await?;
 billing.trial_ends_at(&workspace).await?;
 ```
 
-A trial without a subscription lives in `billing_customers.trial_ends_at` and never reaches the provider. `Subscribed` lets the workspace through while it lasts, with `subscription.plan` set to the plan in `billing.trial_plan` (default: the first plan).
+A trial without a subscription lives in `billing_customers.trial_ends_at` and never reaches the provider. `Subscribed` lets the workspace through while it lasts, with `subscription.plan` set to the plan in `billing.trial_plan` (default: the first plan by key) and `is_trial_without_subscription()` true.
 
 ## Metered usage
 
@@ -309,14 +319,14 @@ Bill per use (AI summaries generated, emails sent, API calls) with a metered pri
 billing.report_usage(&workspace, "ai_summaries", 1).await?;
 ```
 
-`report_usage` writes one row to `billing_usage` in the current unit of work, so a request that fails records nothing and the call costs no network round trip. A scheduled task, `billing:report-usage`, runs every minute with `ScheduleModule` in the app: it sums the unreported rows per billable and meter and sends them to the provider (Stripe meter events, or a Paddle charge added to the next renewal). Without the scheduler, run the command yourself, from cron or a worker.
+`report_usage` writes one row to `billing_usage` in the current unit of work, so a request that fails records nothing and the call costs no network round trip. A scheduled task, `billing:report-usage`, runs every minute with `ScheduleModule` in the app: it sums the unreported rows per billable and meter and sends them to the provider, then marks them reported. On Stripe that is a meter event for the meter behind the metered price (Navree reads the meter's event name from the price once); on Paddle, a one-time charge added to the next renewal. Without the scheduler, run the command yourself, from cron or a worker.
 
 ```rust
 // This period's total, reported or not:
 let used = billing.usage(&workspace, "ai_summaries").await?;
 ```
 
-Reporting an unknown meter, or usage for a billable whose plan has no such meter, is `BillingError::UnknownMeter`.
+Reporting a meter no plan has, or usage for a billable whose plan has no such meter, is `BillingError::UnknownMeter` (a 400); usage for a billable without a valid subscription is `BillingError::NoSubscription`. Rows of a billable whose subscription ended before they were reported stay unreported.
 
 ## Invoices and the customer portal
 
@@ -329,11 +339,11 @@ for invoice in billing.invoices(&workspace).await? {
 let url = billing.portal_url(&workspace, "https://app.acme.test/settings/billing").await?;
 ```
 
-Invoices are read from the provider and cached for `billing.invoice_cache_secs` (300). The customer portal is the provider's hosted page where customers change their card, switch plans you allow there, cancel and download every invoice. Changes made in the portal reach you as webhooks, like any other change.
+Invoices are read from the provider (on Paddle, the customer's billed transactions, without document links) and cached in memory for `billing.invoice_cache_secs` (300); a payment webhook for the billable clears its cache. The customer portal is the provider's hosted page where customers change their card, switch plans you allow there, cancel and download every invoice. Changes made in the portal reach you as webhooks, like any other change. A billable without a provider customer yet gets `BillingError::NoCustomer` from `portal_url`.
 
 ## Built-in routes
 
-With `billing.routes = true` (the default), the module mounts JSON routes for your billing settings page, under `/api/billing`. They act on the request's billable and require the `billing.manage` permission. A workspace's owner has every permission; grant it to admins in the [workspace roles](/docs/workspaces/members-and-roles/):
+With `billing.routes = true` (the default), the module mounts JSON routes for your billing settings page, under `/api/billing`. They act on the request's billable. For a workspace they run behind the `InWorkspace` guard and require the `billing.manage` permission in the workspace; a workspace's owner has every permission, so grant it to admins in the [workspace roles](/docs/workspaces/members-and-roles/). For users, any signed-in user manages their own billing. For a billable type of your own they require the `billing.manage` permission.
 
 ```toml title="config/app.toml"
 [workspace.roles.admin]
@@ -345,23 +355,23 @@ The routes:
 | Route | Does |
 |---|---|
 | `GET /api/billing` | The subscription, the trial, this period's usage per meter and the plans |
-| `GET /api/billing/plans` | The configured plans with their names, intervals and prices |
-| `POST /api/billing/checkout` | `{plan, interval?}`: `{url}` of a checkout |
+| `GET /api/billing/plans` | `{data}`: the configured plans with their names, intervals and prices |
+| `POST /api/billing/checkout` | `{plan, interval?}`: `{url}` of a checkout (prefilled with the signed-in user's email) |
 | `POST /api/billing/swap` | `{plan, interval?}`: the updated subscription |
 | `POST /api/billing/cancel`, `POST /api/billing/resume` | The updated subscription |
-| `GET /api/billing/invoices` | The invoices |
-| `POST /api/billing/portal` | `{return_url?}`: `{url}` of the customer portal |
-| `POST /api/billing/webhook` | The provider's webhooks; public and verified |
+| `GET /api/billing/invoices` | `{data}`: the invoices |
+| `POST /api/billing/portal` | `{return_url?}`: `{url}` of the customer portal; `return_url` must be on the origin of `billing.return_url` |
+| `POST /api/billing/webhook` | The provider's webhooks; public and verified; `{received, duplicate}` |
 
-When you register both `User` and `Workspace` as billables, set `billing.routes_billable` to `workspace` or `user`. Turn the routes off with `billing.routes = false` and keep only the webhook with `billing.webhook_route = true`.
+When you register both `User` and `Workspace` as billables, set `billing.routes_billable` to `workspace` or `user`; until you do, the boot fails, naming the key. Turn the routes off with `billing.routes = false` and keep only the webhook with `billing.webhook_route = true`.
 
 ## Webhooks and events
 
 The provider tells you about every change through webhooks. `POST /api/billing/webhook` handles them in three steps:
 
-1. It verifies the signature with the [webhooks](/docs/packages/webhooks/#verifying-incoming-webhooks) package (`Stripe-Signature` or `Paddle-Signature`, with 5 minutes of tolerance) and answers 400 to anything that fails.
+1. It verifies the signature: `Stripe-Signature` (`t=..,v1=..`, an HMAC-SHA256 of the timestamp and the raw body) or `Paddle-Signature` (`ts=..;h1=..`, the same scheme), with 5 minutes of tolerance in either direction, and answers 400 to anything that fails, including a body it cannot read. The comparison is constant-time and several signatures in one header (secret rotation) are accepted.
 2. It stores the event in `billing_events`, keyed by the provider's event id. A redelivered event is answered 200 and not stored again.
-3. It answers 200 and dispatches a `billing.process_event` job. The job updates the local customer, subscription and invoice rows and emits a Navree event.
+3. It answers 200 and dispatches a `billing.process_event` job on `billing.queue` (without a queue module, the job runs at once). The job updates the local customer and subscription rows, ignores states older than the one it already has (events can arrive out of order), clears the billable's cached invoices and emits a Navree event once its unit of work commits.
 
 The events are ordinary [events](/docs/digging-deeper/events/):
 
@@ -370,11 +380,11 @@ The events are ordinary [events](/docs/digging-deeper/events/):
 | `SubscriptionCreated` | `subscription.created` | A checkout completed |
 | `SubscriptionUpdated` | `subscription.updated` | Plan, quantity, status or period changed |
 | `SubscriptionCanceled` | `subscription.canceled` | Canceled, now or at the period's end (`ends_at`) |
-| `TrialEnding` | `subscription.trial_ending` | Three days before a trial with a subscription ends |
+| `TrialEnding` | `subscription.trial_ending` | Three days before a trial with a subscription ends (Stripe) |
 | `InvoicePaid` | `invoice.paid` | A payment succeeded |
 | `PaymentFailed` | `invoice.payment_failed` | A payment failed; the provider retries it |
 
-Each carries `billable_type`, `billable_id`, `subscription_id` and `plan`; the invoice events add `invoice_id` and `amount_cents`. This listener tells a workspace's owner that a payment failed, through a [notification](/docs/digging-deeper/notifications/):
+Each carries `billable_type`, `billable_id`, `subscription_id` and `plan`; the invoice events add `invoice_id`, `amount_cents` and `currency`, and their `subscription_id` and `plan` are `Option`s (an invoice need not belong to a subscription). This listener tells a workspace's owner that a payment failed, through a [notification](/docs/digging-deeper/notifications/):
 
 ```rust title="src/modules/settings/listeners.rs"
 use navree::BoxFuture;
@@ -417,19 +427,19 @@ impl Listener<PaymentFailed> for WarnOwnerOfFailedPayment {
 }
 ```
 
-A job that fails is retried with backoff; one that keeps failing stays in `billing_events` with its error, and `billing:events --failed` lists them. `billing:sync <type> <id>` pulls a billable's state from the provider when you need to repair a copy by hand.
+A job that fails is retried with backoff (8 attempts, from 10 seconds to 10 minutes apart); each failure is recorded on its `billing_events` row (`attempts`, `error`), and `billing:events --failed` lists the events that have not succeeded since. `billing:sync <type> <id>` pulls a billable's subscriptions from the provider when you need to repair a copy by hand (`billing:sync workspace 0199...`).
 
 ## The tables
 
 | Table | Holds |
 |---|---|
-| `billing_customers` | One row per billable: `billable_type`, `billable_id`, the provider's customer id, `trial_ends_at` |
-| `subscriptions` | `plan`, `interval`, `status`, `quantity`, `trial_ends_at`, `ends_at`, `current_period_end`, the provider's ids |
-| `subscription_items` | Each price of a subscription, metered prices included |
+| `billing_customers` | One row per billable: `billable_type`, `billable_id`, the provider and its customer id, `email`, `trial_ends_at` |
+| `subscriptions` | `plan`, `interval`, `status`, `quantity`, `trial_ends_at`, `ends_at`, `current_period_start`, `current_period_end`, `past_due_since`, the provider's ids and the time of the provider state it reflects |
+| `subscription_items` | Each price of a subscription, metered prices included (with their meter key) |
 | `billing_usage` | Recorded usage, with `reported_at` once sent |
-| `billing_events` | Every webhook received: type, payload, `processed_at`, `error` |
+| `billing_events` | Every webhook received: type, payload, `processed_at`, `attempts`, `error` |
 
-Read them through `Billing` rather than querying them: a subscription row is only as fresh as the last webhook, and the service methods know which fields the provider owns.
+Read them through `Billing` rather than querying them: a subscription row is only as fresh as the last webhook, and the service methods know which fields the provider owns. The entities are in `navree::billing::entity`.
 
 ## Testing
 
@@ -449,14 +459,17 @@ async fn upgrading_starts_a_pro_trial() {
     let app = TestApp::builder()
         .temp_database()
         .fake_auth()
+        .config("app.key", navree::crypto::generate_key())
         .config("billing.provider", "fake")
         .config("billing.plans.pro.prices.monthly", "price_pro")
         .config("billing.plans.pro.trial_days", 14)
         .config("queue.driver", "memory")
+        .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(QueueModule::from_config())
         .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
         .module(BillingModule::from_config())
         .module(SettingsModule)
@@ -501,35 +514,38 @@ async fn upgrading_starts_a_pro_trial() {
 
 | `BillingFake` | |
 |---|---|
-| `checkouts()`, `assert_checkout(predicate)` | The checkouts created; `assert_checkout` returns the match |
+| `checkouts()`, `assert_checkout(predicate)` | The checkouts created; `assert_checkout` returns the match (`id`, `url`, `plan`, `interval`, `price_id`, `quantity`, `trial_days`, `coupon`, `customer_email`, `metadata`, ...) |
 | `complete_checkout(id)` | Sends the webhooks of a paid checkout: customer, subscription, first invoice |
-| `fail_next_payment(&billable)` | The next renewal sends `invoice.payment_failed` |
-| `end_trial(&billable)`, `renew(&billable)` | Sends the webhooks of a trial ending or a period renewing |
+| `fail_next_payment(&billable)` | The next payment (a renewal, or the end of a trial) sends `invoice.payment_failed` |
+| `end_trial(&billable)`, `renew(&billable)` | Sends the webhooks of a trial ending or a period renewing (or, after `cancel`, of the subscription ending) |
 | `reported_usage(&billable, meter)` | The usage the reporter sent |
-| `send_webhook(type, json)` | Any provider event, as raw JSON |
+| `send_webhook(type, json)` | Any event: `json` is a Stripe-shaped `data.object` |
+| `webhook_secret()` | The secret the fake signs with (`Stripe-Signature`), to post to the webhook route yourself |
 
-The simulated webhooks go through the same verification, storage and job as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
+The simulated webhooks are Stripe-shaped events signed with the fake's own secret, and they go through the same verification, storage, job and mapping as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Changes made through `Billing` (`swap`, `cancel`, ...) update the fake and the local copy at once; the fake sends no webhook for them. Fake invoices cost 1000 cents per seat and period (nothing during a trial). Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
 
-To test against the provider's own test mode, use real test keys (`sk_test_...`, the Paddle sandbox) in a separate, opt-in test suite, and forward webhooks to your machine with the provider's CLI.
+To test against the provider's own test mode, use real test keys (`sk_test_...`, the Paddle sandbox) in a separate, opt-in test suite, and forward webhooks to your machine with the provider's CLI. `billing.stripe.api_base` and `billing.paddle.api_base` point the clients at a mock server or a proxy.
 
 ## Reference
 
 | Key | Default | Meaning |
 |---|---|---|
 | `billing.provider` | `stripe` | `stripe`, `paddle` or `fake` |
-| `billing.currency` | `usd` | Default currency for new customers (Stripe) |
+| `billing.currency` | `usd` | The currency of the fake provider's invoices (Stripe and Paddle take it from the price) |
 | `billing.return_url` | `app.url` | Where checkout and the portal return |
-| `billing.queue` | `default` | The queue of webhook and usage jobs |
+| `billing.queue` | `default` | The queue of the webhook jobs |
 | `billing.past_due_grace_days` | `7` | Days a past-due subscription stays valid |
-| `billing.trial_plan` | the first plan | The plan a trial without a subscription grants |
-| `billing.invoice_cache_secs` | `300` | How long invoice lists are cached |
+| `billing.trial_plan` | the first plan by key | The plan a trial without a subscription grants |
+| `billing.invoice_cache_secs` | `300` | How long invoice lists are cached (`0`: not cached) |
 | `billing.routes` | `true` | Mounts the `/api/billing` routes |
-| `billing.routes_billable` | the only registered billable | `workspace` or `user` |
+| `billing.routes_billable` | the only registered billable | `workspace`, `user` or the `BILLABLE_TYPE` of a type of your own |
 | `billing.webhook_route` | `true` | Mounts `POST /api/billing/webhook` |
 | `billing.webhook_tolerance_secs` | `300` | Accepted clock skew of webhook signatures |
 | `billing.stripe.secret_key`, `billing.stripe.webhook_secret` | none | Secrets; from `.env` |
+| `billing.stripe.api_base` | `https://api.stripe.com` | The Stripe API's base URL |
 | `billing.paddle.api_key`, `billing.paddle.webhook_secret` | none | Secrets; from `.env` |
 | `billing.paddle.environment` | `sandbox` | `sandbox` or `production` |
+| `billing.paddle.api_base` | the environment's | The Paddle API's base URL |
 | `billing.plans.<key>.name` | the key | Display name |
 | `billing.plans.<key>.prices` | none | `{ monthly, yearly }` price ids; at least one |
 | `billing.plans.<key>.trial_days` | `0` | Trial on checkout |
@@ -539,9 +555,9 @@ To test against the provider's own test mode, use real test keys (`sk_test_...`,
 | Command | What it does |
 |---|---|
 | `billing:plans` | Lists the plans and checks every price id against the provider |
-| `billing:webhook <url>` | Creates the provider's webhook endpoint with the events Navree handles |
+| `billing:webhook <url>` | Creates the provider's webhook endpoint with the events Navree handles, and prints its secret |
 | `billing:report-usage` | Reports unreported usage (scheduled every minute) |
-| `billing:sync <type> <id>` | Pulls a billable's customer, subscription and invoices from the provider |
+| `billing:sync <type> <id>` | Pulls a billable's subscriptions from the provider |
 | `billing:events [--failed]` | Lists received webhook events |
 | `billing:prune-events [--days N]` | Deletes processed events older than N days (default 90) |
 
@@ -550,7 +566,7 @@ To test against the provider's own test mode, use real test keys (`sk_test_...`,
     The billable most SaaS apps charge.
   </LinkCard>
   <LinkCard href="/docs/packages/webhooks/" title="Webhooks">
-    The signature verification behind the billing webhook.
+    Signed webhooks for your own events and other providers.
   </LinkCard>
   <LinkCard href="/docs/packages/feature-flags/" title="Feature flags">
     Roll out features by plan, workspace or percentage.

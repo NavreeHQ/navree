@@ -8,4 +8,5 @@ mod options;
 mod queue;
 mod smtp;
 mod support;
+mod telemetry;
 mod transports;

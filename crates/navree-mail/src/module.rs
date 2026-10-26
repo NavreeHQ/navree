@@ -5,6 +5,7 @@ use std::sync::Arc;
 use navree_config::{Config, ConfigSection};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_telemetry::Telemetry;
 use navree_view::Views;
 
 use crate::{MailOptions, MailTransport, Mailer, SendMailJob};
@@ -141,8 +142,10 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 let options = r.get::<MailOptions>().await?;
                 let transport = r.get::<dyn MailTransport>().await?;
                 let views = r.get::<Views>().await?;
+                let telemetry = Telemetry::from_app(&r.app()).await;
                 let mailer = Mailer::new(transport, views, options.from.clone())
-                    .queued_through(r.app().downgrade(), options.queue.clone());
+                    .queued_through(r.app().downgrade(), options.queue.clone())
+                    .with_telemetry(telemetry);
                 Ok(Arc::new(mailer))
             })
             .deps(vec![

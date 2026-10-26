@@ -13,6 +13,7 @@ use crate::file::{FileSink, FileWriter};
 use crate::filter::Levels;
 use crate::json::{JsonEvents, JsonFields};
 use crate::redact::{RedactingFields, Redactor};
+use crate::telemetry::TelemetryLayer;
 use crate::{LogControl, LogError, LogFormat, LogOptions};
 
 /// The registry under the reloadable level filter.
@@ -84,6 +85,8 @@ where
         }
         None => None,
     };
+    // Log lines also go to the telemetry sinks that want them.
+    layers.push(TelemetryLayer::new(redactor.clone()).boxed());
     let subscriber = Registry::default().with(filter).with(layers);
     Ok((
         Dispatch::new(subscriber),

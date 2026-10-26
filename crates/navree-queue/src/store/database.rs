@@ -278,7 +278,7 @@ fn reserve_statement(backend: DbBackend, queue: &str, worker: &str, now: i64) ->
                  OR reserved_at + (CASE WHEN timeout_secs = 0 THEN {UNLIMITED_RESERVATION_SECS} \
                      ELSE timeout_secs END + {STALE_RESERVATION_GRACE_SECS}) * 1000 <= ?) \
              ORDER BY available_at, id LIMIT 1{lock}) \
-         RETURNING id, queue, job_type, payload, options, attempts"
+         RETURNING id, queue, job_type, payload, options, attempts, trace_parent"
     );
     statement(
         backend,
@@ -355,8 +355,8 @@ fn insert_job(backend: DbBackend, job: &NewJob) -> Result<Statement, QueueError>
         &format!(
             "INSERT INTO {JOBS_TABLE} \
              (id, queue, job_type, payload, options, attempts, max_attempts, timeout_secs, \
-              available_at, unique_key, created_at) \
-             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) \
+              available_at, unique_key, created_at, trace_parent) \
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?) \
              ON CONFLICT (unique_key) DO NOTHING"
         ),
         vec![
@@ -372,6 +372,7 @@ fn insert_job(backend: DbBackend, job: &NewJob) -> Result<Statement, QueueError>
             job.available_at.into(),
             job.unique_key.clone().into(),
             job.created_at.into(),
+            job.trace_parent.clone().into(),
         ],
     ))
 }
@@ -393,6 +394,7 @@ fn reserved_job(row: &QueryResult) -> Result<ReservedJob, QueueError> {
         payload: json(&row.try_get::<String>("", "payload")?)?,
         options: json(&row.try_get::<String>("", "options")?)?,
         attempts: count(row, "attempts")?,
+        trace_parent: row.try_get("", "trace_parent")?,
     })
 }
 

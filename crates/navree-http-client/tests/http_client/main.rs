@@ -6,3 +6,4 @@ mod real;
 mod retry;
 mod ssrf;
 mod support;
+mod telemetry;

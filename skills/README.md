@@ -39,11 +39,13 @@ conventions, and says which skill to load for each task.
 | [`navree-deployment`](navree-deployment/SKILL.md) | Release builds, processes, systemd, proxies and health checks |
 | [`navree-security-checklist`](navree-security-checklist/SKILL.md) | What to check before shipping |
 | [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level |
+| [`navree-billing`](navree-billing/SKILL.md) | Subscriptions, trials, seats, metered usage, invoices and webhooks with Stripe or Paddle |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [`navree-flags`](navree-flags/SKILL.md) | Feature flags: define, check, roll out by percentage or plan, kill, test |
 | [`navree-search`](navree-search/SKILL.md) | Full-text and vector search over entities, engines and index syncing |
+| [`navree-telemetry`](navree-telemetry/SKILL.md) | Telemetry events and sinks, OpenTelemetry tracing and OTLP export, trace context, `TelemetryRecorder` and `SpanRecorder` in tests |
 
 ## Installing
 

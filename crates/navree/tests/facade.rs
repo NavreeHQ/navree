@@ -25,6 +25,10 @@ fn every_module_crate_is_reexported_whole() {
         navree::contracts::RequestId,
     >());
     assert!(same::<navree::config::ConfigModule, ConfigModule>());
+    assert!(same::<
+        navree::telemetry::TelemetryModule,
+        navree::telemetry::TelemetryModule,
+    >());
     // L2
     assert!(same::<navree::http::HttpModule, HttpModule>());
     assert!(same::<navree::log::LoggerModule, LoggerModule>());
@@ -57,6 +61,9 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    // L7 (opt-in)
+    #[cfg(feature = "billing")]
+    assert!(same::<navree::billing::BillingModule, BillingModule>());
 }
 
 /// Opt-in ecosystem crates are re-exported whole behind their feature
@@ -226,6 +233,12 @@ struct Features {
     runtime_deps: BTreeMap<String, Vec<String>>,
 }
 
+/// Features left out of `full` on purpose: development tools an app's
+/// runtime never needs (`dock`), and ecosystem libraries and packages an app
+/// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
+/// `features = ["flags"]`, `features = ["billing"]`, `features = ["search"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "billing", "search"];
+
 /// Always compiled into the facade (not behind a feature).
 const ALWAYS: [&str; 4] = [
     "navree-kernel",
@@ -373,12 +386,6 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     }
     assert!(extra.is_empty(), "{extra:#?}");
 }
-
-/// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`), and ecosystem libraries and packages an
-/// app turns on by name (`features = ["social"]`, `features = ["oauth"]`,
-/// `features = ["flags"]`, `features = ["search"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "search"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {

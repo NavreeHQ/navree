@@ -24,6 +24,9 @@ pub use navree_kernel::{
     Resolver,
 };
 
+#[cfg(feature = "telemetry")]
+pub use navree_telemetry::ModuleBuilderTelemetryExt as _;
+
 #[cfg(feature = "http")]
 pub use crate::Result;
 #[cfg(feature = "http")]
@@ -86,6 +89,9 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 
 #[cfg(feature = "flags")]
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
+
+#[cfg(feature = "billing")]
+pub use navree_billing::BillingModule;
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
