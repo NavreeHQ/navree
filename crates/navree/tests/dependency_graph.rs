@@ -10,7 +10,7 @@
 //!   ViewModule for MailModule). This covers `navree-testing` (L3) for every
 //!   crate in layer 4 or above.
 //! - `navree-macros` tests expand the macros against the runtime crates, so
-//!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 5).
+//!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 6).
 //!
 //! It also checks the external side of the graph: `Cargo.lock` must not contain
 //! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only).
@@ -85,7 +85,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access",
     ]),
-    // L6
+    // L6: ecosystem libraries (plan §3), then the facade and the CLI.
+    // Microservices: message handlers run through navree-http's guards and
+    // authorizer, navree-db's unit of work (outbox, inbox, dead letters) and
+    // navree-validation's `Valid`; `forward_event` uses navree-events;
+    // `MicroFake` answers with navree-testing's `TestResponse`.
+    rule("navree-micro", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
+        "navree-db", "navree-testing", "navree-validation",
+    ]),
     rule("navree", 6, RUNTIME_CRATES),
     rule("navree-cli", 6, &[]),
     // L7 (apps): anything below, except the CLI binary.
@@ -112,7 +120,7 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
+/// Every runtime crate (layers 0 to 6) plus navree-macros: what the facade may
 /// re-export and what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
@@ -142,6 +150,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-auth",
     "navree-workspace",
+    "navree-micro",
 ];
 
 /// Cargo dependency kind of an edge.
