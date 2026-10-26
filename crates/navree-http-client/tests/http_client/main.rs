@@ -5,4 +5,5 @@ mod module;
 mod real;
 mod retry;
 mod ssrf;
+mod streaming;
 mod support;

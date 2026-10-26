@@ -55,6 +55,9 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L6 (opt-in features)
+    #[cfg(feature = "ai")]
+    assert!(same::<navree::ai::AiModule, AiModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -362,8 +365,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs.
-const OPT_IN: &[&str] = &["dock"];
+/// runtime never needs, and ecosystem libraries an app turns on by name
+/// (their docs say so).
+const OPT_IN: &[&str] = &["dock", "ai"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
