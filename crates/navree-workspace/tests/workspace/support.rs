@@ -16,8 +16,10 @@ use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_view::{ViewModule, ViewOptions};
 use navree_workspace::{
-    Invitations, Members, ModuleBuilderWorkspaceExt, NewWorkspace, Workspace, WorkspaceModule,
-    WorkspaceScoped, Workspaces,
+    AccessRequests, Invitations, Members, ModuleBuilderWorkspaceExt, NewOrganization,
+    NewPartition, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Partition,
+    PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped,
+    WorkspaceSelector, Workspaces,
 };
 use sea_orm::sea_query::{ColumnDef, Query, Table};
 use sea_orm::{ConnectionTrait, DbErr};
@@ -192,6 +194,22 @@ pub fn builder() -> TestAppBuilder {
         .module(WorkspaceModule::from_config())
 }
 
+/// [`builder`] with organizations and partitions on, and an app-defined
+/// organization role `partner` that gives the workspace role `viewer`.
+pub fn org_builder() -> TestAppBuilder {
+    builder()
+        .config("workspace.organizations.enabled", true)
+        .config("workspace.partitions.enabled", true)
+        .config(
+            "workspace.organizations.roles.partner.permissions",
+            serde_json::json!(["organization.read", "reports.read"]),
+        )
+        .config(
+            "workspace.organizations.roles.partner.workspace_role",
+            "viewer",
+        )
+}
+
 /// A booted test app with its clock.
 pub struct World {
     pub app: TestApp,
@@ -226,6 +244,78 @@ impl World {
 
     pub async fn invitations(&self) -> Arc<Invitations> {
         self.app.get::<Invitations>().await
+    }
+
+    pub async fn organizations(&self) -> Arc<Organizations> {
+        self.app.get::<Organizations>().await
+    }
+
+    pub async fn org_members(&self) -> Arc<OrgMembers> {
+        self.app.get::<OrgMembers>().await
+    }
+
+    pub async fn access_requests(&self) -> Arc<AccessRequests> {
+        self.app.get::<AccessRequests>().await
+    }
+
+    pub async fn partitions(&self) -> Arc<Partitions> {
+        self.app.get::<Partitions>().await
+    }
+
+    /// Creates organization `name` owned by `owner`.
+    pub async fn organization(&self, owner: Uuid, name: &str) -> Organization {
+        let organizations = self.organizations().await;
+        let name = name.to_owned();
+        self.work(|uow| async move {
+            organizations
+                .create(&uow, owner, NewOrganization::named(name))
+                .await
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Attaches `workspace` to `org`.
+    pub async fn attach(&self, org: Uuid, workspace: Uuid) {
+        let organizations = self.organizations().await;
+        self.work(|uow| async move { organizations.attach(&uow, org, workspace).await })
+            .await
+            .unwrap();
+    }
+
+    /// Gives `user` organization role `role` in `org`, reaching `workspaces`.
+    pub async fn grant(&self, org: Uuid, user: Uuid, role: &str, workspaces: WorkspaceSelector) {
+        let members = self.org_members().await;
+        let role = OrgRole::parse(role);
+        self.work(|uow| async move { members.grant(&uow, org, user, role, workspaces).await })
+            .await
+            .unwrap();
+    }
+
+    /// Creates partition `name` in `workspace`.
+    pub async fn partition(&self, workspace: Uuid, name: &str) -> Partition {
+        let partitions = self.partitions().await;
+        let name = name.to_owned();
+        self.work(|uow| async move {
+            partitions
+                .create(&uow, workspace, NewPartition::named(name))
+                .await
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Limits `user` in `workspace` to `partitions`.
+    pub async fn limit_partitions(
+        &self,
+        workspace: Uuid,
+        user: Uuid,
+        partitions: PartitionSelector,
+    ) {
+        let service = self.partitions().await;
+        self.work(|uow| async move { service.grant(&uow, workspace, user, partitions).await })
+            .await
+            .unwrap();
     }
 
     /// Inserts a user into `users`.
