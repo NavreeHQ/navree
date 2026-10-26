@@ -58,6 +58,9 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             &app_root(cwd)?,
             &mut std::io::stdout(),
         ),
+        Command::Harbor(command) => {
+            navree_harbor::run(command, &navree_harbor::Context::system(cwd.to_path_buf()))
+        }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");

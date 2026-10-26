@@ -1,0 +1,35 @@
+---
+source: crates/navree-harbor/tests/cli.rs
+expression: "ssh[7].stdin_text()"
+---
+set -euo pipefail
+{
+# harbor: switch to green on app-1
+cat > /etc/caddy/sites/crm-api.caddy <<'HARBOR_EOF'
+# crm-api: written by navree harbor:provision; navree deploy points the
+# reverse_proxy lines at the live slot (green).
+crm.example.com {
+	encode zstd gzip
+
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy 127.0.0.1:8082
+}
+
+# Internal entry for workers and the scheduler, always pointing at the live slot.
+http://:8079 {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:8082
+}
+HARBOR_EOF
+sudo -n systemctl reload caddy
+cd /srv/crm-api
+ln -sfn releases/20261026-091512-3f2a9c1 current.new
+mv -Tf current.new current
+echo green > .harbor-live.new
+mv -f .harbor-live.new .harbor-live
+sed -i "s/^APP_LIGHTHOUSE__RELEASE=.*/APP_LIGHTHOUSE__RELEASE='20261026-091512-3f2a9c1'/" /etc/crm-api/env
+sudo -n systemctl enable crm-api-web@green
+sudo -n systemctl disable crm-api-web@blue
+} < /dev/null

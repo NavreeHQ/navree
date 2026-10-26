@@ -140,6 +140,9 @@ postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
+## Harbor (opt-in, not in `full`): harbor.toml, provisioning and deploys as a
+## library. The `navree` CLI has it built in; apps rarely need it.
+harbor = ["dep:navree-harbor"]
 
 [dependencies]
 navree-config = { workspace = true }
@@ -159,6 +162,7 @@ navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
+navree-harbor = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }

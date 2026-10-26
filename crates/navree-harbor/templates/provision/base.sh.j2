@@ -1,0 +1,28 @@
+# harbor: base on {{ server.name }}
+{% include "provision/prelude.sh" %}
+apt-get update -q
+harbor_apt upgrade
+harbor_apt install unattended-upgrades chrony curl ca-certificates gnupg lsb-release
+harbor_file /etc/apt/apt.conf.d/20auto-upgrades 0644 root:root <<'HARBOR_EOF'
+{{ files.auto_upgrades }}HARBOR_EOF
+systemctl enable --now chrony > /dev/null 2>&1 || true
+if [ "$(timedatectl show --property=Timezone --value 2> /dev/null || echo unknown)" != UTC ]; then
+	timedatectl set-timezone UTC
+fi
+harbor_file /etc/systemd/journald.conf.d/harbor.conf 0644 root:root <<'HARBOR_EOF'
+{{ files.journald }}HARBOR_EOF
+if [ "$HARBOR_CHANGED" = 1 ]; then
+	systemctl restart systemd-journald
+fi
+{% if swap_mb %}
+if [ ! -f /swapfile ]; then
+	fallocate -l {{ swap_mb }}M /swapfile
+	chmod 600 /swapfile
+	mkswap /swapfile > /dev/null
+fi
+swapon --show=NAME --noheadings | grep -qx /swapfile || swapon /swapfile
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+{% endif %}
+if [ -f /var/run/reboot-required ]; then
+	echo "reboot_required=yes"
+fi
