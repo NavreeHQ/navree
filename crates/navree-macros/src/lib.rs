@@ -23,10 +23,75 @@ mod attr;
 mod controller;
 mod duration;
 mod injectable;
+mod micro;
 mod module;
 mod path;
 mod paths;
 mod route;
+
+/// Implements `navree_micro::MessageHandlers` for an impl block whose
+/// methods answer message and event patterns.
+///
+/// ```text
+/// #[message_handlers]
+/// #[authenticated]                                   // impl: applies to its message patterns
+/// impl DealsHandlers {
+///     #[message_pattern("deals.get")]                // request-response
+///     #[can(Read, Deal, from = "id")]                // the record id is the payload's `id`
+///     async fn get(&self, uow: Uow, deal: Authorized<Deal, Read>) -> Result<DealView> { .. }
+///
+///     #[event_pattern("deal.won", max_attempts = 10)] // an event
+///     async fn won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> { .. }
+/// }
+/// ```
+///
+/// Each method marked `#[message_pattern("..")]` or `#[event_pattern("..")]`
+/// becomes one `PatternDef`. The method must be a non-generic `async fn`
+/// taking `&self`; its other arguments are extractors (`Payload<T>` or
+/// `Valid<Payload<T>>` last) and it returns `Result<T>` with `T:
+/// Serialize` (the reply; `()` for events). The generated handler captures
+/// the struct (`Arc<Self>`), so handlers use injected fields through
+/// `self`.
+///
+/// | Attribute | On | Becomes |
+/// |---|---|---|
+/// | `#[message_pattern("deals.get")]` | fn | a message pattern; options `dedupe` and `concurrency = n` |
+/// | `#[event_pattern("deal.won")]` | fn | an event pattern (may end in `*` or `>`); options `max_attempts = n`, `ordered`, `broadcast` and `concurrency = n` |
+/// | `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]`, `#[can(..)]` | fn, impl | the access declaration of message patterns |
+/// | `#[guard(expr, ..)]` | fn, impl | `.guard(expr)`; `expr` may use `self` |
+/// | `#[timeout("2s")]` | fn | the handler's own time limit |
+///
+/// **Deny by default:** a message pattern without an access declaration
+/// (on itself or on the impl) does not compile. An access attribute on an
+/// event pattern does not compile either: events are facts, and the access
+/// check ran where the change was made. Invalid patterns, wildcards in
+/// message patterns, two handlers for one pattern and route-only attributes
+/// (`#[throttle]`, `#[get]`, ...) are compile errors too.
+///
+/// Register the struct with `m.message_handlers::<T>()`; it must also be
+/// `Injectable` (usually `#[injectable]`). The expansion names
+/// `navree::micro` (or `navree_micro`), plus `navree::http` for guards and
+/// `navree::access` for `#[can]` with marker types.
+#[proc_macro_attribute]
+pub fn message_handlers(args: TokenStream, item: TokenStream) -> TokenStream {
+    micro::expand(args.into(), item.into()).into()
+}
+
+/// Declares a message pattern on a method of a [`macro@message_handlers`]
+/// impl block: `#[message_pattern("deals.get")]`. `#[message_handlers]`
+/// consumes it; anywhere else it is a compile error.
+#[proc_macro_attribute]
+pub fn message_pattern(_args: TokenStream, item: TokenStream) -> TokenStream {
+    micro::outside("message_pattern", item.into()).into()
+}
+
+/// Declares an event pattern on a method of a [`macro@message_handlers`]
+/// impl block: `#[event_pattern("deal.won")]`. `#[message_handlers]`
+/// consumes it; anywhere else it is a compile error.
+#[proc_macro_attribute]
+pub fn event_pattern(_args: TokenStream, item: TokenStream) -> TokenStream {
+    micro::outside("event_pattern", item.into()).into()
+}
 
 /// Implements `Injectable` for a struct by resolving each field from the
 /// container (constructor injection).
