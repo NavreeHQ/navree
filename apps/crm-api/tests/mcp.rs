@@ -65,9 +65,12 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
     .assert_ok()
     .assert_json_path("subject", json!("Dana approved the budget"));
 
-    mcp.call_tool("move_deal", json!({ "deal_id": deal["id"], "stage": "won" }))
-        .await
-        .assert_error(403, "Forbidden");
+    mcp.call_tool(
+        "move_deal",
+        json!({ "deal_id": deal["id"], "stage": "won" }),
+    )
+    .await
+    .assert_error(403, "Forbidden");
 
     mcp.read_resource(&format!("crm://deals/{}", deal["id"].as_str().unwrap()))
         .await
@@ -88,10 +91,7 @@ async fn the_server_offers_the_deals_and_activities_items_with_hints() {
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
     names.sort_unstable();
     assert_eq!(names, ["list_deals", "log_activity", "move_deal"]);
-    let list = tools
-        .iter()
-        .find(|tool| tool.name == "list_deals")
-        .unwrap();
+    let list = tools.iter().find(|tool| tool.name == "list_deals").unwrap();
     let hints = list.annotations.as_ref().expect("annotations");
     assert_eq!(hints.read_only_hint, Some(true));
     assert_eq!(hints.destructive_hint, Some(false));
@@ -185,9 +185,12 @@ async fn owners_move_their_deals_and_lost_needs_a_reason() {
     let deal = create_deal(&rep, "Acme renewal").await;
     let mcp = mcp(&rep).await;
 
-    mcp.call_tool("move_deal", json!({ "deal_id": deal["id"], "stage": "lost" }))
-        .await
-        .assert_error(400, None);
+    mcp.call_tool(
+        "move_deal",
+        json!({ "deal_id": deal["id"], "stage": "lost" }),
+    )
+    .await
+    .assert_error(400, None);
     mcp.call_tool(
         "move_deal",
         json!({ "deal_id": deal["id"], "stage": "qualified" }),

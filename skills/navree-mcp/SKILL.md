@@ -42,6 +42,14 @@ Navigator (`navree mcp`), configured by nothing in the app.
 
 ## Server template
 
+A complete, tested server is in the reference CRM:
+`apps/crm-api/crates/crm-deals/src/mcp.rs` (`DealsMcp`: `list_deals`,
+`move_deal`, `crm://deals/{id}`, `crm://pipeline`, the `follow-up-email`
+prompt), `apps/crm-api/crates/crm-activities/src/mcp.rs` (`ActivitiesMcp`:
+`log_activity`) and its suite `apps/crm-api/tests/mcp.rs`. The template
+below calls service methods of your own (`DealService::list`, `rename`,
+`pdf`):
+
 ```rust
 use garde::Validate;
 use navree::mcp::{McpContext, PromptMessage, ResourceContents, mcp_server};
@@ -73,7 +81,9 @@ impl DealsMcp {
     #[mcp_tool(read_only)]                       // the doc comment is the description
     #[can(Read, Deal)]                           // REQUIRED: an access attribute
     async fn list_deals(&self, cx: &McpContext, args: ListDeals) -> Result<Vec<DealResource>> {
-        self.deals.search(cx.uow(), cx.accessible::<Deal, Read>(), args.query, args.mine.then(|| cx.user_id())).await
+        let filter = DealFilter { search: args.query, owner_id: args.mine.then(|| cx.user_id()), ..DealFilter::default() };
+        let page = PageQuery { per_page: 25, ..PageQuery::default() };
+        Ok(self.deals.list(cx.uow(), cx.accessible::<Deal, Read>(), filter, page).await?.data)
     }
 
     /// Renames a deal the user may update.
@@ -173,8 +183,13 @@ allowed_origins = ["https://crm.example.com"]  # browsers only; no Origin header
 [mcp.oauth]                        # with auth = "oauth"
 # resource = "https://crm.example.com/mcp"           # default: app.url + path
 # authorization_servers = ["https://crm.example.com"] # default: [app.url]
-scopes = ["deals.read", "activities.create"]
+# scopes = ["deals:read", "activities:write"]        # default: the keys of oauth.scopes
 ```
+
+With `OAuthServerModule` in the app, `auth = "oauth"` and `app.url` are
+enough: the metadata names the app as the authorization server and lists
+its `oauth.scopes`. Personal access tokens (`nvp_…`) and OAuth access
+tokens are bearer tokens on `/mcp`, narrowed to their scopes' permissions.
 
 Env: `APP_MCP__AUTH=oauth`, `APP_MCP__ALLOWED_ORIGINS=https://a.example,https://b.example`.
 Code: `McpModule::for_root(McpOptions { name: Some("crm".into()), ..McpOptions::default() })`.
