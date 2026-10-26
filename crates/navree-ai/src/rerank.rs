@@ -102,7 +102,13 @@ impl IntoFuture for RerankRequest {
             let passages = matches
                 .iter()
                 .enumerate()
-                .map(|(i, m)| format!("[{}] {}", i + 1, m.text.chars().take(PASSAGE_CHARS).collect::<String>()))
+                .map(|(i, m)| {
+                    format!(
+                        "[{}] {}",
+                        i + 1,
+                        m.text.chars().take(PASSAGE_CHARS).collect::<String>()
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n\n");
             let mut spec = Spec::new(Prompt::from(format!(

@@ -98,7 +98,10 @@ fn decode(frame: &[u8]) -> Result<EventMessage, String> {
                     return Err("truncated event stream header value".to_owned());
                 }
                 if kind == 7 {
-                    headers.insert(name, String::from_utf8_lossy(&headers_bytes[..len]).into_owned());
+                    headers.insert(
+                        name,
+                        String::from_utf8_lossy(&headers_bytes[..len]).into_owned(),
+                    );
                 }
                 headers_bytes.advance(len);
             }
@@ -160,10 +163,16 @@ mod tests {
     #[test]
     fn decodes_messages_split_across_chunks() {
         let mut bytes = encode(
-            &[(":event-type", "contentBlockDelta"), (":message-type", "event")],
+            &[
+                (":event-type", "contentBlockDelta"),
+                (":message-type", "event"),
+            ],
             br#"{"delta":{"text":"Hi"}}"#,
         );
-        bytes.extend(encode(&[(":event-type", "messageStop")], br#"{"stopReason":"end_turn"}"#));
+        bytes.extend(encode(
+            &[(":event-type", "messageStop")],
+            br#"{"stopReason":"end_turn"}"#,
+        ));
         let mut decoder = Decoder::default();
         let (first, rest) = bytes.split_at(20);
         assert!(decoder.feed(first).unwrap().is_empty());

@@ -11,7 +11,10 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use super::eventstream::encode;
-use super::{ChatRequest, ChunkStream, Driver, EmbedRequest, StreamChunk, ToolChoice, ToolDefinition, build_driver};
+use super::{
+    ChatRequest, ChunkStream, Driver, EmbedRequest, StreamChunk, ToolChoice, ToolDefinition,
+    build_driver,
+};
 use crate::error::ProviderError;
 use crate::message::{Message, ToolCall};
 use crate::options::ProviderConfig;
@@ -37,7 +40,10 @@ fn sse(events: &[Value]) -> ResponseTemplate {
 }
 
 fn named_sse(events: &[(&str, Value)]) -> ResponseTemplate {
-    let body: String = events.iter().map(|(n, e)| format!("event: {n}\ndata: {e}\n\n")).collect();
+    let body: String = events
+        .iter()
+        .map(|(n, e)| format!("event: {n}\ndata: {e}\n\n"))
+        .collect();
     ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
 }
 
@@ -61,20 +67,47 @@ fn anthropic() -> Fixture {
         }),
         stream: named_sse(&[
             ("message_start", start.clone()),
-            ("content_block_start", json!({ "type": "content_block_start", "index": 0, "content_block": { "type": "text", "text": "" } })),
-            ("content_block_delta", json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "Hel" } })),
+            (
+                "content_block_start",
+                json!({ "type": "content_block_start", "index": 0, "content_block": { "type": "text", "text": "" } }),
+            ),
+            (
+                "content_block_delta",
+                json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "Hel" } }),
+            ),
             ("ping", json!({ "type": "ping" })),
-            ("content_block_delta", json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "lo" } })),
-            ("content_block_stop", json!({ "type": "content_block_stop", "index": 0 })),
-            ("message_delta", json!({ "type": "message_delta", "delta": { "stop_reason": "end_turn" }, "usage": { "output_tokens": 5 } })),
+            (
+                "content_block_delta",
+                json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "lo" } }),
+            ),
+            (
+                "content_block_stop",
+                json!({ "type": "content_block_stop", "index": 0 }),
+            ),
+            (
+                "message_delta",
+                json!({ "type": "message_delta", "delta": { "stop_reason": "end_turn" }, "usage": { "output_tokens": 5 } }),
+            ),
             ("message_stop", stop.clone()),
         ]),
         tool_stream: named_sse(&[
             ("message_start", start),
-            ("content_block_start", json!({ "type": "content_block_start", "index": 0, "content_block": { "type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {} } })),
-            ("content_block_delta", json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "input_json_delta", "partial_json": "{\"id\": 3}" } })),
-            ("content_block_stop", json!({ "type": "content_block_stop", "index": 0 })),
-            ("message_delta", json!({ "type": "message_delta", "delta": { "stop_reason": "tool_use" }, "usage": { "output_tokens": 5 } })),
+            (
+                "content_block_start",
+                json!({ "type": "content_block_start", "index": 0, "content_block": { "type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {} } }),
+            ),
+            (
+                "content_block_delta",
+                json!({ "type": "content_block_delta", "index": 0, "delta": { "type": "input_json_delta", "partial_json": "{\"id\": 3}" } }),
+            ),
+            (
+                "content_block_stop",
+                json!({ "type": "content_block_stop", "index": 0 }),
+            ),
+            (
+                "message_delta",
+                json!({ "type": "message_delta", "delta": { "stop_reason": "tool_use" }, "usage": { "output_tokens": 5 } }),
+            ),
             ("message_stop", stop),
         ]),
         embed: None,
@@ -187,20 +220,32 @@ fn ollama() -> Fixture {
             json!({ "message": { "role": "assistant", "content": "", "tool_calls": [{ "function": { "name": "lookup", "arguments": { "id": 3 } } }] }, "done": false }),
             done("stop"),
         ]),
-        embed: Some(("/api/embed", json!({ "embeddings": [[1.0, 0.0], [0.0, 1.0]], "prompt_eval_count": 4 }))),
+        embed: Some((
+            "/api/embed",
+            json!({ "embeddings": [[1.0, 0.0], [0.0, 1.0]], "prompt_eval_count": 4 }),
+        )),
         error: json!({ "error": "bad things" }),
     }
 }
 
 fn bedrock() -> Fixture {
     let frame = |event: &str, payload: Value| {
-        encode(&[(":event-type", event), (":message-type", "event")], payload.to_string().as_bytes())
+        encode(
+            &[(":event-type", event), (":message-type", "event")],
+            payload.to_string().as_bytes(),
+        )
     };
     let usage = json!({ "usage": { "inputTokens": 12, "outputTokens": 5 } });
     let stream: Vec<u8> = [
         frame("messageStart", json!({ "role": "assistant" })),
-        frame("contentBlockDelta", json!({ "contentBlockIndex": 0, "delta": { "text": "Hel" } })),
-        frame("contentBlockDelta", json!({ "contentBlockIndex": 0, "delta": { "text": "lo" } })),
+        frame(
+            "contentBlockDelta",
+            json!({ "contentBlockIndex": 0, "delta": { "text": "Hel" } }),
+        ),
+        frame(
+            "contentBlockDelta",
+            json!({ "contentBlockIndex": 0, "delta": { "text": "lo" } }),
+        ),
         frame("contentBlockStop", json!({ "contentBlockIndex": 0 })),
         frame("messageStop", json!({ "stopReason": "end_turn" })),
         frame("metadata", usage.clone()),
@@ -226,15 +271,24 @@ fn bedrock() -> Fixture {
             "output": { "message": { "role": "assistant", "content": [{ "toolUse": { "toolUseId": "t1", "name": "lookup", "input": { "id": 3 } } }] } },
             "stopReason": "tool_use", "usage": usage
         }),
-        stream: ResponseTemplate::new(200).set_body_raw(stream, "application/vnd.amazon.eventstream"),
-        tool_stream: ResponseTemplate::new(200).set_body_raw(tool_stream, "application/vnd.amazon.eventstream"),
+        stream: ResponseTemplate::new(200)
+            .set_body_raw(stream, "application/vnd.amazon.eventstream"),
+        tool_stream: ResponseTemplate::new(200)
+            .set_body_raw(tool_stream, "application/vnd.amazon.eventstream"),
         embed: None,
         error: json!({ "message": "bad things" }),
     }
 }
 
 fn fixtures() -> Vec<Fixture> {
-    vec![anthropic(), openai_like("openai"), openai_like("mistral"), gemini(), ollama(), bedrock()]
+    vec![
+        anthropic(),
+        openai_like("openai"),
+        openai_like("mistral"),
+        gemini(),
+        ollama(),
+        bedrock(),
+    ]
 }
 
 fn http() -> HttpClient {
@@ -303,19 +357,33 @@ async fn collect(stream: ChunkStream) -> Vec<StreamChunk> {
 }
 
 fn assert_authenticated(fixture: &Fixture, request: &Request) {
-    let header = |name: &str| request.headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let header = |name: &str| {
+        request
+            .headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
     match fixture.driver {
         "anthropic" => {
             assert_eq!(header("x-api-key").as_deref(), Some("test-key"));
             assert_eq!(header("anthropic-version").as_deref(), Some("2026-10-21"));
         }
-        "openai" | "mistral" => assert_eq!(header("authorization").as_deref(), Some("Bearer test-key")),
+        "openai" | "mistral" => {
+            assert_eq!(header("authorization").as_deref(), Some("Bearer test-key"))
+        }
         "gemini" => assert_eq!(header("x-goog-api-key").as_deref(), Some("test-key")),
         "bedrock" => {
             let auth = header("authorization").unwrap();
-            assert!(auth.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"), "{auth}");
+            assert!(
+                auth.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"),
+                "{auth}"
+            );
             assert!(auth.contains("/us-east-1/bedrock/aws4_request"), "{auth}");
-            assert!(auth.contains("SignedHeaders=content-type;host;x-amz-date"), "{auth}");
+            assert!(
+                auth.contains("SignedHeaders=content-type;host;x-amz-date"),
+                "{auth}"
+            );
             assert!(header("x-amz-date").is_some());
         }
         _ => {}
@@ -326,8 +394,15 @@ fn assert_authenticated(fixture: &Fixture, request: &Request) {
 async fn every_driver_answers_text_with_usage() {
     let server = MockServer::start().await;
     for fixture in fixtures() {
-        serve(&server, fixture.chat_path, ResponseTemplate::new(200).set_body_json(fixture.text.clone())).await;
-        let response = driver(&fixture, &server).chat(&request(&fixture, false)).await;
+        serve(
+            &server,
+            fixture.chat_path,
+            ResponseTemplate::new(200).set_body_json(fixture.text.clone()),
+        )
+        .await;
+        let response = driver(&fixture, &server)
+            .chat(&request(&fixture, false))
+            .await;
         let response = response.unwrap_or_else(|e| panic!("{}: {e:?}", fixture.driver));
         assert_eq!(response.text(), "Hello", "{}", fixture.driver);
         assert_eq!(response.usage, Usage::new(12, 5), "{}", fixture.driver);
@@ -342,16 +417,29 @@ async fn every_driver_answers_text_with_usage() {
 async fn every_driver_returns_tool_calls() {
     let server = MockServer::start().await;
     for fixture in fixtures() {
-        serve(&server, fixture.chat_path, ResponseTemplate::new(200).set_body_json(fixture.tool.clone())).await;
-        let response = driver(&fixture, &server).chat(&request(&fixture, true)).await.unwrap();
+        serve(
+            &server,
+            fixture.chat_path,
+            ResponseTemplate::new(200).set_body_json(fixture.tool.clone()),
+        )
+        .await;
+        let response = driver(&fixture, &server)
+            .chat(&request(&fixture, true))
+            .await
+            .unwrap();
         let calls = response.tool_calls();
         assert_eq!(calls.len(), 1, "{}", fixture.driver);
         assert_eq!(calls[0].name, "lookup", "{}", fixture.driver);
         assert_eq!(calls[0].arguments, json!({ "id": 3 }), "{}", fixture.driver);
         assert!(!calls[0].id.is_empty(), "{}", fixture.driver);
         assert_eq!(response.finish, Finish::ToolCalls, "{}", fixture.driver);
-        let body: Value = serde_json::from_slice(&server.received_requests().await.unwrap()[0].body).unwrap();
-        assert!(body.to_string().contains("Looks a record up."), "{}: {body}", fixture.driver);
+        let body: Value =
+            serde_json::from_slice(&server.received_requests().await.unwrap()[0].body).unwrap();
+        assert!(
+            body.to_string().contains("Looks a record up."),
+            "{}: {body}",
+            fixture.driver
+        );
     }
 }
 
@@ -360,7 +448,9 @@ async fn every_driver_streams_text_then_done() {
     let server = MockServer::start().await;
     for fixture in fixtures() {
         serve(&server, fixture.stream_path, fixture.stream.clone()).await;
-        let stream = driver(&fixture, &server).stream(&request(&fixture, false)).await;
+        let stream = driver(&fixture, &server)
+            .stream(&request(&fixture, false))
+            .await;
         let chunks = collect(stream.unwrap_or_else(|e| panic!("{}: {e:?}", fixture.driver))).await;
         let text: String = chunks
             .iter()
@@ -371,7 +461,11 @@ async fn every_driver_streams_text_then_done() {
             .collect();
         assert_eq!(text, "Hello", "{}", fixture.driver);
         assert!(
-            chunks.iter().filter(|c| matches!(c, StreamChunk::Text(_))).count() >= 1,
+            chunks
+                .iter()
+                .filter(|c| matches!(c, StreamChunk::Text(_)))
+                .count()
+                >= 1,
             "{}",
             fixture.driver
         );
@@ -392,7 +486,13 @@ async fn every_driver_streams_tool_calls() {
     let server = MockServer::start().await;
     for fixture in fixtures() {
         serve(&server, fixture.stream_path, fixture.tool_stream.clone()).await;
-        let chunks = collect(driver(&fixture, &server).stream(&request(&fixture, true)).await.unwrap()).await;
+        let chunks = collect(
+            driver(&fixture, &server)
+                .stream(&request(&fixture, true))
+                .await
+                .unwrap(),
+        )
+        .await;
         let calls: Vec<&ToolCall> = chunks
             .iter()
             .filter_map(|c| match c {
@@ -404,7 +504,13 @@ async fn every_driver_streams_tool_calls() {
         assert_eq!(calls[0].name, "lookup", "{}", fixture.driver);
         assert_eq!(calls[0].arguments, json!({ "id": 3 }), "{}", fixture.driver);
         assert!(
-            matches!(chunks.last(), Some(StreamChunk::Done { finish: Finish::ToolCalls, .. })),
+            matches!(
+                chunks.last(),
+                Some(StreamChunk::Done {
+                    finish: Finish::ToolCalls,
+                    ..
+                })
+            ),
             "{}: {chunks:?}",
             fixture.driver
         );
@@ -417,27 +523,56 @@ async fn every_driver_classifies_errors() {
     for fixture in fixtures() {
         let cases = [
             (
-                ResponseTemplate::new(429).insert_header("retry-after", "3").set_body_json(fixture.error.clone()),
+                ResponseTemplate::new(429)
+                    .insert_header("retry-after", "3")
+                    .set_body_json(fixture.error.clone()),
                 "rate",
             ),
-            (ResponseTemplate::new(503).set_body_json(fixture.error.clone()), "unavailable"),
-            (ResponseTemplate::new(400).set_body_json(fixture.error.clone()), "request"),
-            (ResponseTemplate::new(401).set_body_json(fixture.error.clone()), "auth"),
+            (
+                ResponseTemplate::new(503).set_body_json(fixture.error.clone()),
+                "unavailable",
+            ),
+            (
+                ResponseTemplate::new(400).set_body_json(fixture.error.clone()),
+                "request",
+            ),
+            (
+                ResponseTemplate::new(401).set_body_json(fixture.error.clone()),
+                "auth",
+            ),
         ];
         for (response, expected) in cases {
             serve(&server, fixture.chat_path, response.clone()).await;
-            let error = driver(&fixture, &server).chat(&request(&fixture, false)).await.unwrap_err();
+            let error = driver(&fixture, &server)
+                .chat(&request(&fixture, false))
+                .await
+                .unwrap_err();
             let ok = match expected {
-                "rate" => error == ProviderError::RateLimited { retry_after: Some(Duration::from_secs(3)) },
+                "rate" => {
+                    error
+                        == ProviderError::RateLimited {
+                            retry_after: Some(Duration::from_secs(3)),
+                        }
+                }
                 "unavailable" => matches!(error, ProviderError::Unavailable { .. }),
-                "request" => matches!(&error, ProviderError::Request { message } if message.contains("bad things")),
+                "request" => {
+                    matches!(&error, ProviderError::Request { message } if message.contains("bad things"))
+                }
                 _ => matches!(error, ProviderError::Auth { .. }),
             };
             assert!(ok, "{} {expected}: {error:?}", fixture.driver);
             // Streams classify the same way before the first event.
             serve(&server, fixture.stream_path, response).await;
-            let stream_error = driver(&fixture, &server).stream(&request(&fixture, false)).await.err();
-            assert_eq!(stream_error, Some(error), "{} stream {expected}", fixture.driver);
+            let stream_error = driver(&fixture, &server)
+                .stream(&request(&fixture, false))
+                .await
+                .err();
+            assert_eq!(
+                stream_error,
+                Some(error),
+                "{} stream {expected}",
+                fixture.driver
+            );
         }
     }
 }
@@ -446,8 +581,15 @@ async fn every_driver_classifies_errors() {
 async fn drivers_with_embeddings_return_vectors_in_order() {
     let server = MockServer::start().await;
     for fixture in fixtures() {
-        let Some((at, answer)) = &fixture.embed else { continue };
-        serve(&server, at, ResponseTemplate::new(200).set_body_json(answer.clone())).await;
+        let Some((at, answer)) = &fixture.embed else {
+            continue;
+        };
+        serve(
+            &server,
+            at,
+            ResponseTemplate::new(200).set_body_json(answer.clone()),
+        )
+        .await;
         let response = driver(&fixture, &server)
             .embed(&EmbedRequest {
                 model: fixture.model.into(),
@@ -457,7 +599,12 @@ async fn drivers_with_embeddings_return_vectors_in_order() {
             })
             .await
             .unwrap_or_else(|e| panic!("{}: {e:?}", fixture.driver));
-        assert_eq!(response.vectors, [vec![1.0, 0.0], vec![0.0, 1.0]], "{}", fixture.driver);
+        assert_eq!(
+            response.vectors,
+            [vec![1.0, 0.0], vec![0.0, 1.0]],
+            "{}",
+            fixture.driver
+        );
     }
 }
 
@@ -481,7 +628,10 @@ async fn bedrock_embeds_with_titan_one_text_per_call() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/model/amazon.titan-embed-text-v2%3A0/invoke"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "embedding": [0.5, 0.5], "inputTextTokenCount": 2 })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({ "embedding": [0.5, 0.5], "inputTextTokenCount": 2 })),
+        )
         .mount(&server)
         .await;
     let response = driver(&bedrock(), &server)
@@ -506,6 +656,12 @@ async fn an_ssrf_blocked_address_is_an_invalid_request() {
     let config = ProviderConfig::openai_compatible("http://10.1.2.3:8000/v1");
     let strict = HttpClient::new(HttpClientOptions::default()).unwrap();
     let driver = build_driver("local", &config, &strict).unwrap();
-    let error = driver.chat(&request(&openai_like("openai"), false)).await.unwrap_err();
-    assert!(matches!(&error, ProviderError::Request { message } if message.contains("SSRF")), "{error:?}");
+    let error = driver
+        .chat(&request(&openai_like("openai"), false))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, ProviderError::Request { message } if message.contains("SSRF")),
+        "{error:?}"
+    );
 }

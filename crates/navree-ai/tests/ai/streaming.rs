@@ -60,8 +60,14 @@ async fn the_response_is_server_sent_events() {
     assert_eq!(headers["content-type"], "text/event-stream");
     assert_eq!(headers["cache-control"], "no-cache");
     assert_eq!(headers["x-accel-buffering"], "no");
-    assert!(body.starts_with("event: text\ndata: {\"text\":\"Acme\"}\n\n"), "{body}");
-    assert!(body.contains("event: text\ndata: {\"text\":\" moved\"}\n\n"), "{body}");
+    assert!(
+        body.starts_with("event: text\ndata: {\"text\":\"Acme\"}\n\n"),
+        "{body}"
+    );
+    assert!(
+        body.contains("event: text\ndata: {\"text\":\" moved\"}\n\n"),
+        "{body}"
+    );
     let done = body
         .split("\n\n")
         .find_map(|event| event.strip_prefix("event: done\ndata: "))
@@ -89,12 +95,21 @@ async fn an_error_after_the_first_event_is_an_error_event() {
         ]))
         .mount(&server)
         .await;
-    let ai = Ai::new(provider_options("anthropic", &server.uri(), "fast", "claude-sonnet-5-5")).unwrap();
+    let ai = Ai::new(provider_options(
+        "anthropic",
+        &server.uri(),
+        "fast",
+        "claude-sonnet-5-5",
+    ))
+    .unwrap();
 
     let stream = ai.stream("hi").await.unwrap();
     let (_, body) = body_text(stream).await;
 
-    assert!(body.starts_with("event: text\ndata: {\"text\":\"Hi\"}\n\n"), "{body}");
+    assert!(
+        body.starts_with("event: text\ndata: {\"text\":\"Hi\"}\n\n"),
+        "{body}"
+    );
     assert!(
         body.ends_with("event: error\ndata: {\"error\":\"Service Unavailable\",\"message\":\"The AI provider is unavailable\",\"statusCode\":503}\n\n"),
         "{body}"
@@ -116,9 +131,21 @@ async fn a_stream_fails_over_before_its_first_event() {
         ]))
         .mount(&server)
         .await;
-    let ai = Ai::new(provider_options("anthropic", &server.uri(), "fast", "claude-sonnet-5-5")).unwrap();
+    let ai = Ai::new(provider_options(
+        "anthropic",
+        &server.uri(),
+        "fast",
+        "claude-sonnet-5-5",
+    ))
+    .unwrap();
 
-    let events: Vec<StreamEvent> = ai.stream("hi").await.unwrap().map(Result::unwrap).collect().await;
+    let events: Vec<StreamEvent> = ai
+        .stream("hi")
+        .await
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+        .await;
 
     assert_eq!(events[0], StreamEvent::Text("Back".into()));
     assert!(matches!(events[1], StreamEvent::Done(_)));
@@ -127,7 +154,10 @@ async fn a_stream_fails_over_before_its_first_event() {
 #[tokio::test]
 async fn errors_before_the_first_event_are_ordinary_errors() {
     let fake = AiFake::new();
-    fake.respond_when(|_| true, FakeReply::error(AiError::unavailable("anthropic")));
+    fake.respond_when(
+        |_| true,
+        FakeReply::error(AiError::unavailable("anthropic")),
+    );
 
     let error = fake.ai().stream("hi").await.unwrap_err();
 
@@ -161,10 +191,16 @@ async fn on_finish_runs_with_the_whole_answer() {
     let saved = Arc::new(Mutex::new(None));
     let sink = saved.clone();
 
-    let stream = fake.ai().stream("x").model("fast").await.unwrap().on_finish(move |response| async move {
-        *sink.lock().await = Some(response);
-        Ok::<(), BoxError>(())
-    });
+    let stream = fake
+        .ai()
+        .stream("x")
+        .model("fast")
+        .await
+        .unwrap()
+        .on_finish(move |response| async move {
+            *sink.lock().await = Some(response);
+            Ok::<(), BoxError>(())
+        });
     let _ = body_text(stream).await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -180,10 +216,15 @@ async fn on_finish_does_not_run_when_the_client_leaves_first() {
     let ran = Arc::new(Mutex::new(false));
     let flag = ran.clone();
 
-    let mut stream = fake.ai().stream("x").await.unwrap().on_finish(move |_| async move {
-        *flag.lock().await = true;
-        Ok::<(), BoxError>(())
-    });
+    let mut stream = fake
+        .ai()
+        .stream("x")
+        .await
+        .unwrap()
+        .on_finish(move |_| async move {
+            *flag.lock().await = true;
+            Ok::<(), BoxError>(())
+        });
     let _first = stream.next().await;
     drop(stream);
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -198,7 +239,11 @@ struct SummaryController {
 
 impl Injectable for SummaryController {
     fn construct(r: Resolver) -> navree_kernel::BoxFuture<'static, Result<Self, KernelError>> {
-        Box::pin(async move { Ok(Self { ai: r.get::<Ai>().await? }) })
+        Box::pin(async move {
+            Ok(Self {
+                ai: r.get::<Ai>().await?,
+            })
+        })
     }
 }
 
@@ -209,16 +254,18 @@ impl Controller for SummaryController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let this = self.clone();
-        vec![RouteDef::on(http::Method::GET, "/", move || {
-            let ai = this.ai.clone();
-            async move {
-                match ai.stream("Summarize the deal").model("fast").await {
-                    Ok(stream) => stream.into_response(),
-                    Err(error) => error.to_app_error().into_response(),
+        vec![
+            RouteDef::on(http::Method::GET, "/", move || {
+                let ai = this.ai.clone();
+                async move {
+                    match ai.stream("Summarize the deal").model("fast").await {
+                        Ok(stream) => stream.into_response(),
+                        Err(error) => error.to_app_error().into_response(),
+                    }
                 }
-            }
-        })
-        .public()]
+            })
+            .public(),
+        ]
     }
 }
 
@@ -241,13 +288,21 @@ async fn a_text_stream_is_served_through_the_http_pipeline() {
     let fake = app.get::<Ai>().await.fake().unwrap();
     fake.respond(FakeReply::text("Acme is close."));
 
-    let response = app.client().get("/api/summary").header("accept", "text/event-stream").send().await;
+    let response = app
+        .client()
+        .get("/api/summary")
+        .header("accept", "text/event-stream")
+        .send()
+        .await;
 
     let response = response.assert_status(200);
     assert_eq!(response.header("content-type"), Some("text/event-stream"));
     assert_eq!(response.header("x-accel-buffering"), Some("no"));
     let body = response.text();
-    assert!(body.contains("event: text\ndata: {\"text\":\"Acme\"}"), "{body}");
+    assert!(
+        body.contains("event: text\ndata: {\"text\":\"Acme\"}"),
+        "{body}"
+    );
     assert!(body.contains("event: done"), "{body}");
 }
 

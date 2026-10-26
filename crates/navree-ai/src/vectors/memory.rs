@@ -24,7 +24,11 @@ impl MemoryStore {
         }
     }
 
-    fn with<T>(&self, collection: &str, f: impl FnOnce(&mut BTreeMap<String, VectorRecord>) -> T) -> T {
+    fn with<T>(
+        &self,
+        collection: &str,
+        f: impl FnOnce(&mut BTreeMap<String, VectorRecord>) -> T,
+    ) -> T {
         let mut collections = self
             .collections
             .lock()
@@ -39,7 +43,11 @@ impl VectorDriver for MemoryStore {
         Box::pin(async { Ok(()) })
     }
 
-    fn upsert<'a>(&'a self, collection: &'a str, records: Vec<VectorRecord>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn upsert<'a>(
+        &'a self,
+        collection: &'a str,
+        records: Vec<VectorRecord>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         self.with(collection, |map| {
             for record in records {
                 map.insert(record.id.clone(), record);
@@ -48,7 +56,11 @@ impl VectorDriver for MemoryStore {
         Box::pin(async { Ok(()) })
     }
 
-    fn delete<'a>(&'a self, collection: &'a str, ids: Vec<String>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn delete<'a>(
+        &'a self,
+        collection: &'a str,
+        ids: Vec<String>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         self.with(collection, |map| {
             for id in ids {
                 map.remove(&id);
@@ -57,8 +69,14 @@ impl VectorDriver for MemoryStore {
         Box::pin(async { Ok(()) })
     }
 
-    fn delete_where<'a>(&'a self, collection: &'a str, filter: &'a Filter) -> BoxFuture<'a, Result<(), AiError>> {
-        self.with(collection, |map| map.retain(|_, record| !filter.matches(&record.metadata)));
+    fn delete_where<'a>(
+        &'a self,
+        collection: &'a str,
+        filter: &'a Filter,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
+        self.with(collection, |map| {
+            map.retain(|_, record| !filter.matches(&record.metadata))
+        });
         Box::pin(async { Ok(()) })
     }
 

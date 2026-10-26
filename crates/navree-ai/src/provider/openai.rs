@@ -41,7 +41,12 @@ pub(crate) struct OpenAi {
 }
 
 impl OpenAi {
-    pub(crate) fn new(name: &str, config: &ProviderConfig, http: HttpClient, flavor: Flavor) -> Self {
+    pub(crate) fn new(
+        name: &str,
+        config: &ProviderConfig,
+        http: HttpClient,
+        flavor: Flavor,
+    ) -> Self {
         let default = match flavor {
             Flavor::OpenAi => "https://api.openai.com/v1",
             Flavor::Mistral => "https://api.mistral.ai/v1",
@@ -207,10 +212,20 @@ impl Driver for OpenAi {
 fn schema_name(name: &str) -> String {
     let name: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .take(64)
         .collect();
-    if name.is_empty() { "output".to_owned() } else { name }
+    if name.is_empty() {
+        "output".to_owned()
+    } else {
+        name
+    }
 }
 
 /// The messages: the system prompt first; tool results become `tool`
@@ -304,7 +319,11 @@ pub(crate) fn parse_response(answer: &Value) -> Result<ChatResponse, ProviderErr
     for call in message["tool_calls"].as_array().into_iter().flatten() {
         parts.push(Part::ToolCall(ToolCall {
             id: call["id"].as_str().unwrap_or_default().to_owned(),
-            name: call.pointer("/function/name").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            name: call
+                .pointer("/function/name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
             arguments: arguments(call.pointer("/function/arguments")),
             meta: None,
         }));
@@ -367,7 +386,13 @@ fn parse_embeddings(answer: &Value) -> Result<EmbedResponse, ProviderError> {
             let index = item["index"].as_u64().unwrap_or(position as u64);
             let vector = item["embedding"]
                 .as_array()
-                .map(|values| values.iter().filter_map(Value::as_f64).map(|v| v as f32).collect())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_f64)
+                        .map(|v| v as f32)
+                        .collect()
+                })
                 .unwrap_or_default();
             (index, vector)
         })
@@ -420,7 +445,11 @@ fn chunks(
                     }))
                 })
                 .collect();
-            let finish = if self.refused { Finish::Refused } else { self.finish };
+            let finish = if self.refused {
+                Finish::Refused
+            } else {
+                self.finish
+            };
             out.push(Ok(StreamChunk::Done {
                 usage: self.usage,
                 finish,
@@ -436,7 +465,10 @@ fn chunks(
                 return Vec::new();
             };
             if let Some(error) = value.get("error") {
-                let message = error["message"].as_str().unwrap_or("stream error").to_owned();
+                let message = error["message"]
+                    .as_str()
+                    .unwrap_or("stream error")
+                    .to_owned();
                 return vec![Err(ProviderError::unavailable(message))];
             }
             if let Some(usage_value) = value.get("usage").filter(|u| !u.is_null()) {
@@ -542,8 +574,14 @@ mod tests {
     fn bodies_per_flavor() {
         let body = driver(Flavor::OpenAi, None).body(&request(), false);
         assert_eq!(body["max_completion_tokens"], 50);
-        assert_eq!(body["messages"][0], json!({ "role": "system", "content": "Be brief." }));
-        assert_eq!(body["messages"][1], json!({ "role": "user", "content": "Hi" }));
+        assert_eq!(
+            body["messages"][0],
+            json!({ "role": "system", "content": "Be brief." })
+        );
+        assert_eq!(
+            body["messages"][1],
+            json!({ "role": "user", "content": "Hi" })
+        );
         let body = driver(Flavor::OpenAi, Some("http://127.0.0.1:8000/v1")).body(&request(), true);
         assert_eq!(body["max_tokens"], 50);
         assert_eq!(body["stream_options"]["include_usage"], true);
@@ -559,7 +597,9 @@ mod tests {
             Message::new(
                 Role::User,
                 vec![
-                    Part::Text { text: "What is this?".into() },
+                    Part::Text {
+                        text: "What is this?".into(),
+                    },
                     Part::Attachment(Attachment::image(vec![1u8, 2], "image/png")),
                 ],
             ),
@@ -588,10 +628,19 @@ mod tests {
         });
         let body = driver(Flavor::OpenAi, None).body(&request, false);
         let messages = body["messages"].as_array().unwrap();
-        assert_eq!(messages[1]["content"][1]["image_url"]["url"], "data:image/png;base64,AQI=");
+        assert_eq!(
+            messages[1]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQI="
+        );
         assert_eq!(messages[2]["content"], Value::Null);
-        assert_eq!(messages[2]["tool_calls"][0]["function"]["arguments"], "{\"id\":3}");
-        assert_eq!(messages[3], json!({ "role": "tool", "tool_call_id": "call_1", "content": "{\"ok\":true}" }));
+        assert_eq!(
+            messages[2]["tool_calls"][0]["function"]["arguments"],
+            "{\"id\":3}"
+        );
+        assert_eq!(
+            messages[3],
+            json!({ "role": "tool", "tool_call_id": "call_1", "content": "{\"ok\":true}" })
+        );
         assert_eq!(body["response_format"]["json_schema"]["name"], "Follow_up");
     }
 

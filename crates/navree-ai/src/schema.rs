@@ -64,9 +64,7 @@ pub(crate) fn wrap_non_object(schema: Value) -> (Value, bool) {
         return (schema, false);
     }
     let mut schema = schema;
-    let defs = schema
-        .as_object_mut()
-        .and_then(|map| map.remove("$defs"));
+    let defs = schema.as_object_mut().and_then(|map| map.remove("$defs"));
     let mut wrapped = json!({
         "type": "object",
         "properties": { WRAPPED: schema },
@@ -88,7 +86,16 @@ pub(crate) fn unwrap_value(mut value: Value) -> Value {
 
 /// String formats Anthropic's structured outputs accept.
 const ANTHROPIC_FORMATS: [&str; 10] = [
-    "date-time", "time", "date", "duration", "email", "hostname", "uri", "ipv4", "ipv6", "uuid",
+    "date-time",
+    "time",
+    "date",
+    "duration",
+    "email",
+    "hostname",
+    "uri",
+    "ipv4",
+    "ipv6",
+    "uuid",
 ];
 
 /// Keywords Anthropic's structured outputs reject (they are checked on the
@@ -239,7 +246,10 @@ mod tests {
     fn schemas_carry_their_definitions_and_descriptions() {
         let schema = json_schema::<Triage>();
         assert_eq!(schema["type"], "object");
-        assert_eq!(schema["properties"]["sentiment"]["$ref"], "#/$defs/Sentiment");
+        assert_eq!(
+            schema["properties"]["sentiment"]["$ref"],
+            "#/$defs/Sentiment"
+        );
         assert_eq!(
             schema["properties"]["reason"]["description"],
             "One sentence for the account owner."
@@ -259,7 +269,10 @@ mod tests {
         assert_eq!(schema["additionalProperties"], false);
         let confidence = &schema["properties"]["confidence"];
         let text = confidence.to_string();
-        assert!(!text.contains("minimum") && !text.contains("maximum"), "{text}");
+        assert!(
+            !text.contains("minimum") && !text.contains("maximum"),
+            "{text}"
+        );
         assert!(!text.contains("\"format\":\"int32\""), "{text}");
         // `["integer", "null"]` became anyOf.
         assert!(confidence.get("anyOf").is_some(), "{confidence}");
@@ -281,7 +294,10 @@ mod tests {
         assert!(wrapped);
         assert_eq!(schema["type"], "object");
         assert_eq!(schema["required"], json!(["value"]));
-        assert_eq!(unwrap_value(json!({ "value": "neutral" })), json!("neutral"));
+        assert_eq!(
+            unwrap_value(json!({ "value": "neutral" })),
+            json!("neutral")
+        );
         let (_, wrapped) = wrap_non_object(json_schema::<Triage>());
         assert!(!wrapped);
     }

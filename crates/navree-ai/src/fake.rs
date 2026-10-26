@@ -365,7 +365,11 @@ impl AiFake {
     }
 
     /// A reply as an answer.
-    fn response(&self, request: &ChatRequest, reply: FakeReply) -> Result<ChatResponse, ProviderError> {
+    fn response(
+        &self,
+        request: &ChatRequest,
+        reply: FakeReply,
+    ) -> Result<ChatResponse, ProviderError> {
         let (parts, finish, output) = match reply.kind {
             ReplyKind::Error(error) => return Err(ProviderError::Scripted(error)),
             ReplyKind::Text(text) => {
@@ -398,7 +402,11 @@ impl AiFake {
         };
         let usage = reply.usage.unwrap_or_else(|| {
             let input: usize = request.system.as_deref().map_or(0, str::len)
-                + request.messages.iter().map(|m| m.text().len()).sum::<usize>();
+                + request
+                    .messages
+                    .iter()
+                    .map(|m| m.text().len())
+                    .sum::<usize>();
             Usage::new(tokens(input), tokens(output))
         });
         Ok(ChatResponse {
@@ -559,7 +567,9 @@ fn truncate(text: &str, max: usize) -> String {
 
 /// Locks `mutex`, ignoring poisoning.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[cfg(test)]
@@ -580,6 +590,9 @@ mod tests {
         let dot = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p * q).sum::<f32>();
         assert!(dot(&a, &b) > dot(&a, &c));
         assert!((dot(&a, &a) - 1.0).abs() < 1e-5);
-        assert_eq!(a, hashed_embedding("Dana wants to be live before January planning", 64));
+        assert_eq!(
+            a,
+            hashed_embedding("Dana wants to be live before January planning", 64)
+        );
     }
 }

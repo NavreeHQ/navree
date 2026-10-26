@@ -8,7 +8,14 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 /// The provider drivers Navree ships, which are also the built-in provider
 /// names.
-pub const DRIVERS: [&str; 6] = ["anthropic", "openai", "gemini", "mistral", "ollama", "bedrock"];
+pub const DRIVERS: [&str; 6] = [
+    "anthropic",
+    "openai",
+    "gemini",
+    "mistral",
+    "ollama",
+    "bedrock",
+];
 
 /// Options of [`AiModule`](crate::AiModule) (configuration section `ai`).
 ///
@@ -612,12 +619,17 @@ impl AiOptions {
             .chain(self.vectors.url.as_deref())
             .filter_map(|url| url::Url::parse(url).ok())
             .filter_map(|url| url.host_str().map(str::to_owned))
-            .map(|host| host.trim_start_matches('[').trim_end_matches(']').to_owned())
+            .map(|host| {
+                host.trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .to_owned()
+            })
             .collect();
         // Ollama's default address, when Ollama is used without a URL.
         let uses_default_ollama = self.models.values().any(|model| {
             let provider = self.providers.get(&model.provider);
-            let driver = provider.map_or(model.provider.as_str(), |p| p.driver_for(&model.provider));
+            let driver =
+                provider.map_or(model.provider.as_str(), |p| p.driver_for(&model.provider));
             driver == "ollama" && provider.and_then(|p| p.url.as_ref()).is_none()
         });
         if uses_default_ollama {
@@ -727,7 +739,10 @@ mod tests {
             "ai.embeddings.model: unknown model `nothing`",
             "ai.vectors.url is required",
         ] {
-            assert!(errors.contains(expected), "missing `{expected}` in:\n{errors}");
+            assert!(
+                errors.contains(expected),
+                "missing `{expected}` in:\n{errors}"
+            );
         }
     }
 
@@ -740,7 +755,11 @@ mod tests {
             },
             "embeddings": { "model": "embed" }
         }));
-        assert!(o.check().join(" ").contains("ai.models.local"), "{:?}", o.check());
+        assert!(
+            o.check().join(" ").contains("ai.models.local"),
+            "{:?}",
+            o.check()
+        );
     }
 
     #[test]
@@ -760,7 +779,10 @@ mod tests {
     fn configured_hosts_are_allowed() {
         let o = AiOptions {
             providers: [
-                ("local".to_owned(), ProviderConfig::openai_compatible("http://10.0.0.5:8000/v1")),
+                (
+                    "local".to_owned(),
+                    ProviderConfig::openai_compatible("http://10.0.0.5:8000/v1"),
+                ),
                 ("anthropic".to_owned(), ProviderConfig::anthropic("k")),
             ]
             .into(),
@@ -777,7 +799,10 @@ mod tests {
             ..ProviderConfig::anthropic("sk-ant-123")
         };
         let printed = format!("{config:?}");
-        assert!(!printed.contains("sk-ant-123") && !printed.contains("s3cr3t"), "{printed}");
+        assert!(
+            !printed.contains("sk-ant-123") && !printed.contains("s3cr3t"),
+            "{printed}"
+        );
         let vectors = VectorsOptions {
             key: Some("qdrant-key".into()),
             ..VectorsOptions::default()

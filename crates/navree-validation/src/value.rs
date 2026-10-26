@@ -103,9 +103,11 @@ mod tests {
 
     #[test]
     fn valid_input_deserializes() {
-        let args: Args =
-            validate_json(&json!({ "subject": "hi", "kind": "call" }), &Messages::default())
-                .unwrap();
+        let args: Args = validate_json(
+            &json!({ "subject": "hi", "kind": "call" }),
+            &Messages::default(),
+        )
+        .unwrap();
         assert_eq!(args.subject, "hi");
         assert!(matches!(args.kind, Kind::Call));
         assert_eq!(args.count, 1);
@@ -130,15 +132,21 @@ mod tests {
 
     #[test]
     fn serde_failures_name_the_field() {
-        let errors = validate_json::<Args>(&json!({ "subject": "x", "kind": "email" }), &Messages::default())
-            .unwrap_err();
+        let errors = validate_json::<Args>(
+            &json!({ "subject": "x", "kind": "email" }),
+            &Messages::default(),
+        )
+        .unwrap_err();
         assert_eq!(
             errors.get("kind").unwrap(),
             ["kind must be one of the following values: note, call"]
         );
-        let errors = validate_json::<Args>(&json!({ "kind": "note" }), &Messages::default())
-            .unwrap_err();
-        assert_eq!(errors.get("subject").unwrap(), ["subject should not be empty"]);
+        let errors =
+            validate_json::<Args>(&json!({ "kind": "note" }), &Messages::default()).unwrap_err();
+        assert_eq!(
+            errors.get("subject").unwrap(),
+            ["subject should not be empty"]
+        );
     }
 
     #[test]

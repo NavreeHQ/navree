@@ -70,7 +70,11 @@ impl StreamEvent {
     pub fn data(&self) -> Value {
         match self {
             StreamEvent::Text(text) => json!({ "text": text }),
-            StreamEvent::ToolCall { id, tool, arguments } => {
+            StreamEvent::ToolCall {
+                id,
+                tool,
+                arguments,
+            } => {
                 json!({ "id": id, "tool": tool, "arguments": arguments })
             }
             StreamEvent::ToolResult { id, tool, ok } => json!({ "id": id, "tool": tool, "ok": ok }),
@@ -216,68 +220,71 @@ fn text_events(open: OpenStream, log_content: bool) -> EventStream {
         ended: false,
         text: String::new(),
     };
-    Box::pin(futures_util::stream::unfold(state, move |mut state| async move {
-        loop {
-            if state.ended {
-                return None;
-            }
-            let open = state.open.as_mut()?;
-            let gap = open.gap;
-            let next = tokio::time::timeout(gap, open.chunks.next()).await;
-            let provider = open.provider.clone();
-            match next {
-                Ok(Some(Ok(StreamChunk::Text(text)))) => {
-                    if log_content {
-                        state.text.push_str(&text);
+    Box::pin(futures_util::stream::unfold(
+        state,
+        move |mut state| async move {
+            loop {
+                if state.ended {
+                    return None;
+                }
+                let open = state.open.as_mut()?;
+                let gap = open.gap;
+                let next = tokio::time::timeout(gap, open.chunks.next()).await;
+                let provider = open.provider.clone();
+                match next {
+                    Ok(Some(Ok(StreamChunk::Text(text)))) => {
+                        if log_content {
+                            state.text.push_str(&text);
+                        }
+                        return Some((Ok(StreamEvent::Text(text)), state));
                     }
-                    return Some((Ok(StreamEvent::Text(text)), state));
-                }
-                Ok(Some(Ok(StreamChunk::Done { usage, finish }))) => {
-                    state.ended = true;
-                    let open = state.open.take()?;
-                    if log_content {
-                        tracing::debug!(target: "navree::ai", model = %open.model, output = %state.text, "AI content");
+                    Ok(Some(Ok(StreamChunk::Done { usage, finish }))) => {
+                        state.ended = true;
+                        let open = state.open.take()?;
+                        if log_content {
+                            tracing::debug!(target: "navree::ai", model = %open.model, output = %state.text, "AI content");
+                        }
+                        let completion = Completion {
+                            model: open.model.clone(),
+                            provider: open.provider.clone(),
+                            usage,
+                            finish,
+                            conversation_id: None,
+                        };
+                        open.finisher.finish(usage).await;
+                        return Some((Ok(StreamEvent::Done(completion)), state));
                     }
-                    let completion = Completion {
-                        model: open.model.clone(),
-                        provider: open.provider.clone(),
-                        usage,
-                        finish,
-                        conversation_id: None,
-                    };
-                    open.finisher.finish(usage).await;
-                    return Some((Ok(StreamEvent::Done(completion)), state));
-                }
-                Ok(Some(Ok(_))) => continue,
-                Ok(Some(Err(error))) => {
-                    state.ended = true;
-                    let error = error.into_ai_error(&provider);
-                    tracing::warn!(target: "navree::ai", %error, "AI stream failed");
-                    return Some((Err(error), state));
-                }
-                Ok(None) => {
-                    state.ended = true;
-                    return Some((
-                        Err(AiError::Unavailable {
-                            provider,
-                            message: "the stream ended before the answer finished".to_owned(),
-                        }),
-                        state,
-                    ));
-                }
-                Err(_) => {
-                    state.ended = true;
-                    return Some((
-                        Err(AiError::Unavailable {
-                            provider,
-                            message: format!("no event within {} s", gap.as_secs_f64()),
-                        }),
-                        state,
-                    ));
+                    Ok(Some(Ok(_))) => continue,
+                    Ok(Some(Err(error))) => {
+                        state.ended = true;
+                        let error = error.into_ai_error(&provider);
+                        tracing::warn!(target: "navree::ai", %error, "AI stream failed");
+                        return Some((Err(error), state));
+                    }
+                    Ok(None) => {
+                        state.ended = true;
+                        return Some((
+                            Err(AiError::Unavailable {
+                                provider,
+                                message: "the stream ended before the answer finished".to_owned(),
+                            }),
+                            state,
+                        ));
+                    }
+                    Err(_) => {
+                        state.ended = true;
+                        return Some((
+                            Err(AiError::Unavailable {
+                                provider,
+                                message: format!("no event within {} s", gap.as_secs_f64()),
+                            }),
+                            state,
+                        ));
+                    }
                 }
             }
-        }
-    }))
+        },
+    ))
 }
 
 /// Merges text within each `window`.
@@ -296,49 +303,54 @@ pub(crate) fn chunk_events(events: EventStream, window: Duration) -> EventStream
         pending: VecDeque::new(),
         ended: false,
     };
-    Box::pin(futures_util::stream::unfold(state, move |mut state| async move {
-        loop {
-            if let Some(item) = state.pending.pop_front() {
-                return Some((item, state));
-            }
-            if state.ended {
-                if state.buffer.is_empty() {
-                    return None;
+    Box::pin(futures_util::stream::unfold(
+        state,
+        move |mut state| async move {
+            loop {
+                if let Some(item) = state.pending.pop_front() {
+                    return Some((item, state));
                 }
-                let text = std::mem::take(&mut state.buffer);
-                return Some((Ok(StreamEvent::Text(text)), state));
-            }
-            let next = match state.deadline {
-                Some(deadline) => match tokio::time::timeout_at(deadline, state.events.next()).await {
-                    Ok(next) => next,
-                    Err(_) => {
-                        state.deadline = None;
-                        let text = std::mem::take(&mut state.buffer);
-                        return Some((Ok(StreamEvent::Text(text)), state));
-                    }
-                },
-                None => state.events.next().await,
-            };
-            match next {
-                Some(Ok(StreamEvent::Text(text))) => {
+                if state.ended {
                     if state.buffer.is_empty() {
-                        state.deadline = Some(Instant::now() + window);
+                        return None;
                     }
-                    state.buffer.push_str(&text);
-                }
-                Some(other) => {
-                    state.deadline = None;
-                    if state.buffer.is_empty() {
-                        return Some((other, state));
-                    }
-                    state.pending.push_back(other);
                     let text = std::mem::take(&mut state.buffer);
                     return Some((Ok(StreamEvent::Text(text)), state));
                 }
-                None => state.ended = true,
+                let next = match state.deadline {
+                    Some(deadline) => {
+                        match tokio::time::timeout_at(deadline, state.events.next()).await {
+                            Ok(next) => next,
+                            Err(_) => {
+                                state.deadline = None;
+                                let text = std::mem::take(&mut state.buffer);
+                                return Some((Ok(StreamEvent::Text(text)), state));
+                            }
+                        }
+                    }
+                    None => state.events.next().await,
+                };
+                match next {
+                    Some(Ok(StreamEvent::Text(text))) => {
+                        if state.buffer.is_empty() {
+                            state.deadline = Some(Instant::now() + window);
+                        }
+                        state.buffer.push_str(&text);
+                    }
+                    Some(other) => {
+                        state.deadline = None;
+                        if state.buffer.is_empty() {
+                            return Some((other, state));
+                        }
+                        state.pending.push_back(other);
+                        let text = std::mem::take(&mut state.buffer);
+                        return Some((Ok(StreamEvent::Text(text)), state));
+                    }
+                    None => state.ended = true,
+                }
             }
-        }
-    }))
+        },
+    ))
 }
 
 /// Server-sent events for `events`: `event: <name>` and JSON `data:`; an
@@ -356,7 +368,9 @@ where
         }
         match events.next().await {
             Some(Ok(event)) => {
-                let sse = Event::default().event(event.name()).data(event.data().to_string());
+                let sse = Event::default()
+                    .event(event.name())
+                    .data(event.data().to_string());
                 Some((Ok::<Event, Infallible>(sse), (events, false)))
             }
             Some(Err(error)) => {
@@ -460,6 +474,9 @@ mod tests {
             ok: true,
         };
         assert_eq!(result.name(), "tool_result");
-        assert_eq!(result.data(), json!({ "id": "c1", "tool": "search_deals", "ok": true }));
+        assert_eq!(
+            result.data(),
+            json!({ "id": "c1", "tool": "search_deals", "ok": true })
+        );
     }
 }

@@ -63,7 +63,10 @@ async fn returns_at_the_headers_and_streams_the_body() {
     while let Some(chunk) = response.chunk().await.unwrap() {
         body.extend_from_slice(&chunk);
     }
-    assert_eq!(String::from_utf8(body).unwrap(), "data: one\n\ndata: two\n\n");
+    assert_eq!(
+        String::from_utf8(body).unwrap(),
+        "data: one\n\ndata: two\n\n"
+    );
 }
 
 #[tokio::test]

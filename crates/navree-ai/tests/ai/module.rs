@@ -55,7 +55,10 @@ async fn models_and_providers_come_from_configuration_and_the_environment() {
 #[tokio::test]
 async fn invalid_configuration_fails_the_boot_naming_the_key() {
     let Err(error) = TestApp::builder()
-        .config("ai.models", json!({ "smart": { "provider": "anthropic", "model": "x", "fallbacks": ["ghost"] } }))
+        .config(
+            "ai.models",
+            json!({ "smart": { "provider": "anthropic", "model": "x", "fallbacks": ["ghost"] } }),
+        )
         .module(AiModule::from_config())
         .try_build()
         .await
@@ -67,7 +70,10 @@ async fn invalid_configuration_fails_the_boot_naming_the_key() {
 
     let Err(error) = TestApp::builder()
         .config("ai.default", "nope")
-        .config("ai.models", json!({ "a": { "provider": "openai", "model": "x" } }))
+        .config(
+            "ai.models",
+            json!({ "a": { "provider": "openai", "model": "x" } }),
+        )
         .module(AiModule::from_config())
         .try_build()
         .await
@@ -82,7 +88,11 @@ async fn for_root_takes_options_directly() {
     let app = TestApp::builder()
         .module(AiModule::for_root(AiOptions {
             default: "local".into(),
-            providers: [("ollama".to_owned(), ProviderConfig::ollama("http://127.0.0.1:11434"))].into(),
+            providers: [(
+                "ollama".to_owned(),
+                ProviderConfig::ollama("http://127.0.0.1:11434"),
+            )]
+            .into(),
             models: [("local".to_owned(), ModelConfig::new("ollama", "llama3.3"))].into(),
             ..AiOptions::default()
         }))
@@ -106,7 +116,10 @@ async fn ai_fake_installs_the_fake_and_every_service() {
     fake.respond(FakeReply::text("hello"));
     assert_eq!(ai.text("hi").await.unwrap().text, "hello");
     let _: Arc<Embeddings> = app.get::<Embeddings>().await;
-    assert_eq!(app.get::<VectorStore>().await.kind(), VectorStoreKind::Memory);
+    assert_eq!(
+        app.get::<VectorStore>().await.kind(),
+        VectorStoreKind::Memory
+    );
     let _: Arc<Conversations> = app.get::<Conversations>().await;
 }
 
@@ -184,7 +197,12 @@ async fn ai_errors_returned_with_question_mark_get_their_status() {
         .send()
         .await
         .assert_error(503, "The AI provider is unavailable");
-    let response = app.client().get("/api/ai/budget").send().await.assert_status(429);
+    let response = app
+        .client()
+        .get("/api/ai/budget")
+        .send()
+        .await
+        .assert_status(429);
     assert_eq!(response.header("retry-after"), Some("120"));
     app.client()
         .get("/api/ai/config")

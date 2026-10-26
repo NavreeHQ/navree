@@ -56,7 +56,9 @@ impl Driver for Ollama {
         Box::pin(async move {
             let request_body = body(request, false);
             let answer = wire::send_json(
-                self.http.post(format!("{}/api/chat", self.base)).json(&request_body),
+                self.http
+                    .post(format!("{}/api/chat", self.base))
+                    .json(&request_body),
                 request.timeout,
                 wire::common_message,
             )
@@ -89,7 +91,9 @@ impl Driver for Ollama {
         Box::pin(async move {
             let request_body = body(request, true);
             let response = wire::open_stream(
-                self.http.post(format!("{}/api/chat", self.base)).json(&request_body),
+                self.http
+                    .post(format!("{}/api/chat", self.base))
+                    .json(&request_body),
                 request.timeout,
                 wire::common_message,
             )
@@ -121,19 +125,29 @@ impl Driver for Ollama {
                 body["dimensions"] = json!(dimensions);
             }
             let answer = wire::send_json(
-                self.http.post(format!("{}/api/embed", self.base)).json(&body),
+                self.http
+                    .post(format!("{}/api/embed", self.base))
+                    .json(&body),
                 request.timeout,
                 wire::common_message,
             )
             .await?;
             let vectors = answer["embeddings"]
                 .as_array()
-                .ok_or_else(|| ProviderError::unavailable("an embeddings answer without embeddings"))?
+                .ok_or_else(|| {
+                    ProviderError::unavailable("an embeddings answer without embeddings")
+                })?
                 .iter()
                 .map(|vector| {
                     vector
                         .as_array()
-                        .map(|values| values.iter().filter_map(Value::as_f64).map(|v| v as f32).collect())
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(Value::as_f64)
+                                .map(|v| v as f32)
+                                .collect()
+                        })
                         .unwrap_or_default()
                 })
                 .collect();
@@ -256,8 +270,15 @@ impl State {
                 .unwrap_or_else(|| format!("ollama_{}", self.calls));
             chunks.push(StreamChunk::ToolCall(ToolCall {
                 id,
-                name: call.pointer("/function/name").and_then(Value::as_str).unwrap_or_default().to_owned(),
-                arguments: call.pointer("/function/arguments").cloned().unwrap_or_else(|| json!({})),
+                name: call
+                    .pointer("/function/name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                arguments: call
+                    .pointer("/function/arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({})),
                 meta: None,
             }));
         }
@@ -302,7 +323,9 @@ mod tests {
                 Message::new(
                     Role::User,
                     vec![
-                        Part::Text { text: "What is it?".into() },
+                        Part::Text {
+                            text: "What is it?".into(),
+                        },
                         Part::Attachment(Attachment::image(vec![1u8], "image/png")),
                     ],
                 ),

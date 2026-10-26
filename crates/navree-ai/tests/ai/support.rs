@@ -8,7 +8,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, Subject, field};
+use navree_access::{
+    AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, Subject, field,
+};
 use navree_ai::{AiModule, AiOptions, ModelConfig, ProviderConfig};
 use navree_auth::{AuthModule, AuthService};
 use navree_contracts::{Clock, FixedClock};
@@ -167,7 +169,9 @@ pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     let Some(user) = &ctx.user else { return };
     rules.can("read", "Note");
     rules.can("create", "Note");
-    rules.can("update", "Note").when(field("owner_id").eq(user.id));
+    rules
+        .can("update", "Note")
+        .when(field("owner_id").eq(user.id));
     if ctx.has_role("manager") {
         rules.can("manage", "Note");
     }
@@ -209,7 +213,11 @@ pub fn agent_app() -> TestAppBuilder {
 pub async fn user(app: &TestApp, name: &str, roles: &[&str]) -> Uuid {
     let auth = app.get::<AuthService>().await;
     let user = auth
-        .create_user(name, &format!("{}@example.test", name.to_lowercase()), "password123")
+        .create_user(
+            name,
+            &format!("{}@example.test", name.to_lowercase()),
+            "password123",
+        )
         .await
         .unwrap();
     if !roles.is_empty() {

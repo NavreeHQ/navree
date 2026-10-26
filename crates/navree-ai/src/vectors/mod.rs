@@ -198,7 +198,9 @@ impl Filter {
                 .is_some_and(accept)
         };
         match self {
-            Filter::Eq(field, value) => lookup(metadata, field).is_some_and(|found| same(found, value)),
+            Filter::Eq(field, value) => {
+                lookup(metadata, field).is_some_and(|found| same(found, value))
+            }
             Filter::AnyOf(field, values) => lookup(metadata, field)
                 .is_some_and(|found| values.iter().any(|value| same(found, value))),
             Filter::Gt(field, value) => compare(field, value, Ordering::is_gt),
@@ -232,9 +234,9 @@ impl Filter {
     pub(crate) fn check_fields(&self) -> Result<(), AiError> {
         for field in self.fields() {
             let valid = !field.is_empty()
-                && field
-                    .split('.')
-                    .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+                && field.split('.').all(|part| {
+                    !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                });
             if !valid {
                 return Err(AiError::config(format!(
                     "invalid filter field `{field}` (use letters, digits, `_` and `.`)"
@@ -247,7 +249,8 @@ impl Filter {
 
 /// The value at dotted `path` of `metadata`.
 fn lookup<'a>(metadata: &'a Value, path: &str) -> Option<&'a Value> {
-    path.split('.').try_fold(metadata, |value, key| value.get(key))
+    path.split('.')
+        .try_fold(metadata, |value, key| value.get(key))
 }
 
 /// JSON equality, numbers compared as numbers.
@@ -306,9 +309,21 @@ pub(crate) trait VectorDriver: Send + Sync {
     /// Creates the collection when it is missing; fails when it exists with
     /// another size.
     fn ensure<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>>;
-    fn upsert<'a>(&'a self, collection: &'a str, records: Vec<VectorRecord>) -> BoxFuture<'a, Result<(), AiError>>;
-    fn delete<'a>(&'a self, collection: &'a str, ids: Vec<String>) -> BoxFuture<'a, Result<(), AiError>>;
-    fn delete_where<'a>(&'a self, collection: &'a str, filter: &'a Filter) -> BoxFuture<'a, Result<(), AiError>>;
+    fn upsert<'a>(
+        &'a self,
+        collection: &'a str,
+        records: Vec<VectorRecord>,
+    ) -> BoxFuture<'a, Result<(), AiError>>;
+    fn delete<'a>(
+        &'a self,
+        collection: &'a str,
+        ids: Vec<String>,
+    ) -> BoxFuture<'a, Result<(), AiError>>;
+    fn delete_where<'a>(
+        &'a self,
+        collection: &'a str,
+        filter: &'a Filter,
+    ) -> BoxFuture<'a, Result<(), AiError>>;
     fn search<'a>(
         &'a self,
         collection: &'a str,
@@ -400,9 +415,15 @@ impl VectorStore {
             VectorStoreKind::Memory => Arc::new(memory::MemoryStore::new(options.metric)),
             VectorStoreKind::Pgvector => {
                 let db = db.ok_or_else(|| {
-                    AiError::config("ai.vectors.store = \"pgvector\" needs DatabaseModule in the app")
+                    AiError::config(
+                        "ai.vectors.store = \"pgvector\" needs DatabaseModule in the app",
+                    )
                 })?;
-                Arc::new(pgvector::PgVector::new(db, options.dimensions, options.metric))
+                Arc::new(pgvector::PgVector::new(
+                    db,
+                    options.dimensions,
+                    options.metric,
+                ))
             }
             VectorStoreKind::Qdrant => Arc::new(qdrant::Qdrant::new(
                 options
@@ -545,7 +566,9 @@ impl Collection {
 
 impl fmt::Debug for Collection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Collection").field("name", &self.name).finish_non_exhaustive()
+        f.debug_struct("Collection")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
     }
 }
 
@@ -630,7 +653,9 @@ impl IntoFuture for SearchRequest {
 fn check_name(name: &str) -> Result<(), AiError> {
     let valid = !name.is_empty()
         && name.len() <= 48
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
     if valid {
         Ok(())
     } else {
@@ -646,7 +671,12 @@ pub(crate) fn score(metric: Metric, a: &[f32], b: &[f32]) -> f32 {
         Metric::Cosine => crate::embeddings::cosine(a, b),
         Metric::Dot => a.iter().zip(b).map(|(x, y)| x * y).sum(),
         Metric::Euclidean => {
-            let distance = a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum::<f32>().sqrt();
+            let distance = a
+                .iter()
+                .zip(b)
+                .map(|(x, y)| (x - y) * (x - y))
+                .sum::<f32>()
+                .sqrt();
             1.0 / (1.0 + distance)
         }
     }
@@ -662,7 +692,9 @@ pub(crate) fn nested(path: &str, value: Value) -> Value {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[cfg(test)]
@@ -685,8 +717,16 @@ mod tests {
         assert!(Filter::gt("count", 2).matches(&metadata));
         assert!(Filter::eq("owner.id", "u1").matches(&metadata));
         assert!(Filter::not(Filter::eq("kind", "note")).matches(&metadata));
-        assert!(Filter::eq("kind", "note").or(Filter::eq("count", 3)).matches(&metadata));
-        assert!(!Filter::eq("kind", "call").and(Filter::eq("count", 4)).matches(&metadata));
+        assert!(
+            Filter::eq("kind", "note")
+                .or(Filter::eq("count", 3))
+                .matches(&metadata)
+        );
+        assert!(
+            !Filter::eq("kind", "call")
+                .and(Filter::eq("count", 4))
+                .matches(&metadata)
+        );
         assert!(!Filter::gt("missing", 1).matches(&metadata));
         // Mixed types never compare.
         assert!(!Filter::gt("kind", 1).matches(&metadata));
@@ -713,7 +753,10 @@ mod tests {
         let near = [0.9, 0.1];
         let far = [-1.0, 0.0];
         for metric in [Metric::Cosine, Metric::Dot, Metric::Euclidean] {
-            assert!(score(metric, &a, &near) > score(metric, &a, &far), "{metric:?}");
+            assert!(
+                score(metric, &a, &near) > score(metric, &a, &far),
+                "{metric:?}"
+            );
         }
         assert_eq!(nested("a.b", json!(1)), json!({ "a": { "b": 1 } }));
     }

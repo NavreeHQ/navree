@@ -161,12 +161,16 @@ pub(crate) trait Driver: Send + Sync {
     fn capabilities(&self) -> Capabilities;
 
     /// One answer.
-    fn chat<'a>(&'a self, request: &'a ChatRequest)
-    -> BoxFuture<'a, Result<ChatResponse, ProviderError>>;
+    fn chat<'a>(
+        &'a self,
+        request: &'a ChatRequest,
+    ) -> BoxFuture<'a, Result<ChatResponse, ProviderError>>;
 
     /// A streamed answer; returns once the provider starts answering.
-    fn stream<'a>(&'a self, request: &'a ChatRequest)
-    -> BoxFuture<'a, Result<ChunkStream, ProviderError>>;
+    fn stream<'a>(
+        &'a self,
+        request: &'a ChatRequest,
+    ) -> BoxFuture<'a, Result<ChunkStream, ProviderError>>;
 
     /// Vectors for texts.
     fn embed<'a>(
@@ -174,7 +178,11 @@ pub(crate) trait Driver: Send + Sync {
         request: &'a EmbedRequest,
     ) -> BoxFuture<'a, Result<EmbedResponse, ProviderError>> {
         let _ = request;
-        Box::pin(async { Err(ProviderError::unsupported("this provider has no embeddings")) })
+        Box::pin(async {
+            Err(ProviderError::unsupported(
+                "this provider has no embeddings",
+            ))
+        })
     }
 }
 
@@ -189,8 +197,18 @@ pub(crate) fn build_driver(
     let http = http.clone();
     Ok(match driver {
         "anthropic" => Arc::new(anthropic::Anthropic::new(name, config, http)),
-        "openai" => Arc::new(openai::OpenAi::new(name, config, http, openai::Flavor::OpenAi)),
-        "mistral" => Arc::new(openai::OpenAi::new(name, config, http, openai::Flavor::Mistral)),
+        "openai" => Arc::new(openai::OpenAi::new(
+            name,
+            config,
+            http,
+            openai::Flavor::OpenAi,
+        )),
+        "mistral" => Arc::new(openai::OpenAi::new(
+            name,
+            config,
+            http,
+            openai::Flavor::Mistral,
+        )),
         "gemini" => Arc::new(gemini::Gemini::new(name, config, http)),
         "ollama" => Arc::new(ollama::Ollama::new(name, config, http)),
         "bedrock" => Arc::new(bedrock::Bedrock::new(name, config, http)),

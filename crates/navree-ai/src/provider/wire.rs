@@ -196,7 +196,12 @@ fn parse_block(block: &str) -> Option<SseEvent> {
 pub(crate) fn sse_events(
     response: StreamingResponse,
 ) -> impl Stream<Item = Result<SseEvent, ProviderError>> + Send {
-    framed(response, SseParser::default(), SseParser::feed, SseParser::finish)
+    framed(
+        response,
+        SseParser::default(),
+        SseParser::feed,
+        SseParser::finish,
+    )
 }
 
 /// An incremental newline-delimited JSON parser (Ollama streams).
@@ -232,7 +237,12 @@ impl LineParser {
 pub(crate) fn lines(
     response: StreamingResponse,
 ) -> impl Stream<Item = Result<String, ProviderError>> + Send {
-    framed(response, LineParser::default(), LineParser::feed, LineParser::finish)
+    framed(
+        response,
+        LineParser::default(),
+        LineParser::feed,
+        LineParser::finish,
+    )
 }
 
 /// The body of `response` cut into frames by `parser`.
@@ -331,20 +341,40 @@ mod tests {
         headers.insert("retry-after", HeaderValue::from_static("7"));
         let body = br#"{"error":{"message":"slow down"}}"#;
         assert_eq!(
-            classify(StatusCode::TOO_MANY_REQUESTS, &headers, body, common_message),
+            classify(
+                StatusCode::TOO_MANY_REQUESTS,
+                &headers,
+                body,
+                common_message
+            ),
             ProviderError::RateLimited {
                 retry_after: Some(Duration::from_secs(7))
             }
         );
         assert!(matches!(
-            classify(StatusCode::UNAUTHORIZED, &HeaderMap::new(), body, common_message),
+            classify(
+                StatusCode::UNAUTHORIZED,
+                &HeaderMap::new(),
+                body,
+                common_message
+            ),
             ProviderError::Auth { .. }
         ));
         assert!(matches!(
-            classify(StatusCode::from_u16(529).unwrap(), &HeaderMap::new(), body, common_message),
+            classify(
+                StatusCode::from_u16(529).unwrap(),
+                &HeaderMap::new(),
+                body,
+                common_message
+            ),
             ProviderError::Unavailable { .. }
         ));
-        match classify(StatusCode::BAD_REQUEST, &HeaderMap::new(), body, common_message) {
+        match classify(
+            StatusCode::BAD_REQUEST,
+            &HeaderMap::new(),
+            body,
+            common_message,
+        ) {
             ProviderError::Request { message } => assert!(message.contains("slow down")),
             other => panic!("{other:?}"),
         }

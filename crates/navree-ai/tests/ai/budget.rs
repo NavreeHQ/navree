@@ -12,7 +12,9 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn a_user_who_spent_their_tokens_waits_until_midnight_utc() {
-    let clock = Arc::new(FixedClock::new(Utc.with_ymd_and_hms(2026, 10, 26, 23, 0, 0).unwrap()));
+    let clock = Arc::new(FixedClock::new(
+        Utc.with_ymd_and_hms(2026, 10, 26, 23, 0, 0).unwrap(),
+    ));
     let app = TestApp::builder()
         .config("ai.fake", true)
         .config("ai.budget.daily_tokens_per_user", 100)
@@ -62,7 +64,9 @@ async fn budgets_are_off_by_default() {
         .build()
         .await;
     let ai = app.get::<Ai>().await;
-    ai.fake().unwrap().respond_when(|_| true, FakeReply::text("ok").with_usage(1_000_000, 1));
+    ai.fake()
+        .unwrap()
+        .respond_when(|_| true, FakeReply::text("ok").with_usage(1_000_000, 1));
     let user = Uuid::now_v7();
 
     for _ in 0..3 {
@@ -82,7 +86,9 @@ async fn streams_count_against_the_budget_when_they_finish() {
         .build()
         .await;
     let ai = app.get::<Ai>().await;
-    ai.fake().unwrap().respond_when(|_| true, FakeReply::text("a b c").with_usage(8, 4));
+    ai.fake()
+        .unwrap()
+        .respond_when(|_| true, FakeReply::text("a b c").with_usage(8, 4));
     let user = Uuid::now_v7();
 
     let stream = ai.stream("hi").user(user).await.unwrap();

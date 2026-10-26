@@ -84,10 +84,10 @@ pub use navree_validation::{Valid, ValidAsync, ValidationModule};
 #[cfg(feature = "auth")]
 pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt as _};
 
-#[cfg(feature = "flags")]
-pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 #[cfg(feature = "ai")]
 pub use navree_ai::{AiModule, ModuleBuilderAiExt as _};
+#[cfg(feature = "flags")]
+pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{

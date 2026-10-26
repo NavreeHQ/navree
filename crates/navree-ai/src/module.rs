@@ -112,7 +112,10 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
         .factory(
             Factory::<Ai>::new(|r: Resolver| async move {
                 let options = r.get::<AiOptions>().await?;
-                Ok(Arc::new(Ai::build((*options).clone(), Some(r.app().downgrade()))?))
+                Ok(Arc::new(Ai::build(
+                    (*options).clone(),
+                    Some(r.app().downgrade()),
+                )?))
             })
             .deps(vec![ProviderKey::of::<AiOptions>()]),
         )
@@ -136,7 +139,10 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
                     ai.inner.http.clone(),
                 )?))
             })
-            .deps(vec![ProviderKey::of::<Ai>(), ProviderKey::of::<Embeddings>()]),
+            .deps(vec![
+                ProviderKey::of::<Ai>(),
+                ProviderKey::of::<Embeddings>(),
+            ]),
         )
         .exports::<VectorStore>()
         .lifecycle::<VectorStore>()
@@ -159,7 +165,9 @@ impl Lifecycle for VectorStore {
             for declared in ctx.contributions::<VectorCollection>() {
                 self.ensure_collection(declared.value.name())
                     .await
-                    .map_err(|error| format!("vector collection `{}`: {error}", declared.value.name()))?;
+                    .map_err(|error| {
+                        format!("vector collection `{}`: {error}", declared.value.name())
+                    })?;
             }
             Ok(())
         })

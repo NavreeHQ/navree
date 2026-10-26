@@ -94,8 +94,12 @@ pub(crate) fn point_id(id: &str) -> Uuid {
 /// The Qdrant filter of `filter` (on `metadata.<field>`).
 pub(crate) fn qdrant_filter(filter: &Filter) -> Value {
     match filter {
-        Filter::And(filters) => json!({ "must": filters.iter().map(condition).collect::<Vec<_>>() }),
-        Filter::Or(filters) => json!({ "should": filters.iter().map(condition).collect::<Vec<_>>() }),
+        Filter::And(filters) => {
+            json!({ "must": filters.iter().map(condition).collect::<Vec<_>>() })
+        }
+        Filter::Or(filters) => {
+            json!({ "should": filters.iter().map(condition).collect::<Vec<_>>() })
+        }
         Filter::Not(inner) => json!({ "must_not": [condition(inner)] }),
         other => json!({ "must": [condition(other)] }),
     }
@@ -105,7 +109,11 @@ pub(crate) fn qdrant_filter(filter: &Filter) -> Value {
 fn condition(filter: &Filter) -> Value {
     let key = |field: &str| format!("metadata.{field}");
     let range = |field: &str, op: &str, value: &Value| {
-        let kind = if value.is_number() { "range" } else { "datetime_range" };
+        let kind = if value.is_number() {
+            "range"
+        } else {
+            "datetime_range"
+        };
         json!({ "key": key(field), kind: { op: value } })
     };
     match filter {
@@ -157,7 +165,11 @@ impl VectorDriver for Qdrant {
         })
     }
 
-    fn upsert<'a>(&'a self, collection: &'a str, records: Vec<VectorRecord>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn upsert<'a>(
+        &'a self,
+        collection: &'a str,
+        records: Vec<VectorRecord>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             let points: Vec<Value> = records
                 .into_iter()
@@ -170,31 +182,48 @@ impl VectorDriver for Qdrant {
                 })
                 .collect();
             self.send(
-                self.request(Method::PUT, &format!("/collections/{collection}/points?wait=true"))
-                    .json(&json!({ "points": points })),
+                self.request(
+                    Method::PUT,
+                    &format!("/collections/{collection}/points?wait=true"),
+                )
+                .json(&json!({ "points": points })),
             )
             .await?;
             Ok(())
         })
     }
 
-    fn delete<'a>(&'a self, collection: &'a str, ids: Vec<String>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn delete<'a>(
+        &'a self,
+        collection: &'a str,
+        ids: Vec<String>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             let points: Vec<Uuid> = ids.iter().map(|id| point_id(id)).collect();
             self.send(
-                self.request(Method::POST, &format!("/collections/{collection}/points/delete?wait=true"))
-                    .json(&json!({ "points": points })),
+                self.request(
+                    Method::POST,
+                    &format!("/collections/{collection}/points/delete?wait=true"),
+                )
+                .json(&json!({ "points": points })),
             )
             .await?;
             Ok(())
         })
     }
 
-    fn delete_where<'a>(&'a self, collection: &'a str, filter: &'a Filter) -> BoxFuture<'a, Result<(), AiError>> {
+    fn delete_where<'a>(
+        &'a self,
+        collection: &'a str,
+        filter: &'a Filter,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             self.send(
-                self.request(Method::POST, &format!("/collections/{collection}/points/delete?wait=true"))
-                    .json(&json!({ "filter": qdrant_filter(filter) })),
+                self.request(
+                    Method::POST,
+                    &format!("/collections/{collection}/points/delete?wait=true"),
+                )
+                .json(&json!({ "filter": qdrant_filter(filter) })),
             )
             .await?;
             Ok(())
@@ -221,8 +250,11 @@ impl VectorDriver for Qdrant {
             }
             let result = self
                 .send(
-                    self.request(Method::POST, &format!("/collections/{collection}/points/search"))
-                        .json(&body),
+                    self.request(
+                        Method::POST,
+                        &format!("/collections/{collection}/points/search"),
+                    )
+                    .json(&body),
                 )
                 .await?;
             let metric = self.metric;
@@ -232,13 +264,20 @@ impl VectorDriver for Qdrant {
                 .flatten()
                 .map(|point| {
                     let raw = point["score"].as_f64().unwrap_or(0.0) as f32;
-                    let score = if metric == Metric::Euclidean { 1.0 / (1.0 + raw) } else { raw };
+                    let score = if metric == Metric::Euclidean {
+                        1.0 / (1.0 + raw)
+                    } else {
+                        raw
+                    };
                     let payload = &point["payload"];
                     VectorMatch {
                         id: payload["id"].as_str().unwrap_or_default().to_owned(),
                         score,
                         text: payload["text"].as_str().unwrap_or_default().to_owned(),
-                        metadata: payload.get("metadata").cloned().unwrap_or_else(|| json!({})),
+                        metadata: payload
+                            .get("metadata")
+                            .cloned()
+                            .unwrap_or_else(|| json!({})),
                     }
                 })
                 .filter(|m| min_score.is_none_or(|min| m.score >= min))
@@ -251,8 +290,11 @@ impl VectorDriver for Qdrant {
         Box::pin(async move {
             let result = self
                 .send(
-                    self.request(Method::POST, &format!("/collections/{collection}/points/count"))
-                        .json(&json!({ "exact": true })),
+                    self.request(
+                        Method::POST,
+                        &format!("/collections/{collection}/points/count"),
+                    )
+                    .json(&json!({ "exact": true })),
                 )
                 .await?;
             Ok(result["count"].as_u64().unwrap_or(0))

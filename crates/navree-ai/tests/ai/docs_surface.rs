@@ -81,14 +81,20 @@ async fn ai_sdk_page(
         .user(Uuid::now_v7())
         .timeout(Duration::from_secs(20))
         .await?;
-    let (_text, _model, _provider): (String, String, String) =
-        (response.text.clone(), response.model.clone(), response.provider.clone());
+    let (_text, _model, _provider): (String, String, String) = (
+        response.text.clone(),
+        response.model.clone(),
+        response.provider.clone(),
+    );
     let Usage {
         input_tokens: _,
         output_tokens: _,
         cached_input_tokens: _,
     } = response.usage;
-    let _ = matches!(response.finish, Finish::Stop | Finish::MaxTokens | Finish::Refused);
+    let _ = matches!(
+        response.finish,
+        Finish::Stop | Finish::MaxTokens | Finish::Refused
+    );
     let _: String = response.to_string();
 
     ai.text(vec![
@@ -103,21 +109,39 @@ async fn ai_sdk_page(
         .attach(Attachment::from_disk(&disk, "contracts/acme.pdf").await?)
         .model("smart")
         .await?;
-    let _: FollowUpEmail = ai.structured::<FollowUpEmail>("Write a follow-up").validated().await?;
-    let _: Triage = ai.structured::<Triage>("I want to cancel.").model("fast").await?;
+    let _: FollowUpEmail = ai
+        .structured::<FollowUpEmail>("Write a follow-up")
+        .validated()
+        .await?;
+    let _: Triage = ai
+        .structured::<Triage>("I want to cancel.")
+        .model("fast")
+        .await?;
 
-    let stream: TextStream = ai.stream("Summarize the deal").system("Two sentences.").model("fast").await?;
+    let stream: TextStream = ai
+        .stream("Summarize the deal")
+        .system("Two sentences.")
+        .model("fast")
+        .await?;
     let stream = stream.on_finish(move |response: TextResponse| async move {
         let _ = response.text;
         Ok::<(), AppError>(())
     });
     let _: Response = stream.into_response();
 
-    let mut stream = ai.stream("Draft").model("fast").user(Uuid::now_v7()).await?.chunked(Duration::from_millis(100));
+    let mut stream = ai
+        .stream("Draft")
+        .model("fast")
+        .user(Uuid::now_v7())
+        .await?
+        .chunked(Duration::from_millis(100));
     while let Some(event) = stream.next().await {
         match event? {
             StreamEvent::Text(_text) => {}
-            StreamEvent::Done(Completion { model: _, usage: _, finish: _, .. }) => {}
+            StreamEvent::Done(done) => {
+                let _: (String, Usage, Finish) = (done.model, done.usage, done.finish);
+                let _: Option<Completion> = None;
+            }
             _ => continue,
         }
     }
@@ -161,7 +185,9 @@ async fn agents_page(
         pending_approval,
         usage: _,
     } = reply;
-    let _ = steps.iter().map(|step| (&step.tool, &step.arguments, step.ok));
+    let _ = steps
+        .iter()
+        .map(|step| (&step.tool, &step.arguments, step.ok));
     if let Some(pending) = pending_approval {
         let _ = (&pending.call_id, &pending.tool, &pending.arguments);
     }
@@ -197,10 +223,15 @@ async fn agents_page(
     let _: Response = stream.into_response();
 
     let page = conversations.list_for(user, PageQuery::default()).await?;
-    let _ = page.data.iter().map(|c| (&c.id, &c.agent, &c.title, c.created_at, c.updated_at));
+    let _ = page
+        .data
+        .iter()
+        .map(|c| (&c.id, &c.agent, &c.title, c.created_at, c.updated_at));
     let messages: Vec<StoredMessage> = conversations.messages(user, conversation_id).await?;
     let _ = messages.iter().map(|m| (&m.role, &m.text, &m.parts));
-    conversations.rename(user, conversation_id, "Q4 pipeline").await?;
+    conversations
+        .rename(user, conversation_id, "Q4 pipeline")
+        .await?;
     conversations.delete(user, conversation_id).await?;
     Ok(())
 }
@@ -225,8 +256,12 @@ async fn embeddings_page(
     deal_id: Uuid,
     ids: Vec<Uuid>,
 ) -> Result<(), AiError> {
-    let one: Embedding = embeddings.embed("Dana asked whether onboarding takes more than a month").await?;
-    let many: Vec<Embedding> = embeddings.embed_many(&["first passage", "second passage"]).await?;
+    let one: Embedding = embeddings
+        .embed("Dana asked whether onboarding takes more than a month")
+        .await?;
+    let many: Vec<Embedding> = embeddings
+        .embed_many(&["first passage", "second passage"])
+        .await?;
     let _: usize = one.dimensions();
     let _: f32 = one.cosine(&many[0]);
     let _: &[f32] = &one;
@@ -239,15 +274,24 @@ async fn embeddings_page(
                 .metadata(json!({ "activity_id": Uuid::now_v7(), "subject_id": deal_id })),
         )
         .await?;
-    let chunks: Vec<Chunk> = Chunker::new().max_tokens(300).overlap(40).split("A long note.");
-    let vectors_of_chunks = embeddings.embed_many(chunks.iter().map(|c| c.text.as_str())).await?;
+    let chunks: Vec<Chunk> = Chunker::new()
+        .max_tokens(300)
+        .overlap(40)
+        .split("A long note.");
+    let vectors_of_chunks = embeddings
+        .embed_many(chunks.iter().map(|c| c.text.as_str()))
+        .await?;
     let records = chunks
         .into_iter()
         .zip(vectors_of_chunks)
-        .map(|(chunk, embedding)| VectorRecord::new(format!("a:{}", chunk.index), embedding).text(chunk.text));
+        .map(|(chunk, embedding)| {
+            VectorRecord::new(format!("a:{}", chunk.index), embedding).text(chunk.text)
+        });
     notes.upsert_many(records.collect()).await?;
     notes.delete("0199c1d2:0").await?;
-    notes.delete_where(Filter::eq("activity_id", Uuid::now_v7())).await?;
+    notes
+        .delete_where(Filter::eq("activity_id", Uuid::now_v7()))
+        .await?;
     let _: u64 = notes.count().await?;
 
     let question = String::from("what did they say about the rollout timeline");
@@ -257,7 +301,11 @@ async fn embeddings_page(
             Filter::eq("subject_id", deal_id)
                 .and(Filter::any_of("subject_id", ids))
                 .or(Filter::not(Filter::gte("created_at", "2026-10-01")))
-                .and(Filter::gt("n", 1).or(Filter::lt("n", 0)).or(Filter::lte("n", 9))),
+                .and(
+                    Filter::gt("n", 1)
+                        .or(Filter::lt("n", 0))
+                        .or(Filter::lte("n", 9)),
+                ),
         )
         .limit(8)
         .min_score(0.2)
@@ -341,12 +389,21 @@ model = "qwen3-32b"
     assert_eq!(options.vectors.store, VectorStoreKind::Pgvector);
     assert_eq!(options.vectors.metric, Metric::Cosine);
     assert_eq!(options.providers["local"].driver.as_deref(), Some("openai"));
-    assert_eq!(options.providers["anthropic"].api_key.as_deref(), Some("sk-ant-api03-..."));
+    assert_eq!(
+        options.providers["anthropic"].api_key.as_deref(),
+        Some("sk-ant-api03-...")
+    );
 
     // `Config::redacted()` masks every key.
     let redacted = config.redacted();
-    assert_eq!(redacted["ai"]["providers"]["anthropic"]["api_key"], "[redacted]");
-    assert_eq!(redacted["ai"]["providers"]["openai"]["api_key"], "[redacted]");
+    assert_eq!(
+        redacted["ai"]["providers"]["anthropic"]["api_key"],
+        "[redacted]"
+    );
+    assert_eq!(
+        redacted["ai"]["providers"]["openai"]["api_key"],
+        "[redacted]"
+    );
 }
 
 #[test]
@@ -385,8 +442,14 @@ fn every_documented_key_and_default() {
     assert_eq!(options.models["fast"].fallbacks, ["backup"]);
     assert_eq!(options.models["fast"].temperature, Some(0.2));
     assert_eq!(options.models["fast"].timeout_secs, Some(20));
-    assert_eq!(options.providers["openai"].organization.as_deref(), Some("org-1"));
-    assert_eq!(options.providers["bedrock"].region.as_deref(), Some("us-east-1"));
+    assert_eq!(
+        options.providers["openai"].organization.as_deref(),
+        Some("org-1")
+    );
+    assert_eq!(
+        options.providers["bedrock"].region.as_deref(),
+        Some("us-east-1")
+    );
     assert_eq!(options.embeddings.batch_size, 32);
     assert_eq!(options.embeddings.cache_ttl_days, 0);
     assert_eq!(options.vectors.metric, Metric::Dot);
@@ -397,15 +460,31 @@ fn every_documented_key_and_default() {
     // The defaults the pages list.
     let defaults = AiOptions::default();
     assert_eq!(
-        (defaults.timeout_secs, defaults.max_retries, defaults.structured_retries),
+        (
+            defaults.timeout_secs,
+            defaults.max_retries,
+            defaults.structured_retries
+        ),
         (60, 2, 2)
     );
     assert_eq!(defaults.budget.daily_tokens_per_user, 0);
     assert!(!defaults.log_content && !defaults.fake);
-    assert_eq!((defaults.embeddings.batch_size, defaults.embeddings.cache_ttl_days), (96, 30));
+    assert_eq!(
+        (
+            defaults.embeddings.batch_size,
+            defaults.embeddings.cache_ttl_days
+        ),
+        (96, 30)
+    );
     assert_eq!(defaults.vectors.store, VectorStoreKind::Memory);
-    assert_eq!((defaults.vectors.dimensions, defaults.vectors.metric), (1536, Metric::Cosine));
-    assert_eq!((defaults.memory.max_messages, defaults.memory.retention_days), (40, 90));
+    assert_eq!(
+        (defaults.vectors.dimensions, defaults.vectors.metric),
+        (1536, Metric::Cosine)
+    );
+    assert_eq!(
+        (defaults.memory.max_messages, defaults.memory.retention_days),
+        (40, 90)
+    );
     assert_eq!(ModelConfig::default().max_tokens, 4096);
     let agent = AgentOptions::default();
     assert_eq!(agent.model, None);
@@ -420,7 +499,11 @@ fn every_documented_key_and_default() {
 fn configuring_in_code() {
     let options = AiOptions {
         default: "local".into(),
-        providers: [("ollama".to_owned(), ProviderConfig::ollama("http://127.0.0.1:11434"))].into(),
+        providers: [(
+            "ollama".to_owned(),
+            ProviderConfig::ollama("http://127.0.0.1:11434"),
+        )]
+        .into(),
         models: [("local".to_owned(), ModelConfig::new("ollama", "llama3.3"))].into(),
         ..AiOptions::default()
     };
@@ -442,14 +525,42 @@ fn configuring_in_code() {
 fn errors_and_their_statuses() {
     let cases = [
         (AiError::unavailable("anthropic"), 503),
-        (AiError::rate_limited("anthropic", Some(Duration::from_secs(3))), 429),
-        (AiError::BudgetExceeded { retry_after: Duration::from_secs(60) }, 429),
-        (AiError::InvalidOutput { message: "x".into() }, 502),
-        (AiError::Refused { model: "fast".into() }, 502),
+        (
+            AiError::rate_limited("anthropic", Some(Duration::from_secs(3))),
+            429,
+        ),
+        (
+            AiError::BudgetExceeded {
+                retry_after: Duration::from_secs(60),
+            },
+            429,
+        ),
+        (
+            AiError::InvalidOutput {
+                message: "x".into(),
+            },
+            502,
+        ),
+        (
+            AiError::Refused {
+                model: "fast".into(),
+            },
+            502,
+        ),
         (AiError::request("openai", "too long"), 500),
-        (AiError::Unsupported { message: "pdf".into() }, 500),
+        (
+            AiError::Unsupported {
+                message: "pdf".into(),
+            },
+            500,
+        ),
         (AiError::config("unknown model `x`"), 500),
-        (AiError::NoFakeReply { prompt: "hi".into() }, 500),
+        (
+            AiError::NoFakeReply {
+                prompt: "hi".into(),
+            },
+            500,
+        ),
     ];
     for (error, status) in cases {
         assert_eq!(error.status().as_u16(), status, "{error}");
@@ -469,16 +580,30 @@ async fn the_fake_api() {
         ..AiOptions::default()
     });
     fake.respond(FakeReply::text("Two sentences.").with_usage(10, 2));
-    fake.respond(FakeReply::json(json!({ "sentiment": "neutral", "reason": "Fine." })));
+    fake.respond(FakeReply::json(
+        json!({ "sentiment": "neutral", "reason": "Fine." }),
+    ));
     fake.respond(FakeReply::error(AiError::unavailable("anthropic")));
     fake.respond_with([FakeReply::text("first"), FakeReply::text("second")]);
-    fake.respond_when(|request| request.model() == "rare", FakeReply::text("always"));
+    fake.respond_when(
+        |request| request.model() == "rare",
+        FakeReply::text("always"),
+    );
     let _ = FakeReply::tool_call("move_deal", json!({ "deal_id": 1 }));
 
-    let response = ai.text("Summarize Acme").model("fast").max_tokens(77).user(Uuid::nil()).await.unwrap();
+    let response = ai
+        .text("Summarize Acme")
+        .model("fast")
+        .max_tokens(77)
+        .user(Uuid::nil())
+        .await
+        .unwrap();
     assert_eq!(response.usage, Usage::new(10, 2));
     let _: Triage = ai.structured("Classify").await.unwrap();
-    assert!(matches!(ai.text("x").await, Err(AiError::Unavailable { .. })));
+    assert!(matches!(
+        ai.text("x").await,
+        Err(AiError::Unavailable { .. })
+    ));
     assert_eq!(ai.text("rare").model("rare").await.unwrap().text, "always");
 
     let requests: Vec<FakeRequest> = fake.requests();

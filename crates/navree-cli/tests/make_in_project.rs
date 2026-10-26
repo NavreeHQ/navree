@@ -101,7 +101,10 @@ fn make_agent_wires_it_into_the_module() {
     )
     .unwrap();
     let agent = read(&root, "src/modules/users/agents/assistant.rs");
-    assert!(agent.contains("#[agent]\nimpl Agent for Assistant {"), "{agent}");
+    assert!(
+        agent.contains("#[agent]\nimpl Agent for Assistant {"),
+        "{agent}"
+    );
     assert!(
         agent.contains("const NAME: &'static str = \"users-assistant\";"),
         "{agent}"
