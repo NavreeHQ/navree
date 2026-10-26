@@ -1,5 +1,6 @@
 //! navree-search integration tests: one binary.
 
+mod access_parity;
 mod commands;
 mod config;
 mod conformance;

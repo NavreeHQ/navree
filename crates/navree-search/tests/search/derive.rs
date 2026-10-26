@@ -86,12 +86,77 @@ async fn the_derived_document_holds_the_key_and_marked_fields() {
     );
     assert_eq!(document.get("title"), Some(&json!(null)));
     assert_eq!(document.get("score"), Some(&json!(7)));
+    // Filter and sort fields hold the value as access rules see it: a
+    // timestamp in UTC with microseconds.
     assert_eq!(
         document.get("created_at"),
-        Some(&json!("2026-10-26T12:00:00Z"))
+        Some(&json!("2026-10-26T12:00:00.000000Z"))
     );
     assert_eq!(document.get("deleted_at"), None);
     drop(search);
+}
+
+mod ticket {
+    use navree_search::Searchable;
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize)]
+    #[sea_orm(rs_type = "String", db_type = "Text")]
+    pub enum Priority {
+        #[sea_orm(string_value = "p1")]
+        Urgent,
+        #[sea_orm(string_value = "p3")]
+        Normal,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
+    #[sea_orm(table_name = "tickets")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: i64,
+        #[searchable(boost = 2, filter)]
+        pub priority: Priority,
+        #[searchable]
+        pub label: Priority,
+        #[sea_orm(column_name = "assignee")]
+        #[searchable(filter)]
+        pub owner: Option<Uuid>,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn filter_fields_hold_database_values_and_text_fields_serde_values() {
+    let settings = ticket::Entity::settings();
+    let owner = settings.field("owner").expect("indexed by its field name");
+    assert_eq!(owner.column, "assignee", "column_name is the column");
+    assert_eq!(settings.field_for_column("assignee").unwrap().name, "owner");
+
+    let app = crate::support::app("memory", "off").await;
+    let db = app.get::<navree_db::Db>().await;
+    let tx = std::sync::Arc::new(sea_orm::TransactionTrait::begin(db.conn()).await.unwrap());
+    let ctx = search_context(&app, tx).await;
+    let assignee = Uuid::now_v7();
+    let model = ticket::Model {
+        id: 7,
+        priority: ticket::Priority::Urgent,
+        label: ticket::Priority::Normal,
+        owner: Some(assignee),
+    };
+    let document = ticket::Entity::document(&model, &ctx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(document.id(), "7");
+    // Access rules compare `priority = "p1"`, the stored value.
+    assert_eq!(document.get("priority"), Some(&json!("p1")));
+    assert_eq!(document.get("label"), Some(&json!("Normal")));
+    assert_eq!(document.get("owner"), Some(&json!(assignee.to_string())));
 }
 
 /// A search context the way the service builds one.

@@ -3611,6 +3611,7 @@ dependencies = [
  "navree-queue",
  "navree-testing",
  "navree-workspace",
+ "proptest",
  "sea-orm",
  "sea-orm-migration",
  "serde",

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ops::{Bound, RangeBounds};
 
 use navree_access::{Ability, Cond, Conditions};
+use sea_orm::{ColumnTrait, ColumnType, EntityTrait, IdenStatic, Iterable};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -379,20 +380,79 @@ pub(crate) enum AccessFilter {
     /// The engine can apply it exactly (every condition is on a filterable
     /// field of the index).
     Exact(Filter),
-    /// Some condition names a column the index does not filter on: apply
-    /// the SQL filter when loading the rows.
+    /// Some condition names a column the index does not filter on, or one
+    /// the index cannot compare exactly: apply the SQL filter when loading
+    /// the rows.
     Rows,
+}
+
+/// The type of an entity's column by name; `None` when the entity has no
+/// such column. The access translation compares operands the way the SQL
+/// `Accessible` filter does, which depends on the column's type.
+pub(crate) type ColumnTypes = fn(&str) -> Option<ColumnType>;
+
+/// [`ColumnTypes`] for entity `E`.
+pub(crate) fn column_type<E: EntityTrait>(name: &str) -> Option<ColumnType> {
+    E::Column::iter()
+        .find(|column| column.as_str() == name)
+        .map(|column| column.def().get_column_type().clone())
+}
+
+/// What the index holds for a column, as access operands compare with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ColumnKind {
+    /// JSON booleans.
+    Boolean,
+    /// JSON numbers.
+    Number,
+    /// JSON strings (text, UUIDs, enums stored as text).
+    Text,
+    /// Anything the index cannot compare exactly: dates and times (the
+    /// index keeps Unix milliseconds, the database finer precision),
+    /// decimals, JSON, binary and custom types.
+    Inexact,
+}
+
+fn column_kind(ty: &ColumnType) -> ColumnKind {
+    match ty {
+        ColumnType::Boolean => ColumnKind::Boolean,
+        ColumnType::TinyInteger
+        | ColumnType::SmallInteger
+        | ColumnType::Integer
+        | ColumnType::BigInteger
+        | ColumnType::TinyUnsigned
+        | ColumnType::SmallUnsigned
+        | ColumnType::Unsigned
+        | ColumnType::BigUnsigned
+        | ColumnType::Float
+        | ColumnType::Double => ColumnKind::Number,
+        ColumnType::Char(_)
+        | ColumnType::String(_)
+        | ColumnType::Text
+        | ColumnType::Uuid
+        | ColumnType::Enum { .. } => ColumnKind::Text,
+        _ => ColumnKind::Inexact,
+    }
 }
 
 /// The records of `subject` on which `ability` allows `action`, as a filter
 /// on `settings`' fields: the same rule selection as
 /// [`Ability::sql_filter`] (last matching rule wins), so engine results
 /// agree with SQL `Accessible` lists.
+///
+/// A condition is translated when it names a filterable field whose
+/// column (typed by `columns`) is a boolean, a number or a string (UUIDs
+/// and text enums included). An operand of another JSON type than the
+/// column's compares as the SQL filter compares it: `$eq` and the ranges
+/// never match, `$ne` always does, and `$in` / `$nin` ignore it. A
+/// condition on any other column (dates and times, decimals, JSON, a
+/// column the index lacks) makes the rule set [`AccessFilter::Rows`].
 pub(crate) fn access_filter(
     ability: &Ability,
     action: &str,
     subject: &str,
     settings: &IndexSettings,
+    columns: ColumnTypes,
 ) -> AccessFilter {
     let relevant = ability.rules().iter().rev().filter(|rule| {
         rule.matches_action(action) && rule.matches_subject(subject) && rule.matches_field(None)
@@ -413,7 +473,7 @@ pub(crate) fn access_filter(
     }
     let mut filter = Filter::Const(otherwise);
     for (conditions, allow) in whens.into_iter().rev() {
-        let Some(condition) = conditions_filter(conditions, settings) else {
+        let Some(condition) = conditions_filter(conditions, settings, columns) else {
             return AccessFilter::Rows;
         };
         filter = if allow {
@@ -426,22 +486,47 @@ pub(crate) fn access_filter(
 }
 
 /// One rule's conditions on index fields; `None` when a column is not a
-/// filterable field.
-fn conditions_filter(conditions: &Conditions, settings: &IndexSettings) -> Option<Filter> {
+/// filterable field, or not one the index compares exactly.
+fn conditions_filter(
+    conditions: &Conditions,
+    settings: &IndexSettings,
+    columns: ColumnTypes,
+) -> Option<Filter> {
     let mut parts = Vec::new();
     for (column, conds) in conditions.iter() {
         let field = settings.field_for_column(column).filter(|f| f.filter)?;
+        let kind = column_kind(&columns(column)?);
+        // A non-null operand of another JSON type than the column's; the
+        // SQL filter compiles it to a constant (`SqlColumns::accepts`).
+        let foreign = |v: &Value| match kind {
+            _ if v.is_null() => false,
+            ColumnKind::Boolean => !v.is_boolean(),
+            ColumnKind::Number => !v.is_number(),
+            ColumnKind::Text => !v.is_string(),
+            ColumnKind::Inexact => true,
+        };
+        if kind == ColumnKind::Inexact {
+            return None;
+        }
         let name = field.name.as_str();
+        let kept = |values: &[Value]| -> Vec<Value> {
+            values.iter().filter(|v| !foreign(v)).cloned().collect()
+        };
         for cond in conds {
             parts.push(match cond {
+                Cond::Eq(v) if foreign(v) => Filter::Const(false),
                 Cond::Eq(v) => Filter::eq(name, v),
+                Cond::Ne(v) if foreign(v) => Filter::Const(true),
                 Cond::Ne(v) => Filter::ne(name, v),
+                Cond::Lt(v) | Cond::Lte(v) | Cond::Gt(v) | Cond::Gte(v) if foreign(v) => {
+                    Filter::Const(false)
+                }
                 Cond::Lt(v) => cmp(name, CmpOp::Lt, v),
                 Cond::Lte(v) => cmp(name, CmpOp::Lte, v),
                 Cond::Gt(v) => cmp(name, CmpOp::Gt, v),
                 Cond::Gte(v) => cmp(name, CmpOp::Gte, v),
-                Cond::In(values) => Filter::is_in(name, values),
-                Cond::Nin(values) => Filter::Not(Box::new(Filter::is_in(name, values))),
+                Cond::In(values) => Filter::is_in(name, kept(values)),
+                Cond::Nin(values) => Filter::Not(Box::new(Filter::is_in(name, kept(values)))),
             });
         }
     }
@@ -569,6 +654,26 @@ mod tests {
             .filter("owner")
             .column("owner", "owner_id")
             .filter("locked")
+            .filter("amount")
+            .filter("closes_at")
+            .filter("ghost")
+    }
+
+    /// The test entity's columns (`ghost` is a declared field without a
+    /// column).
+    fn columns(name: &str) -> Option<ColumnType> {
+        match name {
+            "owner_id" => Some(ColumnType::Uuid),
+            "locked" => Some(ColumnType::Boolean),
+            "amount" => Some(ColumnType::BigInteger),
+            "closes_at" => Some(ColumnType::TimestampWithTimeZone),
+            "title" | "team_id" => Some(ColumnType::Text),
+            _ => None,
+        }
+    }
+
+    fn translate(rules: Rules) -> AccessFilter {
+        access_filter(&rules.build(), READ, "Deal", &settings(), columns)
     }
 
     #[test]
@@ -576,8 +681,7 @@ mod tests {
         let mut rules = Rules::new();
         rules.can(READ, "Deal").when(field("owner_id").eq("u1"));
         rules.cannot(READ, "Deal").when(field("locked").eq(true));
-        let ability = rules.build();
-        let AccessFilter::Exact(f) = access_filter(&ability, READ, "Deal", &settings()) else {
+        let AccessFilter::Exact(f) = translate(rules) else {
             panic!("translatable");
         };
         assert!(f.matches(&doc(json!({"owner": "u1", "locked": false}))));
@@ -589,12 +693,9 @@ mod tests {
     fn unconditional_rules_are_constants() {
         let mut rules = Rules::new();
         rules.can(READ, "Deal");
+        assert_eq!(translate(rules), AccessFilter::Exact(Filter::Const(true)));
         assert_eq!(
-            access_filter(&rules.build(), READ, "Deal", &settings()),
-            AccessFilter::Exact(Filter::Const(true))
-        );
-        assert_eq!(
-            access_filter(&Rules::new().build(), READ, "Deal", &settings()),
+            translate(Rules::new()),
             AccessFilter::Exact(Filter::Const(false))
         );
     }
@@ -603,9 +704,43 @@ mod tests {
     fn conditions_on_unindexed_columns_fall_back_to_rows() {
         let mut rules = Rules::new();
         rules.can(READ, "Deal").when(field("team_id").eq("t1"));
+        assert_eq!(translate(rules), AccessFilter::Rows);
+    }
+
+    #[test]
+    fn conditions_on_timestamps_and_missing_columns_fall_back_to_rows() {
+        // The index keeps milliseconds; the database compares microseconds.
+        let mut rules = Rules::new();
+        rules
+            .can(READ, "Deal")
+            .when(field("closes_at").gt("2026-10-25T12:00:00.250001Z"));
+        assert_eq!(translate(rules), AccessFilter::Rows);
+        // A declared field without a column of the entity.
+        let mut rules = Rules::new();
+        rules.can(READ, "Deal").when(field("ghost").eq(1));
+        assert_eq!(translate(rules), AccessFilter::Rows);
+    }
+
+    #[test]
+    fn operands_of_another_type_compare_like_sql() {
+        // `amount = "3"` never holds; `amount != "3"` always does.
+        let mut rules = Rules::new();
+        rules.can(READ, "Deal").when(field("amount").eq("3"));
+        assert_eq!(translate(rules), AccessFilter::Exact(Filter::Const(false)));
+        let mut rules = Rules::new();
+        rules.can(READ, "Deal").when(field("amount").ne("3"));
+        assert_eq!(translate(rules), AccessFilter::Exact(Filter::Const(true)));
+        // `$in` ignores members of another type.
+        let mut rules = Rules::new();
+        rules
+            .can(READ, "Deal")
+            .when(field("locked").is_in([json!(0), json!(true)]));
         assert_eq!(
-            access_filter(&rules.build(), READ, "Deal", &settings()),
-            AccessFilter::Rows
+            translate(rules),
+            AccessFilter::Exact(Filter::In {
+                field: "locked".into(),
+                values: vec![json!(true)],
+            })
         );
     }
 }

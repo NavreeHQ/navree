@@ -17,7 +17,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::engine::{EngineHit, EngineQuery, SortBy};
-use crate::filter::{AccessFilter, access_filter};
+use crate::filter::{AccessFilter, ColumnTypes, access_filter, column_type};
 use crate::searchable::{key_column, key_value, primary_key_string};
 use crate::service::Entry;
 use crate::settings::WORKSPACE_FIELD;
@@ -77,6 +77,8 @@ pub(crate) struct Access {
     action: &'static str,
     subject: &'static str,
     condition: SimpleExpr,
+    /// The entity's column types, to compare operands as SQL does.
+    columns: ColumnTypes,
 }
 
 impl Access {
@@ -88,6 +90,7 @@ impl Access {
             action: A::NAME,
             subject: E::SUBJECT,
             condition: scope.condition(),
+            columns: column_type::<E>,
         }
     }
 }
@@ -137,7 +140,13 @@ impl Plan {
         }
         let mut rows = None;
         if let Some(access) = access {
-            match access_filter(&access.ability, access.action, access.subject, settings) {
+            match access_filter(
+                &access.ability,
+                access.action,
+                access.subject,
+                settings,
+                access.columns,
+            ) {
                 AccessFilter::Exact(filter) => all.push(filter),
                 AccessFilter::Rows => rows = Some(access.condition.clone()),
             }
