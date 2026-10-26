@@ -318,6 +318,18 @@ impl TracePolicy {
         });
         Some(incoming.unwrap_or_else(|| TraceContext::root_sampled(self.sample_ratio)))
     }
+
+    /// The trace of work the app handed to itself (a queued job) with the
+    /// `traceparent` it recorded when it handed it over: that trace,
+    /// continued whatever `trust_incoming` says (the header never came
+    /// from outside), else a new one; `None` when tracing is off.
+    pub fn resume(&self, traceparent: Option<&str>) -> Option<TraceContext> {
+        if !self.enabled {
+            return None;
+        }
+        let resumed = traceparent.and_then(|header| TraceContext::continue_from(header, None));
+        Some(resumed.unwrap_or_else(|| TraceContext::root_sampled(self.sample_ratio)))
+    }
 }
 
 /// A configuration boolean.

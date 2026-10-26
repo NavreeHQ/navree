@@ -195,8 +195,9 @@ impl Queue {
         }
     }
 
-    /// Runs one reserved job in its own telemetry context (the job id and a
-    /// new trace), and records the outcome.
+    /// Runs one reserved job in its own telemetry context (the job id, and
+    /// a span in the trace it was dispatched in, or a new trace), and
+    /// records the outcome.
     async fn run_reserved(
         &self,
         ctx: &AppContext,
@@ -205,7 +206,7 @@ impl Queue {
     ) -> Result<Outcome, QueueError> {
         let mut context =
             TelemetryContext::new(self.inner.telemetry.clone()).with_job_id(job.id.as_str());
-        if let Some(trace) = self.inner.policy.start(None, None) {
+        if let Some(trace) = self.inner.policy.resume(job.trace_parent.as_deref()) {
             context = context.with_trace(trace);
         }
         context.scope(self.run_attempt(ctx, job, worker)).await
