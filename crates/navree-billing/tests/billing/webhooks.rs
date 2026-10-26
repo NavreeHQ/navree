@@ -340,6 +340,116 @@ async fn the_trial_ending_and_failed_payments_reach_listeners() {
     assert!(sub.past_due() && !sub.valid(), "past the grace days");
 }
 
+/// `billing.queue` names the queue of the `billing.process_event` jobs.
+#[tokio::test]
+async fn the_jobs_go_on_the_configured_queue() {
+    let world = World::with(crate::support::builder().config("billing.queue", "billing")).await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let acme = world.workspace(ada.id, "Acme").await;
+    let billing = world.billing().await;
+    let queue = world.app.get::<navree_queue::Queue>().await;
+    // The seat listener's job for the owner joining is on `default`.
+    let default_before = queue.pending_count("default").await.unwrap();
+    let checkout = billing.checkout(&acme, "starter").create().await.unwrap();
+    world
+        .fake()
+        .await
+        .complete_checkout(&checkout.id)
+        .await
+        .unwrap();
+
+    assert_eq!(queue.pending_count("billing").await.unwrap(), 3);
+    assert_eq!(
+        queue.pending_count("default").await.unwrap(),
+        default_before
+    );
+    let stats = queue
+        .work(navree_queue::WorkOptions {
+            queues: vec!["billing".to_owned()],
+            stop_when_empty: true,
+            ..navree_queue::WorkOptions::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!((stats.processed, stats.succeeded), (3, 3));
+    assert!(billing.subscribed(&acme, "starter").await.unwrap());
+}
+
+/// Without a queue module the job runs at once, inside the webhook request.
+#[tokio::test]
+async fn without_a_queue_the_event_is_processed_at_once() {
+    use std::sync::Arc;
+
+    use navree_billing::{BillableRef, Billing, BillingModule};
+    use navree_contracts::{Clock, FixedClock};
+    use navree_db::DatabaseModule;
+    use navree_testing::TestApp;
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("billing.provider", "fake")
+        .config("billing.routes", false)
+        .config(
+            "billing.return_url",
+            "https://app.acme.test/settings/billing",
+        )
+        .config("billing.plans", crate::support::plans())
+        .module(DatabaseModule::from_config())
+        .module(BillingModule::from_config())
+        .override_value::<dyn Clock>(Arc::new(FixedClock::new(crate::support::start())))
+        .build()
+        .await;
+    let billing = app.get::<Billing>().await;
+    let acme = BillableRef {
+        billable_type: "organization".into(),
+        billable_id: uuid::Uuid::now_v7(),
+        name: "Acme".into(),
+        email: Some("billing@acme.test".into()),
+    };
+    let checkout = billing.checkout(&acme, "starter").create().await.unwrap();
+    billing
+        .fake()
+        .unwrap()
+        .complete_checkout(&checkout.id)
+        .await
+        .unwrap();
+
+    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    assert!(sub.valid() && sub.on_plan("starter"));
+    assert!(
+        billing
+            .events(false)
+            .await
+            .unwrap()
+            .iter()
+            .all(|e| e.processed_at.is_some())
+    );
+}
+
+/// `billing.webhook_tolerance_secs` bounds the signature's age.
+#[tokio::test]
+async fn the_tolerance_is_configurable() {
+    let world =
+        World::with(crate::support::builder().config("billing.webhook_tolerance_secs", 60)).await;
+    let billing = world.billing().await;
+    let fake = world.fake().await;
+    let body = br#"{"id":"evt_t","type":"customer.created","created":1,"data":{"object":{}}}"#;
+    let now = crate::support::start().timestamp();
+
+    let error = billing
+        .receive_webhook(&signed(fake.webhook_secret(), now - 61, body), body)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        BillingError::InvalidWebhook(WebhookError::Expired)
+    ));
+    billing
+        .receive_webhook(&signed(fake.webhook_secret(), now + 59, body), body)
+        .await
+        .unwrap();
+}
+
 trait ClockNow {
     fn clock_now(&self) -> chrono::DateTime<chrono::Utc>;
 }
