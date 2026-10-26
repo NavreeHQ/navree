@@ -375,8 +375,33 @@ impl ErrorMapper {
         }
     }
 
-    /// Applies the first matching mapper to `error`'s source chain.
-    pub(crate) fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
+    /// Applies the first matching mapper to `error`'s source chain; `None`
+    /// when no mapper matches. The HTTP pipeline does this for every 500
+    /// with a source; code that reports errors outside a response (MCP
+    /// tool results, for example) collects the app's mappers with
+    /// `ctx.contributions::<ErrorMapper>()` and calls it too.
+    ///
+    /// ```
+    /// use http::StatusCode;
+    /// use navree_http::{AppError, ErrorMapper};
+    ///
+    /// #[derive(Debug)]
+    /// struct Missing;
+    ///
+    /// impl std::fmt::Display for Missing {
+    ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    ///         f.write_str("missing")
+    ///     }
+    /// }
+    ///
+    /// impl std::error::Error for Missing {}
+    ///
+    /// let mappers = [ErrorMapper::new(|_: &Missing| Some(AppError::not_found()))];
+    /// let mapped = ErrorMapper::apply(&mappers, &AppError::internal(Missing)).unwrap();
+    /// assert_eq!(mapped.status, StatusCode::NOT_FOUND);
+    /// assert!(ErrorMapper::apply(&mappers, &AppError::internal("other")).is_none());
+    /// ```
+    pub fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
         let mut next: Option<&(dyn StdError + 'static)> = error
             .source
             .as_deref()

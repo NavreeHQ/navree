@@ -246,11 +246,14 @@ pub enum MakeKind {
     Command,
     /// `tests/<name>.rs`: a test booting the module.
     Test,
+    /// `mcp/<name>.rs`: an MCP server with one tool, registered with the
+    /// module (needs navree's `mcp` feature and `McpModule`).
+    Mcp,
 }
 
 impl MakeKind {
     /// Every kind, in `navree help` order.
-    pub const ALL: [MakeKind; 12] = [
+    pub const ALL: [MakeKind; 13] = [
         MakeKind::Controller,
         MakeKind::Service,
         MakeKind::Entity,
@@ -263,6 +266,7 @@ impl MakeKind {
         MakeKind::Policy,
         MakeKind::Command,
         MakeKind::Test,
+        MakeKind::Mcp,
     ];
 
     /// `controller`, `service`, ...
@@ -280,6 +284,7 @@ impl MakeKind {
             MakeKind::Policy => "policy",
             MakeKind::Command => "command",
             MakeKind::Test => "test",
+            MakeKind::Mcp => "mcp",
         }
     }
 
@@ -298,6 +303,7 @@ impl MakeKind {
             MakeKind::Policy => "policies",
             MakeKind::Command => "commands",
             MakeKind::Test => "tests",
+            MakeKind::Mcp => "mcp",
         }
     }
 
@@ -316,6 +322,7 @@ impl MakeKind {
             MakeKind::Policy => "Ability policies",
             MakeKind::Command => "CLI commands",
             MakeKind::Test => "Tests",
+            MakeKind::Mcp => "MCP servers",
         };
         format!("//! {what} of the {module_words} module.\n")
     }
@@ -457,6 +464,12 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
         MakeKind::Command => Some(call(
             "m.command",
             &[format!("commands::{stem}::command()")],
+            WIRE_INDENT,
+        )),
+        MakeKind::Mcp => Some(generic_call(
+            "navree::mcp::ModuleBuilderMcpExt::mcp_server",
+            &[format!("mcp::{stem}::{pascal}Mcp")],
+            "m",
             WIRE_INDENT,
         )),
         MakeKind::Migration if new_dir => Some(call(
@@ -607,6 +620,14 @@ pub fn make_item(
             module.snake(),
             ctx.table
         )),
+        MakeKind::Mcp => report.hints.extend([
+            "turn on navree's MCP feature in Cargo.toml: navree = { ..., features = [\"mcp\"] }"
+                .to_owned(),
+            "add utoipa for the arguments' `ToSchema` derive: utoipa = { version = \"6\", features = [\"chrono\", \"uuid\"] }"
+                .to_owned(),
+            "serve /mcp: add `.module(McpModule::from_config())` to the app root, after HttpModule and AuthModule"
+                .to_owned(),
+        ]),
         MakeKind::Listener if options.event.is_none() => report.hints.push(format!(
             "subscribe it in the module's `wire`: navree::events::ModuleBuilderEventsExt::listen::<SomeEvent, listeners::{stem}::{}>(m);",
             ctx.pascal

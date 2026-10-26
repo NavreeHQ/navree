@@ -38,9 +38,10 @@
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `mcp`, `dock`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
@@ -184,6 +185,15 @@ pub mod flags {
     pub use navree_flags::*;
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
+}
+
+// L6 (ecosystem)
+/// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
+/// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
+#[cfg(feature = "mcp")]
+pub mod mcp {
+    pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
+    pub use navree_mcp::*;
 }
 
 // Tools (opt-in)

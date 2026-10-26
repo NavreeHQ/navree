@@ -42,6 +42,7 @@ Commands:
   make:policy        Generate ability rules in a module (policies/NAME.rs), added to src/abilities.rs
   make:command       Generate a CLI command in a module (commands/NAME.rs)
   make:test          Generate a test in a module (tests/NAME.rs)
+  make:mcp           Generate an MCP server with one tool in a module (mcp/NAME.rs)
   dev                Serve the app, rebuilding and restarting it when the code changes
   help               Print this message or the help of the given subcommand(s)
 
@@ -164,8 +165,9 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:policy posts moderation` | `policies/moderation.rs`, ability rules | a call in `src/abilities.rs` |
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, the command `posts:publish-scheduled` | `m.command(..)`, in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | declares it in `tests/mod.rs` |
+| `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, utoipa, `McpModule`) |
 
-`make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [entities](/docs/database/entities-and-repositories/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/) and [tests](/docs/testing/getting-started/).
+`make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [entities](/docs/database/entities-and-repositories/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/), [tests](/docs/testing/getting-started/) and [MCP servers](/docs/ai/mcp-servers/).
 
 ## The development server
 
@@ -296,6 +298,7 @@ Each module registers its own commands, so `list` shows only those of the module
 | `access:role`, `access:grant`, `access:explain` | `AccessModule` | See [Authorization](/docs/security/authorization/). |
 | `audit:prune [--days N]` | `AuditModule` | See [The audit log](/docs/security/audit-log/). |
 | `openapi:export [path]` | `ApiModule` | See [OpenAPI](/docs/digging-deeper/openapi/#exporting-the-document). |
+| `mcp:serve --user <email or id>` | `McpModule` | Serves the app's MCP server on stdin and stdout as that user; logs go to stderr. See [MCP servers](/docs/ai/mcp-servers/#stdio). |
 
 A few of them in the CRM, against a freshly seeded database:
 
