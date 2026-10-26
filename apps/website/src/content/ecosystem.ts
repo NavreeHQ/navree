@@ -282,11 +282,11 @@ export const ecosystem: EcosystemEntry[] = [
     category: "capabilities",
     tagline: "Sign in with Google, GitHub, Apple and more",
     summary: "Redirect to a provider, handle the callback and get a Navree user with linked accounts and normal Navree tokens.",
-    features: ["Google, GitHub, Apple, Microsoft", "GitLab, Slack, LinkedIn, Discord", "Linked accounts", "Issues Navree tokens"],
+    features: ["Google, GitHub, Apple, Microsoft", "GitLab, Slack, LinkedIn, Discord, X", "Linked accounts", "Issues Navree tokens"],
     crate: "navree-social",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features social",
     href: "/docs/packages/social-sign-in/",
-    status: "planned",
+    status: "stable",
     signature: "self.social.redirect(\"github\").await?",
   },
   {

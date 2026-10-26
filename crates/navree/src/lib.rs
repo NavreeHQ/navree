@@ -2,8 +2,8 @@
 //!
 //! Navree: the complete backend framework for Rust, modular, API-first and
 //! AI-native, on Tokio. This facade is the one dependency an app needs: it re-exports
-//! every module crate (one Cargo feature each, all on by default), the
-//! attribute macros and a [`prelude`].
+//! every module crate (one Cargo feature each, all on by default except the
+//! opt-in ecosystem libraries), the attribute macros and a [`prelude`].
 //!
 //! | Module | Crate | Feature | What it brings |
 //! |---|---|---|---|
@@ -33,9 +33,11 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //!
-//! A feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
+//! `full` (the default) turns on every module except the opt-in ones
+//! (`social`). A feature also turns on the features of the crates its crate
+//! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
@@ -158,6 +160,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L6 (opt-in)
+#[cfg(feature = "social")]
+pub use navree_social as social;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).
