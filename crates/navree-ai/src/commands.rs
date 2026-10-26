@@ -26,21 +26,24 @@ async fn prune(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 
 /// `--days N` or `--days=N`.
 fn parse_days(args: &[String]) -> Result<Option<u64>, BoxError> {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        let value = if let Some(value) = arg.strip_prefix("--days=") {
-            value.to_owned()
-        } else if arg == "--days" {
-            iter.next().cloned().ok_or("--days needs a number")?
-        } else {
-            return Err(format!("unknown argument `{arg}` (usage: ai:prune [--days N])").into());
-        };
-        return value
-            .parse::<u64>()
-            .map(Some)
-            .map_err(|_| format!("--days needs a whole number, not `{value}`").into());
-    }
-    Ok(None)
+    let value = match args {
+        [] => return Ok(None),
+        [flag, value] if flag == "--days" => value.as_str(),
+        [arg] => match arg.strip_prefix("--days=") {
+            Some(value) => value,
+            None if arg == "--days" => return Err("--days needs a number".into()),
+            None => return Err(unknown(arg)),
+        },
+        [arg, ..] => return Err(unknown(arg)),
+    };
+    value
+        .parse::<u64>()
+        .map(Some)
+        .map_err(|_| format!("--days needs a whole number, not `{value}`").into())
+}
+
+fn unknown(arg: &str) -> BoxError {
+    format!("unknown argument `{arg}` (usage: ai:prune [--days N])").into()
 }
 
 #[cfg(test)]
@@ -55,5 +58,7 @@ mod tests {
         assert_eq!(parse_days(&args(&["--days=30"])).unwrap(), Some(30));
         assert!(parse_days(&args(&["--days", "x"])).is_err());
         assert!(parse_days(&args(&["--force"])).is_err());
+        assert!(parse_days(&args(&["--days"])).is_err());
+        assert!(parse_days(&args(&["--days", "7", "--force"])).is_err());
     }
 }
