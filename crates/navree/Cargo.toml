@@ -12,7 +12,8 @@ workspace = true
 
 [features]
 default = ["full"]
-## Every module crate.
+## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
+## `graphql`, `billing`, `dock`).
 full = [
     "access",
     "api",
@@ -147,6 +148,19 @@ graphql = [
     "auth",
     "workspace",
 ]
+## L7 (opt-in, not in `full`)
+## Billing: subscriptions, trials, seats, usage, invoices and the portal
+## with Stripe, Paddle or a fake; verified webhooks on the queue.
+billing = [
+    "dep:navree-billing",
+    "http",
+    "events",
+    "http-client",
+    "db",
+    "schedule",
+    "auth",
+    "workspace",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -163,6 +177,7 @@ navree-access = { workspace = true, optional = true }
 navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
+navree-billing = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
 navree-oauth = { workspace = true, optional = true }
 navree-flags = { workspace = true, optional = true }
