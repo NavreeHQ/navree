@@ -3,6 +3,7 @@ source: crates/navree-harbor/tests/cli.rs
 expression: "ssh[10].stdin_text()"
 ---
 set -euo pipefail
+{
 # harbor: prune on app-1
 cd /srv/crm-api
 protected=""
@@ -21,3 +22,4 @@ for id in $(ls -1 releases | grep -v -e '\.partial$' -e '\.tar\.gz$' | sort -r |
 	rm -rf "releases/$id"
 	echo "removed=$id"
 done
+} < /dev/null

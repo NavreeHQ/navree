@@ -3,6 +3,7 @@ source: crates/navree-harbor/tests/cli.rs
 expression: "ssh[0].stdin_text()"
 ---
 set -euo pipefail
+{
 # harbor: inspect on app-1
 echo "arch=$(uname -m)"
 echo "glibc=$(getconf GNU_LIBC_VERSION 2> /dev/null | awk '{print $2}')"
@@ -30,3 +31,4 @@ for dir in releases/*/; do
 	fi
 	printf 'release=%s\t%s\t%s\n' "$id" "$commit" "$subject"
 done
+} < /dev/null

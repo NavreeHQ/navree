@@ -3,6 +3,7 @@ source: crates/navree-harbor/tests/cli.rs
 expression: "ssh[2].stdin_text()"
 ---
 set -euo pipefail
+{
 # harbor: unpack 20261026-091512-3f2a9c1 on app-1
 cd /srv/crm-api/releases
 rm -rf 20261026-091512-3f2a9c1.partial
@@ -19,3 +20,4 @@ rm -rf 20261026-091512-3f2a9c1.partial/storage
 ln -s ../../shared/storage 20261026-091512-3f2a9c1.partial/storage
 rm -rf 20261026-091512-3f2a9c1
 mv 20261026-091512-3f2a9c1.partial 20261026-091512-3f2a9c1
+} < /dev/null
