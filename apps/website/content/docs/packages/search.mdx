@@ -114,7 +114,7 @@ language = "english"   # the text search configuration
 trigram = true         # typo tolerance with pg_trgm
 ```
 
-The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs, and short misspellings ("lovlace") still match. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
+The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("ada lovlace") still finds its record while the other words keep narrowing the results. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
 
 On SQLite, in development and tests, the same engine uses an FTS5 table, `search_documents_fts`, that the migration creates next to `search_documents`: one column per boost, ranked with BM25. Prefixes match there; misspellings don't.
 
@@ -154,7 +154,7 @@ engine = "tantivy"
 
 [search.tantivy]
 path = "storage/search"     # one directory per index
-memory_budget_mb = 64       # writer buffer, at least 15
+memory_budget_mb = 64       # writer buffer; less than 15 counts as 15
 ```
 
 The index lives in the process. Each index has its own directory, and a fresh import builds a new generation of it and swaps it in. Only one process may write to a Tantivy directory, so run the sync jobs in the server process (`sync = "inline"`) or on a single worker. Use it for single-server apps; switch to a server engine when you scale out.
@@ -620,7 +620,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 | `search.postgres.language` | `english` | The text search configuration |
 | `search.postgres.trigram` | `false` | Typo tolerance with `pg_trgm` |
 | `search.tantivy.path` | `storage/search` | Index directory |
-| `search.tantivy.memory_budget_mb` | `64` | Writer buffer (at least 15) |
+| `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB (less than 15 counts as 15) |
 | `search.vectors.store` | none | `pgvector`, `qdrant` or `memory`; vector search is off without it |
 | `search.vectors.url`, `search.vectors.key` | none | The Qdrant server |
 | `search.vectors.dimensions` | `1536` | Vector size |
