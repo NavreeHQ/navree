@@ -1,0 +1,65 @@
+{% extends "helm/layout.html" %}
+{% import "helm/macros.html" as m %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ resource.singular }}</p>
+    <h1>{{ item.title }}</h1>
+  </div>
+  <div class="page-actions">
+    {% if item.can.update %}<a class="btn btn-primary" href="{{ item.url }}/edit">Edit</a>{% endif %}
+    {% if actions %}
+    <form method="post" action="{{ resource.actions_url }}" class="inline-actions">
+      <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+      <input type="hidden" name="_return" value="{{ item.url }}">
+      <input type="hidden" name="ids" value="{{ item.id }}">
+      {% for a in actions %}
+      <button type="submit" name="action" value="{{ a.name }}" class="btn {% if a.destructive %}btn-danger{% else %}btn-secondary{% endif %}"{% if a.question %} data-confirm="{{ a.question }}"{% endif %}>{{ a.label }}</button>
+      {% endfor %}
+    </form>
+    {% endif %}
+    {% if item.can.delete %}
+    <form method="post" action="{{ item.url }}/delete">
+      <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+      <button type="submit" class="btn btn-danger" data-confirm="Delete this {{ resource.singular|lower }}?">Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<section class="card" aria-label="Details">
+  <dl class="details">
+    {% for cell in item.cells %}
+    <div class="detail-row">
+      <dt>{{ cell.label }}</dt>
+      <dd>{{ m.display(cell.display) }}</dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+
+{% for panel_ in relations %}
+<section class="card relation" aria-labelledby="rel-{{ loop.index }}">
+  <div class="relation-head">
+    <h2 id="rel-{{ loop.index }}">{{ panel_.label }} <span class="muted count">{{ panel_.total }}</span></h2>
+    <a class="btn btn-ghost btn-sm" href="{{ panel_.url }}">View all</a>
+  </div>
+  {% if panel_.rows %}
+  <form method="post" action="{{ panel_.actions_url }}" class="bulk">
+    <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+    <input type="hidden" name="_return" value="{{ item.url }}">
+    {% if panel_.actions %}
+    <div class="toolbar" role="toolbar" aria-label="Actions on the selected {{ panel_.label|lower }}">
+      {% for a in panel_.actions %}
+      <button type="submit" name="action" value="{{ a.name }}" class="btn btn-sm {% if a.destructive %}btn-danger{% else %}btn-secondary{% endif %}"{% if a.question %} data-confirm="{{ a.question }}"{% endif %}>{{ a.label }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {{ m.table(panel_.columns, panel_.rows, panel_.actions, false) }}
+  </form>
+  {% else %}
+  <p class="muted empty-inline">None yet.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}
