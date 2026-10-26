@@ -83,8 +83,10 @@ APP_AI__PROVIDERS__OPENAI__API_KEY=sk-proj-...
    A provider named after its driver needs no table. A second account or an
    OpenAI-compatible server gets its own table with `driver = "openai"` and
    `url`. Bedrock takes `region`, `access_key_id`, `secret_access_key`,
-   `session_token`, `profile` (else `AWS_*` variables, then the shared
-   credentials file). Ollama defaults to `http://127.0.0.1:11434`.
+   `session_token`, `profile` (else `AWS_*` variables, the shared
+   credentials file, then an ECS/EKS container role or the EC2 instance
+   role over IMDSv2; IRSA web identity tokens aren't read). Ollama defaults
+   to `http://127.0.0.1:11434`.
 
 4. Inject `Arc<Ai>` and call it (see the templates). Return `AiError` with `?`
    from handlers: it becomes Navree's JSON error with its status.
