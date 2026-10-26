@@ -71,9 +71,14 @@ fn translate(x: f32, y: f32) -> Matrix {
 /// One shown string, placed on the page.
 #[derive(Clone, Debug)]
 struct Chunk {
+    /// Start along the baseline direction.
     x0: f32,
+    /// End along the baseline direction.
     x1: f32,
+    /// Baseline position across the baseline direction.
     y: f32,
+    /// Baseline direction in whole degrees (0 for horizontal text).
+    angle: i32,
     size: f32,
     text: String,
 }
@@ -288,6 +293,12 @@ impl<'a> Walker<'a> {
         };
         let device = multiply(*tm, ctm);
         let size = state.size * (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
+        // Positions are measured along the baseline: rotated text (a
+        // diagonal stamp) forms lines in its own direction.
+        let angle = device[1].atan2(device[0]);
+        let degrees = angle.to_degrees().round() as i32;
+        let (sin, cos) = (-angle).sin_cos();
+        let frame = |(x, y): (f32, f32)| (x * cos - y * sin, x * sin + y * cos);
         // Marked content with actual text replaces the glyphs it covers:
         // one item spanning them all.
         let actual = marks.iter().rposition(|m| m.actual_text.is_some());
@@ -295,7 +306,7 @@ impl<'a> Walker<'a> {
             match item {
                 Object::String(bytes, _) => {
                     for code in bytes.chunks(font.code_len) {
-                        let start = apply(multiply(*tm, ctm), 0.0, state.rise);
+                        let start = frame(apply(multiply(*tm, ctm), 0.0, state.rise));
                         let value = code.iter().fold(0u32, |acc, b| acc * 256 + u32::from(*b));
                         let width = font.width(value);
                         let mut advance = width / 1000.0 * state.size + state.char_spacing;
@@ -303,7 +314,7 @@ impl<'a> Walker<'a> {
                             advance += state.word_spacing;
                         }
                         *tm = multiply(translate(advance * state.scale, 0.0), *tm);
-                        let end = apply(multiply(*tm, ctm), 0.0, state.rise);
+                        let end = frame(apply(multiply(*tm, ctm), 0.0, state.rise));
                         let (x0, x1) = if start.0 <= end.0 {
                             (start.0, end.0)
                         } else {
@@ -322,6 +333,7 @@ impl<'a> Walker<'a> {
                                         x0,
                                         x1,
                                         y: start.1,
+                                        angle: degrees,
                                         size,
                                         text: mark.actual_text.clone().unwrap_or_default(),
                                     });
@@ -341,6 +353,7 @@ impl<'a> Walker<'a> {
                             x0,
                             x1,
                             y: start.1,
+                            angle: degrees,
                             size,
                             text,
                         });
@@ -579,21 +592,28 @@ fn classify(text: &str) -> Class {
 
 /// The glyphs of a page as lines of text.
 fn assemble(mut chunks: Vec<Chunk>) -> String {
-    chunks.sort_by(|a, b| b.y.total_cmp(&a.y));
-    let mut lines: Vec<(f32, f32, Vec<Chunk>)> = Vec::new();
+    // Horizontal text first, top to bottom; then each other direction.
+    chunks.sort_by(|a, b| {
+        (a.angle != 0)
+            .cmp(&(b.angle != 0))
+            .then(a.angle.cmp(&b.angle))
+            .then(b.y.total_cmp(&a.y))
+    });
+    let mut lines: Vec<(i32, f32, f32, Vec<Chunk>)> = Vec::new();
     for chunk in chunks {
         match lines.last_mut() {
-            Some((y, size, line))
-                if (*y - chunk.y).abs() <= 0.5 * size.max(chunk.size).max(1.0) =>
+            Some((angle, y, size, line))
+                if *angle == chunk.angle
+                    && (*y - chunk.y).abs() <= 0.5 * size.max(chunk.size).max(1.0) =>
             {
                 *size = size.max(chunk.size);
                 line.push(chunk);
             }
-            _ => lines.push((chunk.y, chunk.size, vec![chunk])),
+            _ => lines.push((chunk.angle, chunk.y, chunk.size, vec![chunk])),
         }
     }
     let mut out = Vec::with_capacity(lines.len());
-    for (_, _, mut line) in lines {
+    for (_, _, _, mut line) in lines {
         line.sort_by(|a, b| a.x0.total_cmp(&b.x0));
         let line = attach_marks(line);
         // Visual order, with a space where two glyphs do not touch.
