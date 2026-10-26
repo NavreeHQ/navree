@@ -288,3 +288,39 @@ async fn an_app_without_sinks_reports_nothing_and_still_traces() {
         .await;
     assert_eq!(response.text(), TRACE, "propagation needs no sink");
 }
+
+/// Records, for each `navree::request` line, the trace id current when it
+/// was written.
+#[derive(Clone, Default)]
+struct RequestLines(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for RequestLines {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if event.metadata().target() == "navree::request" {
+            let trace = current_trace_id()
+                .map(|id| id.to_string())
+                .unwrap_or_default();
+            self.0.lock().unwrap().push(trace);
+        }
+    }
+}
+
+// `#[tokio::test]` runs on one thread, so a thread-local default subscriber
+// sees every event of the request.
+#[tokio::test]
+async fn the_request_log_line_is_written_in_the_requests_trace() {
+    use tracing_subscriber::layer::SubscriberExt;
+
+    let lines = RequestLines::default();
+    let _guard =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(lines.clone()));
+    let app = Setup::new(vec![trace_route()]).boot().await;
+    let traceparent = format!("00-{TRACE}-{PARENT}-01");
+    app.send(get_with("/api/trace", &[("traceparent", &traceparent)]))
+        .await;
+    assert_eq!(*lines.0.lock().unwrap(), [TRACE.to_owned()]);
+}
