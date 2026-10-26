@@ -52,6 +52,8 @@ fn new_creates_expected_tree() {
             ".env",
             ".env.example",
             ".gitignore",
+            "AGENTS.md",
+            "CLAUDE.md",
             "Cargo.toml",
             "README.md",
             "config/app.toml",
@@ -97,6 +99,56 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         "{env}"
     );
     assert_eq!(std::fs::read_to_string(root.join(".env")).unwrap(), env);
+}
+
+/// Coding agents get the project's conventions: AGENTS.md, and a CLAUDE.md
+/// that imports it rather than repeating it.
+#[test]
+fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
+    let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    assert!(agents.starts_with("# AGENTS.md\n"), "{agents}");
+    assert!(
+        agents.contains("working on My shop, a Navree app"),
+        "{agents}"
+    );
+    for expected in [
+        // layout and commands
+        "src/modules/<name>/",
+        "cargo test",
+        "cargo clippy --all-targets -- -D warnings",
+        "navree dev",
+        // the generators
+        "navree make:module posts --crud",
+        "navree make:migration posts create_tags_table",
+        "navree make:job posts publish_post",
+        "navree make:test posts publishing",
+        // deny by default and the error shape
+        "#[authenticated]",
+        r#"{ "statusCode": 404, "message": "Not Found", "error": "Not Found" }"#,
+        // where the docs and skills are
+        "https://navree.com/docs/",
+        "npx skills add NavreeHQ/navree",
+    ] {
+        assert!(agents.contains(expected), "AGENTS.md lacks `{expected}`");
+    }
+    assert!(!agents.contains("web/ "), "no front end without --ui next");
+
+    let claude = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+    assert_eq!(claude.lines().next(), Some("@AGENTS.md"), "{claude}");
+    assert!(
+        claude.lines().count() <= 3,
+        "CLAUDE.md only points: {claude}"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = create_app(dir.path(), &app("blog", Ui::Next), now()).unwrap();
+    let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    assert!(
+        agents.contains("web/                   the Next.js front end"),
+        "{agents}"
+    );
 }
 
 #[test]

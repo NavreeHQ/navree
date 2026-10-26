@@ -1,8 +1,8 @@
 //! # navree-cli
 //!
-//! The library behind the `navree` command-line tool (Laravel's Artisan,
-//! NestJS's CLI). It depends on no navree crate: everything it knows about the
-//! framework is in the code it generates.
+//! The library behind the `navree` command-line tool: it creates apps,
+//! generates code and runs the dev loop. It depends on no navree crate:
+//! everything it knows about the framework is in the code it generates.
 //!
 //! | Command | What it does |
 //! |---|---|
