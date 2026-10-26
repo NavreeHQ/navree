@@ -1,0 +1,5 @@
+# harbor: current -> {{ release }} on {{ server.name }}
+cd {{ base }}
+ln -sfn releases/{{ release }} current.new
+mv -Tf current.new current
+sed -i "s/^APP_LIGHTHOUSE__RELEASE=.*/APP_LIGHTHOUSE__RELEASE='{{ release }}'/" {{ env_file }}

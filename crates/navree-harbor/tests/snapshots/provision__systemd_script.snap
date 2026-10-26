@@ -1,0 +1,157 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+expression: "step(&steps(SINGLE, \"app-1\", &plain(), 1987), \"systemd\").script"
+---
+# harbor: systemd on app-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+units=/etc/systemd/system
+changed=0
+harbor_file $units/crm-api-web@.service 0644 root:root <<'HARBOR_EOF'
+[Unit]
+Description=crm-api web (%i)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=navree
+Group=navree
+WorkingDirectory=/srv/crm-api/%i
+EnvironmentFile=/etc/crm-api/env
+EnvironmentFile=/etc/crm-api/%i.env
+ExecStart=/srv/crm-api/%i/crm-api serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/crm-api/shared
+
+[Install]
+WantedBy=multi-user.target
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+for slot in blue green; do
+	if [ ! -f /etc/crm-api/$slot.env ]; then
+		install -m 0600 -o navree -g navree /dev/null /etc/crm-api/$slot.env
+	fi
+done
+for slot in blue green; do
+	systemctl disable --now crm-api-frontend@$slot > /dev/null 2>&1 || true
+done
+harbor_remove $units/crm-api-frontend@.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+harbor_file $units/crm-api-worker@.service 0644 root:root <<'HARBOR_EOF'
+[Unit]
+Description=crm-api worker %i
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=navree
+Group=navree
+WorkingDirectory=/srv/crm-api/current
+EnvironmentFile=/etc/crm-api/env
+ExecStart=/srv/crm-api/current/crm-api queue:work
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/crm-api/shared
+
+[Install]
+WantedBy=multi-user.target
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+harbor_file $units/crm-api-scheduler.service 0644 root:root <<'HARBOR_EOF'
+[Unit]
+Description=crm-api scheduler
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=navree
+Group=navree
+WorkingDirectory=/srv/crm-api/current
+EnvironmentFile=/etc/crm-api/env
+ExecStart=/srv/crm-api/current/crm-api schedule:work
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/crm-api/shared
+
+[Install]
+WantedBy=multi-user.target
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+# Worker instances beyond the configured number stop.
+for wants in /etc/systemd/system/multi-user.target.wants/crm-api-worker@*.service; do
+	[ -e "$wants" ] || continue
+	instance="${wants##*@}"
+	instance="${instance%.service}"
+	if [ "$instance" -gt 2 ]; then
+		systemctl disable --now "crm-api-worker@$instance" > /dev/null 2>&1 || true
+	fi
+done
+if [ "$changed" = 1 ]; then
+	systemctl daemon-reload
+fi
+systemctl enable crm-api-worker@1 crm-api-worker@2 crm-api-scheduler > /dev/null 2>&1
+# Workers and the scheduler run once a release is live.
+if [ -e /srv/crm-api/current ]; then
+	if [ "$changed" = 1 ]; then
+		systemctl restart crm-api-worker@1 crm-api-worker@2 crm-api-scheduler
+	else
+		systemctl start crm-api-worker@1 crm-api-worker@2 crm-api-scheduler
+	fi
+fi

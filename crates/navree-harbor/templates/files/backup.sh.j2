@@ -1,0 +1,10 @@
+#!/bin/sh
+# Written by navree harbor:provision: a pg_dump of {{ database }}, kept {{ backup_days }} days.
+set -eu
+umask 027
+dir={{ backup_dir }}
+file="$dir/{{ database }}-$(date -u +%Y%m%d-%H%M%S).dump"
+pg_dump --format=custom --file="$file.partial" {{ database }}
+mv "$file.partial" "$file"
+find "$dir" -name '{{ database }}-*.dump' -mtime +{{ backup_days - 1 }} -delete
+echo "$file"

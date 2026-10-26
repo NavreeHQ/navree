@@ -1,0 +1,11 @@
+# harbor: start {{ kind }} {{ slot }} on {{ server.name }}
+{% if kind == "web" %}
+cd {{ base }}
+ln -sfn releases/{{ release }} {{ slot }}.new
+mv -Tf {{ slot }}.new {{ slot }}
+{% endif %}
+umask 077
+cat > {{ env_path }}.new <<'HARBOR_EOF'
+{{ env }}HARBOR_EOF
+mv -f {{ env_path }}.new {{ env_path }}
+sudo -n systemctl restart {{ unit }}

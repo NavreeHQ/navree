@@ -375,9 +375,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`), and ecosystem libraries an app turns on by
-/// name (`features = ["social"]`, `features = ["oauth"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth"];
+/// runtime never needs (`dock`, `harbor`), and ecosystem libraries an app
+/// turns on by name (`features = ["social"]`, `features = ["oauth"]`).
+const OPT_IN: &[&str] = &["dock", "harbor", "social", "oauth"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
@@ -410,6 +410,21 @@ fn dock_is_reexported_with_its_feature() {
     let file = navree::dock::DockFile::parse("[services.redis]\n", "shop").unwrap();
     assert_eq!(navree::dock::DOCK_FILE, "dock.toml");
     assert_eq!(file.env()[0].1, "redis://127.0.0.1:6379");
+}
+
+/// `navree::harbor` is navree-harbor, with `--features harbor`.
+#[cfg(feature = "harbor")]
+#[test]
+fn harbor_is_reexported_with_its_feature() {
+    let config = navree::harbor::HarborConfig::parse(
+        "app = \"shop\"\n\n[servers.app-1]\nhost = \"203.0.113.10\"\n",
+        std::path::Path::new("harbor.toml"),
+    );
+    assert!(config.is_ok(), "{config:?}");
+    assert!(same::<
+        navree::harbor::cli::HarborCommand,
+        navree::harbor::HarborCommand,
+    >());
 }
 
 /// The opt-in ecosystem libraries are re-exported whole too.

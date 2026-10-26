@@ -1,0 +1,84 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+expression: "step(&steps(SINGLE, \"app-1\", &plain(), 1987), \"users\").script"
+---
+# harbor: users on app-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+id -u navree > /dev/null 2>&1 || useradd --create-home --shell /bin/bash navree
+usermod -aG systemd-journal navree
+install -d -m 0700 -o navree -g navree "$(getent passwd navree | cut -d: -f6)/.ssh"
+harbor_file "$(getent passwd navree | cut -d: -f6)/.ssh/authorized_keys" 0600 navree:navree <<'HARBOR_EOF'
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMine me@laptop
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICi ci-deploy
+HARBOR_EOF
+harbor_file /etc/sudoers.d/harbor-crm-api 0440 root:root "visudo -cqf" <<'HARBOR_EOF'
+# Written by navree harbor:provision: what navree may run as root for crm-api.
+Cmnd_Alias HARBOR_CRM_API = \
+	/usr/bin/systemctl start crm-api-web@blue, \
+	/usr/bin/systemctl stop crm-api-web@blue, \
+	/usr/bin/systemctl restart crm-api-web@blue, \
+	/usr/bin/systemctl enable crm-api-web@blue, \
+	/usr/bin/systemctl disable crm-api-web@blue, \
+	/usr/bin/systemctl start crm-api-web@green, \
+	/usr/bin/systemctl stop crm-api-web@green, \
+	/usr/bin/systemctl restart crm-api-web@green, \
+	/usr/bin/systemctl enable crm-api-web@green, \
+	/usr/bin/systemctl disable crm-api-web@green, \
+	/usr/bin/systemctl reload caddy, \
+	/usr/bin/systemctl start crm-api-worker@1, \
+	/usr/bin/systemctl stop crm-api-worker@1, \
+	/usr/bin/systemctl restart crm-api-worker@1, \
+	/usr/bin/systemctl start crm-api-worker@2, \
+	/usr/bin/systemctl stop crm-api-worker@2, \
+	/usr/bin/systemctl restart crm-api-worker@2, \
+	/usr/bin/systemctl start crm-api-scheduler, \
+	/usr/bin/systemctl stop crm-api-scheduler, \
+	/usr/bin/systemctl restart crm-api-scheduler, \
+	/usr/bin/systemctl start crm-api-backup.service
+navree ALL=(root) NOPASSWD: HARBOR_CRM_API
+HARBOR_EOF
+install -d -m 0755 -o navree -g navree /srv/crm-api /srv/crm-api/releases /srv/crm-api/shared
+install -d -m 0755 -o navree -g navree /srv/crm-api/shared/storage
+install -d -m 0700 -o navree -g navree /etc/crm-api
+if [ ! -f /etc/crm-api/env ]; then
+	install -m 0600 -o navree -g navree /dev/null /etc/crm-api/env
+fi
