@@ -50,6 +50,7 @@ navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
 navree-dock = { path = "crates/navree-dock", version = "0.1.0" }
 navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
+navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -185,6 +186,8 @@ subtle = "2.6.1"
 # of Sign in with Apple). Already in the tree through rustls.
 ring = "0.17.14"
 rand = "0.10.3"
+# Ed25519 signatures (navree-oauth's OpenID Connect ID tokens), pure Rust.
+ed25519-dalek = "3.0.0"
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
 qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
 # JWT access tokens (navree-auth): no crypto backend feature and no PEM parsing.

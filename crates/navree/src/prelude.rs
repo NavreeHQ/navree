@@ -95,3 +95,6 @@ pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
+
+#[cfg(feature = "oauth")]
+pub use navree_oauth::{OAuthServerModule, OAuthToken};

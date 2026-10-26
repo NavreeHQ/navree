@@ -272,7 +272,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-oauth",
     command: "navree oauth:client \"Acme mobile\"",
     href: "/docs/packages/oauth-server/",
-    status: "planned",
+    status: "stable",
     signature: "navree oauth:client \"Zapier\" --scopes deals:read",
   },
   {

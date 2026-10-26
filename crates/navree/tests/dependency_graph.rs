@@ -107,6 +107,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
         "navree-workspace",
     ]),
+    // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
+    // access tokens for navree-auth users, scopes mapped to navree-access
+    // permissions, workspace-limited clients.
+    rule("navree-oauth", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-db", "navree-access", "navree-auth", "navree-workspace",
+        // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+        "navree-testing",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -170,6 +179,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-workspace",
     "navree-social",
     "navree-webhooks",
+    "navree-oauth",
 ];
 
 /// Cargo dependency kind of an edge.

@@ -81,7 +81,7 @@ pub use controller::{
     CreateWorkspaceInput, InvitationController, InvitationResource, InviteInput, MemberResource,
     RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController, WorkspaceResource,
 };
-pub use current::{CurrentWorkspace, InWorkspace, WorkspaceUow};
+pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
 pub use entity::{
     INVITATION_SUBJECT, Invitation, MEMBER_SUBJECT, Member, WORKSPACE_SUBJECT, Workspace,
