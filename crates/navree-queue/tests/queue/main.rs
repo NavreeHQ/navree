@@ -6,8 +6,61 @@ mod commands;
 mod database_driver;
 mod fake;
 mod module;
+mod operations;
 mod suite;
 mod support;
+
+/// Runs each named function of `operations` as a test against `$driver`.
+macro_rules! operations_suite {
+    ($module:ident, $driver:expr, [$($test:ident),* $(,)?]) => {
+        mod $module {
+            use super::*;
+
+            $(
+                #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+                async fn $test() {
+                    crate::operations::$test($driver).await;
+                }
+            )*
+        }
+    };
+}
+
+operations_suite!(
+    database_operations,
+    QueueDriver::Database,
+    [
+        an_operation_follows_its_job,
+        the_jobs_outcome_finishes_the_operation,
+        a_finished_operation_never_changes,
+        cancel_skips_work_not_started,
+        cancel_stops_a_running_job_at_its_next_report,
+        a_batch_drives_its_operation,
+        a_failing_batch_fails_its_operation,
+        cancelling_a_batch_operation_cancels_the_batch,
+        the_watchdog_fails_stalled_operations,
+        access_is_the_owner_or_the_permission,
+        owners_list_and_prune_operations,
+    ]
+);
+
+operations_suite!(
+    memory_operations,
+    QueueDriver::Memory,
+    [
+        an_operation_follows_its_job,
+        the_jobs_outcome_finishes_the_operation,
+        a_finished_operation_never_changes,
+        cancel_skips_work_not_started,
+        cancel_stops_a_running_job_at_its_next_report,
+        a_batch_drives_its_operation,
+        a_failing_batch_fails_its_operation,
+        cancelling_a_batch_operation_cancels_the_batch,
+        the_watchdog_fails_stalled_operations,
+        access_is_the_owner_or_the_permission,
+        owners_list_and_prune_operations,
+    ]
+);
 
 use navree_queue::QueueDriver;
 
