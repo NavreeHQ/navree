@@ -73,7 +73,7 @@ async fn users_update_their_own_profile() {
 #[tokio::test]
 async fn invalid_input_is_rejected() {
     let app = app().await;
-    // A 400 in the NestJS error format, with the messages under `errors.timezone`.
+    // A 400 JSON error, with the messages under `errors.timezone`.
     app.acting_as(principal(Uuid::now_v7()))
         .put("/api/v1/profile")
         .json(&json!({ "timezone": "" }))

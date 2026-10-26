@@ -31,6 +31,8 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "app/gitignore",
     "app/env.example",
     "app/README.md",
+    "app/AGENTS.md",
+    "app/CLAUDE.md",
     "app/config/app.toml",
     "app/src/main.rs",
     "app/src/lib.rs",

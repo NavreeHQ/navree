@@ -464,7 +464,7 @@ async fn only_the_owner_may_update_or_delete() {
 #[tokio::test]
 async fn invalid_input_is_rejected() {
     let app = app().await;
-    // A 400 in the NestJS error format, with the messages under `errors.name`.
+    // A 400 JSON error, with the messages under `errors.name`.
     app.acting_as(principal(Uuid::now_v7()))
         .post("/api/v1/posts")
         .json(&json!({ "name": "" }))

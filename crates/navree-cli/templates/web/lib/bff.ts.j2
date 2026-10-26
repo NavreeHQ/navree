@@ -63,7 +63,7 @@ export function originAllowed(request: Request): boolean {
   }
 }
 
-/** A JSON error in Navree's (NestJS) format. */
+/** A JSON error in Navree's error shape. */
 export function error(statusCode: number, message: string, reason: string): Response {
   return Response.json({ statusCode, message, error: reason }, { status: statusCode });
 }

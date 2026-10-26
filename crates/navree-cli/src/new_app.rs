@@ -1,4 +1,4 @@
-//! `navree new <name>`: a new Navree app (Laravel's `laravel new`).
+//! `navree new <name>`: a new Navree app, ready to run.
 
 use std::path::{Path, PathBuf};
 
@@ -157,6 +157,9 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
         ("app/gitignore", ".gitignore".to_owned()),
         ("app/Cargo.toml", "Cargo.toml".to_owned()),
         ("app/README.md", "README.md".to_owned()),
+        // Conventions for coding agents; CLAUDE.md imports AGENTS.md.
+        ("app/AGENTS.md", "AGENTS.md".to_owned()),
+        ("app/CLAUDE.md", "CLAUDE.md".to_owned()),
         ("app/config/app.toml", "config/app.toml".to_owned()),
         ("app/src/main.rs", "src/main.rs".to_owned()),
         ("app/src/lib.rs", "src/lib.rs".to_owned()),

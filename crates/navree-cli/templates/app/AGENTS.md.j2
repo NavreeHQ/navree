@@ -1,0 +1,126 @@
+# AGENTS.md
+
+Instructions for coding agents working on {{ title }}, a Navree app: a Rust
+backend built from modules wired by dependency injection. Read this file
+before changing code.
+
+## Layout
+
+```text
+config/app.toml        settings shared by every environment (committed)
+.env                   this machine's secrets, such as APP_KEY (never committed)
+src/main.rs            runs the app: `serve` by default, or any other command
+src/app.rs             the root module: every module, configured once
+src/abilities.rs       who may do what: permissions and ability rules
+src/modules/<name>/    feature modules: mod.rs, controller.rs, service.rs,
+                       entity.rs, dto.rs, migrations/, tests/
+tests/                 tests that boot the whole app
+storage/               runtime data: the SQLite database, logs, uploads
+{% if ui_next %}
+web/                   the Next.js front end; its server holds the API tokens
+{% endif %}
+```
+
+## Commands
+
+```sh
+navree dev                                  # serve on http://127.0.0.1:8080, rebuild on save
+cargo test                                  # every test; each gets its own SQLite database
+cargo clippy --all-targets -- -D warnings   # must pass
+cargo fmt                                   # must leave nothing to change
+navree check                                # validate the module graph without booting
+navree routes                               # every route with its access rule
+navree migrate                              # run pending migrations
+navree list                                 # every command of the app
+```
+
+`navree <command>` runs `cargo run --quiet -- <command>` here. The API
+reference is served at http://127.0.0.1:8080/api/docs while `navree dev`
+runs.
+
+## Generate code, then fill it in
+
+Use the generators instead of writing files by hand: they follow the
+conventions below and register what they create at the marker comments
+`// navree:modules` (src/app.rs), `// navree:wire` (a module's `wire`) and
+`// navree:policies` (src/abilities.rs). Keep those markers. Names are
+snake_case; module names are plural. Generators never overwrite a file.
+
+| To add | Run |
+|---|---|
+| A feature module with a CRUD JSON API, entity, migration and tests | `navree make:module posts --crud` |
+| A controller in a module | `navree make:controller posts admin` |
+| A service | `navree make:service posts pricing` |
+| An entity, then its table | `navree make:entity posts tag`, then `navree make:migration posts create_tags_table` |
+| A migration | `navree make:migration posts add_slug_to_posts` |
+| A queued job | `navree make:job posts publish_post` |
+| An event and a listener | `navree make:event posts post_published`, then `navree make:listener posts notify_followers --event post_published` |
+| A mail (HTML and text templates) | `navree make:mail posts welcome` |
+| A notification | `navree make:notification posts post_liked` |
+| Ability rules | `navree make:policy posts moderation` |
+| A console command | `navree make:command posts publish_scheduled` |
+| A test | `navree make:test posts publishing` |
+
+## Conventions
+
+- **Deny by default.** Every route declares who may call it with
+  `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or
+  `#[can(Action, Subject)]` (`from = "id"` checks the record in the path).
+  A route without one does not compile. Never make a route `#[public]` to
+  get past a 401 or a 403: grant the permission or add an ability rule in
+  `src/abilities.rs`.
+- **Modules.** Services are `#[injectable]` structs whose `Arc<T>` fields
+  are injected. A module lists them in `#[module(imports = [..],
+  providers = [..], controllers = [..], exports = [..], register =
+  Self::wire)]`; migrations, jobs, listeners, commands and templates are
+  registered in `wire`. A module only sees its own providers, the exports of
+  modules it imports, and global modules.
+- **Input.** Request bodies are DTOs deriving `Deserialize` and
+  `garde::Validate`; every field has a `#[garde(..)]` rule or
+  `#[garde(skip)]`. Handlers take `Valid(Json(input)): Valid<Json<T>>`
+  (or `Valid<Query<T>>`), so invalid input never reaches them.
+- **Errors.** Handlers return `Result<T>` (`navree::Result`, error type
+  `AppError`): `AppError::not_found()`, `AppError::forbidden()`,
+  `AppError::bad_request("..")`, `AppError::conflict("..")`. Any other
+  error with `?` is a logged 500. Every error response has one JSON shape:
+
+  ```json
+  { "statusCode": 404, "message": "Not Found", "error": "Not Found" }
+  ```
+
+  Validation errors are 400s whose `message` lists every problem, plus
+  `"errors": { "field": ["field should not be empty"] }`.
+- **Database.** Entities are SeaORM entities with UUID v7 ids
+  (`Uuid::now_v7()`); set `created_at` and `updated_at` yourself. Services
+  take the request's `&Uow` as a parameter; write with
+  `Repo::<Entity>::insert`, `update` and `delete` (they record the changes
+  for the audit log) and read with SeaORM through `&*uow.tx().await?`. The
+  unit of work commits when the response status is below 400 and rolls
+  back otherwise. Lists take `PageQuery`, return `Page<T>` (`{ "data",
+  "meta" }`) and filter with `Accessible<Entity, Read>`.
+- **Migrations** belong to their module's `MigrationSet`; never edit one
+  that has run anywhere, add a new one.
+- **Configuration.** `config/app.toml` holds shared settings; `APP_*`
+  environment variables override it (`APP_DATABASE__URL` sets
+  `database.url`). `.env` only fills keys that config/app.toml leaves out.
+  Never commit `.env` or put secrets in config/app.toml.
+- **Tests.** Every change comes with tests. Module tests boot the module
+  with `navree::testing::TestApp::builder().temp_database()`; call routes
+  with `app.client()` (a guest) or `app.acting_as(principal(user_id))`,
+  and assert with `assert_status`, `assert_json_path`, `assert_error` and
+  `assert_validation_error`.
+
+## Before you finish
+
+Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and
+`cargo test`, and fix everything they report.
+
+## Documentation and skills
+
+- Docs: https://navree.com/docs/ (for models: https://navree.com/llms.txt,
+  and every page as Markdown at `https://navree.com/docs/<section>/<page>.md`).
+- Agent skills, one per common task (modules, routing, validation, the
+  database, auth, access control, queues, tests and more):
+  `npx skills add NavreeHQ/navree`, or copy the `skills/` directory of
+  https://github.com/NavreeHQ/navree into `.claude/skills/` or
+  `.agents/skills/`. Start with the `navree` skill.
