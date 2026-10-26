@@ -30,7 +30,11 @@ async fn boot(root: &std::path::Path, clock: Arc<FixedClock>) -> TestApp {
 }
 
 /// Sends `body` to a presigned upload with its headers.
-async fn upload(app: &TestApp, upload: &PresignedUpload, body: Vec<u8>) -> crate::support::TestResponse {
+async fn upload(
+    app: &TestApp,
+    upload: &PresignedUpload,
+    body: Vec<u8>,
+) -> crate::support::TestResponse {
     let mut request = Request::put(&upload.url).header("content-length", body.len());
     for (name, value) in &upload.headers {
         request = request.header(name, value);
@@ -54,14 +58,32 @@ async fn the_route_checks_size_type_and_expiry() {
             .size(100)
             .await
             .unwrap();
-        assert!(signed.url.starts_with(&format!("/storage/{name}/a.png?expires=")), "{}", signed.url);
-        assert!(signed.url.contains("&type=image%2Fpng&max=1000&size=100&signature="), "{}", signed.url);
+        assert!(
+            signed
+                .url
+                .starts_with(&format!("/storage/{name}/a.png?expires=")),
+            "{}",
+            signed.url
+        );
+        assert!(
+            signed
+                .url
+                .contains("&type=image%2Fpng&max=1000&size=100&signature="),
+            "{}",
+            signed.url
+        );
 
         // Another size than declared.
         let body = upload(&app, &signed, png(101)).await.error(400);
-        assert_eq!(body["message"], "The upload must be exactly 100 bytes long.");
+        assert_eq!(
+            body["message"],
+            "The upload must be exactly 100 bytes long."
+        );
         let body = upload(&app, &signed, png(99)).await.error(400);
-        assert_eq!(body["message"], "The upload must be exactly 100 bytes long.");
+        assert_eq!(
+            body["message"],
+            "The upload must be exactly 100 bytes long."
+        );
         assert!(!disk.exists("a.png").await.unwrap(), "{name}");
 
         // The declared size, the declared type.
@@ -78,7 +100,10 @@ async fn the_route_checks_size_type_and_expiry() {
         .await
         .unwrap();
     let body = upload(&app, &signed, png(1001)).await.error(413);
-    assert_eq!(body["message"], "The file must not be larger than 1000 bytes.");
+    assert_eq!(
+        body["message"],
+        "The file must not be larger than 1000 bytes."
+    );
     let chunks: Vec<Result<Vec<u8>, std::io::Error>> = vec![Ok(png(600)), Ok(vec![0; 600])];
     let streamed = Request::put(&signed.url)
         .header("content-type", "image/png")
@@ -104,7 +129,11 @@ async fn forged_links_are_refused() {
         .presigned_put("doc.txt", Duration::minutes(5), &rules)
         .await
         .unwrap();
-    assert!(signed.headers.is_empty(), "no type declared, no header: {:?}", signed.headers);
+    assert!(
+        signed.headers.is_empty(),
+        "no type declared, no header: {:?}",
+        signed.headers
+    );
     assert!(!signed.url.contains("type="), "{}", signed.url);
 
     let forged = |from: &str, to: &str| PresignedUpload {
@@ -119,7 +148,13 @@ async fn forged_links_are_refused() {
         forged("&signature=", "&size=4&signature="),
     ] {
         let response = upload(&app, &tampered, b"text".to_vec()).await;
-        assert_eq!(response.status, 403, "{}: {}", tampered.url, response.text());
+        assert_eq!(
+            response.status,
+            403,
+            "{}: {}",
+            tampered.url,
+            response.text()
+        );
     }
     // A download link is not an upload link.
     let download = disk
@@ -155,7 +190,9 @@ async fn links_use_the_base_url_and_serialize_as_json() {
         .await
         .unwrap();
     assert!(
-        upload.url.starts_with("https://api.example.com/storage/files/exports/q1.csv?expires="),
+        upload
+            .url
+            .starts_with("https://api.example.com/storage/files/exports/q1.csv?expires="),
         "{}",
         upload.url
     );
@@ -227,13 +264,17 @@ impl Controller for UploadsController {
                 },
             )
             .public(),
-            RouteDef::on(Method::POST, "/accept/{*path}", move |Path(path): Path<String>| {
-                let disk = self.disk.clone();
-                async move {
-                    let stored: StoredFile = disk.accept_upload(&path, &rules()).await?;
-                    Ok::<_, AppError>(Json(stored))
-                }
-            })
+            RouteDef::on(
+                Method::POST,
+                "/accept/{*path}",
+                move |Path(path): Path<String>| {
+                    let disk = self.disk.clone();
+                    async move {
+                        let stored: StoredFile = disk.accept_upload(&path, &rules()).await?;
+                        Ok::<_, AppError>(Json(stored))
+                    }
+                },
+            )
             .public(),
         ]
     }
@@ -251,7 +292,10 @@ impl Module for UploadsModule {
 async fn rejections_map_to_400_and_413_in_handlers() {
     let app = TestApp::boot(
         Navree::app()
-            .module(StorageModule::for_root(single_disk("memory", DiskConfig::Memory)))
+            .module(StorageModule::for_root(single_disk(
+                "memory",
+                DiskConfig::Memory,
+            )))
             .module(UploadsModule),
     )
     .await;
@@ -260,7 +304,10 @@ async fn rejections_map_to_400_and_413_in_handlers() {
     let ok = app.send(post("/presign/10")).await;
     assert_eq!(ok.status, 200, "{}", ok.text());
     let body = app.send(post("/presign/1001")).await.error(413);
-    assert_eq!(body["message"], "The file must not be larger than 1000 bytes.");
+    assert_eq!(
+        body["message"],
+        "The file must not be larger than 1000 bytes."
+    );
     let body = app.send(post("/presign/0")).await.error(400);
     assert_eq!(body["message"], "The file should not be empty.");
 

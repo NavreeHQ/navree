@@ -416,7 +416,10 @@ fn storage_drivers_are_features() {
         ("storage-azure", "azure"),
     ] {
         let items = &features.table[feature];
-        assert!(items.contains(&"storage".to_owned()), "{feature}: {items:?}");
+        assert!(
+            items.contains(&"storage".to_owned()),
+            "{feature}: {items:?}"
+        );
         assert!(
             items.contains(&format!("navree-storage/{driver}")),
             "{feature}: {items:?}"

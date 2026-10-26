@@ -2,9 +2,7 @@
 
 use navree_config::{ConfigModule, ConfigSection, ConfigSources};
 use navree_kernel::Navree;
-use navree_storage::{
-    AzureConfig, DiskConfig, GcsConfig, S3Config, StorageModule, StorageOptions,
-};
+use navree_storage::{AzureConfig, DiskConfig, GcsConfig, S3Config, StorageModule, StorageOptions};
 use serde_json::json;
 
 use crate::support::{boot_error, single_disk};
@@ -117,7 +115,10 @@ fn gcs_and_azure_disks_parse() {
         panic!("an azure disk");
     };
     assert_eq!(azure.account.as_deref(), Some("acmestorage"));
-    assert_eq!(azure.container, "archive", "`bucket` is another name for `container`");
+    assert_eq!(
+        azure.container, "archive",
+        "`bucket` is another name for `container`"
+    );
     assert_eq!(azure.access_key.as_ref().unwrap().expose(), "a2V5");
     assert_eq!(GcsConfig::new("acme-media").bucket, "acme-media");
     let azure = AzureConfig::new("acmestorage", "archive");
@@ -157,15 +158,19 @@ fn cloud_disks_are_validated() {
             invalid(S3Config::default().into()),
             "disk `uploads`: `bucket` is required for the s3 driver"
         );
-        assert!(invalid(S3Config::new("b").endpoint("127.0.0.1:9000").into())
-            .contains("endpoint `127.0.0.1:9000` must be an absolute http(s) URL"));
+        assert!(
+            invalid(S3Config::new("b").endpoint("127.0.0.1:9000").into())
+                .contains("endpoint `127.0.0.1:9000` must be an absolute http(s) URL")
+        );
         let half = S3Config {
             access_key: Some("AKIA".into()),
             ..S3Config::new("b")
         };
         assert!(invalid(half.into()).contains("set both access_key and secret_key"));
-        assert!(invalid(S3Config::new("b").prefix("../other-tenant").into())
-            .contains("prefix `../other-tenant`"));
+        assert!(
+            invalid(S3Config::new("b").prefix("../other-tenant").into())
+                .contains("prefix `../other-tenant`")
+        );
         assert!(invalid(S3Config::new("b").public_url(" ").into()).contains("public_url"));
         assert_eq!(
             single_disk("uploads", S3Config::new("b").prefix("a/b").into()).validate(),
@@ -183,7 +188,8 @@ fn cloud_disks_are_validated() {
     }
     if cfg!(feature = "azure") {
         assert!(
-            invalid(AzureConfig::default().into()).contains("`container` is required for the azure")
+            invalid(AzureConfig::default().into())
+                .contains("`container` is required for the azure")
         );
     }
 }
@@ -191,8 +197,16 @@ fn cloud_disks_are_validated() {
 #[test]
 fn a_driver_that_is_not_compiled_in_names_its_feature() {
     let checks = [
-        (cfg!(feature = "s3"), DiskConfig::from(S3Config::new("b")), "storage-s3"),
-        (cfg!(feature = "gcs"), GcsConfig::new("b").into(), "storage-gcs"),
+        (
+            cfg!(feature = "s3"),
+            DiskConfig::from(S3Config::new("b")),
+            "storage-s3",
+        ),
+        (
+            cfg!(feature = "gcs"),
+            GcsConfig::new("b").into(),
+            "storage-gcs",
+        ),
         (
             cfg!(feature = "azure"),
             AzureConfig::new("a", "c").into(),

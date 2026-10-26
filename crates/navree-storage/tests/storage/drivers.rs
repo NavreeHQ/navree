@@ -95,7 +95,10 @@ mod s3 {
         // Uploads went through multipart requests, links were presigned.
         let log = server.log();
         assert!(log.iter().any(|line| line.contains("?uploads")), "{log:?}");
-        assert!(log.iter().any(|line| line.contains("X-Amz-Signature=")), "{log:?}");
+        assert!(
+            log.iter().any(|line| line.contains("X-Amz-Signature=")),
+            "{log:?}"
+        );
     }
 
     #[tokio::test]
@@ -106,7 +109,10 @@ mod s3 {
         // http://<access key>:<secret key>@127.0.0.1:9000/<bucket>
         let url = reqwest::Url::parse(&url).expect("NAVREE_TEST_S3_URL is a URL");
         let bucket = url.path().trim_matches('/').to_owned();
-        assert!(!bucket.is_empty(), "NAVREE_TEST_S3_URL names the bucket in its path");
+        assert!(
+            !bucket.is_empty(),
+            "NAVREE_TEST_S3_URL names the bucket in its path"
+        );
         let endpoint = format!(
             "{}://{}:{}",
             url.scheme(),
@@ -129,7 +135,9 @@ mod s3 {
     async fn a_prefix_keeps_every_key_under_it() {
         let server = S3Server::start().await;
         let disk = disk(config(&server).prefix("/tenants//acme/"));
-        disk.put("logo.png", crate::conformance::png(100)).await.unwrap();
+        disk.put("logo.png", crate::conformance::png(100))
+            .await
+            .unwrap();
         assert_eq!(server.keys(), ["tenants/acme/logo.png"]);
         assert_eq!(disk.list("").await.unwrap(), ["logo.png"]);
 
@@ -148,11 +156,22 @@ mod s3 {
             .await
             .unwrap();
         let reply = http
-            .send("PUT", &upload.url, &upload.headers, crate::conformance::png(50))
+            .send(
+                "PUT",
+                &upload.url,
+                &upload.headers,
+                crate::conformance::png(50),
+            )
             .await;
         assert_eq!(reply.status, 200, "{reply:?}");
-        assert_eq!(server.keys(), ["tenants/acme/logo.png", "tenants/acme/next.png"]);
-        assert_eq!(server.content_type("tenants/acme/next.png").as_deref(), Some("image/png"));
+        assert_eq!(
+            server.keys(),
+            ["tenants/acme/logo.png", "tenants/acme/next.png"]
+        );
+        assert_eq!(
+            server.content_type("tenants/acme/next.png").as_deref(),
+            Some("image/png")
+        );
     }
 
     #[tokio::test]
@@ -163,7 +182,10 @@ mod s3 {
             .temporary_url("a b.txt", Utc::now() + chrono::Duration::hours(1))
             .await
             .unwrap();
-        assert!(url.starts_with(&format!("{}/navree-test/a%20b.txt?", server.url)), "{url}");
+        assert!(
+            url.starts_with(&format!("{}/navree-test/a%20b.txt?", server.url)),
+            "{url}"
+        );
         for param in [
             "X-Amz-Algorithm=AWS4-HMAC-SHA256",
             "X-Amz-Credential=navree-test%2F",
@@ -216,10 +238,17 @@ mod s3 {
             .await
             .unwrap();
         let checks = app.ctx().get_all::<dyn HealthCheck>().await.unwrap();
-        let storage = checks.iter().find(|check| check.name() == "storage").unwrap();
+        let storage = checks
+            .iter()
+            .find(|check| check.name() == "storage")
+            .unwrap();
         let started = std::time::Instant::now();
         let status = storage.check().await;
-        assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "{:?}",
+            started.elapsed()
+        );
         assert_eq!(
             status,
             HealthStatus::Down("disk `uploads`: timed out after 1500 ms".to_owned())

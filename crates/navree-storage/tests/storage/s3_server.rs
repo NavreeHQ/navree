@@ -142,7 +142,11 @@ async fn handle(State(state): State<Arc<ServerState>>, request: Request) -> Resp
         None => (decoded, String::new()),
     };
     if !state.buckets.lock().unwrap().contains_key(&bucket) {
-        return error(StatusCode::NOT_FOUND, "NoSuchBucket", "The bucket does not exist");
+        return error(
+            StatusCode::NOT_FOUND,
+            "NoSuchBucket",
+            "The bucket does not exist",
+        );
     }
     let has = |name: &str| query.iter().any(|(key, _)| key == name);
     let param = |name: &str| {
@@ -207,7 +211,13 @@ async fn handle(State(state): State<Arc<ServerState>>, request: Request) -> Resp
             }
             let contents = Bytes::from(contents);
             let tag = etag(&contents);
-            store(&state, &upload.bucket, &upload.key, contents, upload.content_type);
+            store(
+                &state,
+                &upload.bucket,
+                &upload.key,
+                contents,
+                upload.content_type,
+            );
             xml(format!(
                 "<CompleteMultipartUploadResult><Location>/{0}/{1}</Location><Bucket>{0}</Bucket><Key>{1}</Key><ETag>{tag}</ETag></CompleteMultipartUploadResult>",
                 escape(&upload.bucket),
@@ -240,7 +250,9 @@ async fn handle(State(state): State<Arc<ServerState>>, request: Request) -> Resp
                     return error(StatusCode::NOT_FOUND, "NoSuchKey", "The key does not exist");
                 };
                 let tag = store(&state, &bucket, &key, object.body, object.content_type);
-                return xml(format!("<CopyObjectResult><ETag>{tag}</ETag></CopyObjectResult>"));
+                return xml(format!(
+                    "<CopyObjectResult><ETag>{tag}</ETag></CopyObjectResult>"
+                ));
             }
             let tag = store(&state, &bucket, &key, body, content_type);
             let mut response = StatusCode::OK.into_response();
@@ -278,15 +290,21 @@ fn store(
     content_type: Option<String>,
 ) -> String {
     let tag = etag(&body);
-    state.buckets.lock().unwrap().get_mut(bucket).unwrap().insert(
-        key.to_owned(),
-        Object {
-            body,
-            content_type,
-            last_modified: Utc::now(),
-            etag: tag.clone(),
-        },
-    );
+    state
+        .buckets
+        .lock()
+        .unwrap()
+        .get_mut(bucket)
+        .unwrap()
+        .insert(
+            key.to_owned(),
+            Object {
+                body,
+                content_type,
+                last_modified: Utc::now(),
+                etag: tag.clone(),
+            },
+        );
     tag
 }
 
@@ -314,10 +332,7 @@ fn get(object: &Object, headers: &HeaderMap, head: bool) -> Response {
                 "The requested range is not satisfiable",
             );
         }
-        Some((start, end)) => (
-            StatusCode::PARTIAL_CONTENT,
-            object.body.slice(start..=end),
-        ),
+        Some((start, end)) => (StatusCode::PARTIAL_CONTENT, object.body.slice(start..=end)),
         None => (StatusCode::OK, object.body.clone()),
     };
     let mut response = Response::builder()
@@ -338,7 +353,11 @@ fn get(object: &Object, headers: &HeaderMap, head: bool) -> Response {
     if let Some(content_type) = &object.content_type {
         response = response.header("content-type", content_type);
     }
-    let body = if head { Body::empty() } else { Body::from(body) };
+    let body = if head {
+        Body::empty()
+    } else {
+        Body::from(body)
+    };
     response.body(body).unwrap()
 }
 
@@ -401,54 +420,55 @@ fn authorize(
             .map(str::trim)
             .unwrap_or("")
     };
-    let (credential, amz_date, signed_headers, signature, payload) = if let Some(signature) =
-        get("X-Amz-Signature")
-    {
-        if get("X-Amz-Algorithm") != Some("AWS4-HMAC-SHA256") {
-            return Err("unknown algorithm".into());
-        }
-        let amz_date = get("X-Amz-Date").ok_or("no X-Amz-Date")?;
-        let expires: i64 = get("X-Amz-Expires")
-            .and_then(|value| value.parse().ok())
-            .ok_or("no X-Amz-Expires")?;
-        let signed_at = NaiveDateTime::parse_from_str(amz_date, "%Y%m%dT%H%M%SZ")
-            .map_err(|_| "bad X-Amz-Date")?
-            .and_utc();
-        if Utc::now() > signed_at + chrono::Duration::seconds(expires) {
-            return Err("Request has expired".into());
-        }
-        (
-            get("X-Amz-Credential").ok_or("no credential")?.to_owned(),
-            amz_date.to_owned(),
-            get("X-Amz-SignedHeaders").ok_or("no signed headers")?.to_owned(),
-            signature.to_owned(),
-            "UNSIGNED-PAYLOAD".to_owned(),
-        )
-    } else {
-        let authorization = header("authorization");
-        let fields = authorization
-            .strip_prefix("AWS4-HMAC-SHA256 ")
-            .ok_or("no AWS4-HMAC-SHA256 authorization")?;
-        let field = |name: &str| {
-            fields
-                .split(',')
-                .map(str::trim)
-                .find_map(|part| part.strip_prefix(name))
-                .map(str::to_owned)
-                .ok_or_else(|| format!("no {name}"))
+    let (credential, amz_date, signed_headers, signature, payload) =
+        if let Some(signature) = get("X-Amz-Signature") {
+            if get("X-Amz-Algorithm") != Some("AWS4-HMAC-SHA256") {
+                return Err("unknown algorithm".into());
+            }
+            let amz_date = get("X-Amz-Date").ok_or("no X-Amz-Date")?;
+            let expires: i64 = get("X-Amz-Expires")
+                .and_then(|value| value.parse().ok())
+                .ok_or("no X-Amz-Expires")?;
+            let signed_at = NaiveDateTime::parse_from_str(amz_date, "%Y%m%dT%H%M%SZ")
+                .map_err(|_| "bad X-Amz-Date")?
+                .and_utc();
+            if Utc::now() > signed_at + chrono::Duration::seconds(expires) {
+                return Err("Request has expired".into());
+            }
+            (
+                get("X-Amz-Credential").ok_or("no credential")?.to_owned(),
+                amz_date.to_owned(),
+                get("X-Amz-SignedHeaders")
+                    .ok_or("no signed headers")?
+                    .to_owned(),
+                signature.to_owned(),
+                "UNSIGNED-PAYLOAD".to_owned(),
+            )
+        } else {
+            let authorization = header("authorization");
+            let fields = authorization
+                .strip_prefix("AWS4-HMAC-SHA256 ")
+                .ok_or("no AWS4-HMAC-SHA256 authorization")?;
+            let field = |name: &str| {
+                fields
+                    .split(',')
+                    .map(str::trim)
+                    .find_map(|part| part.strip_prefix(name))
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("no {name}"))
+            };
+            let payload = header("x-amz-content-sha256").to_owned();
+            if payload != "UNSIGNED-PAYLOAD" && payload != sha256_hex(body) {
+                return Err("the payload hash does not match".into());
+            }
+            (
+                field("Credential=")?,
+                header("x-amz-date").to_owned(),
+                field("SignedHeaders=")?,
+                field("Signature=")?,
+                payload,
+            )
         };
-        let payload = header("x-amz-content-sha256").to_owned();
-        if payload != "UNSIGNED-PAYLOAD" && payload != sha256_hex(body) {
-            return Err("the payload hash does not match".into());
-        }
-        (
-            field("Credential=")?,
-            header("x-amz-date").to_owned(),
-            field("SignedHeaders=")?,
-            field("Signature=")?,
-            payload,
-        )
-    };
 
     let (access_key, scope) = credential.split_once('/').ok_or("bad credential")?;
     if access_key != ACCESS_KEY {

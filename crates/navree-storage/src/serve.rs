@@ -325,8 +325,9 @@ impl StorageController {
 
 /// 413: over the signed size limit.
 fn too_large(max_bytes: u64) -> AppError {
-    AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE)
-        .with_detail(format!("The file must not be larger than {max_bytes} bytes."))
+    AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE).with_detail(format!(
+        "The file must not be larger than {max_bytes} bytes."
+    ))
 }
 
 /// 400: not the declared size.
@@ -392,7 +393,9 @@ mod tests {
     #[test]
     fn upload_params_decode_and_refuse_duplicates() {
         assert_eq!(
-            upload_params(Some("expires=10&type=image%2Fpng&max=100&size=5&signature=ab")),
+            upload_params(Some(
+                "expires=10&type=image%2Fpng&max=100&size=5&signature=ab"
+            )),
             Some(UploadParams {
                 expires: 10,
                 content_type: Some("image/png".into()),

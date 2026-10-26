@@ -67,10 +67,15 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
 
     // Deterministic for the same input; different for another path, expiry or disk.
     assert_eq!(
-        disk.temporary_url("reports/q1 final.pdf", expires).await.unwrap(),
+        disk.temporary_url("reports/q1 final.pdf", expires)
+            .await
+            .unwrap(),
         url
     );
-    assert_ne!(disk.temporary_url("reports/q2.pdf", expires).await.unwrap(), url);
+    assert_ne!(
+        disk.temporary_url("reports/q2.pdf", expires).await.unwrap(),
+        url
+    );
     let later = expires + chrono::Duration::seconds(1);
     assert!(
         !disk
@@ -82,14 +87,16 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
     let local = storage
         .disk("local")
         .unwrap()
-        .temporary_url("reports/q1 final.pdf", expires).await;
+        .temporary_url("reports/q1 final.pdf", expires)
+        .await;
     assert!(!local.unwrap().ends_with(signature));
     // Another key signs differently.
     let other = Storage::new(&options(root.path()), b"another key").unwrap();
     let other = other
         .disk("memory")
         .unwrap()
-        .temporary_url("reports/q1 final.pdf", expires).await;
+        .temporary_url("reports/q1 final.pdf", expires)
+        .await;
     assert!(!other.unwrap().ends_with(signature));
 
     assert!(matches!(

@@ -227,7 +227,10 @@ mod tests {
             max_bytes: 1025,
             ..grant
         }));
-        assert!(refused(UploadGrant { size: None, ..grant }));
+        assert!(refused(UploadGrant {
+            size: None,
+            ..grant
+        }));
         let at_expiry = DateTime::from_timestamp(grant.expires, 0).unwrap();
         assert_eq!(
             signer.verify_upload(&grant, &signature, at_expiry),
