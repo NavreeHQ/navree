@@ -142,6 +142,65 @@ async fn echo_until_answered(client: &TcpTransport) -> Result<Envelope, MicroErr
     Err(last.expect("an attempt"))
 }
 
+/// Two apps on one broker: the deals service (`deals`) answers the API's
+/// route (`crm-api`) with the user's forwarded credentials, and its
+/// refusals come back unchanged. Each broker's tests run it.
+#[allow(dead_code)]
+pub(crate) async fn deals_answer_the_api_over(deals: MicroOptions, api: MicroOptions) {
+    let deals_app = TestApp::builder()
+        .temp_database()
+        .module(BearerAuthModule)
+        .module(DatabaseModule)
+        .module(AccessModule::for_root(access()))
+        .module(MicroModule::for_root(MicroOptions {
+            service: "deals".into(),
+            ..deals
+        }))
+        .module(DealsModule)
+        .build()
+        .await;
+    assert!(MicroModule::start_listener(deals_app.ctx()).await.unwrap());
+    let rep = Uuid::now_v7();
+    let deal = insert_deal(&deals_app, rep, "Acme renewal").await;
+    let api_app = TestApp::builder()
+        .module(BearerAuthModule)
+        .module(MicroModule::for_root(MicroOptions {
+            service: "crm-api".into(),
+            ..api
+        }))
+        .module(GatewayModule)
+        .build()
+        .await;
+    let path = format!("/api/gateway/deals/{}", deal.id);
+
+    let view: DealView = api_app
+        .client()
+        .get(&path)
+        .bearer(&rep.to_string())
+        .send()
+        .await
+        .assert_status(200)
+        .json();
+    assert_eq!(view.title, "Acme renewal");
+    api_app
+        .client()
+        .get(&path)
+        .bearer(&Uuid::now_v7().to_string())
+        .send()
+        .await
+        .assert_error(403, "Forbidden");
+    api_app
+        .client()
+        .get(&format!("/api/gateway/deals/{}", Uuid::now_v7()))
+        .bearer(&rep.to_string())
+        .send()
+        .await
+        .assert_error(404, "Not Found");
+
+    api_app.shutdown().await.unwrap();
+    deals_app.shutdown().await.unwrap();
+}
+
 /// The deals service on TCP at `addr`, authenticating forwarded bearers.
 async fn deals_on_tcp(addr: &str, listen_with_serve: bool) -> TestApp {
     TestApp::builder()

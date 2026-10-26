@@ -36,7 +36,7 @@ use crate::{
 /// use core publish-subscribe: at most once. Broadcast handlers always use
 /// a plain core subscription. Dead letters go to
 /// `<stream>.dead.<service>.<pattern>`, stored by the same stream.
-pub(crate) struct NatsTransport {
+pub struct NatsTransport {
     servers: Vec<String>,
     options: NatsOptions,
     service: String,
@@ -46,9 +46,13 @@ pub(crate) struct NatsTransport {
 }
 
 impl NatsTransport {
-    /// A transport for `url` (several servers comma-separated). Connects on
-    /// first use.
-    pub(crate) fn new(
+    /// A transport for `url` (several servers comma-separated) that listens
+    /// as `service` (the queue group and the durable consumers' prefix) and
+    /// names its connection `instance`. Connects on first use, giving up
+    /// after `connect_timeout`. `MicroModule` builds it from `micro.nats`;
+    /// build one yourself for [`Transport::custom`](crate::Transport::custom)
+    /// or the [conformance suite](crate::conformance).
+    pub fn new(
         url: String,
         options: &NatsOptions,
         service: &str,

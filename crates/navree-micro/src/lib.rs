@@ -85,3 +85,14 @@ pub use transport::{
     Delivery, DeliveryActions, Group, MemoryTransport, MicroTransport, PatternKind, Subscription,
     TcpTransport, Transport, TransportKind,
 };
+
+#[cfg(feature = "kafka")]
+pub use transport::KafkaTransport;
+#[cfg(feature = "mqtt")]
+pub use transport::MqttTransport;
+#[cfg(feature = "nats")]
+pub use transport::NatsTransport;
+#[cfg(feature = "rabbitmq")]
+pub use transport::RabbitmqTransport;
+#[cfg(feature = "redis")]
+pub use transport::RedisTransport;
