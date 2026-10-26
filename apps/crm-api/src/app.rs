@@ -9,10 +9,12 @@ use navree::prelude::*;
 
 use crate::seed::DemoModule;
 
-/// The Navree CRM API: the platform modules ([`crm_core::platform`]) and
-/// every CRM module, configured from `sources`.
+/// The Navree CRM API: the platform modules ([`crm_core::platform`]), the
+/// MCP server at `/mcp` (the deals and activities modules add its tools,
+/// resources and prompts) and every CRM module, configured from `sources`.
 pub fn app(sources: ConfigSources) -> AppBuilder {
     platform(Navree::app(), sources)
+        .module(McpModule::from_config()) // section `mcp`; serves /mcp
         .module(CrmCoreModule)
         .module(UsersModule)
         .module(CompaniesModule)
