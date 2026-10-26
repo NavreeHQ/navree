@@ -1,0 +1,17 @@
+[
+  {"name":"keel","label":"Keel","language":"Rust","category":"full-stack","context":"..","dockerfile":"frameworks/keel/Dockerfile"},
+  {"name":"loco","label":"Loco","language":"Rust","category":"full-stack"},
+  {"name":"axum","label":"Axum + sqlx","language":"Rust","category":"micro"},
+  {"name":"actix","label":"Actix Web + sqlx","language":"Rust","category":"micro"},
+  {"name":"gin","label":"Gin + pgx","language":"Go","category":"micro"},
+  {"name":"aspnet","label":"ASP.NET Core + EF Core","language":"C#","category":"full-stack"},
+  {"name":"spring","label":"Spring Boot + JPA","language":"Java","category":"full-stack"},
+  {"name":"nestjs-express","label":"NestJS (Express)","language":"TypeScript","category":"full-stack","context":"frameworks/nestjs","dockerfile":"frameworks/nestjs/Dockerfile.express"},
+  {"name":"nestjs-fastify","label":"NestJS (Fastify)","language":"TypeScript","category":"full-stack","context":"frameworks/nestjs","dockerfile":"frameworks/nestjs/Dockerfile.fastify"},
+  {"name":"express","label":"Express + pg","language":"JavaScript","category":"micro"},
+  {"name":"fastapi","label":"FastAPI + SQLAlchemy","language":"Python","category":"micro"},
+  {"name":"django","label":"Django + DRF","language":"Python","category":"full-stack"},
+  {"name":"laravel-octane","label":"Laravel (Octane, FrankenPHP)","language":"PHP","category":"full-stack","context":"frameworks/laravel","dockerfile":"frameworks/laravel/Dockerfile.octane"},
+  {"name":"laravel-fpm","label":"Laravel (PHP-FPM + nginx)","language":"PHP","category":"full-stack","context":"frameworks/laravel","dockerfile":"frameworks/laravel/Dockerfile.fpm","run_args":["--sysctl","net.ipv4.tcp_tw_reuse=1"],"note":"A new PostgreSQL connection per request (Laravel default under FPM) exhausts the container's ephemeral ports (TIME_WAIT) at ~1,400 connections/s; tcp_tw_reuse lets the kernel reuse them."},
+  {"name":"rails","label":"Ruby on Rails","language":"Ruby","category":"full-stack"}
+]

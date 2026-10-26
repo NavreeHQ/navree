@@ -1,0 +1,9 @@
+.env
+vendor
+bootstrap/cache/*.php
+storage/logs/*.log
+storage/framework/cache/data/*
+storage/framework/views/*.php
+storage/framework/sessions/*
+README.md
+Dockerfile.*

@@ -1,0 +1,42 @@
+[workspace]
+
+[package]
+name = "bench-loco"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "bench-loco"
+
+[workspace.dependencies]
+# Postgres + JWT only: no SQLite driver, no Redis/Postgres job queue, no
+# in-memory cache and no `cli` (clap) front end. `src/bin/main.rs` does what
+# `cargo loco start` does through `loco_rs::boot`.
+loco-rs = { version = "1.2.0", default-features = false, features = ["with-db", "auth"] }
+
+[dependencies]
+loco-rs = { workspace = true }
+migration = { path = "migration" }
+async-trait = "0.1.92"
+axum = "0.8.9"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
+# The same major loco-rs links for its own `auth::jwt`, so the app and the
+# framework share one JWT stack (and Loco's `ModelError::Jwt` conversions).
+jsonwebtoken = { version = "10.4.0", default-features = false, features = ["rust_crypto"] }
+rand = "0.10.3"
+sea-orm = { version = "2.0.4", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", default-features = false, features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.29.0", features = ["serde", "v4"] }
+# loco-rs implements its `ValidatorTrait` (behind `JsonValidate*` and
+# `QueryValidate*`) for validator 0.20's `Validate`, so the app must use 0.20.
+validator = { version = "0.20.0", features = ["derive"] }
+
+[[bin]]
+name = "bench-loco"
+path = "src/bin/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

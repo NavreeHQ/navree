@@ -1,0 +1,54 @@
+
+                      ▄     ▀                     
+                                 ▀  ▄             
+                  ▄       ▀     ▄  ▄ ▄▀           
+                                    ▄ ▀▄▄         
+                        ▄     ▀    ▀  ▀▄▀█▄       
+                                          ▀█▄     
+▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ ▄▄▄▄▄▄▄▄▄ ▀▀█    
+ ██████  █████   ███ █████   ███ █████   ███ ▀█   
+ ██████  █████   ███ █████   ▀▀▀ █████   ███ ▄█▄  
+ ██████  █████   ███ █████       █████   ███ ████▄
+ ██████  █████   ███ █████   ▄▄▄ █████   ███ █████
+ ██████  █████   ███  ████   ███ █████   ███ ████▀
+   ▀▀▀██▄ ▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀ ██▀  
+       ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀    
+                https://loco.rs
+
+environment: production
+     logger: warn
+compilation: release
+      modes: server
+
+listening on http://0.0.0.0:8080
+{"timestamp":"2026-10-26T03:59:08.164817Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration.","error.details":"Unauthorized(\"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration.\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.164837Z","level":"WARN","fields":{"err":"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration."},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.165944Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"InvalidSignature","error.details":"Unauthorized(\"InvalidSignature\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.165953Z","level":"WARN","fields":{"err":"InvalidSignature"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.167096Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"ExpiredSignature","error.details":"Unauthorized(\"ExpiredSignature\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.167103Z","level":"WARN","fields":{"err":"ExpiredSignature"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.168043Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"InvalidIssuer","error.details":"Unauthorized(\"InvalidIssuer\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.168051Z","level":"WARN","fields":{"err":"InvalidIssuer"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.169570Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"user not found","error.details":"Unauthorized(\"user not found\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.169578Z","level":"WARN","fields":{"err":"user not found"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.170443Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"InvalidToken","error.details":"Unauthorized(\"InvalidToken\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.170453Z","level":"WARN","fields":{"err":"InvalidToken"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.182367Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"page\": [ValidationError { code: \"range\", message: Some(\"page must be at least 1\"), params: {\"min\": Number(1), \"value\": Number(0)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.183579Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Invalid query string: Failed to deserialize query string: page: invalid digit found in string","error.details":"BadRequest(\"Invalid query string: Failed to deserialize query string: page: invalid digit found in string\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.184589Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Invalid query string: Failed to deserialize query string: page: invalid digit found in string","error.details":"BadRequest(\"Invalid query string: Failed to deserialize query string: page: invalid digit found in string\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.185487Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"per_page\": [ValidationError { code: \"range\", message: Some(\"per_page must be between 1 and 100\"), params: {\"min\": Number(1), \"max\": Number(100), \"value\": Number(0)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.186493Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"per_page\": [ValidationError { code: \"range\", message: Some(\"per_page must be between 1 and 100\"), params: {\"value\": Number(101), \"min\": Number(1), \"max\": Number(100)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.187394Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Invalid query string: Failed to deserialize query string: per_page: invalid digit found in string","error.details":"BadRequest(\"Invalid query string: Failed to deserialize query string: per_page: invalid digit found in string\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.189218Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration.","error.details":"Unauthorized(\"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration.\")"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.189229Z","level":"WARN","fields":{"err":"Token not found in any of the configured JWT locations. Please check your auth.jwt.location configuration."},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.190405Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Failed to deserialize the JSON body into the target type: missing field `title` at line 1 column 35","error.details":"JsonRejection(JsonDataError(JsonDataError(Error { inner: Error { path: Path { segments: [] }, original: Error(\"missing field `title`\", line: 1, column: 35) } })))"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.191542Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"title\": [ValidationError { code: \"length\", message: Some(\"title must be 1 to 200 characters\"), params: {\"max\": Number(200), \"value\": String(\"\"), \"min\": Number(1)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.192718Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"title\": [ValidationError { code: \"length\", message: Some(\"title must be 1 to 200 characters\"), params: {\"max\": Number(200), \"min\": Number(1), \"value\": String(\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\")} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.193719Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"amount_cents\": [ValidationError { code: \"range\", message: Some(\"amount_cents must be between 0 and 1000000000000\"), params: {\"value\": Number(-1), \"min\": Number(0), \"max\": Number(1000000000000)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.194904Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Failed to deserialize the JSON body into the target type: amount_cents: invalid type: floating point `10.5`, expected i64 at line 1 column 35","error.details":"JsonRejection(JsonDataError(JsonDataError(Error { inner: Error { path: Path { segments: [Map { key: \"amount_cents\" }] }, original: Error(\"invalid type: floating point `10.5`, expected i64\", line: 1, column: 35) } })))"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.195874Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"amount_cents\": [ValidationError { code: \"range\", message: Some(\"amount_cents must be between 0 and 1000000000000\"), params: {\"min\": Number(0), \"max\": Number(1000000000000), \"value\": Number(1000000000001)} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.196878Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Failed to deserialize the JSON body into the target type: missing field `amount_cents` at line 1 column 31","error.details":"JsonRejection(JsonDataError(JsonDataError(Error { inner: Error { path: Path { segments: [] }, original: Error(\"missing field `amount_cents`\", line: 1, column: 31) } })))"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.197932Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Model validation failed","error.details":"Validation(ModelValidationErrors { errors: {\"stage\": [ValidationError { code: \"stage\", message: Some(\"stage must be one of lead, qualified, proposal, negotiation, won, lost\"), params: {\"value\": String(\"bogus\")} }]} })"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.199000Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Failed to deserialize the JSON body into the target type: missing field `stage` at line 1 column 35","error.details":"JsonRejection(JsonDataError(JsonDataError(Error { inner: Error { path: Path { segments: [] }, original: Error(\"missing field `stage`\", line: 1, column: 35) } })))"},"target":"loco_rs::controller"}
+{"timestamp":"2026-10-26T03:59:08.199999Z","level":"ERROR","fields":{"message":"controller_error","error.msg":"Failed to parse the request body as JSON: key must be a string at line 1 column 2","error.details":"JsonRejection(JsonSyntaxError(JsonSyntaxError(Error { inner: Error { path: Path { segments: [Unknown] }, original: Error(\"key must be a string\", line: 1, column: 2) } })))"},"target":"loco_rs::controller"}
+

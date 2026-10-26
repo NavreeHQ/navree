@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1
+# laravel-fpm: the classic deployment, PHP-FPM (static pool) behind nginx in
+# one container. Build context: bench/frameworks/laravel (shared with Dockerfile.octane).
+
+# Composer dependencies (the composer image runs the same PHP 8.5).
+FROM composer:2.10 AS vendor
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN --mount=type=cache,target=/tmp/composer-cache \
+    COMPOSER_CACHE_DIR=/tmp/composer-cache \
+    composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction --no-progress
+COPY app ./app
+RUN composer dump-autoload --no-dev --no-scripts --classmap-authoritative --no-interaction
+
+FROM php:8.5.12-fpm-trixie
+
+# pdo_pgsql for PostgreSQL. OPcache is part of PHP 8.5.
+COPY --from=mlocati/php-extension-installer:2.12 /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions pdo_pgsql \
+ && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY docker/php.ini $PHP_INI_DIR/conf.d/zz-app.ini
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends nginx
+
+# No per-request access log (the image's docker.conf sends it to stderr).
+RUN sed -i 's/^access\.log/;access.log/' /usr/local/etc/php-fpm.d/docker.conf
+COPY docker/fpm/php-fpm.conf /usr/local/etc/php-fpm.d/zzz-app.conf
+COPY docker/fpm/nginx.conf /etc/nginx/nginx.conf
+
+WORKDIR /app
+COPY . .
+COPY --from=vendor /app/vendor ./vendor
+RUN php artisan package:discover --no-interaction \
+ && cp .env.example .env \
+ && php artisan key:generate --force --no-interaction \
+ && chmod +x docker/*.sh \
+ && chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 8080
+ENTRYPOINT ["/app/docker/fpm-start.sh"]

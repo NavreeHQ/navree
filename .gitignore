@@ -21,3 +21,16 @@ node_modules/
 # insta pending snapshots
 *.snap.new
 *.pending-snap
+
+# Benchmark: smoke runs and per-language build output
+/bench/results/smoke/
+/bench/frameworks/*/vendor/
+/bench/frameworks/*/dist/
+/bench/frameworks/aspnet/bin/
+/bench/frameworks/aspnet/obj/
+/bench/frameworks/*/.venv/
+__pycache__/
+
+# Browser-automation scratch files
+.playwright-mcp/
+/bench/results/logs/*.build.log

@@ -1,0 +1,247 @@
+{
+  "name": "laravel-fpm",
+  "label": "Laravel (PHP-FPM + nginx)",
+  "language": "PHP",
+  "category": "full-stack",
+  "mode": "full",
+  "started_at": "2026-10-26T05:17:00.928Z",
+  "settings": {
+    "runs": 3,
+    "duration_s": 15,
+    "warmup_s": 10,
+    "connections": 256,
+    "threads": 6,
+    "cpus": {
+      "ncpu": 24,
+      "app": "0-7",
+      "pg": "8-17",
+      "load": "18-23"
+    }
+  },
+  "image_mb": 759.5370349884033,
+  "startup_ms": 275,
+  "idle_mem_mb": 80.38,
+  "conformance": {
+    "ok": true,
+    "output": "PASS: 170 checks passed, 0 failed"
+  },
+  "tests": {
+    "json": {
+      "rps": 5622.809021386026,
+      "requests": 84845,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 44.5139,
+        "stdev": 5.551699999999999,
+        "max": 80.798,
+        "p50": 42.759,
+        "p75": 47.102,
+        "p90": 52.436,
+        "p99": 61.97,
+        "p999": 68.323
+      },
+      "peak_mem_mb": 204,
+      "avg_cpu_pct": 799.7871428571431,
+      "pg_avg_cpu_pct": 0.06285714285714286,
+      "wrk_avg_cpu_pct": 15.639999999999999,
+      "runs": [
+        {
+          "rps": 5622.809021386026,
+          "errors": 0,
+          "p99_ms": 61.97
+        },
+        {
+          "rps": 5650.216472817153,
+          "errors": 0,
+          "p99_ms": 62.17
+        },
+        {
+          "rps": 5389.8441590569,
+          "errors": 0,
+          "p99_ms": 65.384
+        }
+      ]
+    },
+    "db": {
+      "rps": 1574.5018261121588,
+      "requests": 23773,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 158.1523,
+        "stdev": 14.0855,
+        "max": 236.144,
+        "p50": 157.065,
+        "p75": 164.421,
+        "p90": 173.009,
+        "p99": 199.861,
+        "p999": 217.147
+      },
+      "peak_mem_mb": 215.7,
+      "avg_cpu_pct": 790.2257142857143,
+      "pg_avg_cpu_pct": 860.8299999999999,
+      "wrk_avg_cpu_pct": 7.345714285714286,
+      "runs": [
+        {
+          "rps": 1576.581596937511,
+          "errors": 0,
+          "p99_ms": 194.693
+        },
+        {
+          "rps": 1574.5018261121588,
+          "errors": 0,
+          "p99_ms": 199.861
+        },
+        {
+          "rps": 1552.6595802811835,
+          "errors": 0,
+          "p99_ms": 196.269
+        }
+      ]
+    },
+    "queries": {
+      "rps": 928.2036159394225,
+      "requests": 14010,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 267.2919,
+        "stdev": 22.4445,
+        "max": 355.051,
+        "p50": 266.55,
+        "p75": 276.965,
+        "p90": 289.16,
+        "p99": 321.1,
+        "p999": 338.919
+      },
+      "peak_mem_mb": 217.2,
+      "avg_cpu_pct": 692.7375000000001,
+      "pg_avg_cpu_pct": 735.3087499999999,
+      "wrk_avg_cpu_pct": 4.225,
+      "runs": [
+        {
+          "rps": 928.2036159394225,
+          "errors": 0,
+          "p99_ms": 321.1
+        },
+        {
+          "rps": 930.8694073676892,
+          "errors": 0,
+          "p99_ms": 312.281
+        },
+        {
+          "rps": 927.1834733603171,
+          "errors": 0,
+          "p99_ms": 316.751
+        }
+      ]
+    },
+    "deals_list": {
+      "rps": 926.7212526414576,
+      "requests": 13962,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 268.5093,
+        "stdev": 23.639599999999998,
+        "max": 342.584,
+        "p50": 268.519,
+        "p75": 279.72,
+        "p90": 291.534,
+        "p99": 314.806,
+        "p999": 331.982
+      },
+      "peak_mem_mb": 236.7,
+      "avg_cpu_pct": 799.4957142857141,
+      "pg_avg_cpu_pct": 637.9571428571428,
+      "wrk_avg_cpu_pct": 6.845714285714286,
+      "runs": [
+        {
+          "rps": 928.2659876039014,
+          "errors": 0,
+          "p99_ms": 311.296
+        },
+        {
+          "rps": 926.3722783426837,
+          "errors": 0,
+          "p99_ms": 310.144
+        },
+        {
+          "rps": 926.7212526414576,
+          "errors": 0,
+          "p99_ms": 314.806
+        }
+      ]
+    },
+    "deals_create": {
+      "rps": 1095.0043748464427,
+      "requests": 16517,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 227.08720000000002,
+        "stdev": 22.2194,
+        "max": 333.84,
+        "p50": 225.333,
+        "p75": 237.682,
+        "p90": 252.335,
+        "p99": 281.892,
+        "p999": 306.285
+      },
+      "peak_mem_mb": 238.7,
+      "avg_cpu_pct": 697.8325,
+      "pg_avg_cpu_pct": 611.7275000000001,
+      "wrk_avg_cpu_pct": 7.022500000000001,
+      "runs": [
+        {
+          "rps": 1095.0043748464427,
+          "errors": 0,
+          "p99_ms": 281.892
+        },
+        {
+          "rps": 1058.2784045614912,
+          "errors": 0,
+          "p99_ms": 327.437
+        },
+        {
+          "rps": 1096.4123614588364,
+          "errors": 0,
+          "p99_ms": 280.927
+        }
+      ]
+    }
+  },
+  "ok": true,
+  "finished_at": "2026-10-26T05:22:11.469Z"
+}

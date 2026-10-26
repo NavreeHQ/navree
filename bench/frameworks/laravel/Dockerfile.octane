@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# laravel-octane: Laravel Octane on FrankenPHP, one worker per CPU.
+# Build context: bench/frameworks/laravel (shared with Dockerfile.fpm).
+
+# Composer dependencies (the composer image runs the same PHP 8.5).
+FROM composer:2.10 AS vendor
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN --mount=type=cache,target=/tmp/composer-cache \
+    COMPOSER_CACHE_DIR=/tmp/composer-cache \
+    composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction --no-progress
+COPY app ./app
+RUN composer dump-autoload --no-dev --no-scripts --classmap-authoritative --no-interaction
+
+FROM dunglas/frankenphp:1.13.3-php8.5.12-trixie
+
+# pdo_pgsql for PostgreSQL, pcntl for Octane. OPcache is part of PHP 8.5.
+RUN install-php-extensions pdo_pgsql pcntl \
+ && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY docker/php.ini $PHP_INI_DIR/conf.d/zz-app.ini
+
+WORKDIR /app
+COPY . .
+COPY --from=vendor /app/vendor ./vendor
+RUN php artisan package:discover --no-interaction \
+ && cp .env.example .env \
+ && php artisan key:generate --force --no-interaction \
+ && chmod +x docker/*.sh
+
+EXPOSE 8080
+ENTRYPOINT ["/app/docker/octane-start.sh"]

@@ -1,0 +1,247 @@
+{
+  "name": "aspnet",
+  "label": "ASP.NET Core + EF Core",
+  "language": "C#",
+  "category": "full-stack",
+  "mode": "full",
+  "started_at": "2026-10-26T04:19:42.361Z",
+  "settings": {
+    "runs": 3,
+    "duration_s": 15,
+    "warmup_s": 10,
+    "connections": 256,
+    "threads": 6,
+    "cpus": {
+      "ncpu": 24,
+      "app": "0-7",
+      "pg": "8-17",
+      "load": "18-23"
+    }
+  },
+  "image_mb": 336.68602657318115,
+  "startup_ms": 513,
+  "idle_mem_mb": 34.84,
+  "conformance": {
+    "ok": true,
+    "output": "PASS: 170 checks passed, 0 failed"
+  },
+  "tests": {
+    "json": {
+      "rps": 496923.6966026156,
+      "requests": 7503357,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 0.5458999999999999,
+        "stdev": 0.6141,
+        "max": 20.324,
+        "p50": 0.4,
+        "p75": 0.556,
+        "p90": 0.893,
+        "p99": 3.425,
+        "p999": 7.803
+      },
+      "peak_mem_mb": 114.5,
+      "avg_cpu_pct": 663.6671428571428,
+      "pg_avg_cpu_pct": 0.05857142857142857,
+      "wrk_avg_cpu_pct": 431.18142857142857,
+      "runs": [
+        {
+          "rps": 493015.6979173213,
+          "errors": 0,
+          "p99_ms": 3.75
+        },
+        {
+          "rps": 503166.1715550003,
+          "errors": 0,
+          "p99_ms": 3.161
+        },
+        {
+          "rps": 496923.6966026156,
+          "errors": 0,
+          "p99_ms": 3.425
+        }
+      ]
+    },
+    "db": {
+      "rps": 77474.36536526679,
+      "requests": 1169053,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 3.2397,
+        "stdev": 0.892,
+        "max": 27.057,
+        "p50": 2.996,
+        "p75": 3.468,
+        "p90": 4.312,
+        "p99": 6.759,
+        "p999": 9.998
+      },
+      "peak_mem_mb": 192.4,
+      "avg_cpu_pct": 725.5985714285714,
+      "pg_avg_cpu_pct": 640.342857142857,
+      "wrk_avg_cpu_pct": 145.35714285714286,
+      "runs": [
+        {
+          "rps": 77474.36536526679,
+          "errors": 0,
+          "p99_ms": 6.759
+        },
+        {
+          "rps": 74746.46100192281,
+          "errors": 0,
+          "p99_ms": 7.076
+        },
+        {
+          "rps": 78366.2998901974,
+          "errors": 0,
+          "p99_ms": 6.574
+        }
+      ]
+    },
+    "queries": {
+      "rps": 6316.595999141794,
+      "requests": 95153,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 39.6812,
+        "stdev": 5.2151000000000005,
+        "max": 83.677,
+        "p50": 38.575,
+        "p75": 41.669,
+        "p90": 45.735,
+        "p99": 60.526,
+        "p999": 74.782
+      },
+      "peak_mem_mb": 179.9,
+      "avg_cpu_pct": 583.1274999999999,
+      "pg_avg_cpu_pct": 679.9912499999999,
+      "wrk_avg_cpu_pct": 17.5125,
+      "runs": [
+        {
+          "rps": 6412.630587173677,
+          "errors": 0,
+          "p99_ms": 55.497
+        },
+        {
+          "rps": 6316.595999141794,
+          "errors": 0,
+          "p99_ms": 60.526
+        },
+        {
+          "rps": 6183.389283686636,
+          "errors": 0,
+          "p99_ms": 71.222
+        }
+      ]
+    },
+    "deals_list": {
+      "rps": 20352.491883476046,
+      "requests": 306791,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 12.3077,
+        "stdev": 2.4081,
+        "max": 30.388,
+        "p50": 11.777,
+        "p75": 13.591,
+        "p90": 15.459,
+        "p99": 19.925,
+        "p999": 24.443
+      },
+      "peak_mem_mb": 190.5,
+      "avg_cpu_pct": 687.7285714285715,
+      "pg_avg_cpu_pct": 914.7871428571428,
+      "wrk_avg_cpu_pct": 72.29857142857142,
+      "runs": [
+        {
+          "rps": 20458.278500140837,
+          "errors": 0,
+          "p99_ms": 19.554
+        },
+        {
+          "rps": 19943.20258599099,
+          "errors": 0,
+          "p99_ms": 21.636
+        },
+        {
+          "rps": 20352.491883476046,
+          "errors": 0,
+          "p99_ms": 19.925
+        }
+      ]
+    },
+    "deals_create": {
+      "rps": 29245.484845436433,
+      "requests": 440727,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 8.562100000000001,
+        "stdev": 1.8874000000000002,
+        "max": 28.003,
+        "p50": 8.011,
+        "p75": 9.529,
+        "p90": 11.077,
+        "p99": 14.748,
+        "p999": 18.753
+      },
+      "peak_mem_mb": 208.2,
+      "avg_cpu_pct": 622.58875,
+      "pg_avg_cpu_pct": 668.2525,
+      "wrk_avg_cpu_pct": 82.82249999999999,
+      "runs": [
+        {
+          "rps": 29060.475688284634,
+          "errors": 0,
+          "p99_ms": 15.272
+        },
+        {
+          "rps": 29245.484845436433,
+          "errors": 0,
+          "p99_ms": 14.748
+        },
+        {
+          "rps": 29656.10611299244,
+          "errors": 0,
+          "p99_ms": 14.395
+        }
+      ]
+    }
+  },
+  "ok": true,
+  "finished_at": "2026-10-26T04:24:53.674Z"
+}

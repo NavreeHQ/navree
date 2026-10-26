@@ -1,0 +1,2 @@
+{"timestamp":"2026-10-26T05:11:56.611132Z","level":"WARN","target":"keel_crypto::module","fields":{"message":"no application key is configured (`app.key` / APP_KEY): encryption is disabled until one is set; run `key:generate` to create one"}}
+
