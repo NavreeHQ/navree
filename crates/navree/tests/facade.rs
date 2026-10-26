@@ -362,8 +362,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs.
-const OPT_IN: &[&str] = &["dock"];
+/// runtime never needs (`dock`), and ecosystem packages an app turns on
+/// itself (`features = ["search"]`).
+const OPT_IN: &[&str] = &["dock", "search"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {

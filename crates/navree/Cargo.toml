@@ -85,6 +85,20 @@ workspace = [
     "mail",
     "access",
 ]
+## L7 (opt-in, not in `full`)
+## Search: full-text and vector search over entities (postgres,
+## meilisearch, typesense and memory engines).
+search = [
+    "dep:navree-search",
+    "http",
+    "http-client",
+    "db",
+    "queue",
+    "access",
+    "workspace",
+]
+## The embedded Tantivy engine for search (compiles Tantivy in).
+search-tantivy = ["search", "navree-search/tantivy"]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -102,6 +116,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
+navree-search = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }

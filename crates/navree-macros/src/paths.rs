@@ -32,6 +32,13 @@ pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
     facade_module: "access",
 };
 
+/// navree-search: `Searchable`, `IndexSettings`, `Document`
+/// (`#[derive(Searchable)]`).
+pub(crate) const SEARCH: RuntimeCrate = RuntimeCrate {
+    package: "navree-search",
+    facade_module: "search",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
+use sea_orm::DatabaseTransaction;
 use navree_kernel::{AppContext, WeakAppContext};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -129,6 +130,27 @@ impl Queue {
         let delay = envelope_delay(&envelope);
         let job = self.prepare(envelope, delay)?;
         self.store_in(uow, job).await
+    }
+
+    /// Queues a serialized job from inside a
+    /// [`ChangeObserver`](navree_db::ChangeObserver), as part of the commit
+    /// it observes: with the database driver the row is written through
+    /// `tx` (the transaction the observer is given, since `uow.tx()` fails
+    /// while it commits); otherwise the job is queued once `uow` has
+    /// committed. A commit that fails queues nothing. Returns the id the
+    /// job gets.
+    pub async fn push_observed(
+        &self,
+        tx: &DatabaseTransaction,
+        uow: &Uow,
+        envelope: JobEnvelope,
+    ) -> Result<String, QueueError> {
+        let delay = envelope_delay(&envelope);
+        let job = self.prepare(envelope, delay)?;
+        match &self.inner.store {
+            Store::Database(store) => store.insert_on_tx(tx, &job).await,
+            Store::Memory(_) | Store::Fake(_) => self.store_in(uow, job).await,
+        }
     }
 
     /// Stores `job` as part of `uow`.
