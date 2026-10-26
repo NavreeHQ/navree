@@ -158,6 +158,55 @@ async fn explicit_headers_replace_the_defaults() {
 }
 
 #[tokio::test]
+async fn without_header_drops_a_default_or_explicit_header() {
+    let app = TestApp::builder()
+        .module(DemoModule)
+        .config(
+            "http.cors.allowed_origins",
+            json!(["http://localhost:3000"]),
+        )
+        .build()
+        .await;
+    let headers = app
+        .client()
+        .get("/api/demo/headers")
+        .header("x-custom", "1")
+        .without_header("origin")
+        .without_header("x-custom")
+        .send()
+        .await
+        .json_value();
+    assert!(headers.get("origin").is_none(), "{headers}");
+    assert!(headers.get("x-custom").is_none(), "{headers}");
+    assert_eq!(headers["accept"], "application/json");
+
+    // A header set after `without_header` is sent again.
+    let headers = app
+        .client()
+        .get("/api/demo/headers")
+        .without_header("accept")
+        .header("accept", "text/event-stream")
+        .send()
+        .await
+        .json_value();
+    assert_eq!(headers["accept"], "text/event-stream");
+}
+
+#[tokio::test]
+async fn send_stream_returns_the_response_with_its_body_unread() {
+    use http_body_util::BodyExt;
+
+    let app = TestApp::builder().module(DemoModule).build().await;
+    let client = app.client();
+    let response = client.get("/api/demo/visits").send_stream().await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(client.cookie("visits").as_deref(), Some("1"), "cookies are kept");
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["visits"], 0);
+}
+
+#[tokio::test]
 async fn bearer_sets_the_authorization_header() {
     let app = TestApp::builder().module(DemoModule).build().await;
     let headers = app

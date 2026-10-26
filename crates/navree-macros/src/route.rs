@@ -127,7 +127,7 @@ fn short_name(attr: &Attribute) -> String {
 pub(crate) struct At(TokenStream);
 
 impl At {
-    fn of(attr: &Attribute) -> Self {
+    pub(crate) fn of(attr: &Attribute) -> Self {
         At(attr.to_token_stream())
     }
 
@@ -191,7 +191,7 @@ impl Can {
 
     /// Parses the arguments of `#[can(..)]` written at `at`. A malformed
     /// attribute gets one error underlining all of it.
-    fn parse_args(attr: &Attribute, at: &At) -> syn::Result<Self> {
+    pub(crate) fn parse_args(attr: &Attribute, at: &At) -> syn::Result<Self> {
         let expected = || {
             at.error("expected #[can(Action, Subject)] or #[can(Action, Subject, from = \"id\")]")
         };
@@ -628,7 +628,7 @@ fn check_site(kind: Kind, name: &str, site: Site, seen: &[(Kind, String)]) -> Re
 }
 
 /// A flag attribute such as `#[public]`: no arguments.
-fn flag(attr: &Attribute) -> syn::Result<At> {
+pub(crate) fn flag(attr: &Attribute) -> syn::Result<At> {
     let at = At::of(attr);
     match &attr.meta {
         Meta::Path(_) => Ok(at),
@@ -637,7 +637,7 @@ fn flag(attr: &Attribute) -> syn::Result<At> {
 }
 
 /// `#[roles("a", "b")]`: a non-empty list of non-empty strings.
-fn strings(attr: &Attribute, example: &str) -> syn::Result<Vec<LitStr>> {
+pub(crate) fn strings(attr: &Attribute, example: &str) -> syn::Result<Vec<LitStr>> {
     let expected = || At::of(attr).error(format!("expected #[{}({example})]", short_name(attr)));
     let list = match &attr.meta {
         Meta::List(_) => attr
@@ -652,7 +652,7 @@ fn strings(attr: &Attribute, example: &str) -> syn::Result<Vec<LitStr>> {
 }
 
 /// `value`, unless it is empty or blank.
-fn non_empty(value: LitStr) -> syn::Result<LitStr> {
+pub(crate) fn non_empty(value: LitStr) -> syn::Result<LitStr> {
     if value.value().trim().is_empty() {
         Err(syn::Error::new(value.span(), "must not be empty"))
     } else {
