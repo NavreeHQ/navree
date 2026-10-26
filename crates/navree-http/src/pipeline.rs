@@ -156,35 +156,38 @@ pub(crate) async fn request_context(
         .map_or_else(|| "unmatched".to_owned(), |meta| meta.full_path.clone());
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
     let status = response.status().as_u16();
-    if let Some(path) = path {
-        let event = RequestHandled {
-            method: method.to_string(),
-            route: matched.map(|meta| meta.full_path.clone()),
-            path,
-            status,
-            duration: latency,
-            user_id: user
-                .map(|user| user.to_string())
-                .or_else(|| telemetry_context.user_id().map(str::to_owned)),
-            workspace_id: telemetry_context.workspace_id().map(str::to_owned),
-            request_id: request_id.as_str().to_owned(),
-            client_ip: Some(ip.0.to_string()),
-        };
-        let telemetry = state.telemetry.clone();
-        telemetry_context.sync_scope(|| telemetry.emit(TelemetryEvent::RequestHandled(event)));
-    }
-    span.in_scope(|| {
-        tracing::info!(
-            target: "navree::request",
-            method = %method,
-            route = %route,
-            status,
-            latency_ms = latency.as_secs_f64() * 1000.0,
-            request_id = %request_id,
-            user_id = user.map(tracing::field::display),
-            ip = %ip.0,
-            "request completed"
-        );
+    let event = path.map(|path| RequestHandled {
+        method: method.to_string(),
+        route: matched.map(|meta| meta.full_path.clone()),
+        path,
+        status,
+        duration: latency,
+        user_id: user
+            .map(|user| user.to_string())
+            .or_else(|| telemetry_context.user_id().map(str::to_owned)),
+        workspace_id: telemetry_context.workspace_id().map(str::to_owned),
+        request_id: request_id.as_str().to_owned(),
+        client_ip: Some(ip.0.to_string()),
+    });
+    // Still in the request's context: the event and the log line carry its
+    // request id and trace.
+    telemetry_context.sync_scope(|| {
+        if let Some(event) = event {
+            state.telemetry.emit(TelemetryEvent::RequestHandled(event));
+        }
+        span.in_scope(|| {
+            tracing::info!(
+                target: "navree::request",
+                method = %method,
+                route = %route,
+                status,
+                latency_ms = latency.as_secs_f64() * 1000.0,
+                request_id = %request_id,
+                user_id = user.map(tracing::field::display),
+                ip = %ip.0,
+                "request completed"
+            );
+        });
     });
     let labels = [
         ("method", method.to_string()),
