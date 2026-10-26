@@ -90,6 +90,8 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-workspace", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access",
+        // `navree_workspace::testing`: isolation suites on navree-testing's TestApp.
+        "navree-testing",
     ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
