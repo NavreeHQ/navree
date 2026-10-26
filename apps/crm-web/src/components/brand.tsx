@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** The Navree mark: a hull in side profile with its navree fin beneath the waterline. */
+/** The Navree mark: a hull in side profile with its fin beneath the waterline. */
 export function NavreeMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={cn("size-5", className)}>

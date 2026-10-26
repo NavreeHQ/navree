@@ -53,7 +53,7 @@ const layerNames: Record<number, string> = {
 
 /**
  * Every framework crate, drawn as the decks of a hull: layer 6 (the facade
- * and the CLI) on top, the kernel at the bottom like a navree. Generated from
+ * and the CLI) on top, the kernel at the bottom as the foundation. Generated from
  * the workspace by scripts/prebuild.ts.
  */
 export function InTheBox() {
@@ -81,7 +81,7 @@ export function InTheBox() {
 
       <div className="mt-12 overflow-hidden rounded-[1.25rem] border border-line bg-ink-1/40 lg:mt-14">
         {layers.map((layer, i) => {
-          const isKeel = layer === 0;
+          const isBase = layer === 0;
           const members = all.filter((c) => c.layer === layer);
           return (
             <section
@@ -90,11 +90,11 @@ export function InTheBox() {
               className={cn(
                 "grid md:grid-cols-[13rem_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)]",
                 i > 0 && "border-t border-line",
-                isKeel && "bg-accent/[0.035] shadow-[inset_0_-1px_0_var(--color-accent)]",
+                isBase && "bg-accent/[0.035] shadow-[inset_0_-1px_0_var(--color-accent)]",
               )}
             >
               <div className="flex items-baseline gap-3 px-5 pt-5 md:flex-col md:gap-1 md:border-r md:border-line md:py-5 lg:px-6">
-                <span className={cn("font-mono text-xs numeric", isKeel ? "text-accent" : "text-fg-3")}>L{layer}</span>
+                <span className={cn("font-mono text-xs numeric", isBase ? "text-accent" : "text-fg-3")}>L{layer}</span>
                 <span className="text-[0.9375rem] font-medium text-fg-1">{layerNames[layer]}</span>
               </div>
               <ul className="grid gap-x-2 p-2 sm:grid-cols-2 md:p-3 xl:grid-cols-3">

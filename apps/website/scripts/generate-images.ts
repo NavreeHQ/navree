@@ -132,7 +132,7 @@ const BRIEFS: Brief[] = [
     width: 1584,
     alt: "The bow of a sleek black hull in still dark water, its edge traced by green light",
     subject:
-      "The bow of a sleek, minimal, modern black yacht hull seen in profile at water level, emerging from darkness on the right side of the frame. One continuous thin neon green light line traces the hull's upper edge from the bow backward and is mirrored in the perfectly still black water. Only the hull and its reflection; no masts, no railings, no structures, no navree shown. The left half of the frame is calm empty darkness.",
+      "The bow of a sleek, minimal, modern black yacht hull seen in profile at water level, emerging from darkness on the right side of the frame. One continuous thin neon green light line traces the hull's upper edge from the bow backward and is mirrored in the perfectly still black water. Only the hull and its reflection; no masts, no railings, no structures, nothing below the waterline shown. The left half of the frame is calm empty darkness.",
   },
   {
     key: "hero-archipelago",

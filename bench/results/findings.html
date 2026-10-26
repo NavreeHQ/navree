@@ -1,6 +1,5 @@
 <section class="card findings">
 <h2 style="margin-top:0">What the numbers say about Navree</h2>
-<p>These runs were measured under the framework's working name, Navree, on the same code.</p>
 <ul>
   <li><b>On the two realistic endpoints, Navree is 4th of the 10 full-stack frameworks.</b> On the authenticated paginated list it does 15,458 req/s: level with Loco (16,202) and Spring Boot (16,256), behind ASP.NET Core (20,352), and 3.3× NestJS, 4.7× Rails, 6.9× Django and 8.8× Laravel Octane. On the validated insert it does 20,295 req/s: behind Loco (34,308), ASP.NET Core (29,245) and Spring Boot (28,540), ahead of NestJS (1.4×) and 4–6× Rails, Django and Laravel Octane.</li>
   <li><b>Navree's own per-request cost is high.</b> On the plain JSON test it is the slowest of the compiled and JIT frameworks: 214k req/s, against 542k for Loco, 963k for Axum (its own foundation) and 357k–644k for NestJS. On a single query it reaches 46.5k req/s, while Loco, ASP.NET Core, Spring Boot and NestJS all do 65k–80k. In both tests Navree used nearly all of its CPUs (772% of 800% on JSON; 586% on one query, with PostgreSQL only at 329%), so the time goes into Navree's request pipeline, not the database.</li>

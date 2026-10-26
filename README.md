@@ -49,8 +49,6 @@ navree dev              # http://127.0.0.1:8080/api/docs
 The docs are also published for AI agents as
 [`llms.txt`](https://navree.com/llms.txt) and as Markdown, page by page.
 
-Navree was developed under the working name Navree and briefly called Navree.
-
 ## The ecosystem
 
 Everything a production backend needs beyond the framework is first-party,
