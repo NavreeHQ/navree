@@ -380,8 +380,11 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// `soft_delete` (a nullable column; rows where it is set are removed from
 /// the index) and `workspace` (default: the entity's `WorkspaceScoped`
 /// column, if it implements that trait). The document holds the primary
-/// key and the marked fields, serialized with serde. The generated code
-/// names `::navree::search` (or `::navree_search`).
+/// key and the marked fields: text and embedded fields serialized with
+/// serde, filter and sort fields as the database holds them (the form
+/// access rules compare). A field's column is its name or its
+/// `#[sea_orm(column_name = "..")]`. The generated code names
+/// `::navree::search` (or `::navree_search`).
 #[proc_macro_derive(Searchable, attributes(searchable))]
 pub fn derive_searchable(input: TokenStream) -> TokenStream {
     searchable::expand(input.into()).into()

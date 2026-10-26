@@ -226,6 +226,12 @@ search.assert_indexed::<Contact>(ada.id).await;
 - After changing `#[searchable]` fields: `navree search:import --all --fresh`.
 - Every column an access rule names should be `#[searchable(filter)]`, or
   totals count records the user can't read (they are dropped from the page).
+  Rules on date and time columns always work that way (the index keeps
+  milliseconds); rules on boolean, number, string, UUID and enum columns
+  filter in the engine exactly.
+- The access parity property test
+  (`crates/navree-search/tests/search/access_parity.rs`) must stay green
+  on every engine after a change to filters or the derive.
 - Writes through raw SQL or `update_many` are not observed: `reindex` them.
 
 ## Gotchas
@@ -236,6 +242,14 @@ search.assert_indexed::<Contact>(ada.id).await;
   PostgreSQL needs `search.postgres.trigram = true` for typos.
 - Filtering or sorting on a field not marked `filter`/`sort` is a 400
   (`NotFilterable` / `NotSortable`), before the engine is called.
+- The derive stores filter and sort fields as the database holds them (the
+  form access rules compare), text fields as serde serializes them. For an
+  enum stored as `closed_won` whose serde name is `ClosedWon`, filter with
+  `filter("stage", "closed_won")`. A hand-written `document()` should do the
+  same (`deal.stage.as_str()`). `#[sea_orm(column_name = "..")]` is the
+  field's column.
+- A fresh import re-syncs, after its swap, every record synced while it
+  ran, so writes during `search:import --fresh` are kept.
 - Typesense can't filter on missing values (`filter_null` is a 400).
 - `without_syncing(fut)` only skips commits that happen inside `fut`.
 - Tantivy: one writing process per directory; use `sync = "inline"` or a
