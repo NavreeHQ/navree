@@ -329,6 +329,8 @@ The cache store is in-memory today, so with several app instances, a change made
 Use the memory store and set the flags each test needs:
 
 ```rust title="tests/pipeline.rs"
+use navree::access::AccessService;
+use navree::db::Db;
 use navree::flags::{FlagScope, Flags};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
@@ -346,7 +348,16 @@ async fn the_forecast_is_hidden_until_the_new_pipeline_is_on() {
         .module(FlagsModule::from_config())
         .build()
         .await;
+
+    // A rep who may read deals (the route's `#[can(Read, Deal)]`).
     let rep_id = Uuid::now_v7();
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    app.get::<AccessService>()
+        .await
+        .grant_to_user(&uow, rep_id, "deals.read")
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
     let rep = app.acting_as(principal(rep_id));
 
     rep.get("/api/v1/deals/forecast").send().await.assert_error(404, None);

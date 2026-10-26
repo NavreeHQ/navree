@@ -229,6 +229,8 @@ m.plan_resolver::<Plans>();
 The memory store, with the flags each test needs:
 
 ```rust
+use navree::access::AccessService;
+use navree::db::Db;
 use navree::flags::{FlagScope, Flags};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
@@ -246,7 +248,12 @@ async fn the_forecast_is_hidden_until_the_new_pipeline_is_on() {
         .module(FlagsModule::from_config())
         .build()
         .await;
-    let rep_id = Uuid::now_v7(); // grant the route's permission as your app does
+    // The route's #[can(Read, Deal)]: the rep needs `deals.read`.
+    let rep_id = Uuid::now_v7();
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    app.get::<AccessService>().await
+        .grant_to_user(&uow, rep_id, "deals.read").await.unwrap();
+    uow.commit().await.unwrap();
     let rep = app.acting_as(principal(rep_id));
 
     rep.get("/api/v1/deals/forecast").send().await.assert_error(404, None);
