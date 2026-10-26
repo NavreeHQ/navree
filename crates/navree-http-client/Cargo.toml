@@ -18,6 +18,7 @@ ipnet = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }

@@ -33,6 +33,7 @@ full = [
     "schedule",
     "session",
     "storage",
+    "telemetry",
     "testing",
     "validation",
     "view",
@@ -41,20 +42,23 @@ full = [
 ]
 # Each module feature turns on the features of the navree crates it builds
 # on (spec §3), so `navree::<dependency>` is always there to name their types.
+## L1
+## Telemetry events, sinks and W3C trace context (every emitting module turns it on).
+telemetry = ["dep:navree-telemetry"]
 ## L2
-http = ["dep:navree-http", "dep:axum"]
-log = ["dep:navree-log"]
+http = ["dep:navree-http", "dep:axum", "telemetry"]
+log = ["dep:navree-log", "telemetry"]
 crypto = ["dep:navree-crypto"]
 events = ["dep:navree-events"]
 view = ["dep:navree-view"]
-cache = ["dep:navree-cache"]
-http-client = ["dep:navree-http-client"]
+cache = ["dep:navree-cache", "telemetry"]
+http-client = ["dep:navree-http-client", "telemetry"]
 ## L3
 db = ["dep:navree-db", "http"]
 testing = ["dep:navree-testing", "http"]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
-mail = ["dep:navree-mail", "view"]
+mail = ["dep:navree-mail", "view", "telemetry"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
 ## L4
@@ -153,6 +157,9 @@ postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
+## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
+## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
+otel = ["observe", "navree-observe/otel"]
 
 [dependencies]
 navree-config = { workspace = true }
@@ -185,6 +192,7 @@ navree-schedule = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
+navree-telemetry = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true, optional = true }
@@ -197,6 +205,7 @@ axum = { workspace = true, optional = true }
 [dev-dependencies]
 chrono = { workspace = true }
 garde = { workspace = true }
+metrics = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }

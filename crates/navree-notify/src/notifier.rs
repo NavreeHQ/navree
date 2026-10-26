@@ -9,6 +9,7 @@ use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_mail::Mailer;
+use navree_telemetry::{EventKind, NotificationSent, Telemetry, TelemetryEvent};
 use sea_orm::sea_query::OnConflict;
 use sea_orm::{ActiveValue::Set, ConnectionTrait, EntityTrait};
 use serde_json::{Value, json};
@@ -34,15 +35,19 @@ pub struct Notifier {
     app: WeakAppContext,
     /// Whether the "no dispatcher, delivering now" warning was logged.
     warned_inline: AtomicBool,
+    /// Where delivered channels are reported (`NotificationSent`).
+    telemetry: Telemetry,
 }
 
 impl Notifier {
-    /// A notifier for `app` with `options`.
-    pub(crate) fn new(options: NotifyOptions, app: WeakAppContext) -> Self {
+    /// A notifier for `app` with `options`, reporting each delivered
+    /// channel to `telemetry` as a `NotificationSent` event.
+    pub(crate) fn new(options: NotifyOptions, app: WeakAppContext, telemetry: Telemetry) -> Self {
         Self {
             options,
             app,
             warned_inline: AtomicBool::new(false),
+            telemetry,
         }
     }
 
@@ -145,6 +150,17 @@ impl Notifier {
                     store(&*tx, job, data).await?;
                 }
             }
+            if self.telemetry.enabled(EventKind::NotificationSent) {
+                // Stored with the transaction: reported once it commits.
+                let telemetry = self.telemetry.clone();
+                uow.after_commit(move || {
+                    Box::pin(async move {
+                        for job in &stored {
+                            report(&telemetry, job);
+                        }
+                    })
+                });
+            }
         }
         if !later.is_empty() {
             let app = self.app.clone();
@@ -186,6 +202,16 @@ impl Notifier {
     }
 
     async fn deliver_with(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+    ) -> Result<(), NotifyError> {
+        self.deliver_channel(ctx, job).await?;
+        report(&self.telemetry, job);
+        Ok(())
+    }
+
+    async fn deliver_channel(
         &self,
         ctx: &AppContext,
         job: &SendNotificationJob,
@@ -395,6 +421,19 @@ fn broadcast_payload(job: &SendNotificationJob, data: &Value) -> Value {
         "read_at": null,
         "created_at": job.created_at,
     })
+}
+
+/// Emits a [`NotificationSent`] for one delivered channel.
+fn report(telemetry: &Telemetry, job: &SendNotificationJob) {
+    telemetry.emit_with(EventKind::NotificationSent, || {
+        TelemetryEvent::NotificationSent(NotificationSent {
+            notification_id: job.id.to_string(),
+            notification_type: job.notification_type.clone(),
+            notifiable_type: job.notifiable_type.clone(),
+            notifiable_id: job.notifiable_id.clone(),
+            channel: job.delivery.channel().to_string(),
+        })
+    });
 }
 
 /// Removes repeated channels, keeping the first occurrence.

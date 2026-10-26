@@ -1,7 +1,6 @@
 ---
 title: "Distributed tracing"
-description: "Follow one request through every service with OpenTelemetry: spans for HTTP, messages, gRPC, queries and jobs, trace context across every hop, OTLP export, trace ids in your logs, and Lighthouse."
-status: "planned"
+description: "Follow one request through every service with OpenTelemetry: spans for HTTP, outgoing calls, queries, jobs, cache and mail, W3C trace context across every hop, OTLP export, trace ids in your logs, and Lighthouse."
 ---
 
 ## Introduction
@@ -10,13 +9,13 @@ status: "planned"
 
 Navree records traces with [OpenTelemetry](https://opentelemetry.io), the open standard for them:
 
-- every request, message, gRPC call, GraphQL operation, query, job and mail is a span, named and labeled with OpenTelemetry's conventions;
-- the trace context travels with every hop: HTTP calls, messages and events, gRPC calls and queued jobs;
+- every request, outgoing call, query, job, scheduled task, cache call and mail is a span, named and labeled with OpenTelemetry's conventions; messages, gRPC calls and GraphQL operations are spans too, with their packages;
+- the trace context travels with every hop: HTTP calls in and out, queued jobs, and messages and gRPC calls with their packages;
 - spans go to any OpenTelemetry backend over OTLP;
-- every log line carries its trace id;
+- log lines written inside a request or job carry its trace id;
 - [Lighthouse](/docs/tools/lighthouse/) links each issue to the trace where it happened.
 
-Spans and propagation are always on, so trace ids appear in your logs from the first request. Export starts when you give Navree an endpoint.
+Propagation is always on, so trace ids appear in your logs and in the headers your app sends from the first request. Spans are built only when something reads them: the OTLP export, the `stdout` exporter, or `SpanRecorder` in a test. An app that exports nothing pays for a trace id per request and nothing else.
 
 ```text
 GET /api/v1/deals/{id}/move             crm-api         182 ms
@@ -24,43 +23,57 @@ GET /api/v1/deals/{id}/move             crm-api         182 ms
    +- process deals.move                deals           164 ms
       +- SELECT deals                   deals             2 ms
       +- UPDATE deals                   deals             3 ms
-      +- db.transaction commit          deals             4 ms
       +- publish deal.won               deals             2 ms
          +- process deal.won            notifications    38 ms
          |  +- INSERT notifications     notifications     2 ms
-         |  +- dispatch mail.send       notifications     1 ms
-         |     +- job mail.send         notifications   310 ms
+         |  +- job mail.send            notifications   310 ms
+         |     +- mail send             notifications   305 ms
          +- process deal.won            activities       12 ms
             +- INSERT activities        activities        2 ms
 ```
 
+Spans are made from Navree's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events): when a request is answered, a query runs or a job attempt ends, `ObserveModule` turns the event into a span of the request's or job's trace.
+
 ## Exporting traces
 
-Tracing is part of `ObserveModule`, in the `observe.tracing` section. Point it at an OTLP endpoint, usually an OpenTelemetry Collector:
+Tracing is part of `ObserveModule`, in the `observe.tracing` section. OTLP export needs the facade's `otel` feature. It is opt-in, not in `full`, because it adds the OpenTelemetry SDK, tonic and prost:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["otel"] }
+```
+
+`otel` turns on `observe` and adds the exporter; the default features stay on.
+
+Then point the section at an OTLP endpoint, usually an OpenTelemetry Collector:
 
 ```toml title="config/app.toml"
 [observe.tracing]
 endpoint = "http://127.0.0.1:4317"
 ```
 
-That's all a service needs. Its spans are named after `micro.service` (or `app.name`), batched in the background and sent over OTLP/gRPC.
+That's all a service needs. Its spans carry `service.name` from `micro.service` (or `app.name`), are batched in the background and sent over OTLP/gRPC. Without the `otel` feature, an `endpoint` in the configuration fails the boot with a message that names the feature, and one from `OTEL_EXPORTER_OTLP_ENDPOINT` is ignored with a warning.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `observe.tracing.enabled` | `true` | Record spans and propagate trace context. `false` turns both off. |
-| `observe.tracing.endpoint` | none | The OTLP endpoint. Without one, nothing is exported. |
-| `observe.tracing.protocol` | `grpc` | `grpc` (port 4317) or `http` (OTLP/HTTP with protobuf, port 4318). |
+| `observe.tracing.enabled` | `true` | Start traces and propagate trace context. `false` turns both off. |
+| `observe.tracing.endpoint` | none | The OTLP endpoint, `http://` or `https://`. Without one, nothing is exported. |
+| `observe.tracing.protocol` | `grpc` | `grpc` (port 4317) or `http` (OTLP/HTTP with protobuf, port 4318). For `http`, `/v1/traces` is added to an endpoint without a path. |
 | `observe.tracing.headers` | `{}` | Headers sent with every export, such as a vendor's API key. |
 | `observe.tracing.service_name` | `micro.service`, then `app.name`, then the binary's name | The `service.name` of every span. |
 | `observe.tracing.resource` | `{}` | Extra resource attributes, such as `{ "deployment.environment" = "production" }`. |
-| `observe.tracing.sample_ratio` | `1.0` | The share of new traces recorded. See [sampling](#sampling). |
+| `observe.tracing.sample_ratio` | `1.0` | The share of new traces recorded, from 0 to 1. See [sampling](#sampling). |
 | `observe.tracing.trust_incoming` | `true` | Continue traces from incoming `traceparent` headers. See [public edges](#public-edges). |
-| `observe.tracing.stdout` | `false` | Also print finished spans to stdout, for development. |
+| `observe.tracing.stdout` | `false` | Also print finished spans to stdout, one JSON object per line, for development. Works without the `otel` feature. |
 | `observe.tracing.timeout_ms` | `10000` | The time limit of one export. |
 | `observe.tracing.max_queue_size` | `2048` | Spans waiting for export; when full, new spans are dropped. |
-| `observe.tracing.trace_url` | none | Your backend's trace page, with `{trace_id}`, for [Lighthouse links](#lighthouse). |
+| `observe.tracing.trace_url` | none | Your backend's trace page, with `{trace_id}`, for [links to traces](#lighthouse). |
 
-As environment variables: `APP_OBSERVE__TRACING__ENDPOINT=http://otel-collector:4317`, `APP_OBSERVE__TRACING__SAMPLE_RATIO=0.2`. Navree also reads OpenTelemetry's standard variables, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLER_ARG` and `OTEL_RESOURCE_ATTRIBUTES`, for any setting the `observe.tracing` section doesn't set.
+An invalid value fails the boot with a message that names the key: a `sample_ratio` outside 0 to 1, a `timeout_ms` or `max_queue_size` of 0, an endpoint that isn't an `http://` or `https://` URL.
+
+As environment variables: `APP_OBSERVE__TRACING__ENDPOINT=http://otel-collector:4317`, `APP_OBSERVE__TRACING__SAMPLE_RATIO=0.2`. Navree also reads OpenTelemetry's standard variables for any setting the `observe.tracing` section doesn't set: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`grpc` or `http/protobuf`), `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_RESOURCE_ATTRIBUTES` (`key=value,key=value`), `OTEL_SERVICE_NAME` and `OTEL_TRACES_SAMPLER_ARG`.
+
+In code, inject `Arc<TracingOptions>` (from `navree::observe`): `ObserveModule` provides the section as it was read, with the variables applied and the service name resolved.
 
 ### Locally
 
@@ -76,14 +89,42 @@ APP_OBSERVE__TRACING__ENDPOINT=http://127.0.0.1:4317
 
 Click through the web app, then open `http://localhost:16686` and pick `crm-api`: each request is a trace, with the spans of every service it reached.
 
+Without a backend, set `observe.tracing.stdout = true` and read the spans in the terminal:
+
+```json title="One span, formatted"
+{
+  "name": "GET /api/v1/deals/{id}",
+  "kind": "server",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span_id": "a3ce929d0e0e4736",
+  "parent_span_id": "00f067aa0ba902b7",
+  "start": "2026-10-26T08:18:20.201542Z",
+  "end": "2026-10-26T08:18:20.384068Z",
+  "status": { "code": "unset" },
+  "attributes": {
+    "http.request.method": "GET",
+    "http.response.status_code": 200,
+    "http.route": "/api/v1/deals/{id}",
+    "navree.request_id": "01a17749fe5f71caaee8974e482b5659",
+    "url.path": "/api/v1/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23"
+  },
+  "links": []
+}
+```
+
 ## What is traced
 
-Navree names spans and sets attributes the way OpenTelemetry's semantic conventions say, so backends recognize HTTP, messaging, RPC and database spans and draw them accordingly.
+Navree names spans and sets attributes the way OpenTelemetry's semantic conventions say, so backends recognize HTTP, database, messaging and RPC spans and draw them accordingly.
 
 | What | Span name | Kind | Main attributes |
 |---|---|---|---|
-| An HTTP request | `GET /api/v1/deals/{id}` (method and route template) | server | `http.request.method`, `http.route`, `http.response.status_code`, `client.address`, `navree.request_id`, `enduser.id` |
-| An outgoing HTTP call (`HttpClient`) | `GET` | client | `http.request.method`, `server.address`, `url.full` (no query string), `http.response.status_code` |
+| An HTTP request | `GET /api/v1/deals/{id}` (method and route template) | server | `http.request.method`, `http.route`, `http.response.status_code`, `url.path`, `client.address`, `navree.request_id`, `enduser.id`, `navree.workspace_id` |
+| An outgoing HTTP call (`HttpClient`) | `GET` | client | `http.request.method`, `server.address`, `url.full` (no query string), `http.response.status_code`, `http.request.resend_count` |
+| A database query | `SELECT deals` | client | `db.system.name`, `db.operation.name`, `db.collection.name`, `db.query.text` |
+| A job run | `job contacts.export` | consumer | `navree.queue`, `navree.job_id`, `navree.attempt` |
+| A scheduled task run | `task prune-sessions` | internal | `navree.task` |
+| A cache call | `cache get`, `cache put`, `cache forget` | internal | `navree.cache.store`, `navree.cache.hit` |
+| A mail sent | `mail send` | client | `navree.mail.transport` |
 | A message sent | `send deals.move` | client | `messaging.system`, `messaging.destination.name`, `messaging.message.id`, `navree.service` |
 | A message handled | `process deals.move` | server | the same, plus `navree.reply_status` |
 | An event published | `publish deal.won` | producer | `messaging.system`, `messaging.destination.name`, `messaging.message.id` |
@@ -91,33 +132,37 @@ Navree names spans and sets attributes the way OpenTelemetry's semantic conventi
 | A gRPC call served | `crm.deals.v1.Deals/GetDeal` | server | `rpc.system`, `rpc.service`, `rpc.method`, `rpc.grpc.status_code` |
 | A gRPC call made | `crm.deals.v1.Deals/GetDeal` | client | the same |
 | A GraphQL operation | `query DealBoard`, `mutation MoveDeal` | internal | `graphql.operation.type`, `graphql.operation.name` |
-| A database query | `SELECT deals` | client | `db.system.name`, `db.operation.name`, `db.collection.name`, `db.query.text` |
-| A commit or rollback | `db.transaction commit` | internal | `navree.outcome` |
-| A job dispatched | `dispatch contacts.export` | producer | `navree.queue`, `navree.job_id` |
-| A job run | `job contacts.export` | consumer | `navree.queue`, `navree.job_id`, `navree.attempt` |
-| A cache call | `cache get` | internal | `navree.cache.store`, `navree.cache.hit` |
-| A mail sent | `mail send` | client | `navree.mail.transport` |
-| An in-process event | `emit deal.won` | internal | `navree.listeners` |
+
+The first seven come with the core modules; the messaging, gRPC and GraphQL spans come with [microservices](/docs/microservices/introduction/), [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/).
+
+- A request's span covers the whole request. Queries, outgoing calls, cache calls and mail sent while it runs are its children; so are its log lines, through their trace id.
+- An outgoing call is one span for all its attempts: `http.request.resend_count` says how many retries it took.
+- A job attempt is one span. The queries and calls of the handler are its children, and the job itself is a child of the span that dispatched it (see [context propagation](#context-propagation)).
+- Each scheduled task run starts a new trace.
+- Notifications, exceptions and log lines are telemetry events but not spans.
 
 Some rules hold for every span:
 
-- **No values from your data.** `db.query.text` is the statement with its placeholders, never the bound parameters; URLs lose their query string; payloads, bodies and headers are never recorded.
-- **Redaction applies.** An attribute whose name contains one of the `log.redact` fragments (`password`, `token`, `secret`, ...) is written as `[redacted]`, as in [logs](/docs/basics/logging/#redaction).
-- **Errors mark the span.** A 5xx response, an error reply, a failed job attempt or a failed query sets the span's status to error, with the error's message. A 4xx is a client's mistake, not the server's: an HTTP server span keeps status unset for it, as the conventions say.
+- **No values from your data.** `db.query.text` is the statement with its placeholders, never the bound parameters (a literal you write into the SQL yourself stays in it); URLs lose their query string and credentials; payloads, bodies and headers are never recorded.
+- **Errors mark the span.** A 5xx response, a failed outgoing call (a 5xx, or no response), a failed job attempt, a failed scheduled task or a failed query sets the span's status to error, with the error's message. A 4xx is a client's mistake, not the server's: an HTTP server span keeps status unset for it, as the conventions say.
 
 ## Context propagation
 
-Navree uses W3C Trace Context (`traceparent` and `tracestate`) and W3C Baggage on every hop, so spans from different services join the same trace, whatever language a service is written in:
+Navree uses W3C Trace Context (`traceparent` and `tracestate`) on every hop, so spans from different services join the same trace, whatever language a service is written in:
 
 | Hop | Carried in | The span on the other side is |
 |---|---|---|
 | HTTP into a Navree app | request headers | a child of the caller's span |
 | `HttpClient` out of a Navree app | request headers, added by Navree | a child of the `GET` client span |
+| Queued jobs, queued listeners, queued mail | the job's row (`jobs.trace_parent`) | `job` is a child of the span that dispatched it |
 | `ServiceClient::send` | message headers | `process` is a child of `send` |
 | `ServiceClient::emit` and forwarded events | message headers (and the outbox row) | each service's `process` is a child of `publish` |
 | gRPC, both ways | call metadata | a child of the caller's span |
-| Queued jobs, queued listeners, queued mail | the job's envelope | `job` is a child of `dispatch` |
 | GraphQL subscriptions | the WebSocket's `connection_init` | each event's span links to the subscription |
+
+- **Incoming HTTP.** navree-http reads `traceparent` and `tracestate` on every request. A valid header continues the caller's trace with a new span; a missing or malformed one starts a new trace. The `observe.tracing` keys `enabled`, `trust_incoming` and `sample_ratio` apply even without `ObserveModule`.
+- **Outgoing HTTP.** Inside a request or job, every `HttpClient` request carries a `traceparent` for a new client span of the current trace, and the current `tracestate`. A request that sets its own `traceparent` header keeps it.
+- **Queued jobs.** A job dispatched inside a request or job records that span's `traceparent` with the job (the `jobs.trace_parent` column, added by the queue's migrations). Each attempt continues that trace, whatever `trust_incoming` says, since the value came from your own app. Queued listeners and queued mail are jobs, so they follow. Jobs dispatched outside a request or job, and failed jobs retried with `navree queue:retry`, start a new trace.
 
 An event published through the [outbox](/docs/microservices/events/#the-outbox) keeps the context of the code that emitted it: the outbox stores it with the row, so the `publish` span sits under the request that changed the deal even when a relay on another instance sent it.
 
@@ -125,29 +170,11 @@ Browsers can join too. The app's CORS settings allow the `traceparent` and `trac
 
 ### Public edges
 
-By default an incoming `traceparent` is trusted: the request's spans join the caller's trace, and the caller's sampling decision holds. That's right between your own services and for your own front end. On an API that strangers call, a client could pick trace ids or force sampling on. Set `observe.tracing.trust_incoming = false` on the edge service: each request then starts a new trace, which keeps a link to the client's span so you can still follow it.
+By default an incoming `traceparent` is trusted: the request's spans join the caller's trace, and the caller's sampling decision holds. That's right between your own services and for your own front end. On an API that strangers call, a client could pick trace ids or force sampling on. Set `observe.tracing.trust_incoming = false` on the edge service: each request then starts a new trace, sampled by your own `sample_ratio`, whose span keeps a link to the client's span so you can still follow it.
 
-## Your own spans
+## Your own code in a trace
 
-Navree records spans through the [`tracing`](https://docs.rs/tracing) crate, which your app already uses for logs. Any span you create becomes an OpenTelemetry span, with its fields as attributes, in the right place in the tree:
-
-```rust title="services/deals/src/scoring.rs"
-use tracing::instrument;
-
-impl DealScorer {
-    /// Scores a deal against the owner's history. Shows up as `score_deal`
-    /// under the message or request that asked for it.
-    #[instrument(name = "score_deal", skip(self, uow), fields(deal_id = %deal.id))]
-    pub async fn score(&self, uow: &Uow, deal: &deal::Model) -> Result<u8> {
-        let history = self.history(uow, deal.owner_id).await?;
-        let score = compute(deal, &history);
-        tracing::Span::current().record("score", score);
-        Ok(score)
-    }
-}
-```
-
-Log lines written inside a span at `warn` or `error` are also recorded as span events, so the trace shows them at the moment they happened.
+Everything your handlers and jobs do through Navree is already in the trace: their queries, outgoing calls, cache calls, mail and the jobs they dispatch. Spans you open yourself with the [`tracing`](https://docs.rs/tracing) crate stay in your logs, where each line carries the trace id; they are not exported as spans.
 
 To show users a reference they can quote to support, read the current trace id:
 
@@ -157,37 +184,51 @@ use navree::observe::current_trace_id;
 let reference = current_trace_id().map(|id| id.to_string()).unwrap_or_default();
 ```
 
+It is `None` outside a request, job or scheduled task run, and when tracing is off. The same value is `navree::telemetry::current_trace_id()`; `TelemetryContext::current()` (in `navree::telemetry`) gives the whole context: the request or job id, the trace, the user and the workspace.
+
+Work you spawn onto another task leaves the request's context behind, since it is a task-local value. Wrap the future to keep it:
+
+```rust
+use navree::telemetry::TelemetryContext;
+
+tokio::spawn(TelemetryContext::propagate(async move {
+    // queries and calls here belong to the request's trace
+    refresh_forecast(&db, deal_id).await
+}));
+```
+
 ## Sampling
 
 Recording every trace is right in development and for most apps. At high volume, record a share of them with `observe.tracing.sample_ratio`:
 
 - the decision is made when a trace starts, from its trace id, so every service makes the same decision for the same trace;
-- a request that arrives with a `traceparent` follows the caller's decision, so traces are never cut in half;
-- unsampled requests still get a trace id: it is in the logs and propagated to the next service, but not exported.
+- a request that arrives with a trusted `traceparent` follows the caller's decision, and a queued job follows the request that dispatched it, so traces are never cut in half;
+- unsampled requests still get a trace id: it is in the logs and propagated to the next service, but none of their spans are built or exported.
 
 A ratio below `1.0` drops error traces too, since nobody knows at the start that a request will fail. To keep every trace with an error and a share of the rest, keep `sample_ratio = 1.0` and let an OpenTelemetry Collector make the decision at the end of each trace (tail sampling).
 
 ## Logs and traces
 
-Every log line written inside a span carries the trace id and the span id. In the JSON format, they sit next to the request id:
+Every log line written inside a request or job carries the trace id and the id of the request's or job's span. In the [JSON format](/docs/basics/logging/), they sit next to the request id:
 
 ```json title="One line, formatted"
 {
   "timestamp": "2026-10-26T08:18:20.384068Z",
   "level": "INFO",
-  "target": "notifications::alerts",
-  "fields": { "message": "owner notified", "deal_id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23" },
+  "target": "crm::deals",
+  "fields": { "message": "deal moved", "deal_id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23" },
   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-  "span_id": "00f067aa0ba902b7",
+  "span_id": "a3ce929d0e0e4736",
   "span": {
-    "name": "message",
-    "pattern": "deal.won",
+    "method": "POST",
+    "name": "request",
+    "path": "/api/v1/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/move",
     "request_id": "01a17749fe5f71caaee8974e482b5659"
   }
 }
 ```
 
-The request id stays the same across services too: `ServiceClient`, gRPC channels and queued jobs pass it on. Search your logs for a trace id to get the lines of every service that took part, or start from the logs and open the trace. In development, [Logbook](/docs/tools/logbook/) shows the same ids on its entries.
+Search your logs for a trace id to get the lines of every service that took part, or start from the logs and open the trace. To pass the request id on as well, add `.with_request_id(&request_id)` to an `HttpClient` request: it sends `X-Request-Id`, and the other Navree service uses it as its own request id. In development, [Logbook](/docs/tools/logbook/) shows the same ids on its entries.
 
 ## Lighthouse
 
@@ -199,67 +240,71 @@ endpoint = "http://otel-collector:4317"
 trace_url = "https://grafana.example.com/explore?traceId={trace_id}"
 ```
 
-Each occurrence of an issue then links to its trace. When `deal.won` keeps failing in the notifications service, you go from the issue to the trace and see the click in the web app, the `deals.move` message and the commit that led to it.
+Each occurrence of an issue then links to its trace. Your own pages can build the same link: `tracing_options.trace_link(&trace_id)` on the injected `TracingOptions` returns `trace_url` with the id filled in, or `None` when `trace_url` isn't set.
 
 ## In production
 
 - **Export to a Collector**, as an agent on each host or a gateway for the cluster, rather than straight to a vendor. The Collector batches, retries, samples by tail, and lets you change backends without redeploying services.
-- **Export never slows requests.** Spans are queued and sent in the background. When the queue is full (`max_queue_size`), new spans are dropped and counted in the `navree_tracing_spans_dropped_total` metric on `/metrics`.
-- **Shutdown flushes.** On Ctrl-C or SIGTERM, Navree exports what's left in the queue within the app's shutdown timeout.
-- **Resource attributes** identify each process: `service.name`, `service.version` (your crate's version), `service.instance.id` (unique per process), plus `observe.tracing.resource`.
+- **Export never slows requests.** Spans are queued and sent in the background, in batches of up to 512 every two seconds. When the queue is full (`max_queue_size`), new spans are dropped and counted in the `navree_tracing_spans_dropped_total` metric on `/metrics`. A failed or timed-out export is logged as a warning under the `navree::tracing` target.
+- **Shutdown flushes.** On Ctrl-C or SIGTERM, Navree exports what's left in the queue before the app stops.
+- **Resource attributes** identify each process: `service.name`, `service.instance.id` (unique per process), `service.version` (the `app.version` setting, when you set it), plus `observe.tracing.resource`.
+- **TLS** to an `https://` endpoint uses rustls with the ring provider, as the rest of Navree does.
 
 ## Testing
 
-`SpanRecorder` collects finished spans in memory. Install its exporter in place of the app's, then assert on the tree:
+`SpanRecorder` (from `navree::observe::testing`) collects finished spans in memory. Add its module to the app, then assert on the tree. This test sends a request with a `traceparent` to a route that calls another service through a faked `HttpClient`:
 
-```rust title="services/crm-api/tests/tracing.rs"
-use navree::micro::{MicroFake, Reply};
+```rust title="tests/tracing.rs"
+use navree::axum::http::Method;
+use navree::http_client::{FakeResponse, HttpClient};
 use navree::observe::testing::SpanRecorder;
 use navree::prelude::*;
-use navree::testing::{TestApp, principal};
+use navree::testing::TestApp;
 use serde_json::json;
-use uuid::Uuid;
 
 #[tokio::test]
-async fn a_message_joins_the_request_trace() {
+async fn the_rates_call_joins_the_request_trace() {
     let spans = SpanRecorder::new();
-    let micro = MicroFake::new();
+    let (client, server) = HttpClient::fake();
+    server.on(Method::GET, "https://rates.example.com/*", FakeResponse::new(200));
     let app = TestApp::builder()
         .config("observe.metrics", false)
         .module(ObserveModule::from_config())
-        .module(MicroModule::for_root(micro.transport()))
-        .module(GatewayModule)
-        .override_value(spans.exporter())
+        .module(HttpClientModule::from_config())
+        .module(RatesModule)
+        .module(spans.module())
+        .override_value(Arc::new(client))
         .build()
         .await;
-    micro.on("deals.get", Reply::json(&sample_deal()));
 
-    app.acting_as(principal(Uuid::now_v7()))
-        .get(&format!("/api/v1/deals/{}", Uuid::now_v7()))
+    app.client()
+        .get("/api/v1/rates/eur")
         .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
         .send()
         .await
         .assert_status(200);
 
-    let request = spans.find("GET /api/v1/deals/{id}");
-    let send = spans.find("send deals.get");
+    let request = spans.find("GET /api/v1/rates/{currency}");
+    let call = spans.find("GET");
     assert_eq!(request.trace_id.to_string(), "4bf92f3577b34da6a3ce929d0e0e4736");
-    assert_eq!(send.trace_id, request.trace_id);
-    assert_eq!(send.parent_span_id, Some(request.span_id));
-    assert_eq!(send.attributes["messaging.destination.name"], json!("deals.get"));
+    assert_eq!(call.trace_id, request.trace_id);
+    assert_eq!(call.parent_span_id, Some(request.span_id));
+    assert_eq!(call.attributes["url.full"], json!("https://rates.example.com/v1/eur"));
 
     app.shutdown().await.unwrap();
 }
 ```
 
-`spans.all()` returns every finished span, `spans.find(name)` the first with that name (and fails the test without one), and each recorded span has its `name`, `kind`, `trace_id`, `span_id`, `parent_span_id`, `status` and `attributes`. The recorder sees spans whether or not an endpoint is configured, so tests never export anything.
+`spans.all()` returns every finished span, `spans.find(name)` the first with that name (and fails the test with the names it has when there is none), `spans.find_all(name)` every one, and `spans.clear()` forgets them. Each `RecordedSpan` has its `name`, `kind` (`SpanKind`), `trace_id`, `span_id`, `parent_span_id`, `start`, `end`, `status` (`SpanStatus::Unset` or `SpanStatus::Error { message }`), `attributes` (JSON values by name) and `links`. The recorder sees the spans of sampled traces whether or not an endpoint is configured, so tests never export anything.
+
+To assert on the events themselves (requests, queries, jobs, mail), use [`TelemetryRecorder`](/docs/digging-deeper/health-and-metrics/#testing-with-telemetryrecorder).
 
 <LinkCards>
   <LinkCard href="/docs/basics/logging/" title="Logging">
     Formats, levels and redaction of the logs that carry trace ids.
   </LinkCard>
-  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health checks and metrics">
-    The other half of `ObserveModule`.
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health, metrics and telemetry">
+    The other half of `ObserveModule`, and the telemetry events spans are made from.
   </LinkCard>
   <LinkCard href="/docs/tools/lighthouse/" title="Lighthouse">
     Exceptions, slow requests and failed jobs, linked to their traces.

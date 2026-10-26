@@ -93,6 +93,7 @@ impl MemoryStore {
             payload: stored.job.payload.clone(),
             options: stored.job.options.clone(),
             attempts: stored.attempts,
+            trace_parent: stored.job.trace_parent.clone(),
         })
     }
 

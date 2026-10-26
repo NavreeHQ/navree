@@ -2059,6 +2059,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-timeout"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
+dependencies = [
+ "hyper",
+ "hyper-util",
+ "pin-project-lite",
+ "tokio",
+ "tower-service",
+]
+
+[[package]]
 name = "hyper-util"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2776,6 +2789,7 @@ dependencies = [
  "axum",
  "chrono",
  "garde",
+ "metrics",
  "navree-access",
  "navree-api",
  "navree-audit",
@@ -2804,6 +2818,7 @@ dependencies = [
  "navree-session",
  "navree-social",
  "navree-storage",
+ "navree-telemetry",
  "navree-testing",
  "navree-validation",
  "navree-view",
@@ -2979,6 +2994,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-kernel",
+ "navree-telemetry",
  "serde",
  "serde_json",
  "thiserror",
@@ -3071,6 +3087,7 @@ dependencies = [
  "navree-contracts",
  "navree-http",
  "navree-kernel",
+ "navree-telemetry",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -3158,6 +3175,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-kernel",
+ "navree-telemetry",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -3182,6 +3200,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-kernel",
+ "navree-telemetry",
  "reqwest",
  "rustls",
  "serde",
@@ -3211,6 +3230,7 @@ version = "0.1.0"
 dependencies = [
  "navree-config",
  "navree-kernel",
+ "navree-telemetry",
  "serde",
  "serde_json",
  "tempfile",
@@ -3255,6 +3275,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-kernel",
+ "navree-telemetry",
  "navree-view",
  "serde",
  "serde_json",
@@ -3277,6 +3298,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-mail",
+ "navree-telemetry",
  "navree-testing",
  "navree-view",
  "sea-orm",
@@ -3331,15 +3353,25 @@ name = "navree-observe"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "futures-util",
  "http",
  "http-body-util",
+ "hyper",
  "metrics",
  "metrics-exporter-prometheus",
  "navree-config",
  "navree-contracts",
  "navree-http",
+ "navree-http-client",
  "navree-kernel",
+ "navree-telemetry",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-proto",
+ "opentelemetry_sdk",
+ "prost",
+ "rustls",
  "serde",
  "serde_json",
  "subtle",
@@ -3360,6 +3392,7 @@ dependencies = [
  "navree-contracts",
  "navree-db",
  "navree-kernel",
+ "navree-telemetry",
  "navree-testing",
  "sea-orm",
  "sea-orm-migration",
@@ -3412,9 +3445,11 @@ dependencies = [
  "chrono",
  "croner",
  "futures-util",
+ "navree-config",
  "navree-contracts",
  "navree-db",
  "navree-kernel",
+ "navree-telemetry",
  "navree-testing",
  "sea-orm",
  "sea-orm-migration",
@@ -3514,6 +3549,18 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+]
+
+[[package]]
+name = "navree-telemetry"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "navree-kernel",
+ "rand 0.10.3",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -3638,6 +3685,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-mail",
+ "navree-telemetry",
  "navree-testing",
  "navree-view",
  "sea-orm",
@@ -3853,6 +3901,81 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "opentelemetry"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c1f1a6ac9c875a4941e4c7c085b61e8f4daa326de03b4701768c3491a6ad9ee"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry-http"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "302249bd8ee804789faaa7b5b2cbf79bc61cb864714079c644e3828af5b7e811"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http",
+ "opentelemetry",
+ "reqwest",
+]
+
+[[package]]
+name = "opentelemetry-otlp"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0756af24841e367128ef31c831999937b8b5c5197d47914590d8f4e2e88c2e1a"
+dependencies = [
+ "http",
+ "httpdate",
+ "opentelemetry",
+ "opentelemetry-http",
+ "opentelemetry-proto",
+ "opentelemetry_sdk",
+ "prost",
+ "reqwest",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tonic-types",
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d576f5dddc3299341bcd85a04be17b2564844c0c9563214f02d85f2524d1afae"
+dependencies = [
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "prost",
+ "tonic",
+ "tonic-prost",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "372a912db2974d1990207006fd0e3aa0ef3fd4ad3be43c65cfaadf2206866061"
+dependencies = [
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "opentelemetry",
+ "percent-encoding",
+ "portable-atomic",
+ "rand 0.9.5",
+ "thiserror",
+]
+
+[[package]]
 name = "ordered-float"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4002,6 +4125,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "pin-project"
+version = "1.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2466b2336ed02bcdca6b294417127b90ec92038d1d5c4fbeac971a922e0e0924"
+dependencies = [
+ "pin-project-internal",
+]
+
+[[package]]
+name = "pin-project-internal"
+version = "1.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c96395f0a926bc13b1c17622aaddda1ecb55d49c8f1bf9777e4d877800a43f8b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4113,6 +4256,38 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+dependencies = [
+ "anyhow",
+ "itertools 0.14.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
+dependencies = [
+ "prost",
 ]
 
 [[package]]
@@ -5536,6 +5711,56 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 
 [[package]]
+name = "tonic"
+version = "0.14.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac2a5518c70fa84342385732db33fb3f44bc4cc748936eb5833d2df34d6445ef"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-timeout",
+ "hyper-util",
+ "percent-encoding",
+ "pin-project",
+ "sync_wrapper",
+ "tokio",
+ "tokio-rustls",
+ "tokio-stream",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+ "webpki-roots",
+]
+
+[[package]]
+name = "tonic-prost"
+version = "0.14.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50849f68853be452acf590cde0b146665b8d507b3b8af17261df47e02c209ea0"
+dependencies = [
+ "bytes",
+ "prost",
+ "tonic",
+]
+
+[[package]]
+name = "tonic-types"
+version = "0.14.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73ab1b02061f83d519bba3caa167f88f261ef05720ab8ebc954ade70de3348e8"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tonic",
+]
+
+[[package]]
 name = "totp-rs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5561,7 +5786,9 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
+ "indexmap",
  "pin-project-lite",
+ "slab",
  "sync_wrapper",
  "tokio",
  "tokio-util",

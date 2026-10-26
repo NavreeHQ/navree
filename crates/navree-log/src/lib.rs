@@ -16,7 +16,12 @@
 //! - an optional **rotating log file** ([`FileLog`]: daily, hourly or never,
 //!   kept `keep_days`), written by a background thread and flushed when the
 //!   app shuts down;
-//! - `log` crate records bridged into `tracing`.
+//! - `log` crate records bridged into `tracing`;
+//! - **telemetry**: inside a request or job with a trace, JSON lines carry
+//!   its `trace_id` and `span_id`; every line that passes the level filter
+//!   is also a `LogRecord` event (fields redacted) for the telemetry sinks
+//!   that want logs: the current request's or job's app, else the app
+//!   whose `LoggerModule` booted last (see navree-telemetry).
 //!
 //! Settings come from [`LogOptions`], the `log` configuration section
 //! ([`LoggerModule::from_config`]) or [`LoggerModule::for_root`].
@@ -55,6 +60,7 @@ mod module;
 mod options;
 mod redact;
 mod subscriber;
+mod telemetry;
 
 pub use capture::CaptureWriter;
 pub use control::LogControl;

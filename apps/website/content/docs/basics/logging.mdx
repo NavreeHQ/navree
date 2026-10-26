@@ -199,6 +199,8 @@ One JSON object per line, for log collectors:
   "level": "INFO",
   "target": "my_app::deals",
   "fields": { "deal_id": 42, "message": "loading the deal", "password": "[redacted]" },
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span_id": "a3ce929d0e0e4736",
   "span": {
     "method": "GET",
     "name": "request",
@@ -220,6 +222,7 @@ One JSON object per line, for log collectors:
 
 - `timestamp` is UTC, RFC 3339. `level` is upper case.
 - `fields` holds the event's fields, the message included.
+- `trace_id` and `span_id` are the [trace](/docs/microservices/tracing/#logs-and-traces) of the request, job or scheduled task the line was written in. Both are absent outside one, and when `observe.tracing.enabled` is `false`.
 - `span` is the innermost span with its fields and `name`; `spans` lists every span from the outermost. Both are absent for events outside any span.
 
 ## The request log line

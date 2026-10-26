@@ -6,10 +6,11 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use navree_kernel::BoxError;
+use navree_telemetry::CacheOperation;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::cache::{Slot, negate};
+use crate::cache::{Slot, hit_or_miss, negate};
 use crate::{Cache, CacheError, Ttl};
 
 /// A view of a [`Cache`] whose entries belong to a set of tags, created by
@@ -107,26 +108,34 @@ impl TaggedCache {
     /// See [`Cache::has`].
     pub async fn has(&self, key: &str) -> Result<bool, CacheError> {
         let slot = self.slot(key).await?;
-        Ok(self.cache.store().get(&slot.full).await?.is_some())
+        let found = self.cache.store().get(&slot.full).await?.is_some();
+        self.cache.report(hit_or_miss(found), key);
+        Ok(found)
     }
 
     /// See [`Cache::forget`].
     pub async fn forget(&self, key: &str) -> Result<bool, CacheError> {
         let slot = self.slot(key).await?;
-        self.cache.store().forget(&slot.full).await
+        let removed = self.cache.store().forget(&slot.full).await?;
+        self.cache.report(CacheOperation::Forget, key);
+        Ok(removed)
     }
 
     /// See [`Cache::increment`].
     pub async fn increment(&self, key: &str, by: i64) -> Result<i64, CacheError> {
         let slot = self.slot(key).await?;
-        self.cache.store().increment(&slot.full, by).await
+        let value = self.cache.store().increment(&slot.full, by).await?;
+        self.cache.report(CacheOperation::Write, key);
+        Ok(value)
     }
 
     /// See [`Cache::decrement`].
     pub async fn decrement(&self, key: &str, by: i64) -> Result<i64, CacheError> {
         let slot = self.slot(key).await?;
         let by = negate(&slot.full, by)?;
-        self.cache.store().increment(&slot.full, by).await
+        let value = self.cache.store().increment(&slot.full, by).await?;
+        self.cache.report(CacheOperation::Write, key);
+        Ok(value)
     }
 
     /// See [`Cache::remember`].
