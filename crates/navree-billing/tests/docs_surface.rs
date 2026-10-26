@@ -10,7 +10,8 @@ use std::collections::BTreeSet;
 
 use navree_auth::{CurrentUser, User};
 use navree_billing::{
-    Billable, Billing, BillingError, BillingFake, BillingModule, BillingOptions, CheckoutUrl,
+    Billable, Billing, BillingError, BillingFake, BillingModule, BillingOptions, Checkout,
+    CheckoutUrl,
     FakeCheckout, Interval, Invoice, InvoicePaid, PaymentFailed, Proration, Subscribed,
     Subscription, SubscriptionCanceled, SubscriptionCreated, SubscriptionStatus,
     SubscriptionUpdated, TrialEnding,
@@ -281,6 +282,112 @@ async fn the_documented_routes_tables_and_commands() {
     ] {
         assert!(commands.contains(command), "{command} in {commands:?}");
     }
+}
+
+/// The rest of the page: the names it mentions in passing (the checkout's
+/// result, the error variants, the remaining checks and swaps, the fake's
+/// secret, the API version, the base URLs and the entities).
+#[test]
+fn the_names_the_page_mentions_in_passing() {
+    // "Checkout": `create` returns a `Checkout`, which converts into the
+    // `CheckoutUrl` response.
+    let checkout = Checkout {
+        id: "cs_1".into(),
+        url: "https://checkout.stripe.com/c/pay/cs_1".into(),
+        plan: "pro".into(),
+        interval: Interval::Yearly,
+        quantity: 3,
+        trial_days: Some(14),
+    };
+    assert_eq!(CheckoutUrl::from(checkout).url, "https://checkout.stripe.com/c/pay/cs_1");
+
+    // The errors the page names, with their statuses.
+    for (error, status) in [
+        (BillingError::UnknownPlan("gold".into()), 400),
+        (
+            BillingError::NoPrice {
+                plan: "pro".into(),
+                interval: "yearly",
+            },
+            400,
+        ),
+        (BillingError::UnknownMeter("x".into()), 400),
+        (BillingError::AlreadySubscribed, 409),
+        (BillingError::NoSubscription, 404),
+        (BillingError::NoCustomer, 404),
+    ] {
+        assert_eq!(error.to_app_error().status.as_u16(), status, "{error}");
+    }
+    let _ = Proration::NextInvoice;
+
+    // "Checking subscriptions" and "Trials".
+    let checks = |s: &Subscription| (s.ended(), s.is_trial_without_subscription());
+    let _ = checks;
+
+    // "Testing": the fake's secret and the fields `assert_checkout` returns.
+    let fake = |f: &BillingFake| {
+        let _: &str = f.webhook_secret();
+        let found = f.assert_checkout(|c| c.plan == "pro");
+        let _ = (
+            found.id,
+            found.url,
+            found.plan,
+            found.interval,
+            found.price_id,
+            found.quantity,
+            found.trial_days,
+            found.coupon,
+            found.customer_email,
+            found.metadata,
+        );
+    };
+    let _ = fake;
+
+    // "Configuration" and "Reference".
+    assert_eq!(navree_billing::STRIPE_API_VERSION, "2025-03-31.basil");
+    let options = BillingOptions::default();
+    assert_eq!(options.stripe.api_base, "https://api.stripe.com");
+    assert_eq!(options.paddle.api_base, None, "the environment's");
+    assert_eq!(options.paddle.base_url(), "https://sandbox-api.paddle.com");
+
+    // "Webhooks and events": the invoice events carry the currency, and
+    // their subscription and plan are options.
+    let invoice = |e: &InvoicePaid| -> (Option<uuid::Uuid>, Option<String>, String) {
+        (e.subscription_id, e.plan.clone(), e.currency.clone())
+    };
+    let _ = invoice;
+
+    // "The tables": the entities are in `navree::billing::entity`.
+    let _ = (
+        navree_billing::entity::customer::Entity,
+        navree_billing::entity::subscription::Entity,
+        navree_billing::entity::subscription_item::Entity,
+        navree_billing::entity::usage::Entity,
+        navree_billing::entity::event::Entity,
+    );
+}
+
+/// The remaining documented methods: the other swaps, the checkout's
+/// `interval`, `subscriptions` and `access`.
+#[allow(dead_code)]
+async fn the_other_documented_methods(billing: &Billing, workspace: &Workspace) {
+    let _ = billing
+        .checkout(workspace, "pro")
+        .interval(Interval::Yearly)
+        .create()
+        .await;
+    let _ = billing.swap_monthly(workspace, "pro").await;
+    let _ = billing
+        .swap_to(workspace, "pro", Some(Interval::Yearly), Proration::None)
+        .await;
+    let _: Result<Vec<Subscription>, BillingError> = billing.subscriptions(workspace).await;
+    let _: Result<Option<Subscription>, BillingError> = billing.access(workspace).await;
+}
+
+/// "Billable models": `Billable::from_request` finds a request's billable.
+#[allow(dead_code)]
+fn from_request_is_part_of_the_trait(parts: &mut http::request::Parts) {
+    let _ = <Workspace as Billable>::from_request(parts);
 }
 
 /// Registers users as the billable.
