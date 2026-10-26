@@ -8,6 +8,33 @@ use navree_contracts::AuthState;
 
 use crate::{ResolverKind, WorkspaceConfig};
 
+/// The workspace identifier (a slug or an id) a request names, and the
+/// resolver that found it: the resolvers of `config.resolvers` run in
+/// order and the first that finds one wins. Nothing is loaded or checked
+/// (use [`CurrentWorkspace`](crate::CurrentWorkspace) for the workspace
+/// itself); for middleware that needs to know which workspace a request is
+/// about, such as navree-i18n's locale negotiation.
+///
+/// ```
+/// use navree_workspace::{ResolverKind, WorkspaceConfig, requested_workspace};
+///
+/// let (parts, ()) = http::Request::builder()
+///     .header("X-Workspace", "acme")
+///     .body(())
+///     .unwrap()
+///     .into_parts();
+/// assert_eq!(
+///     requested_workspace(&WorkspaceConfig::default(), &parts),
+///     Some((ResolverKind::Header, "acme".to_owned()))
+/// );
+/// ```
+pub fn requested_workspace(
+    config: &WorkspaceConfig,
+    parts: &Parts,
+) -> Option<(ResolverKind, String)> {
+    identifier(config, parts)
+}
+
 /// The workspace identifier (a slug or an id) the request names, and the
 /// resolver that found it: the configured resolvers run in order and the
 /// first that finds one wins.

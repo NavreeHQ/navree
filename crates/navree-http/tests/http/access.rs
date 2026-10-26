@@ -472,6 +472,7 @@ async fn global_layers_applied_in_slot_order() {
     ])
     .authenticated()
     // Registered out of order on purpose.
+    .module(LayerModule::<5>(LayerSlot::Context, "context"))
     .module(LayerModule::<1>(LayerSlot::Uow, "uow"))
     .module(LayerModule::<2>(LayerSlot::Session, "session-a"))
     .module(LayerModule::<3>(LayerSlot::AuthContext, "auth-context"))
@@ -482,7 +483,7 @@ async fn global_layers_applied_in_slot_order() {
     let response = app.get("/api/trail").await;
     assert_eq!(
         response.text(),
-        "session-a,session-b,auth-context+auth,uow+auth",
+        "session-a,session-b,auth-context+auth,uow+auth,context+auth",
         "slots outermost first, module order within a slot, navree's authentication first in AuthContext"
     );
     // Global layers also wrap the 404 fallback.
