@@ -48,4 +48,5 @@ navree-macros = { workspace = true }
 rmcp = { workspace = true, features = ["client"] }
 sea-orm-migration = { workspace = true }
 tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
 trybuild = { workspace = true }
