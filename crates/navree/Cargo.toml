@@ -36,6 +36,7 @@ full = [
     "testing",
     "validation",
     "view",
+    "webhooks",
     "workspace",
 ]
 # Each module feature turns on the features of the navree crates it builds
@@ -84,6 +85,18 @@ workspace = [
     "events",
     "mail",
     "access",
+]
+## L6
+## Webhooks: signed outgoing deliveries with retries and a delivery log,
+## verified incoming webhooks (pure Rust; in `full`).
+webhooks = [
+    "dep:navree-webhooks",
+    "http",
+    "crypto",
+    "events",
+    "http-client",
+    "db",
+    "workspace",
 ]
 ## L6 (opt-in, not in `full`)
 ## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
@@ -135,6 +148,7 @@ navree-storage = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true, optional = true }
+navree-webhooks = { workspace = true, optional = true }
 
 # Re-exported as `navree::axum` (extractors such as `Path` and `Query`), with
 # the `http` feature.

@@ -49,6 +49,7 @@ navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
 navree-dock = { path = "crates/navree-dock", version = "0.1.0" }
 navree-social = { path = "crates/navree-social", version = "0.1.0" }
+navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -177,6 +178,8 @@ argon2 = "0.6.0"
 password-hash = { version = "0.6.1", features = ["alloc", "getrandom"] }
 hmac = "0.13.0"
 sha2 = "0.11.1"
+# HMAC-SHA1 for incoming webhook sources that still sign with SHA-1.
+sha1 = "0.11.0"
 subtle = "2.6.1"
 # JWS signatures (navree-social: RS256/ES256 ID tokens, the ES256 client secret
 # of Sign in with Apple). Already in the tree through rustls.

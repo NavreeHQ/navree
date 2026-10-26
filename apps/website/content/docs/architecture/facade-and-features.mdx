@@ -81,6 +81,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
+| `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 
 The facade's root also has:
 
@@ -104,7 +105,7 @@ The facade's root also has:
 | Validation | `Valid`, `ValidAsync`, `ValidationModule` |
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
-| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule` |
+| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
 
@@ -138,6 +139,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
+| `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
