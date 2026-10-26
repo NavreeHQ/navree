@@ -1,9 +1,9 @@
 ---
-title: "Health and metrics"
-description: "Liveness and readiness endpoints, custom health checks, and Prometheus metrics with an optional bearer token."
+title: "Health, metrics and telemetry"
+description: "Liveness and readiness endpoints, custom health checks, Prometheus metrics with an optional bearer token, and the typed telemetry events every module emits."
 ---
 
-<Badge feature="observe" /> Load balancers and orchestrators need to know whether your app is alive and ready for traffic, and you want numbers on how it behaves. `navree-observe` serves both: a liveness probe, a readiness probe that runs every registered health check, and a Prometheus endpoint with the request metrics Navree records for you.
+<Badge feature="observe" /> Load balancers and orchestrators need to know whether your app is alive and ready for traffic, and you want numbers on how it behaves. `navree-observe` serves both: a liveness probe, a readiness probe that runs every registered health check, and a Prometheus endpoint with the request metrics Navree records for you. Underneath, every module reports what it does as [telemetry events](#telemetry-events) that your own sinks can receive.
 
 ## Setup
 
@@ -226,6 +226,129 @@ Keep label values bounded (ids and paths make the number of series explode), and
 ### Turning metrics off
 
 With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mounted. Do that when another library installs its own `metrics` recorder: there is one per process, and `ObserveModule` fails the boot if another one is already installed.
+
+## Telemetry events
+
+<Badge feature="telemetry" /> Navree's modules report what they do as typed events: every request answered, query run, job attempt, scheduled task, mail, notification, cache call, outgoing HTTP call, exception and log line. [Tracing](/docs/microservices/tracing/) turns them into spans, [Lighthouse](/docs/tools/lighthouse/), [Logbook](/docs/tools/logbook/) and [Fleet](/docs/tools/fleet/) are built on them, and your own code can receive them by registering a **sink**. The types live in `navree::telemetry` (the `navree-telemetry` crate, in `full`).
+
+| Event | Emitted by | When | Fields |
+|---|---|---|---|
+| `RequestHandled` | `HttpModule` | a response is ready | `method`, `route` (the template, `None` when no route matched), `path`, `status`, `duration`, `user_id`, `workspace_id`, `request_id`, `client_ip` |
+| `QueryExecuted` | `DatabaseModule` | a statement ran | `sql` (with its placeholders, never the bound values), `duration`, `rows` (`None`: SeaORM doesn't report them), `connection` (the URL without its password), `failed` |
+| `JobProcessed` | queue workers | a job attempt succeeded | `queue`, `job_type`, `job_id`, `attempt`, `duration` |
+| `JobFailed` | queue workers | a job attempt failed, timed out or panicked | the same, plus `error` (the error chain) and `will_retry` |
+| `ScheduledTaskRan` | `ScheduleModule` | a task ran (skipped ticks aren't reported) | `task`, `tick`, `duration`, `error` |
+| `MailSent` | `MailModule` | the transport accepted a mail | `to`, `cc`, `bcc`, `from`, `subject`, `text`, `html`, `transport`, `duration` |
+| `NotificationSent` | `NotifyModule` | a notification went out on one channel | `notification_id`, `notification_type`, `notifiable_type`, `notifiable_id`, `channel` |
+| `CacheEvent` | `CacheModule` | a read hit or missed, a value was written, a key was forgotten | `operation` (`CacheOperation::Hit`, `Miss`, `Write`, `Forget`), `key` (without the prefix), `store` |
+| `HttpClientRequest` | `HttpClient` | an outgoing call finished, after its retries | `method`, `url` (no query string, fragment or credentials), `status`, `duration`, `attempts`, `error`, `span_id` |
+| `ExceptionReported` | `HttpModule`, or your code | a 500 (or a 5xx with an underlying error), a panicking handler | `message`, `chain` (the message, then each source's), `location` (the handler, or the panic's `file:line:column`), `panic`, `request` |
+| `LogRecord` | `LoggerModule` | a log line passed the level filter | `level`, `target`, `message`, `fields` (redacted, as in the output) |
+
+A sink receives each one as a `TelemetryRecord`: the `event` (a `TelemetryEvent`), the time it was emitted (`at`) and its `context`, an `EventContext` with the request id or job id, the trace, the user id and the workspace id of the request or job it happened in. Records serialize to JSON with a `type` tag (`{"type": "query_executed", "sql": ...}`) and durations in milliseconds, ready to store or send.
+
+### Writing a sink
+
+A sink implements `TelemetrySink`: `interest` names the kinds it wants (all of them by default) and `record` receives each record. Register it with `m.telemetry_sink::<S>()`; the container builds it like any provider:
+
+```rust title="src/modules/monitoring/mod.rs"
+use navree::prelude::*;
+use navree::telemetry::{EventKind, Interest, TelemetryEvent, TelemetryRecord, TelemetrySink};
+
+/// Counts failed job attempts by queue and job type, on `/metrics`.
+#[injectable]
+pub struct JobFailureMetrics;
+
+impl TelemetrySink for JobFailureMetrics {
+    fn interest(&self) -> Interest {
+        Interest::only([EventKind::JobFailed])
+    }
+
+    fn record(&self, record: &TelemetryRecord) {
+        if let TelemetryEvent::JobFailed(job) = &record.event {
+            metrics::counter!(
+                "job_failures_total",
+                "queue" => job.queue.clone(),
+                "job" => job.job_type.clone(),
+            )
+            .increment(1);
+        }
+    }
+}
+
+/// Registers the app's own telemetry sinks.
+#[module(register = Self::wire)]
+pub struct MonitoringModule;
+
+impl MonitoringModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.telemetry_sink::<JobFailureMetrics>();
+    }
+}
+```
+
+`m.telemetry_sink_value(sink)` registers a sink you built yourself, and `m.telemetry_sink_factory(Factory::<dyn TelemetrySink>::new(...))` one that needs setup. An app can have any number of sinks; each gets the kinds it asked for.
+
+- **`record` runs on the emitting task**, in the middle of a request, a query or a log call. Keep it short and never block: a sink that stores or sends records hands them to a channel and does the work in a background task.
+- **Interest is read once, at boot.** Sinks start receiving records once every provider is built, and stop at shutdown.
+- **A sink can't loop.** A record emitted while a sink on the same thread is receiving one (a sink that logs, say) is dropped, not delivered back.
+
+### What it costs
+
+An app without a sink has no telemetry registry: each emitter holds a disabled handle, and every event costs one branch on a `None`. With sinks, an emitter checks one atomic before building an event, so kinds that no sink wants are never built. The `RequestHandled` of an app whose only sink wants `JobFailed` costs one load per request.
+
+### Reporting your own errors
+
+Inside a request, job or scheduled task, `Telemetry::current()` is the app's registry. Report an error you handled yourself, with its source chain and your code's location:
+
+```rust
+use navree::telemetry::Telemetry;
+
+if let Err(error) = sync_calendar(&user).await {
+    Telemetry::current().report_exception(&error);
+}
+```
+
+Outside one, resolve the registry once with `Telemetry::from_app(ctx).await` and keep it. Both are disabled, and report nothing, when the app has no sink.
+
+### Testing with `TelemetryRecorder`
+
+`TelemetryRecorder` (from `navree::telemetry`) is a sink that keeps every record in memory. Add its module to a test app, then read what was emitted:
+
+```rust title="tests/telemetry.rs"
+use navree::axum::http::Method;
+use navree::http_client::{FakeResponse, HttpClient};
+use navree::prelude::*;
+use navree::telemetry::{EventKind, TelemetryRecorder};
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn the_rates_call_happens_inside_the_request() {
+    let recorder = TelemetryRecorder::new();
+    let (client, server) = HttpClient::fake();
+    server.on(Method::GET, "https://rates.example.com/*", FakeResponse::new(200));
+    let app = TestApp::builder()
+        .module(HttpClientModule::from_config())
+        .module(RatesModule)
+        .module(recorder.module())
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    app.client().get("/api/v1/rates/eur").send().await.assert_status(200);
+
+    let request = &recorder.requests()[0];
+    assert_eq!(request.route.as_deref(), Some("/api/v1/rates/{currency}"));
+    let call = &recorder.http_client_requests()[0];
+    assert_eq!(call.url, "https://rates.example.com/v1/eur");
+    let record = &recorder.of_kind(EventKind::HttpClientRequest)[0];
+    assert_eq!(record.context.request_id.as_deref(), Some(request.request_id.as_str()));
+
+    app.shutdown().await.unwrap();
+}
+```
+
+The recorder has one accessor per event: `requests()`, `queries()`, `jobs_processed()`, `jobs_failed()`, `scheduled_tasks()`, `mails()`, `notifications()`, `cache_events()`, `http_client_requests()`, `exceptions()` and `logs()`. `records()` returns every record with its context, `events()` every event, `of_kind(kind)` the records of one kind, and `clear()` forgets them. For events emitted by background work, such as a queued job, `recorder.wait_for(EventKind::JobProcessed, Duration::from_secs(5)).await` waits until one arrives and returns whether it did. `TelemetryRecorder::only([EventKind::QueryExecuted])` records only those kinds.
 
 ## Monitoring with Lighthouse
 
