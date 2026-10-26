@@ -1,6 +1,8 @@
 //! AWS Bedrock: the Converse API (`/model/{id}/converse`,
 //! `/converse-stream`) for chat and `InvokeModel` for Titan and Cohere
-//! embeddings, signed with SigV4.
+//! embeddings, signed with SigV4. Credentials come from the configuration,
+//! the environment or the shared credentials file, else from the platform's
+//! role (ECS or EKS container endpoint, EC2 instance metadata).
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -12,6 +14,7 @@ use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
 use url::Url;
 
+use super::aws_role::{RoleCredentials, RoleSource};
 use super::eventstream::{Decoder, EventMessage};
 use super::sigv4::{self, Credentials, Signable};
 use super::wire;
@@ -35,6 +38,7 @@ pub(crate) struct Bedrock {
     explicit: (Option<String>, Option<String>, Option<String>),
     profile: Option<String>,
     credentials: OnceLock<Option<Credentials>>,
+    role: RoleCredentials,
     http: HttpClient,
 }
 
@@ -60,11 +64,13 @@ impl Bedrock {
             ),
             profile: config.profile.clone(),
             credentials: OnceLock::new(),
+            role: RoleCredentials::new(RoleSource::from_env(|name| std::env::var(name).ok())),
             http,
         }
     }
 
-    fn credentials(&self) -> Option<&Credentials> {
+    /// Configured, environment or shared-file credentials.
+    fn static_credentials(&self) -> Option<&Credentials> {
         self.credentials
             .get_or_init(|| {
                 sigv4::resolve_credentials(
@@ -81,8 +87,24 @@ impl Bedrock {
             .as_ref()
     }
 
+    /// The credentials to sign with: static ones, else the platform role's.
+    async fn credentials(&self) -> Result<Credentials, ProviderError> {
+        if let Some(credentials) = self.static_credentials() {
+            return Ok(credentials.clone());
+        }
+        self.role
+            .get(Utc::now())
+            .await?
+            .ok_or_else(|| ProviderError::Auth {
+                message: "no AWS credentials: set access_key_id and secret_access_key, \
+                          AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, a shared credentials \
+                          profile, or run with an ECS, EKS or EC2 role"
+                    .to_owned(),
+            })
+    }
+
     /// A signed `POST {base}/model/{model}/{action}` with `body`.
-    fn post(
+    async fn post(
         &self,
         model: &str,
         action: &str,
@@ -94,11 +116,7 @@ impl Bedrock {
                 self.name.to_uppercase()
             ),
         })?;
-        let credentials = self.credentials().ok_or_else(|| ProviderError::Auth {
-            message: "no AWS credentials: set access_key_id and secret_access_key, \
-                      AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or a shared credentials profile"
-                .to_owned(),
-        })?;
+        let credentials = &self.credentials().await?;
         let base = self
             .base
             .clone()
@@ -169,7 +187,7 @@ impl Driver for Bedrock {
         Box::pin(async move {
             let body = body(request);
             let answer = wire::send_json(
-                self.post(&request.model, "converse", &body)?,
+                self.post(&request.model, "converse", &body).await?,
                 request.timeout,
                 wire::common_message,
             )
@@ -185,7 +203,7 @@ impl Driver for Bedrock {
         Box::pin(async move {
             let body = body(request);
             let response = wire::open_stream(
-                self.post(&request.model, "converse-stream", &body)?,
+                self.post(&request.model, "converse-stream", &body).await?,
                 request.timeout,
                 wire::common_message,
             )
@@ -227,7 +245,8 @@ impl Driver for Bedrock {
                         &request.model,
                         "invoke",
                         &json!({ "texts": request.texts, "input_type": "search_document" }),
-                    )?,
+                    )
+                    .await?,
                     request.timeout,
                     wire::common_message,
                 )
@@ -257,7 +276,7 @@ impl Driver for Bedrock {
                     body["dimensions"] = json!(dimensions);
                 }
                 let answer = wire::send_json(
-                    self.post(&request.model, "invoke", &body)?,
+                    self.post(&request.model, "invoke", &body).await?,
                     request.timeout,
                     wire::common_message,
                 )

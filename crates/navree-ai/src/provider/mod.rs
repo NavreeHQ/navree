@@ -18,6 +18,7 @@ use crate::options::ProviderConfig;
 use crate::response::{Finish, Usage};
 
 pub(crate) mod anthropic;
+pub(crate) mod aws_role;
 pub(crate) mod bedrock;
 #[cfg(test)]
 mod conformance;
