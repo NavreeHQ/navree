@@ -412,6 +412,30 @@ fn dock_is_reexported_with_its_feature() {
     assert_eq!(file.env()[0].1, "redis://127.0.0.1:6379");
 }
 
+/// `validation-phone` and `validation-html` add navree-validation's
+/// `Phone` and `SafeHtml`, and `full` turns both on.
+#[test]
+fn full_brings_the_international_validation_types() {
+    let features = Features::read();
+    let full = features.closure("full");
+    for feature in ["validation-phone", "validation-html"] {
+        assert!(full.contains(feature), "`full` lacks `{feature}`");
+        assert!(
+            features.closure(feature).contains("validation"),
+            "`{feature}` must turn on `validation`"
+        );
+    }
+}
+
+#[cfg(all(feature = "validation-phone", feature = "validation-html"))]
+#[test]
+fn phone_and_safe_html_are_reexported() {
+    let phone = navree::validation::Phone::parse("+44 7400 123456", None).unwrap();
+    assert_eq!(phone.as_str(), "+447400123456");
+    let html = navree::validation::SafeHtml::new("<b onclick=\"x()\">bold</b>");
+    assert_eq!(html.as_str(), "<b>bold</b>");
+}
+
 /// The opt-in ecosystem libraries are re-exported whole too.
 #[cfg(feature = "social")]
 #[test]
