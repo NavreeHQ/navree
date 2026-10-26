@@ -76,7 +76,9 @@ fn builder() -> TestAppBuilder {
         .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
         .module(AuthModule::from_config())
-        .module(AccessModule::for_root(navree::access::AccessOptions::default()))
+        .module(AccessModule::for_root(
+            navree::access::AccessOptions::default(),
+        ))
         .module(OAuthServerModule::from_config())
         .module(McpModule::from_config())
         .module(DealsModule)
@@ -162,7 +164,10 @@ async fn clients_find_the_apps_authorization_server_and_scopes() {
     assert_eq!(metadata["resource"], format!("{APP_URL}/mcp"));
     assert_eq!(metadata["authorization_servers"], json!([APP_URL]));
     // The OAuth server's scopes, unless `mcp.oauth.scopes` lists others.
-    assert_eq!(metadata["scopes_supported"], json!(["deals:read", "deals:write"]));
+    assert_eq!(
+        metadata["scopes_supported"],
+        json!(["deals:read", "deals:write"])
+    );
 
     // The authorization server it names is the app's own.
     app.client()

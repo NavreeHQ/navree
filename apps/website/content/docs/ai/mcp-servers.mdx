@@ -94,7 +94,7 @@ auth = "bearer"
 | `mcp.max_request_bytes` | `1048576` | The largest JSON-RPC message accepted; a larger one gets a 413. |
 | `mcp.oauth.resource` | `app.url` + `mcp.path` | With `auth = "oauth"`: the resource identifier clients request tokens for. |
 | `mcp.oauth.authorization_servers` | `[app.url]` | With `auth = "oauth"`: the issuers that grant tokens for it. |
-| `mcp.oauth.scopes` | `[]` | With `auth = "oauth"`: the scopes listed as `scopes_supported`. |
+| `mcp.oauth.scopes` | the names of `oauth.scopes`, else `[]` | With `auth = "oauth"`: the scopes listed as `scopes_supported`. By default, the scopes of your app's [OAuth server](/docs/packages/oauth-server/). |
 
 Invalid values fail the boot, naming the key. From the environment: `APP_MCP__AUTH=oauth`, `APP_MCP__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. In code, `McpModule::for_root(McpOptions { name: Some("navree-crm".into()), ..McpOptions::default() })`. The resolved settings are the `McpSettings` provider.
 
@@ -332,7 +332,7 @@ The endpoint authenticates every request; there is no anonymous MCP session. A t
 
 With `mcp.auth = "bearer"` (the default), clients send `Authorization: Bearer <token>`, and the token goes through your app's authenticators like any API request: a navree-auth access token, or a personal access token from the [OAuth server](/docs/packages/oauth-server/). A request without a valid token gets a 401 with `WWW-Authenticate: Bearer` (an authenticator's own challenge, such as `error="invalid_token"`, is kept).
 
-Personal access tokens suit MCP well: they are long-lived, revocable, and limited to the abilities you give them. A user creates one in your app's settings, limited to `deals.read` and `activities.create`, and pastes it into their client:
+Personal access tokens suit MCP well: they are long-lived, revocable, and limited to the scopes you give them. A user creates one in your app's settings, limited to scopes such as `deals:read` and `activities:write` (which grant the permissions `deals.read` and `activities.create`), and pastes it into their client:
 
 ```sh
 claude mcp add --transport http crm https://crm.example.com/mcp --header "Authorization: Bearer nvp_7Kq2..."
@@ -343,11 +343,11 @@ claude mcp add --transport http crm https://crm.example.com/mcp --header "Author
 With `mcp.auth = "oauth"`, MCP clients sign users in themselves, the way the MCP authorization spec describes. `McpModule` is the resource server: it serves the protected resource metadata (RFC 9728) and points clients at it. The authorization server is your app's [`OAuthServerModule`](/docs/packages/oauth-server/) by default, or any issuer you list in `mcp.oauth.authorization_servers`:
 
 1. The client calls `/mcp` without a token and gets a 401 with `WWW-Authenticate: Bearer resource_metadata="https://crm.example.com/.well-known/oauth-protected-resource/mcp"`.
-2. It reads that document (also served at `/.well-known/oauth-protected-resource`): the `resource`, its `authorization_servers`, `bearer_methods_supported`, the `resource_name` (`mcp.title`) and `scopes_supported` (`mcp.oauth.scopes`). Then it reads the authorization server's metadata and registers itself (dynamic client registration, when `oauth.dynamic_registration` is on).
+2. It reads that document (also served at `/.well-known/oauth-protected-resource`): the `resource`, its `authorization_servers`, `bearer_methods_supported`, the `resource_name` (`mcp.title`) and `scopes_supported` (`mcp.oauth.scopes`, by default the OAuth server's scopes such as `deals:read`). Then it reads the authorization server's metadata and registers itself (dynamic client registration, when `oauth.dynamic_registration` is on).
 3. It sends the user to the sign-in and consent screen with PKCE. The user approves the scopes the client asked for.
 4. It calls `/mcp` with the access token it received, which your app's authenticators check like any other bearer token.
 
-OAuth mode needs the `app.url` setting (or `mcp.oauth.resource` and `mcp.oauth.authorization_servers`); without it the boot fails. A token whose principal carries abilities is limited to them: a client granted `deals.read` sees `list_deals` and the deal resources, and not `log_activity`, even when the user could log activities in the app. Users see and revoke connected clients in your app, like any other OAuth client.
+OAuth mode needs the `app.url` setting (or `mcp.oauth.resource` and `mcp.oauth.authorization_servers`); without it the boot fails. A token is limited to its scopes' permissions, OAuth access tokens and personal access tokens alike: a client granted only `deals:read` sees `list_deals` and the deal resources, and not `log_activity`, even when the user could log activities in the app. Users see and revoke connected clients in your app, like any other OAuth client.
 
 ## Per-tool permissions
 

@@ -583,7 +583,10 @@ mod tests {
             ..oauth
         };
         let settings = McpSettings::resolve(&listed, Some(&app)).unwrap();
-        assert_eq!(settings.oauth.expect("oauth settings").scopes, ["deals:read"]);
+        assert_eq!(
+            settings.oauth.expect("oauth settings").scopes,
+            ["deals:read"]
+        );
     }
 
     #[test]
