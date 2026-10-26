@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+# {{ app }}: written by navree build:image. Once this file is in your app,
+# `navree build:image` builds with it, so change it as you like.
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release{% if locked %} --locked{% endif %} --package {{ app }}{% if features %} --features {{ features | join(",") }}{% endif %} \
+    && mkdir -p /out \
+    && cp target/release/{{ app }} /out/{{ app }}
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin app
+WORKDIR /app
+COPY --from=build /out/{{ app }} /app/{{ app }}
+{% for dir in include %}
+COPY {{ app_dir }}{{ dir }} /app/{{ dir }}
+{% endfor %}
+RUN mkdir -p /app/storage && chown 10001:10001 /app/storage
+VOLUME /app/storage
+USER 10001
+ENV APP_HTTP__ADDR=0.0.0.0:8080
+EXPOSE 8080
+ENTRYPOINT ["/app/{{ app }}"]
+CMD ["serve"]

@@ -1,8 +1,9 @@
 //! # navree-cli
 //!
 //! The library behind the `navree` command-line tool: it creates apps,
-//! generates code and runs the dev loop. It depends on no navree crate:
-//! everything it knows about the framework is in the code it generates.
+//! generates code, runs the dev loop and deploys. It depends on no runtime
+//! navree crate: everything it knows about the framework is in the code it
+//! generates. Deployment comes from navree-harbor, a tool crate.
 //!
 //! | Command | What it does |
 //! |---|---|
@@ -10,6 +11,7 @@
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test in a module ([`make::make_item`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
+//! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! Generators render MiniJinja templates embedded in the binary

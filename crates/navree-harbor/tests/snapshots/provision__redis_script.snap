@@ -1,0 +1,63 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+expression: "step(&steps(SINGLE, \"app-1\", &plain(), 1987), \"redis\").script"
+---
+# harbor: redis on app-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+harbor_installed redis-server || harbor_apt install redis-server
+harbor_file /etc/redis/harbor.conf 0640 redis:redis <<'HARBOR_EOF'
+# Written by navree harbor:provision.
+bind 127.0.0.1 -::1
+protected-mode yes
+requirepass RedisPassword456
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+HARBOR_EOF
+restart="$HARBOR_CHANGED"
+if ! grep -qx 'include /etc/redis/harbor.conf' /etc/redis/redis.conf; then
+	echo 'include /etc/redis/harbor.conf' >> /etc/redis/redis.conf
+	restart=1
+fi
+systemctl enable --now redis-server > /dev/null 2>&1
+if [ "$restart" = 1 ]; then
+	systemctl restart redis-server
+fi

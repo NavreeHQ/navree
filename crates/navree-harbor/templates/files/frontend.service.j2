@@ -1,0 +1,22 @@
+[Unit]
+Description={{ app }} front end (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ user }}
+WorkingDirectory={{ base }}/%i/frontend
+EnvironmentFile={{ etc }}/frontend-%i.env
+ExecStart=/bin/sh -c 'exec {{ frontend.command }}'
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
