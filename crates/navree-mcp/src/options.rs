@@ -126,8 +126,9 @@ pub struct McpOAuthOptions {
     /// Default: `[app.url]` (the app's own OAuth server).
     #[serde(deserialize_with = "list_or_csv")]
     pub authorization_servers: Vec<String>,
-    /// The scopes clients may request, listed as `scopes_supported`
-    /// (none by default).
+    /// The scopes clients may request, listed as `scopes_supported`.
+    /// Default: the names of the app's OAuth server scopes (the
+    /// `oauth.scopes` section), else none.
     #[serde(deserialize_with = "list_or_csv")]
     pub scopes: Vec<String>,
 }
@@ -192,8 +193,8 @@ impl ConfigSection for McpOptions {
 }
 
 /// The options with every default resolved (from `app.name`,
-/// `app.version`, `app.url` and the executable's name): what the module
-/// runs with. Provided and exported by `McpModule`.
+/// `app.version`, `app.url`, `oauth.scopes` and the executable's name):
+/// what the module runs with. Provided and exported by `McpModule`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct McpSettings {
     /// The endpoint path.
@@ -255,7 +256,8 @@ impl OAuthSettings {
 
 impl McpSettings {
     /// Resolves `options` against the app's configuration (`app.name`,
-    /// `app.version`, `app.url`); `config` is `None` without `ConfigModule`.
+    /// `app.version`, `app.url`, `oauth.scopes`); `config` is `None`
+    /// without `ConfigModule`.
     pub fn resolve(options: &McpOptions, config: Option<&Config>) -> Result<Self, String> {
         options.check().map_err(|errors| errors.join("; "))?;
         let setting = |key: &str| {
@@ -293,10 +295,15 @@ impl McpSettings {
                 } else {
                     options.oauth.authorization_servers.clone()
                 };
+                let scopes = if options.oauth.scopes.is_empty() {
+                    oauth_server_scopes(config)
+                } else {
+                    options.oauth.scopes.clone()
+                };
                 Some(OAuthSettings {
                     resource,
                     authorization_servers,
-                    scopes: options.oauth.scopes.clone(),
+                    scopes,
                 })
             }
         };
@@ -321,6 +328,23 @@ impl McpSettings {
             .iter()
             .any(|allowed| allowed.trim_end_matches('/').eq_ignore_ascii_case(origin))
     }
+}
+
+/// The names of the app's OAuth server scopes (the keys of the
+/// `oauth.scopes` section, sorted), or none without that section.
+fn oauth_server_scopes(config: Option<&Config>) -> Vec<String> {
+    config
+        .and_then(|config| {
+            config
+                .section::<serde_json::Map<String, serde_json::Value>>("oauth.scopes")
+                .ok()
+        })
+        .map(|scopes| {
+            let mut names: Vec<String> = scopes.keys().cloned().collect();
+            names.sort();
+            names
+        })
+        .unwrap_or_default()
 }
 
 /// The running executable's file name without its extension.
@@ -529,6 +553,37 @@ mod tests {
                 "resource_name": "CRM",
             })
         );
+    }
+
+    #[test]
+    fn oauth_scopes_default_to_the_oauth_servers_scopes() {
+        let oauth = McpOptions {
+            auth: McpAuth::Oauth,
+            ..McpOptions::default()
+        };
+        let app = config(json!({
+            "app": { "url": "https://crm.example.com" },
+            "oauth": { "scopes": {
+                "deals:read": { "description": "Read your deals", "permissions": ["deals.read"] },
+                "activities:write": { "description": "Log activities", "permissions": ["activities.create"] },
+            } },
+        }));
+        let settings = McpSettings::resolve(&oauth, Some(&app)).unwrap();
+        assert_eq!(
+            settings.oauth.expect("oauth settings").scopes,
+            ["activities:write", "deals:read"]
+        );
+
+        // `mcp.oauth.scopes` wins.
+        let listed = McpOptions {
+            oauth: McpOAuthOptions {
+                scopes: vec!["deals:read".to_owned()],
+                ..McpOAuthOptions::default()
+            },
+            ..oauth
+        };
+        let settings = McpSettings::resolve(&listed, Some(&app)).unwrap();
+        assert_eq!(settings.oauth.expect("oauth settings").scopes, ["deals:read"]);
     }
 
     #[test]
