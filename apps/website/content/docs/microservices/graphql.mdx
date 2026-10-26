@@ -1,7 +1,6 @@
 ---
 title: "GraphQL"
 description: "Serve a GraphQL API from your modules with `#[resolver]` on async-graphql: access rules on fields, validated inputs, per-request dataloaders, subscriptions over WebSockets and GraphiQL in development."
-status: "planned"
 ---
 
 ## Introduction
@@ -25,10 +24,10 @@ You get:
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
-async-graphql = { version = "7", features = ["uuid", "chrono"] }
+async-graphql = { version = "7.2", default-features = false, features = ["chrono", "dataloader", "uuid"] }
 ```
 
-The `graphql` feature isn't in the default `full` set. Add `GraphqlModule` to the app root:
+The `graphql` feature isn't in the default `full` set: turn it on yourself. It brings `navree::graphql` (the crate, plus the `#[resolver]` macro) and puts `GraphqlModule` and `ModuleBuilderGraphqlExt` in the prelude. Add `GraphqlModule` to the app root:
 
 ```rust title="src/app.rs"
 pub fn app(sources: ConfigSources) -> AppBuilder {
@@ -39,6 +38,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(CompaniesModule)
 }
 ```
+
+Fields that declare `#[roles]`, `#[permissions]` or `#[can]` need `AccessModule`, and fields that need a signed-in user need an authenticator (`AuthModule`); the boot fails, naming the field, when one is missing. The app also needs `DatabaseModule` for [units of work](#the-unit-of-work) and `EventsModule` for [subscriptions](#subscriptions).
 
 ## Configuration
 
@@ -55,15 +56,15 @@ complexity_limit = 500
 |---|---|---|
 | `graphql.path` | `/graphql` | The endpoint. Absolute: `http.api_prefix` doesn't apply. |
 | `graphql.graphiql` | `true` in debug builds | Serve GraphiQL to browsers that open the endpoint. |
-| `graphql.introspection` | `true` in debug builds | Answer introspection queries. |
+| `graphql.introspection` | `true` in debug builds | Answer introspection queries. When it's off, `__schema` and `__type` resolve to `null`. |
 | `graphql.depth_limit` | `16` | The deepest selection a query may nest. |
 | `graphql.complexity_limit` | `1000` | The highest complexity score a query may have (each field counts 1 unless it says otherwise). |
 | `graphql.batching` | `false` | Accept a JSON array of operations in one request. |
 | `graphql.subscriptions` | `true` | Serve subscriptions over WebSockets at `<path>/ws`. |
 | `graphql.connection_init_timeout_secs` | `10` | How long a WebSocket may wait before sending `connection_init`. |
-| `graphql.keep_alive_secs` | `15` | How often the server pings an idle WebSocket. |
+| `graphql.keep_alive_secs` | `15` | How often the server pings an idle WebSocket (`0` turns the pings off). |
 
-As environment variables: `APP_GRAPHQL__INTROSPECTION=false`, `APP_GRAPHQL__COMPLEXITY_LIMIT=300`. In code, `GraphqlModule::for_root(GraphqlOptions { depth_limit: 12, ..GraphqlOptions::default() })`.
+As environment variables: `APP_GRAPHQL__INTROSPECTION=false`, `APP_GRAPHQL__COMPLEXITY_LIMIT=300`. In code, `GraphqlModule::for_root(GraphqlOptions { depth_limit: 12, ..GraphqlOptions::default() })`. Invalid options (a relative `path`, a zero limit or timeout) fail the boot with the key's name.
 
 ## Types
 
@@ -179,21 +180,23 @@ impl DealResolver {
 }
 ```
 
-The arguments after `ctx` are GraphQL arguments, with async-graphql's attributes (`#[graphql(default = ..)]`, validators). Navree's request state comes from the context through `ContextExt`:
+A field method is a non-generic `async fn` taking `&self`, then optionally `ctx: &Context<'_>`, then its GraphQL arguments as plain names, with async-graphql's argument attributes (`#[graphql(default = ..)]`, validators). It returns a value or a `Result`. Doc comments become field descriptions, and a `#[graphql(..)]` attribute on the method (`name`, `deprecation`, `complexity`, ...) applies to the field. Methods without `#[query]`, `#[mutation]` or `#[subscription]` stay ordinary methods.
+
+Navree's request state comes from the context through `ContextExt`:
 
 | Method | Gives you |
 |---|---|
 | `ctx.uow()` | The [unit of work](#the-unit-of-work) of this field. |
-| `ctx.principal()` | The authenticated viewer; an `UNAUTHENTICATED` error for guests. |
-| `ctx.current_user().await` | The viewer's user record. |
+| `ctx.principal()` | The authenticated viewer (`&Principal`); an `UNAUTHENTICATED` error for guests. |
+| `ctx.current_user().await` | The viewer's user record (`AuthModule`). |
 | `ctx.abilities().await` | The viewer's abilities. |
 | `ctx.accessible::<E, A>().await` | A SQL filter for the records of `E` the viewer may `A`. |
 | `ctx.authorized::<E, A>()` | The record a `#[can(.., from = "arg")]` check loaded. |
-| `ctx.workspace()` | The current [workspace](/docs/workspaces/introduction/). |
+| `ctx.workspace().await` | The current [workspace](/docs/workspaces/introduction/), resolved and checked like the `CurrentWorkspace` extractor. |
 | `ctx.loader::<L>()` | This request's [dataloader](#dataloaders) of type `L`. |
-| `ctx.app()` | The `AppContext`, to resolve any provider. |
+| `ctx.app()?` | The `AppContext`, to resolve any provider. |
 
-`navree::graphql::Result<T>` is async-graphql's result. `?` works on `AppError`, database errors, `MicroError` and every other error, and Navree renders each with the status it has on HTTP (see [errors](#errors)).
+`navree::graphql::Result<T>` is async-graphql's result. `?` works on `AppError`, database errors and every other error, and Navree renders each with the status it has on HTTP (see [errors](#errors)).
 
 ### Registering resolvers
 
@@ -207,15 +210,15 @@ impl DealsModule {
 }
 ```
 
-At boot, Navree builds one schema from every registered resolver. Root fields from different modules sit side by side (`deal` from the deals module, `company` from the companies module). Two resolvers that define the same root field fail the boot, naming both and their modules.
+`m.resolver::<R>()` registers `R` as a provider of the module (with the module's visibility for its dependencies) and adds its fields to the schema. At boot, Navree builds one schema from every registered resolver. Root fields from different modules sit side by side (`deal` from the deals module, `company` from the companies module). Two resolvers that define the same root field fail the boot, naming both and their modules.
 
 A resolver's fields can call anything the module can see, so a GraphQL field and a REST route that share a service share its rules too. In a split system, the resolvers of the API service call the other services with [`ServiceClient`](/docs/microservices/request-response/) or [gRPC](/docs/microservices/grpc/), and GraphQL becomes the one API the front end talks to.
 
 ## Access
 
-Root fields are deny by default, like routes. Each needs `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`, on the method or on the impl block, or the resolver doesn't compile. `#[can(.., from = "id")]` reads the record's id from the field's `id` argument, loads it in the field's unit of work and checks it; `ctx.authorized::<E, A>()` hands it over.
+Root fields are deny by default, like routes. Each needs `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`, on the method or on the impl block (below `#[resolver]`), or the resolver doesn't compile. `#[can(.., from = "id")]` reads the record's id from the field's `id` argument (naming an argument the field doesn't have is a compile error), loads it in the field's unit of work and checks it; `ctx.authorized::<E, A>()` hands it over. The checks are the ones routes get: navree-access's route authorizer runs them when the field resolves.
 
-The endpoint itself is open to everyone; the checks run per field. A guest's query for `deal` gets an error for that field, while a `#[public]` field in the same query still resolves.
+The endpoint itself is open to everyone; the checks run per field. A guest's query for `deal` gets an `UNAUTHENTICATED` error for that field, while a `#[public]` field in the same query still resolves.
 
 Fields of object types (the `company` of a `Deal`) run after their parent resolved, so whoever may read the deal reaches them. When one nested field needs a check of its own, make it in the field:
 
@@ -233,11 +236,11 @@ impl DealObject {
 }
 ```
 
-Refusals are logged on target `navree::security` and, with an audit trail, recorded as `access.denied` with the field's path, as on routes.
+Refusals are logged on target `navree::security` and, with an audit trail, recorded as `access.denied` with the field's path in the entry's `field` metadata (next to `method` and `route`), as on routes.
 
 ## Validation
 
-Wrap an input object in `Valid<T>` and its garde rules run when the argument is parsed. Derive `InputObject` and `Validate` on the same struct:
+Wrap an input object in `Valid<T>`, the same `Valid` routes use, and its garde rules run before the field does. Derive `InputObject` and `Validate` on the same struct:
 
 ```rust title="src/deals/graphql/types.rs"
 use async_graphql::InputObject;
@@ -254,7 +257,7 @@ pub struct MoveDealInput {
 }
 ```
 
-A broken rule fails the field before the resolver runs, with every message and the field errors in `extensions`, under the argument's name:
+In the schema the argument has `T`'s type (`input: MoveDealInput!`). A broken rule fails the field before the resolver runs, after its access check, with every message and the field errors in `extensions`, under the argument's name:
 
 ```json title="200 OK"
 {
@@ -275,7 +278,7 @@ A broken rule fails the field before the resolver runs, with every message and t
 }
 ```
 
-The messages are the ones [validation](/docs/basics/validation/) gives everywhere else. async-graphql's own validators (`#[graphql(validator(..))]`) work too, for single arguments.
+The messages are the ones [validation](/docs/basics/validation/) gives everywhere else, with your app's message overrides. The keys and messages name the Rust fields (`input.lost_reason`), as on routes; several messages are joined with `; ` in `message`. `Valid<T>` works on the arguments of `#[resolver]` fields. async-graphql's own validators (`#[graphql(validator(..))]`) work too, for single arguments.
 
 ## Errors
 
@@ -288,9 +291,17 @@ A GraphQL response carries errors next to the data, so a failed field doesn't fa
 | `error` | The status's reason phrase. |
 | `errors` | Field errors, for validation failures. |
 
-A 404 from `?` on a missing record is `NOT_FOUND` with `"statusCode": 404`, and a server error keeps the message `"Internal server error"` while the real error is logged with the request id.
+How an error gets its status:
 
-The HTTP status of the response is `200` whenever the query ran, with or without field errors. A document that doesn't parse, breaks the schema, or goes over the depth or complexity limit is a `400` with the errors and no data. Invalid credentials are a `401` before the query runs, as on every route.
+- an `AppError` keeps its own (`AppError::conflict(..)` is a `CONFLICT`);
+- a database error maps as on routes: a missing record is `NOT_FOUND` with `"statusCode": 404`, a unique or foreign-key violation `CONFLICT`;
+- an error type a module maps with `m.map_error::<E>(..)` gets that mapping;
+- a plain message (`async_graphql::Error::new(..)`, a `String`) and async-graphql's own errors are `BAD_REQUEST`;
+- anything else is a server error: the message becomes `"Internal server error"` while the real error is logged on target `navree::error` with the request id.
+
+A `code` your resolver sets itself (with async-graphql's `extend_with`) is kept.
+
+The HTTP status of the response is `200` whenever the query ran, with or without field errors. A document that doesn't parse, breaks the schema, or goes over the depth or complexity limit is a `400` with the errors and no `data`. Invalid credentials are a `401` before the query runs, as on every route. A body that isn't `application/json` is a `415`: queries always come as JSON, which a form on another site can't send without a CORS preflight.
 
 ## Dataloaders
 
@@ -342,11 +353,11 @@ impl DealObject {
 }
 ```
 
-Navree creates a new `DataLoader` for every request, so its cache lives as long as one query: results are never shared between two viewers, and a mutation never reads a value cached before it. Loads requested in the same tick are batched into one call to `load`. Loaders read through the pool, outside the field's unit of work, and don't check access: load only what the parent field was allowed to show, or filter with `ctx.accessible` before you call the loader.
+Navree creates a new `DataLoader` for every request (`RequestLoader<L>`, around the app's one `L`), so its cache lives as long as one query: results are never shared between two viewers, and a mutation never reads a value cached before it. Loads requested in the same tick are batched into one call to `load`. Loaders read through the pool, outside the field's unit of work, and don't check access: load only what the parent field was allowed to show, or filter with `ctx.accessible` before you call the loader. Asking for a loader that wasn't registered is a programming error: `ctx.loader` panics, naming it.
 
 ## The unit of work
 
-Queries read: their fields share the request's unit of work, which never writes and commits nothing. Each **mutation** field runs in a unit of work of its own, because GraphQL runs a document's mutations one after another and each must succeed or fail on its own. The unit of work commits when the field returns `Ok` and rolls back when it returns an error, and then the next mutation runs. Jobs, notifications and events emitted in a mutation join its unit of work, as they would in a route.
+Queries read: the query fields of one operation share a unit of work that commits nothing (it's rolled back when the operation ends). Each **mutation** field runs in a unit of work of its own, because GraphQL runs a document's mutations one after another and each must succeed or fail on its own. The unit of work commits when the field returns `Ok` and rolls back when it returns an error, and then the next mutation runs. While a field's method runs, its unit of work is `Uow::current()`, so jobs, notifications and events emitted in a mutation join its unit of work, as they would in a route.
 
 ## Subscriptions
 
@@ -377,8 +388,9 @@ impl DealResolver {
 }
 ```
 
-- **Authentication.** Clients send their token in the `connection_init` payload, `{ "authorization": "Bearer <token>" }`, and Navree authenticates it with the app's authenticator. Browsers on the app's own origin may rely on the session cookie instead; the WebSocket's `Origin` must then be one of `http.cors.allowed_origins`.
-- **Access** is checked when the subscription starts. When the token's expiry passes, Navree closes the socket with code `4401`, and the client reconnects with a fresh token.
+- **Authentication.** Clients send their token in the `connection_init` payload, `{ "authorization": "Bearer <token>" }` (the key in any case), and Navree authenticates it with the app's authenticator; a token it refuses closes the socket with code `4403`. Without a token in the payload, the upgrade request's own authentication counts: an `Authorization` header from a non-browser client, or, for browsers on the app's own origin, the session cookie, but only when the WebSocket's `Origin` is one of `http.cors.allowed_origins`.
+- **Access** is checked when the subscription starts: a guest or a refused viewer gets one `next` message with the error, then `complete`. When the token's expiry (its `exp` claim) passes, Navree closes the socket with code `4401`, and the client reconnects with a fresh token.
+- **Timeouts.** A client that sends no `connection_init` within `graphql.connection_init_timeout_secs` is closed with code `4408`. The server sends a `ping` (`ka` on `graphql-ws`) every `graphql.keep_alive_secs`.
 - **Several instances.** An instance's event bus only sees events emitted in that instance. When the API runs on several instances, add `m.receive_event::<DealUpdated>()` from [navree-micro](/docs/microservices/events/#every-instance-broadcast), and events published by any instance or service reach every subscriber.
 
 A subscriber that falls more than 256 events behind skips the oldest, like any subscriber of the bus.
@@ -391,7 +403,13 @@ In development, open `http://localhost:8080/graphql` in a browser to get GraphiQ
 { "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..." }
 ```
 
-GraphiQL is served only when `graphql.graphiql` is on (debug builds by default). In release builds, a `GET` on the endpoint answers 405: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
+GraphiQL sends it with every query, and in the `connection_init` payload of its subscriptions. The page loads GraphiQL from unpkg.
+
+GraphiQL is served only when `graphql.graphiql` is on (debug builds by default) and only to requests that accept HTML. Any other `GET` on the endpoint answers 405, and so does every `GET` in release builds: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
+
+## Batching
+
+With `graphql.batching` on, the endpoint accepts a JSON array of operations and answers with an array of responses, in order. The operations run one after another, each with its own units of work. Without it, an array is a `400`.
 
 ## The schema as a file
 
@@ -401,13 +419,13 @@ The schema is code-first: your types and resolvers define it. `graphql:schema` p
 cargo run -- graphql:schema schema.graphql
 ```
 
-Commit `schema.graphql`, and check in CI that it's up to date:
+The path defaults to `schema.graphql`. Commit the file, and check in CI that it's up to date:
 
 ```sh
 cargo run -- graphql:schema schema.graphql --check
 ```
 
-`--check` exits with status 1 and prints the difference when the code's schema and the file disagree. Teams that design the schema first write the SDL, then implement resolvers until `--check` passes. A change that removes a field or an argument shows up in the diff before any client breaks.
+`--check` exits with status 1 and prints the difference when the code's schema and the file disagree (a missing file counts as empty; line endings don't count). Teams that design the schema first write the SDL, then implement resolvers until `--check` passes. A change that removes a field or an argument shows up in the diff before any client breaks.
 
 ## Testing
 
@@ -449,7 +467,7 @@ async fn deal_by_id_respects_access() {
 }
 ```
 
-To test without HTTP, `app.get::<GraphqlSchema>().await.execute(request)` runs an `async_graphql::Request` against the app's schema; add the viewer with `.data(principal(rep))`. `GraphqlSchema::sdl()` returns the SDL, for a test that compares it with `schema.graphql`.
+To test without HTTP, `app.get::<GraphqlSchema>().await.execute(request)` runs an `async_graphql::Request` against the app's schema and renders its errors as the endpoint does; add the viewer with `.data(principal(rep))`. `execute_batch` and `execute_stream` (for subscriptions) work the same way. `schema.sdl()` returns the SDL, for a test that compares it with `schema.graphql`.
 
 <LinkCards>
   <LinkCard href="/docs/basics/access-control/" title="Access control">

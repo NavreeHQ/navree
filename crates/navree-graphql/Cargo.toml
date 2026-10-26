@@ -1,0 +1,48 @@
+[package]
+name = "navree-graphql"
+description = "Navree GraphqlModule: a GraphQL API served from your modules on async-graphql, with access rules, dataloaders and subscriptions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-graphql = { workspace = true }
+axum = { workspace = true }
+base64 = { workspace = true }
+futures-util = { workspace = true }
+garde = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-validation = { workspace = true }
+navree-workspace = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+similar = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+navree-crypto = { workspace = true }
+navree-macros = { workspace = true }
+navree-testing = { workspace = true }
+sea-orm-migration = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+trybuild = { workspace = true }

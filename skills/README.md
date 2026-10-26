@@ -39,6 +39,7 @@ conventions, and says which skill to load for each task.
 | [`navree-deployment`](navree-deployment/SKILL.md) | Release builds, processes, systemd, proxies and health checks |
 | [`navree-security-checklist`](navree-security-checklist/SKILL.md) | What to check before shipping |
 | [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level |
+| [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
 
 ## Installing
 
