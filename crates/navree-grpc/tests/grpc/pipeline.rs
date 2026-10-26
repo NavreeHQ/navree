@@ -213,7 +213,9 @@ struct QuotaMapping;
 impl Module for QuotaMapping {
     fn register(&self, m: &mut ModuleBuilder) {
         m.map_error::<QuotaExceeded>(|_| {
-            Some(AppError::service_unavailable("the quota is used up, try later"))
+            Some(AppError::service_unavailable(
+                "the quota is used up, try later",
+            ))
         });
     }
 }

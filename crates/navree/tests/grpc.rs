@@ -399,8 +399,7 @@ async fn get_deal_checks_access() {
     let error = lookup
         .get(deal_id)
         .await
-        .err()
-        .expect("no client named deals");
+        .expect_err("no client named deals");
     assert_eq!(error.status.as_u16(), 500);
 
     app.shutdown().await.unwrap();
