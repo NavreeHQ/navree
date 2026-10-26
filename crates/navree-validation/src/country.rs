@@ -171,7 +171,10 @@ mod tests {
     #[test]
     fn the_table_is_sorted_and_complete() {
         assert_eq!(CODES.len(), 249);
-        assert!(CODES.windows(2).all(|w| w[0] < w[1]), "sorted, no duplicates");
+        assert!(
+            CODES.windows(2).all(|w| w[0] < w[1]),
+            "sorted, no duplicates"
+        );
         assert!(
             CODES
                 .iter()

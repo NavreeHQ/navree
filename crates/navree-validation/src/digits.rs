@@ -16,42 +16,42 @@ use crate::rules::RuleInput;
 /// digits 0 to 9 in order; the test below checks the table against the
 /// Unicode character database.
 const ZEROS: &[u32] = &[
-    0x0660, // Arabic-Indic
-    0x06F0, // Extended Arabic-Indic (Persian, Urdu)
-    0x07C0, // NKo
-    0x0966, // Devanagari
-    0x09E6, // Bengali
-    0x0A66, // Gurmukhi
-    0x0AE6, // Gujarati
-    0x0B66, // Oriya
-    0x0BE6, // Tamil
-    0x0C66, // Telugu
-    0x0CE6, // Kannada
-    0x0D66, // Malayalam
-    0x0DE6, // Sinhala Lith
-    0x0E50, // Thai
-    0x0ED0, // Lao
-    0x0F20, // Tibetan
-    0x1040, // Myanmar
-    0x1090, // Myanmar Shan
-    0x17E0, // Khmer
-    0x1810, // Mongolian
-    0x1946, // Limbu
-    0x19D0, // New Tai Lue
-    0x1A80, // Tai Tham Hora
-    0x1A90, // Tai Tham Tham
-    0x1B50, // Balinese
-    0x1BB0, // Sundanese
-    0x1C40, // Lepcha
-    0x1C50, // Ol Chiki
-    0xA620, // Vai
-    0xA8D0, // Saurashtra
-    0xA900, // Kayah Li
-    0xA9D0, // Javanese
-    0xA9F0, // Myanmar Tai Laing
-    0xAA50, // Cham
-    0xABF0, // Meetei Mayek
-    0xFF10, // Fullwidth
+    0x0660,  // Arabic-Indic
+    0x06F0,  // Extended Arabic-Indic (Persian, Urdu)
+    0x07C0,  // NKo
+    0x0966,  // Devanagari
+    0x09E6,  // Bengali
+    0x0A66,  // Gurmukhi
+    0x0AE6,  // Gujarati
+    0x0B66,  // Oriya
+    0x0BE6,  // Tamil
+    0x0C66,  // Telugu
+    0x0CE6,  // Kannada
+    0x0D66,  // Malayalam
+    0x0DE6,  // Sinhala Lith
+    0x0E50,  // Thai
+    0x0ED0,  // Lao
+    0x0F20,  // Tibetan
+    0x1040,  // Myanmar
+    0x1090,  // Myanmar Shan
+    0x17E0,  // Khmer
+    0x1810,  // Mongolian
+    0x1946,  // Limbu
+    0x19D0,  // New Tai Lue
+    0x1A80,  // Tai Tham Hora
+    0x1A90,  // Tai Tham Tham
+    0x1B50,  // Balinese
+    0x1BB0,  // Sundanese
+    0x1C40,  // Lepcha
+    0x1C50,  // Ol Chiki
+    0xA620,  // Vai
+    0xA8D0,  // Saurashtra
+    0xA900,  // Kayah Li
+    0xA9D0,  // Javanese
+    0xA9F0,  // Myanmar Tai Laing
+    0xAA50,  // Cham
+    0xABF0,  // Meetei Mayek
+    0xFF10,  // Fullwidth
     0x104A0, // Osmanya
     0x10D30, // Hanifi Rohingya
     0x10D40, // Garay
@@ -273,9 +273,7 @@ impl<T: garde::rules::AsStr> garde::rules::AsStr for Folded<T> {
     }
 }
 
-impl<T: garde::rules::length::HasSimpleLength> garde::rules::length::HasSimpleLength
-    for Folded<T>
-{
+impl<T: garde::rules::length::HasSimpleLength> garde::rules::length::HasSimpleLength for Folded<T> {
     fn length(&self) -> usize {
         self.0.length()
     }
@@ -340,7 +338,10 @@ mod tests {
                 None => {}
             }
         }
-        assert!(missed.is_empty(), "decimal digits the table misses: {missed:?}");
+        assert!(
+            missed.is_empty(),
+            "decimal digits the table misses: {missed:?}"
+        );
     }
 
     #[test]

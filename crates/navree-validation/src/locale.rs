@@ -190,7 +190,9 @@ mod tests {
 
     #[test]
     fn malformed_tags_are_rejected() {
-        for input in ["", "e", "en_US", "en-", "-en", "123", "en--GB", "en GB", "ëñ"] {
+        for input in [
+            "", "e", "en_US", "en-", "-en", "123", "en--GB", "en GB", "ëñ",
+        ] {
             let error = Locale::parse(input).unwrap_err();
             assert_eq!(
                 error.to_string(),

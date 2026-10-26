@@ -195,7 +195,13 @@ async fn international_numbers_become_e164_in_any_digits() {
 #[tokio::test]
 async fn invalid_numbers_are_field_errors() {
     let app = app_with(PhoneTestModule).await;
-    for phone in ["+44 12", "hello", "", "+999 1234 5678", "+44 7400 123456 789 012"] {
+    for phone in [
+        "+44 12",
+        "hello",
+        "",
+        "+999 1234 5678",
+        "+44 7400 123456 789 012",
+    ] {
         let response = app
             .client()
             .post("/phone/contacts")

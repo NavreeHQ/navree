@@ -505,7 +505,10 @@ mod tests {
                 .allow_attributes("img", ["src"]),
         );
         let html: SafeHtml = images.scope(|| serde_json::from_str(input)).unwrap();
-        assert_eq!(html.as_str(), r#"<p>a <img src="https://x.example/a.png"></p>"#);
+        assert_eq!(
+            html.as_str(),
+            r#"<p>a <img src="https://x.example/a.png"></p>"#
+        );
         assert_eq!(serde_json::to_value(&html).unwrap(), html.as_str());
         assert_eq!(SafeHtml::new("<b onclick=x>b</b>").into_inner(), "<b>b</b>");
     }
