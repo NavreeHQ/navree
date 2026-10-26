@@ -1,0 +1,63 @@
+[package]
+name = "navree-micro"
+description = "Navree MicroModule: request-response messages and events between services, with the same modules, guards, validation and unit of work as HTTP routes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## NATS (core request-reply, JetStream for durable events).
+nats = []
+## Kafka.
+kafka = []
+## RabbitMQ (AMQP 0-9-1).
+rabbitmq = []
+## Redis Streams.
+redis = []
+## MQTT 5.
+mqtt = []
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-testing = { workspace = true }
+navree-validation = { workspace = true }
+percent-encoding = { workspace = true }
+rmp-serde = { workspace = true }
+rustls = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+webpki-roots = { workspace = true }
+
+[dev-dependencies]
+garde = { workspace = true }
+navree-access = { workspace = true }
+navree-macros = { workspace = true }
+rcgen = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+trybuild = { workspace = true }
