@@ -81,6 +81,36 @@ async fn slow_queries_are_logged_at_warn_without_bound_values() {
     );
 }
 
+/// A MySQL or MariaDB URL without the `mysql` feature names the feature;
+/// with it, the error is the driver's. The password never shows.
+#[tokio::test]
+async fn mysql_urls_name_the_feature_they_need() {
+    let connect = |url: &str| {
+        let options = DbOptions {
+            url: url.to_owned(),
+            connect_timeout_secs: 1,
+            ..DbOptions::default()
+        };
+        async move { Db::connect(&options).await.unwrap_err().to_string() }
+    };
+    let mysql = "mysql://navree:hunter2@127.0.0.1:1/app";
+    let mariadb = "mariadb://navree:hunter2@127.0.0.1:1/app";
+    // Concurrently: with the driver, each waits for the pool's timeout.
+    let (mysql_error, mariadb_error) = tokio::join!(connect(mysql), connect(mariadb));
+    for (url, error) in [(mysql, mysql_error), (mariadb, mariadb_error)] {
+        assert!(
+            error.contains(&format!("cannot connect to {}", url.replace("hunter2", "***"))),
+            "{error}"
+        );
+        assert!(!error.contains("hunter2"), "{error}");
+        assert_eq!(
+            error.contains("(enable the `mysql` feature of navree-db)"),
+            !cfg!(feature = "mysql"),
+            "{error}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn log_queries_logs_every_statement_at_debug() {
     let temp = TempDb::new();

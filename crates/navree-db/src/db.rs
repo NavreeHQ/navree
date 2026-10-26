@@ -11,7 +11,7 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbBackend, DbErr};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-use crate::options::url_password;
+use crate::options::{driver_url, scheme, url_password};
 use crate::{ChangeObserver, DbOptions, Reader, Uow};
 
 /// How long SQLite waits for a lock before failing with `SQLITE_BUSY`.
@@ -21,7 +21,10 @@ const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
 ///
 /// Provided (and exported) by `DatabaseModule`; inject `Arc<Db>` or take a
 /// [`Uow`](crate::Uow) per request. SQLite connections use WAL,
-/// `busy_timeout = 5000` and `foreign_keys = ON`.
+/// `busy_timeout = 5000` and `foreign_keys = ON`. MySQL and MariaDB
+/// connections (`mysql://` or `mariadb://`, the `mysql` feature) run in
+/// the UTC time zone with `utf8mb4`, and in strict SQL mode unless
+/// `database.mysql.strict` is `false` (see [`MySqlOptions`](crate::MySqlOptions)).
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<DbInner>,
@@ -38,8 +41,26 @@ struct DbInner {
 
 impl Db {
     /// Opens a pool for `options` (creating the directory of a SQLite file).
+    ///
+    /// The URL's scheme picks the driver: `sqlite:`, `postgres://` (the
+    /// `postgres` feature), `mysql://` or `mariadb://` (the `mysql`
+    /// feature). A URL whose driver is not compiled in fails with a message
+    /// naming the feature to turn on.
+    ///
+    /// ```no_run
+    /// # async fn demo() -> Result<(), sea_orm::DbErr> {
+    /// use navree_db::{Db, DbOptions};
+    ///
+    /// let db = Db::connect(&DbOptions {
+    ///     url: "mariadb://crm:secret@127.0.0.1:3306/crm".into(),
+    ///     ..DbOptions::default()
+    /// })
+    /// .await?;
+    /// assert_eq!(db.backend(), sea_orm::DbBackend::MySql);
+    /// # Ok(()) }
+    /// ```
     pub async fn connect(options: &DbOptions) -> Result<Db, DbErr> {
-        let mut connect = ConnectOptions::new(options.url.clone());
+        let mut connect = ConnectOptions::new(driver_url(&options.url).into_owned());
         connect
             .max_connections(options.max_connections)
             .min_connections(options.min_connections)
@@ -53,6 +74,10 @@ impl Db {
                     .busy_timeout(SQLITE_BUSY_TIMEOUT)
                     .foreign_keys(true)
             });
+        }
+        #[cfg(feature = "mysql")]
+        if crate::options::is_mysql_url(&options.url) {
+            crate::mysql::configure(&mut connect, &options.mysql);
         }
         let mut conn = Database::connect(connect)
             .await
@@ -223,23 +248,27 @@ fn install_query_log(conn: &mut DatabaseConnection, log_queries: bool, slow_quer
 }
 
 /// A connection error that names the database without its password (the
-/// driver's own message may echo the URL).
+/// driver's own message may echo the URL), with the feature to turn on
+/// when the URL's driver is not compiled in.
 fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
+    let redacted = options.redacted_url();
     let mut message = error
         .to_string()
-        .replace(&options.url, &options.redacted_url());
+        .replace(&options.url, &redacted)
+        .replace(driver_url(&options.url).as_ref(), &redacted);
     if let Some(password) = url_password(&options.url) {
         message = message.replace(password, "***");
     }
-    let hint = if options.url.starts_with("postgres") && !cfg!(feature = "postgres") {
-        " (enable the `postgres` feature of navree-db)"
-    } else {
-        ""
+    let hint = match scheme(&options.url).as_deref() {
+        Some("postgres" | "postgresql") if !cfg!(feature = "postgres") => {
+            " (enable the `postgres` feature of navree-db)"
+        }
+        Some("mysql" | "mariadb") if !cfg!(feature = "mysql") => {
+            " (enable the `mysql` feature of navree-db)"
+        }
+        _ => "",
     };
-    DbErr::Custom(format!(
-        "cannot connect to {}: {message}{hint}",
-        options.redacted_url()
-    ))
+    DbErr::Custom(format!("cannot connect to {redacted}: {message}{hint}"))
 }
 
 fn is_sqlite_url(url: &str) -> bool {

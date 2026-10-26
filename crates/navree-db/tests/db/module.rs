@@ -68,6 +68,54 @@ async fn plain_module_reads_environment_variables() {
 }
 
 #[tokio::test]
+async fn mysql_settings_come_from_the_database_mysql_section() {
+    let temp = TempDb::new();
+    let from_file = Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::new().set(
+            "database",
+            json!({ "url": temp.url, "mysql": { "strict": false } }),
+        )))
+        .module(DatabaseModule::from_config())
+        .boot()
+        .await
+        .expect("boots");
+    let options = from_file.ctx().get::<DbOptions>().await.unwrap();
+    assert!(!options.mysql.strict);
+
+    let from_env = Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_DATABASE__URL", temp.url.as_str()),
+                ("APP_DATABASE__MYSQL__STRICT", "false"),
+            ],
+        )))
+        .module(DatabaseModule)
+        .boot()
+        .await
+        .expect("boots");
+    assert!(
+        !from_env
+            .ctx()
+            .get::<DbOptions>()
+            .await
+            .unwrap()
+            .mysql
+            .strict
+    );
+
+    let defaults = Navree::app()
+        .module(ConfigModule::for_root(
+            ConfigSources::new().set("database", json!({ "url": temp.url })),
+        ))
+        .module(DatabaseModule::from_config())
+        .boot()
+        .await
+        .expect("boots");
+    assert!(defaults.ctx().get::<DbOptions>().await.unwrap().mysql.strict);
+}
+
+#[tokio::test]
 async fn invalid_database_config_fails_the_boot() {
     let error = Navree::app()
         .module(ConfigModule::for_root(

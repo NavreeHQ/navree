@@ -44,3 +44,9 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# Against a real MySQL server: `NAVREE_TEST_MYSQL_URL` (see tests/mysql/main.rs).
+[[test]]
+name = "mysql"
+path = "tests/mysql/main.rs"
+required-features = ["mysql"]
