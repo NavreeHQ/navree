@@ -70,6 +70,15 @@ fn opt_in_crates_are_reexported_with_their_feature() {
     assert_eq!(navree::oauth::pkce_challenge(&verifier), challenge);
 }
 
+/// `navree::ai` is navree-ai re-exported whole, and the `ai` feature puts
+/// `AiModule` in the prelude (`cargo test -p navree --features ai --test facade`).
+#[cfg(feature = "ai")]
+#[test]
+fn ai_is_reexported_with_its_feature() {
+    assert!(same::<navree::ai::AiModule, AiModule>());
+    assert!(same::<navree::ai::Ai, navree::ai::Ai>());
+}
+
 /// The kernel names an app's `main` and root module use most.
 #[test]
 fn kernel_essentials_sit_at_the_root() {
@@ -376,8 +385,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries an app turns on by
-/// name (`features = ["social"]`, `features = ["oauth"]`, `features = ["flags"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags"];
+/// name (`features = ["social"]`, `features = ["oauth"]`, `features = ["flags"]`,
+/// `features = ["ai"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "ai"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {

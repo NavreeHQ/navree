@@ -124,6 +124,17 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // AI SDK: outgoing provider calls go through navree-http-client (its SSRF
+    // guard); conversation memory and pgvector use navree-db; agents run as a
+    // navree-auth user with navree-access abilities and report tool argument
+    // errors with navree-validation's messages; budgets and the embeddings
+    // cache use navree-cache; attachments read navree-storage disks; it
+    // re-exports `#[agent]` from navree-macros.
+    rule("navree-ai", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-http-client", "navree-cache", "navree-db", "navree-storage", "navree-validation",
+        "navree-access", "navree-auth",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -189,6 +200,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-ai",
 ];
 
 /// Cargo dependency kind of an edge.

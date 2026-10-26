@@ -244,13 +244,16 @@ pub enum MakeKind {
     Policy,
     /// `commands/<name>.rs`: a CLI command, registered with the module.
     Command,
+    /// `agents/<name>.rs`: an AI agent with one tool, registered with the
+    /// module (needs the `ai` feature of `navree`).
+    Agent,
     /// `tests/<name>.rs`: a test booting the module.
     Test,
 }
 
 impl MakeKind {
     /// Every kind, in `navree help` order.
-    pub const ALL: [MakeKind; 12] = [
+    pub const ALL: [MakeKind; 13] = [
         MakeKind::Controller,
         MakeKind::Service,
         MakeKind::Entity,
@@ -262,6 +265,7 @@ impl MakeKind {
         MakeKind::Notification,
         MakeKind::Policy,
         MakeKind::Command,
+        MakeKind::Agent,
         MakeKind::Test,
     ];
 
@@ -279,6 +283,7 @@ impl MakeKind {
             MakeKind::Notification => "notification",
             MakeKind::Policy => "policy",
             MakeKind::Command => "command",
+            MakeKind::Agent => "agent",
             MakeKind::Test => "test",
         }
     }
@@ -297,6 +302,7 @@ impl MakeKind {
             MakeKind::Notification => "notifications",
             MakeKind::Policy => "policies",
             MakeKind::Command => "commands",
+            MakeKind::Agent => "agents",
             MakeKind::Test => "tests",
         }
     }
@@ -315,6 +321,7 @@ impl MakeKind {
             MakeKind::Notification => "Notifications",
             MakeKind::Policy => "Ability policies",
             MakeKind::Command => "CLI commands",
+            MakeKind::Agent => "AI agents",
             MakeKind::Test => "Tests",
         };
         format!("//! {what} of the {module_words} module.\n")
@@ -457,6 +464,12 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
         MakeKind::Command => Some(call(
             "m.command",
             &[format!("commands::{stem}::command()")],
+            WIRE_INDENT,
+        )),
+        MakeKind::Agent => Some(generic_call(
+            "navree::ai::ModuleBuilderAiExt::agent",
+            &[format!("agents::{stem}::{pascal}")],
+            "m",
             WIRE_INDENT,
         )),
         MakeKind::Migration if new_dir => Some(call(
@@ -607,6 +620,11 @@ pub fn make_item(
             module.snake(),
             ctx.table
         )),
+        MakeKind::Agent => report.hints.push(
+            "agents need the `ai` feature of navree (features = [\"ai\"]) and \
+             `AiModule::from_config()` in the app"
+                .to_owned(),
+        ),
         MakeKind::Listener if options.event.is_none() => report.hints.push(format!(
             "subscribe it in the module's `wire`: navree::events::ModuleBuilderEventsExt::listen::<SomeEvent, listeners::{stem}::{}>(m);",
             ctx.pascal
