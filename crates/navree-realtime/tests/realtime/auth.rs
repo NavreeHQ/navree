@@ -78,6 +78,7 @@ async fn auth_endpoint_accepts_json_and_validates_fields() {
             "statusCode": 400,
             "message": ["channel_name should not be empty", "socket_id should not be empty"],
             "error": "Bad Request",
+            "code": "validation_failed",
             "errors": {
                 "channel_name": ["channel_name should not be empty"],
                 "socket_id": ["socket_id should not be empty"],

@@ -85,11 +85,14 @@ snake_case; module names are plural. Generators never overwrite a file.
   error with `?` is a logged 500. Every error response has one JSON shape:
 
   ```json
-  { "statusCode": 404, "message": "Not Found", "error": "Not Found" }
+  { "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
   ```
 
-  Validation errors are 400s whose `message` lists every problem, plus
-  `"errors": { "field": ["field should not be empty"] }`.
+  `code` is the stable machine-readable code a front end maps to a
+  translation key; give a refusal its own with
+  `AppError::conflict("..").with_code("invoice_already_sent")`. Validation
+  errors are 400s (`"code": "validation_failed"`) whose `message` lists
+  every problem, plus `"errors": { "field": ["field should not be empty"] }`.
 - **Database.** Entities are SeaORM entities with UUID v7 ids
   (`Uuid::now_v7()`); set `created_at` and `updated_at` yourself. Services
   take the request's `&Uow` as a parameter; write with

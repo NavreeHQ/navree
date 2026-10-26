@@ -65,7 +65,12 @@ async fn post_with_session_without_xsrf_is_403() {
         .assert_error(403, "Invalid CSRF token");
     assert_eq!(
         response.json_value(),
-        json!({"statusCode": 403, "message": "Invalid CSRF token", "error": "Forbidden"})
+        json!({
+            "statusCode": 403,
+            "message": "Invalid CSRF token",
+            "error": "Forbidden",
+            "code": "csrf_token_mismatch",
+        })
     );
     assert!(response.header("x-request-id").is_some());
 }
