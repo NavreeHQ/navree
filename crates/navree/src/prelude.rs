@@ -99,5 +99,10 @@ pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
 
+#[cfg(feature = "micro")]
+pub use crate::message_handlers;
+#[cfg(feature = "micro")]
+pub use navree_micro::{MicroModule, ModuleBuilderMicroExt as _, Payload, ServiceClient};
+
 #[cfg(feature = "oauth")]
 pub use navree_oauth::{OAuthServerModule, OAuthToken};

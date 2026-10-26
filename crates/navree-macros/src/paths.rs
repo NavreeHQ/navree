@@ -39,6 +39,12 @@ pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {
     facade_module: "flags",
 };
 
+/// navree-micro: `MessageHandlers`, `PatternDef` (`#[message_handlers]`).
+pub(crate) const MICRO: RuntimeCrate = RuntimeCrate {
+    package: "navree-micro",
+    facade_module: "micro",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

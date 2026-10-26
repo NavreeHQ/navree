@@ -207,6 +207,18 @@ impl AppError {
         }
     }
 
+    /// Takes the error out of a response rendered by
+    /// [`into_response`](IntoResponse::into_response), so a pipeline other
+    /// than the HTTP server's (navree-micro's message handlers) can map and
+    /// log it the way the HTTP error layer does. `None` for any other
+    /// response, and once the error has been taken.
+    pub fn take_from(response: &mut Response) -> Option<AppError> {
+        response
+            .extensions_mut()
+            .remove::<PendingError>()
+            .and_then(|pending| pending.take())
+    }
+
     /// Renders the response (the pipeline sets `X-Request-Id` itself).
     pub(crate) fn render(&self) -> Response {
         let body = serde_json::to_vec(&self.wire()).unwrap_or_default();
@@ -375,8 +387,10 @@ impl ErrorMapper {
         }
     }
 
-    /// Applies the first matching mapper to `error`'s source chain.
-    pub(crate) fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
+    /// Applies the first matching mapper to `error`'s source chain (what the
+    /// HTTP error layer does with a 500 that has a source); `None` when no
+    /// mapper matches.
+    pub fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
         let mut next: Option<&(dyn StdError + 'static)> = error
             .source
             .as_deref()
@@ -537,6 +551,34 @@ mod tests {
             })
         );
         assert!(error.log_chain().contains("hunter2"), "logged, not sent");
+    }
+
+    #[test]
+    fn take_from_returns_the_error_a_response_carries_once() {
+        let mut response = AppError::conflict("Taken").into_response();
+        let error = AppError::take_from(&mut response).expect("the pending error");
+        assert_eq!(error.status, StatusCode::CONFLICT);
+        assert_eq!(error.detail.as_deref(), Some("Taken"));
+        assert!(AppError::take_from(&mut response).is_none(), "taken once");
+        let mut plain = (StatusCode::OK, "fine").into_response();
+        assert!(AppError::take_from(&mut plain).is_none());
+    }
+
+    #[test]
+    fn mappers_apply_to_the_source_chain() {
+        #[derive(Debug)]
+        struct Missing;
+        impl fmt::Display for Missing {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("missing")
+            }
+        }
+        impl StdError for Missing {}
+        let mappers = [ErrorMapper::new::<Missing>(|_| Some(AppError::not_found()))];
+        let mapped = ErrorMapper::apply(&mappers, &AppError::internal(Missing)).expect("mapped");
+        assert_eq!(mapped.status, StatusCode::NOT_FOUND);
+        assert!(ErrorMapper::apply(&mappers, &AppError::internal("other")).is_none());
+        assert!(ErrorMapper::apply(&[], &AppError::internal(Missing)).is_none());
     }
 
     #[test]
