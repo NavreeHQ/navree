@@ -10,8 +10,8 @@ builder's calls (marked).
   the user required a .com domain. The user bought **navree.com** on Cloudflare
   on 2026-10-26, and the site will be deployed there. crates.io `navree` and
   `navree-*` were free, and so was the npm name. The GitHub name `navree` is
-  taken (`navree-rs` and `navreehq` were free), so `repoUrl` stays a marked
-  placeholder until the user creates the organisation.
+  taken, so the user created the **NavreeHQ** organisation; the repository is
+  `NavreeHQ/navree` (`repoUrl`).
 - **Privacy:** the public site doesn't name the people behind the name unless
   the user asks for a dedication.
 - **Look: neon green on black.**
@@ -60,7 +60,7 @@ Builder's calls on how it gets made:
   - system UI sans with a monospace for code.
   
   New logo and favicon: a simple hull/keel mark that works at 16 px.
-- **Configuration.** All site-wide strings live in one `site.config.ts`: the name, tagline, `repoUrl` and the install command. The GitHub URL isn't decided yet, so it is a placeholder marked TODO there and listed for the user.
+- **Configuration.** All site-wide strings live in one `site.config.ts`: the name, tagline, `repoUrl` and the install command. The repository is `https://github.com/NavreeHQ/navree`.
 
 ### Pages
 1. **Landing (`/`).**
