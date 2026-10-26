@@ -1,45 +1,45 @@
 /*
- * Long-form technical writing: the docs body (`.prose-navis`) and the MDX
- * components. Selectors inside `.prose-navis` use :where() so any component
+ * Long-form technical writing: the docs body (`.prose-navree`) and the MDX
+ * components. Selectors inside `.prose-navree` use :where() so any component
  * class overrides them without a specificity fight.
  */
 
-.prose-navis {
+.prose-navree {
   color: var(--color-fg-1);
   font-size: 1.0625rem;
   line-height: 1.75;
   overflow-wrap: break-word;
 }
 
-:where(.prose-navis) > :first-child {
+:where(.prose-navree) > :first-child {
   margin-top: 0;
 }
 
-:where(.prose-navis) :where(p, ul, ol, blockquote, dl) {
+:where(.prose-navree) :where(p, ul, ol, blockquote, dl) {
   margin-block: 1.15em;
 }
 
-:where(.prose-navis) :where(h2, h3, h4) {
+:where(.prose-navree) :where(h2, h3, h4) {
   color: var(--color-fg);
   font-weight: 650;
   text-wrap: balance;
 }
 
-:where(.prose-navis) h2 {
+:where(.prose-navree) h2 {
   margin: 3.25rem 0 1rem;
   font-size: 1.625rem;
   line-height: 1.25;
   letter-spacing: -0.022em;
 }
 
-:where(.prose-navis) h3 {
+:where(.prose-navree) h3 {
   margin: 2.5rem 0 0.75rem;
   font-size: 1.25rem;
   line-height: 1.35;
   letter-spacing: -0.012em;
 }
 
-:where(.prose-navis) h4 {
+:where(.prose-navree) h4 {
   margin: 2rem 0 0.5rem;
   font-size: 1.0625rem;
   line-height: 1.4;
@@ -67,7 +67,7 @@
   color: var(--color-accent);
 }
 
-:where(.prose-navis) a:not(.heading-anchor, .link-card) {
+:where(.prose-navree) a:not(.heading-anchor, .link-card) {
   color: var(--color-accent);
   text-decoration-line: underline;
   text-decoration-color: rgb(61 255 143 / 0.35);
@@ -75,39 +75,39 @@
   text-underline-offset: 3px;
   transition: text-decoration-color 150ms;
 }
-:where(.prose-navis) a:not(.heading-anchor, .link-card):hover {
+:where(.prose-navree) a:not(.heading-anchor, .link-card):hover {
   text-decoration-color: var(--color-accent);
 }
 
-:where(.prose-navis) :where(strong, b) {
+:where(.prose-navree) :where(strong, b) {
   color: var(--color-fg);
   font-weight: 620;
 }
 
-:where(.prose-navis) ul {
+:where(.prose-navree) ul {
   list-style: disc;
   padding-left: 1.35em;
 }
-:where(.prose-navis) ol {
+:where(.prose-navree) ol {
   list-style: decimal;
   padding-left: 1.5em;
 }
-:where(.prose-navis) li {
+:where(.prose-navree) li {
   margin-block: 0.4em;
   padding-left: 0.2em;
 }
-:where(.prose-navis) li::marker {
+:where(.prose-navree) li::marker {
   color: var(--color-fg-3);
 }
-:where(.prose-navis) ol > li::marker {
+:where(.prose-navree) ol > li::marker {
   font-variant-numeric: tabular-nums;
 }
-:where(.prose-navis) li > :where(ul, ol) {
+:where(.prose-navree) li > :where(ul, ol) {
   margin-block: 0.4em;
 }
 
 /* Inline code. */
-:where(.prose-navis) :not(pre) > code {
+:where(.prose-navree) :not(pre) > code {
   padding: 0.12em 0.38em;
   border: 1px solid var(--color-line);
   border-radius: 5px;
@@ -116,32 +116,32 @@
   font-size: 0.84em;
   white-space: break-spaces;
 }
-:where(.prose-navis) a > code {
+:where(.prose-navree) a > code {
   color: inherit;
 }
-:where(.prose-navis) :where(h2, h3, h4) code {
+:where(.prose-navree) :where(h2, h3, h4) code {
   font-size: 0.86em;
 }
 
-:where(.prose-navis) blockquote {
+:where(.prose-navree) blockquote {
   padding-left: 1.1em;
   border-left: 2px solid var(--color-line-2);
   color: var(--color-fg-2);
 }
 
-:where(.prose-navis) hr {
+:where(.prose-navree) hr {
   margin-block: 3rem;
   border: 0;
   border-top: 1px solid var(--color-line);
 }
 
-:where(.prose-navis) img {
+:where(.prose-navree) img {
   max-width: 100%;
   border: 1px solid var(--color-line);
   border-radius: 10px;
 }
 
-:where(.prose-navis) kbd {
+:where(.prose-navree) kbd {
   padding: 0.05em 0.4em;
   border: 1px solid var(--color-line-2);
   border-bottom-width: 2px;

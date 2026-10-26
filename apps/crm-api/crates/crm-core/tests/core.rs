@@ -6,12 +6,12 @@ use crm_core::embeds::{CompanyRef, ContactRef, OwnerRef};
 use crm_core::entities::{activity, company, contact, deal};
 use crm_core::enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
 use crm_core::{CrmCoreModule, permissions, platform};
-use navis::access::{AbilityFactory, AccessService};
-use navis::audit::AuditLog;
-use navis::auth::{AuthService, User};
-use navis::db::{Db, Migrator};
-use navis::prelude::*;
-use navis::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+use navree::access::{AbilityFactory, AccessService};
+use navree::audit::AuditLog;
+use navree::auth::{AuthService, User};
+use navree::db::{Db, Migrator};
+use navree::prelude::*;
+use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, EntityTrait};
 use serde_json::Value;
@@ -24,7 +24,7 @@ struct Core {
 
 fn sources(url: String) -> ConfigSources {
     ConfigSources::new()
-        .set("app.key", navis::crypto::generate_key())
+        .set("app.key", navree::crypto::generate_key())
         .set("database.url", url)
         .set("database.migrate_on_boot", true)
         .set("http.per_ip_rate_limit", Value::Null)
@@ -38,7 +38,7 @@ fn sources(url: String) -> ConfigSources {
 async fn boot() -> Core {
     let (url, db) = temp_sqlite_url();
     let app =
-        TestApp::from_builder(platform(Navis::app(), sources(url)).module(CrmCoreModule)).await;
+        TestApp::from_builder(platform(Navree::app(), sources(url)).module(CrmCoreModule)).await;
     Core { app, _db: db }
 }
 
@@ -75,7 +75,7 @@ async fn crm_migrations_run_after_auth_and_access() {
 #[tokio::test]
 async fn every_crm_table_round_trips_its_columns() {
     let core = boot().await;
-    let owner = user(&core, "Priya Shah", "rep1@navis.test").await;
+    let owner = user(&core, "Priya Shah", "rep1@navree.test").await;
     let db = core.app.get::<Db>().await;
     let conn = db.conn();
     let now = Utc.with_ymd_and_hms(2026, 10, 26, 9, 30, 0).unwrap();
@@ -180,7 +180,7 @@ async fn every_crm_table_round_trips_its_columns() {
     assert_eq!(found, Some(call));
 
     // Enum columns hold the contract strings, which ability conditions see.
-    let record = navis::access::record_json(&renewal);
+    let record = navree::access::record_json(&renewal);
     assert_eq!(record["stage"], "negotiation");
     assert_eq!(record["owner_id"], owner.id.to_string());
     core.app.shutdown().await.expect("shutdown");
@@ -242,8 +242,8 @@ async fn roles_seeder_creates_the_roles_once() {
 #[tokio::test]
 async fn embeds_load_names_by_id() {
     let core = boot().await;
-    let priya = user(&core, "Priya Shah", "rep1@navis.test").await;
-    let tom = user(&core, "Tom Becker", "rep2@navis.test").await;
+    let priya = user(&core, "Priya Shah", "rep1@navree.test").await;
+    let tom = user(&core, "Tom Becker", "rep2@navree.test").await;
     let db = core.app.get::<Db>().await;
     let conn = db.conn();
     let now = Utc::now();
@@ -307,7 +307,7 @@ async fn embeds_load_names_by_id() {
 #[tokio::test]
 async fn platform_and_core_pass_check() {
     let (url, _db) = temp_sqlite_url();
-    platform(Navis::app(), sources(url))
+    platform(Navree::app(), sources(url))
         .module(CrmCoreModule)
         .run_with_args(vec!["check".to_owned()])
         .await
@@ -317,20 +317,20 @@ async fn platform_and_core_pass_check() {
 #[tokio::test]
 async fn the_platform_provides_the_system_clock() {
     let core = boot().await;
-    let clock = core.app.get::<dyn navis::contracts::Clock>().await;
+    let clock = core.app.get::<dyn navree::contracts::Clock>().await;
     let drift = (clock.now() - Utc::now()).num_seconds().abs();
     assert!(drift < 5, "the system clock is {drift}s off");
     core.app.shutdown().await.expect("shutdown");
 }
 
 /// `migrate:fresh --seed` on a migrated, seeded CRM database: every table
-/// (navis-access's `role_permissions` with its two cascading parents
+/// (navree-access's `role_permissions` with its two cascading parents
 /// included) is dropped and recreated, and the roles are seeded again.
 #[tokio::test]
 async fn migrate_fresh_runs_on_a_migrated_database() {
     let (url, _db) = temp_sqlite_url();
     let app =
-        TestApp::from_builder(platform(Navis::app(), sources(url)).module(CrmCoreModule)).await;
+        TestApp::from_builder(platform(Navree::app(), sources(url)).module(CrmCoreModule)).await;
     app.run_command("db:seed", &[]).await.expect("db:seed");
     // The seed's audit entries are written in the background: let them
     // land before the tables go.

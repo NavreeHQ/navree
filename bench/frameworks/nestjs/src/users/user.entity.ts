@@ -1,7 +1,7 @@
 import { Exclude, Expose } from 'class-transformer';
 import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
-// Navis's users table. Serialized (ClassSerializerInterceptor) as { id, name } only.
+// Navree's users table. Serialized (ClassSerializerInterceptor) as { id, name } only.
 @Exclude()
 @Entity('users')
 export class User {

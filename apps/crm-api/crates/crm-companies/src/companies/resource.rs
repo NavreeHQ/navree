@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use crm_core::entities::company;
 use crm_core::{CompanySize, OwnerRef};
-use navis::db::Page;
+use navree::db::Page;
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;

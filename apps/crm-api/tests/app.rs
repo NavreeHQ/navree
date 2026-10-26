@@ -6,18 +6,18 @@ use std::path::Path;
 
 use crm_core::entities::{activity, company, contact, deal};
 use crm_core::{ActivityKind, Stage};
-use navis::config::Config;
-use navis::contracts::Clock;
-use navis::db::Db;
-use navis::prelude::*;
-use navis::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+use navree::config::Config;
+use navree::contracts::Clock;
+use navree::db::Db;
+use navree::prelude::*;
+use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
 use sea_orm::{EntityTrait, PaginatorTrait};
 use serde_json::{Value, json};
 
 /// Hermetic settings for one test app on the database at `url`.
 fn sources(url: String) -> ConfigSources {
     ConfigSources::new()
-        .set("app.key", navis::crypto::generate_key())
+        .set("app.key", navree::crypto::generate_key())
         .set("database.url", url)
         .set("database.migrate_on_boot", true)
         .set("http.per_ip_rate_limit", Value::Null)
@@ -73,7 +73,7 @@ async fn serves_the_contract_routes() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("info.title", json!("Navis CRM API"))
+        .assert_json_path("info.title", json!("Navree CRM API"))
         .json_value();
     for (path, method) in [
         ("/api/auth/login", "post"),
@@ -158,7 +158,7 @@ async fn serves_the_contract_routes() {
     // Public sign-up is off: accounts are created by admins.
     app.client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Eve", "email": "eve@navis.test", "password": "a long password" }))
+        .json(&json!({ "name": "Eve", "email": "eve@navree.test", "password": "a long password" }))
         .send()
         .await
         .assert_status(404);
@@ -171,10 +171,10 @@ async fn seeder_creates_demo_accounts() {
     app.run_command("db:seed", &[]).await.expect("db:seed");
 
     for (email, role) in [
-        ("admin@navis.test", "admin"),
-        ("manager@navis.test", "manager"),
-        ("rep1@navis.test", "rep"),
-        ("rep2@navis.test", "rep"),
+        ("admin@navree.test", "admin"),
+        ("manager@navree.test", "manager"),
+        ("rep1@navree.test", "rep"),
+        ("rep2@navree.test", "rep"),
     ] {
         app.client()
             .post("/api/auth/login")
@@ -257,7 +257,7 @@ fn dev_config_points_at_the_local_web_app() {
             "auth.password_reset.url",
             "http://localhost:3000/reset-password",
         ),
-        ("realtime.key", "navis-crm-key"),
+        ("realtime.key", "navree-crm-key"),
         ("mail.transport", "log"),
     ] {
         assert_eq!(config.get_string(key).as_deref(), Some(value), "{key}");

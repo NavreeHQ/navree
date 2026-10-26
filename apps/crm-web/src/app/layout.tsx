@@ -12,8 +12,8 @@ const instrument = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Navis CRM", template: "%s | Navis CRM" },
-  description: "Pipeline, accounts and follow-ups for the Navis sales team.",
+  title: { default: "Navree CRM", template: "%s | Navree CRM" },
+  description: "Pipeline, accounts and follow-ups for the Navree sales team.",
 };
 
 export const viewport: Viewport = {

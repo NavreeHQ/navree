@@ -9,7 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
 /**
- * Navis's users table (uuid keys, the password in "password_hash").
+ * Navree's users table (uuid keys, the password in "password_hash").
  *
  * @property string $id
  * @property string $name

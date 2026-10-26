@@ -4,11 +4,11 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use navis::BoxFuture;
-use navis::access::AccessService;
-use navis::auth::{AuthService, User};
-use navis::db::{Db, Seeder, Uow};
-use navis::prelude::*;
+use navree::BoxFuture;
+use navree::access::AccessService;
+use navree::auth::{AuthService, User};
+use navree::db::{Db, Seeder, Uow};
+use navree::prelude::*;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, IntoActiveModel};
 
@@ -36,22 +36,22 @@ pub struct DemoAccount {
 pub const DEMO_ACCOUNTS: [DemoAccount; 4] = [
     DemoAccount {
         name: "Dana Whitfield",
-        email: "admin@navis.test",
+        email: "admin@navree.test",
         role: UserRole::Admin,
     },
     DemoAccount {
         name: "Marcus Reyes",
-        email: "manager@navis.test",
+        email: "manager@navree.test",
         role: UserRole::Manager,
     },
     DemoAccount {
         name: "Priya Shah",
-        email: "rep1@navis.test",
+        email: "rep1@navree.test",
         role: UserRole::Rep,
     },
     DemoAccount {
         name: "Tom Becker",
-        email: "rep2@navis.test",
+        email: "rep2@navree.test",
         role: UserRole::Rep,
     },
 ];

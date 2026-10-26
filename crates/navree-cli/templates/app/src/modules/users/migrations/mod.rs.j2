@@ -1,0 +1,15 @@
+//! The migrations of the users module. `navree migrate` runs every module's set
+//! in dependency order and each set in name order;
+//! `navree make:migration users <name>` adds one here.
+
+use navree::db::MigrationSet;
+
+mod {{ users_migration }};
+
+/// The module's migration set, run after navree-auth's (`auth`), which
+/// creates the `users` table.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("users")
+        .after(["auth"])
+        .migration({{ users_migration }}::Migration)
+}

@@ -1,7 +1,7 @@
 //! # crm-api
 //!
-//! The Navis CRM API: companies, contacts, deals, activities and a
-//! dashboard for a small sales team, built on the Navis framework (spec §6
+//! The Navree CRM API: companies, contacts, deals, activities and a
+//! dashboard for a small sales team, built on the Navree framework (spec §6
 //! and §7).
 //!
 //! [`app`] assembles it: the platform modules
@@ -11,7 +11,7 @@
 //! tests both start from it:
 //!
 //! ```no_run
-//! use navis::prelude::*;
+//! use navree::prelude::*;
 //!
 //! # fn main() -> Result<(), BoxError> {
 //! crm_api::app(ConfigSources::defaults()).run()

@@ -1,6 +1,6 @@
-# Navis benchmark: the contract every implementation follows
+# Navree benchmark: the contract every implementation follows
 
-Navis is compared with other web frameworks by having each implement the same
+Navree is compared with other web frameworks by having each implement the same
 small API, then measuring them one at a time under identical conditions. This
 file is the contract. `tools/conformance.mjs` checks it, and `run.mjs` runs
 the measurements.
@@ -23,7 +23,7 @@ template before each app starts, so every app sees identical data.
 `db/init.sql` creates and seeds the template database (deterministic data):
 
 - `world (id integer pk, randomnumber integer)`: 10,000 rows, `randomnumber = ((id * 7919) % 10000) + 1`.
-- `users`: Navis's users table (`id uuid pk, name, email unique, password_hash, email_verified_at, two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at, created_at, updated_at`). 100 rows: user `i` has `id = md5('user-' || i)::uuid`, `name = 'User ' || i`, `email = 'user' || i || '@bench.test'`.
+- `users`: Navree's users table (`id uuid pk, name, email unique, password_hash, email_verified_at, two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at, created_at, updated_at`). 100 rows: user `i` has `id = md5('user-' || i)::uuid`, `name = 'User ' || i`, `email = 'user' || i || '@bench.test'`.
 - `deals (id uuid pk, title varchar(200), amount_cents bigint, stage varchar(20), owner_id uuid → users, created_at timestamptz, updated_at timestamptz)`: 1,000 rows. Deal `i` has `id = md5('deal-' || i)::uuid`, `title = 'Deal ' || i`, `amount_cents = (i * 104729) % 100000000`, `stage = ['lead','qualified','proposal','negotiation','won','lost'][i % 6]` (0-based), `owner = user ((i % 100) + 1)`, `created_at = 2026-01-01T00:00:00Z + i minutes`. Indexes: `(created_at DESC, id DESC)` and `(owner_id)`.
 
 Apps must not create or migrate tables; the schema already exists.
@@ -46,7 +46,7 @@ N separate single-row queries (no `IN (...)` batching); N is clamped to
 ### 3.4 `GET /api/deals?page=P&per_page=S`: the realistic endpoint
 What a typical authenticated CRUD list endpoint does:
 
-1. **Authenticate.** `Authorization: Bearer <JWT>`, HS256, secret `JWT_SECRET`. Check the signature, `exp` and `iss == "navis"`. Then load the user row by `sub` from `users`. A missing, malformed, expired, wrong-issuer or wrong-signature token, or an unknown user, gives `401`.
+1. **Authenticate.** `Authorization: Bearer <JWT>`, HS256, secret `JWT_SECRET`. Check the signature, `exp` and `iss == "navree"`. Then load the user row by `sub` from `users`. A missing, malformed, expired, wrong-issuer or wrong-signature token, or an unknown user, gives `401`.
 2. **Validate.** `page` is an integer ≥ 1 (default 1) and `per_page` an integer 1..100 (default 20). Anything else gives `400` (or `422` where that is the framework's idiomatic validation status), with a JSON body.
 3. **Query.** Count all deals, then load page P, ordered by `created_at DESC, id DESC`, with each deal's owner. Use a join or one eager-load query for the owners, never one query per deal.
 4. **Respond** `200`:
@@ -86,7 +86,7 @@ Invalid input gives `400`/`422` with a JSON body. Otherwise insert the deal, wit
 
 ## 5. Container contract
 
-- `frameworks/<name>/Dockerfile`; the build context is `frameworks/<name>` unless `frameworks.json` says otherwise (Navis builds from the repo root).
+- `frameworks/<name>/Dockerfile`; the build context is `frameworks/<name>` unless `frameworks.json` says otherwise (Navree builds from the repo root).
 - These environment variables are supplied at run time:
   - `DATABASE_URL=postgres://bench:bench@bench-pg:5432/bench`
   - `DB_HOST=bench-pg`
@@ -95,7 +95,7 @@ Invalid input gives `400`/`422` with a JSON body. Otherwise insert the deal, wit
   - `DB_USER=bench`
   - `DB_PASSWORD=bench`
   - `JWT_SECRET`
-  - `JWT_ISSUER=navis`
+  - `JWT_ISSUER=navree`
 - `frameworks/<name>/README.md` lists the versions, server and worker setup, DB library and pool size, JWT and validation libraries, and anything notable.
 
 ## 6. Measurements (`run.mjs`)

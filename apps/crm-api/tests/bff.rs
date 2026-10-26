@@ -6,7 +6,7 @@
 
 use crm_core::seed::DEMO_PASSWORD;
 use crm_testkit::{Role, TestCrm};
-use navis::testing::TestResponse;
+use navree::testing::TestResponse;
 use serde_json::json;
 
 async fn crm() -> TestCrm {

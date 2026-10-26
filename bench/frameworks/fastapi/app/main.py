@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await engine.dispose()
 
 
-app = FastAPI(title="Navis benchmark (FastAPI)", lifespan=lifespan)
+app = FastAPI(title="Navree benchmark (FastAPI)", lifespan=lifespan)
 
 
 def random_world_id() -> int:

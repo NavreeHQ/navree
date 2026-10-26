@@ -12,7 +12,7 @@ A plain note: extra context the reader can skip. It can hold `inline code` and [
 </Callout>
 
 <Callout type="tip" title="Run one crate's tests">
-Use `cargo test -p navis-validation` while you work on one crate. It builds less and finishes sooner.
+Use `cargo test -p navree-validation` while you work on one crate. It builds less and finishes sooner.
 </Callout>
 
 <Callout type="warning" title="Commit before you rotate keys">
@@ -24,7 +24,7 @@ Changing `APP_KEY` without moving the old key to `app.previous_keys` makes exist
 A fence with a language gets highlighted. Add `title="..."` for a filename, and `{3-5}` to highlight lines.
 
 ```rust title="src/deals/controller.rs" {6-8}
-use navis::prelude::*;
+use navree::prelude::*;
 
 #[controller("/deals", version = "1")]
 impl DealsController {
@@ -39,17 +39,17 @@ impl DealsController {
 Without a title, the bar shows the language:
 
 ```sh
-cargo install navis-cli
-navis new blog && cd blog
-navis dev
+cargo install navree-cli
+navree new blog && cd blog
+navree dev
 ```
 
 Notation comments mark lines in place, which is handy for changes:
 
 ```toml title="Cargo.toml"
 [dependencies]
-navis = { version = "0.1", default-features = false, features = ["http", "db"] } # [!code --]
-navis = { version = "0.1", features = ["postgres"] } # [!code ++]
+navree = { version = "0.1", default-features = false, features = ["http", "db"] } # [!code --]
+navree = { version = "0.1", features = ["postgres"] } # [!code ++]
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -105,7 +105,7 @@ url = "sqlite://storage/app.db?mode=rwc"
 Turn on the `postgres` feature, then point `database.url` at your server.
 
 ```sh
-cargo add navis --features postgres
+cargo add navree --features postgres
 ```
 
 </Tab>
@@ -117,18 +117,18 @@ cargo add navis --features postgres
 <Step title="Install the CLI">
 
 ```sh
-cargo install navis-cli
+cargo install navree-cli
 ```
 
 </Step>
 <Step title="Create an app">
 
-`navis new` writes a working app with a health check and one module.
+`navree new` writes a working app with a health check and one module.
 
 </Step>
 <Step title="Run it">
 
-`navis dev` builds, serves and restarts when you save.
+`navree dev` builds, serves and restarts when you save.
 
 </Step>
 </Steps>

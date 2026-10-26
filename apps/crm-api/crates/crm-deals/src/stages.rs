@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use crm_core::Stage;
-use navis::validation::ValidationErrors;
+use navree::validation::ValidationErrors;
 
 /// The message for a lost deal without a reason.
 const REASON_REQUIRED: &str = "lost_reason should not be empty";

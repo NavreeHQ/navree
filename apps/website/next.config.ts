@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * navis.sh is a fully static site: `next build` writes plain HTML, CSS and
+ * navree.com is a fully static site: `next build` writes plain HTML, CSS and
  * JS to `out/`, which any static host can serve (Vercel, Cloudflare Pages,
  * GitHub Pages, S3, nginx). Nothing runs on a server.
  */

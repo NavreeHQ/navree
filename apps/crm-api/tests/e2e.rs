@@ -6,9 +6,9 @@
 
 use chrono::Duration;
 use crm_testkit::{CrmClient, Role, TestCrm};
-use navis::audit::AuditLog;
-use navis::contracts::Clock;
-use navis::mail::{Mailer, Message};
+use navree::audit::AuditLog;
+use navree::contracts::Clock;
+use navree::mail::{Mailer, Message};
 use serde_json::{Value, json};
 
 async fn crm() -> TestCrm {
@@ -511,7 +511,7 @@ async fn errors_follow_the_nestjs_format_across_modules() {
     rep.post("/api/v1/users")
         .json(&json!({
             "name": "Eve",
-            "email": "eve@navis.test",
+            "email": "eve@navree.test",
             "password": "a long password",
             "role": "admin",
         }))

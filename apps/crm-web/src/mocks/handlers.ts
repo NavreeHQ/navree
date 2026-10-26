@@ -1,5 +1,5 @@
 /**
- * MSW handlers implementing the Navis CRM API contract (spec §7, §9, §10) as the
+ * MSW handlers implementing the Navree CRM API contract (spec §7, §9, §10) as the
  * browser sees it through the BFF: same-origin `/api/*`, the session held
  * "server side" (here: sessionStorage stands in for the httpOnly token
  * cookies), `POST /api/auth/login` returning only `{user}`, NestJS error bodies
@@ -89,7 +89,7 @@ function fail(status: number, message?: string | string[], errors?: Record<strin
   throw new HttpError(errorResponse(status, message, errors));
 }
 
-/** 400 with `message: string[]` and `errors: {field: [messages]}`, like Navis's validation pipe. */
+/** 400 with `message: string[]` and `errors: {field: [messages]}`, like Navree's validation pipe. */
 function invalid(errors: Record<string, string[]>): void {
   if (Object.keys(errors).length > 0) fail(400, Object.values(errors).flat(), errors);
 }
@@ -144,7 +144,7 @@ function route(handler: Handler, { auth = true } = {}): HttpResponseResolver {
       return response;
     } catch (error) {
       if (error instanceof HttpError) return error.response;
-      console.error("[navis mock]", error);
+      console.error("[navree mock]", error);
       return errorResponse(500, "Internal server error");
     }
   };
@@ -241,7 +241,7 @@ function diff<T extends object>(before: T, after: T): [Partial<T>, Partial<T>] |
 
 // ---- Broadcasting (mock real-time: a window event bus) ---------------------------
 
-export const MOCK_BROADCAST_EVENT = "navis-mock:broadcast";
+export const MOCK_BROADCAST_EVENT = "navree-mock:broadcast";
 
 export interface MockBroadcast {
   channel: string;
@@ -709,7 +709,7 @@ export const handlers = [
         setSessionUser(user.id);
         audit({ user }, "login", "User", user.id, null, null, "auth");
         persist();
-        // Navis returns {user, access_token, refresh_token, ...}; the BFF keeps the tokens.
+        // Navree returns {user, access_token, refresh_token, ...}; the BFF keeps the tokens.
         return HttpResponse.json({ user: toUser(user) });
       },
       { auth: false },
@@ -820,7 +820,7 @@ export const handlers = [
         else row.role = role as Role;
       }
       invalid(errors);
-      // Like crm-api: a new name is a `user.updated` row, a new role navis-access's `access.user_roles_synced`.
+      // Like crm-api: a new name is a `user.updated` row, a new role navree-access's `access.user_roles_synced`.
       if (before.name !== row.name) audit(ctx, "updated", "User", row.id, { name: before.name }, { name: row.name });
       if (before.roles[0] !== row.role) {
         audit(ctx, "user_roles_synced", "user", row.id, { roles: before.roles }, { roles: [row.role] }, "access");
@@ -1363,7 +1363,7 @@ export const handlers = [
       const channel = str(ctx.body.channel_name) ?? "";
       if (channel.startsWith("private-users.") && channel !== `private-users.${ctx.user.id}`)
         fail(403, "Forbidden resource");
-      return HttpResponse.json({ auth: `navis-crm-key:mock-signature` });
+      return HttpResponse.json({ auth: `navree-crm-key:mock-signature` });
     }),
   ),
 ];

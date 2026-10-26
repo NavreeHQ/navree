@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "navis-bench/laravel",
+    "name": "navree-bench/laravel",
     "type": "project",
-    "description": "Laravel implementation of the Navis benchmark API (bench/SPEC.md).",
+    "description": "Laravel implementation of the Navree benchmark API (bench/SPEC.md).",
     "license": "MIT",
     "require": {
         "php": "^8.5",

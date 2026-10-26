@@ -17,7 +17,7 @@ test("a wrong password is refused with a clear message and no session", async ({
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByLabel("Password")).toHaveValue("");
   const cookies = await context.cookies();
-  expect(cookies.map((c) => c.name)).not.toContain("navis_at");
+  expect(cookies.map((c) => c.name)).not.toContain("navree_at");
 });
 
 test("signing in lands on the dashboard with the tokens in httpOnly cookies only", async ({ page, context }) => {
@@ -38,12 +38,12 @@ test("signing in lands on the dashboard with the tokens in httpOnly cookies only
   await expect(page.getByText(ACCOUNTS.rep1.name).first()).toBeVisible();
 
   const cookies = Object.fromEntries((await context.cookies()).map((c) => [c.name, c]));
-  for (const name of ["navis_at", "navis_rt"]) {
+  for (const name of ["navree_at", "navree_rt"]) {
     expect(cookies[name], name).toBeTruthy();
     expect(cookies[name].httpOnly, `${name} is httpOnly`).toBe(true);
     expect(cookies[name].sameSite).toBe("Lax");
   }
-  expect(await page.evaluate(() => document.cookie)).not.toContain("navis_");
+  expect(await page.evaluate(() => document.cookie)).not.toContain("navree_");
 
   // A signed-in visitor going back to /login is sent on to the app.
   await page.goto("/login");

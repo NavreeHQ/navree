@@ -1,5 +1,5 @@
 [
-  {"name":"navis","label":"Navis","language":"Rust","category":"full-stack","context":"..","dockerfile":"frameworks/navis/Dockerfile"},
+  {"name":"navree","label":"Navree","language":"Rust","category":"full-stack","context":"..","dockerfile":"frameworks/navree/Dockerfile"},
   {"name":"loco","label":"Loco","language":"Rust","category":"full-stack"},
   {"name":"axum","label":"Axum + sqlx","language":"Rust","category":"micro"},
   {"name":"actix","label":"Actix Web + sqlx","language":"Rust","category":"micro"},

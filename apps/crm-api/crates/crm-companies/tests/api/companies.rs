@@ -509,7 +509,7 @@ async fn soft_deleted_hidden() {
     admin.delete(&path).send().await.assert_error(404, None);
 
     // The row stays, marked deleted.
-    let db = crm.get::<navis::db::Db>().await;
+    let db = crm.get::<navree::db::Db>().await;
     let row = <crm_core::Company as sea_orm::EntityTrait>::find_by_id(
         id_of(&gone).parse::<uuid::Uuid>().expect("uuid"),
     )

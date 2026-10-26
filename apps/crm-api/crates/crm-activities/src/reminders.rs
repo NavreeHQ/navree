@@ -10,14 +10,14 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use crm_core::entities::activity;
 use crm_core::{NotifiableUser, NotificationData};
-use navis::auth::user;
-use navis::config::Config;
-use navis::contracts::Clock;
-use navis::db::Db;
-use navis::kernel::CommandSpec;
-use navis::mail::TemplateMail;
-use navis::notify::{Channel, Notifiable, Notification, Notifier};
-use navis::prelude::*;
+use navree::auth::user;
+use navree::config::Config;
+use navree::contracts::Clock;
+use navree::db::Db;
+use navree::kernel::CommandSpec;
+use navree::mail::TemplateMail;
+use navree::notify::{Channel, Notifiable, Notification, Notifier};
+use navree::prelude::*;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -329,12 +329,12 @@ mod tests {
 
     #[test]
     fn the_templates_render_every_task() {
-        let views = navis::view::Views::from_templates(TEMPLATES).expect("templates compile");
+        let views = navree::view::Views::from_templates(TEMPLATES).expect("templates compile");
         let mail = reminder(&["Call <Acme>", "Send deck"])
             .to_mail(&NotifiableUser {
                 id: Uuid::nil(),
                 name: "Priya Shah".to_owned(),
-                email: "rep1@navis.test".to_owned(),
+                email: "rep1@navree.test".to_owned(),
             })
             .expect("a mail");
         assert_eq!(mail.subject, "2 tasks due today");

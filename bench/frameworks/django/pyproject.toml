@@ -1,7 +1,7 @@
 [project]
 name = "bench-django"
 version = "0.1.0"
-description = "Navis benchmark: Django + Django REST Framework + djangorestframework-simplejwt"
+description = "Navree benchmark: Django + Django REST Framework + djangorestframework-simplejwt"
 requires-python = "==3.14.*"
 dependencies = [
     "django>=6.1.2",

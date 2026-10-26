@@ -1,0 +1,251 @@
+---
+source: crates/navree-cli/tests/make_module.rs
+expression: files.to_string()
+---
+==> posts/mod.rs <==
+//! The posts module: the `posts` table, its service and its JSON
+//! API under `/api/v1/posts`.
+//!
+//! ```text
+//! posts/
+//! ├── mod.rs           # PostsModule: what the module provides and imports
+//! ├── controller.rs    # PostController: the HTTP routes
+//! ├── service.rs       # PostService: the business logic
+//! ├── entity.rs        # the `posts` table (SeaORM entity)
+//! ├── dto.rs           # request bodies and their validation rules
+//! ├── migrations/      # migrations owned by this module
+//! └── tests/           # tests on a fresh database
+//! ```
+
+mod controller;
+pub mod dto;
+pub mod entity;
+mod migrations;
+mod service;
+#[cfg(test)]
+mod tests;
+
+use navree::db::ModuleBuilderDbExt;
+use navree::kernel::ModuleBuilder;
+use navree::module;
+
+pub use controller::PostController;
+pub use service::PostService;
+
+/// Posts: the `posts` table, and `/api/v1/posts` for
+/// signed-in users.
+#[module(
+    providers = [PostService],
+    controllers = [PostController],
+    exports = [PostService],
+    register = Self::wire,
+)]
+pub struct PostsModule;
+
+impl PostsModule {
+    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// listeners, commands, templates). `navree make:*` adds its lines above
+    /// the `navree:wire` marker.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        // navree:wire
+    }
+}
+
+==> posts/controller.rs <==
+//! The posts JSON API: `/api/v1/posts`.
+
+use std::sync::Arc;
+
+use navree::db::Uow;
+use navree::http::{Json, Result};
+use navree::{controller, injectable};
+
+use super::entity::Model;
+use super::service::PostService;
+
+/// The routes of the posts module, for signed-in users.
+#[injectable]
+pub struct PostController {
+    posts: Arc<PostService>,
+}
+
+#[controller("/posts", version = "1")]
+#[authenticated]
+impl PostController {
+    /// Lists every post, newest first.
+    #[get("/")]
+    async fn index(&self, uow: Uow) -> Result<Json<Vec<Model>>> {
+        Ok(Json(self.posts.all(&uow).await?))
+    }
+}
+
+==> posts/service.rs <==
+//! The business logic of the posts module.
+
+use navree::db::Uow;
+use navree::injectable;
+use sea_orm::{DbErr, EntityTrait, QueryOrder};
+
+use super::entity::{Column, Entity, Model};
+
+/// Reads and writes posts. Take the caller's `Uow` so the work
+/// joins its transaction.
+#[injectable]
+pub struct PostService;
+
+impl PostService {
+    /// Every post, newest first.
+    pub async fn all(&self, uow: &Uow) -> Result<Vec<Model>, DbErr> {
+        Entity::find()
+            .order_by_desc(Column::CreatedAt)
+            .all(&*uow.tx().await?)
+            .await
+    }
+}
+
+==> posts/entity.rs <==
+//! The `posts` table.
+
+use sea_orm::entity::prelude::*;
+use serde::Serialize;
+
+/// A post. Serialized as is in API responses: keep secrets out
+/// of it (or skip them with `#[serde(skip)]`).
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+#[sea_orm(table_name = "posts")]
+pub struct Model {
+    /// A UUID v7, so ids sort by creation time.
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
+==> posts/dto.rs <==
+//! Request bodies of the posts API, with their validation rules
+//! (checked by the `Valid` extractor before the handler runs).
+
+use garde::Validate;
+use serde::Deserialize;
+
+/// The body of `POST /api/v1/posts`.
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreatePost {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: String,
+}
+
+==> posts/migrations/mod.rs <==
+//! The migrations of the posts module. `navree migrate` runs every
+//! module's set in dependency order and each set in name order;
+//! `navree make:migration posts <name>` adds one here.
+
+use navree::db::MigrationSet;
+
+mod m20261025_143005_create_posts_table;
+
+/// The module's migration set, recorded under `posts` in `navree_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("posts")
+        .migration(m20261025_143005_create_posts_table::Migration)
+}
+
+==> posts/migrations/m20261025_143005_create_posts_table.rs <==
+//! Creates the `posts` table.
+
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(Posts::Table)
+                    .col(ColumnDef::new(Posts::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Posts::Name).string().not_null())
+                    .col(
+                        ColumnDef::new(Posts::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Posts::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(Posts::Table).to_owned())
+            .await
+    }
+}
+
+/// The table and column names (`Posts::Table` is `posts`).
+#[derive(DeriveIden)]
+enum Posts {
+    Table,
+    Id,
+    Name,
+    CreatedAt,
+    UpdatedAt,
+}
+
+==> posts/tests/mod.rs <==
+//! Tests of the posts module: each one boots the module with a fresh
+//! SQLite database and calls its routes in-process.
+
+use navree::db::DatabaseModule;
+use navree::testing::{TestApp, principal};
+use serde_json::json;
+use uuid::Uuid;
+
+use super::PostsModule;
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(PostsModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_must_sign_in() {
+    let app = app().await;
+    app.client()
+        .get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn signed_in_users_list_posts() {
+    let app = app().await;
+    let list = app
+        .acting_as(principal(Uuid::now_v7()))
+        .get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(list, json!([]));
+}

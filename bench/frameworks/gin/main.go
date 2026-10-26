@@ -83,7 +83,7 @@ func main() {
 
 	issuer := os.Getenv("JWT_ISSUER")
 	if issuer == "" {
-		issuer = "navis"
+		issuer = "navree"
 	}
 	s := &server{
 		db: pool,

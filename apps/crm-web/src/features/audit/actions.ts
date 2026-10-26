@@ -1,11 +1,11 @@
 /**
  * Audit actions as crm-api records them, for the admin audit log.
  *
- * Data changes come from navis-audit's change observer: `<entity>.created|updated|deleted`
+ * Data changes come from navree-audit's change observer: `<entity>.created|updated|deleted`
  * for every write through `Repo`. Companies and contacts are soft-deleted (an update that
  * sets `deleted_at`), so their deletions are recorded as `company.updated` /
  * `contact.updated`; deals and activities are really deleted (`deal.deleted`,
- * `activity.deleted`); users are never deleted. Role changes come from navis-access:
+ * `activity.deleted`); users are never deleted. Role changes come from navree-access:
  * `access.role_assigned` when an admin creates a user, `access.user_roles_synced` when
  * `PATCH /api/v1/users/{id}` changes the role. Sign-ins and refused requests are `auth.*`
  * and `access.denied`.

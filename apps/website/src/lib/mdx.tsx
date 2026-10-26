@@ -15,7 +15,7 @@ import { createHighlighter, type Highlighter, type ShikiTransformer } from "shik
 import { visit } from "unist-util-visit";
 
 import { mdxComponents } from "@/components/mdx";
-import { languageAliases, languages, navisTheme } from "@/lib/shiki-theme";
+import { languageAliases, languages, navreeTheme } from "@/lib/shiki-theme";
 
 export type Heading = { depth: 2 | 3; id: string; text: string };
 
@@ -24,7 +24,7 @@ let highlighter: Promise<Highlighter> | null = null;
 /** One highlighter for the whole build: loading grammars is the slow part. */
 export function getHighlighter(): Promise<Highlighter> {
   highlighter ??= createHighlighter({
-    themes: [navisTheme],
+    themes: [navreeTheme],
     langs: [...languages],
     langAlias: languageAliases,
   });
@@ -37,7 +37,7 @@ export function getHighlighter(): Promise<Highlighter> {
  * component (`{3-5}` is handled by `transformerMetaHighlight`).
  */
 const metaTransformer: ShikiTransformer = {
-  name: "navis:meta",
+  name: "navree:meta",
   pre(node) {
     const raw = String((this.options.meta as { __raw?: string } | undefined)?.__raw ?? "");
     const title = /(?:title|filename)="([^"]+)"/.exec(raw)?.[1];
@@ -71,7 +71,7 @@ export async function renderMdx(source: string): Promise<{ content: ReactElement
         rehypeShikiFromHighlighter,
         shiki,
         {
-          theme: "navis-night",
+          theme: "navree-night",
           defaultLanguage: "text",
           fallbackLanguage: "text",
           transformers: [metaTransformer, transformerMetaHighlight(), transformerNotationHighlight(), transformerNotationDiff()],
@@ -87,7 +87,7 @@ export async function highlight(code: string, lang: string): Promise<string> {
   const shiki = await getHighlighter();
   return shiki.codeToHtml(code.trimEnd(), {
     lang,
-    theme: "navis-night",
+    theme: "navree-night",
     transformers: [transformerNotationHighlight()],
   });
 }

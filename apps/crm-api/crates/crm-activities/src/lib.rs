@@ -37,7 +37,7 @@ mod resource;
 mod service;
 
 use crm_core::CrmCoreModule;
-use navis::prelude::*;
+use navree::prelude::*;
 
 pub use controller::ActivitiesController;
 pub use dashboard::{

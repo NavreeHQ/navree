@@ -1,26 +1,26 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# navis
+# navree
 
 Created in [T3 Code](https://t3.codes).
 
-Navis is an application framework for Rust on Tokio. It aims to be as complete as
+Navree is an application framework for Rust on Tokio. It aims to be as complete as
 Laravel (routing, validation, ORM, auth, queues, scheduler, cache, mail,
 notifications, storage, real-time, testing, CLI generators) and structured
 like NestJS: everything above a small kernel is a module that declares its
 imports, providers, controllers and exports, and an app is a composition of
-modules. Navis builds on maintained crates (Axum, Tower, SeaORM, garde,
+modules. Navree builds on maintained crates (Axum, Tower, SeaORM, garde,
 argon2, minijinja, lettre, object_store, utoipa, ...) and adds the glue: a
 dependency-injection container, deny-by-default routing with CASL-compatible
 abilities, a unit of work per request, NestJS-format errors, logging and an
 audit trail that are on by default.
 
-Navis was developed under the working name Keel.
+Navree was developed under the working name Keel and briefly called Navis.
 
 The repository is a Cargo workspace of small module crates, plus a reference
 CRM built on top of them:
 
-- `apps/crm-api`: the Navis CRM API, a Navis application.
+- `apps/crm-api`: the Navree CRM API, a Navree application.
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
 
@@ -40,51 +40,51 @@ The crates form eight layers (spec §3). A crate may depend only on crates in
 lower layers, dev-dependencies included, and its runtime dependencies must
 also match the spec's table of allowed edges. Cross-cutting needs (audit,
 events, broadcasting, sessions, health checks, jobs, the current principal)
-go through traits in `navis-contracts`, so modules don't depend on each
-other sideways. `crates/navis/tests/dependency_graph.rs` checks every edge on
+go through traits in `navree-contracts`, so modules don't depend on each
+other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
 each test run.
 
 ```
-L7  apps/crm-api (Navis app)                   apps/crm-web (Next.js 16)
-L6  navis (facade: re-exports + prelude)       navis-cli (binary `navis`; no runtime navis deps)
-L5  navis-auth
-L4  navis-session  navis-validation  navis-queue  navis-audit  navis-access  navis-schedule  navis-notify
-L3  navis-db  navis-testing  navis-observe  navis-api  navis-mail  navis-realtime  navis-storage
-L2  navis-http  navis-log  navis-crypto  navis-events  navis-view  navis-cache  navis-http-client
-L1  navis-contracts  navis-config
-L0  navis-kernel                                navis-macros (proc-macro; no runtime navis deps)
+L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
+L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
+L5  navree-auth
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
+L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
+L1  navree-contracts  navree-config
+L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
-| L0 | `navis-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
-| L0 | `navis-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
-| L1 | `navis-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
-| L1 | `navis-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
-| L2 | `navis-http` | Axum integration, default Tower layers, NestJS-format errors, controllers, rate limits, trusted proxies |
-| L2 | `navis-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
-| L2 | `navis-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
-| L2 | `navis-events` | Typed event bus with sync and queued listeners |
-| L2 | `navis-view` | MiniJinja templates (mail and other text) |
-| L2 | `navis-cache` | Cache stores (memory on moka), remember, tags, locks |
-| L2 | `navis-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
-| L3 | `navis-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
-| L3 | `navis-testing` | `TestApp`, an in-process `TestClient`, fakes |
-| L3 | `navis-observe` | Health checks, readiness, Prometheus metrics |
-| L3 | `navis-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
-| L3 | `navis-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
-| L3 | `navis-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
-| L3 | `navis-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
-| L4 | `navis-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
-| L4 | `navis-validation` | `Valid<T>` extractors on garde, class-validator style messages, async unique/exists rules |
-| L4 | `navis-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
-| L4 | `navis-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
-| L4 | `navis-access` | Roles, permissions and CASL-compatible abilities, record checks, SQL list filters |
-| L4 | `navis-schedule` | Cron-style schedules, overlap prevention, single-node runs |
-| L4 | `navis-notify` | Notifications over mail, database and broadcast, with read state |
-| L5 | `navis-auth` | NestJS-style JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
-| L6 | `navis` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L6 | `navis-cli` | The `navis` binary: `navis new`, `navis make:*`, `navis dev` |
+| L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
+| L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
+| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
+| L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
+| L2 | `navree-http` | Axum integration, default Tower layers, NestJS-format errors, controllers, rate limits, trusted proxies |
+| L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
+| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
+| L2 | `navree-events` | Typed event bus with sync and queued listeners |
+| L2 | `navree-view` | MiniJinja templates (mail and other text) |
+| L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
+| L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
+| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
+| L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
+| L3 | `navree-observe` | Health checks, readiness, Prometheus metrics |
+| L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
+| L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
+| L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
+| L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
+| L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
+| L4 | `navree-validation` | `Valid<T>` extractors on garde, class-validator style messages, async unique/exists rules |
+| L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
+| L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
+| L4 | `navree-access` | Roles, permissions and CASL-compatible abilities, record checks, SQL list filters |
+| L4 | `navree-schedule` | Cron-style schedules, overlap prevention, single-node runs |
+| L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
+| L5 | `navree-auth` | NestJS-style JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
+| L6 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
+| L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
@@ -127,7 +127,7 @@ the compiled dependencies:
 CARGO_TARGET_DIR=target/agents/<label> cargo test -p <crate>
 ```
 
-For example `CARGO_TARGET_DIR=target/agents/http cargo test -p navis-http`.
+For example `CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http`.
 Use `-p <crate>` while working on one crate, and keep `CARGO_BUILD_JOBS`
 moderate when memory is tight.
 
@@ -193,7 +193,7 @@ pnpm install
 pnpm dev                                        # http://localhost:3000
 ```
 
-It talks to the API at `NAVIS_API_URL` (default `http://127.0.0.1:8080`).
+It talks to the API at `NAVREE_API_URL` (default `http://127.0.0.1:8080`).
 `pnpm dev:mock` runs the web app alone against an in-browser mock of the
 API, with the same demo accounts.
 
@@ -201,10 +201,10 @@ API, with the same demo accounts.
 
 | Email | Role | Can |
 |---|---|---|
-| `admin@navis.test` | admin | Everything, including users, roles and the audit log |
-| `manager@navis.test` | manager | All customer records, reassign deals, export contacts, reopen won/lost deals (only admin deletes them) |
-| `rep1@navis.test` | rep | Read everything; create records; edit and delete only their own; can't delete or reopen won/lost deals |
-| `rep2@navis.test` | rep | Same as rep1 (a second owner, to see ownership rules and live updates) |
+| `admin@navree.test` | admin | Everything, including users, roles and the audit log |
+| `manager@navree.test` | manager | All customer records, reassign deals, export contacts, reopen won/lost deals (only admin deletes them) |
+| `rep1@navree.test` | rep | Read everything; create records; edit and delete only their own; can't delete or reopen won/lost deals |
+| `rep2@navree.test` | rep | Same as rep1 (a second owner, to see ownership rules and live updates) |
 
 The seed also creates about 20 companies, 50 contacts, 30 deals across the
 pipeline stages and 60 activities. Open the deals board as two users in two
@@ -223,7 +223,7 @@ changed the auth and error direction during the build (spec §10).
   revokes its whole family), a Passport-style `Strategy` trait, a global
   guard with a `#[public]` opt-out and a `CurrentUser` extractor. The PRD's
   Sanctum SPA cookie auth, CSRF-cookie endpoint, personal access tokens and
-  session login are not built. `navis-session` exists but is optional, and
+  session login are not built. `navree-session` exists but is optional, and
   the CRM doesn't use it.
 - The browser never holds tokens: the Next.js server is a BFF that keeps
   them in httpOnly cookies and forwards `Authorization: Bearer`.
@@ -237,10 +237,10 @@ changed the auth and error direction during the build (spec §10).
 
 | Deferred | Why |
 |---|---|
-| `navis-redis` and every Redis driver (cache, queue, session, locks, real-time scaling) | No Redis server on the build machine, so nothing could be tested. Each module has a driver trait, so Redis drivers can be added without API changes |
+| `navree-redis` and every Redis driver (cache, queue, session, locks, real-time scaling) | No Redis server on the build machine, so nothing could be tested. Each module has a driver trait, so Redis drivers can be added without API changes |
 | apalis as the queue driver | The native database driver and a memory driver cover the PRD's fallback; apalis can come later as another driver |
 | Passkeys (webauthn-rs), social login, an OAuth2 server | webauthn-rs needs OpenSSL on Windows; the other two are PRD Phase 3-4 |
-| navis-i18n, navis-flags, navis-billing, navis-ai, navis-grpc, navis-transport, navis-export, navis-search, navis-admin, navis-graphql | Phase 2-4 modules with external services; the CRM doesn't need them |
+| navree-i18n, navree-flags, navree-billing, navree-ai, navree-grpc, navree-transport, navree-export, navree-search, navree-admin, navree-graphql | Phase 2-4 modules with external services; the CRM doesn't need them |
 | Nuxt kit, teams, multi-tenancy, OpenTelemetry and Sentry, the request inspector | Phase 2-3 |
 
 **Other differences.**
@@ -251,12 +251,12 @@ changed the auth and error direction during the build (spec §10).
   compiles, but every test runs on SQLite, the PRD's development and test
   database.
 - Real-time: the PRD plans Sockudo first and an in-process server later.
-  Navis ships the in-process Pusher-protocol server now (Laravel Echo and
+  Navree ships the in-process Pusher-protocol server now (Laravel Echo and
   pusher-js work unchanged). Processes that don't serve the sockets, such
   as queue workers, send their broadcasts to the serving process over a
   signed HTTP relay.
 - Framework crates implement `Module`, `Injectable` and `Controller` by hand
-  (the PRD's escape hatch) instead of using `navis-macros`, so every crate
+  (the PRD's escape hatch) instead of using `navree-macros`, so every crate
   could be built before the macros existed. Apps and the facade's tests use
   the macros.
 
@@ -264,15 +264,15 @@ changed the auth and error direction during the build (spec §10).
 
 | Path | What |
 |---|---|
-| `crates/navis` | Facade: re-exports every module crate and the macros; holds the full-stack and dependency-graph tests |
-| `crates/navis-*` | One crate per module (see [Crate hierarchy](#crate-hierarchy)) |
-| `apps/crm-api` | The CRM API, a Navis application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
+| `crates/navree` | Facade: re-exports every module crate and the macros; holds the full-stack and dependency-graph tests |
+| `crates/navree-*` | One crate per module (see [Crate hierarchy](#crate-hierarchy)) |
+| `apps/crm-api` | The CRM API, a Navree application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
 | `docs/` | PRD, build design, implementation plan, notes |
 
 ### Features and drivers
 
 - Databases: SQLite (bundled) by default; enable PostgreSQL with the
-  `postgres` feature of `navis` (or `navis-db`).
+  `postgres` feature of `navree` (or `navree-db`).
 - External versions live only in the root `[workspace.dependencies]`; crates
   use `dep = { workspace = true }`.

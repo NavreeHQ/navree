@@ -119,7 +119,7 @@ test("a rep cannot edit another rep's deal: no edit control, and the API answers
   await expect(card).toHaveAttribute("aria-roledescription", "deal");
   await expect(card.getByLabel(`Owned by ${ACCOUNTS.rep2.name}; you can't move it`)).toBeVisible();
 
-  // The API refuses the edit and the move (403 from Navis, not the BFF's origin check).
+  // The API refuses the edit and the move (403 from Navree, not the BFF's origin check).
   for (const [method, path, body] of [
     ["PATCH", `/api/v1/deals/${deal.id}`, { title: "Hijacked" }],
     ["POST", `/api/v1/deals/${deal.id}/move`, { stage: "won" }],

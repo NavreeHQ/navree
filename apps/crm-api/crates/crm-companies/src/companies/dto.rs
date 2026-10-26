@@ -2,7 +2,7 @@
 
 use crm_core::CompanySize;
 use garde::Validate;
-use navis::validation::{AsyncRule, AsyncRules};
+use navree::validation::{AsyncRule, AsyncRules};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;

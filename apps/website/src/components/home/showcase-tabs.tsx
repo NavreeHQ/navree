@@ -82,7 +82,7 @@ export function ShowcaseTabs({ panels }: { panels: ShowcasePanel[] }) {
               <span className="code-block-title">{panel.file}</span>
               <CopyButton />
             </figcaption>
-            <pre className="shiki navis-night" tabIndex={0} dangerouslySetInnerHTML={{ __html: panel.html }} />
+            <pre className="shiki navree-night" tabIndex={0} dangerouslySetInnerHTML={{ __html: panel.html }} />
           </figure>
           {panel.extra ? (
             <figure className="code-panel" data-copy-root>
@@ -90,7 +90,7 @@ export function ShowcaseTabs({ panels }: { panels: ShowcasePanel[] }) {
                 <span className="code-block-lang">{panel.extra.file}</span>
                 <CopyButton />
               </figcaption>
-              <pre className="shiki navis-night" tabIndex={0} dangerouslySetInnerHTML={{ __html: panel.extra.html }} />
+              <pre className="shiki navree-night" tabIndex={0} dangerouslySetInnerHTML={{ __html: panel.extra.html }} />
             </figure>
           ) : null}
         </div>

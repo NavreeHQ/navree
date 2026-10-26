@@ -1,0 +1,42 @@
+[package]
+name = "navree-macros"
+description = "Navree attribute macros: #[module], #[injectable], #[controller] and route attributes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+proc-macro-crate = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+
+# Macro tests expand against the runtime crates (allowed as dev-dependencies
+# of navree-macros only; see crates/navree/tests/dependency_graph.rs). The DI
+# macro tests (Task 12) need the kernel, plus navree-http for
+# `#[module(controllers = [..])]`; the controller macro tests (Task 13) build
+# real routers, so they add axum, navree-access (action and subject markers for
+# `#[can]`), navree-contracts (a fake authenticator) and friends.
+[dev-dependencies]
+axum = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+navree-access = { workspace = true }
+navree-contracts = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+trybuild = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }

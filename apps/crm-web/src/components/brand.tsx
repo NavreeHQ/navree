@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
-/** The Navis mark: a hull in side profile with its keel fin beneath the waterline. */
-export function NavisMark({ className }: { className?: string }) {
+/** The Navree mark: a hull in side profile with its keel fin beneath the waterline. */
+export function NavreeMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={cn("size-5", className)}>
       <path
@@ -15,11 +15,11 @@ export function NavisMark({ className }: { className?: string }) {
   );
 }
 
-export function NavisWordmark({ className }: { className?: string }) {
+export function NavreeWordmark({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      <NavisMark className="text-sidebar-primary" />
-      <span className="text-[17px] font-semibold tracking-tight font-condensed">Navis</span>
+      <NavreeMark className="text-sidebar-primary" />
+      <span className="text-[17px] font-semibold tracking-tight font-condensed">Navree</span>
       <span className="text-xs font-medium text-sidebar-foreground/60">CRM</span>
     </span>
   );

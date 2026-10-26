@@ -4,7 +4,7 @@ Requests per second (median of 3 measured runs), higher is better. `wrk` 6 threa
 
 | Framework | Language | JSON | Single query | 20 queries | Auth + paginated list | Auth + validated insert | Startup (ms) | Idle mem (MB) | Peak mem (MB) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Navis | Rust | 214,257 | 46,547 | 6,126 | 15,458 | 20,295 | 23 | 4 | 38 |
+| Navree | Rust | 214,257 | 46,547 | 6,126 | 15,458 | 20,295 | 23 | 4 | 38 |
 | Loco | Rust | 541,744 | 76,058 | 6,433 | 16,202 | 34,308 | 3 | 5 | 42 |
 | Axum + sqlx | Rust | 962,842 | 107,994 | 7,103 | 24,402 | 49,043 | 3 | 3 | 31 |
 | Actix Web + sqlx | Rust | 1,233,097 | 78,164 | 6,371 | 22,074 | 44,515 | 3 | 4 | 24 |
@@ -24,7 +24,7 @@ Requests per second (median of 3 measured runs), higher is better. `wrk` 6 threa
 
 | Framework | JSON | Single query | 20 queries | Auth + paginated list | Auth + validated insert |
 |---|---:|---:|---:|---:|---:|
-| Navis | 2.6 | 8.3 | 59.9 | 22.3 | 18.9 |
+| Navree | 2.6 | 8.3 | 59.9 | 22.3 | 18.9 |
 | Loco | 1.1 | 5.2 | 55.2 | 21.4 | 10.4 |
 | Axum + sqlx | 0.6 | 4.0 | 52.3 | 14.8 | 8.2 |
 | Actix Web + sqlx | 0.8 | 5.5 | 55.4 | 15.5 | 9.6 |

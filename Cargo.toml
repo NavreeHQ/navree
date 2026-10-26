@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*"]
-# The benchmark apps (Navis's and other Rust frameworks') are separate projects.
+# The benchmark apps (Navree's and other Rust frameworks') are separate projects.
 exclude = ["bench"]
 
 [workspace.package]
@@ -17,35 +17,35 @@ missing_docs = "warn"
 
 [workspace.dependencies]
 # ---------------------------------------------------------------------------
-# Navis crates (paths; members use `{ workspace = true }`)
+# Navree crates (paths; members use `{ workspace = true }`)
 # ---------------------------------------------------------------------------
-navis = { path = "crates/navis", version = "0.1.0" }
-navis-kernel = { path = "crates/navis-kernel", version = "0.1.0" }
-navis-contracts = { path = "crates/navis-contracts", version = "0.1.0" }
-navis-macros = { path = "crates/navis-macros", version = "0.1.0" }
-navis-config = { path = "crates/navis-config", version = "0.1.0" }
-navis-log = { path = "crates/navis-log", version = "0.1.0" }
-navis-crypto = { path = "crates/navis-crypto", version = "0.1.0" }
-navis-http = { path = "crates/navis-http", version = "0.1.0" }
-navis-events = { path = "crates/navis-events", version = "0.1.0" }
-navis-view = { path = "crates/navis-view", version = "0.1.0" }
-navis-cache = { path = "crates/navis-cache", version = "0.1.0" }
-navis-http-client = { path = "crates/navis-http-client", version = "0.1.0" }
-navis-db = { path = "crates/navis-db", version = "0.1.0" }
-navis-testing = { path = "crates/navis-testing", version = "0.1.0" }
-navis-observe = { path = "crates/navis-observe", version = "0.1.0" }
-navis-api = { path = "crates/navis-api", version = "0.1.0" }
-navis-mail = { path = "crates/navis-mail", version = "0.1.0" }
-navis-realtime = { path = "crates/navis-realtime", version = "0.1.0" }
-navis-storage = { path = "crates/navis-storage", version = "0.1.0" }
-navis-session = { path = "crates/navis-session", version = "0.1.0" }
-navis-validation = { path = "crates/navis-validation", version = "0.1.0" }
-navis-queue = { path = "crates/navis-queue", version = "0.1.0" }
-navis-audit = { path = "crates/navis-audit", version = "0.1.0" }
-navis-access = { path = "crates/navis-access", version = "0.1.0" }
-navis-schedule = { path = "crates/navis-schedule", version = "0.1.0" }
-navis-notify = { path = "crates/navis-notify", version = "0.1.0" }
-navis-auth = { path = "crates/navis-auth", version = "0.1.0" }
+navree = { path = "crates/navree", version = "0.1.0" }
+navree-kernel = { path = "crates/navree-kernel", version = "0.1.0" }
+navree-contracts = { path = "crates/navree-contracts", version = "0.1.0" }
+navree-macros = { path = "crates/navree-macros", version = "0.1.0" }
+navree-config = { path = "crates/navree-config", version = "0.1.0" }
+navree-log = { path = "crates/navree-log", version = "0.1.0" }
+navree-crypto = { path = "crates/navree-crypto", version = "0.1.0" }
+navree-http = { path = "crates/navree-http", version = "0.1.0" }
+navree-events = { path = "crates/navree-events", version = "0.1.0" }
+navree-view = { path = "crates/navree-view", version = "0.1.0" }
+navree-cache = { path = "crates/navree-cache", version = "0.1.0" }
+navree-http-client = { path = "crates/navree-http-client", version = "0.1.0" }
+navree-db = { path = "crates/navree-db", version = "0.1.0" }
+navree-testing = { path = "crates/navree-testing", version = "0.1.0" }
+navree-observe = { path = "crates/navree-observe", version = "0.1.0" }
+navree-api = { path = "crates/navree-api", version = "0.1.0" }
+navree-mail = { path = "crates/navree-mail", version = "0.1.0" }
+navree-realtime = { path = "crates/navree-realtime", version = "0.1.0" }
+navree-storage = { path = "crates/navree-storage", version = "0.1.0" }
+navree-session = { path = "crates/navree-session", version = "0.1.0" }
+navree-validation = { path = "crates/navree-validation", version = "0.1.0" }
+navree-queue = { path = "crates/navree-queue", version = "0.1.0" }
+navree-audit = { path = "crates/navree-audit", version = "0.1.0" }
+navree-access = { path = "crates/navree-access", version = "0.1.0" }
+navree-schedule = { path = "crates/navree-schedule", version = "0.1.0" }
+navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
+navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -107,7 +107,7 @@ tokio-tungstenite = "0.30.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 serde_urlencoded = "0.7.1"
-# Raw query/form pair parsing, so navis-validation can report serde paths.
+# Raw query/form pair parsing, so navree-validation can report serde paths.
 form_urlencoded = "1.2.2"
 serde_path_to_error = "0.1.20"
 toml = "1.1.8"
@@ -124,7 +124,7 @@ hex = "0.4.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
-# `log` records into tracing (navis-log installs the bridge with its subscriber).
+# `log` records into tracing (navree-log installs the bridge with its subscriber).
 tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
@@ -176,7 +176,7 @@ subtle = "2.6.1"
 rand = "0.10.3"
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
 qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
-# JWT access tokens (navis-auth): RustCrypto backend, no aws-lc, no PEM parsing.
+# JWT access tokens (navree-auth): RustCrypto backend, no aws-lc, no PEM parsing.
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
 
 # ---------------------------------------------------------------------------

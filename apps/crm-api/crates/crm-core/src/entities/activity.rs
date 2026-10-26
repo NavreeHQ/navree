@@ -44,16 +44,16 @@ pub struct Model {
 pub enum Relation {
     /// The owner (`owner_id` → `users.id`).
     #[sea_orm(
-        belongs_to = "navis::auth::user::Entity",
+        belongs_to = "navree::auth::user::Entity",
         from = "Column::OwnerId",
-        to = "navis::auth::user::Column::Id"
+        to = "navree::auth::user::Column::Id"
     )]
     Owner,
     /// The assignee (`assignee_id` → `users.id`).
     #[sea_orm(
-        belongs_to = "navis::auth::user::Entity",
+        belongs_to = "navree::auth::user::Entity",
         from = "Column::AssigneeId",
-        to = "navis::auth::user::Column::Id"
+        to = "navree::auth::user::Column::Id"
     )]
     Assignee,
 }

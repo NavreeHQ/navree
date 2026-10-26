@@ -1,11 +1,11 @@
-//! Bearer-token authentication for Navis's access tokens.
+//! Bearer-token authentication for Navree's access tokens.
 //!
 //! Loco's `auth::JWT` and `auth::JWTWithUser` extractors validate Loco's own
 //! token: HS512 by default, a base64-encoded secret and a `pid` claim, with no
-//! issuer check. Navis signs HS256 with the raw secret and names the user in
+//! issuer check. Navree signs HS256 with the raw secret and names the user in
 //! `sub`, so this extractor keeps Loco's token lookup (`auth.jwt.location`,
 //! the bearer header by default) and Loco's secret (`auth.jwt.secret`), and
-//! decodes Navis's claims with `jsonwebtoken`, the crate `loco_rs::auth::jwt`
+//! decodes Navree's claims with `jsonwebtoken`, the crate `loco_rs::auth::jwt`
 //! wraps. Like `JWTWithUser`, it then loads the user row and answers 401 when
 //! there is none.
 use axum::{extract::FromRequestParts, http::request::Parts};

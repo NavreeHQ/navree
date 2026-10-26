@@ -66,7 +66,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-[90rem] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-5 text-[0.8125rem] text-fg-3 sm:px-6 lg:px-8">
-          <p>Navis is free and open source, licensed {site.license}.</p>
+          <p>Navree is free and open source, licensed {site.license}.</p>
           <p>{site.domain}</p>
         </div>
       </div>

@@ -175,10 +175,10 @@ export function createSeed(now: Date = new Date()): MockDatabase {
 
   // ---- Users -----------------------------------------------------------------
   const userSpec: [string, string, Role][] = [
-    ["Dana Whitfield", "admin@navis.test", "admin"],
-    ["Marcus Reyes", "manager@navis.test", "manager"],
-    ["Priya Shah", "rep1@navis.test", "rep"],
-    ["Tom Becker", "rep2@navis.test", "rep"],
+    ["Dana Whitfield", "admin@navree.test", "admin"],
+    ["Marcus Reyes", "manager@navree.test", "manager"],
+    ["Priya Shah", "rep1@navree.test", "rep"],
+    ["Tom Becker", "rep2@navree.test", "rep"],
   ];
   const users: UserRow[] = userSpec.map(([name, email, role], i) => {
     const created = daysAgo(400 - i * 20);

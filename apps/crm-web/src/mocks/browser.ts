@@ -20,7 +20,7 @@ export function startMockApi(): Promise<void> {
     })
     .then(() => {
       Object.assign(window, {
-        __navisMock: {
+        __navreeMock: {
           reset() {
             resetDatabase();
             window.location.reload();
@@ -28,7 +28,7 @@ export function startMockApi(): Promise<void> {
         },
       });
       console.info(
-        "[navis] Mock API enabled. Sign in as rep1@navis.test / password123. Reset with __navisMock.reset().",
+        "[navree] Mock API enabled. Sign in as rep1@navree.test / password123. Reset with __navreeMock.reset().",
       );
     });
   return started;

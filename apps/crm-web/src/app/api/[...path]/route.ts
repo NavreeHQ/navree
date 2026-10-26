@@ -1,6 +1,6 @@
 import { bff } from "@/lib/bff/server";
 
-/** Every `/api/*` call from the browser is forwarded to Navis with the bearer token from the httpOnly cookie. */
+/** Every `/api/*` call from the browser is forwarded to Navree with the bearer token from the httpOnly cookie. */
 function handle(request: Request): Promise<Response> {
   return bff.proxy(request, new URL(request.url).pathname);
 }

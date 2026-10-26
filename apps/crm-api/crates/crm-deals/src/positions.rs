@@ -6,7 +6,7 @@
 
 use crm_core::Stage;
 use crm_core::entities::deal;
-use navis::db::Uow;
+use navree::db::Uow;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,

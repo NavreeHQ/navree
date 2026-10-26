@@ -12,7 +12,7 @@ const FEATURED: TestKey = "deals_list";
  * and the highlighted framework's place in every test, all from the data.
  */
 export function BenchTeaser() {
-  const navis = highlighted();
+  const navree = highlighted();
   const featured = bench.tests.find((t) => t.key === FEATURED)!;
   const rows: BarRow[] = bench.frameworks
     .filter((f) => f.results[FEATURED])
@@ -50,10 +50,10 @@ export function BenchTeaser() {
       </figure>
 
       <div>
-        <h3 className="font-semibold text-fg">{navis.label} in every test</h3>
+        <h3 className="font-semibold text-fg">{navree.label} in every test</h3>
         <table className="mt-4 w-full text-sm">
           <caption className="sr-only">
-            {navis.label}: requests per second and rank among {bench.frameworks.length} frameworks in each test
+            {navree.label}: requests per second and rank among {bench.frameworks.length} frameworks in each test
           </caption>
           <tbody>
             {bench.tests.map((t) => {
@@ -63,7 +63,7 @@ export function BenchTeaser() {
                   <th scope="row" className="py-2.5 pr-3 text-left font-normal text-fg-2">
                     {t.label}
                   </th>
-                  <td className="py-2.5 text-right text-fg numeric">{fmtCompact(rps(navis, t.key))}</td>
+                  <td className="py-2.5 text-right text-fg numeric">{fmtCompact(rps(navree, t.key))}</td>
                   <td className="py-2.5 pl-3 text-right text-fg-3 numeric">
                     {ordinal(rank.rank)} of {rank.of}
                   </td>
@@ -74,7 +74,7 @@ export function BenchTeaser() {
               <th scope="row" className="py-2.5 pr-3 text-left font-normal text-fg-2">
                 Peak memory
               </th>
-              <td className="py-2.5 text-right text-fg numeric">{fmtMb(navis.peakMemMb)}</td>
+              <td className="py-2.5 text-right text-fg numeric">{fmtMb(navree.peakMemMb)}</td>
               <td className="py-2.5 pl-3 text-right text-fg-3 numeric">
                 {ordinal(peak.rank)} lowest
               </td>
@@ -83,7 +83,7 @@ export function BenchTeaser() {
               <th scope="row" className="py-2.5 pr-3 text-left font-normal text-fg-2">
                 Ready after
               </th>
-              <td className="py-2.5 text-right text-fg numeric">{fmtInt(navis.startupMs)} ms</td>
+              <td className="py-2.5 text-right text-fg numeric">{fmtInt(navree.startupMs)} ms</td>
               <td className="py-2.5 pl-3 text-right text-fg-3 numeric">
                 {ordinal(startup.rank)} fastest
               </td>
@@ -91,7 +91,7 @@ export function BenchTeaser() {
           </tbody>
         </table>
         <p className="mt-5 text-sm leading-relaxed text-fg-2">
-          {worst.label} is where {navis.label} ranks lowest
+          {worst.label} is where {navree.label} ranks lowest
           {worst.key === "json" || worst.key === "db"
             ? ": with little database work, the framework's own per-request cost is most of what is measured."
             : "."}

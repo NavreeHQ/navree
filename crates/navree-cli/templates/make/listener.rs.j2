@@ -1,0 +1,52 @@
+//! {{ title }}: a listener of the {{ module_words }} module.
+
+{% if event %}
+use navree::events::Listener;
+{% else %}
+use navree::events::{Event, Listener};
+{% endif %}
+use navree::injectable;
+use navree::kernel::{AppContext, BoxError, BoxFuture};
+{% if event %}
+
+use super::super::events::{{ event }}::{{ event_pascal }};
+{% endif %}
+
+/// {{ title }}. A provider: inject services as `Arc<T>` fields.
+#[injectable]
+pub struct {{ pascal }};
+
+{% if event %}
+impl Listener<{{ event_pascal }}> for {{ pascal }} {
+    fn handle<'a>(
+        &'a self,
+        event: &'a {{ event_pascal }},
+        ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let _ = (event, ctx);
+            Ok(())
+        })
+    }
+
+    /// Run on a queue worker instead of during `emit`.
+    fn queued(&self) -> bool {
+        false
+    }
+}
+{% else %}
+/// Handles any event. Subscribe it in the module's `wire` with
+/// `navree::events::ModuleBuilderEventsExt::listen::<SomeEvent, {{ pascal }}>(m);`.
+impl<E: Event> Listener<E> for {{ pascal }} {
+    fn handle<'a>(
+        &'a self,
+        event: &'a E,
+        ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let _ = (event, ctx);
+            Ok(())
+        })
+    }
+}
+{% endif %}

@@ -1,7 +1,7 @@
 import type { RealtimeConnection } from "./connection";
 
 /** Mirrors `MOCK_BROADCAST_EVENT` in `src/mocks/handlers.ts` (kept separate so mocks never load in production). */
-const MOCK_BROADCAST_EVENT = "navis-mock:broadcast";
+const MOCK_BROADCAST_EVENT = "navree-mock:broadcast";
 
 /** In mock mode, the MSW handlers broadcast on a window event bus instead of a socket. */
 export function connectMockBus(): RealtimeConnection {

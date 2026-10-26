@@ -51,7 +51,7 @@ export type Framework = {
   results: Partial<Record<TestKey, TestResult>>;
   startedAt: string;
   stack: StackRow[];
-  /** The implementation's directory, e.g. `bench/frameworks/navis`. */
+  /** The implementation's directory, e.g. `bench/frameworks/navree`. */
   sourceDir: string;
   readmeTitle: string;
   /** The raw result file, as served by the site. */

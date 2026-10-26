@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 /**
- * The browser never talks to the Navis API directly. Route handlers under
+ * The browser never talks to the Navree API directly. Route handlers under
  * `src/app/api` and `src/app/broadcasting` are a backend-for-frontend: they
- * keep the JWTs in httpOnly cookies and forward requests to `NAVIS_API_URL`
+ * keep the JWTs in httpOnly cookies and forward requests to `NAVREE_API_URL`
  * with `Authorization: Bearer` (see `src/lib/bff`).
  */
 const nextConfig: NextConfig = {

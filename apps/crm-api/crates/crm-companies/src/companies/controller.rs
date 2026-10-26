@@ -1,7 +1,7 @@
 //! `/api/v1/companies`.
 
 use crm_core::Company;
-use navis::prelude::*;
+use navree::prelude::*;
 
 use super::dto::{CompanyFilters, CreateCompany, UpdateCompany};
 use super::resource::{CompanyDetail, CompanyPage, CompanyResource};

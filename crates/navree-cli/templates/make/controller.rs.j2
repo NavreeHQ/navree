@@ -1,0 +1,21 @@
+//! `/api/v1/{{ kebab }}`: {{ words }} routes of the {{ module_words }} module.
+
+use navree::http::{CurrentPrincipal, Json};
+use navree::{controller, injectable};
+use serde_json::{Value, json};
+
+/// Routes under `/api/v1/{{ kebab }}` for signed-in users. Inject services
+/// as `Arc<T>` fields; every route needs an access attribute (`#[public]`,
+/// `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`).
+#[injectable]
+pub struct {{ pascal }}Controller;
+
+#[controller("/{{ kebab }}", version = "1")]
+#[authenticated]
+impl {{ pascal }}Controller {
+    /// `GET /api/v1/{{ kebab }}`.
+    #[get("/")]
+    async fn index(&self, CurrentPrincipal(me): CurrentPrincipal) -> Json<Value> {
+        Json(json!({ "user_id": me.user_id }))
+    }
+}

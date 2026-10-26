@@ -73,7 +73,7 @@ export default async function DocPage({ params }: Props) {
           </details>
         ) : null}
 
-        <div className="prose-navis">{content}</div>
+        <div className="prose-navree">{content}</div>
 
         <footer className="mt-16 border-t border-line pt-8">
           <a href={edit} className="inline-flex items-center gap-2 text-sm text-fg-2 transition-colors hover:text-fg">

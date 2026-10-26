@@ -4,11 +4,11 @@
 @import "./home.css" layer(components);
 
 /*
- * Navis design tokens. Dark only.
+ * Navree design tokens. Dark only.
  *
  * Ink: near-black surfaces with a faint sea-green cast, stepping up for
  * raised elements. One accent, "starboard" green (a ship's green running
- * light), used sparingly: links, focus, the logo, Navis in charts, the
+ * light), used sparingly: links, focus, the logo, Navree in charts, the
  * waterline. Text tokens meet WCAG AA on every ink step (fg-3 is 5.4:1 on
  * ink-3 at worst).
  */

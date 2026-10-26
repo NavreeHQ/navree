@@ -37,9 +37,9 @@ function Section({
 }
 
 export default function Home() {
-  const navis = highlighted();
+  const navree = highlighted();
   const others = bench.frameworks.length - 1;
-  const checks = navis.conformance.passed;
+  const checks = navree.conformance.passed;
   const layers = new Set(crates.map((c) => c.layer)).size;
 
   return (
@@ -92,7 +92,7 @@ export default function Home() {
         lead={
           <p>
             {crates.length} crates in {layers} layers. A crate depends only on the layers below it, and a test checks every
-            edge. Depend on the <code className="inline-code">navis</code> facade to get them all, or turn its features off
+            edge. Depend on the <code className="inline-code">navree</code> facade to get them all, or turn its features off
             to compile less.
           </p>
         }

@@ -2,8 +2,8 @@
 //! `manage` the record type; everyone else creates records they own, and
 //! cannot hand them to someone else (403).
 
-use navis::access::{Ability, MANAGE};
-use navis::http::AppError;
+use navree::access::{Ability, MANAGE};
+use navree::http::AppError;
 use uuid::Uuid;
 
 /// The `owner_id` a write sets on a record of `subject` (`"Deal"`, ...).
@@ -43,7 +43,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    use navis::access::{ALL, Ability, AbilityCtx, MANAGE, Rules};
+    use navree::access::{ALL, Ability, AbilityCtx, MANAGE, Rules};
     use uuid::Uuid;
 
     use super::*;

@@ -20,7 +20,7 @@
 //! and, last (the last matching rule wins), `cannot delete Deal` when
 //! `stage` is `won` or `lost`.
 
-use navis::access::{AbilityCtx, AccessOptions, CREATE, DELETE, READ, Rules, UPDATE, field};
+use navree::access::{AbilityCtx, AccessOptions, CREATE, DELETE, READ, Rules, UPDATE, field};
 
 use crate::actions::{COMPLETE, MOVE};
 use crate::enums::Stage;
@@ -100,7 +100,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    use navis::access::{ALL, Ability, AbilityCtx, MANAGE, Rules};
+    use navree::access::{ALL, Ability, AbilityCtx, MANAGE, Rules};
     use serde_json::{Value, json};
     use uuid::Uuid;
 
@@ -109,7 +109,7 @@ mod tests {
     use crate::roles::{ADMIN, MANAGER, REP};
 
     /// The permission prefixes the CRM registers (`for_feature` on every
-    /// entity and on navis-auth's users).
+    /// entity and on navree-auth's users).
     fn prefixes() -> Arc<BTreeMap<String, String>> {
         Arc::new(
             [

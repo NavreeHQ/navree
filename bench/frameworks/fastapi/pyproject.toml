@@ -1,7 +1,7 @@
 [project]
 name = "bench-fastapi"
 version = "0.1.0"
-description = "Navis benchmark: FastAPI + SQLAlchemy 2 (async ORM, asyncpg) + PyJWT"
+description = "Navree benchmark: FastAPI + SQLAlchemy 2 (async ORM, asyncpg) + PyJWT"
 requires-python = "==3.14.*"
 dependencies = [
     "fastapi[standard]>=0.162.0",

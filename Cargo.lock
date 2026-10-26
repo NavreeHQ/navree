@@ -1008,7 +1008,7 @@ dependencies = [
  "crm-core",
  "crm-testkit",
  "garde",
- "navis",
+ "navree",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1029,7 +1029,7 @@ dependencies = [
  "crm-deals",
  "crm-testkit",
  "crm-users",
- "navis",
+ "navree",
  "sea-orm",
  "serde_json",
  "tokio",
@@ -1046,7 +1046,7 @@ dependencies = [
  "crm-testkit",
  "csv",
  "garde",
- "navis",
+ "navree",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1060,7 +1060,7 @@ name = "crm-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "navis",
+ "navree",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -1079,7 +1079,7 @@ dependencies = [
  "crm-testkit",
  "futures-util",
  "garde",
- "navis",
+ "navree",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1096,7 +1096,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "crm-core",
- "navis",
+ "navree",
  "sea-orm",
  "serde_json",
  "tokio",
@@ -1111,7 +1111,7 @@ dependencies = [
  "crm-core",
  "crm-testkit",
  "garde",
- "navis",
+ "navree",
  "sea-orm",
  "serde",
  "serde_json",
@@ -2860,38 +2860,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
-name = "navis"
+name = "navree"
 version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
  "garde",
- "navis-access",
- "navis-api",
- "navis-audit",
- "navis-auth",
- "navis-cache",
- "navis-config",
- "navis-contracts",
- "navis-crypto",
- "navis-db",
- "navis-events",
- "navis-http",
- "navis-http-client",
- "navis-kernel",
- "navis-log",
- "navis-macros",
- "navis-mail",
- "navis-notify",
- "navis-observe",
- "navis-queue",
- "navis-realtime",
- "navis-schedule",
- "navis-session",
- "navis-storage",
- "navis-testing",
- "navis-validation",
- "navis-view",
+ "navree-access",
+ "navree-api",
+ "navree-audit",
+ "navree-auth",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-log",
+ "navree-macros",
+ "navree-mail",
+ "navree-notify",
+ "navree-observe",
+ "navree-queue",
+ "navree-realtime",
+ "navree-schedule",
+ "navree-session",
+ "navree-storage",
+ "navree-testing",
+ "navree-validation",
+ "navree-view",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -2903,7 +2903,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-access"
+name = "navree-access"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -2911,11 +2911,11 @@ dependencies = [
  "http",
  "insta",
  "moka",
- "navis-contracts",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-testing",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
  "proptest",
  "sea-orm",
  "sea-orm-migration",
@@ -2930,15 +2930,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-api"
+name = "navree-api"
 version = "0.1.0"
 dependencies = [
  "axum",
  "http-body-util",
- "navis-config",
- "navis-contracts",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
  "serde",
  "serde_json",
  "tempfile",
@@ -2951,17 +2951,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-audit"
+name = "navree-audit"
 version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "navis-config",
- "navis-contracts",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-testing",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -2974,7 +2974,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-auth"
+name = "navree-auth"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -2984,20 +2984,20 @@ dependencies = [
  "garde",
  "http",
  "jsonwebtoken",
- "navis-access",
- "navis-api",
- "navis-cache",
- "navis-config",
- "navis-contracts",
- "navis-crypto",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-mail",
- "navis-observe",
- "navis-testing",
- "navis-validation",
- "navis-view",
+ "navree-access",
+ "navree-api",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-mail",
+ "navree-observe",
+ "navree-testing",
+ "navree-validation",
+ "navree-view",
  "qrcode2",
  "sea-orm",
  "sea-orm-migration",
@@ -3012,14 +3012,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-cache"
+name = "navree-cache"
 version = "0.1.0"
 dependencies = [
  "bytes",
  "moka",
- "navis-config",
- "navis-contracts",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
  "serde",
  "serde_json",
  "thiserror",
@@ -3030,7 +3030,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-cli"
+name = "navree-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3048,12 +3048,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-config"
+name = "navree-config"
 version = "0.1.0"
 dependencies = [
  "config",
- "navis-contracts",
- "navis-kernel",
+ "navree-contracts",
+ "navree-kernel",
  "serde",
  "serde_json",
  "tempfile",
@@ -3064,11 +3064,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-contracts"
+name = "navree-contracts"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "navis-kernel",
+ "navree-kernel",
  "serde",
  "serde_json",
  "thiserror",
@@ -3077,7 +3077,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-crypto"
+name = "navree-crypto"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
@@ -3085,9 +3085,9 @@ dependencies = [
  "base64 0.23.1",
  "hex",
  "hmac 0.13.0",
- "navis-config",
- "navis-contracts",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
  "rand 0.10.3",
  "serde",
  "serde_json",
@@ -3099,7 +3099,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-db"
+name = "navree-db"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3107,10 +3107,10 @@ dependencies = [
  "chrono",
  "http",
  "http-body-util",
- "navis-config",
- "navis-contracts",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -3125,11 +3125,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-events"
+name = "navree-events"
 version = "0.1.0"
 dependencies = [
- "navis-contracts",
- "navis-kernel",
+ "navree-contracts",
+ "navree-kernel",
  "serde",
  "serde_json",
  "thiserror",
@@ -3138,7 +3138,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-http"
+name = "navree-http"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3149,9 +3149,9 @@ dependencies = [
  "http",
  "http-body-util",
  "metrics",
- "navis-config",
- "navis-contracts",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -3166,16 +3166,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-http-client"
+name = "navree-http-client"
 version = "0.1.0"
 dependencies = [
  "backon",
  "bytes",
  "http",
  "ipnet",
- "navis-config",
- "navis-contracts",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
  "reqwest",
  "rustls",
  "serde",
@@ -3190,7 +3190,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-kernel"
+name = "navree-kernel"
 version = "0.1.0"
 dependencies = [
  "thiserror",
@@ -3200,11 +3200,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-log"
+name = "navree-log"
 version = "0.1.0"
 dependencies = [
- "navis-config",
- "navis-kernel",
+ "navree-config",
+ "navree-kernel",
  "serde",
  "serde_json",
  "tempfile",
@@ -3217,16 +3217,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-macros"
+name = "navree-macros"
 version = "0.1.0"
 dependencies = [
  "axum",
  "http",
  "http-body-util",
- "navis-access",
- "navis-contracts",
- "navis-http",
- "navis-kernel",
+ "navree-access",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -3241,14 +3241,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-mail"
+name = "navree-mail"
 version = "0.1.0"
 dependencies = [
  "lettre",
- "navis-config",
- "navis-contracts",
- "navis-kernel",
- "navis-view",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "navree-view",
  "serde",
  "serde_json",
  "thiserror",
@@ -3259,19 +3259,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-notify"
+name = "navree-notify"
 version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "navis-config",
- "navis-contracts",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-mail",
- "navis-testing",
- "navis-view",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-mail",
+ "navree-testing",
+ "navree-view",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -3283,7 +3283,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-observe"
+name = "navree-observe"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3292,10 +3292,10 @@ dependencies = [
  "http-body-util",
  "metrics",
  "metrics-exporter-prometheus",
- "navis-config",
- "navis-contracts",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
  "serde",
  "serde_json",
  "subtle",
@@ -3306,17 +3306,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-queue"
+name = "navree-queue"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "futures-util",
  "hex",
- "navis-config",
- "navis-contracts",
- "navis-db",
- "navis-kernel",
- "navis-testing",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-kernel",
+ "navree-testing",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -3332,7 +3332,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-realtime"
+name = "navree-realtime"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3341,11 +3341,11 @@ dependencies = [
  "hex",
  "http",
  "http-body-util",
- "navis-config",
- "navis-contracts",
- "navis-crypto",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-http",
+ "navree-kernel",
  "rand 0.10.3",
  "reqwest",
  "rustls",
@@ -3362,16 +3362,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-schedule"
+name = "navree-schedule"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "croner",
  "futures-util",
- "navis-contracts",
- "navis-db",
- "navis-kernel",
- "navis-testing",
+ "navree-contracts",
+ "navree-db",
+ "navree-kernel",
+ "navree-testing",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -3383,19 +3383,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-session"
+name = "navree-session"
 version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
  "cookie",
- "navis-config",
- "navis-contracts",
- "navis-crypto",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-testing",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
  "percent-encoding",
  "sea-orm",
  "sea-orm-migration",
@@ -3409,7 +3409,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-storage"
+name = "navree-storage"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3420,11 +3420,11 @@ dependencies = [
  "http-body-util",
  "infer",
  "mime_guess",
- "navis-config",
- "navis-contracts",
- "navis-crypto",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-http",
+ "navree-kernel",
  "object_store",
  "percent-encoding",
  "serde",
@@ -3437,7 +3437,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-testing"
+name = "navree-testing"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3446,10 +3446,10 @@ dependencies = [
  "cookie",
  "http",
  "http-body-util",
- "navis-config",
- "navis-contracts",
- "navis-http",
- "navis-kernel",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3460,7 +3460,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-validation"
+name = "navree-validation"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -3469,11 +3469,11 @@ dependencies = [
  "form_urlencoded",
  "garde",
  "http",
- "navis-config",
- "navis-db",
- "navis-http",
- "navis-kernel",
- "navis-testing",
+ "navree-config",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
  "sea-orm",
  "serde",
  "serde_json",
@@ -3485,13 +3485,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "navis-view"
+name = "navree-view"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "minijinja",
- "navis-config",
- "navis-kernel",
+ "navree-config",
+ "navree-kernel",
  "serde",
  "serde_json",
  "tempfile",

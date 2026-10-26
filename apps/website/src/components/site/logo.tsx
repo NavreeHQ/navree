@@ -1,5 +1,5 @@
 /**
- * The Navis mark: a hull in profile with its sheer rising to the bow, cut
+ * The Navree mark: a hull in profile with its sheer rising to the bow, cut
  * by the waterline, over a swept fin. It is drawn
  * on a 32-unit grid so it stays crisp at 16 px (the favicon is the same
  * paths: `src/app/icon.svg`).
@@ -32,7 +32,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
       <LogoMark className="size-7 text-accent drop-shadow-[0_0_10px_rgb(61_255_143/0.45)]" />
-      <span className="text-[1.3125rem] font-semibold tracking-[-0.03em] text-fg">navis</span>
+      <span className="text-[1.3125rem] font-semibold tracking-[-0.03em] text-fg">navree</span>
     </span>
   );
 }

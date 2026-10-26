@@ -1,7 +1,7 @@
 /**
  * The landing page's code tabs. Adapted from real code: the CRM's deals
  * module and controller (apps/crm-api/crates/crm-deals), the benchmark app
- * (bench/frameworks/navis) and the navis-queue crate docs. Keep them short,
+ * (bench/frameworks/navree) and the navree-queue crate docs. Keep them short,
  * and keep them true to the APIs.
  */
 export type Showcase = {
@@ -26,7 +26,7 @@ export const showcases: Showcase[] = [
     text: "As in NestJS, each module declares what it imports, the services it provides, its controllers and what it exports. The container wires them by type when the app boots, and refuses to start if a dependency is missing or private, naming the module and the type.",
     href: "/docs/architecture/modules/",
     linkText: "Read about modules",
-    code: `use navis::prelude::*;
+    code: `use navree::prelude::*;
 
 /// The sales pipeline: its routes, its service, and what
 /// other modules may use.
@@ -48,7 +48,7 @@ impl DealsModule {
 }
 
 fn main() -> Result<(), BoxError> {
-    Navis::app()
+    Navree::app()
         .module(ConfigModule::for_root(ConfigSources::defaults()))
         .module(LoggerModule::from_config())
         .module(CryptoModule::from_config())
@@ -150,7 +150,7 @@ async fn store(
     text: "Workers run jobs with retries, backoff and timeouts, from the database queue. A job dispatched while a request is running waits for that request's transaction: if it rolls back, the job is never queued.",
     href: "/docs/digging-deeper/queues/",
     linkText: "Read about queues",
-    code: `use navis::contracts::{Job, JobContext, JobOptions};
+    code: `use navree::contracts::{Job, JobContext, JobOptions};
 
 #[derive(Serialize, Deserialize)]
 pub struct SendInvoice {

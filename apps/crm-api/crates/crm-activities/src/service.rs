@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use crm_core::entities::{activity, company, contact, deal};
 use crm_core::{Activity, ActivityKind, SubjectType};
-use navis::access::{Ability, Accessible, PrincipalAccess, READ, Read, record_json};
-use navis::auth::user;
-use navis::contracts::Clock;
-use navis::db::paginate;
-use navis::prelude::*;
-use navis::validation::ValidationErrors;
+use navree::access::{Ability, Accessible, PrincipalAccess, READ, Read, record_json};
+use navree::auth::user;
+use navree::contracts::Clock;
+use navree::db::paginate;
+use navree::prelude::*;
+use navree::validation::ValidationErrors;
 use sea_orm::ActiveValue::{Set, Unchanged};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, IntoActiveModel,

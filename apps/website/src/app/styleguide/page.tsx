@@ -22,7 +22,7 @@ export default async function Styleguide() {
       <article className="min-w-0">
         <h1 className="text-[2.25rem] leading-[1.12] font-semibold tracking-[-0.03em] text-fg sm:text-[2.625rem]">{String(data.title)}</h1>
         <p className="mt-4 mb-9 text-lg leading-relaxed text-fg-2">{String(data.description)}</p>
-        <div className="prose-navis">{content}</div>
+        <div className="prose-navree">{content}</div>
       </article>
       <aside className="hidden xl:block">
         <div className="sticky top-[calc(var(--header-h)+3rem)]">

@@ -36,7 +36,7 @@ export function GET() {
                 <path key={d} d={d} fill="#3dff8f" />
               ))}
             </svg>
-            <span style={{ fontSize: 52, fontWeight: 600, letterSpacing: "-0.03em" }}>navis</span>
+            <span style={{ fontSize: 52, fontWeight: 600, letterSpacing: "-0.03em" }}>navree</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", fontSize: 54, fontWeight: 600, lineHeight: 1.05, letterSpacing: "-0.035em" }}>
             {site.tagline.split(/(?<=,)\s+/).map((line) => (

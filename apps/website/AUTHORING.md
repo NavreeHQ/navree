@@ -1,4 +1,4 @@
-# Writing the Navis docs
+# Writing the Navree docs
 
 This is the guide for everyone writing pages in `apps/website`. It covers
 where pages live, the front-matter, every component you can use, how to
@@ -118,7 +118,7 @@ impl DealsController { /* ... */ }
 
 ````mdx
 ```rust title="src/app.rs" {4}
-Navis::app()
+Navree::app()
     .module(ConfigModule::for_root(ConfigSources::defaults()))
     .module(HttpModule::from_config())
     .module(QueueModule::from_config())
@@ -126,8 +126,8 @@ Navis::app()
 ```
 
 ```toml
-navis = { version = "0.1", features = ["http", "db"] } # [!code --]
-navis = { version = "0.1", features = ["postgres"] } # [!code ++]
+navree = { version = "0.1", features = ["http", "db"] } # [!code --]
+navree = { version = "0.1", features = ["postgres"] } # [!code ++]
 tokio = { version = "1", features = ["full"] } # [!code highlight]
 ```
 ````
@@ -161,7 +161,7 @@ A note, tip or warning set apart from the text. The title is optional.
 ```mdx
 <Callout type="tip" title="Run one crate's tests">
 
-Use `cargo test -p navis-validation` while you work on one crate.
+Use `cargo test -p navree-validation` while you work on one crate.
 
 </Callout>
 ```
@@ -222,13 +222,13 @@ A numbered procedure. Use it only when the order matters.
 <Step title="Install the CLI">
 
 ```sh
-cargo install navis-cli
+cargo install navree-cli
 ```
 
 </Step>
 <Step title="Create an app">
 
-`navis new blog` writes a working app with one module.
+`navree new blog` writes a working app with one module.
 
 </Step>
 </Steps>
@@ -256,7 +256,7 @@ src/
 ### Badge
 
 A small inline label. Use `feature` to say which Cargo feature of the
-`navis` facade a page or section needs. Put it at the start of the first
+`navree` facade a page or section needs. Put it at the start of the first
 paragraph, not in the heading (it would end up in the heading's link id):
 
 ```mdx
@@ -296,8 +296,8 @@ developer who wants to get something done.
 - **Talk to the reader.** "You", never "the user" or "we". "Register the job
   in your module", not "The job should be registered".
 - **Short sentences, active voice, present tense.** One idea per sentence.
-  "`navis new` creates the app", not "The app will be created by running
-  `navis new`".
+  "`navree new` creates the app", not "The app will be created by running
+  `navree new`".
 - **Say why, then how.** Open a section with what the feature is for, in a
   sentence or two, then show the code. Show the most common case first and
   the options after it.
@@ -335,7 +335,7 @@ pnpm serve         # serves out/ at http://127.0.0.1:3211, like a static host
   copies the raw results to `public/data/bench/` (every number on the site
   comes from there, so re-running the benchmark updates the site on the next
   build);
-- reads the crate layers from `crates/navis/tests/dependency_graph.rs` and
+- reads the crate layers from `crates/navree/tests/dependency_graph.rs` and
   the descriptions from each `Cargo.toml` into `src/generated/crates.json`;
 - checks the docs against the manifest and builds the search index into
   `public/data/search-index.json`.

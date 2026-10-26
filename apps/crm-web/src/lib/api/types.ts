@@ -14,7 +14,7 @@ export type PageMeta = Schemas["CompanyPage"]["meta"];
 export type Page<T> = { data: T[]; meta: PageMeta };
 
 /**
- * A CASL raw rule as `GET /api/me/abilities` serves it. navis-access has no
+ * A CASL raw rule as `GET /api/me/abilities` serves it. navree-access has no
  * OpenAPI schema for it, so it is written out here.
  */
 export type CaslRule = {
@@ -39,9 +39,9 @@ export type Role = Schemas["UserRole"];
 export type User = Schemas["User"];
 export type Me = Schemas["Me"];
 export type LoginInput = Schemas["LoginInput"];
-/** Navis's login response (tokens + user). Only the BFF ever sees it. */
-export type NavisLoginResponse = Schemas["LoginResponse"];
-/** Navis's login answer for an account with two-factor authentication. */
+/** Navree's login response (tokens + user). Only the BFF ever sees it. */
+export type NavreeLoginResponse = Schemas["LoginResponse"];
+/** Navree's login answer for an account with two-factor authentication. */
 export type TwoFactorChallenge = Schemas["TwoFactorChallenge"];
 export type TwoFactorVerifyInput = Schemas["TwoFactorVerifyInput"];
 export type TokenPair = Schemas["TokenPair"];
@@ -97,7 +97,7 @@ export type AppSubject = Company | Contact | Deal | Activity | User;
 
 // ---- Query parameters ----------------------------------------------------------
 //
-// navis-api cannot document query parameters yet (framework open issue W2/W6), so
+// navree-api cannot document query parameters yet (framework open issue W2/W6), so
 // the generated `paths` say `query?: never` for every list endpoint. These are the
 // filters of spec §7, merged into `paths` below so openapi-fetch type-checks them.
 

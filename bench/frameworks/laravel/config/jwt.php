@@ -23,11 +23,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | Not a jwt-auth option: App\Auth\Claims\Issuer rejects tokens whose
-    | `iss` claim differs from this value (Navis issues them as "navis").
+    | `iss` claim differs from this value (Navree issues them as "navree").
     |
     */
 
-    'issuer' => env('JWT_ISSUER', 'navis'),
+    'issuer' => env('JWT_ISSUER', 'navree'),
 
     /*
     |--------------------------------------------------------------------------
@@ -157,7 +157,7 @@ return [
     |
     */
 
-    // Navis's access tokens carry no `nbf` claim.
+    // Navree's access tokens carry no `nbf` claim.
     'required_claims' => [
         'iss',
         'iat',
@@ -201,7 +201,7 @@ return [
     |
     */
 
-    // Navis's tokens carry no `prv` claim, and there is one user model.
+    // Navree's tokens carry no `prv` claim, and there is one user model.
     'lock_subject' => false,
 
     /*

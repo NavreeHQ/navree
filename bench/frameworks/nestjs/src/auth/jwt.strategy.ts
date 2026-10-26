@@ -17,7 +17,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: process.env.JWT_SECRET as string,
-      issuer: process.env.JWT_ISSUER ?? 'navis',
+      issuer: process.env.JWT_ISSUER ?? 'navree',
       algorithms: ['HS256'],
       ignoreExpiration: false,
     });

@@ -26,7 +26,7 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser):
-    """Navis's `users` table as the AUTH_USER_MODEL.
+    """Navree's `users` table as the AUTH_USER_MODEL.
 
     The table names the hash column `password_hash` and has no `last_login` or
     `is_active` columns: `password` is mapped onto `password_hash`,

@@ -6,7 +6,7 @@
 | Framework | FastAPI 0.162.0 (`fastapi[standard]`) on Starlette 1.10.0 |
 | Server | Uvicorn 0.54.0 with uvloop 0.23.0 and httptools 0.9.0 (`uvicorn[standard]`), one worker process per CPU (`--workers` from `WEB_CONCURRENCY` = `nproc`, 8 under the benchmark's cpuset), `--no-access-log` |
 | Database | SQLAlchemy 2.1.6 async ORM (declarative models) on asyncpg 0.32.0, `pool_size=8, max_overflow=0` per worker (64 in total) |
-| JWT | PyJWT 2.15.1 (HS256, `issuer="navis"`, `exp`/`iss`/`sub` required) in a `Depends(get_current_user)` dependency behind `HTTPBearer`; it loads the user with `session.get(User, sub)` and raises `HTTPException(401)` |
+| JWT | PyJWT 2.15.1 (HS256, `issuer="navree"`, `exp`/`iss`/`sub` required) in a `Depends(get_current_user)` dependency behind `HTTPBearer`; it loads the user with `session.get(User, sub)` and raises `HTTPException(401)` |
 | Validation | Pydantic 2.14.1: a body model for create, `Query(ge=, le=)` for `page`/`per_page` (FastAPI's 422); responses go through `response_model`s |
 | Lockfile | `uv.lock`, installed with `uv sync --locked` (uv 0.13.5) |
 

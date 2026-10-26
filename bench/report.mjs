@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds bench/results/report.html from bench/results/*.json: one ranked bar
-// chart per test (Navis highlighted, the rest grey), latency, memory and a
+// chart per test (Navree highlighted, the rest grey), latency, memory and a
 // table with every number.
 //   node bench/report.mjs [resultsDir]
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const BENCH = dirname(fileURLToPath(import.meta.url));
 const DIR = process.argv[2] ?? join(BENCH, "results");
-const HIGHLIGHT = "navis";
+const HIGHLIGHT = "navree";
 
 const TESTS = [
   { key: "deals_list", label: "Auth + paginated list", what: "JWT check, user lookup, count + one page of 20 deals with owners" },
@@ -103,11 +103,11 @@ function testSection(test) {
         tip: `${r.label}: ${int(t.rps)} req/s · p50 ${ms(t.latency_ms.p50)} ms · p99 ${ms(t.latency_ms.p99)} ms · CPU app ${Math.round(t.avg_cpu_pct ?? 0)}% / db ${Math.round(t.pg_avg_cpu_pct ?? 0)}%${errors}`,
       };
     });
-  const navis = rows.find((r) => r.name === HIGHLIGHT);
-  const rank = navis ? [...rows].sort((a, b) => b.value - a.value).findIndex((r) => r.name === HIGHLIGHT) + 1 : null;
+  const navree = rows.find((r) => r.name === HIGHLIGHT);
+  const rank = navree ? [...rows].sort((a, b) => b.value - a.value).findIndex((r) => r.name === HIGHLIGHT) + 1 : null;
   return `<section class="card">
   <h3 id="${test.key}-t">${esc(test.label)} <span class="unit">requests / s</span></h3>
-  <p class="sub">${esc(test.what)}${navis ? ` · Navis ${int(navis.value)} req/s, #${rank} of ${rows.length}` : ""}</p>
+  <p class="sub">${esc(test.what)}${navree ? ` · Navree ${int(navree.value)} req/s, #${rank} of ${rows.length}` : ""}</p>
   ${barChart({ id: test.key, rows, unit: "req/s" })}
 </section>`;
 }
@@ -161,7 +161,7 @@ function table() {
 const s = ok[0]?.settings ?? {};
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Navis benchmark</title>
+<title>Navree benchmark</title>
 <style>
 .viz-root{color-scheme:light;--page:#f9f9f7;--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--accent:#2a78d6;--rest:#aeaca4;--border:rgba(11,11,11,.10);--hl-row:#eef4fc}
 @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--page:#0d0d0d;--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--accent:#3987e5;--rest:#5a5a55;--border:rgba(255,255,255,.10);--hl-row:#1c2a3b}}
@@ -203,9 +203,9 @@ tr.hl td{background:var(--hl-row);font-weight:600}
 ul.notes{color:var(--text-secondary);font-size:13px;max-width:1000px;padding-left:18px}
 </style></head>
 <body><div class="viz-root"><div class="wrap">
-<h1>Navis vs. other web frameworks</h1>
+<h1>Navree vs. other web frameworks</h1>
 <p class="lede">Every framework implements the same API (bench/SPEC.md) and is measured alone: the app gets ${esc(s.cpus?.app ? `CPUs ${s.cpus.app}` : "8 CPUs")} and 4 GB, PostgreSQL 17 its own CPUs, wrk its own. ${s.connections ?? 256} connections, ${s.warmup_s ?? 10} s warmup, then the median of ${s.runs ?? 3} × ${s.duration_s ?? 15} s runs. Docker ${esc(env.docker ?? "")} on a 24-core Intel Core Ultra 9 275HX laptop (Windows 11, WSL2).</p>
-<div class="legend"><span><span class="sw" style="background:var(--accent)"></span>Navis</span><span><span class="sw" style="background:var(--rest)"></span>other frameworks</span><span>· marks a micro-framework (no ORM/auth layer of its own)</span></div>
+<div class="legend"><span><span class="sw" style="background:var(--accent)"></span>Navree</span><span><span class="sw" style="background:var(--rest)"></span>other frameworks</span><span>· marks a micro-framework (no ORM/auth layer of its own)</span></div>
 ${fragment("findings.html")}
 <h2>Throughput</h2>
 <div class="grid2">
@@ -271,7 +271,7 @@ function chart(rows, lowerIsBetter) {
   let s = '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" role="img">';
   for (const t of ticks) s += '<line class="grid" x1="' + x(t) + '" x2="' + x(t) + '" y1="2" y2="' + (H - 22) + '"/><text class="tick" x="' + x(t) + '" y="' + (H - 6) + '" text-anchor="middle">' + tickLabel(t) + "</text>";
   rows.forEach((r, i) => {
-    const y = TOP + i * (RH + G), hl = r.k === "navis", w = Math.max(1.5, x(r.value) - L), bh = RH - 6, rad = Math.min(4, w / 2, bh / 2);
+    const y = TOP + i * (RH + G), hl = r.k === "navree", w = Math.max(1.5, x(r.value) - L), bh = RH - 6, rad = Math.min(4, w / 2, bh / 2);
     s += '<g class="row' + (hl ? " hl" : "") + '" data-tip="' + esc(r.tip) + '"><rect class="hit" x="0" y="' + (y - G / 2) + '" width="' + W + '" height="' + (RH + G) + '"/>';
     s += '<text class="label" x="' + (L - 10) + '" y="' + (y + RH / 2 + 4) + '" text-anchor="end">' + esc(r.label) + "</text>";
     s += '<path class="bar" d="M' + L + "," + (y + 3) + " h" + (w - rad) + " a" + rad + "," + rad + " 0 0 1 " + rad + "," + rad + " v" + (bh - 2 * rad) + " a" + rad + "," + rad + " 0 0 1 -" + rad + "," + rad + " h" + -(w - rad) + ' z"/>';
@@ -292,7 +292,7 @@ for (const t of TESTS) {
 html += '<section><h3>Peak memory under load <span class="unit">MB, lower is better</span></h3>' + chart(DATA.map((d) => ({ k: d.k, label: label(d), value: d.mem, text: fmt(d.mem) + " MB", tip: d.n + ": peak " + fmt(d.mem) + " MB" })), true) + "</section>";
 const sorted = [...DATA].sort((a, b) => b.t.deals_list[0] - a.t.deals_list[0]);
 html += '<h3>All results <span class="unit">req/s, sorted by the paginated-list test</span></h3><div class="tw"><table><thead><tr><th>Framework</th>' + TESTS.map((t) => '<th class="n">' + esc(t.label) + "</th>").join("") + '<th class="n">Peak MB</th></tr></thead><tbody>';
-for (const d of sorted) html += "<tr" + (d.k === "navis" ? ' class="hl"' : "") + "><td>" + esc(label(d)) + "</td>" + TESTS.map((t) => '<td class="n">' + fmt(d.t[t.key][0]) + "</td>").join("") + '<td class="n">' + fmt(d.mem) + "</td></tr>";
+for (const d of sorted) html += "<tr" + (d.k === "navree" ? ' class="hl"' : "") + "><td>" + esc(label(d)) + "</td>" + TESTS.map((t) => '<td class="n">' + fmt(d.t[t.key][0]) + "</td>").join("") + '<td class="n">' + fmt(d.mem) + "</td></tr>";
 document.getElementById("r").insertAdjacentHTML("beforeend", html + "</tbody></table></div>");
 const tip = document.getElementById("tip");
 document.querySelectorAll(".chart .row").forEach((row) => {
@@ -338,7 +338,7 @@ const inline = `<!doctype html>
 <style>${inlineStyle}</style></head>
 <body><div class="r" id="r">
 <p class="cap">Each app limited to 8 CPUs and 4 GB and run alone; 256 connections; median of 3 × 15 s runs after a 10 s warmup; PostgreSQL 17 and wrk on their own CPUs. Hover a bar for p99 latency and CPU.</p>
-<div class="legend"><span><span class="sw" style="background:var(--accent)"></span>Navis</span><span><span class="sw" style="background:var(--rest)"></span>other frameworks</span><span>· micro-framework (no ORM/auth layer of its own)</span></div>
+<div class="legend"><span><span class="sw" style="background:var(--accent)"></span>Navree</span><span><span class="sw" style="background:var(--rest)"></span>other frameworks</span><span>· micro-framework (no ORM/auth layer of its own)</span></div>
 </div><div id="tip"></div>
 <script>
 const DATA = ${JSON.stringify(inlineData)};

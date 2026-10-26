@@ -4,11 +4,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navis::BoxFuture;
-use navis::access::AccessService;
-use navis::access::entity::{role, user_role};
-use navis::auth::{USER_SUBJECT, User, UserResourceExtension};
-use navis::prelude::*;
+use navree::BoxFuture;
+use navree::access::AccessService;
+use navree::access::entity::{role, user_role};
+use navree::auth::{USER_SUBJECT, User, UserResourceExtension};
+use navree::prelude::*;
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -129,7 +129,7 @@ pub async fn roles_by_user<C: ConnectionTrait>(
     Ok(roles)
 }
 
-/// Adds `roles` to the user resource of navis-auth's routes
+/// Adds `roles` to the user resource of navree-auth's routes
 /// (`GET /api/auth/me`, `user` in the login response).
 #[injectable]
 pub struct UserRolesExtension {

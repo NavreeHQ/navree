@@ -3,7 +3,7 @@
 
 use crm_core::ContactStatus;
 use garde::Validate;
-use navis::validation::{AsyncRule, AsyncRules};
+use navree::validation::{AsyncRule, AsyncRules};
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;

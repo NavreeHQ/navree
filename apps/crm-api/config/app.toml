@@ -1,4 +1,4 @@
-# Navis CRM API: development settings.
+# Navree CRM API: development settings.
 #
 # Read from the working directory (run the API from apps/crm-api), after
 # `.env` and before `APP_*` environment variables, which override any key:
@@ -28,7 +28,7 @@ url = "sqlite://storage/crm.db?mode=rwc"
 migrate_on_boot = true
 
 [mail]
-from = "Navis CRM <crm@navis.test>"
+from = "Navree CRM <crm@navree.test>"
 # Mails are written to the log in development.
 transport = "log"
 
@@ -43,8 +43,8 @@ registration = false
 url = "http://localhost:3000/reset-password"
 
 [realtime]
-# ws://127.0.0.1:8080/app/navis-crm-key
-key = "navis-crm-key"
+# ws://127.0.0.1:8080/app/navree-crm-key
+key = "navree-crm-key"
 allowed_origins = ["http://localhost:3000"]
 # queue:work and schedule:work hand their broadcasts (deal notifications,
 # task reminders) to `serve`, which holds the sockets: `auto` posts them to
@@ -53,7 +53,7 @@ allowed_origins = ["http://localhost:3000"]
 relay_url = "auto"
 
 [api]
-title = "Navis CRM API"
+title = "Navree CRM API"
 
 [log]
 level = "info"

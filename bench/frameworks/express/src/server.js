@@ -23,7 +23,7 @@ function start() {
     max: Math.max(1, Math.floor(MAX_DB_CONNECTIONS / WORKERS)),
   });
   const secret = process.env.JWT_SECRET;
-  const issuer = process.env.JWT_ISSUER ?? "navis";
+  const issuer = process.env.JWT_ISSUER ?? "navree";
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const app = express();

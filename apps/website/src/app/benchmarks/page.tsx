@@ -40,7 +40,7 @@ const headings = [
   { depth: 3 as const, id: "latency", text: "Latency" },
   { depth: 2 as const, id: "memory-and-startup", text: "Memory and startup" },
   { depth: 2 as const, id: "all-results", text: "All results" },
-  { depth: 2 as const, id: "where-navis-is-slower", text: `Where ${site.name} is slower` },
+  { depth: 2 as const, id: "where-navree-is-slower", text: `Where ${site.name} is slower` },
   { depth: 2 as const, id: "methodology", text: "Methodology" },
   { depth: 2 as const, id: "caveats", text: "Caveats" },
   { depth: 2 as const, id: "stacks", text: "The stacks" },
@@ -62,7 +62,7 @@ function Section({ id, title, lead, children }: { id: string; title: string; lea
 }
 
 function Prose({ children }: { children: ReactNode }) {
-  return <div className="prose-navis max-w-[44rem]">{children}</div>;
+  return <div className="prose-navree max-w-[44rem]">{children}</div>;
 }
 
 /** "A, B and C". */
@@ -76,11 +76,11 @@ function minutesBetween(a: string, b: string): number {
 }
 
 export default async function BenchmarksPage() {
-  const navis = highlighted();
+  const navree = highlighted();
   const name = site.name;
   const { settings } = bench;
   const others = bench.frameworks.length - 1;
-  const checks = navis.conformance.passed ?? 0;
+  const checks = navree.conformance.passed ?? 0;
   const allPassed = bench.frameworks.every((f) => f.conformance.ok && !f.conformance.failed);
   const fullStackCount = bench.frameworks.filter((f) => f.category === "full-stack").length;
   const label = (key: TestKey) => testInfo(key).label;
@@ -96,14 +96,14 @@ export default async function BenchmarksPage() {
   const loco = byName("loco");
   const behindOnList = ["nestjs-fastify", "rails", "django", "laravel-octane"]
     .map(byName)
-    .filter((f): f is Framework => Boolean(f) && rps(f!, "deals_list") < rps(navis, "deals_list"));
+    .filter((f): f is Framework => Boolean(f) && rps(f!, "deals_list") < rps(navree, "deals_list"));
   const aheadOnList = bench.frameworks.filter(
-    (f) => f.category === "full-stack" && rps(f, "deals_list") > rps(navis, "deals_list"),
+    (f) => f.category === "full-stack" && rps(f, "deals_list") > rps(navree, "deals_list"),
   ).sort((a, b) => rps(b, "deals_list") - rps(a, "deals_list"));
-  const totalErrors =Object.values(navis.results).reduce((sum, r) => sum + (r?.errors ?? 0), 0);
-  const jsonCpu = navis.results.json?.cpuPct ?? 0;
-  const dbCpu = navis.results.db?.cpuPct ?? 0;
-  const dbPg = navis.results.db?.pgCpuPct ?? 0;
+  const totalErrors =Object.values(navree.results).reduce((sum, r) => sum + (r?.errors ?? 0), 0);
+  const jsonCpu = navree.results.json?.cpuPct ?? 0;
+  const dbCpu = navree.results.db?.cpuPct ?? 0;
+  const dbPg = navree.results.db?.pgCpuPct ?? 0;
   const appCap = settings.app.count * 100;
   const pgCap = settings.pg.count * 100;
   const loadCap = settings.load.count * 100;
@@ -180,13 +180,13 @@ export default async function BenchmarksPage() {
     imageMb: f.imageMb,
   }));
 
-  const repoName = site.repoUrl.replace(/\/$/, "").split("/").pop() ?? "navis";
+  const repoName = site.repoUrl.replace(/\/$/, "").split("/").pop() ?? "navree";
   const reproduce = [
     `git clone ${site.repoUrl}`,
     `cd ${repoName}`,
-    `node bench/run.mjs --smoke --only ${navis.name}   # build, conformance, then 5 s per test`,
+    `node bench/run.mjs --smoke --only ${navree.name}   # build, conformance, then 5 s per test`,
     `node bench/run.mjs                        # the full run, one framework at a time`,
-    `node bench/run.mjs --only ${navis.name},axum      # or just some of them`,
+    `node bench/run.mjs --only ${navree.name},axum      # or just some of them`,
     `node bench/report.mjs                     # writes bench/results/report.html`,
   ].join("\n");
   const reproduceHtml = await highlight(reproduce, "shellscript");
@@ -225,23 +225,23 @@ export default async function BenchmarksPage() {
                   : `${ordinal(listRank.rank)} and ${ordinal(createRank.rank)} of the ${fullStackCount} full-stack frameworks`}
                 .
               </strong>{" "}
-              It serves {fmtInt(rps(navis, "deals_list"))} authenticated, paginated lists a second, behind{" "}
+              It serves {fmtInt(rps(navree, "deals_list"))} authenticated, paginated lists a second, behind{" "}
               {list(aheadOnList.map((f) => `${f.label} (${fmtInt(rps(f, "deals_list"))})`))}.
               {behindOnList.length
-                ? ` That is ${list(behindOnList.map((f) => `${fmtTimes(rps(navis, "deals_list") / rps(f, "deals_list"))} ${f.label}`))}.`
+                ? ` That is ${list(behindOnList.map((f) => `${fmtTimes(rps(navree, "deals_list") / rps(f, "deals_list"))} ${f.label}`))}.`
                 : ""}
             </li>
             <li className="finding">
               <strong className="text-fg">Its own per-request cost is high.</strong> On plain JSON it is{" "}
-              {ordinal(jsonRank.rank)} of {jsonRank.of}, at {fmtCompact(rps(navis, "json"))} requests a second
+              {ordinal(jsonRank.rank)} of {jsonRank.of}, at {fmtCompact(rps(navree, "json"))} requests a second
               {axum ? `, against ${fmtCompact(rps(axum, "json"))} for Axum, the router it is built on` : ""}
               {loco ? `, and ${fmtCompact(rps(loco, "json"))} for Loco` : ""}. On one query it is {ordinal(dbRank.rank)}{" "}
-              of {dbRank.of}. <Link href="#where-navis-is-slower" className="link">Here is why.</Link>
+              of {dbRank.of}. <Link href="#where-navree-is-slower" className="link">Here is why.</Link>
             </li>
             <li className="finding">
-              <strong className="text-fg">Its footprint is tiny.</strong> It idles at {fmtMb(navis.idleMemMb)}, peaks at{" "}
-              {fmtMb(navis.peakMemMb)} under load ({ordinal(peakRank.rank)} lowest of {peakRank.of}), is ready{" "}
-              {fmtInt(navis.startupMs)} ms after it starts, and returned {totalErrors === 0 ? "no errors" : `${fmtInt(totalErrors)} errors`} in
+              <strong className="text-fg">Its footprint is tiny.</strong> It idles at {fmtMb(navree.idleMemMb)}, peaks at{" "}
+              {fmtMb(navree.peakMemMb)} under load ({ordinal(peakRank.rank)} lowest of {peakRank.of}), is ready{" "}
+              {fmtInt(navree.startupMs)} ms after it starts, and returned {totalErrors === 0 ? "no errors" : `${fmtInt(totalErrors)} errors`} in
               any test.
             </li>
           </ul>
@@ -304,7 +304,7 @@ export default async function BenchmarksPage() {
             />
           </div>
           <p className="mt-4 text-sm text-fg-3">
-            {name} was ready in {fmtInt(navis.startupMs)} ms, {ordinal(startupRank.rank)} of {startupRank.of}.
+            {name} was ready in {fmtInt(navree.startupMs)} ms, {ordinal(startupRank.rank)} of {startupRank.of}.
           </p>
         </Section>
 
@@ -318,7 +318,7 @@ export default async function BenchmarksPage() {
 
         {/* --------------------------------------------------------- candour */}
         <Section
-          id="where-navis-is-slower"
+          id="where-navree-is-slower"
           title={`Where ${name} is slower`}
           lead={
             <p>
@@ -354,12 +354,12 @@ export default async function BenchmarksPage() {
                       <th scope="row" className="font-normal text-fg-1">
                         {t.label}
                       </th>
-                      <td className="text-right text-fg">{fmtCompact(rps(navis, t.key))}</td>
+                      <td className="text-right text-fg">{fmtCompact(rps(navree, t.key))}</td>
                       <td className="text-right">{fmtCompact(rps(axum, t.key))}</td>
                       <td className="text-right">{fmtCompact(rps(loco, t.key))}</td>
                       <td className="text-right text-fg-2">
-                        {Math.round((rps(navis, t.key) / rps(axum, t.key)) * 100)}% of Axum,{" "}
-                        {Math.round((rps(navis, t.key) / rps(loco, t.key)) * 100)}% of Loco
+                        {Math.round((rps(navree, t.key) / rps(axum, t.key)) * 100)}% of Axum,{" "}
+                        {Math.round((rps(navree, t.key) / rps(loco, t.key)) * 100)}% of Loco
                       </td>
                     </tr>
                   ))}
@@ -377,11 +377,11 @@ export default async function BenchmarksPage() {
             <p>Reading the code at the time of the run shows where the time goes. Fixing these is the next piece of work:</p>
             <ol>
               <li>
-                <code>navis-db</code> leaves sqlx&apos;s <code>test_before_acquire</code> on, so every pool checkout pings
+                <code>navree-db</code> leaves sqlx&apos;s <code>test_before_acquire</code> on, so every pool checkout pings
                 PostgreSQL first: <code>/db</code> costs two round trips instead of one.
               </li>
               <li>
-                Every unit-of-work transaction adds a <code>SELECT set_config(&apos;navis.actor&apos;, …)</code> round trip.
+                Every unit-of-work transaction adds a <code>SELECT set_config(&apos;navree.actor&apos;, …)</code> round trip.
               </li>
               <li>
                 The unit-of-work layer spawns a task for every request, <code>/json</code> included.
@@ -408,8 +408,8 @@ export default async function BenchmarksPage() {
             </ol>
             <p>
               What this means for an application: once a request does real database work, the gap narrows. On the
-              authenticated list, {name} delivers {Math.round((rps(navis, "deals_list") / rps(loco ?? navis, "deals_list")) * 100)}%
-              of Loco&apos;s throughput{axum ? ` and ${Math.round((rps(navis, "deals_list") / rps(axum, "deals_list")) * 100)}% of hand-written Axum` : ""}.
+              authenticated list, {name} delivers {Math.round((rps(navree, "deals_list") / rps(loco ?? navree, "deals_list")) * 100)}%
+              of Loco&apos;s throughput{axum ? ` and ${Math.round((rps(navree, "deals_list") / rps(axum, "deals_list")) * 100)}% of hand-written Axum` : ""}.
             </p>
           </Prose>
         </Section>
@@ -604,7 +604,7 @@ export default async function BenchmarksPage() {
           }
         >
           <div className="max-w-[44rem]">
-            <CodeBlock data-title="Terminal" data-language="shellscript" className="shiki navis-night">
+            <CodeBlock data-title="Terminal" data-language="shellscript" className="shiki navree-night">
               <span dangerouslySetInnerHTML={{ __html: preInner }} />
             </CodeBlock>
           </div>

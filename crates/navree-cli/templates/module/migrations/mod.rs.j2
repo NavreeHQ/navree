@@ -1,0 +1,13 @@
+//! The migrations of the {{ module_words }} module. `navree migrate` runs every
+//! module's set in dependency order and each set in name order;
+//! `navree make:migration {{ module }} <name>` adds one here.
+
+use navree::db::MigrationSet;
+
+mod {{ migration }};
+
+/// The module's migration set, recorded under `{{ module }}` in `navree_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("{{ module }}")
+        .migration({{ migration }}::Migration)
+}

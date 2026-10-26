@@ -58,7 +58,7 @@ const groups: Group[] = [
       { name: "Cache and storage", text: "Cache stores with tags and locks; disks with signed URLs.", href: "/docs/digging-deeper/cache/" },
       { name: "OpenAPI", text: "An OpenAPI 3.1 document generated from your routes.", href: "/docs/digging-deeper/openapi/" },
       { name: "Health and metrics", text: "Readiness checks and Prometheus metrics.", href: "/docs/digging-deeper/health-and-metrics/" },
-      { name: "The CLI", text: "navis new, generators, and a dev server that restarts on save.", href: "/docs/digging-deeper/cli/" },
+      { name: "The CLI", text: "navree new, generators, and a dev server that restarts on save.", href: "/docs/digging-deeper/cli/" },
     ],
   },
   {

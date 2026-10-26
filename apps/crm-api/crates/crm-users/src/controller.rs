@@ -1,8 +1,8 @@
 //! `GET /api/v1/me` and `/api/v1/users`.
 
 use crm_core::User;
-use navis::access::CurrentAccess;
-use navis::prelude::*;
+use navree::access::CurrentAccess;
+use navree::prelude::*;
 
 use crate::dto::{CreateUser, UpdateUser, UserFilter};
 use crate::resource::{Me, UserPage, UserView};

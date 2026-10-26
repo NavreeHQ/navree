@@ -1,4 +1,4 @@
-//! The CRM's roles (spec §6). Roles live in navis-access's `roles` table;
+//! The CRM's roles (spec §6). Roles live in navree-access's `roles` table;
 //! the `crm-roles` seeder creates them and grants their permissions.
 
 use std::fmt;
@@ -36,7 +36,7 @@ impl UserRole {
     /// Every role, most powerful first.
     pub const ALL: [UserRole; 3] = [UserRole::Admin, UserRole::Manager, UserRole::Rep];
 
-    /// The role name stored in navis-access.
+    /// The role name stored in navree-access.
     pub const fn as_str(self) -> &'static str {
         match self {
             UserRole::Admin => ADMIN,

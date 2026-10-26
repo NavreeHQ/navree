@@ -73,9 +73,9 @@ pub enum Relation {
     Contact,
     /// The owner (`owner_id` → `users.id`).
     #[sea_orm(
-        belongs_to = "navis::auth::user::Entity",
+        belongs_to = "navree::auth::user::Entity",
         from = "Column::OwnerId",
-        to = "navis::auth::user::Column::Id"
+        to = "navree::auth::user::Column::Id"
     )]
     Owner,
 }

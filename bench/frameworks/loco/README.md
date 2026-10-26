@@ -6,7 +6,7 @@
 | Framework | Loco 1.2.0 (`loco-rs`, on Axum 0.8.9, hyper 1.12, Tokio 1.54.1), `LOCO_ENV=production` |
 | Workers | One process on Tokio's default multi-thread runtime (`#[tokio::main]`): one worker thread per CPU, 8 under the benchmark's cpuset. Started in Loco's `ServerOnly` mode, as `cargo loco start` does |
 | Database | SeaORM 2.0.4 on sqlx 0.9.0 (Postgres), Loco's pool from `database:` in `config/production.yaml`: `max_connections: 64`, `min_connections: 1` |
-| JWT | jsonwebtoken 10.4.0 (`rust_crypto`, the version loco-rs 1.2 links for its own `auth::jwt`) in a custom extractor on top of Loco's token lookup and `auth.jwt.secret` config; HS256, `exp`/`iss`/`sub` required, `iss` must be `navis`, then the user row is loaded |
+| JWT | jsonwebtoken 10.4.0 (`rust_crypto`, the version loco-rs 1.2 links for its own `auth::jwt`) in a custom extractor on top of Loco's token lookup and `auth.jwt.secret` config; HS256, `exp`/`iss`/`sub` required, `iss` must be `navree`, then the user row is loaded |
 | Validation | validator 0.20.0 (derive) through Loco's `JsonValidateWithMessage` (body) and `QueryValidateWithMessage` (query string) extractors |
 
 ## Layout
@@ -15,7 +15,7 @@ The structure `loco new` generates for a REST API app with Postgres (`--db postg
 
 - `src/app.rs`: the `Hooks` impl (routes, boot, `after_context`).
 - `src/controllers/{home,world,deals}.rs`: thin handlers returning `format::json` / `format::render()`.
-- `src/models/_entities/`: SeaORM entities for `world`, `users` (Navis's table, mapped as it is: `id uuid`, `password_hash`, two-factor columns) and `deals`, in the compact format `cargo loco db entities` writes, with the `deals.owner_id` → `users.id` relation.
+- `src/models/_entities/`: SeaORM entities for `world`, `users` (Navree's table, mapped as it is: `id uuid`, `password_hash`, two-factor columns) and `deals`, in the compact format `cargo loco db entities` writes, with the `deals.owner_id` → `users.id` relation.
 - `src/models/{world,users,deals}.rs`: finders and creation on `impl Model` (`find_random`, `find_by_id`, `page_with_owners`, `create`), the `before_save` hook that fills a new deal's id and timestamps, and the `CreateParams` body struct.
 - `src/views/`: response types; entities never go on the wire.
 - `src/extractors/auth.rs`: the `CurrentUser` extractor.
@@ -70,7 +70,7 @@ Plus the monitoring routes `AppRoutes::with_default_routes()` adds (`/_ping`, `/
 
 ## Judgement calls
 
-- **Custom token extractor instead of `auth::JWT` / `auth::JWTWithUser`.** Loco's extractors decode Loco's own claims (`pid`), decode `auth.jwt.secret` as base64, default to HS512 and don't check `iss`, so they can't validate Navis's token. `CurrentUser` keeps the Loco pieces that fit: `extract_token(get_jwt_from_config(ctx)?, parts)` (honours `auth.jwt.location`) and the secret from `auth.jwt.secret`; it decodes with `jsonwebtoken` (as `loco_rs::auth::jwt` does), with `leeway = 0` like Loco's own validation. The `DecodingKey` and `Validation` are built once in `Hooks::after_context` and kept in `ctx.shared_store`; the extractor reads them from there per request.
+- **Custom token extractor instead of `auth::JWT` / `auth::JWTWithUser`.** Loco's extractors decode Loco's own claims (`pid`), decode `auth.jwt.secret` as base64, default to HS512 and don't check `iss`, so they can't validate Navree's token. `CurrentUser` keeps the Loco pieces that fit: `extract_token(get_jwt_from_config(ctx)?, parts)` (honours `auth.jwt.location`) and the secret from `auth.jwt.secret`; it decodes with `jsonwebtoken` (as `loco_rs::auth::jwt` does), with `leeway = 0` like Loco's own validation. The `DecodingKey` and `Validation` are built once in `Hooks::after_context` and kept in `ctx.shared_store`; the extractor reads them from there per request.
 - **jsonwebtoken 10.4 and validator 0.20, not 11.1 / 0.21.** validator is forced: Loco's `ValidatorTrait` (what `JsonValidate*` / `QueryValidate*` require) is implemented for validator 0.20's `Validate`. jsonwebtoken 10 is the major loco-rs links, so there is one JWT stack in the binary; 11 would build a second copy for no functional difference.
 - **No `cli` feature.** See *Production setup*: same boot path, one pool instead of two, and no clap in the build.
 - **`stage` is a `String` with a custom validator rule**, not a Rust enum: `cargo loco db entities` maps `varchar(20)` to `String`, and a rule keeps the error a per-field validation error (400) instead of a deserialization error.

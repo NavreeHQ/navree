@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * A small inline label.
  *
- * - `<Badge feature="queue" />` says which Cargo feature of `navis` a page
+ * - `<Badge feature="queue" />` says which Cargo feature of `navree` a page
  *   or section needs ("Feature: queue").
  * - `<Badge>Experimental</Badge>`, with `tone="accent"` or `tone="warning"`
  *   when it should stand out.

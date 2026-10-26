@@ -8,7 +8,7 @@ type AuthCallback = (error: Error | null, data: { auth: string; channel_data?: s
 
 /**
  * Connects to the API's Pusher-protocol server with Laravel Echo. The socket
- * goes straight to Navis; private channels authorise through same-origin
+ * goes straight to Navree; private channels authorise through same-origin
  * `POST /broadcasting/auth`, where the BFF adds the bearer token.
  */
 export function connectEcho(onUnavailable?: () => void): RealtimeConnection {
@@ -47,7 +47,7 @@ export function connectEcho(onUnavailable?: () => void): RealtimeConnection {
   pusher.connection.bind("state_change", ({ current }: { current: string }) => {
     if ((current === "unavailable" || current === "failed") && !reported) {
       reported = true;
-      console.info(`[navis] Real-time updates unavailable (${current}); continuing without them.`);
+      console.info(`[navree] Real-time updates unavailable (${current}); continuing without them.`);
       onUnavailable?.();
     }
     if (current === "connected") reported = false;

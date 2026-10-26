@@ -43,7 +43,7 @@ builder.Services
         o.MapInboundClaims = false; // keep "sub" as "sub"
         o.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidIssuer = config["JWT_ISSUER"] ?? "navis",
+            ValidIssuer = config["JWT_ISSUER"] ?? "navree",
             ValidateAudience = false,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidAlgorithms = [SecurityAlgorithms.HmacSha256],

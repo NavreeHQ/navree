@@ -6,10 +6,10 @@ use std::sync::Arc;
 use crm_core::entities::{company, contact, deal};
 use crm_core::subjects::COMPANY;
 use crm_core::{OwnerRef, Stage, owner_for};
-use navis::access::{Ability, Accessible, Read};
-use navis::contracts::Clock;
-use navis::db::{eq_ignore_case, paginate};
-use navis::prelude::*;
+use navree::access::{Ability, Accessible, Read};
+use navree::contracts::Clock;
+use navree::db::{eq_ignore_case, paginate};
+use navree::prelude::*;
 use sea_orm::ActiveValue::Set;
 use sea_orm::sea_query::{Alias, Expr, ExprTrait, Func};
 use sea_orm::{

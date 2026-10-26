@@ -1,0 +1,31 @@
+//! {{ title }}.
+
+use navree::access::AccessModule;
+use navree::db::DatabaseModule;
+use navree::testing::TestApp;
+
+use super::super::{{ module_struct }};
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(AccessModule)
+        .module({{ module_struct }})
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn {{ name }}() {
+    let app = app().await;
+    // Call routes with `app.client()` (a guest) or
+    // `app.acting_as(navree::testing::principal(user_id))`, and resolve
+    // services with `app.get::<T>().await`.
+    assert!(
+        app.ctx()
+            .modules()
+            .iter()
+            .any(|module| module.name == "{{ module_struct }}")
+    );
+}

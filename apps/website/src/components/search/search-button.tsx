@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 import { SearchIcon } from "@/components/icons";
 
-export const OPEN_SEARCH_EVENT = "navis:open-search";
+export const OPEN_SEARCH_EVENT = "navree:open-search";
 
 const subscribe = () => () => {};
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);

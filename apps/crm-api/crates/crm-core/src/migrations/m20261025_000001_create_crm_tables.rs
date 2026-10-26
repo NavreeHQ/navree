@@ -372,7 +372,7 @@ enum Activities {
     UpdatedAt,
 }
 
-/// navis-auth's `users` table.
+/// navree-auth's `users` table.
 #[derive(DeriveIden, Clone, Copy)]
 enum Users {
     Table,

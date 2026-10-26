@@ -101,7 +101,7 @@ export function errorMessage(error: unknown, fallback = "Something went wrong. T
     if (error.status === 404) return detail ?? "That record no longer exists.";
     if (error.status === 409) return detail ?? "That conflicts with an existing record.";
     if (error.status === 429) return "Too many attempts. Wait a minute and try again.";
-    if (error.status === 502 || error.status === 503) return "Can't reach the Navis API. Try again in a moment.";
+    if (error.status === 502 || error.status === 503) return "Can't reach the Navree API. Try again in a moment.";
     if (error.status >= 500) return "The server hit an error. Try again in a moment.";
     return detail ?? fallback;
   }

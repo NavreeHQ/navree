@@ -1,9 +1,9 @@
 import type { ThemeRegistration } from "shiki";
 
 /**
- * "Navis Night": the code theme. Mostly calm off-whites and greys, with the
+ * "Navree Night": the code theme. Mostly calm off-whites and greys, with the
  * accent kept for attributes and macros (`#[controller]`, `#[can(..)]`),
- * which are what Navis code is about. Every token colour has at least
+ * which are what Navree code is about. Every token colour has at least
  * 4.5:1 contrast on the code background.
  */
 const c = {
@@ -21,8 +21,8 @@ const c = {
   constant: "#f0b98a",
 };
 
-export const navisTheme: ThemeRegistration = {
-  name: "navis-night",
+export const navreeTheme: ThemeRegistration = {
+  name: "navree-night",
   type: "dark",
   colors: {
     "editor.background": c.bg,

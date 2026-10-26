@@ -5,8 +5,8 @@
 
 use crm_core::seed::DEMO_PASSWORD;
 use crm_testkit::{Role, TestCrm};
-use navis::audit::{AuditFilter, AuditLog, AuditRecord};
-use navis::db::PageQuery;
+use navree::audit::{AuditFilter, AuditLog, AuditRecord};
+use navree::db::PageQuery;
 use serde_json::json;
 
 async fn crm() -> TestCrm {

@@ -12,7 +12,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use navis::auth::user;
+use navree::auth::user;
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

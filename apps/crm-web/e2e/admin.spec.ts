@@ -11,7 +11,7 @@ test("an admin adds a user with a role, and the audit log shows it", async ({ pa
   expect(existing).toBeGreaterThanOrEqual(4);
 
   const name = unique("Riley Novak");
-  const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@navis.test`;
+  const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, ".")}@navree.test`;
   await page.getByRole("button", { name: "Add user" }).click();
   const dialog = page.getByRole("dialog", { name: "Add a user" });
   await dialog.getByLabel("Name").fill(name);

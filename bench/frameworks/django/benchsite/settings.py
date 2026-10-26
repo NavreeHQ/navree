@@ -1,4 +1,4 @@
-"""Production settings for the Navis benchmark's Django + DRF app (bench/SPEC.md)."""
+"""Production settings for the Navree benchmark's Django + DRF app (bench/SPEC.md)."""
 
 import os
 from pathlib import Path
@@ -56,12 +56,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
 }
 
-# Validates the benchmark's (Navis's) access tokens: HS256 with JWT_SECRET,
-# iss == "navis", exp, a jti, typ == "access", and the user id in `sub`.
+# Validates the benchmark's (Navree's) access tokens: HS256 with JWT_SECRET,
+# iss == "navree", exp, a jti, typ == "access", and the user id in `sub`.
 SIMPLE_JWT = {
     "ALGORITHM": "HS256",
     "SIGNING_KEY": os.environ["JWT_SECRET"],
-    "ISSUER": os.environ.get("JWT_ISSUER", "navis"),
+    "ISSUER": os.environ.get("JWT_ISSUER", "navree"),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "sub",

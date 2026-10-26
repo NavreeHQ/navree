@@ -2,18 +2,18 @@
 
 use std::collections::HashMap;
 
-use navis::access::{AbilityFactory, READ};
-use navis::config::Config;
-use navis::contracts::{Clock, Principal, SystemClock};
-use navis::realtime::ChannelDecision;
-use navis::{BoxFuture, prelude::*};
+use navree::access::{AbilityFactory, READ};
+use navree::config::Config;
+use navree::contracts::{Clock, Principal, SystemClock};
+use navree::realtime::ChannelDecision;
+use navree::{BoxFuture, prelude::*};
 
 use crate::abilities;
 use crate::subjects::DEAL;
 
-/// The realtime application key: clients connect to `ws://host/app/navis-crm-key`
+/// The realtime application key: clients connect to `ws://host/app/navree-crm-key`
 /// (spec §7). A default; `realtime.key` overrides it.
-pub const REALTIME_KEY: &str = "navis-crm-key";
+pub const REALTIME_KEY: &str = "navree-crm-key";
 
 /// The private channel deal changes are broadcast on (`private-crm.deals`,
 /// event `deal.updated`); any user who can read deals may subscribe.
@@ -36,9 +36,9 @@ pub const TRUSTED_PROXIES: &str = "127.0.0.1,::1";
 /// Defaults the CRM gives settings that the configuration does not set.
 const DEFAULTS: &[(&str, &str)] = &[
     ("realtime.key", REALTIME_KEY),
-    ("realtime.app_id", "navis-crm"),
-    ("api.title", "Navis CRM API"),
-    ("mail.from", "Navis CRM <crm@navis.test>"),
+    ("realtime.app_id", "navree-crm"),
+    ("api.title", "Navree CRM API"),
+    ("mail.from", "Navree CRM <crm@navree.test>"),
     ("http.trusted_proxies", TRUSTED_PROXIES),
 ];
 
@@ -59,10 +59,10 @@ const DEFAULTS: &[(&str, &str)] = &[
 ///
 /// ```no_run
 /// use crm_core::{CrmCoreModule, platform};
-/// use navis::prelude::*;
+/// use navree::prelude::*;
 ///
 /// # fn main() -> Result<(), BoxError> {
-/// platform(Navis::app(), ConfigSources::defaults())
+/// platform(Navree::app(), ConfigSources::defaults())
 ///     .module(CrmCoreModule)
 ///     .run()
 /// # }

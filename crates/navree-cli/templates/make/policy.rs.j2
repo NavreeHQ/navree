@@ -1,0 +1,16 @@
+//! Abilities on `{{ pascal }}`, added to every user's rules by the app's
+//! abilities function (`src/abilities.rs`).
+
+use navree::access::{AbilityCtx, READ, Rules, UPDATE, field};
+
+/// The rules on `{{ pascal }}` for one user (or guest). Rules and conditions
+/// name database columns; later rules win.
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    rules.can(READ, "{{ pascal }}");
+    rules
+        .can(UPDATE, "{{ pascal }}")
+        .when(field("owner_id").eq(user.id));
+}

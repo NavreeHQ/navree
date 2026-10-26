@@ -58,7 +58,7 @@ export function RealtimeBridge({ userId }: { userId: string }) {
         connection = conn;
         subscribe(conn);
       } catch (error) {
-        console.info("[navis] Real-time disabled:", error);
+        console.info("[navree] Real-time disabled:", error);
       }
     };
     void start();

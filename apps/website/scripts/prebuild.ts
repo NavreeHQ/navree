@@ -35,7 +35,7 @@ const GENERATED = path.join(WEBSITE, "src/generated");
 const PUBLIC_DATA = path.join(WEBSITE, "public/data");
 
 /** The framework the site is about; it gets the accent in every chart. */
-const HIGHLIGHT = "navis";
+const HIGHLIGHT = "navree";
 
 /** The five tests, as `bench/run.mjs` and `bench/report.mjs` name them. */
 const TESTS: TestInfo[] = [
@@ -469,7 +469,7 @@ function buildDocs(bench: BenchData): SearchDoc[] {
   const benchmarks = links.find((l) => l.href.startsWith("/benchmarks"));
   if (benchmarks) {
     const sectionsOfBenchmarks: [string, string, string][] = [
-      ["", "", `How Navis compares with ${bench.frameworks.length - 1} other web frameworks on the same API and machine: throughput, latency, memory and startup.`],
+      ["", "", `How Navree compares with ${bench.frameworks.length - 1} other web frameworks on the same API and machine: throughput, latency, memory and startup.`],
       ["results", "Results", "Requests per second for every framework and test, ranked. JSON, single query, 20 queries, auth + paginated list, auth + validated insert."],
       ["latency", "Latency", "p99 latency per test for every framework."],
       ["memory-and-startup", "Memory and startup", "Peak memory under load, idle memory, image size and startup time."],
@@ -477,7 +477,7 @@ function buildDocs(bench: BenchData): SearchDoc[] {
       ["stacks", "The stacks", "Versions, server and workers, database library and pool, JWT and validation of each implementation."],
       ["methodology", "Methodology", "The API contract, the conformance gate, fairness rules, CPU pinning, warmup and runs, the drift check."],
       ["caveats", "Caveats", "Load-generator limits, database-bound tests, Laravel PHP-FPM port exhaustion, wrk clock fix."],
-      ["where-navis-is-slower", "Where Navis is slower", "Where Navis loses time per request and why: pool pings, set_config, task spawning, locks."],
+      ["where-navree-is-slower", "Where Navree is slower", "Where Navree loses time per request and why: pool pings, set_config, task spawning, locks."],
       ["reproduce", "Reproduce it yourself", "Commands to run the benchmark, the source of each implementation and the raw JSON."],
     ];
     for (const [id, heading, text] of sectionsOfBenchmarks) {
@@ -495,20 +495,20 @@ export type CrateInfo = { name: string; layer: number; module: string | null; de
 /**
  * Every framework crate with its layer and description, for "everything in
  * the box": layers from the HIERARCHY table that
- * `crates/navis/tests/dependency_graph.rs` enforces, descriptions from each
+ * `crates/navree/tests/dependency_graph.rs` enforces, descriptions from each
  * crate's Cargo.toml.
  */
 function buildCrates(): CrateInfo[] {
-  const graph = fs.readFileSync(path.join(REPO, "crates/navis/tests/dependency_graph.rs"), "utf8");
+  const graph = fs.readFileSync(path.join(REPO, "crates/navree/tests/dependency_graph.rs"), "utf8");
   const crates: CrateInfo[] = [];
-  for (const match of graph.matchAll(/rule\("(navis(?:-[a-z-]+)?)",\s*(\d+)/g)) {
+  for (const match of graph.matchAll(/rule\("(navree(?:-[a-z-]+)?)",\s*(\d+)/g)) {
     const [, name, layer] = match;
     const manifest = path.join(REPO, "crates", name, "Cargo.toml");
     if (!fs.existsSync(manifest)) continue;
     const raw = /^description\s*=\s*"(.*)"\s*$/m.exec(fs.readFileSync(manifest, "utf8"))?.[1] ?? "";
-    // "Navis QueueModule: database and memory job queues, ..." → module + text.
-    const prefixed = /^Navis (\w+Module): (.*)$/.exec(raw);
-    const text = prefixed ? prefixed[2] : raw.replace(/^Navis( kernel| contracts| attribute macros| testing kit)?: /i, "");
+    // "Navree QueueModule: database and memory job queues, ..." → module + text.
+    const prefixed = /^Navree (\w+Module): (.*)$/.exec(raw);
+    const text = prefixed ? prefixed[2] : raw.replace(/^Navree( kernel| contracts| attribute macros| testing kit)?: /i, "");
     crates.push({
       name,
       layer: Number(layer),
@@ -516,7 +516,7 @@ function buildCrates(): CrateInfo[] {
       description: text.charAt(0).toUpperCase() + text.slice(1),
     });
   }
-  if (!crates.length) fail("no crates found in crates/navis/tests/dependency_graph.rs");
+  if (!crates.length) fail("no crates found in crates/navree/tests/dependency_graph.rs");
   return crates;
 }
 

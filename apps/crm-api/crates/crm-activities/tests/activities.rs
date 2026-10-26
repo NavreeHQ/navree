@@ -755,7 +755,7 @@ async fn activity_changes_are_audited() {
         .send()
         .await
         .assert_status(200);
-    crm.get::<navis::audit::AuditLog>().await.flush().await;
+    crm.get::<navree::audit::AuditLog>().await.flush().await;
 
     let page = crm
         .login_as(Role::Admin)
