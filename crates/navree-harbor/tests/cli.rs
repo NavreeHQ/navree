@@ -520,8 +520,8 @@ fn deploy_world(app: &App, health: &'static str) -> FakeExecutor {
                 )
             } else if step.starts_with("health") {
                 Output::ok(format!("status={health}\nmillis=400\n"))
-            } else if step.starts_with("run migrate") || step.starts_with("migrate") {
-                Output::ok("Ran 2 migrations.\n")
+            } else if step.starts_with("migrate") {
+                Output::ok("Migrated: deals/m1\nMigrated: deals/m2\n")
             } else if step.starts_with("logs") {
                 Output::ok("error: database connection refused\n")
             } else {
@@ -566,7 +566,7 @@ fn a_deploy_over_ssh() {
       build     crm-api for x86_64-unknown-linux-gnu, natively (0s)
       upload    app-1  releases/20261026-091512-3f2a9c1, <size> (0s)
       env       app-1  5 settings, 1 secret
-      migrate   app-1  Ran 2 migrations. (0s)
+      migrate   app-1  2 migrations ran (0s)
       start     app-1  green on 127.0.0.1:8082
       health    app-1  GET /health/ready 200 after 0.4 s
       switch    app-1  Caddy -> green, current -> 20261026-091512-3f2a9c1
