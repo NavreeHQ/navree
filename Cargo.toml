@@ -52,6 +52,7 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
+navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -234,6 +235,8 @@ icu_decimal = "2.4.0"
 icu_datetime = "2.4.0"
 icu_locale_core = "2.4.0"
 fixed_decimal = "0.7.3"
+# Plural rules of fluent-bundle, checked per locale at boot.
+intl_pluralrules = "7.0.2"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI
