@@ -124,6 +124,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // GraphQL: `#[resolver]` fields with route-style access, per-request
+    // units of work and dataloaders, subscriptions over WebSockets.
+    rule("navree-graphql", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
+        "navree-db", "navree-validation", "navree-access", "navree-auth", "navree-workspace",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -189,6 +195,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-graphql",
 ];
 
 /// Cargo dependency kind of an edge.
