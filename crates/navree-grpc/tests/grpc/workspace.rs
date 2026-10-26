@@ -110,11 +110,7 @@ async fn user(app: &TestApp, name: &str) -> Uuid {
             Query::insert()
                 .into_table("users")
                 .columns(["id", "name", "email"])
-                .values_panic([
-                    id.into(),
-                    name.into(),
-                    format!("{name}@example.com").into(),
-                ]),
+                .values_panic([id.into(), name.into(), format!("{name}@example.com").into()]),
         )
         .await
         .unwrap();

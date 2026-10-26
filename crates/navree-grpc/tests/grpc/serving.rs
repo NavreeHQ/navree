@@ -316,6 +316,12 @@ async fn grpc_addr_gives_grpc_a_listener_of_its_own() {
             status.message().contains("404 Not Found"),
             "the routes answered: {status:?}"
         );
+
+        // The gRPC port answers nothing but gRPC, gRPC-Web and Connect.
+        assert_eq!(
+            plain_http_status(grpc).await,
+            "HTTP/1.1 415 Unsupported Media Type"
+        );
     })
     .await;
     assert_eq!(
@@ -331,4 +337,61 @@ async fn other_commands_never_open_the_grpc_port() {
     app.run_command("routes", &[]).await.unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert_eq!(app.get::<GrpcServer>().await.local_addr(), None);
+}
+
+/// The status line a plain `GET /` over HTTP/1.1 gets from `addr`.
+async fn plain_http_status(addr: std::net::SocketAddr) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    stream
+        .write_all(
+            b"GET / HTTP/1.1
+host: localhost
+connection: close
+
+",
+        )
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await.unwrap();
+    String::from_utf8_lossy(&response)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn unary_calls_in_flight_finish_on_shutdown() {
+    let app = ping_app()
+        .config("http.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 5)
+        .build()
+        .await;
+    let serve = app.run_command("serve", &[]);
+    let call = async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let mut client = PingClient::new(channel);
+        let slow = client.ping(PingRequest {
+            message: "slow".to_owned(),
+            sleep_ms: 300,
+        });
+        let stop = async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            app.ctx().shutdown_token().cancel();
+        };
+        let (reply, ()) = tokio::join!(slow, stop);
+        reply
+    };
+    let (served, reply) = tokio::join!(serve, call);
+    served.expect("serve stops cleanly");
+    let reply = reply.expect("the call in flight finished");
+    assert_eq!(reply.into_inner().message, "slow");
 }
