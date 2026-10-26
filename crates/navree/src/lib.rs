@@ -38,13 +38,17 @@
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
-//! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
+//! (`social`, `oauth`, `flags`, `dock`, `harbor`). A feature also turns on
+//! the features of the crates its crate builds on (`auth` turns on `access`,
+//! `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
-//! `dock.toml`.
+//! `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has Harbor
+//! built in, and an app turns it on only to read `harbor.toml` or drive
+//! deploys from its own code.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -189,6 +193,8 @@ pub mod flags {
 // Tools (opt-in)
 #[cfg(feature = "dock")]
 pub use navree_dock as dock;
+#[cfg(feature = "harbor")]
+pub use navree_harbor as harbor;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

@@ -1,0 +1,48 @@
+{% macro metrics() %}
+{% if metrics_allow %}
+	@metrics {
+		path /metrics
+		not remote_ip {{ metrics_allow | join(" ") }}
+	}
+{% else %}
+	@metrics path /metrics
+{% endif %}
+	respond @metrics 404
+{% endmacro %}
+# {{ app }}: written by navree harbor:provision; navree deploy points the
+# reverse_proxy lines at the live slot ({{ slot }}).
+{% if frontend %}
+{{ domain }} {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:{{ frontend_port }}
+}
+{% if api_domain %}
+
+{{ api_domain }} {
+	encode zstd gzip
+
+{{ metrics() }}
+	reverse_proxy {{ upstream }}
+}
+{% endif %}
+{% else %}
+{{ domain }} {
+	encode zstd gzip
+
+{{ metrics() }}
+	reverse_proxy {{ upstream }}
+}
+{% endif %}
+{% if aliases %}
+
+{{ aliases | join(", ") }} {
+	redir https://{{ domain }}{uri} permanent
+}
+{% endif %}
+
+# Internal entry for workers and the scheduler, always pointing at the live slot.
+http://:{{ internal_port }} {
+	bind {{ internal_bind | join(" ") }}
+	reverse_proxy {{ upstream }}
+}

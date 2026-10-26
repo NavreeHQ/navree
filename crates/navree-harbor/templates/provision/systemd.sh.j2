@@ -1,0 +1,78 @@
+# harbor: systemd on {{ server.name }}
+{% include "provision/prelude.sh" %}
+units=/etc/systemd/system
+changed=0
+{% if roles.web %}
+harbor_file $units/{{ app }}-web@.service 0644 root:root <<'HARBOR_EOF'
+{{ files.web_unit }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+for slot in blue green; do
+	if [ ! -f {{ etc }}/$slot.env ]; then
+		install -m 0600 -o {{ user }} -g {{ user }} /dev/null {{ etc }}/$slot.env
+	fi
+done
+{% if frontend %}
+harbor_file $units/{{ app }}-frontend@.service 0644 root:root <<'HARBOR_EOF'
+{{ files.frontend_unit }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+for slot in blue green; do
+	if [ ! -f {{ etc }}/frontend-$slot.env ]; then
+		install -m 0600 -o {{ user }} -g {{ user }} /dev/null {{ etc }}/frontend-$slot.env
+	fi
+done
+{% else %}
+for slot in blue green; do
+	systemctl disable --now {{ app }}-frontend@$slot > /dev/null 2>&1 || true
+done
+harbor_remove $units/{{ app }}-frontend@.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% endif %}
+{% else %}
+for slot in blue green; do
+	systemctl disable --now {{ app }}-web@$slot {{ app }}-frontend@$slot > /dev/null 2>&1 || true
+done
+harbor_remove $units/{{ app }}-web@.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+harbor_remove $units/{{ app }}-frontend@.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% endif %}
+{% if roles.worker %}
+harbor_file $units/{{ app }}-worker@.service 0644 root:root <<'HARBOR_EOF'
+{{ files.worker_unit }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% else %}
+harbor_remove $units/{{ app }}-worker@.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% endif %}
+{% if roles.scheduler %}
+harbor_file $units/{{ app }}-scheduler.service 0644 root:root <<'HARBOR_EOF'
+{{ files.scheduler_unit }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% else %}
+systemctl disable --now {{ app }}-scheduler > /dev/null 2>&1 || true
+harbor_remove $units/{{ app }}-scheduler.service
+[ "$HARBOR_CHANGED" = 1 ] && changed=1
+{% endif %}
+# Worker instances beyond the configured number stop.
+for wants in /etc/systemd/system/multi-user.target.wants/{{ app }}-worker@*.service; do
+	[ -e "$wants" ] || continue
+	instance="${wants##*@}"
+	instance="${instance%.service}"
+	if [ "$instance" -gt {{ worker_instances }} ]; then
+		systemctl disable --now "{{ app }}-worker@$instance" > /dev/null 2>&1 || true
+	fi
+done
+if [ "$changed" = 1 ]; then
+	systemctl daemon-reload
+fi
+{% if process_units %}
+systemctl enable {{ process_units | join(" ") }} > /dev/null 2>&1
+# Workers and the scheduler run once a release is live.
+if [ -e {{ base }}/current ]; then
+	if [ "$changed" = 1 ]; then
+		systemctl restart {{ process_units | join(" ") }}
+	else
+		systemctl start {{ process_units | join(" ") }}
+	fi
+fi
+{% endif %}

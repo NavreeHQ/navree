@@ -1,0 +1,144 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+assertion_line: 258
+expression: "step(&steps, \"postgres\").script"
+---
+# harbor: postgres on data-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+cd /
+if ! harbor_installed postgresql-17; then
+	harbor_apt install postgresql-common ca-certificates curl
+	install -d -m 0755 /usr/share/postgresql-common/pgdg
+	curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+	echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+	apt-get update -q
+	harbor_apt install postgresql-17
+fi
+conf=/etc/postgresql/17/main
+restart=0
+reload=0
+harbor_file "$conf/conf.d/harbor.conf" 0644 postgres:postgres <<'HARBOR_EOF'
+# Written by navree harbor:provision.
+listen_addresses = 'localhost,10.0.0.31'
+password_encryption = scram-sha-256
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && restart=1
+# The block between the harbor markers admits the app's other servers.
+hba="$(mktemp)"
+awk '/^# harbor:start/ {skip = 1} !skip {print} /^# harbor:end/ {skip = 0}' "$conf/pg_hba.conf" > "$hba"
+cat >> "$hba" <<'HARBOR_EOF'
+# harbor:start (written by navree harbor:provision)
+host    crm_api crm_api 10.0.0.11/32 scram-sha-256
+host    crm_api crm_api 10.0.0.12/32 scram-sha-256
+host    crm_api crm_api 10.0.0.21/32 scram-sha-256
+# harbor:end
+HARBOR_EOF
+harbor_file "$conf/pg_hba.conf" 0640 postgres:postgres < "$hba"
+rm -f "$hba"
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+systemctl enable --now postgresql > /dev/null 2>&1
+if [ "$restart" = 1 ]; then
+	systemctl restart postgresql
+elif [ "$reload" = 1 ]; then
+	systemctl reload postgresql
+fi
+for _ in $(seq 1 30); do
+	sudo -u postgres pg_isready -q && break
+	sleep 1
+done
+sudo -u postgres psql -v ON_ERROR_STOP=1 -q <<'HARBOR_SQL'
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'crm_api') THEN
+		CREATE ROLE crm_api LOGIN PASSWORD 'PgPassword123';
+	ELSE
+		ALTER ROLE crm_api WITH LOGIN PASSWORD 'PgPassword123';
+	END IF;
+END
+$$;
+SELECT 'CREATE DATABASE crm_api OWNER crm_api'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'crm_api')\gexec
+HARBOR_SQL
+# Daily backups.
+install -d -m 2750 -o postgres -g navree /var/backups/postgresql/crm-api
+timer=0
+harbor_file /usr/local/bin/crm-api-backup 0755 root:root <<'HARBOR_EOF'
+#!/bin/sh
+# Written by navree harbor:provision: a pg_dump of crm_api, kept 7 days.
+set -eu
+umask 027
+dir=/var/backups/postgresql/crm-api
+file="$dir/crm_api-$(date -u +%Y%m%d-%H%M%S).dump"
+pg_dump --format=custom --file="$file.partial" crm_api
+mv "$file.partial" "$file"
+find "$dir" -name 'crm_api-*.dump' -mtime +6 -delete
+echo "$file"
+HARBOR_EOF
+harbor_file /etc/systemd/system/crm-api-backup.service 0644 root:root <<'HARBOR_EOF'
+[Unit]
+Description=crm-api PostgreSQL backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=navree
+ExecStart=/usr/local/bin/crm-api-backup
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && timer=1
+harbor_file /etc/systemd/system/crm-api-backup.timer 0644 root:root <<'HARBOR_EOF'
+[Unit]
+Description=Daily crm-api PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && timer=1
+if [ "$timer" = 1 ]; then
+	systemctl daemon-reload
+fi
+systemctl enable --now crm-api-backup.timer > /dev/null 2>&1

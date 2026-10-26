@@ -1,0 +1,23 @@
+# Harbor: where and how {{ app }} runs{% if env_name != "production" %} ({{ env_name }}){% endif %}. See https://navree.com/docs/tools/harbor/
+# `navree harbor:provision` prepares the servers; `navree deploy{{ env_flag }}` ships a release.
+
+# The package to build and run, and the domain it answers on.
+app = "{{ app }}"
+domain = "{{ domain }}"
+
+[build]
+features = []                 # Cargo features of the release build, e.g. ["postgres"]
+
+[deploy]
+keep_releases = 5             # releases kept on each server for rollbacks
+health_check = "/health/ready"
+
+[servers.app-1]
+host = "203.0.113.10"         # your server's address
+roles = ["web", "worker", "scheduler"]   # add "postgres" and "redis" to run them here too
+
+[env]
+APP_APP__URL = "https://{{ domain }}"
+
+# Encrypted with {{ key_file }}: `navree harbor:secrets set <NAME>{{ env_flag }}`.
+[secrets]
