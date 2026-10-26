@@ -46,7 +46,7 @@ harbor_apt() {
 harbor_installed redis-server || harbor_apt install redis-server
 harbor_file /etc/redis/harbor.conf 0640 redis:redis <<'HARBOR_EOF'
 # Written by navree harbor:provision.
-bind 127.0.0.1 -::1
+bind 127.0.0.1
 protected-mode yes
 requirepass RedisPassword456
 maxmemory 256mb

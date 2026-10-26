@@ -383,7 +383,7 @@ fn provisioning_pins_the_host_key_and_stores_the_urls() {
       ssh       no passwords, root by key only, host key recorded
       firewall  ufw: 22/tcp, 80/tcp, 443/tcp, 443/udp; fail2ban
       postgres  PostgreSQL 17, database crm_api; URL saved to [secrets] as APP_DATABASE__URL
-      redis     Redis on 127.0.0.1, 256 MB; URL saved to [secrets] as APP_REDIS__URL
+      redis     Redis on 127.0.0.1, 256 MB; URL saved to [secrets] as REDIS_URL
       caddy     Caddy 2, site crm.example.com
       systemd   crm-api-web@blue, @green, crm-api-worker@1, crm-api-scheduler, crm-api-backup.timer
     Provisioned app-1 in 0s. Run `navree deploy` next.
@@ -421,7 +421,7 @@ fn provisioning_pins_the_host_key_and_stores_the_urls() {
         db.starts_with("postgres://crm_api:") && db.ends_with("@127.0.0.1:5432/crm_api"),
         "{db}"
     );
-    let redis = project.reveal(&key, "APP_REDIS__URL").unwrap();
+    let redis = project.reveal(&key, "REDIS_URL").unwrap();
     assert!(
         redis.starts_with("redis://:") && redis.ends_with("@127.0.0.1:6379/0"),
         "{redis}"
