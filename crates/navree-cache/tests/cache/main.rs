@@ -8,3 +8,4 @@ mod module;
 mod send;
 mod store;
 mod tags;
+mod telemetry;

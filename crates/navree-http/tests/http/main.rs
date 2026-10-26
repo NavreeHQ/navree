@@ -9,3 +9,4 @@ mod logs;
 mod pipeline;
 mod routes;
 mod server;
+mod telemetry;

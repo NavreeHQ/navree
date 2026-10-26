@@ -19,6 +19,7 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
+navree-telemetry = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }

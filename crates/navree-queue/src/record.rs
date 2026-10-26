@@ -69,6 +69,7 @@ impl FailedJob {
             created_at: now,
             unique_key: None,
             unique_for_ms: None,
+            trace_parent: None,
         }
     }
 }
@@ -91,6 +92,9 @@ pub(crate) struct NewJob {
     /// How long a pending unique job blocks its duplicates (`None`: while
     /// it is pending).
     pub(crate) unique_for_ms: Option<i64>,
+    /// The W3C `traceparent` of the span that dispatched the job, so its
+    /// attempts continue that trace.
+    pub(crate) trace_parent: Option<String>,
 }
 
 impl NewJob {
@@ -112,6 +116,8 @@ pub(crate) struct ReservedJob {
     pub(crate) options: JobOptions,
     /// Including the attempt that is starting.
     pub(crate) attempts: u32,
+    /// The `traceparent` recorded at dispatch (see [`NewJob::trace_parent`]).
+    pub(crate) trace_parent: Option<String>,
 }
 
 /// How long a reservation of a job without a time limit (`timeout_secs`
