@@ -1,0 +1,7 @@
+# Known findings in this benchmark app that have no fix yet. Reviewed
+# 2026-10-26; each entry expires so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0258"
+ignoreUntil = 2027-01-31
+reason = "h2 0.3.27 is the last 0.3.x and actix-http 3.20 still requires it (h2 0.4 is only in actix/actix-web#4321). Not reachable here: the app binds plain HTTP/1.1 without TLS, so the HTTP/2 code never runs."

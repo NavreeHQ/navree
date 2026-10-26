@@ -1,0 +1,18 @@
+# Known findings that come from Loco itself (loco-rs 1.2.0, the latest
+# release). The benchmark measures Loco as shipped, so they stay until a Loco
+# release drops them. Reviewed 2026-10-26; each entry expires.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+ignoreUntil = 2027-01-31
+reason = "rsa 0.9.10 via loco-rs's auth feature (jsonwebtoken 10 with rust_crypto). No fixed rsa release exists; Loco's main branch removes jsonwebtoken. The benchmark only verifies HS256 tokens, so RSA code never runs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0387"
+ignoreUntil = 2027-01-31
+reason = "crypto-bigint 0.5.5 via the same jsonwebtoken rust_crypto backend (elliptic-curve); fixed only in 0.7.6+. Not used for HS256."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+ignoreUntil = 2027-01-31
+reason = "unsafe-libyaml is unmaintained (an informational advisory). Loco reads its YAML config with serde_yaml_ng and keeps it (Loco #1883); config files are trusted input here."

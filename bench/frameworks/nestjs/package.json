@@ -28,5 +28,8 @@
     "@types/node": "^24.19.2",
     "@types/passport-jwt": "^4.0.1",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "multer": "^2.5.0"
   }
 }
