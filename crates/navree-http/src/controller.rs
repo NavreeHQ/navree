@@ -71,12 +71,19 @@ impl ControllerRegistration {
 }
 
 /// Where a [`GlobalLayer`] sits in the request pipeline, outermost first:
-/// the session layer, then authentication context, then the unit of work.
-/// All slots run after the fixed layers (request id, tracing, CORS, panic
-/// catcher, timeout, security headers, compression, maintenance mode, per-IP
-/// rate limit, body limit) and before routing.
+/// the edge, then the session layer, then authentication context, then the
+/// unit of work. Every slot but [`Edge`](LayerSlot::Edge) runs after the
+/// fixed layers (request id, tracing, CORS, panic catcher, timeout, security
+/// headers, compression, maintenance mode, per-IP rate limit, body limit)
+/// and before routing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LayerSlot {
+    /// Around the whole app, before every fixed layer: for protocols that
+    /// share the HTTP port but not the HTTP pipeline (navree-grpc sends
+    /// gRPC calls to its own). Requests here have no request id, app
+    /// context or client IP yet, and a response an edge layer returns
+    /// itself gets none of the fixed layers' treatment.
+    Edge,
     /// Session and CSRF (navree-session).
     Session,
     /// Authentication: navree-http runs the `Authenticator` first in this slot.

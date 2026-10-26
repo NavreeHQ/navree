@@ -85,6 +85,9 @@ workspace = [
     "mail",
     "access",
 ]
+## L6 (opt-in: not in `full`)
+## gRPC, gRPC-Web and Connect services in modules, on tonic.
+grpc = ["dep:navree-grpc", "http", "db", "validation", "testing"]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 
@@ -99,6 +102,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
+navree-grpc = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
@@ -133,3 +137,13 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
+# The gRPC docs example: tonic's generated code names these crates.
+prost = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tonic-prost = { workspace = true }
+
+# The gRPC docs example through the facade (`cargo test -p navree --features grpc --test grpc`).
+[[test]]
+name = "grpc"
+required-features = ["grpc"]

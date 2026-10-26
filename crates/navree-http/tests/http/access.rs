@@ -489,6 +489,62 @@ async fn global_layers_applied_in_slot_order() {
     app.get("/api/missing").await.assert_error(404);
 }
 
+/// A module whose `Edge` layer answers `/edge/...` itself (reporting
+/// whether the request already had a request id) and marks every other
+/// response it lets through.
+struct EdgeModule;
+
+impl Module for EdgeModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(GlobalLayer::new(LayerSlot::Edge, "edge", |_ctx, router| {
+            Ok(router.layer(axum::middleware::from_fn(
+                |request: Request, next: Next| async move {
+                    if request.uri().path().starts_with("/edge") {
+                        let seen = request
+                            .extensions()
+                            .get::<navree_contracts::RequestId>()
+                            .is_some();
+                        return axum::response::IntoResponse::into_response(format!(
+                            "edge saw a request id: {seen}"
+                        ));
+                    }
+                    let mut response = next.run(request).await;
+                    response
+                        .headers_mut()
+                        .insert("x-edge", http::HeaderValue::from_static("passed"));
+                    response
+                },
+            )))
+        }));
+    }
+}
+
+#[tokio::test]
+async fn edge_layers_run_before_every_fixed_layer() {
+    let app = Setup::new(vec![ok_route(Method::GET, "/inner").public()])
+        .module(LayerModule::<1>(LayerSlot::Session, "session"))
+        .module(EdgeModule)
+        .boot()
+        .await;
+
+    let edge = app.get("/edge/call").await;
+    assert_eq!(edge.status, StatusCode::OK);
+    assert_eq!(edge.text(), "edge saw a request id: false");
+    assert!(
+        edge.headers.get("x-request-id").is_none(),
+        "an edge layer that answers itself bypasses the request-id layer"
+    );
+
+    let inner = app.get("/api/inner").await;
+    assert_eq!(inner.status, StatusCode::OK);
+    assert_eq!(inner.headers["x-edge"], "passed");
+    assert!(inner.headers.contains_key("x-request-id"));
+    // The edge layer also wraps the fixed layers' own responses.
+    let missing = app.get("/api/missing").await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    assert_eq!(missing.headers["x-edge"], "passed");
+}
+
 #[tokio::test]
 async fn failing_global_layer_fails_boot() {
     struct BrokenLayer;

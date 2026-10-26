@@ -32,6 +32,12 @@ pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
     facade_module: "access",
 };
 
+/// navree-grpc: the call pipeline of `#[grpc_service]` methods.
+pub(crate) const GRPC: RuntimeCrate = RuntimeCrate {
+    package: "navree-grpc",
+    facade_module: "grpc",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

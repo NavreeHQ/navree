@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package crm.deals.v1;
+
+// The deals service of the docs (microservices/grpc), plus a client-streaming
+// and a bidirectional method for the pipeline tests.
+service Deals {
+  rpc GetDeal(GetDealRequest) returns (Deal);
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse);
+  rpc MoveDeal(MoveDealRequest) returns (Deal);
+  rpc WatchDeals(WatchDealsRequest) returns (stream DealEvent);
+  rpc ImportDeals(stream Deal) returns (ImportDealsResponse);
+  rpc Echo(stream DealEvent) returns (stream DealEvent);
+}
+
+message GetDealRequest { string id = 1; }
+
+message ListDealsRequest {
+  string company_id = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+}
+
+message ListDealsResponse {
+  repeated Deal deals = 1;
+  uint64 total = 2;
+}
+
+message MoveDealRequest {
+  string id = 1;
+  string stage = 2;
+  optional int64 position = 3;
+  optional string lost_reason = 4;
+}
+
+message Deal {
+  string id = 1;
+  string title = 2;
+  int64 amount_cents = 3;
+  string currency = 4;
+  string stage = 5;
+  string company_id = 6;
+  string owner_id = 7;
+}
+
+message WatchDealsRequest {}
+
+message DealEvent {
+  string deal_id = 1;
+  string stage = 2;
+}
+
+message ImportDealsResponse { uint32 imported = 1; }
