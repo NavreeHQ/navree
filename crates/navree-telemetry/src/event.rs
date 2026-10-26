@@ -348,8 +348,10 @@ pub struct ExceptionReported {
     pub message: String,
     /// The message, then each source's message, outermost first.
     pub chain: Vec<String>,
-    /// Where it happened: the route's handler (`DealsController::show`) or
-    /// a panic's `file:line:column`, when known.
+    /// Where it happened (`file:line:column`), when known: the panic's
+    /// location for a panicking handler, the caller's for
+    /// [`Telemetry::report_exception`](crate::Telemetry::report_exception);
+    /// `None` for an error response.
     pub location: Option<String>,
     /// Whether it was a panic.
     pub panic: bool,
