@@ -40,7 +40,16 @@ const DEFAULTS: &[(&str, &str)] = &[
     ("api.title", "Navree CRM API"),
     ("mail.from", "Navree CRM <crm@navree.test>"),
     ("http.trusted_proxies", TRUSTED_PROXIES),
+    // The MCP server (`crm_api::app` adds `McpModule`).
+    ("mcp.name", "navree-crm"),
+    ("mcp.title", "Navree CRM"),
+    ("mcp.instructions", MCP_INSTRUCTIONS),
 ];
+
+/// What MCP clients tell the model about the CRM's MCP server, unless
+/// `mcp.instructions` says otherwise.
+pub const MCP_INSTRUCTIONS: &str = "Tools for the Navree CRM. Deals move through the stages lead, \
+     qualified, proposal, negotiation, won and lost. Amounts are in cents.";
 
 /// Adds every platform module the CRM uses to `builder`, configured from
 /// `sources`:
