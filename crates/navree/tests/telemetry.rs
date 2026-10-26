@@ -50,6 +50,48 @@ impl MonitoringModule {
 }
 
 // ---------------------------------------------------------------------------
+// A sink that hands records to a background task, as in the navree-telemetry
+// skill.
+
+/// Hands every record but log lines to a background task; never blocks.
+pub struct ChannelSink(tokio::sync::mpsc::Sender<TelemetryRecord>);
+
+impl TelemetrySink for ChannelSink {
+    fn interest(&self) -> Interest {
+        Interest::ALL.without(EventKind::Log)
+    }
+
+    fn record(&self, record: &TelemetryRecord) {
+        // A full buffer drops the record rather than slow the request.
+        let _ = self.0.try_send(record.clone());
+    }
+}
+
+/// Stores telemetry records in the background (here: forwards them to the
+/// test).
+pub struct StoreModule(tokio::sync::mpsc::UnboundedSender<TelemetryRecord>);
+
+impl Module for StoreModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let stored = self.0.clone();
+        m.telemetry_sink_factory(Factory::<dyn TelemetrySink>::new(
+            move |_r: Resolver| {
+                let stored = stored.clone();
+                async move {
+                    let (tx, mut rx) = tokio::sync::mpsc::channel::<TelemetryRecord>(1024);
+                    tokio::spawn(async move {
+                        while let Some(record) = rx.recv().await {
+                            let _ = stored.send(record);
+                        }
+                    });
+                    Ok(Arc::new(ChannelSink(tx)) as Arc<dyn TelemetrySink>)
+                }
+            },
+        ));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // A route that calls another service.
 
 /// `GET /api/v1/rates/{currency}` asks the rates provider.
@@ -153,6 +195,31 @@ async fn a_sink_receives_only_the_kinds_it_wants() {
     let telemetry = Telemetry::from_app(app.ctx()).await;
     assert!(telemetry.enabled(EventKind::JobFailed));
     assert!(!telemetry.enabled(EventKind::RequestHandled));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_channel_sink_hands_records_to_a_background_task() {
+    let (stored, mut received) = tokio::sync::mpsc::unbounded_channel();
+    let (app, _server) = rates_app(StoreModule(stored)).await;
+
+    app.client()
+        .get("/api/v1/rates/eur")
+        .send()
+        .await
+        .assert_status(200);
+
+    let mut kinds = Vec::new();
+    while kinds.len() < 2 {
+        let record = tokio::time::timeout(std::time::Duration::from_secs(5), received.recv())
+            .await
+            .expect("a record in time")
+            .expect("the channel is open");
+        kinds.push(record.event.kind());
+    }
+    assert!(kinds.contains(&EventKind::RequestHandled), "{kinds:?}");
+    assert!(kinds.contains(&EventKind::HttpClientRequest), "{kinds:?}");
+    assert!(!kinds.contains(&EventKind::Log));
     app.shutdown().await.unwrap();
 }
 
