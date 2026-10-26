@@ -124,6 +124,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // Documents: PDF from Typst templates (an embedded compiler) or HTML
+    // templates (navree-view, printed by headless Chrome), DOCX, and PDF
+    // merge and stamp. Queued renders go through the job dispatcher of
+    // navree-contracts and land on a storage disk.
+    rule("navree-documents", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-storage",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -189,6 +197,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-documents",
 ];
 
 /// Cargo dependency kind of an edge.

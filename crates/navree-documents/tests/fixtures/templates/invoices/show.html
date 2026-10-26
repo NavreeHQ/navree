@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invoice {{ number }}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <h1>Invoice {{ number }}</h1>
+  <p>Billed to {{ customer }}</p>
+  <p>Total {{ total_cents|money(currency) }}</p>
+</body>
+</html>
