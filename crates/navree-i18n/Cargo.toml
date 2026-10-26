@@ -1,6 +1,6 @@
 [package]
 name = "navree-i18n"
-description = "Navree I18nModule: Fluent translations with plurals and variables, locale negotiation per request, and translated validation messages, mail and notifications."
+description = "Navree I18nModule: Fluent translations with plurals and variables, the request's locale negotiated per request, and translated validation messages, views and notifications."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,13 +23,14 @@ icu_datetime = { workspace = true }
 icu_decimal = { workspace = true }
 icu_locale_core = { workspace = true }
 intl-memoizer = { workspace = true }
+intl_pluralrules = { workspace = true }
 minijinja = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
+navree-i18n-macros = { workspace = true }
 navree-kernel = { workspace = true }
-navree-macros = { workspace = true }
 navree-notify = { workspace = true }
 navree-validation = { workspace = true }
 navree-view = { workspace = true }
@@ -47,7 +48,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 garde = { workspace = true }
+navree-access = { workspace = true }
+navree-events = { workspace = true }
 navree-mail = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }

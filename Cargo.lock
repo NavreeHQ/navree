@@ -3408,6 +3408,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-i18n-macros"
+version = "0.1.0"
+dependencies = [
+ "fluent-syntax",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+ "tempfile",
+]
+
+[[package]]
 name = "navree-kernel"
 version = "0.1.0"
 dependencies = [
