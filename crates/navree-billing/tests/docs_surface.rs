@@ -388,8 +388,9 @@ async fn the_other_documented_methods(billing: &Billing, workspace: &Workspace) 
 
 /// "Billable models": `Billable::from_request` finds a request's billable.
 #[allow(dead_code)]
-fn from_request_is_part_of_the_trait(parts: &mut http::request::Parts) {
-    let _ = <Workspace as Billable>::from_request(parts);
+async fn from_request_is_part_of_the_trait(parts: &mut http::request::Parts) {
+    let _: Result<navree_billing::BillableRef, navree_http::AppError> =
+        <Workspace as Billable>::from_request(parts).await;
 }
 
 /// Registers users as the billable.
