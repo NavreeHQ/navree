@@ -242,7 +242,7 @@ With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mo
 | `NotificationSent` | `NotifyModule` | a notification went out on one channel | `notification_id`, `notification_type`, `notifiable_type`, `notifiable_id`, `channel` |
 | `CacheEvent` | `CacheModule` | a read hit or missed, a value was written, a key was forgotten | `operation` (`CacheOperation::Hit`, `Miss`, `Write`, `Forget`), `key` (without the prefix), `store` |
 | `HttpClientRequest` | `HttpClient` | an outgoing call finished, after its retries | `method`, `url` (no query string, fragment or credentials), `status`, `duration`, `attempts`, `error`, `span_id` |
-| `ExceptionReported` | `HttpModule`, or your code | a 500 (or a 5xx with an underlying error), a panicking handler | `message`, `chain` (the message, then each source's), `location` (the handler, or the panic's `file:line:column`), `panic`, `request` |
+| `ExceptionReported` | `HttpModule`, or your code | a 500 (or a 5xx with an underlying error), a panicking handler | `message`, `chain` (the message, then each source's), `location` (the panic's or the reporting call's `file:line:column`), `panic`, `request` (method, path, route and status) |
 | `LogRecord` | `LoggerModule` | a log line passed the level filter | `level`, `target`, `message`, `fields` (redacted, as in the output) |
 
 A sink receives each one as a `TelemetryRecord`: the `event` (a `TelemetryEvent`), the time it was emitted (`at`) and its `context`, an `EventContext` with the request id or job id, the trace, the user id and the workspace id of the request or job it happened in. Records serialize to JSON with a `type` tag (`{"type": "query_executed", "sql": ...}`) and durations in milliseconds, ready to store or send.
