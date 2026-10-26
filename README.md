@@ -94,7 +94,7 @@ Documents:
 
 ## Crate hierarchy
 
-The crates form eight layers (spec §3). A crate may depend only on crates in
+The crates form layers 0 to 8 (spec §3; layers 6 and 7 hold the ecosystem packages). A crate may depend only on crates in
 lower layers, dev-dependencies included, and its runtime dependencies must
 also match the spec's table of allowed edges. Cross-cutting needs (audit,
 events, broadcasting, sessions, health checks, jobs, the current principal)
@@ -103,8 +103,10 @@ other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
 each test run.
 
 ```
-L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
+L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
+L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
+L7  (packages built on other packages)
+L6  navree-mcp
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -143,8 +145,9 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
-| L6 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
+| L6 | `navree-mcp` | MCP servers: `#[mcp_server]` tools, resources and prompts over streamable HTTP at `/mcp` and stdio (`mcp:serve`), behind the app's authenticators and per-tool access checks (opt-in facade feature `mcp`) |
+| L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
