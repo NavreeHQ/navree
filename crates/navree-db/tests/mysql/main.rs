@@ -10,6 +10,8 @@
 //!     cargo test -p navree-db --features mysql --test mysql
 //! ```
 
+mod fixtures;
 mod support;
 
 mod connect;
+mod uow;

@@ -7,6 +7,7 @@ mod connect;
 mod http;
 mod migrations;
 mod module;
+mod mysql_sql;
 mod paginate;
 mod repo;
 mod seed;
