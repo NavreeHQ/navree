@@ -207,7 +207,11 @@ async fn deal_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Dea
 - Close codes: `4403` token refused, `4408` no `connection_init` within
   `graphql.connection_init_timeout_secs`, `4401` the token's `exp` passed
   (reconnect with a fresh token). Pings every `graphql.keep_alive_secs`.
-- Session cookies count only when `Origin` is in `http.cors.allowed_origins`.
+- Without `authorization` in the payload, the upgrade request's own
+  authentication counts (an `Authorization` header); a session cookie
+  counts only when `Origin` is in `http.cors.allowed_origins`.
+- Access is checked when the subscription starts: a guest or a refused
+  viewer gets one `next` with the error, then `complete`.
 - `EventStream` sees this instance's bus; 256 events of lag max.
 
 ## Configuration (`[graphql]`, env `APP_GRAPHQL__<KEY>`)

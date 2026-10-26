@@ -109,8 +109,9 @@ The facade's root also has:
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
+| GraphQL (with `graphql`) | `GraphqlModule` |
 
-It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
+It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()` work without naming the traits.
 
 Three details to know:
 
