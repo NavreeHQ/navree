@@ -2710,6 +2710,7 @@ dependencies = [
  "navree-log",
  "navree-macros",
  "navree-mail",
+ "navree-mcp",
  "navree-notify",
  "navree-observe",
  "navree-queue",
