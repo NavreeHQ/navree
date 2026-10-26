@@ -102,12 +102,13 @@ impl App {
     }
 }
 
-/// The step named on a script's first line (`# harbor: <step> on ...`).
+/// The step a script names on its first line (`# harbor: <step> on ...`),
+/// inside the strict-mode wrapper.
 fn step_of(cmd: &Cmd) -> String {
     cmd.stdin_text()
         .lines()
-        .nth(1)
-        .and_then(|l| l.strip_prefix("# harbor: "))
+        .take(3)
+        .find_map(|l| l.strip_prefix("# harbor: "))
         .unwrap_or("")
         .to_owned()
 }
