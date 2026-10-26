@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use navree_kernel::{BoxError, Factory, Navree, KernelError, ProviderKey};
+use navree_kernel::{BoxError, Factory, KernelError, Navree, ProviderKey};
 
 use crate::support::{Counter, boot_errors, injectable, module};
 

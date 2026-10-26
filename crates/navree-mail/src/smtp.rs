@@ -3,10 +3,10 @@
 use std::fmt;
 use std::sync::OnceLock;
 
-use navree_kernel::BoxFuture;
 use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::AsyncSmtpTransportBuilder;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use navree_kernel::BoxFuture;
 use url::Url;
 
 use crate::message::mailbox;

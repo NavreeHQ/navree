@@ -9,8 +9,8 @@ use navree_config::{Config, ConfigModule, ConfigSources};
 use navree_contracts::{Clock, FixedClock as ContractsFixedClock};
 use navree_http::HttpModule;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, Navree, KernelError, Lifecycle, Module,
-    ModuleBuilder, Resolver,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, Module, ModuleBuilder,
+    Navree, Resolver,
 };
 use navree_testing::{FixedClock, TestApp, temp_sqlite_url};
 
@@ -211,7 +211,12 @@ async fn an_app_without_http_still_boots() {
     let app =
         TestApp::from_builder(Navree::app().module(ConfigModule::for_root(ConfigSources::new())))
             .await;
-    assert!(app.ctx().try_get::<navree_http::HttpServer>().await.is_none());
+    assert!(
+        app.ctx()
+            .try_get::<navree_http::HttpServer>()
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -227,7 +232,12 @@ async fn client_needs_http() {
 async fn builder_apps_include_http_and_config() {
     let app = TestApp::builder().module(DemoModule).build().await;
     assert!(app.ctx().try_get::<Config>().await.is_some());
-    assert!(app.ctx().try_get::<navree_http::HttpServer>().await.is_some());
+    assert!(
+        app.ctx()
+            .try_get::<navree_http::HttpServer>()
+            .await
+            .is_some()
+    );
     let _ = HttpModule;
 }
 

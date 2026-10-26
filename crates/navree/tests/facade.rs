@@ -20,7 +20,10 @@ fn every_module_crate_is_reexported_whole() {
     // L0-L1
     assert!(same::<navree::kernel::Navree, navree::Navree>());
     assert!(same::<navree::kernel::ModuleBuilder, navree::ModuleBuilder>());
-    assert!(same::<navree::contracts::RequestId, navree::contracts::RequestId>());
+    assert!(same::<
+        navree::contracts::RequestId,
+        navree::contracts::RequestId,
+    >());
     assert!(same::<navree::config::ConfigModule, ConfigModule>());
     // L2
     assert!(same::<navree::http::HttpModule, HttpModule>());

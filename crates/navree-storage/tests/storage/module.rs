@@ -10,7 +10,7 @@ use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::HealthStatus;
 use navree_crypto::{CryptoModule, CryptoOptions, generate_key};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_storage::{
     Disk, DiskConfig, Storage, StorageError, StorageModule, StorageOptions, UploadRules,
     store_upload,

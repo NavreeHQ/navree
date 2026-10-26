@@ -9,7 +9,7 @@ use navree_db::{
     Repo, Uow,
 };
 use navree_kernel::{
-    BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 use sea_orm::sea_query::Query;
 use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseTransaction, DbErr, IntoActiveModel};

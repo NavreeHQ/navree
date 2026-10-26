@@ -7,7 +7,7 @@ use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::Job;
 use navree_contracts::JobRegistration;
 use navree_kernel::{
-    App, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    App, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 use navree_mail::{ArrayTransport, MailModule, MailTransport, Mailer, SendMailJob, TemplateMail};
 use serde_json::json;

@@ -18,7 +18,7 @@ use navree_http::{
     RouteDef, build_router,
 };
 use navree_kernel::{
-    App, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    App, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 use sea_orm::{DatabaseTransaction, DbErr};
 use serde_json::{Value, json};

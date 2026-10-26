@@ -7,7 +7,7 @@ use std::time::Duration;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::Principal;
 use navree_http::{Authenticator, HttpModule, HttpOptions};
-use navree_kernel::{AppContext, BoxError, BoxFuture, Navree, Module, ModuleBuilder};
+use navree_kernel::{AppContext, BoxError, BoxFuture, Module, ModuleBuilder, Navree};
 use navree_realtime::{ChannelDecision, ModuleBuilderRealtimeExt, RealtimeModule, RealtimeOptions};
 use serde_json::json;
 use tokio::time::Instant;

@@ -260,7 +260,8 @@ mod tests {
     #[test]
     fn modules_without_controllers_do_not_need_the_http_crate() {
         for args in [quote!(providers = [Repo]), quote!(controllers = [])] {
-            expand_with_http(args, |_| panic!("navree-http must not be looked up")).expect("expands");
+            expand_with_http(args, |_| panic!("navree-http must not be looked up"))
+                .expect("expands");
         }
     }
 }

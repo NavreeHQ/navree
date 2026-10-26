@@ -249,7 +249,7 @@ export function createBff(options: BffOptions) {
     return address ? { "x-forwarded-for": address } : {};
   }
 
-  async function callKeelRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
+  async function callNavisRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
     try {
       const response = await upstreamFetch(`${apiUrl}/api/auth/refresh`, {
         method: "POST",
@@ -277,7 +277,7 @@ export function createBff(options: BffOptions) {
     const existing = refreshes.get(refreshToken);
     if (existing) return existing.promise;
     const entry: { promise: Promise<TokenPair | null>; settledAt?: number } = {
-      promise: callKeelRefresh(refreshToken, request).then((pair) => {
+      promise: callNavisRefresh(refreshToken, request).then((pair) => {
         entry.settledAt = Date.now();
         if (!pair) refreshes.delete(refreshToken);
         return pair;

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use navree_contracts::{Dispatcher, JobContext, JobRegistration};
 use navree_events::{EventBus, EventsModule, ModuleBuilderEventsExt};
-use navree_kernel::{Navree, Module, ModuleBuilder};
+use navree_kernel::{Module, ModuleBuilder, Navree};
 use serde_json::json;
 
 use crate::support::{CaptureDispatcher, Journal, UserRegistered, listener};

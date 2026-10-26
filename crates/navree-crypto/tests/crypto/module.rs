@@ -8,7 +8,7 @@ use navree_crypto::{
     generate_key,
 };
 use navree_kernel::{
-    BootErrors, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey,
+    BootErrors, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey,
     Resolver,
 };
 use serde_json::json;

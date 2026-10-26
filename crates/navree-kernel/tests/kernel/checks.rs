@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_kernel::{BoxError, Factory, Navree, KernelError};
+use navree_kernel::{BoxError, Factory, KernelError, Navree};
 
 use crate::support::{boot_errors, injectable, module};
 

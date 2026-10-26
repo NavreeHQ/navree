@@ -8,7 +8,7 @@ use navree_audit::{AuditModule, AuditOptions, DEFAULT_SKIP_FIELDS};
 use navree_config::{Config, ConfigModule, ConfigSources};
 use navree_db::DatabaseModule;
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_testing::{TestApp, principal};
 use uuid::Uuid;
 

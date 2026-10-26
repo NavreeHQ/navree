@@ -13,7 +13,7 @@ use navree_http::{
     AppError, Authenticator, HttpModule, HttpOptions, RouteAuthorizer, RouteMeta, build_router,
     route_table,
 };
-use navree_kernel::{App, BoxFuture, Navree, Module};
+use navree_kernel::{App, BoxFuture, Module, Navree};
 use tower::ServiceExt;
 use uuid::Uuid;
 

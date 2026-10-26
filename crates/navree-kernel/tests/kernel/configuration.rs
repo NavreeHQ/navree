@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use navree_kernel::{Navree, KernelError, Module, ModuleBuilder, ModuleId};
+use navree_kernel::{KernelError, Module, ModuleBuilder, ModuleId, Navree};
 
 use crate::support::{Counter, boot_errors, injectable, module};
 

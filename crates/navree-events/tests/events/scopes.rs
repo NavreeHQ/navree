@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use navree_contracts::{Dispatcher, JobContext, JobRegistration};
 use navree_events::{EventBus, EventsModule, Listener, ModuleBuilderEventsExt, listener_job_name};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
     ProviderKey, Resolver, Scope,
 };
 

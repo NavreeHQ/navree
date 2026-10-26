@@ -193,7 +193,8 @@ mod tests {
 
     #[test]
     fn new_with_ui_and_navree_path() {
-        let Command::New(args) = parse(&["new", "blog", "--ui", "next", "--navree-path", "../navree"])
+        let Command::New(args) =
+            parse(&["new", "blog", "--ui", "next", "--navree-path", "../navree"])
         else {
             panic!("expected new");
         };

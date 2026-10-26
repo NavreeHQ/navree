@@ -7,7 +7,7 @@ use navree_db::{
     run_seeders,
 };
 use navree_kernel::{
-    App, AppContext, BoxError, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder,
+    App, AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
     ProviderKey, Resolver,
 };
 use sea_orm::ActiveValue::Set;

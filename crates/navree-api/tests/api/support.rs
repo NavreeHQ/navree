@@ -15,7 +15,7 @@ use navree_http::{
     RouteAuthorizer, RouteDef, RouteMeta, build_router, schema_fn,
 };
 use navree_kernel::{
-    App, AppBuilder, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, Resolver,
+    App, AppBuilder, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

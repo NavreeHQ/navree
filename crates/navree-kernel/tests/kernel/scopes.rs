@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use navree_kernel::{
-    BoxError, BoxFuture, Factory, Injectable, Navree, KernelError, Lazy, Module, ModuleBuilder,
-    ModuleId, ProviderKey, RequestScope, Resolver, Scope,
+    BoxError, BoxFuture, Factory, Injectable, KernelError, Lazy, Module, ModuleBuilder, ModuleId,
+    Navree, ProviderKey, RequestScope, Resolver, Scope,
 };
 
 use crate::support::{Counter, module};

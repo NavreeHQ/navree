@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 use http::Method;
 use navree_config::{ConfigModule, ConfigSources};
-use navree_http_client::{FakeResponse, HttpClient, HttpClientModule, HttpClientOptions, SsrfPolicy};
-use navree_kernel::{Factory, Navree, Module, ModuleBuilder, ModuleId, ProviderKey};
+use navree_http_client::{
+    FakeResponse, HttpClient, HttpClientModule, HttpClientOptions, SsrfPolicy,
+};
+use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, Navree, ProviderKey};
 use serde_json::json;
 
 /// A module that needs the client without importing `HttpClientModule`.

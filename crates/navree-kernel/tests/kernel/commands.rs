@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use navree_kernel::{BoxError, CommandSpec, Factory, Navree, KernelError, Module, ModuleBuilder};
+use navree_kernel::{BoxError, CommandSpec, Factory, KernelError, Module, ModuleBuilder, Navree};
 use tokio_util::sync::CancellationToken;
 
 use crate::support::{Counter, Journal, injectable, module};

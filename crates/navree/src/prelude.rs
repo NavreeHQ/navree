@@ -20,7 +20,7 @@ pub use crate::{controller, injectable, module};
 pub use navree_config::{ConfigModule, ConfigSources, ModuleBuilderConfigExt as _};
 pub use navree_contracts::ModuleBuilderJobsExt as _;
 pub use navree_kernel::{
-    AppBuilder, AppContext, BoxError, Factory, Injectable, Navree, Lazy, Module, ModuleBuilder,
+    AppBuilder, AppContext, BoxError, Factory, Injectable, Lazy, Module, ModuleBuilder, Navree,
     Resolver,
 };
 

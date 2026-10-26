@@ -6,9 +6,9 @@ use axum::Json;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderName};
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
+use metrics_exporter_prometheus::PrometheusHandle;
 use navree_http::{ApiMeta, Controller, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use metrics_exporter_prometheus::PrometheusHandle;
 use serde_json::json;
 
 use crate::metrics::{BearerToken, MetricsRecorder};

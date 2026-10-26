@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use navree_config::{Config, ConfigModule, ConfigSection, ConfigSources, ModuleBuilderConfigExt};
-use navree_kernel::{BootErrors, Navree, KernelError, Module, ModuleBuilder};
+use navree_kernel::{BootErrors, KernelError, Module, ModuleBuilder, Navree};
 use serde::Deserialize;
 use tempfile::TempDir;
 

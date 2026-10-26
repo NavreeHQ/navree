@@ -124,7 +124,10 @@ fn verbatim_windows_paths_become_plain_paths() {
             r#"{ path = "//server/share/navree/crates/navree" }"#,
         ),
     ] {
-        assert_eq!(NavreeSource::Path(PathBuf::from(path)).dependency(), expected);
+        assert_eq!(
+            NavreeSource::Path(PathBuf::from(path)).dependency(),
+            expected
+        );
     }
 }
 

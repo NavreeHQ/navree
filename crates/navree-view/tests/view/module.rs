@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use navree_config::{ConfigModule, ConfigSources};
 use navree_kernel::{
-    App, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    App, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions, Views};
 use serde_json::json;

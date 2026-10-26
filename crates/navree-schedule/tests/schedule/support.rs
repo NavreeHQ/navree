@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use chrono::{DateTime, Utc};
 use navree_contracts::{Clock, FixedClock};
 use navree_db::{DatabaseModule, Db, DbOptions};
-use navree_kernel::{App, AppBuilder, AppContext, BoxError, Navree, Module, ModuleBuilder};
+use navree_kernel::{App, AppBuilder, AppContext, BoxError, Module, ModuleBuilder, Navree};
 use navree_schedule::{ModuleBuilderScheduleExt, Schedule, ScheduleModule, Scheduler};
 use navree_testing::TempDirGuard;
 use sea_orm::{ConnectionTrait, Statement};

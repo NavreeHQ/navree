@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use navree_events::{EventBus, EventsModule, ModuleBuilderEventsExt};
-use navree_kernel::{Navree, KernelError, Module, ModuleBuilder};
+use navree_kernel::{KernelError, Module, ModuleBuilder, Navree};
 
 use crate::support::{Journal, UserDeleted, UserRegistered, listener};
 

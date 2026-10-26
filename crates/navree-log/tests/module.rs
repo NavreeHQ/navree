@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use navree_config::{ConfigModule, ConfigSources};
 use navree_kernel::{
-    BoxError, Factory, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    BoxError, Factory, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 use navree_log::{LogControl, LogFormat, LogOptions, LoggerModule};
 use serde_json::json;

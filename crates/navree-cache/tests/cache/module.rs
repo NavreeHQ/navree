@@ -11,7 +11,7 @@ use navree_cache::{
 };
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{HealthCheck, HealthStatus};
-use navree_kernel::{App, BootErrors, Factory, Navree, Module, ModuleBuilder, ProviderKey};
+use navree_kernel::{App, BootErrors, Factory, Module, ModuleBuilder, Navree, ProviderKey};
 use serde_json::json;
 
 const MINUTE: Duration = Duration::from_secs(60);

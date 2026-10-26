@@ -9,7 +9,7 @@ use navree_contracts::{
     Job, JobContext, JobEnvelope, JobOptions, JobRegistration, ModuleBuilderJobsExt, Principal,
     RequestId, Secret, SessionRecord,
 };
-use navree_kernel::{AppContext, Navree, Module, ModuleBuilder};
+use navree_kernel::{AppContext, Module, ModuleBuilder, Navree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;

@@ -27,7 +27,9 @@ export function startMockApi(): Promise<void> {
           },
         },
       });
-      console.info("[navree] Mock API enabled. Sign in as rep1@navree.test / password123. Reset with __navreeMock.reset().");
+      console.info(
+        "[navree] Mock API enabled. Sign in as rep1@navree.test / password123. Reset with __navreeMock.reset().",
+      );
     });
   return started;
 }

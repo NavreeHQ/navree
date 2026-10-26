@@ -1,6 +1,6 @@
 //! Boot-time wiring checks: visibility and missing providers.
 
-use navree_kernel::{Navree, KernelError};
+use navree_kernel::{KernelError, Navree};
 
 use crate::support::{boot_errors, injectable, module};
 

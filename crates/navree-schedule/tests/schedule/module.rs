@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use navree_db::{DatabaseModule, DbOptions, Migrator};
-use navree_kernel::{Navree, Module, ModuleBuilder};
+use navree_kernel::{Module, ModuleBuilder, Navree};
 use navree_schedule::{
     ModuleBuilderScheduleExt, RUNS_TABLE, ScheduleError, ScheduleModule, Scheduler,
 };

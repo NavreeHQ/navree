@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use navree_kernel::{GraphReport, Navree, KernelError, ModuleReport};
+use navree_kernel::{GraphReport, KernelError, ModuleReport, Navree};
 use navree_macros::{injectable, module};
 
 /// The report of module `name`.
@@ -201,7 +201,10 @@ mod configured {
 async fn module_imports_accept_expressions() {
     use configured::{Welcome, WelcomeModule};
 
-    let report = Navree::app().module(WelcomeModule).validate().expect("valid");
+    let report = Navree::app()
+        .module(WelcomeModule)
+        .validate()
+        .expect("valid");
     assert_eq!(
         module_report(&report, "WelcomeModule").imports,
         vec!["GreetingModule", "DataModule"]

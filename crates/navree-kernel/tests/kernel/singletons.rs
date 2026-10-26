@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use navree_kernel::{
-    BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
 
 use crate::support::{Counter, injectable};

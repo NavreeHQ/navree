@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, Navree, KernelError, Lifecycle, Module,
-    ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, Module, ModuleBuilder,
+    ModuleId, Navree, ProviderKey, Resolver,
 };
 
 use crate::support::{Journal, module};

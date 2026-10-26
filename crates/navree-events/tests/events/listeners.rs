@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use navree_events::{EventBus, EventsError, EventsModule, Listener, ModuleBuilderEventsExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, Navree, KernelError, Module, ModuleBuilder, Resolver,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
+    Resolver,
 };
 
 use crate::support::{Journal, UserDeleted, UserRegistered, listener};

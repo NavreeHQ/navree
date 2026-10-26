@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use navree_contracts::EventSink;
 use navree_events::{EventBus, EventsError, EventsModule, ModuleBuilderEventsExt};
-use navree_kernel::{Navree, Module, ModuleBuilder, ModuleId};
+use navree_kernel::{Module, ModuleBuilder, ModuleId, Navree};
 use serde_json::{Value, json};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::broadcast::error::TryRecvError;

@@ -446,7 +446,11 @@ mod tests {
         );
         assert_eq!(found, ["first", "v1.k.n.c"]);
         assert!(
-            session_cookies(&headers(&[("cookie", "navree_session_x=1")]), "navree_session").is_empty()
+            session_cookies(
+                &headers(&[("cookie", "navree_session_x=1")]),
+                "navree_session"
+            )
+            .is_empty()
         );
         assert_eq!(
             session_cookies(&headers(&[("cookie", "navree_session=")]), "navree_session"),

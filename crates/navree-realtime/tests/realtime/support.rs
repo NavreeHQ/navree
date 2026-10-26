@@ -15,7 +15,9 @@ use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthVia, Principal, Secret};
 use navree_http::{AppError, Authenticator, HttpModule, HttpOptions, build_router};
-use navree_kernel::{App, AppBuilder, AppContext, BoxError, BoxFuture, Navree, Module, ModuleBuilder};
+use navree_kernel::{
+    App, AppBuilder, AppContext, BoxError, BoxFuture, Module, ModuleBuilder, Navree,
+};
 use navree_realtime::{
     ChannelDecision, ModuleBuilderRealtimeExt, Realtime, RealtimeModule, RealtimeOptions,
 };

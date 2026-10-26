@@ -2487,647 +2487,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "navree"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "garde",
- "navree-access",
- "navree-api",
- "navree-audit",
- "navree-auth",
- "navree-cache",
- "navree-config",
- "navree-contracts",
- "navree-crypto",
- "navree-db",
- "navree-events",
- "navree-http",
- "navree-http-client",
- "navree-kernel",
- "navree-log",
- "navree-macros",
- "navree-mail",
- "navree-notify",
- "navree-observe",
- "navree-queue",
- "navree-realtime",
- "navree-schedule",
- "navree-session",
- "navree-storage",
- "navree-testing",
- "navree-validation",
- "navree-view",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "navree-access"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "http",
- "insta",
- "navree-contracts",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-testing",
- "moka",
- "proptest",
- "sea-orm",
- "sea-orm-migration",
- "sea-query",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "navree-api"
-version = "0.1.0"
-dependencies = [
- "axum",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-http",
- "navree-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "utoipa",
- "utoipa-scalar",
-]
-
-[[package]]
-name = "navree-audit"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "navree-config",
- "navree-contracts",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "navree-auth"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "form_urlencoded",
- "futures",
- "garde",
- "http",
- "jsonwebtoken",
- "navree-access",
- "navree-api",
- "navree-cache",
- "navree-config",
- "navree-contracts",
- "navree-crypto",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-mail",
- "navree-observe",
- "navree-testing",
- "navree-validation",
- "navree-view",
- "qrcode2",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "totp-rs",
- "tracing",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "navree-cache"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "navree-config",
- "navree-contracts",
- "navree-kernel",
- "moka",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "navree-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "heck 0.5.0",
- "insta",
- "minijinja",
- "notify",
- "notify-debouncer-mini",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "navree-config"
-version = "0.1.0"
-dependencies = [
- "config",
- "navree-contracts",
- "navree-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "navree-contracts"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "navree-kernel",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "navree-crypto"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "base64 0.23.1",
- "hex",
- "hmac 0.13.0",
- "navree-config",
- "navree-contracts",
- "navree-kernel",
- "rand 0.10.3",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "subtle",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "navree-db"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64 0.23.1",
- "chrono",
- "http",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-http",
- "navree-kernel",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "navree-events"
-version = "0.1.0"
-dependencies = [
- "navree-contracts",
- "navree-kernel",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "navree-http"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "futures-util",
- "hex",
- "hmac 0.13.0",
- "http",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-kernel",
- "metrics",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "tower",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "navree-http-client"
-version = "0.1.0"
-dependencies = [
- "backon",
- "bytes",
- "http",
- "ipnet",
- "navree-config",
- "navree-contracts",
- "navree-kernel",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "wildmatch",
-]
-
-[[package]]
-name = "navree-kernel"
-version = "0.1.0"
-dependencies = [
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "navree-log"
-version = "0.1.0"
-dependencies = [
- "navree-config",
- "navree-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-log",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "navree-macros"
-version = "0.1.0"
-dependencies = [
- "axum",
- "http",
- "http-body-util",
- "navree-access",
- "navree-contracts",
- "navree-http",
- "navree-kernel",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "syn 3.0.9",
- "tokio",
- "tower",
- "trybuild",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "navree-mail"
-version = "0.1.0"
-dependencies = [
- "navree-config",
- "navree-contracts",
- "navree-kernel",
- "navree-view",
- "lettre",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
-name = "navree-notify"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "navree-config",
- "navree-contracts",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-mail",
- "navree-testing",
- "navree-view",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "navree-observe"
-version = "0.1.0"
-dependencies = [
- "axum",
- "futures-util",
- "http",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-http",
- "navree-kernel",
- "metrics",
- "metrics-exporter-prometheus",
- "serde",
- "serde_json",
- "subtle",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "navree-queue"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "futures-util",
- "hex",
- "navree-config",
- "navree-contracts",
- "navree-db",
- "navree-kernel",
- "navree-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "navree-realtime"
-version = "0.1.0"
-dependencies = [
- "axum",
- "dashmap",
- "futures-util",
- "hex",
- "http",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-crypto",
- "navree-http",
- "navree-kernel",
- "rand 0.10.3",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "tokio-tungstenite 0.30.0",
- "tokio-util",
- "tower",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "navree-schedule"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "croner",
- "futures-util",
- "navree-contracts",
- "navree-db",
- "navree-kernel",
- "navree-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "navree-session"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "cookie",
- "navree-config",
- "navree-contracts",
- "navree-crypto",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-testing",
- "percent-encoding",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
- "wildmatch",
-]
-
-[[package]]
-name = "navree-storage"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "futures-util",
- "hex",
- "http-body-util",
- "infer",
- "navree-config",
- "navree-contracts",
- "navree-crypto",
- "navree-http",
- "navree-kernel",
- "mime_guess",
- "object_store",
- "percent-encoding",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
-name = "navree-testing"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "cookie",
- "http",
- "http-body-util",
- "navree-config",
- "navree-contracts",
- "navree-http",
- "navree-kernel",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "tempfile",
- "tokio",
- "tower",
- "uuid",
-]
-
-[[package]]
-name = "navree-validation"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "form_urlencoded",
- "garde",
- "http",
- "navree-config",
- "navree-db",
- "navree-http",
- "navree-kernel",
- "navree-testing",
- "sea-orm",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "navree-view"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "navree-config",
- "navree-kernel",
- "minijinja",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "kqueue"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3499,6 +2858,647 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
+
+[[package]]
+name = "navree"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "garde",
+ "navree-access",
+ "navree-api",
+ "navree-audit",
+ "navree-auth",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-log",
+ "navree-macros",
+ "navree-mail",
+ "navree-notify",
+ "navree-observe",
+ "navree-queue",
+ "navree-realtime",
+ "navree-schedule",
+ "navree-session",
+ "navree-storage",
+ "navree-testing",
+ "navree-validation",
+ "navree-view",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-access"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "http",
+ "insta",
+ "moka",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "proptest",
+ "sea-orm",
+ "sea-orm-migration",
+ "sea-query",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navree-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "utoipa",
+ "utoipa-scalar",
+]
+
+[[package]]
+name = "navree-audit"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navree-auth"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "form_urlencoded",
+ "futures",
+ "garde",
+ "http",
+ "jsonwebtoken",
+ "navree-access",
+ "navree-api",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-mail",
+ "navree-observe",
+ "navree-testing",
+ "navree-validation",
+ "navree-view",
+ "qrcode2",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "totp-rs",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-cache"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "moka",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navree-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "heck 0.5.0",
+ "insta",
+ "minijinja",
+ "notify",
+ "notify-debouncer-mini",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "navree-config"
+version = "0.1.0"
+dependencies = [
+ "config",
+ "navree-contracts",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+]
+
+[[package]]
+name = "navree-contracts"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "navree-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "base64 0.23.1",
+ "hex",
+ "hmac 0.13.0",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "rand 0.10.3",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "navree-db"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "http",
+ "http-body-util",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "navree-events"
+version = "0.1.0"
+dependencies = [
+ "navree-contracts",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "navree-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "futures-util",
+ "hex",
+ "hmac 0.13.0",
+ "http",
+ "http-body-util",
+ "metrics",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-http-client"
+version = "0.1.0"
+dependencies = [
+ "backon",
+ "bytes",
+ "http",
+ "ipnet",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wildmatch",
+]
+
+[[package]]
+name = "navree-kernel"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "navree-log"
+version = "0.1.0"
+dependencies = [
+ "navree-config",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "navree-macros"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "http",
+ "http-body-util",
+ "navree-access",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 3.0.9",
+ "tokio",
+ "tower",
+ "trybuild",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-mail"
+version = "0.1.0"
+dependencies = [
+ "lettre",
+ "navree-config",
+ "navree-contracts",
+ "navree-kernel",
+ "navree-view",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "navree-notify"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-mail",
+ "navree-testing",
+ "navree-view",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navree-observe"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "navree-queue"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "hex",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-kernel",
+ "navree-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "navree-realtime"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "dashmap",
+ "futures-util",
+ "hex",
+ "http",
+ "http-body-util",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-http",
+ "navree-kernel",
+ "rand 0.10.3",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tokio-util",
+ "tower",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navree-schedule"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "croner",
+ "futures-util",
+ "navree-contracts",
+ "navree-db",
+ "navree-kernel",
+ "navree-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "navree-session"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "cookie",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "percent-encoding",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
+name = "navree-storage"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "hex",
+ "http-body-util",
+ "infer",
+ "mime_guess",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-http",
+ "navree-kernel",
+ "object_store",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "navree-testing"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "cookie",
+ "http",
+ "http-body-util",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tempfile",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
+name = "navree-validation"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "garde",
+ "http",
+ "navree-config",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "navree-view"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "minijinja",
+ "navree-config",
+ "navree-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "nix"

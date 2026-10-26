@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use navree_kernel::{Injectable, Navree, Module, ModuleBuilder, ProviderKey};
+use navree_kernel::{Injectable, Module, ModuleBuilder, Navree, ProviderKey};
 use navree_macros::injectable;
 
 /// A dependency registered as a trait object.
@@ -189,7 +189,11 @@ async fn injectable_scope_argument_sets_the_scope() {
     assert_eq!(Shared::scope(), Scope::Singleton);
     assert_eq!(Repo::scope(), Scope::Singleton, "singleton by default");
 
-    let app = Navree::app().module(ScopesModule).boot().await.expect("boot");
+    let app = Navree::app()
+        .module(ScopesModule)
+        .boot()
+        .await
+        .expect("boot");
     let ctx = app.ctx();
     let a = ctx.get::<Fresh>().await.expect("Fresh");
     let b = ctx.get::<Fresh>().await.expect("Fresh");

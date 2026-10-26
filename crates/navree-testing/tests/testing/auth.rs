@@ -6,7 +6,7 @@ use http::request::Parts;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{AuthVia, Principal};
 use navree_http::{AppError, Authenticator, HttpModule};
-use navree_kernel::{BoxFuture, Navree, Module, ModuleBuilder};
+use navree_kernel::{BoxFuture, Module, ModuleBuilder, Navree};
 use navree_testing::{TestApp, TestAuthenticator, principal};
 use serde_json::json;
 use uuid::Uuid;

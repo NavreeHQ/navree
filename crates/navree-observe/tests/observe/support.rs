@@ -13,7 +13,7 @@ use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_http::{HttpModule, HttpOptions, build_router};
-use navree_kernel::{App, AppBuilder, Factory, Navree, Module, ModuleBuilder};
+use navree_kernel::{App, AppBuilder, Factory, Module, ModuleBuilder, Navree};
 use navree_observe::{ObserveModule, ObserveOptions};
 use tower::ServiceExt;
 

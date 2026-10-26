@@ -167,8 +167,8 @@ pub use navree_macros::{controller, delete, get, injectable, module, patch, post
 
 /// The kernel types an app's root and modules use most.
 pub use navree_kernel::{
-    App, AppBuilder, AppContext, BoxError, BoxFuture, Factory, Injectable, Navree, KernelError, Lazy,
-    Module, ModuleBuilder, ModuleId, ProviderKey, Resolver, Scope,
+    App, AppBuilder, AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Lazy,
+    Module, ModuleBuilder, ModuleId, Navree, ProviderKey, Resolver, Scope,
 };
 
 /// A handler's result: the error defaults to [`AppError`](navree_http::AppError),

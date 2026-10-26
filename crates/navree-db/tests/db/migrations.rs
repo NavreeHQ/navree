@@ -1,7 +1,7 @@
 //! Module-owned migrations: order, batches, rollback, fresh, status, commands.
 
 use navree_db::{DatabaseModule, Db, MigrationSet, MigrationStatus, Migrator, ModuleBuilderDbExt};
-use navree_kernel::{App, Navree, Module, ModuleBuilder};
+use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use sea_orm::ConnectionTrait;
 
 use crate::fixtures::{CreateTable, FailAfterCreating, count, tables};
