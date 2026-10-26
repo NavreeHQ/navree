@@ -1,0 +1,38 @@
+//! {{ title }}: an MCP server of the {{ module_words }} module, whose tools,
+//! resources and prompts AI clients reach at `/mcp` (and over stdio with
+//! `mcp:serve --user <email>`).
+
+use garde::Validate;
+use navree::mcp::{McpContext, mcp_server};
+use navree::{Result, injectable};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use utoipa::ToSchema;
+
+/// The arguments of `{{ name }}_echo`. Field doc comments become the
+/// descriptions in the tool's input schema; garde checks them before the
+/// tool runs.
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct {{ pascal }}EchoArgs {
+    /// The text to send back.
+    #[garde(length(chars, min = 1, max = 200))]
+    pub text: String,
+}
+
+/// {{ title }}. Inject services as `Arc<T>` fields and call them from the
+/// tools. Every tool, resource and prompt needs an access attribute
+/// (`#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` or
+/// `#[can]`), and its doc comment is what the model reads.
+#[injectable]
+pub struct {{ pascal }}Mcp;
+
+#[mcp_server]
+impl {{ pascal }}Mcp {
+    /// Sends the text back with the id of the user who called (replace with
+    /// a real tool).
+    #[mcp_tool(read_only, idempotent)]
+    #[authenticated]
+    async fn {{ name }}_echo(&self, cx: &McpContext, args: {{ pascal }}EchoArgs) -> Result<Value> {
+        Ok(json!({ "text": args.text, "user_id": cx.user_id() }))
+    }
+}
