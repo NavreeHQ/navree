@@ -116,6 +116,12 @@ const HIERARCHY: &[Rule] = &[
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
     ]),
+    // gRPC: `#[grpc_service]` (navree-macros) expands into its call pipeline;
+    // navree-testing backs `navree_grpc::testing::TestChannel`.
+    rule("navree-grpc", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-testing", "navree-db", "navree-validation",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -180,6 +186,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-social",
     "navree-webhooks",
     "navree-oauth",
+    "navree-grpc",
 ];
 
 /// Cargo dependency kind of an edge.
