@@ -22,6 +22,7 @@ pub struct ProfileController {
 impl ProfileController {
     /// The caller's profile (defaults until they save one).
     #[get("/")]
+    #[api(summary = "The signed-in user's profile", tag = "Profile")]
     async fn show(
         &self,
         uow: Uow,
@@ -36,6 +37,7 @@ impl ProfileController {
 
     /// Updates the caller's profile.
     #[put("/")]
+    #[api(summary = "Update the signed-in user's profile", tag = "Profile")]
     async fn update(
         &self,
         uow: Uow,
