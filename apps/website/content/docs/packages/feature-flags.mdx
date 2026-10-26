@@ -1,0 +1,392 @@
+---
+title: "Feature flags"
+description: "Define flags as types with `#[flag]`, turn them on per user, per workspace, by plan or by percentage, check them with `Flags` or `#[requires_flag]`, and store them in your database with a cache in front."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="flags" /> A feature flag separates shipping code from releasing it. You merge the new deal pipeline behind a flag, turn it on for your own workspace, then for 10% of customers, then for everyone, and turn it off in seconds if something goes wrong, without a deploy.
+
+`navree-flags` keeps flags type-safe and close to your code:
+
+- A flag is a Rust type, defined with `#[flag]`. A typo in a flag name is a compile error, and `flags:purge` finds flags that no longer exist in code.
+- You check a flag with the `Flags` service, the `CurrentFlags` extractor, or `#[requires_flag]` on a route.
+- A flag is resolved for a **scope**: a user, a [workspace](/docs/workspaces/introduction/), or both. Turn it on for one user or one workspace, for a percentage of either, for workspaces on given [plans](/docs/packages/billing/), or for everyone.
+- Flag state lives in two tables in your database and is cached, so a check during a request costs nothing after the first one.
+
+## Installation
+
+Turn on the `flags` feature of the `navree` facade:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["flags"] }
+```
+
+Add `FlagsModule` to your app root. It needs the database; with `CacheModule` in the app it caches flag state there, and with `AuditModule` every change is recorded:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(DatabaseModule::from_config())
+    .module(CacheModule::from_config())
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())
+    .module(FlagsModule::from_config()) // section `flags`
+    // ...
+```
+
+The module is global and contributes the migration set `flags`, which creates `feature_flags` and `feature_flag_overrides`.
+
+## Configuration
+
+Every key has a default:
+
+```toml title="config/app.toml"
+[flags]
+store = "database"        # database | memory
+cache_ttl_secs = 60       # how long resolved state is cached
+routes = true             # GET /api/flags for the front end
+admin_routes = true       # /api/admin/flags, with the flags.manage permission
+missing_scope = "default" # checks without a user or workspace: default | off
+```
+
+From the environment: `APP_FLAGS__STORE=memory`, `APP_FLAGS__CACHE_TTL_SECS=10`. `FlagsModule::for_root(FlagsOptions { .. })` takes the same options in code.
+
+## Defining flags
+
+A flag is a unit struct with `#[flag]`. Its doc comment becomes its description in `flags:list` and the admin routes:
+
+```rust title="src/modules/deals/flags.rs"
+use navree::flags::flag;
+
+/// The redesigned deal pipeline board with drag-and-drop between stages.
+#[flag]
+pub struct NewPipeline;
+
+/// AI summaries on the deal page.
+#[flag(name = "ai-summaries", default = false, expose)]
+pub struct AiSummaries;
+
+/// The CSV export of deals; on unless someone turns it off.
+#[flag(default = true)]
+pub struct DealExport;
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `name` | the type name in kebab case (`new-pipeline`) | The stored name. Keep it stable: state is keyed by it. |
+| `default` | `false` | The value when nothing else decides |
+| `expose` | off | Includes the flag in `GET /api/flags`, for the front end |
+
+Register each flag with `FlagsModule::for_feature`, in the module that owns it:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(
+    imports = [
+        FlagsModule::for_feature::<NewPipeline>(),
+        FlagsModule::for_feature::<AiSummaries>(),
+        FlagsModule::for_feature::<DealExport>(),
+    ],
+    providers = [DealService],
+    controllers = [DealsController],
+)]
+pub struct DealsModule;
+```
+
+Two registered flags with the same name fail the boot, naming both types. Checking a flag that no module registered fails too, with `FlagsError::Unregistered`, so a forgotten registration shows up in the first test that touches it.
+
+## Checking flags
+
+### In handlers: CurrentFlags
+
+`CurrentFlags` resolves flags for the request's user and, when the app has workspaces, the request's `CurrentWorkspace`. Results are memoized for the request:
+
+```rust title="src/modules/deals/controller.rs"
+use navree::flags::CurrentFlags;
+
+#[get("/board")]
+#[can(Read, Deal)]
+async fn board(
+    &self,
+    uow: Uow,
+    flags: CurrentFlags,
+    scope: Accessible<Deal, Read>,
+) -> Result<Json<DealBoard>> {
+    let board = if flags.active::<NewPipeline>().await? {
+        self.deals.board_v2(&uow, scope).await?
+    } else {
+        self.deals.board(&uow, scope).await?
+    };
+    Ok(Json(board))
+}
+```
+
+### Anywhere: the Flags service
+
+Inject `Arc<Flags>` and pass a scope. Anything that converts into a `FlagScope` works: a `User`, a `Workspace`, or a scope you build:
+
+```rust
+use navree::flags::{FlagScope, Flags};
+
+#[injectable]
+pub struct DealSummaries {
+    flags: Arc<Flags>,
+    // ...
+}
+
+impl DealSummaries {
+    pub async fn maybe_summarize(&self, deal: &deal::Model, workspace_id: Uuid) -> Result<(), BoxError> {
+        let scope = FlagScope::user(deal.owner_id).workspace(workspace_id);
+        if !self.flags.active::<AiSummaries>(&scope).await? {
+            return Ok(());
+        }
+        // ...
+        Ok(())
+    }
+}
+```
+
+`FlagScope::user(id)`, `FlagScope::workspace(id)` and `FlagScope::user(id).workspace(id)` name who is asking. `flags.active::<NewPipeline>(&user)` and `flags.active::<NewPipeline>(&workspace)` work too.
+
+### On routes: #[requires_flag]
+
+A route that only exists behind a flag declares it. `#[controller]` consumes the attribute, like `#[can]`, so there is nothing to import:
+
+```rust
+#[get("/forecast")]
+#[can(Read, Deal)]
+#[requires_flag(NewPipeline)]
+async fn forecast(&self, uow: Uow, scope: Accessible<Deal, Read>) -> Result<Json<Forecast>> {
+    // ...
+}
+```
+
+When the flag is off for the request's scope, the route answers 404 Not Found, as if it didn't exist, before the handler or its extractors run. To answer 403 instead, write `#[requires_flag(NewPipeline, status = 403)]`. Access is still declared with `#[can]`, `#[authenticated]` or `#[public]`: a flag is not an access rule. The OpenAPI document lists the route with an `x-navree-flag: new-pipeline` extension.
+
+## Scopes and rollouts
+
+### How a flag is resolved
+
+For a scope with a user U and a workspace W, the first rule that decides wins:
+
+1. **Killed.** A [killed](#kill-switch) flag is off for everyone.
+2. **User override.** U was turned on or off for this flag.
+3. **Workspace override.** W was turned on or off.
+4. **Everyone.** The flag was turned on or off for everyone.
+5. **Rollout.** The flag has a rollout and U (or W) falls inside it.
+6. **Default.** The `default` from `#[flag]`.
+
+A check without a user or a workspace, from a job or a command, uses the overrides it can and then the global state. With `flags.missing_scope = "off"`, such a check is off unless the flag is on for everyone.
+
+### Turning flags on and off
+
+```rust
+use navree::flags::{FlagScope, Flags, Rollout};
+
+// On for one workspace, and for one user wherever they work:
+flags.activate::<NewPipeline>(FlagScope::workspace(acme.id)).await?;
+flags.activate::<NewPipeline>(FlagScope::user(ada.id)).await?;
+
+// Off for one user, then back to what their workspace gets:
+flags.deactivate::<NewPipeline>(FlagScope::user(grace.id)).await?;
+flags.forget::<NewPipeline>(FlagScope::user(grace.id)).await?;
+
+// Released to everyone:
+flags.activate::<NewPipeline>(FlagScope::everyone()).await?;
+```
+
+Writes join the current [unit of work](/docs/database/unit-of-work/) when there is one, so a flag change made in a request commits or rolls back with it. Each change clears the cached state of that flag, emits `FlagChanged` (`flag.changed`) and, with `AuditModule`, writes a `flag.changed` audit entry with the old and new state and the user who made it.
+
+### Percentage rollouts
+
+A rollout turns a flag on for a share of users or workspaces:
+
+```rust
+flags.rollout::<NewPipeline>(Rollout::percent(10).of_workspaces()).await?;
+// a week later
+flags.rollout::<NewPipeline>(Rollout::percent(50).of_workspaces()).await?;
+```
+
+Each workspace (or user) falls in a bucket from 0 to 99, computed from a hash of the flag's name and its id. The bucket never changes, so raising the percentage only adds workspaces: everyone who had the feature at 10% keeps it at 50%. Different flags hash differently, so the same customers aren't the first to get every feature.
+
+Roll out by workspace when a feature changes shared data (a pipeline board everyone in the workspace sees), and by user (`Rollout::percent(10)`, the default) when it only changes one person's view.
+
+### Rolling out by plan
+
+With [billing](/docs/packages/billing/) in the app, a rollout can be limited to workspaces on some plans:
+
+```rust
+flags
+    .rollout::<AiSummaries>(Rollout::plans(["pro", "business"]))
+    .await?;
+
+// Half of the Pro and Business workspaces:
+flags
+    .rollout::<AiSummaries>(Rollout::percent(50).of_workspaces().on_plans(["pro", "business"]))
+    .await?;
+```
+
+A plan rule reads the workspace's local subscription copy, so it costs no call to the payment provider. A workspace that leaves the plan loses the feature on the next check after the cache expires.
+
+### Kill switch
+
+`kill` turns a flag off for everyone, overrides included, in one write. Use it when the feature is causing an incident:
+
+```rust
+flags.kill::<NewPipeline>().await?;
+flags.revive::<NewPipeline>().await?; // back to the overrides and rollout it had
+```
+
+The same from a shell, with the app's configuration:
+
+```sh
+navree flags:kill new-pipeline
+```
+
+## In the front end
+
+Flags marked `expose` are served to the signed-in user at `GET /api/flags`, resolved for the request's user and workspace:
+
+```http
+GET /api/flags HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+X-Workspace: acme
+```
+
+```json
+{ "ai-summaries": true, "new-pipeline": false }
+```
+
+Flags without `expose` never leave the server, so you can name an unreleased feature without announcing it. The response carries `Cache-Control: private, max-age=60` (`flags.cache_ttl_secs`).
+
+## Managing flags
+
+### From the command line
+
+| Command | What it does |
+|---|---|
+| `flags:list` | Every registered flag with its default, global state, rollout and override counts |
+| `flags:on <flag> [--user <id>] [--workspace <id-or-slug>]` | Activates for one user or workspace; without an option, for everyone |
+| `flags:off <flag> [--user <id>] [--workspace <id-or-slug>]` | Deactivates the same way |
+| `flags:forget <flag> [--user <id>] [--workspace <id-or-slug>]` | Removes an override, or resets the global state to the default |
+| `flags:rollout <flag> <percent> [--of users\|workspaces] [--plans pro,business]` | Sets a rollout |
+| `flags:kill <flag>`, `flags:revive <flag>` | The kill switch |
+| `flags:purge [--dry-run]` | Deletes the state of flags no module registers any more |
+
+```sh
+navree flags:on new-pipeline --workspace acme
+navree flags:rollout new-pipeline 25 --of workspaces
+navree flags:list
+```
+
+```text
+flag            default  everyone  rollout            overrides
+ai-summaries    off      -         plans pro,business 0
+deal-export     on       -         -                  2
+new-pipeline    off      -         25% of workspaces  1
+```
+
+### From your admin screens
+
+With `flags.admin_routes = true`, the module mounts JSON routes under `/api/admin/flags` that require the `flags.manage` permission: `GET /api/admin/flags` lists every flag and its state, `PUT /api/admin/flags/{name}` sets the global state or rollout, and `PUT /api/admin/flags/{name}/overrides` and `DELETE` manage overrides. [Helm](/docs/tools/helm/), the admin panel, shows the same flags on its own page.
+
+## Caching
+
+The global state of each flag and the overrides of each scope are cached in the app's [cache](/docs/digging-deeper/cache/) for `flags.cache_ttl_secs` (60 seconds), and `CurrentFlags` memoizes results for the length of a request. A change made through `Flags` clears the cached state of that flag at once.
+
+The cache store is in-memory today, so with several app instances, a change made on one instance reaches the others when their cached entry expires: within `cache_ttl_secs`. Lower it if you need faster propagation; a check that misses the cache costs one indexed query.
+
+## Testing
+
+Use the memory store and set the flags each test needs:
+
+```rust title="apps/crm-api/tests/pipeline.rs"
+use crm_testkit::{Role, TestCrm};
+use navree::flags::{FlagScope, Flags};
+use serde_json::json;
+
+#[tokio::test]
+async fn the_forecast_is_hidden_until_the_new_pipeline_is_on() {
+    let crm = TestCrm::builder()
+        .app(crm_api::app)
+        .config("flags.store", "memory")
+        .build()
+        .await;
+    let rep = crm.login_as(Role::Rep1).await;
+
+    rep.get("/api/v1/deals/forecast").send().await.assert_error(404, None);
+
+    crm.get::<Flags>()
+        .await
+        .activate::<NewPipeline>(FlagScope::user(rep.id()))
+        .await
+        .unwrap();
+
+    rep.get("/api/v1/deals/forecast")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("currency", json!("USD"));
+}
+```
+
+To force a value without storage, install a `FlagsFake`. It answers what you tell it and records every check:
+
+```rust
+use navree::flags::FlagsFake;
+
+let fake = FlagsFake::new().on::<NewPipeline>().off::<AiSummaries>();
+let app = TestApp::builder()
+    .override_value(Arc::new(fake.flags()))
+    // ...
+    .build()
+    .await;
+
+// ... exercise the app ...
+fake.assert_checked::<NewPipeline>();
+fake.assert_not_checked::<DealExport>();
+```
+
+Flags the fake wasn't told about resolve to their `default`. A test for a percentage rollout can compute who is inside it with `Rollout::percent(25).of_workspaces().includes::<NewPipeline>(workspace_id)`.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `flags.store` | `database` | `database` or `memory` |
+| `flags.cache_ttl_secs` | `60` | Cache lifetime of resolved state; `0` turns the cache off |
+| `flags.routes` | `true` | Mounts `GET /api/flags` |
+| `flags.admin_routes` | `true` | Mounts `/api/admin/flags` (permission `flags.manage`) |
+| `flags.missing_scope` | `default` | `default` or `off`, for checks without a user or workspace |
+
+| `Flags` method | |
+|---|---|
+| `active::<F>(scope)` | Whether `F` is on for the scope |
+| `all(scope)` | Every registered flag's value for the scope, by name |
+| `activate::<F>(scope)`, `deactivate::<F>(scope)` | Sets an override, or the global state with `FlagScope::everyone()` |
+| `forget::<F>(scope)` | Removes the override (or the global state) |
+| `rollout::<F>(rollout)`, `stop_rollout::<F>()` | Sets or removes the rollout |
+| `kill::<F>()`, `revive::<F>()` | The kill switch |
+| `state::<F>()` | The stored state, for admin screens |
+
+| Table | Holds |
+|---|---|
+| `feature_flags` | One row per flag that has state: `name`, `everyone` (on, off or unset), `rollout` (JSON), `killed`, `updated_at`, `updated_by` |
+| `feature_flag_overrides` | `flag`, `scope_type` (`user` or `workspace`), `scope_id`, `active` |
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/introduction/" title="Workspaces">
+    The scope most flags roll out by.
+  </LinkCard>
+  <LinkCard href="/docs/packages/billing/" title="Billing">
+    Plans that rollouts can target.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control on routes">
+    Who may call a route, next to whether it exists.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cache/" title="Cache">
+    Where resolved flag state is kept.
+  </LinkCard>
+</LinkCards>

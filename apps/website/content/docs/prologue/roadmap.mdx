@@ -1,66 +1,44 @@
 ---
 title: "Roadmap"
-description: "What was deliberately left out of Navree 0.1, and the performance work the benchmark identified. No dates, no promises."
+description: "Where Navree goes after 0.1: the 1.0 API freeze, long-term support, more drivers and starter kits, Windows services and ongoing performance work."
 ---
 
-This page lists the work that lies ahead of Navree: the modules and drivers deliberately left out of 0.1, the performance problems the benchmark found, and the smaller gaps 0.1 shipped with. It is a list of known work, not a schedule. Nothing here has a date, and nothing here is promised; until something ships, plan as if it won't.
+This page describes where Navree is heading. It has no dates: each item ships when it is ready, and the [release notes](/docs/prologue/release-notes/) record what each release brings. If one of these matters to you, [Contributing](/docs/prologue/contributing/) explains how to help.
 
-If one of these matters to you, [Contributing](/docs/prologue/contributing/) explains how to help.
+## Navree 1.0 and the API freeze
 
-## Deferred from 0.1
+0.x releases may still change public APIs; each change is listed in the release notes with what to do about it. Navree 1.0 freezes the public API of every crate in the framework and the ecosystem:
 
-Navree's original requirements describe a much larger framework than 0.1. The first release covers the foundation and the modules a real application, the reference CRM, needed. These were left out on purpose:
+- **Semantic versioning.** After 1.0, a breaking change needs a new major version. Minor and patch releases are safe to take.
+- **crates.io.** Every crate is published, so `cargo install navree-cli` and `cargo add navree` replace the Git installs.
+- **A minimum supported Rust version** stated for each release, and raised only in minor releases.
+- **Upgrade guides** for every major version, with the changes your code needs.
 
-| Deferred | What it would be | Why it isn't in 0.1 |
-|---|---|---|
-| Redis (`navree-redis`) and every Redis driver | A shared Redis connection pool, with Redis drivers for the cache, the queue, sessions, locks and scaling real time across servers | There was no Redis server to test against while 0.1 was built, so nothing Redis-backed could be verified. Each module has a driver abstraction, so drivers can be added without changing its API. |
-| apalis as a queue driver | Another queue backend, built on the apalis crate | The database and memory drivers cover what the CRM needs. |
-| Passkeys | WebAuthn sign-in, on webauthn-rs | webauthn-rs needs OpenSSL on Windows, and Navree avoids OpenSSL everywhere. |
-| Social login and an OAuth2 server | Sign-in through other providers, and issuing tokens to third parties | Later phases of the original plan. |
-| `navree-i18n` | Translations and locale handling | Not needed by the CRM. |
-| `navree-flags` | Feature flags stored in the app's database | Not needed by the CRM. |
-| `navree-billing` | Plans, subscriptions, invoices and payment webhooks | Depends on external payment services. |
-| `navree-ai` | LLM providers, embeddings and an MCP server | Depends on external services. |
-| `navree-grpc` and `navree-transport` | gRPC services, and message-broker transports for request/reply and events | Depend on external services; not needed by the CRM. |
-| `navree-export` | PDF, spreadsheet and image helpers | Not needed by the CRM. |
-| `navree-search` | Search-engine adapters and model indexing | Depends on external services. |
-| `navree-admin` and `navree-graphql` | An admin API with a front-end kit, and GraphQL | The latest phase of the original plan. |
-| Front-end kits, teams, multi-tenancy, OpenTelemetry and Sentry, a request inspector | A Nuxt kit next to the Next.js template, team-scoped roles, tenant isolation, tracing export, error reporting and a Telescope-style inspector | Later phases of the original plan. |
-| PostgreSQL behaviour verified by tests | Running the test suite against a real PostgreSQL server | There was no PostgreSQL server while 0.1 was built. The PostgreSQL code paths exist, and the benchmark now runs Navree on PostgreSQL, but the test suite runs on SQLite. |
+## Long-term support
 
-Two decisions taken during 0.1 also shape what comes next. Authentication follows NestJS (JWTs and rotating refresh tokens), so Laravel Sanctum's SPA cookie authentication and personal access tokens aren't built. Errors use the NestJS format, so there are no `application/problem+json` responses. Both were choices, not omissions.
+From 1.0, Navree publishes a support policy: how long each release line gets bug fixes and security fixes, and which major versions are long-term support (LTS) releases with the longest security window. Security fixes are released for every supported line at the same time, with an advisory.
 
-## Performance work
+## More drivers
 
-The [benchmark](/benchmarks/) shows that Navree's own per-request cost is high. On plain JSON it delivers 22% of the throughput of a hand-written Axum and sqlx service built on the same libraries, and on a single database query 43%. Navree used nearly all its CPU in both tests while PostgreSQL had capacity to spare, so the time goes into Navree's request pipeline, not the database.
+Every module talks to its backend through a driver trait, so new drivers arrive without changes to your code:
 
-Reading the code behind those numbers found these causes. Fixing them is the next performance step:
+- **Redis** for the cache, the queue, sessions, locks and the rate limiter, and as a backplane that lets several `serve` processes share WebSocket broadcasts.
+- **Object storage** disks for S3 and S3-compatible stores, Google Cloud Storage and Azure Blob Storage.
+- **More queue backends** alongside the database and memory drivers.
 
-1. **An extra database round trip per connection.** navree-db leaves sqlx's `test_before_acquire` on, so every checkout from the pool pings the database first: a single-query request costs two round trips instead of one. There is no setting to turn it off yet.
-2. **An extra query per transaction.** Every unit-of-work transaction on PostgreSQL first runs `SELECT set_config('navree.actor', ...)` to record the acting user and the request id on the transaction: one more round trip before its first real query.
-3. **A task per request.** The unit-of-work layer spawns a Tokio task for every request, including requests that never touch the database, such as the plain JSON test.
-4. **Process-wide locks on every request.** Maintenance mode takes a mutex and a read-write lock, and the per-IP rate limiter uses one global `Mutex<HashMap>`.
-5. **Work done for nobody.** The request-context layer builds metrics labels (fresh strings) even when no metrics recorder is installed, and creates a request scope and a UUID request id.
-6. **A slow `CurrentUser`.** It finds `AuthService` by scanning every provider, and loads every column of the user, including the password hash and the two-factor secrets.
-7. **JSON parsed twice.** Request bodies are parsed into a `serde_json::Value`, then into the DTO.
-8. **Change events nobody reads.** `Repo::insert` serializes each new row for a change event even when nothing listens for change events.
+## More starter kits
 
-A related kernel issue: `AppContext::get`, `try_get` and `get_named` search every provider on each call, so services that resolve optional dependencies per request pay for it every time.
+The [starter kits](/docs/getting-started/starter-kits/) grow with more product shapes and more front ends, each one production-ready from `navree new` and kept current with every release.
 
-Navree's memory use and startup are already good: 4 MB at idle, 38 MB at peak and 23 ms to ready in the benchmark. The work above is about throughput and latency.
+## Windows services
 
-## Smaller gaps
+`serve`, `queue:work` and `schedule:work` run as Windows services, with the same graceful shutdown they have under systemd, and [Harbor](/docs/tools/harbor/) learns to deploy to Windows Server.
 
-These shipped in 0.1 and are described in the [release notes](/docs/prologue/release-notes/#known-limitations):
+## Security
 
-- publishing the crates to crates.io;
-- the configuration precedence of `.env` and `config/app.toml`, which is the opposite of what the generated files say;
-- an `auth:prune` command for old refresh tokens;
-- route-specific rate limits for registration and password reset, and a password confirmation for regenerating two-factor recovery codes;
-- query parameters and non-JSON bodies in the OpenAPI document, and an OpenAPI schema for `Page<T>`;
-- a soft-delete scope for record checks and `exists` rules;
-- a size limit for the memory cache store;
-- cloud disks for file storage, beyond the local filesystem;
-- keeping the listening socket open across `navree dev` restarts;
-- a command to assign roles to users;
-- reporting validation's serde errors together with the garde rules, instead of one at a time.
+- **Passkeys.** WebAuthn sign-in alongside passwords and two-factor codes.
+- **Revocable access tokens**, for apps that need sign-out to take effect before an access token expires.
+
+## Performance
+
+Performance work continues release by release, focused on the cost of the request pipeline: fewer database round trips per request, less work on requests that don't need it, and no process-wide locks on the hot path. [Performance](/performance/) tracks the numbers.

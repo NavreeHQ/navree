@@ -1,0 +1,280 @@
+---
+title: "Dock"
+description: "Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS for local development with one command, in Docker or Podman, with your app already pointed at them."
+status: "planned"
+---
+
+## Introduction
+
+Dock starts the services your app needs on your machine. List them in `dock.toml`, run `navree dock up`, and PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS start in containers, wait until they are ready, and your app's settings point at them. `navree dock down` stops them; your data stays for next time.
+
+Dock is part of the `navree` CLI and drives Docker or Podman, whichever you have. It needs no Compose file and nothing in your app's code. The same `dock.toml` starts the same services in CI, so your tests run against what you develop against.
+
+A new Navree app runs on SQLite with mail written to the log, and needs no services at all. Reach for Dock when your app uses PostgreSQL, a search engine, a message broker or object storage, or when you want to see your mail in a real inbox.
+
+## What you need
+
+- **The CLI**: `cargo install --git https://github.com/NavreeHQ/navree navree-cli`.
+- **Docker or Podman.** Docker Desktop or Docker Engine, or Podman (rootless works). On macOS and Windows, Podman needs a running machine (`podman machine start`).
+
+## Getting started
+
+Add the services you want, then start them:
+
+```sh
+navree dock:add postgres
+navree dock:add mailpit
+navree dock up
+```
+
+```text
+  created  dock.toml        # [services.postgres]
+Added postgres. Your app needs navree's `postgres` feature.
+  updated  dock.toml        # [services.mailpit]
+Added mailpit.
+
+Starting crm-api services with docker
+  postgres  postgres:17      127.0.0.1:5432  ready in 2.1 s
+  mailpit   axllent/mailpit  127.0.0.1:1025  ready in 0.6 s
+Mailpit's inbox: http://127.0.0.1:8025
+Wrote 2 settings to .env: APP_DATABASE__URL, APP_MAIL__TRANSPORT.
+```
+
+Now run your app as usual. `navree dev` passes the services' settings to it, so it migrates the PostgreSQL database and sends its mail to Mailpit, whose inbox is at `http://127.0.0.1:8025`:
+
+```sh
+navree migrate
+navree dev
+```
+
+When you're done for the day:
+
+```sh
+navree dock down
+```
+
+## dock.toml
+
+`dock.toml` sits next to your app's `Cargo.toml` and lists its services. Commit it: everyone on the team, and CI, gets the same ones.
+
+```toml title="dock.toml"
+# Local services for crm-api. `navree dock up` starts them.
+
+[services.postgres]
+version = "17"
+database = "crm_api"
+
+[services.redis]
+
+[services.mailpit]
+
+[services.meilisearch]
+
+[services.minio]
+bucket = "crm-uploads"
+
+[services.nats]
+jetstream = true
+```
+
+A service with an empty table runs with its defaults. Top-level keys:
+
+| Key | Default | What it does |
+|---|---|---|
+| `project` | the package name | Prefix of container and volume names: `crm-api-postgres`, `crm-api-postgres-data`. |
+| `runtime` | `auto` | `docker`, `podman`, or `auto`: `NAVREE_DOCK_RUNTIME` if set, else `docker`, else `podman`, whichever is installed. |
+| `write_env` | `true` | Write the services' settings into `.env` (see [how your app finds them](#how-your-app-finds-the-services)). |
+
+## The services
+
+| Service | Image | Ports on 127.0.0.1 | Settings your app gets |
+|---|---|---|---|
+| `postgres` | `postgres` (`pgvector/pgvector` with `extensions = ["vector"]`) | 5432 | `APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api` |
+| `redis` | `redis` | 6379 | `REDIS_URL=redis://127.0.0.1:6379`, for your own code and the [Redis Streams transport](/docs/microservices/transports/#redis-streams) |
+| `meilisearch` | `getmeili/meilisearch` | 7700 | `APP_SEARCH__ENGINE=meilisearch`, `APP_SEARCH__URL=http://127.0.0.1:7700`, `APP_SEARCH__KEY` |
+| `mailpit` | `axllent/mailpit` | 1025 (SMTP), 8025 (inbox) | `APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025` |
+| `minio` | `minio/minio` | 9000 (S3 API), 9001 (console) | `AWS_ENDPOINT_URL=http://127.0.0.1:9000`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1` |
+| `nats` | `nats` | 4222, 8222 (monitoring) | `APP_MICRO__TRANSPORT=nats`, `APP_MICRO__URL=nats://127.0.0.1:4222` |
+
+Each image is pinned to a version Navree's own tests run against, and `navree dock up` prints the one it uses. Set `version` (the image tag) or `image` (any image) to choose another.
+
+### Service settings
+
+Every service takes `image`, `version`, `port` (the host port of its main port) and `env` (below). The rest are its own:
+
+| Service | Key | Default | What it does |
+|---|---|---|---|
+| `postgres` | `database` | the package name with `_` | The database created on first start. |
+| | `user`, `password` | `navree`, `navree` | The role it is created with. |
+| | `extensions` | `[]` | Extensions created in the database. `"vector"` switches to the pgvector image, for [vector search](/docs/packages/search/). |
+| `redis` | `maxmemory_mb` | `256` | Redis's memory limit. |
+| `meilisearch` | `master_key` | `dock-meilisearch-master-key` | The master key, passed to your app as `APP_SEARCH__KEY`. |
+| `mailpit` | `smtp_port`, `ui_port` | `1025`, `8025` | The SMTP port and the inbox's web port. |
+| `minio` | `bucket` | the package name | A bucket created on first start. |
+| | `access_key`, `secret_key` | `navree`, `navree-secret` | The credentials. |
+| | `console_port` | `9001` | The web console's port. |
+| `nats` | `jetstream` | `true` | Turn on JetStream, for durable [events](/docs/microservices/events/). |
+| | `monitor_port` | `8222` | The monitoring port. |
+
+Every port is bound to `127.0.0.1` only, so nothing on your network can reach the services, and the passwords are development defaults. Dock is for your machine and CI, never for a server: [Harbor](/docs/tools/harbor/) provisions the production equivalents.
+
+## How your app finds the services
+
+Each service has settings your app reads, listed [above](#the-services). Dock delivers them two ways:
+
+1. **As environment variables.** `navree dev`, and every app command the CLI forwards (`navree migrate`, `navree queue:work`, `navree db:seed` and the rest), pass them to your app's process when `dock.toml` exists. Environment variables override `config/app.toml`, so they win even when the file sets `database.url`, as a new app's does.
+2. **In `.env`.** `navree dock up` writes them between two marker lines, for tools that read `.env`, and replaces that block on every run:
+
+```env title=".env"
+APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+
+# dock:start (written by navree dock up; edit dock.toml instead)
+APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api
+APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025
+# dock:end
+```
+
+Navree reads `.env` before `config/app.toml`, so a key that the TOML file also sets keeps the TOML value (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). When you start the binary without the CLI, with `cargo run` or from your editor, either remove those keys from `config/app.toml` or load the variables first:
+
+```sh
+eval "$(navree dock env --export)"
+cargo run -- serve
+```
+
+`navree dock env` prints every setting as `NAME=value` lines; `--export` prefixes them with `export` for a shell.
+
+### Changing what your app gets
+
+Each service's `env` table replaces its settings. Values may use `{host}`, `{port}`, `{user}`, `{password}`, `{database}`, `{bucket}` and `{key}`:
+
+```toml title="dock.toml"
+[services.postgres]
+database = "crm_api"
+env = { APP_DATABASE__URL = "postgres://{user}:{password}@{host}:{port}/{database}?application_name=crm-dev" }
+
+[services.minio]
+bucket = "crm-uploads"
+env = { CRM_UPLOADS_ENDPOINT = "http://{host}:{port}", CRM_UPLOADS_BUCKET = "{bucket}" }
+```
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `navree dock up [service...]` | Starts every service, or the ones named, and waits until each is ready. Pulls images the first time. Running it again starts only what isn't running. |
+| `navree dock down [service...] [--volumes]` | Stops and removes the containers. `--volumes` also deletes their data. |
+| `navree dock status` | Each service's state, image, ports and address. |
+| `navree dock logs <service> [--follow]` | A service's output. |
+| `navree dock env [--export]` | Prints the settings your app gets. |
+| `navree dock shell <service>` | Opens the service's own client: `psql` for PostgreSQL, `redis-cli` for Redis, the `nats` CLI for NATS. |
+| `navree dock:add <service>` | Adds a service to `dock.toml`, creating the file if needed. |
+| `navree dock:remove <service> [--volumes]` | Stops a service and removes it from `dock.toml`. |
+
+`navree dock up` waits for each service's own readiness check (`pg_isready`, a Redis `PING`, Meilisearch's `/health`, MinIO's `/minio/health/live` and so on) and fails with the service's last log lines if one isn't ready within 60 seconds.
+
+```text title="navree dock status"
+Service      State     Image            Address
+postgres     running   postgres:17      127.0.0.1:5432
+redis        running   redis:7          127.0.0.1:6379
+mailpit      running   axllent/mailpit  127.0.0.1:1025, 127.0.0.1:8025
+meilisearch  stopped
+```
+
+## Your data
+
+Each service keeps its data in a named volume, `<project>-<service>-data`, so `navree dock down` and a reboot lose nothing. To start a service from empty, remove its volume:
+
+```sh
+navree dock down postgres --volumes
+navree dock up postgres
+navree migrate:fresh --seed
+```
+
+## Several apps on one machine
+
+Each app's services are named after its `project`, so two apps never share a container or a volume. They do share your machine's ports: when a port is taken, `navree dock up` says which and by what, before starting anything. Give the second app other ports:
+
+```toml title="dock.toml"
+[services.postgres]
+port = 5433
+
+[services.redis]
+port = 6380
+```
+
+The settings your app gets follow the ports you choose.
+
+## Docker or Podman
+
+Dock runs the same containers with either. With `runtime = "auto"` it uses `NAVREE_DOCK_RUNTIME` when set, otherwise Docker when the `docker` command exists, otherwise Podman. To force one for yourself without changing the team's file, set the variable in your shell:
+
+```sh
+export NAVREE_DOCK_RUNTIME=podman
+```
+
+Containers carry the label `dev.navree.dock.project=<project>`, so `docker ps --filter label=dev.navree.dock.project` lists everything Dock started.
+
+## In CI
+
+The same `dock.toml` gives your CI job the same services. On GitHub Actions:
+
+```yaml title=".github/workflows/test.yml"
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install --git https://github.com/NavreeHQ/navree navree-cli --locked
+      - run: navree dock up postgres nats
+      - run: navree dock env >> "$GITHUB_ENV"
+      - run: cargo test --locked
+```
+
+`navree dock env >> "$GITHUB_ENV"` makes the settings environment variables for the following steps. GitHub's runners have Docker, so nothing else is needed.
+
+### Tests against PostgreSQL
+
+`TestApp` never reads `.env` or the environment, so tests run on a temporary SQLite database by default and need no service. For tests that must run on PostgreSQL, hand the URL to the test app yourself:
+
+```rust title="tests/postgres.rs"
+use navree::prelude::*;
+use navree::testing::TestApp;
+
+/// Runs only where `navree dock up postgres` (or CI) provided a database.
+#[tokio::test]
+async fn pipeline_totals_on_postgres() {
+    let Ok(url) = std::env::var("APP_DATABASE__URL") else {
+        eprintln!("skipped: no APP_DATABASE__URL");
+        return;
+    };
+    let app = TestApp::builder()
+        .config("database.url", url)
+        .config("database.migrate_on_boot", true)
+        .module(DatabaseModule::from_config())
+        .module(DealsModule)
+        .build()
+        .await;
+    // ...
+    app.shutdown().await.unwrap();
+}
+```
+
+Tests that share one PostgreSQL database see each other's rows: create the records each test needs and assert on those, or run these tests one at a time with `cargo test -- --test-threads=1`.
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/installation/" title="Installation">
+    The CLI, a new app and its first run.
+  </LinkCard>
+  <LinkCard href="/docs/database/getting-started/" title="Database: getting started">
+    SQLite and PostgreSQL.
+  </LinkCard>
+  <LinkCard href="/docs/tools/harbor/" title="Harbor">
+    The same services, provisioned on your servers.
+  </LinkCard>
+</LinkCards>

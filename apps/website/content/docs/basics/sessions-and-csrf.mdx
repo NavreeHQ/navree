@@ -3,7 +3,7 @@ title: "Sessions and CSRF"
 description: "The optional session module: encrypted session cookies, memory and database stores, CSRF protection for cookie clients, and when to use it instead of bearer tokens."
 ---
 
-`SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. It speaks the same protocol as Laravel Sanctum's single-page-app mode: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.
+`SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. Single-page apps use a cookie-to-header handshake: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.
 
 The module is **optional**. Navree's built-in authentication (`AuthModule`) uses bearer tokens and doesn't need sessions, and the reference CRM doesn't import this module. Read [when to use sessions](#sessions-or-bearer-tokens) first.
 
@@ -161,7 +161,7 @@ set-cookie: XSRF-TOKEN=PONeR2ziCPrjirwcliGhp5dkEkcwsWp5ZW2MhsOG; SameSite=Lax; S
 
 Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). Both stores delete expired sessions on every hundredth save; `prune_expired()` on either store does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
 
-To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`. There's no Redis store yet; see the [roadmap](/docs/prologue/roadmap/).
+To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`. A Redis store is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
 
 ## CSRF protection
 

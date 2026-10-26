@@ -1,0 +1,96 @@
+{
+  "model": "gemini-3.1-flash-lite-image",
+  "images": [
+    {
+      "key": "tool-lighthouse",
+      "src": "/images/generated/tool-lighthouse.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A minimal black lighthouse casting a green beam across the dark"
+    },
+    {
+      "key": "tool-fleet",
+      "src": "/images/generated/tool-fleet.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "Five small black vessels in precise formation with green running lights"
+    },
+    {
+      "key": "tool-harbor",
+      "src": "/images/generated/tool-harbor.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A black gantry crane lowering a glowing green cube onto a pier"
+    },
+    {
+      "key": "tool-helm",
+      "src": "/images/generated/tool-helm.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A precision-machined black ship's wheel with a thin green light ring"
+    },
+    {
+      "key": "tool-logbook",
+      "src": "/images/generated/tool-logbook.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A closed black leather logbook with a glowing green ribbon"
+    },
+    {
+      "key": "tool-dock",
+      "src": "/images/generated/tool-dock.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A neat grid of black containers on a dock, one lit green from within"
+    },
+    {
+      "key": "tool-navigator",
+      "src": "/images/generated/tool-navigator.webp",
+      "width": 1024,
+      "height": 1024,
+      "alt": "A black titanium compass with a glowing green needle"
+    },
+    {
+      "key": "hero-hull",
+      "src": "/images/generated/hero-hull.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "The bow of a sleek black hull in still dark water, its edge traced by green light"
+    },
+    {
+      "key": "hero-archipelago",
+      "src": "/images/generated/hero-archipelago.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "Black modular islands linked by thin bridges of green light"
+    },
+    {
+      "key": "hero-constellation",
+      "src": "/images/generated/hero-constellation.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "Green star points joined into a navigation route across a black sky"
+    },
+    {
+      "key": "hero-wake",
+      "src": "/images/generated/hero-wake.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "A black hull cutting through still water, leaving a wake of green light"
+    },
+    {
+      "key": "hero-rooms",
+      "src": "/images/generated/hero-rooms.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "A row of black glass rooms, each softly lit, one glowing green"
+    },
+    {
+      "key": "hero-harbor",
+      "src": "/images/generated/hero-harbor.webp",
+      "width": 1584,
+      "height": 672,
+      "alt": "A minimal harbor at night with vessels in their berths and a green lighthouse beam"
+    }
+  ]
+}

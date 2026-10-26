@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { Badge } from "./badge";
 import { Callout } from "./callout";
 import { CodeBlock } from "./code-block";
+import { Diagram } from "./diagram";
 import { FileTree } from "./file-tree";
 import { LinkCard, LinkCards } from "./link-card";
 import { Step, Steps } from "./steps";
@@ -65,6 +66,7 @@ export const mdxComponents = {
   Badge,
   Callout,
   CodeGroup,
+  Diagram,
   FileTree,
   LinkCard,
   LinkCards,

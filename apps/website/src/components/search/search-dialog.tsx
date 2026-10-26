@@ -17,7 +17,8 @@ const SUGGESTIONS: { label: string; href: string }[] = [
   { label: "Routing and controllers", href: "/docs/basics/routing/" },
   { label: "Validation", href: "/docs/basics/validation/" },
   { label: "Authentication", href: "/docs/security/authentication/" },
-  { label: "Benchmarks", href: "/benchmarks/" },
+  { label: "Workspaces", href: "/docs/workspaces/introduction/" },
+  { label: "Performance", href: "/performance/" },
 ];
 
 let indexPromise: Promise<MiniSearch<SearchDoc>> | null = null;

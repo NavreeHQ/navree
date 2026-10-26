@@ -7,9 +7,11 @@ description: "How an app is composed from modules that declare imports, provider
 
 A Navree application is a composition of modules. A module groups the code of one feature or one piece of infrastructure: its services (providers), its HTTP controllers, and anything else it contributes, such as migrations, jobs or console commands. It also says which of its providers other modules may use (its exports) and which modules it needs (its imports).
 
-Everything above the small kernel is a module, the framework included: `HttpModule`, `DatabaseModule` and `AuthModule` are modules like the ones you write. If you know NestJS, the model is the same: `@Module({ imports, providers, controllers, exports })` becomes `#[module(imports = [..], providers = [..], controllers = [..], exports = [..])]`.
+Everything above the small kernel is a module, the framework included: `HttpModule`, `DatabaseModule` and `AuthModule` are modules like the ones you write. A module is a struct with `#[module(imports = [..], providers = [..], controllers = [..], exports = [..])]` on it.
 
 The kernel turns the modules into a graph when the app boots. It checks the graph before it builds anything, so a missing or private provider, a cycle or a module configured twice stops the boot with an error that names the module and the type.
+
+<Diagram name="module-graph" />
 
 ## Defining a module
 
@@ -233,7 +235,7 @@ Each provider shows its scope and, after `<-`, the dependencies it declares. Wit
 
 ## Configurable modules
 
-Many modules need settings. Navree follows the NestJS convention of *dynamic modules*: a module type offers constructors that return a configured instance of itself.
+Many modules need settings. They are *configurable modules*: a module type offers constructors that return a configured instance of itself.
 
 ### `for_root` and `from_config`
 

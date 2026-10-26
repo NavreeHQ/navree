@@ -1,0 +1,251 @@
+---
+title: "Navigator"
+description: "`navree mcp`: the MCP server for your coding agent, with your app's routes, module graph, providers, schemas, read-only SQL, logs, configuration and docs matched to your Navree version."
+status: "planned"
+---
+
+## Introduction
+
+A coding agent that reads your source files still has to guess at what the running app looks like: which routes exist after every module is wired, what the `deals` table really has in it, what failed in the last request. **Navigator** answers those questions from the app itself. It is an [MCP](https://modelcontextprotocol.io/) server built into the Navree CLI, started with one command:
+
+```sh
+navree mcp
+```
+
+Connect your agent to it once, and it can ask your app:
+
+| Tool | Answers |
+|---|---|
+| `app_info` | Navree and Rust versions, the facade features, the modules, the database driver |
+| `list_routes` | Every route with its method, path, access rule, handler and module |
+| `module_graph` | Modules with their imports, exports and providers |
+| `list_providers` | Providers with their scope, module, visibility and dependencies |
+| `list_commands` | The app's commands, as `navree list` shows them |
+| `describe_schema` | Tables, columns, indexes, foreign keys and migration status |
+| `query_database` | The rows of a read-only SQL query |
+| `read_logs` | Recent log lines, filtered by level, target or request id |
+| `last_error` | The most recent error, with its request and the log lines around it |
+| `read_config` | The merged configuration, secrets redacted |
+| `search_docs`, `read_doc` | These docs, for the Navree version your app uses |
+
+When the app includes [Lighthouse](/docs/tools/lighthouse/#mcp-tools-for-agents), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database.
+
+Everything is read-only, and Navigator runs only on your machine, over stdio, for the project you start it in. It is for development; your production binary doesn't contain it.
+
+## Connecting your agent
+
+Navigator is a stdio server: your agent starts `navree mcp` as a child process in your app's directory. Install the [CLI](/docs/digging-deeper/cli/#installing-the-cli) first, then register Navigator with your agent.
+
+<Tabs>
+<Tab label="Claude Code">
+
+From your app's directory:
+
+```sh
+claude mcp add navree -- navree mcp
+```
+
+To share the setup with your team, add it at project scope instead. Claude Code writes `.mcp.json`, which you commit:
+
+```sh
+claude mcp add --scope project navree -- navree mcp
+```
+
+</Tab>
+<Tab label="Cursor">
+
+```json title=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "navree": {
+      "command": "navree",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+</Tab>
+<Tab label="Codex">
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.navree]
+command = "navree"
+args = ["mcp"]
+```
+
+If Codex starts the server outside your app's directory, add the path: `args = ["mcp", "--path", "/home/ada/code/crm"]`.
+
+</Tab>
+<Tab label="VS Code">
+
+```json title=".vscode/mcp.json"
+{
+  "servers": {
+    "navree": {
+      "type": "stdio",
+      "command": "navree",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+Any other MCP client that launches stdio servers works the same way: the command is `navree`, the arguments are `["mcp"]`. When a client doesn't start servers in your project's directory, name the project:
+
+```sh
+navree mcp --path /home/ada/code/crm
+```
+
+Ask your agent "Which Navigator tools do you have?" to check the connection. In Claude Code, `/mcp` lists the server and its tools.
+
+## How it works
+
+Navigator runs next to your app, not inside it:
+
+1. It finds the app: the Cargo package in the directory it starts in (or `--path`), and the `navree` version in its `Cargo.lock`.
+2. For routes, the module graph, providers and commands, it builds your app with `cargo build` (the debug profile, sharing your `target/` directory) and asks the binary. The binary boots its module graph without serving traffic, as `navree check` does, and answers. Results are cached until a source file changes.
+3. For the database, it reads your configuration exactly as the app does (`.env`, `config/app.toml`, `APP_*` variables) and connects to `database.url` itself, read-only.
+4. For logs, it reads the log file your app writes (`log.file`).
+5. For the docs, it searches the documentation of the Navree version in your lockfile, downloaded once from navree.com and cached under `~/.navree/docs/<version>/`.
+
+A build that fails doesn't stop the other tools: `list_routes` and friends return the compiler's first error, which is often what the agent needed to see, while `describe_schema`, `read_logs` and `search_docs` keep working.
+
+## The tools
+
+### app_info
+
+The first call an agent makes in a new project. It returns the Navree version from `Cargo.lock`, the Rust toolchain, the facade features turned on, the modules in boot order, the database driver and the configuration files that exist.
+
+### list_routes
+
+Every route of the booted app, with the information of `navree routes --json`: method, path, name, access rule (`public`, `auth`, `can:read Deal from id`), the module and the handler. Arguments filter by `path` prefix, `method` or `module`.
+
+```json title="list_routes, path /api/v1/deals"
+[
+  {"method": "GET", "path": "/api/v1/deals", "access": "can:read Deal", "module": "DealsModule", "handler": "DealsController::index"},
+  {"method": "POST", "path": "/api/v1/deals", "access": "can:create Deal", "module": "DealsModule", "handler": "DealsController::store"},
+  {"method": "POST", "path": "/api/v1/deals/{id}/move", "access": "can:move Deal from id", "module": "DealsModule", "handler": "DealsController::move_deal"}
+]
+```
+
+An agent that checks the route table before adding a route doesn't create a second `GET /deals/{id}`, and sees the access rule the neighbors use.
+
+### module_graph and list_providers
+
+<Diagram name="module-graph" />
+
+`module_graph` returns the tree `navree check --graph` prints, as data: each module, what it imports and exports, its providers, controllers and commands. With a `module` argument it returns one module in detail. `list_providers` lists providers across the app with their type, scope (`singleton`, `request`), owning module, whether they are exported, and their dependencies.
+
+This is what an agent needs to wire a new service correctly: where `DealService` lives, that `DealsModule` exports it, and that a new module using it must import `DealsModule`. When the graph doesn't validate, both tools return the kernel's error, which names the module and the missing type.
+
+### list_commands
+
+The app's commands with their one-line help, from `navree list`: what the agent can run, such as `migrate`, `queue:work` or your own `crm:task-reminders`.
+
+### describe_schema
+
+The database as it is, not as the code says it should be: tables, columns with their types, nullability and defaults, primary keys, indexes and foreign keys. It also lists the migrations that have run (`navree migrate:status`) and those that haven't, so the agent knows when a column it sees in an entity doesn't exist yet. A `table` argument returns one table.
+
+### query_database
+
+Runs one read-only SQL statement against your development database and returns at most 100 rows:
+
+```json title="query_database"
+{
+  "sql": "SELECT stage, count(*) AS deals, sum(amount_cents) AS total FROM deals GROUP BY stage ORDER BY stage"
+}
+```
+
+```json
+{
+  "columns": ["stage", "deals", "total"],
+  "rows": [["lead", 4, 1840000], ["negotiation", 2, 6050000], ["won", 3, 9100000]],
+  "truncated": false,
+  "duration_ms": 3
+}
+```
+
+The [limits](#security) below keep it read-only. Values in columns whose names contain `password`, `secret` or `token` come back as `[redacted]`.
+
+### read_logs and last_error
+
+`read_logs` returns recent lines of the log file your app writes, newest last. Arguments filter by `level` (`warn` returns warnings and errors), `target` (`navree::job`), `request_id`, `since` and `limit` (default 100). Navigator reads JSON and pretty lines alike, but JSON keeps every field.
+
+`last_error` returns the most recent `error` line, and every other line of the same request (by its request id): the route, the status, the error chain, the slow queries before it. "Why did that request fail?" is one call.
+
+Both need the app to write a log file, which is off by default. Turn it on for development:
+
+```toml title="config/app.toml"
+[log]
+file = { path = "storage/logs/navree.log", rotation = "daily", keep_days = 7 }
+```
+
+Navigator reads `log.file.path` from your configuration, so a different path works too. Without a log file, both tools say how to turn it on.
+
+### read_config
+
+The configuration tree your app sees, merged from `.env`, `config/app.toml` and `APP_*` variables, with secrets redacted the way `Config::redacted()` does it: any key containing `password`, `secret`, `token`, `key`, `authorization` or `cookie`, and the password in any URL. A `key` argument returns one section (`queue`, `ai.models`).
+
+### search_docs and read_doc
+
+`search_docs` searches these docs for the Navree version in your `Cargo.lock` and returns the best pages and sections with an excerpt each. `read_doc` returns one page as Markdown. An agent working on an app pinned to an older Navree reads the docs of that version, not of the latest release, so the APIs it finds are the APIs it has.
+
+## Working with Navigator
+
+Agents use tools they know about. Two things help them reach for Navigator at the right moments:
+
+- **Skills.** The [agent skills](/docs/ai/agent-skills/) tell the agent what to check before a task: the route table before adding a route, the module graph before wiring a provider, the schema before writing a migration.
+- **AGENTS.md.** The `AGENTS.md` that [`navree new`](/docs/ai/docs-for-agents/#agentsmd-and-claudemd) writes describes the project's conventions. Add a line about Navigator if your team relies on it, for example "Use the navree MCP tools to check routes, providers and the schema before changing them".
+
+A typical exchange, in Claude Code:
+
+```text
+> The deals page is empty since I pulled main, and the API returns 500. Fix it.
+
+● navree - last_error()
+  ⎿ 500 GET /api/v1/deals request_id=0199c4b1-...
+    error: no such column: deals.expected_close_date
+● navree - describe_schema(table: "deals")
+  ⎿ deals: id, title, amount_cents, currency, stage, position, ...
+    pending migrations: crm/m20261026_000004_add_expected_close_date
+● navree - list_commands()
+  ⎿ ... migrate  Run every pending migration ...
+
+The code you pulled reads deals.expected_close_date, but the migration that
+adds it hasn't run on your database. Run `navree migrate` and reload the page.
+```
+
+## Options
+
+| Option | What it does |
+|---|---|
+| `--path <dir>` | The app to serve, instead of the current directory. |
+| `--no-build` | Never run `cargo build`; use the last built binary, or answer without one. |
+| `--allow-remote-database` | Let `query_database` and `describe_schema` connect to a database that isn't on this machine. |
+| `--docs-offline` | Never download docs; use the cache, or say the version isn't cached. |
+
+## Security
+
+Navigator gives a model a view into your app, so it is built to show and never to change.
+
+- **Development only.** It runs on your machine, as you, over stdio. It opens no port, and it isn't part of your app's binary, so nothing you deploy contains it.
+- **Read-only.** No tool writes anything. `query_database` sends one statement at a time, refuses anything but `SELECT`, `WITH`, `EXPLAIN` and `SHOW` before sending it, and runs it in a read-only transaction (`SET TRANSACTION READ ONLY` on PostgreSQL, `PRAGMA query_only` on SQLite), with a 5 second statement timeout and a 100-row limit.
+- **Local databases.** Unless you pass `--allow-remote-database`, Navigator only connects to SQLite files and to databases on `localhost`, `127.0.0.1`, `::1` or a Unix socket. A `database.url` pointing at a server elsewhere, such as a staging database in a `.env` you forgot to change, is refused with a message that says why.
+- **Secrets redacted.** Configuration is redacted like `Config::redacted()`, query results mask secret-looking columns, and logs carry what your app's `log.redact` already left out.
+- **What leaves your machine.** Tool results go to the model your agent uses, like any file the agent reads. Keep customer data out of your development database: seed it with [factories](/docs/database/seeding-and-factories/) instead of copying production.
+
+<LinkCards>
+  <LinkCard href="/docs/ai/agent-skills/" title="Agent skills">
+    Teach your agent how to build with Navree.
+  </LinkCard>
+  <LinkCard href="/docs/ai/docs-for-agents/" title="Docs for agents">
+    `llms.txt`, Markdown pages and AGENTS.md.
+  </LinkCard>
+  <LinkCard href="/docs/ai/mcp-servers/" title="MCP servers">
+    The MCP server your product offers its users.
+  </LinkCard>
+</LinkCards>

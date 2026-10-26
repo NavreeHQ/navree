@@ -1,15 +1,15 @@
 ---
 title: "Real-time broadcasting"
-description: "A Pusher-protocol WebSocket server inside your app: public, private and presence channels, channel authorisation, a signed relay for workers, and Laravel Echo on the front end."
+description: "A Pusher-protocol WebSocket server inside your app: public, private and presence channels, channel authorisation, a signed relay for workers, and pusher-js on the front end."
 ---
 
-<Badge feature="realtime" /> When a deal moves on one person's board, everyone else looking at the board should see it move. `navree-realtime` makes that possible without an external service: it is a [Pusher](https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/)-protocol (version 7) WebSocket server that runs inside your app's own HTTP server. [Laravel Echo](https://github.com/laravel/echo) and [pusher-js](https://github.com/pusher/pusher-js) connect to it unchanged.
+<Badge feature="realtime" /> When a deal moves on one person's board, everyone else looking at the board should see it move. `navree-realtime` makes that possible without an external service: it is a [Pusher](https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/)-protocol (version 7) WebSocket server that runs inside your app's own HTTP server. [pusher-js](https://github.com/pusher/pusher-js) and any other Pusher client connect to it unchanged.
 
 You get public, private and presence channels, an endpoint that authorises private channels with your own rules, broadcasting from any service, a signed relay so queue workers and the scheduler can broadcast too, and a way to end a user's subscriptions when their access changes.
 
-<Callout type="note" title="What it doesn't do (yet)">
+<Callout type="note" title="Limits">
 
-- **One serving process.** Each `serve` process only reaches the sockets connected to it. Running several behind a load balancer needs a shared backplane such as Redis, which is not built yet (see the [roadmap](/docs/prologue/roadmap/)).
+- **One serving process.** Each `serve` process only reaches the sockets connected to it. Running several behind a load balancer needs a shared backplane; a Redis backplane is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
 - **No client events.** `client-…` events sent by browsers are ignored, not relayed to other subscribers.
 - **No Pusher HTTP API.** You can't trigger events with a Pusher server SDK; broadcast from your app instead. Pusher's user authentication (`pusher:signin`) and webhooks are not supported either.
 
@@ -299,16 +299,12 @@ Two more things to know:
 
 ## Client setup
 
-On the front end, install `laravel-echo` and `pusher-js` and point Echo at your app. Use the `pusher` broadcaster with your `realtime.key`, your API's host and port, and the auth endpoint:
+On the front end, install [pusher-js](https://github.com/pusher/pusher-js) and point it at your app: your `realtime.key`, your API's host and port, and the auth endpoint:
 
-```ts title="lib/echo.ts"
-import Echo from "laravel-echo";
+```ts title="lib/realtime.ts"
 import Pusher from "pusher-js";
 
-export const echo = new Echo({
-  broadcaster: "pusher",
-  Pusher,
-  key: "navree-crm-key",
+export const pusher = new Pusher("navree-crm-key", {
   cluster: "mt1", // pusher-js requires one; it isn't used with wsHost
   wsHost: "127.0.0.1",
   wsPort: 8080,
@@ -316,17 +312,17 @@ export const echo = new Echo({
   forceTLS: false,
   enabledTransports: ["ws", "wss"],
   disableStats: true,
-  authEndpoint: "/broadcasting/auth",
+  channelAuthorization: { endpoint: "/broadcasting/auth", transport: "ajax" },
 });
 
-echo.private("crm.deals").listen(".deal.updated", (payload: { deal: { id: string } }) => {
+pusher.subscribe("private-crm.deals").bind("deal.updated", (payload: { deal: { id: string } }) => {
   // refresh the deal on the board
 });
 ```
 
-- `echo.private("crm.deals")` subscribes to `private-crm.deals`; Echo adds the prefix. `echo.join("deals.42")` joins `presence-deals.42`.
-- Start the event name with a dot (`.deal.updated`), or Echo prefixes it with a Laravel namespace (`App\Events\…`).
-- `authEndpoint` must reach `POST /broadcasting/auth` **with the user's credentials**. A browser app holding a bearer token can add it with `auth: { headers: { Authorization: "Bearer …" } }`.
+- Channel names carry their kind as a prefix: `private-crm.deals` is a private channel, and `pusher.subscribe("presence-deals.42")` joins a presence channel.
+- Bind the event name exactly as the server broadcasts it (`deal.updated`).
+- The auth endpoint must reach `POST /broadcasting/auth` **with the user's credentials**. A browser app holding a bearer token can add it with `headers: { Authorization: "Bearer …" }` in `channelAuthorization`.
 
 ### Through a backend-for-frontend
 
@@ -335,13 +331,13 @@ The reference front end, `apps/crm-web`, never lets the browser see a token: its
 ```ts title="apps/crm-web/src/app/broadcasting/auth/route.ts"
 import { bff } from "@/lib/bff/server";
 
-/** Private-channel authorisation for Laravel Echo: forwarded to Navree with the bearer token. */
+/** Private-channel authorisation for the Pusher client: forwarded to Navree with the bearer token. */
 export function POST(request: Request): Promise<Response> {
   return bff.proxy(request, "/broadcasting/auth");
 }
 ```
 
-Its Echo client uses a custom `authorizer` that posts `{socket_id, channel_name}` as JSON to that route. The WebSocket host, port and key come from `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`, and `NEXT_PUBLIC_REALTIME=0` turns real time off. If the socket can't connect, the app keeps working with refetch-on-focus and polling.
+Its real-time client (`src/lib/realtime/echo.ts`, on pusher-js) uses a custom authorizer that posts `{socket_id, channel_name}` as JSON to that route. The WebSocket host, port and key come from `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`, and `NEXT_PUBLIC_REALTIME=0` turns real time off. If the socket can't connect, the app keeps working with refetch-on-focus and polling.
 
 ## Allowed origins
 
@@ -379,7 +375,7 @@ A private subscription is authorised once, when it is made. If a user then loses
 - [navree-access](/docs/security/authorization/) does it after a change commits: a user's roles or direct permissions change, a role loses permissions (for all its members) or a role is deleted;
 - [navree-auth](/docs/security/authentication/) does it when a user signs out.
 
-Both call `Broadcaster::end_user_subscriptions(user_id)`, which also works from workers through the relay. The user's connections close with `4200`; Echo reconnects and authorises each private channel again with the user's current access, so the channels they may no longer join stay closed. A failure is logged and the change itself stands.
+Both call `Broadcaster::end_user_subscriptions(user_id)`, which also works from workers through the relay. The user's connections close with `4200`; the client reconnects and authorises each private channel again with the user's current access, so the channels they may no longer join stay closed. A failure is logged and the change itself stands.
 
 You can do the same yourself with `Realtime`:
 

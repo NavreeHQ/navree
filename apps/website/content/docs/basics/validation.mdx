@@ -1,9 +1,9 @@
 ---
 title: "Validation"
-description: "Validate request bodies and query strings with `Valid<Json<T>>` on garde, with class-validator style messages and `unique` / `exists` database rules."
+description: "Validate request bodies and query strings with `Valid<Json<T>>` on garde, with field-level messages and `unique` / `exists` database rules."
 ---
 
-Navree validates input with extractors. You describe the rules on a DTO with [garde](https://docs.rs/garde), take `Valid<Json<T>>` or `Valid<Query<T>>` in your handler, and the handler only runs when the input passes. When it doesn't, the client gets a 400 in the NestJS format, with one message per broken rule, written the way class-validator writes them.
+Navree validates input with extractors. You describe the rules on a DTO with [garde](https://docs.rs/garde), take `Valid<Json<T>>` or `Valid<Query<T>>` in your handler, and the handler only runs when the input passes. When it doesn't, the client gets a 400 [error](/docs/basics/errors/) with one message per broken rule, such as `email must be a valid email address`.
 
 Validation lives in the `navree-validation` crate (the `validation` feature of the `navree` facade, on by default). `Valid` and `ValidAsync` are in the prelude.
 
@@ -327,7 +327,7 @@ The same format is used for every 400 with field errors, including the ones you 
 
 ## Custom messages
 
-The built-in messages follow class-validator: the field's path, then the rule, with no capital letter and no full stop. You can replace any of them, for every field or for one field, and you can give fields display names.
+The built-in messages read as one short sentence: the field's path, then the rule, with no capital letter and no full stop. You can replace any of them, for every field or for one field, and you can give fields display names.
 
 ### Overriding messages
 
@@ -409,7 +409,7 @@ The full table is `navree::validation::DEFAULT_MESSAGES`.
 
 <Callout type="note">
 
-Messages are English, and there is one table per app: Navree has no per-request locale yet. An i18n module is on the [roadmap](/docs/prologue/roadmap/).
+The built-in messages are English, with one table per app. [Localization](/docs/packages/localization/) translates them per request, in the locale of the user, the workspace or `Accept-Language`.
 
 </Callout>
 
@@ -501,7 +501,7 @@ A failed rule is a field error like any other: `email has already been taken`, `
 - `AsyncRule::unique(field, table, column, value, ignore_id)` passes when no row of `table` has `value` in `column`. When `ignore_id` is `Some(id)`, the row whose `id` column equals it doesn't count, which is what an update needs.
 - `.ignore_path_param("id")` does the same with the route's `{id}` parameter, when it is a UUID. An explicit `ignore_id` wins.
 - `AsyncRule::exists(field, table, column, value)` passes when some row has `value` in `column`.
-- A `None` value passes without a query, like Laravel's rules on a nullable field. Combine with `required` to demand a value.
+- A `None` value passes without a query, so optional fields stay optional. Combine with `required` to demand a value.
 - Bind values with the column's type: a `Uuid` for UUID columns, a `String` for text.
 
 How they run:
@@ -618,7 +618,7 @@ See [HTTP tests](/docs/testing/http-tests/) for the test client.
 
 <LinkCards>
   <LinkCard href="/docs/basics/errors/" title="Errors">
-    The NestJS error format, `AppError` and mapping your own errors.
+    The JSON error shape, `AppError` and mapping your own errors.
   </LinkCard>
   <LinkCard href="/docs/basics/requests/" title="Requests and extractors">
     Path parameters, query strings, bodies and the current user.

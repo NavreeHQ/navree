@@ -69,6 +69,37 @@ description: "Validated extractors on garde, with field-level error messages."
   results and in link previews. Say what the reader will find, not that the
   page exists. Backticks work: `` `Valid<Json<T>>` ``.
 
+### Pages for packages in development
+
+A page about a package or tool that isn't in the repository yet adds a
+third field:
+
+```mdx
+---
+title: "Fleet"
+description: "A queue dashboard and worker supervisor."
+status: "planned"
+---
+```
+
+- **Write it as finished documentation** of a shipped package:
+  installation (the facade feature or the crate), configuration (config
+  keys and environment variables), the API with realistic examples,
+  testing, and a reference table where useful. The page is also the
+  package's design, so follow Navree's existing conventions exactly
+  (`for_root`, `from_config` and `for_feature`, config key and env var
+  names, extractors, errors, fakes) and use the names, crates and commands
+  of the ecosystem catalogue (`src/content/ecosystem.ts`).
+- **Don't claim its code compiles.** Samples must be consistent with each
+  other and with the rest of Navree, but they can't be checked yet.
+- **The site decides how it shows.** `showPlannedBadges` in
+  `site.config.ts` adds an "In development" badge to every planned page and
+  ecosystem card when it is `true`; while it is `false`, planned pages look
+  like every other page. Remove the field when the package is built and the
+  page has been checked against its code.
+- Pages without `status` document built code: every type, function,
+  attribute, config key and command they name must exist.
+
 Don't write an `# h1` in the body: the title is the page's heading.
 
 ## Headings and links
@@ -81,8 +112,11 @@ Don't write an `# h1` in the body: the title is the page's heading.
   `-2` and so on.
 - Link to other pages with absolute paths and a trailing slash:
   `[validation](/docs/basics/validation/)` or
-  `[custom messages](/docs/basics/validation/#custom-messages)`. Link to the
-  benchmarks with `/benchmarks/`.
+  `[custom messages](/docs/basics/validation/#custom-messages)`.
+- The site's other pages are `/ecosystem/`, `/architecture/`, `/ai/` and
+  `/performance/`. Link to Navree's measurements with
+  `[performance](/performance/)`, never `/benchmarks/`: that URL only
+  redirects to `/performance/`.
 - External links use full URLs: `[garde](https://docs.rs/garde)`.
 
 ## Code blocks
@@ -289,6 +323,23 @@ Internal links use paths; links starting with `http` open the other site.
 </LinkCards>
 ```
 
+### Diagram
+
+An architecture diagram, drawn as SVG and laid out again for phones. Use one
+where a picture explains the page better than a paragraph:
+
+```mdx
+<Diagram name="request-lifecycle" />
+```
+
+The names are `modular-monolith`, `microservices`, `multi-tenancy`,
+`event-driven`, `api-first`, `backend-for-frontend`, `request-lifecycle`
+and `module-graph`. The diagrams live in `src/components/diagrams/`, each
+with a title and a text description for screen readers; to add one, add a
+component there and its name to `src/components/mdx/diagram.tsx`. Put the
+tag on its own line with blank lines around it, and don't repeat in prose
+what the diagram already labels.
+
 ### Plain Markdown
 
 Tables (GitHub style), lists, block quotes, bold, inline code and images all
@@ -296,8 +347,18 @@ work. Tables scroll sideways on phones, so a wide table is fine.
 
 ## Voice
 
-The docs read like Laravel's: clear, direct and friendly, written for a
-developer who wants to get something done.
+The docs are clear, direct and friendly, written for a developer who wants
+to get something done.
+
+- **Say what Navree is and does, in its own terms.** Never compare it with
+  another framework or use one as a reference point: no "like X", "X-style",
+  "the way you know from X" or "X calls these ...". Describe the feature,
+  its behaviour and its limits. Naming the libraries Navree is built on is
+  good (Tokio, Axum, Hyper, Tower, SeaORM, sqlx, garde, tonic, rustls,
+  Argon2), and so are protocols and standards: "speaks the Pusher protocol,
+  so pusher-js and any Pusher client connects", OpenAPI 3.1, OAuth 2.1,
+  OpenTelemetry, MCP. The JSON error shape
+  (`{ "statusCode", "message", "error" }`) is Navree's.
 
 - **Talk to the reader.** "You", never "the user" or "we". "Register the job
   in your module", not "The job should be registered".
@@ -318,12 +379,19 @@ developer who wants to get something done.
   it.
 - **Sentence case** for titles and headings: "Rotating refresh tokens", not
   "Rotating Refresh Tokens".
-- **Spelling.** British in prose (behaviour, organise), but use the code's
-  spelling for anything that is a name in the code (`serialize`,
-  `Authorization`).
-- **Be honest about limits.** If something isn't built yet (Redis drivers,
-  passkeys), say so and link to the roadmap. Don't document plans as
-  features.
+- **Spelling.** Keep the spelling a page already uses (most existing pages
+  are British: behaviour, organise); new pages use American spelling
+  (behavior, organize). Either way, use the code's spelling for anything
+  that is a name in the code (`serialize`, `Authorization`).
+- **Confident, concrete, short.** Prefer verbs and numbers to adjectives.
+  No exclamation marks, and none of "blazing", "revolutionary", "next-gen",
+  "seamless", "robust", "leverage", "unlock" or "supercharge".
+- **Limits are behaviour.** On pages about built code, state what a
+  feature doesn't do as plainly as what it does ("counters are kept per
+  process"). Point forward-looking work at the matching section of the
+  roadmap, such as `/docs/prologue/roadmap/#more-drivers`. Packages that
+  aren't built yet get a `status: "planned"` page (see
+  [Front-matter](#pages-for-packages-in-development)), not a caveat.
 
 ## Building and deploying the site
 
@@ -334,17 +402,27 @@ pnpm build         # static export to out/
 pnpm serve         # serves out/ at http://127.0.0.1:3211, like a static host
 ```
 
-`pnpm build` first runs `scripts/prebuild.ts`, which:
+`pnpm build` (and `pnpm dev`) first runs `scripts/prebuild.ts`, which:
 
-- reads `bench/results/*.json`, `bench/results/extra/`, `bench/frameworks.json`
-  and each implementation's README into `src/generated/benchmarks.json`, and
-  copies the raw results to `public/data/bench/` (every number on the site
+- reads Navree's own benchmark results (`bench/results/navree.json` and the
+  repeat run in `bench/results/extra/`), the environment and the measured
+  app's source into `src/generated/performance.json`, and copies the two raw
+  result files to `public/data/bench/` (every number on `/performance/`
   comes from there, so re-running the benchmark updates the site on the next
   build);
 - reads the crate layers from `crates/navree/tests/dependency_graph.rs` and
   the descriptions from each `Cargo.toml` into `src/generated/crates.json`;
 - checks the docs against the manifest and builds the search index into
   `public/data/search-index.json`.
+
+Then `scripts/agent-files.ts` writes the files for agents into `public/`
+(git-ignored, generated on every dev start and build):
+
+- `docs/<section>/<page>.md`, every docs page as Markdown, with the MDX
+  components turned into plain Markdown;
+- `llms.txt` (the index) and `llms-full.txt` (every page in one file);
+- `skills/<name>/...` and `skills/index.json`, copied from the repository's
+  `skills/` directory.
 
 `out/` is plain HTML, CSS and JavaScript: upload it to any static host
 (Cloudflare Pages, Vercel, GitHub Pages, S3, nginx). Every page is a

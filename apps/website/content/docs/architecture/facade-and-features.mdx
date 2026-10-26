@@ -75,10 +75,11 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::validation` | navree-validation | `validation` | `Valid` extractors on garde |
 | `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
 | `navree::audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
-| `navree::access` | navree-access | `access` | `AccessModule`: roles, permissions, CASL abilities |
-| `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule`: cron-style tasks |
+| `navree::access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
+| `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
+| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
 
 The facade's root also has:
 
@@ -134,9 +135,10 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `queue`, `schedule` | `db` |
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
+| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
-SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. The [benchmark](/benchmarks/) runs Navree on PostgreSQL 17, but the test suite runs on SQLite only, so some PostgreSQL-only code paths haven't been run yet. The [database](/docs/database/getting-started/) pages list which.
+SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
 Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module.
 

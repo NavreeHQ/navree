@@ -1,0 +1,147 @@
+---
+title: "Docs for agents"
+description: "Every docs page as Markdown, `llms.txt` and `llms-full.txt` for models, Copy page and Open in Claude or ChatGPT on every page, and the AGENTS.md and CLAUDE.md that `navree new` writes."
+---
+
+## Introduction
+
+These docs are written for two readers: you, and the model working next to you. Everything you read on navree.com is also published in the form a model reads best, plain Markdown at a predictable URL, and every app you create starts with instructions for the agents that will work on it.
+
+| What | Where | Use it to |
+|---|---|---|
+| The index | [`/llms.txt`](/llms.txt) | Give a model the map of the docs, one line per page. |
+| Everything | [`/llms-full.txt`](/llms-full.txt) | Load the whole documentation into one context. |
+| One page | `/docs/<section>/<page>.md` | Give a model exactly the page it needs. |
+| Page actions | the top of every docs page | Copy a page, or open it in Claude or ChatGPT. |
+| Project instructions | `AGENTS.md` and `CLAUDE.md` in every new app | Tell agents how your app is built before they change it. |
+
+They are generated from the same source as the pages you are reading, at the same time, so a model never reads docs older than the site.
+
+## Every page as Markdown
+
+Replace the trailing slash of a docs URL with `.md` and you get the page as Markdown:
+
+| Page | Markdown |
+|---|---|
+| `https://navree.com/docs/basics/validation/` | `https://navree.com/docs/basics/validation.md` |
+| `https://navree.com/docs/digging-deeper/queues/` | `https://navree.com/docs/digging-deeper/queues.md` |
+| `https://navree.com/docs/ai/agent-skills/` | `https://navree.com/docs/ai/agent-skills.md` |
+
+The Markdown starts with the page's title as a heading and its description, then the body as written: headings, tables, and code blocks with their language and file name. The site's components become plain Markdown, so nothing is lost on the way: a callout becomes a block quote that starts with its kind ("Note", "Tip", "Warning"), each tab becomes a titled section, steps become numbered headings, link cards a list of links, a file tree a text block and a diagram one sentence that describes it. The files are served as `text/markdown`, with no navigation, scripts or styling around them.
+
+Point your agent at the page for the task:
+
+```text
+Read https://navree.com/docs/digging-deeper/queues.md, then add a queued job
+that exports a company's contacts to CSV and mails the requester a link.
+```
+
+## llms.txt
+
+[`/llms.txt`](/llms.txt) follows the [llms.txt](https://llmstxt.org/) convention: a short description of Navree, then one line per docs page, in the order of the sidebar, linking the page's Markdown with its one-sentence description:
+
+```text title="https://navree.com/llms.txt"
+# Navree
+
+> The complete backend framework for Rust. Modular, API-first and AI-native.
+> Everything your backend needs, checked by the compiler.
+
+## Prologue
+
+- [Introduction](https://navree.com/docs/prologue/introduction.md): What Navree is, the ideas it is built on, what comes in the box, who it's for and how to read these docs.
+
+## Getting started
+
+- [Installation](https://navree.com/docs/getting-started/installation.md): Install Rust and the `navree` CLI, create an app with `navree new`, and run it with `navree dev`.
+- [Your first app](https://navree.com/docs/getting-started/your-first-app.md): Build a small task-list API with an entity, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests.
+
+## The basics
+
+- [Routing and controllers](https://navree.com/docs/basics/routing.md): Controllers and route attributes, the API prefix and versions, absolute `!` paths, path and query parameters, route names and the route table.
+- [Validation](https://navree.com/docs/basics/validation.md): Validate request bodies and query strings with `Valid<Json<T>>` on garde, with field-level messages and `unique` / `exists` database rules.
+...
+```
+
+An agent that starts from `llms.txt` reads the index (a few thousand tokens), picks the pages that matter for the task and fetches only those. That is the best default: small, current and specific.
+
+## llms-full.txt
+
+[`/llms-full.txt`](/llms-full.txt) is every page's Markdown in one file, in sidebar order, each page starting with its title and URL. Use it when you want the model to hold the whole framework at once: loading it into a project's knowledge in a chat app, or asking broad questions ("Which modules does an app with workspaces, queues and real time need, and in what order?").
+
+It is large, the size of a book. For a coding task in your editor, the index and a few pages are faster and cost less; for a long design conversation, the full file saves the model from fetching page after page.
+
+## Page actions
+
+Every docs page has actions next to its title:
+
+| Action | What it does |
+|---|---|
+| **Copy page** | Copies the page's Markdown to your clipboard, to paste into any chat or agent. |
+| **View as Markdown** | Opens the page's `.md` URL. |
+| **Open in Claude** | Opens a new Claude conversation that reads the page, ready for your question. |
+| **Open in ChatGPT** | The same, in ChatGPT. |
+
+"Open in" starts the conversation with a prompt that names the page's Markdown URL and asks the assistant to read it first, so your first message can be the question itself: "How do I make this job unique per company?"
+
+## AGENTS.md and CLAUDE.md
+
+`navree new` writes two files at the root of every app, next to `README.md`:
+
+<FileTree title="navree new crm">{`
+  AGENTS.md *       # conventions for every coding agent
+  CLAUDE.md *       # imports AGENTS.md for Claude Code
+  Cargo.toml
+  README.md
+  config/
+  src/
+  tests/
+`}</FileTree>
+
+**`AGENTS.md`** is the project's instructions for coding agents, in the format most agents read on their own. It is written for the app it lives in, with the app's name, and covers:
+
+- **Layout**: what lives in `config/`, `src/app.rs`, `src/abilities.rs`, `src/modules/<name>/`, `tests/` and `storage/` (and `web/` for apps created with `--ui next`).
+- **Commands**: `navree dev`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt`, `navree check`, `navree routes`, `navree migrate` and `navree list`.
+- **Generators**: which `navree make:*` command to run for each kind of code, and the marker comments (`// navree:modules`, `// navree:wire`, `// navree:policies`) they register at.
+- **Conventions**: deny-by-default routes and the access attributes, modules and injected services, validated DTOs, the error shape and `AppError` helpers, the unit of work and `Repo`, migrations, configuration and secrets, and tests with `TestApp`.
+- **Before you finish**: format, lint and test, and fix everything they report.
+- **Documentation and skills**: these docs, `llms.txt`, the Markdown pages and how to install the [agent skills](/docs/ai/agent-skills/).
+
+**`CLAUDE.md`** is for Claude Code, which reads that file name. It imports `AGENTS.md` instead of repeating it, so every agent reads the same instructions:
+
+```text title="CLAUDE.md"
+@AGENTS.md
+
+The conventions for coding agents in crm live in AGENTS.md, imported above; keep them there so every agent reads the same file.
+```
+
+### Making them yours
+
+The generated `AGENTS.md` describes Navree's conventions. Add your team's: the domain words agents should use, the modules that are off limits, how you name migrations, which [Navigator](/docs/ai/navigator/) tools to use before changing routes or the schema. Keep it short and specific; agents read it at the start of every session, and a rule written down there beats the same rule explained again in every prompt.
+
+Edit `AGENTS.md`, not `CLAUDE.md`. Claude Code follows the import, and every other agent reads `AGENTS.md` directly.
+
+For an app created before these files existed, run `navree new` for a scratch app of the same kind and copy its `AGENTS.md` and `CLAUDE.md` into your project, changing the name.
+
+## Choosing what to give your agent
+
+| Situation | Give it |
+|---|---|
+| Every session in a Navree app | `AGENTS.md` (automatic) and the [agent skills](/docs/ai/agent-skills/) |
+| A task that touches one feature | The feature's page as `.md` |
+| A question about your running app | [Navigator](/docs/ai/navigator/): routes, schema, logs, configuration |
+| An agent with web access and no skills | `https://navree.com/llms.txt` |
+| A long design discussion in a chat app | `https://navree.com/llms-full.txt` |
+
+Skills, `AGENTS.md` and Navigator work together: `AGENTS.md` says how this app is built, a skill says how to do this kind of task, Navigator says what the app looks like right now, and the docs say everything else.
+
+<LinkCards>
+  <LinkCard href="/docs/ai/agent-skills/" title="Agent skills">
+    Step-by-step skills for every common task.
+  </LinkCard>
+  <LinkCard href="/docs/ai/navigator/" title="Navigator">
+    The MCP server that shows your agent the running app.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="The CLI">
+    `navree new` and the generators the instructions refer to.
+  </LinkCard>
+</LinkCards>

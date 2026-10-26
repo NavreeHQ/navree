@@ -7,7 +7,7 @@ Navree is developed in the open at [github.com/NavreeHQ/navree](https://github.c
 
 ## The repository
 
-Everything lives in one repository: the framework, the CLI, a reference application, the benchmark and this website.
+Everything lives in one repository: the framework, the CLI, the agent skills, a reference application, the performance harness and this website.
 
 | Path | What |
 |---|---|
@@ -16,10 +16,11 @@ Everything lives in one repository: the framework, the CLI, a reference applicat
 | `apps/crm-api` | The reference CRM API, a Navree application: `src/`, its feature crates in `crates/` and system tests in `tests/` |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
 | `apps/website` | navree.com and these docs |
-| `bench/` | The benchmark: the spec, every framework's implementation, the conformance checks and the results |
+| `skills/` | The agent skills, one directory per skill, each with a `SKILL.md` |
+| `bench/` | The performance harness: the workload's specification, the conformance checks and the results behind [Performance](/performance/) |
 | `docs/` | The product requirements, the build design, the implementation plan and notes |
 
-The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm-api/crates/*`. The benchmark apps are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
+The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm-api/crates/*`. The apps under `bench/` are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
 
 ## Setting up
 
@@ -120,17 +121,18 @@ Commit messages in the history describe the change in the imperative, prefixed w
 
 Open an issue first for anything large, such as a new module or a change to a public API, so the design can be discussed before you write it. For a fix, open a pull request against `main` with the tests, clippy and rustfmt passing. Say in the description what changed and why, and link the issue if there is one.
 
-If you find a limitation that isn't listed in the [release notes](/docs/prologue/release-notes/#known-limitations), an issue describing it is a contribution too.
+If you run into a limitation or a surprise, an issue describing it is a contribution too.
 
 ## Contributing to the docs
 
 These docs are MDX files in the same repository, under `apps/website/content/docs/<section>/<page>.mdx`. `apps/website/content/docs/manifest.ts` sets the order of sections and pages. Every page has an "Edit this page" link that opens its file on GitHub.
 
-Read `apps/website/AUTHORING.md` before you write. It covers the front-matter, the components (callouts, tabs, code groups, steps, file trees, badges and link cards), how to write code blocks, and the voice. The rules that matter most:
+Read `apps/website/AUTHORING.md` before you write. It covers the front-matter, the components (callouts, tabs, code groups, steps, file trees, badges, link cards and diagrams), how to write code blocks, and the voice. The rules that matter most:
 
 - **Write from the code.** Every type, function, attribute, config key and command a page mentions must exist. Check it in the crate's source and tests, and in how the CRM uses it.
 - **Show real code.** A non-trivial Rust snippet must compile. Check it in a scratch crate that depends on `crates/navree` by path, or quote it from a test or the CRM.
-- **Be honest about limits.** If something isn't supported yet, say so and link to the [roadmap](/docs/prologue/roadmap/).
+- **Say what Navree does, in its own terms.** Describe the feature and its behaviour, limits included, without measuring it against other frameworks.
+- **Mark pages for packages still in development.** Their front-matter has `status: "planned"`; the page documents the package's design as it will ship.
 
 To preview the site while you write:
 

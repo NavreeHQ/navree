@@ -1,0 +1,334 @@
+---
+title: "Starter kits"
+description: "Production-ready apps from one command: a SaaS kit with a Next.js and shadcn/ui front end, an API kit and a microservice kit."
+status: "planned"
+---
+
+## Introduction
+
+A starter kit is a complete application, written into your directory by `navree new`, that you own from the first commit. Instead of an empty app with one example module, you start with the parts every product needs already built, tested and wired together: sign-in, workspaces, billing, settings, an admin panel, background work, local services and a deploy configuration.
+
+Pick the kit for the shape you are building:
+
+| Kit | Command | What you get |
+|---|---|---|
+| `saas` | `navree new acme --kit saas` | A Navree API and a Next.js and shadcn/ui front end: sign-in, two-factor, workspaces with members and roles, billing, settings and an admin panel, behind a backend-for-frontend |
+| `api` | `navree new acme --kit api` | The same API without the front end: accounts, workspaces, OpenAPI and typed-client generation, for mobile apps, partners or a front end you build yourself |
+| `micro` | `navree new billing --kit micro` | A microservice: message and event handlers on a broker, health checks and tracing, and a contracts crate for its clients |
+
+Kits are generated code, not a framework layer. There is no kit runtime and nothing to stay compatible with: every route, screen and test is a file in your repository, written with the same modules, macros and conventions as the rest of these docs.
+
+## Requirements
+
+- Rust (the stable toolchain) and the [Navree CLI](/docs/getting-started/installation/).
+- Docker or Podman, for the local services that [Dock](/docs/tools/dock/) starts: PostgreSQL and Mailpit for every kit, NATS for the `micro` kit.
+- For the `saas` kit, Node.js 22 or newer and pnpm.
+
+## Creating an app
+
+```sh
+navree new acme --kit saas
+```
+
+```text
+Created acme in /home/ada/code/acme (kit: saas)
+
+Next steps:
+  cd acme
+  navree dock up                 # PostgreSQL and Mailpit
+  navree key:generate            # then set APP_KEY in .env
+  navree migrate:fresh --seed    # tables and a demo workspace
+  navree dev                     # API on :8080, web app on :3000
+```
+
+<Steps>
+<Step title="Start the local services">
+
+`navree dock up` reads `dock.toml` and starts PostgreSQL and Mailpit in containers. `.env` already points at them: `APP_DATABASE__URL` at the database, `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
+
+</Step>
+<Step title="Set the application key">
+
+`navree key:generate` prints a key; put it in `.env` as `APP_KEY`. It encrypts cookies and secrets, and signs tokens, so keep it out of git.
+
+</Step>
+<Step title="Create the tables and the demo data">
+
+`navree migrate:fresh --seed` runs every module's migrations and seeds one workspace, `demo`, with an owner (`owner@acme.test`) and a member (`member@acme.test`), both with the password `password123`.
+
+</Step>
+<Step title="Run it">
+
+`navree dev` serves the API, rebuilding it when the Rust code changes, and starts the web app's dev server. Open `http://localhost:3000` and sign in as the owner.
+
+</Step>
+</Steps>
+
+`navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing.
+
+## The SaaS kit
+
+The SaaS kit is a working multi-tenant product: people sign up, create a workspace, invite their team, pick a plan and manage everything from settings, while you manage the whole system from an admin panel.
+
+### What users get
+
+| Area | Screens and flows |
+|---|---|
+| Sign-in | Email and password, two-factor with an authenticator app and recovery codes, social sign-in buttons for every provider you configure |
+| Accounts | Sign-up with email verification, forgotten password, password reset |
+| Workspaces | Create a workspace, switch between workspaces, workspace URLs under `/w/<slug>/` |
+| Members | Invite by email, accept an invitation, change a member's role (`Owner`, `Admin`, `Member`, `Viewer`), remove members, transfer ownership |
+| Billing | Plans with monthly and yearly prices, trials, checkout, the customer portal, invoices; seats follow the member count |
+| Settings | Profile, password, two-factor, active sessions, workspace name and slug, notifications |
+| Product | A dashboard and an example feature, projects, with a list, filters, pagination, a detail page, real-time updates and access rules per role |
+| Admin | The [Helm](/docs/tools/helm/) admin panel at `/admin` for super admins: users, workspaces, subscriptions, failed jobs |
+
+### How it is built
+
+The API is a [modular monolith](/docs/patterns/modular-monolith/). Its root adds the framework modules, configured once, then the kit's feature modules:
+
+```rust title="src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    platform(Navree::app(), sources)
+        .module(AccountsModule)   // profile, sessions and account settings on top of AuthModule
+        .module(SettingsModule)   // workspace settings, plans, checkout and the portal
+        .module(ProjectsModule)   // the example feature: a workspace-scoped resource
+        .module(AdminModule)      // Helm resources for users, workspaces and subscriptions
+    // navree:modules
+}
+```
+
+`platform` in `src/platform.rs` lists the framework modules the kit uses: Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail, Queue, Schedule, Validation, Auth, Access, Workspace, Billing, Social, Notify, Realtime, Audit, Api, Observe and Helm.
+
+Every product route is scoped to a workspace. The example feature shows the pattern the rest of your features follow:
+
+```rust title="src/modules/projects/controller.rs"
+#[controller("/projects", version = "1")]
+#[guard(InWorkspace::guard())]
+impl ProjectsController {
+    /// `GET /api/v1/projects`: the current workspace's projects.
+    #[get("/")]
+    #[can(Read, Project)]
+    #[api(summary = "List projects", tag = "Projects", response = ProjectPage, responses(400, 401, 403))]
+    async fn index(
+        &self,
+        uow: WorkspaceUow,
+        ws: CurrentWorkspace,
+        scope: Accessible<Project, Read>,
+        page: PageQuery,
+    ) -> Result<Page<ProjectResource>> {
+        self.projects.list(&uow, ws.id(), scope, page).await
+    }
+
+    /// `POST /api/v1/projects`
+    #[post("/")]
+    #[can(Create, Project)]
+    #[api(summary = "Create a project", tag = "Projects", request = CreateProject, response = ProjectResource, status = 201, responses(400, 401, 403))]
+    async fn store(
+        &self,
+        uow: WorkspaceUow,
+        ws: CurrentWorkspace,
+        CurrentUser(user): CurrentUser,
+        Valid(Json(input)): Valid<Json<CreateProject>>,
+    ) -> Result<Created<ProjectResource>> {
+        let project = self.projects.create(&uow, ws.id(), user.id, input).await?;
+        Ok(Created(format!("/api/v1/projects/{}", project.id), project))
+    }
+}
+```
+
+The `InWorkspace` guard resolves the workspace from the request and checks that the user is a member before the access rules run, so `#[can]` and `Accessible` decide with the user's role in that workspace. The kit uses row isolation: the service reads and writes through `WorkspaceRepo`, so every query on a workspace table is filtered by `workspace_id`, and its migrations add PostgreSQL row-level security policies. See [Multi-tenant SaaS](/docs/patterns/multi-tenancy/) and [Workspaces](/docs/workspaces/introduction/).
+
+The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session.
+
+The browser's API client is generated from the API's OpenAPI document. `pnpm gen:api` in `web/` exports the document and regenerates the types, so a changed DTO is a TypeScript error before it is a bug.
+
+### The generated layout
+
+<FileTree title="acme/">{`
+  AGENTS.md                 # conventions for coding agents
+  CLAUDE.md                 # points at AGENTS.md
+  Cargo.toml
+  dock.toml                 # local services: PostgreSQL, Mailpit
+  harbor.toml               # servers and deploys
+  .env.example
+  .github/
+    workflows/
+      ci.yml                # fmt, clippy, check, tests, OpenAPI drift, web lint and tests
+  config/
+    app.toml
+  src/
+    main.rs
+    lib.rs
+    app.rs *                # the root: platform() plus the kit's modules
+    platform.rs             # the framework modules, configured once
+    abilities.rs            # role permissions and ability rules
+    modules/
+      accounts/
+      settings/
+      projects/ *           # the example feature, copy it for your own
+      admin/
+    seed.rs                 # the demo workspace and accounts
+  tests/
+    app.rs                  # boots the app, checks the module graph
+    sign_up.rs              # sign-up, verification and the first workspace
+    billing.rs              # checkout and trials with the fake provider
+  web/
+    package.json
+    components.json         # shadcn/ui
+    .env.example            # NAVREE_API_URL and the real-time settings
+    app/
+      (auth)/               # sign-in, sign-up, verify, forgot and reset password
+      (app)/
+        w/[workspace]/      # dashboard, projects, settings
+      api/
+        [...path]/route.ts  # the BFF: forwards with the bearer token
+        auth/               # login, two-factor, logout, refresh
+      broadcasting/
+        auth/route.ts
+    lib/
+      bff/                  # the backend-for-frontend, unit-tested
+      api/                  # the generated client and error helpers
+      realtime/
+    components/
+      ui/                   # shadcn/ui components
+    e2e/                    # Playwright journeys against the real API
+`}</FileTree>
+
+### Configuring it
+
+Everything the kit needs is in `config/app.toml` and `.env`. The settings you will change first:
+
+| Key | In the kit | What it does |
+|---|---|---|
+| `app.url` | `http://localhost:3000` | The web app's URL, for links in mail |
+| `auth.registration` | `true` | Public sign-up; set `false` to create accounts by invitation only |
+| `workspace.resolvers` | `["header"]` | Where the workspace comes from: the browser client sends `X-Workspace` through the BFF |
+| `billing.provider` | `stripe` | `stripe`, `paddle`, or `fake` for local development |
+| `billing.plans.*` | `starter`, `pro` | Your plans and the provider's price ids |
+| `social.providers.*` | none | Social sign-in providers; each one adds a button |
+| `mail.transport` | Mailpit over SMTP | Your mail provider in production |
+
+Secrets go in `.env`, never in the TOML file: `APP_KEY`, `APP_BILLING__STRIPE__SECRET_KEY`, `APP_BILLING__STRIPE__WEBHOOK_SECRET` and each social provider's client secret. In development, `billing.provider = "fake"` lets you click through checkout without a provider account.
+
+## The API kit
+
+`--kit api` is the SaaS kit's API without `web/`: the same modules, the same tests, and two additions for API consumers.
+
+- **Accounts over the API.** Sign-up, verification, password reset and two-factor are JSON routes under `/api/auth`, with bearer tokens for every client. The OpenAPI document at `/api/openapi.json` describes all of them.
+- **Typed clients.** `navree openapi:export openapi.json` writes the document, and the CI workflow fails when the committed file no longer matches the code, so every contract change shows in review. See [API-first](/docs/patterns/api-first/).
+
+Use it for mobile apps, public APIs, or a front end you build in another stack. `navree new acme --kit api` and later adding a front end gives you the same app as the SaaS kit's API: the BFF pattern works with any web server.
+
+## The microservice kit
+
+`--kit micro` creates one service that talks to others over a message broker, with [navree-micro](/docs/microservices/introduction/). It is a Cargo workspace of two crates:
+
+<FileTree title="billing/">{`
+  AGENTS.md
+  CLAUDE.md
+  Cargo.toml                # the workspace
+  dock.toml                 # PostgreSQL and NATS
+  harbor.toml
+  config/
+    app.toml                # [micro] transport = "nats"
+  crates/
+    billing-contracts/ *    # the messages and events, shared with clients
+      src/lib.rs
+    billing/
+      src/
+        main.rs
+        app.rs              # MicroModule, HttpModule (health and metrics only), the handlers
+        modules/
+          invoices/
+            handlers.rs     # #[message_pattern] and #[event_pattern]
+            service.rs
+            entity.rs
+            migrations/
+      tests/
+        invoices.rs         # handlers called through MicroFake, no broker needed
+`}</FileTree>
+
+The handlers are ordinary injectable providers in a module, so they share the container, the access rules and the unit of work with the rest of your code:
+
+```rust title="crates/billing/src/modules/invoices/handlers.rs"
+#[injectable]
+pub struct InvoiceHandlers {
+    invoices: Arc<InvoiceService>,
+}
+
+#[message_handlers]
+impl InvoiceHandlers {
+    /// Request-response: another service asks for an invoice.
+    #[message_pattern("invoices.get")]
+    #[authenticated]
+    async fn get(&self, uow: Uow, Valid(Payload(input)): Valid<Payload<GetInvoice>>) -> Result<Invoice> {
+        self.invoices.find(&uow, input.id).await
+    }
+
+    /// An event: a deal was won somewhere else.
+    #[event_pattern("deal.won")]
+    async fn deal_won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> {
+        self.invoices.draft_for_deal(&uow, event.deal_id, event.amount_cents).await
+    }
+}
+```
+
+The module registers them with `m.message_handlers::<InvoiceHandlers>()`, and `tests/invoices.rs` calls them through `MicroFake`'s in-memory transport, so the tests need no broker.
+
+`billing-contracts` holds `GetInvoice`, `Invoice` and the events, and other services depend on it to call this one with `ServiceClient` and get the same types back. The service also serves `/health/live`, `/health/ready` and `/metrics` over HTTP, so an orchestrator can probe it, and `serve` starts the HTTP server and the message listener together (`micro:listen` runs the listener alone). The kit sets `micro.transport = "nats"` and turns on the `micro-nats` feature; switch to Kafka, RabbitMQ, Redis Streams, MQTT or TCP by changing both, without touching the handlers. See [Microservices](/docs/patterns/microservices/).
+
+## Every kit includes
+
+- **`AGENTS.md` and `CLAUDE.md`**, so a coding agent knows the project's conventions from its first prompt, and the [agent skills](/docs/ai/agent-skills/) for Navree's common tasks (`navree skills:install` refreshes them).
+- **`dock.toml`** for [Dock](/docs/tools/dock/): `navree dock up` starts the services the kit needs, and the CI workflow uses the same file.
+- **`harbor.toml`** for [Harbor](/docs/tools/harbor/): `navree harbor:provision` prepares a server and `navree deploy` ships a release with a health check. In the SaaS kit, its `[frontend]` section deploys `web/` in the same release as the API, so a page and the API it calls always come from the same build.
+- **A CI workflow** in `.github/workflows/ci.yml`: formatting, clippy, `check` (the module graph), the Rust tests on PostgreSQL, the OpenAPI drift check, and for `saas`, the web app's lint, type check, unit tests and Playwright journeys.
+- **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue and billing. The SaaS kit's BFF has unit tests against a scripted API, and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member and upgrading a plan.
+
+## Customizing a kit
+
+The code is yours from the first commit, so change it the way you change any Navree app:
+
+- **Add features** with `navree make:module`, then copy the shape of `projects/`: a workspace-scoped entity, the `InWorkspace` guard and `CurrentWorkspace` in the controller, an access subject and a page in `web/app/(app)/w/[workspace]/`.
+- **Remove what you don't need.** Delete the module and its line in `src/app.rs`; for billing, also remove `BillingModule` from `platform.rs` and the billing screens under `web/app/(app)/w/[workspace]/settings/billing/`. `cargo run -- check` tells you if anything still depends on it.
+- **Restyle the front end.** The colors, radius and fonts are CSS variables in `web/app/globals.css`, and the components in `web/components/ui/` are shadcn/ui source files you edit directly.
+- **Change roles and permissions** in `src/abilities.rs`. The front end reads the rules from `GET /api/me/abilities`, so buttons follow the API's rules without front-end changes.
+
+## Updating
+
+There are two kinds of updates, and neither rewrites your code.
+
+**The framework** comes from the `navree` crate. Raise its version in `Cargo.toml` (or run `cargo update -p navree`), then follow the [release notes](/docs/prologue/release-notes/). The web app's dependencies are ordinary npm packages.
+
+**The kit** is a template, so improvements to it reach new apps, not yours. Your app records the kit it started from in `Cargo.toml`:
+
+```toml title="Cargo.toml"
+[package.metadata.navree]
+kit = "saas"
+kit_version = "0.1.0"
+```
+
+To adopt a later kit's changes, generate a fresh copy with the current CLI and compare the parts you care about:
+
+```sh
+navree new acme-latest --kit saas
+git diff --no-index acme-latest/web/lib/bff acme/web/lib/bff
+```
+
+The release notes list what changed in each kit, so you can pick up a fix without reviewing the whole template.
+
+<LinkCards>
+  <LinkCard href="/docs/patterns/multi-tenancy/" title="Multi-tenant SaaS">
+    How workspaces scope every request and query.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    The BFF the SaaS kit's front end is built on.
+  </LinkCard>
+  <LinkCard href="/docs/packages/billing/" title="Billing">
+    Plans, trials, seats and the customer portal.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
+    Build an app from `navree new` step by step.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,372 @@
+---
+title: "Browser testing"
+description: "Drive a real Chrome from your Rust tests over the Chrome DevTools Protocol: visit pages, fill forms, press buttons and assert on what a user sees, with automatic waiting and a screenshot on every failure."
+status: "planned"
+---
+
+## Introduction
+
+[HTTP tests](/docs/testing/http-tests/) check your API one request at a time. Some things only show up when a person uses the product: the sign-in form posts to the BFF, the BFF stores the tokens, the deal board loads, a drag between columns moves a deal. `navree-browser` tests those journeys from Rust, in the same `cargo test` run as everything else:
+
+```rust
+let page = browser.visit(web.url("/login")).await?;
+page.type_into("Email", "rep1@navree.test").await?;
+page.type_into("Password", "password123").await?;
+page.press("Sign in").await?;
+page.assert_path_is("/").await?;
+page.assert_see("Pipeline by stage").await?;
+```
+
+- It drives Chrome or Chromium over the **Chrome DevTools Protocol**, headless by default. No WebDriver server, no Node.js in your test process.
+- Every action and assertion **waits** for the page, up to a timeout, so tests don't need sleeps.
+- A failing step saves a **screenshot**, the page's HTML and its console log, and the panic message says where.
+- It serves your Navree app from the test, on a real port, and starts your front end against it, so a test owns its data from the database up.
+
+## Installation
+
+`navree-browser` is a test-only crate. Add it as a dev-dependency:
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree-browser = { git = "https://github.com/NavreeHQ/navree" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+It needs Chrome or Chromium. It uses `NAVREE_BROWSER_CHROME` when set, then looks in the usual install locations. On a machine without either, install a pinned Chrome for Testing build into Navree's cache:
+
+```sh
+navree browser:install
+```
+
+```text
+Downloaded Chrome for Testing 141.0.7390.54 (linux64) to ~/.cache/navree/chrome/141.0.7390.54
+```
+
+Put browser tests in a test file of their own, such as `tests/browser.rs`. They take seconds rather than milliseconds, so you can run them on their own with `cargo test --test browser`, and skip them with `cargo test --lib --test api` while you work.
+
+## A first test
+
+This test boots the CRM API with its demo accounts, starts the CRM's web front end against it, and signs in as a sales rep:
+
+```rust title="apps/crm-api/tests/browser.rs"
+use crm_testkit::TestCrm;
+use navree_browser::{Browser, BrowserError, FrontEnd};
+
+/// crm-web, built with `pnpm --dir apps/crm-web build`, started once per test binary.
+fn crm_web() -> FrontEnd {
+    FrontEnd::new("crm-web")
+        .command("pnpm", ["--dir", "../crm-web", "start", "--port", "3100"])
+        .url("http://127.0.0.1:3100")
+        .api_env("NAVREE_API_URL")
+}
+
+#[tokio::test]
+async fn a_rep_signs_in_and_sees_the_pipeline() -> Result<(), BrowserError> {
+    let crm = TestCrm::builder().app(crm_api::app).build().await;
+    let web = crm_web().serve(crm.ctx()).await?;
+    let browser = Browser::launch().await?;
+
+    let page = browser.visit(web.url("/login")).await?;
+    page.type_into("Email", "rep1@navree.test").await?;
+    page.type_into("Password", "password123").await?;
+    page.press("Sign in").await?;
+
+    page.assert_path_is("/").await?;
+    page.assert_see("Pipeline by stage").await?;
+    page.assert_no_console_errors().await?;
+    Ok(())
+}
+```
+
+`Browser::launch` starts one headless Chrome per test binary and gives each test its own browser context: separate cookies, storage and cache, so tests can't see each other's sessions. The context closes when `browser` is dropped.
+
+## Serving your app
+
+### Your API
+
+A browser can't call an in-process `TestApp`; it needs a port. `TestServer::start` serves an app's routes on `127.0.0.1` with a free port, until it is dropped:
+
+```rust
+use navree_browser::TestServer;
+
+let server = TestServer::start(crm.ctx()).await?;
+server.url("/api/v1/deals"); // "http://127.0.0.1:52417/api/v1/deals"
+```
+
+The server runs the app's real router (`build_router`), with every layer, so CORS, cookies, CSRF and rate limits behave as in production. Pages Navree renders itself, from [views](/docs/digging-deeper/views/), can be visited directly at `server.url(..)`.
+
+### Your front end
+
+Most Navree apps have a separate web front end with a BFF in front of the API. `FrontEnd` starts it and points it at the test's API:
+
+| Method | Meaning |
+|---|---|
+| `FrontEnd::new(name)` | A front end, identified by `name` within the test binary |
+| `.command(program, args)` | How to start it (a production build starts in about a second) |
+| `.url(base)` | Where it listens; `serve` waits until this URL answers |
+| `.api_env(var)` | The environment variable that tells it where the API is |
+| `.env(var, value)` | Any other environment variable |
+| `.timeout(duration)` | How long to wait for it to start (default 60 s) |
+| `.serve(ctx)` | Starts it if needed, routes its API calls to this app, and returns a `WebSession` |
+
+The front end process starts once per test binary, on the first `serve`, and stops when the binary exits. It is given the address of a small proxy that navree-browser runs, and each `serve` points that proxy at the calling test's app. A `WebSession` holds the front end until it is dropped, so browser tests that share a front end run one after another, each against its own fresh database, while the rest of your tests keep running in parallel.
+
+Build the front end before the tests run (`pnpm --dir apps/crm-web build`). Starting a development server works too, but its first page loads compile on demand and can take longer than the default timeouts.
+
+## Interacting with pages
+
+### Finding elements
+
+Actions and assertions take a **target** string, resolved in this order:
+
+| Target | Finds |
+|---|---|
+| `"#deal-title"`, `".board .card"`, `"[name=email]"`, `"css=main h1"` | A CSS selector: anything starting with `#`, `.` or `[`, or prefixed with `css=` |
+| `"@deal-card"` | The element with `data-testid="deal-card"` |
+| `"Email"` | For fields: the input whose label, `aria-label`, placeholder or `name` is `Email`. For buttons and links: the one whose text or accessible name is `Email`. |
+
+Text and labels match exactly after trimming whitespace, case included. When a target matches several elements, actions use the first visible one. Narrow it with `Target`, or search inside one element with `within`:
+
+```rust
+use navree_browser::Target;
+
+let renewal = Target::from("@deal-card").containing("Lovelace renewal");
+page.click(renewal.clone()).await?;
+
+let card = page.within(renewal).await?;
+card.press("Edit").await?;
+```
+
+Every method that takes a target accepts a `&str` or a `Target`. `Target::nth(i)` picks one match by position.
+
+Prefer labels and button text: they are what users see, and a test that finds "Sign in" breaks when the button's text changes, which is when it should. Add `data-testid` attributes for elements without visible text.
+
+### Actions
+
+```rust
+page.type_into("Title", "Lovelace renewal").await?;   // clears, then types
+page.append("Notes", " Call back Monday.").await?;     // types without clearing
+page.select("Stage", "Negotiation").await?;            // by text or value
+page.check("Send me a summary").await?;
+page.uncheck("Send me a summary").await?;
+page.attach("Logo", "tests/fixtures/acme.png").await?; // a file input
+page.press("Save").await?;                             // a button or link
+page.click("@deal-card").await?;                       // any element
+page.keys("Escape").await?;                            // "Enter", "Control+K"
+page.drag("@deal-card", "[data-stage=won]").await?;
+page.scroll_to("@load-more").await?;
+page.back().await?;
+page.refresh().await?;
+```
+
+Each action waits for its target to be visible, enabled and not covered by another element, then scrolls it into view and acts like a user: `press` and `click` dispatch real mouse events at the element's center, `type_into` sends key events one character at a time. A target that never becomes ready fails the action after the timeout.
+
+### Assertions
+
+```rust
+page.assert_see("Deal saved").await?;
+page.assert_dont_see("Something went wrong").await?;
+page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+page.assert_path_is("/deals").await?;
+page.assert_query_has("stage", "won").await?;
+page.assert_title("Deals · Navree CRM").await?;
+page.assert_value("Title", "Lovelace renewal").await?;
+page.assert_visible("@toast").await?;
+page.assert_missing("@spinner").await?;
+page.assert_count("@deal-card", 3).await?;
+page.assert_enabled("Save").await?;
+page.assert_no_console_errors().await?;
+```
+
+Assertions retry until they pass or the timeout ends: `assert_see("Deal saved")` passes as soon as the toast appears, and `assert_missing("@spinner")` as soon as loading finishes. `assert_see` looks at visible text only; text in hidden elements doesn't count.
+
+### Waiting
+
+Because every action and assertion waits, explicit waits are rare. For the cases that need them:
+
+```rust
+page.wait_for("@chart").await?;                       // visible
+page.wait_until_missing("Loading…").await?;
+page.wait_for_url("/deals/*").await?;                 // a glob
+page.wait_for_request("/api/v1/deals/*/move").await?; // an API call the page makes
+```
+
+The timeout is 5 seconds per step, set with `NAVREE_BROWSER_TIMEOUT_MS`, `Browser::builder().timeout(..)`, or per call with `page.with_timeout(Duration::from_secs(20)).assert_see("Export ready")`.
+
+### Reading the page
+
+```rust
+let title: String = page.text("@deal-title").await?;
+let value: String = page.value("Amount").await?;
+let cards = page.all("@deal-card").await?;            // Vec<Element>
+let total: f64 = page.script("return window.__DEAL_TOTAL__").await?;
+let cookie = page.cookie("navree_at").await?;          // Option<Cookie>
+```
+
+`script` runs JavaScript in the page and deserializes its return value. Reach for it to read state, not to drive the page: a test that clicks through `script` skips what the user would see.
+
+## Screenshots and failures
+
+When an action or an assertion fails, navree-browser saves three files under `target/navree-browser/<test name>/` and puts their paths in the error:
+
+```text wrap
+Error: assert_see("Deal saved") failed after 5s: the text is not visible on http://127.0.0.1:3100/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23
+  screenshot: target/navree-browser/a_rep_moves_a_deal_to_won/03-failure.png
+  html:       target/navree-browser/a_rep_moves_a_deal_to_won/03-failure.html
+  console:    target/navree-browser/a_rep_moves_a_deal_to_won/03-console.log
+```
+
+The console log holds the page's console messages and failed network requests, which usually explain a blank page faster than the screenshot. Take screenshots on purpose with `page.screenshot("board-after-move").await?`, and full-page ones with `page.screenshot_full_page(..)`.
+
+To watch a test run, show the window and slow it down:
+
+```sh
+NAVREE_BROWSER_HEADLESS=false NAVREE_BROWSER_SLOW_MO=250 cargo test --test browser a_rep_moves
+```
+
+## Phones and other viewports
+
+The default window is 1440 by 900. Test the phone layout with a preset or your own size:
+
+```rust
+use navree_browser::Viewport;
+
+// 390 x 844, touch, a mobile user agent:
+let page = browser.visit_with(web.url("/deals"), Viewport::phone()).await?;
+page.press("Open menu").await?;
+page.assert_see("Companies").await?;
+
+page.resize(768, 1024).await?;
+```
+
+`Viewport::phone()`, `Viewport::tablet()` and `Viewport::desktop()` set the size, the device pixel ratio, touch support and the user agent.
+
+## A complete journey
+
+Drag a deal to Won and check that the API, not only the page, agrees:
+
+```rust title="apps/crm-api/tests/browser.rs"
+use crm_testkit::{Role, TestCrm};
+use navree_browser::{Browser, BrowserError, Page, Target, WebSession};
+use serde_json::json;
+
+// crm_web() as in the first test.
+
+#[tokio::test]
+async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
+    let crm = TestCrm::builder().app(crm_api::app).build().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let company = rep
+        .post("/api/v1/companies")
+        .json(&json!({ "name": "Lovelace Analytics" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let deal = rep
+        .post("/api/v1/deals")
+        .json(&json!({
+            "title": "Lovelace renewal",
+            "amount_cents": 4_200_000,
+            "company_id": company["id"],
+        }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+
+    let web = crm_web().serve(crm.ctx()).await?;
+    let browser = Browser::launch().await?;
+    let page = sign_in(&browser, &web, Role::Rep1).await?;
+
+    page.click("Deals").await?;
+    let card = Target::from("@deal-card").containing("Lovelace renewal");
+    page.drag(card, "[data-stage=won]").await?;
+    page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+
+    rep.get(&format!("/api/v1/deals/{}", deal["id"].as_str().unwrap()))
+        .send()
+        .await
+        .assert_json_path("stage", json!("won"));
+    Ok(())
+}
+
+/// Signs in through the login form, as a user would.
+async fn sign_in(browser: &Browser, web: &WebSession, role: Role) -> Result<Page, BrowserError> {
+    let page = browser.visit(web.url("/login")).await?;
+    page.type_into("Email", role.email()).await?;
+    page.type_into("Password", "password123").await?;
+    page.press("Sign in").await?;
+    page.assert_path_is("/").await?;
+    Ok(page)
+}
+```
+
+The test seeds data through the API with `crm.login_as`, drives the browser, then checks the result through the API again: the browser proves the journey works, the API proves it stuck.
+
+## Running in CI
+
+GitHub's Ubuntu runners include Chrome, so browser tests need the front end built and nothing else. Upload the failure files when a test fails:
+
+```yaml title=".github/workflows/browser.yml"
+name: Browser tests
+on: [push, pull_request]
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/crm-web build
+      - run: cargo test -p crm-api --test browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: target/navree-browser/
+```
+
+On a runner without Chrome, add `navree browser:install` before the tests, or set `NAVREE_BROWSER_CHROME` to the browser your image provides.
+
+## Reference
+
+| Environment variable | Default | Meaning |
+|---|---|---|
+| `NAVREE_BROWSER_CHROME` | found on the machine | The Chrome or Chromium binary |
+| `NAVREE_BROWSER_HEADLESS` | `true` | `false` shows the window |
+| `NAVREE_BROWSER_SLOW_MO` | `0` | Milliseconds to pause after each action |
+| `NAVREE_BROWSER_TIMEOUT_MS` | `5000` | How long each action and assertion waits |
+| `NAVREE_BROWSER_ARTIFACTS` | `target/navree-browser` | Where screenshots and failure files go |
+
+These are environment variables of the test run, not app configuration, so they use the `NAVREE_BROWSER_` prefix rather than `APP_`. `Browser::builder()` sets the same options in code: `.headless(false)`, `.chrome(path)`, `.slow_mo(ms)`, `.timeout(duration)`, `.window(1440, 900)`, `.artifacts(dir)`, then `.launch()`.
+
+| Type | |
+|---|---|
+| `Target` | A target with filters: `from(str)`, `containing(text)`, `nth(i)` |
+| `Browser` | `launch()`, `builder()`, `visit(url)`, `visit_with(url, viewport)`, `new_page()` |
+| `Page` | The actions, assertions and waits above; `within(target)` returns a scoped `Element` with the same methods |
+| `TestServer` | `start(ctx)`, `url(path)` |
+| `FrontEnd`, `WebSession` | The front end and a test's turn with it: `url(path)` |
+| `Viewport` | `phone()`, `tablet()`, `desktop()`, `new(width, height)` |
+| `BrowserError` | What failed, where, and the paths of the failure files |
+
+<LinkCards>
+  <LinkCard href="/docs/testing/getting-started/" title="Testing">
+    Unit, HTTP and database tests.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    The test client the journeys seed data with.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    The BFF that browser tests run through.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    The app these examples test.
+  </LinkCard>
+</LinkCards>

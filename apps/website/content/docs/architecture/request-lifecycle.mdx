@@ -52,6 +52,8 @@ Finally the command runs. `serve` builds the router, binds `http.addr` (`127.0.0
 
 ## The life of a request
 
+<Diagram name="request-lifecycle" />
+
 `navree-http` assembles the pipeline in `build_router`. A request passes through these layers, outermost first, and the response passes back through them in reverse:
 
 ```text
@@ -63,7 +65,7 @@ request
  ├─ timeout            http.timeout_secs (30 s); a route's own timeout can extend it
  ├─ security headers   http.security_headers
  ├─ compression        http.compression
- ├─ error rendering    the NestJS error format, error mappers, 5xx logs
+ ├─ error rendering    Navree's JSON error shape, error mappers, 5xx logs
  ├─ maintenance mode   503 while the maintenance file exists
  ├─ per-IP rate limit  http.per_ip_rate_limit requests per minute (600)
  ├─ body limit         http.body_limit_bytes (2 MiB)
@@ -101,7 +103,7 @@ On the way out, this layer writes one log line per request (target `navree::requ
 
 ### Error rendering
 
-This layer gives every error the same shape, the NestJS format:
+This layer gives every error the same JSON shape:
 
 ```json
 { "statusCode": 404, "message": "Not Found", "error": "Not Found" }

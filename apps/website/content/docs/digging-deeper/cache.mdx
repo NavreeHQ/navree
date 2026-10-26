@@ -14,7 +14,7 @@ Both sit on a store. Navree 0.1 ships one, an in-process store on [moka](https:/
 
 <Callout type="warning" title="The memory store belongs to one process">
 
-Every process has its own cache and its own locks. Two API servers, or `serve` and `queue:work`, don't see each other's entries, and a lock taken in one process doesn't stop another. There is no Redis or database store yet (see the [roadmap](/docs/prologue/roadmap/)). The store traits are public, so you can plug in your own: see [custom stores](#custom-stores).
+Every process has its own cache and its own locks. Two API servers, or `serve` and `queue:work`, don't see each other's entries, and a lock taken in one process doesn't stop another. A Redis store is on the [roadmap](/docs/prologue/roadmap/#more-drivers). The store traits are public, so you can plug in your own: see [custom stores](#custom-stores).
 
 </Callout>
 

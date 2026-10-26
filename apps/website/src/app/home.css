@@ -1,161 +1,129 @@
-/* The landing page's hull drawing: one orchestrated entrance, then still. */
-.hull {
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-.hull-grid line {
-  stroke: var(--color-line);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.hull-grid .hull-ref {
-  stroke: var(--color-line-2);
-}
-.hull-station {
-  fill: none;
-  stroke: var(--color-fg-3);
-  stroke-width: 1.15;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: hull-draw 1400ms var(--ease-out-quint) both;
-}
-.hull-station.is-mid {
-  stroke: var(--color-fg-2);
-  stroke-width: 1.5;
-}
-.hull-dwl {
-  stroke: var(--color-accent);
-  stroke-width: 1.5;
-  vector-effect: non-scaling-stroke;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: hull-waterline 900ms var(--ease-out-quint) 900ms both;
-}
-.hull-fin {
-  fill: var(--color-accent);
-  animation: hull-fade 600ms ease-out 60ms both;
-}
-.hull-labels text {
-  fill: var(--color-fg-3);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  animation: hull-fade 700ms ease-out 1200ms both;
-}
+/*
+ * The homepage. Most of it is Tailwind in src/components/home/; this file
+ * holds what utilities can't express well: the code panel, the module
+ * graph's pulses and the hero's light.
+ */
 
-/* The drawing scales down on phones; keep its labels readable. */
-@media (max-width: 40rem) {
-  .hull-labels text {
-    font-size: 21px;
-  }
-}
-
-@keyframes hull-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-}
-@keyframes hull-waterline {
-  from {
-    transform: scaleX(0);
-    opacity: 0;
-  }
-}
-@keyframes hull-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* The install snippet in the hero. */
-.terminal {
-  border: 1px solid var(--color-line-2);
-  border-radius: 14px;
-  background: var(--color-ink-1);
-}
-/* A command too long for the box wraps under itself, after the prompt. */
-.terminal-line {
-  padding-left: calc(1ch + 0.75rem);
-  text-indent: calc(-1ch - 0.75rem);
-  overflow-wrap: anywhere;
-}
-.terminal-line::before {
-  content: "$" / "";
-  margin-right: 0.75rem;
-  color: var(--color-fg-3);
-  user-select: none;
-}
-
-/* The landing code panel. */
+/* The code showcase panel (Shiki output inside). */
 .code-panel {
   overflow: hidden;
-  border: 1px solid var(--color-line);
-  border-radius: 14px;
+  border: 1px solid var(--color-line-2);
+  border-radius: calc(1.25rem - 0.375rem);
   background: var(--color-ink-1);
+  box-shadow: var(--shadow-bezel);
 }
 
-/* "Everything in the box": the crate layers as decks, kernel at the bottom. */
-.decks {
-  border-top: 1px solid var(--color-line);
-}
-.deck {
-  display: grid;
-  grid-template-columns: 3.5rem minmax(0, 1fr);
-  gap: 1rem;
-  padding: 1.1rem 0;
-  border-bottom: 1px solid var(--color-line);
-}
-.deck.is-bottom {
-  border-bottom: 1px solid var(--color-accent);
-  box-shadow: 0 1px 0 0 rgb(61 255 143 / 0.25), 0 8px 24px -16px rgb(61 255 143 / 0.6);
-}
-.deck-label {
-  padding-top: 0.15rem;
-  color: var(--color-fg-3);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-}
-.deck.is-bottom .deck-label {
-  color: var(--color-accent);
-}
-.deck-crates {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
-  gap: 0.25rem 1.5rem;
-}
-.crate {
-  display: block;
-  padding: 0.35rem 0.5rem;
-  margin: 0 -0.5rem;
-  border-radius: 8px;
-  transition: background-color 150ms;
-}
-.crate:hover {
-  background: var(--color-ink-1);
-}
-.crate-name {
-  display: block;
-  color: var(--color-fg);
+/* A mono transcript inside a product mock: lines wrap with a hanging indent. */
+.mock-lines {
   font-family: var(--font-mono);
-  font-size: 0.84rem;
-}
-.crate:hover .crate-name {
-  color: var(--color-accent);
-}
-.crate-text {
-  display: block;
-  margin-top: 0.15rem;
-  color: var(--color-fg-3);
   font-size: 0.8125rem;
-  line-height: 1.5;
+  line-height: 1.7;
+  font-feature-settings: "calt" 1, "liga" 0;
+}
+.mock-lines > * {
+  padding-left: 2ch;
+  text-indent: -2ch;
+  overflow-wrap: anywhere;
+}
+
+/* The hero's light: one soft green bloom behind the terminal. */
+.hero-bloom {
+  background:
+    radial-gradient(closest-side, rgb(61 255 143 / 0.13), rgb(61 255 143 / 0.04) 55%, transparent),
+    radial-gradient(closest-side, rgb(61 255 143 / 0.06), transparent);
+  background-size:
+    100% 100%,
+    140% 140%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* The module graph: pulses travel the wiring, then rest. */
+.graph-pulse {
+  fill: var(--color-accent);
+  filter: drop-shadow(0 0 4px rgb(61 255 143 / 0.9));
+}
+.graph-wire {
+  fill: none;
+  stroke: var(--color-line-2);
+  stroke-width: 1;
+}
+.graph-wire.is-live {
+  stroke: rgb(61 255 143 / 0.55);
+}
+.graph-head {
+  fill: var(--color-fg-3);
+}
+.graph-head.is-live {
+  fill: rgb(61 255 143 / 0.75);
+}
+
+/* The workspace demo's rows change without moving anything. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.row-in {
+  animation: row-in 360ms var(--ease-out-quint) both;
+}
+
+/* GlowCard: a spotlight and a lit border that follow a mouse pointer. */
+.glow-card {
+  --mx: -999px;
+  --my: -999px;
+}
+.glow-card-spot,
+.glow-card-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out-quint);
+}
+.glow-card-spot {
+  background: radial-gradient(300px circle at var(--mx) var(--my), rgb(61 255 143 / 0.07), transparent 100%);
+}
+.glow-card-ring {
+  padding: 1px;
+  background: radial-gradient(240px circle at var(--mx) var(--my), rgb(61 255 143 / 0.6), transparent 100%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+.glow-card:hover > .glow-card-spot,
+.glow-card:hover > .glow-card-ring {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .glow-card-spot,
+  .glow-card-ring {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hull,
-  .hull * {
-    animation: none !important;
+  .graph-pulse,
+  .glow-card-spot,
+  .glow-card-ring {
+    display: none;
+  }
+  .row-in {
+    animation: none;
+  }
+}
+
+/* The terminal caret. */
+@keyframes caret {
+  50% {
+    opacity: 0;
   }
 }

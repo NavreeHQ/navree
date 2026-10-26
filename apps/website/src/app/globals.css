@@ -1,16 +1,20 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "./prose.css" layer(components);
 @import "./charts.css" layer(components);
 @import "./home.css" layer(components);
 
+/* The site is dark only: `dark:` utilities (used by shadcn/ui) always apply. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
- * Navree design tokens. Dark only.
+ * Navree design tokens. Dark only. DESIGN.md explains how to use them.
  *
  * Ink: near-black surfaces with a faint sea-green cast, stepping up for
  * raised elements. One accent, "starboard" green (a ship's green running
- * light), used sparingly: links, focus, the logo, Navree in charts, the
- * waterline. Text tokens meet WCAG AA on every ink step (fg-3 is 5.4:1 on
- * ink-3 at worst).
+ * light), used sparingly: primary buttons, links, focus, the logo, the one
+ * highlighted element in a diagram. Text tokens meet WCAG AA on every ink
+ * step (fg-3 is 5.4:1 on ink-3 at worst).
  */
 @theme {
   --color-ink-0: #040605;
@@ -26,24 +30,160 @@
   --color-accent: #3dff8f;
   --color-accent-ink: #03130a;
   --color-amber: #ffbf5e;
+  --color-danger: #ff6b6b;
   --color-bar: #5b6862;
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
+  /* The display type scale (headings). Fluid between 390 px and 1440 px. */
+  --text-display-2xl: clamp(2.75rem, 1.9rem + 3.6vw, 5rem);
+  --text-display-2xl--line-height: 1;
+  --text-display-2xl--letter-spacing: -0.038em;
+  --text-display-xl: clamp(2.375rem, 1.8rem + 2.4vw, 3.75rem);
+  --text-display-xl--line-height: 1.04;
+  --text-display-xl--letter-spacing: -0.034em;
+  --text-display-lg: clamp(2rem, 1.6rem + 1.7vw, 3rem);
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-md: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.024em;
+  --text-display-sm: 1.25rem;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--letter-spacing: -0.016em;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.14em;
+
+  /* Glows: green light, never a dark drop shadow. */
+  --shadow-glow-sm: 0 0 10px rgb(61 255 143 / 0.3);
+  --shadow-glow: 0 0 18px rgb(61 255 143 / 0.35);
+  --shadow-glow-lg: 0 0 60px -12px rgb(61 255 143 / 0.45);
+  --shadow-bezel: inset 0 1px 0 0 rgb(233 239 235 / 0.05);
+  --shadow-float: 0 30px 80px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(61 255 143 / 0.04);
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Magic UI keyframes (marquee, orbit, shine, gradient). */
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+  --animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
+  --animate-shine: shine var(--duration) infinite linear;
+  --animate-gradient: gradient 8s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes marquee-vertical {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes orbit {
+    0% {
+      transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+    }
+    100% {
+      transform: rotate(calc(var(--angle) * 1deg + 360deg)) translateY(calc(var(--radius) * 1px))
+        rotate(calc((var(--angle) * -1deg) - 360deg));
+    }
+  }
+  @keyframes shine {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    to {
+      background-position: 0% 0%;
+    }
+  }
+  @keyframes gradient {
+    to {
+      background-position: var(--bg-size, 300%) 0;
+    }
+  }
 }
 
+/*
+ * Fonts (src/app/fonts.ts) and the shadcn/ui semantic colors, mapped onto
+ * the Navree tokens. `accent` stays Navree green: shadcn components were
+ * restyled so they never use `bg-accent` as a hover surface.
+ */
 @theme inline {
+  --font-sans:
+    var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display--font-variation-settings: "wdth" 112;
   --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --color-background: var(--color-ink-0);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-ink-1);
+  --color-card-foreground: var(--color-fg);
+  --color-popover: var(--color-ink-1);
+  --color-popover-foreground: var(--color-fg);
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-accent-ink);
+  --color-secondary: var(--color-ink-2);
+  --color-secondary-foreground: var(--color-fg);
+  --color-muted: var(--color-ink-2);
+  --color-muted-foreground: var(--color-fg-2);
+  --color-accent-foreground: var(--color-accent-ink);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line-2);
+  --color-ring: var(--color-accent);
+}
+
+/* Layout helpers: one page container, one section rhythm. */
+@utility container-site {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 2rem;
+  }
+}
+
+@utility section-y {
+  padding-block: clamp(4.5rem, 3rem + 5vw, 8rem);
+}
+
+@utility font-display-wide {
+  font-variation-settings: "wdth" 125;
 }
 
 @layer base {
   :root {
     color-scheme: dark;
     --glow: 0 0 18px rgb(61 255 143 / 0.35);
-    --header-h: 3.75rem;
+    --header-h: 4rem;
+  }
+
+  /* shadcn/ui components draw borders without naming a color. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  :where(h1, h2) {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 112;
   }
 
   html {
@@ -290,5 +430,62 @@
   }
   .toc-mobile[open] summary::after {
     content: "\2212" / "";
+  }
+}
+
+@layer components {
+  /*
+   * The eyebrow above a section heading: mono, uppercase, with a small
+   * green running light. `<p className="eyebrow">Modules</p>`.
+   */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-eyebrow);
+    line-height: var(--text-eyebrow--line-height);
+    letter-spacing: var(--text-eyebrow--letter-spacing);
+    text-transform: uppercase;
+    color: var(--color-fg-2);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 8px rgb(61 255 143 / 0.7);
+  }
+
+  /*
+   * A raised surface: ink-1, a 1px line and a faint top highlight.
+   * `.bezel` is the double-bezel frame for product mocks and hero panels:
+   * an outer tray with a nested core (`.bezel-core`) and concentric radii.
+   */
+  .surface {
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: var(--color-ink-1);
+    box-shadow: var(--shadow-bezel);
+  }
+  .bezel {
+    padding: 0.375rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    background: rgb(17 23 20 / 0.55);
+  }
+  .bezel-core {
+    overflow: hidden;
+    border: 1px solid var(--color-line-2);
+    border-radius: calc(1.25rem - 0.375rem);
+    background: var(--color-ink-1);
+    box-shadow: var(--shadow-bezel);
+  }
+
+  /* A thin scrollbar for sidebars and code panes. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-2) transparent;
   }
 }

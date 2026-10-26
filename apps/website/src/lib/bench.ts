@@ -1,59 +1,79 @@
-import data from "@/generated/benchmarks.json";
+import data from "@/generated/performance.json";
 
-import type { BenchData, Framework, TestKey } from "./bench-types";
+import type { PerfData, TestKey, TestResult } from "./bench-types";
 
-/** Every benchmark number on the site comes from here (see scripts/prebuild.ts). */
-export const bench = data as BenchData;
+/**
+ * Navree's own performance measurements. Every number on the site comes from
+ * here, and this comes from `bench/results/navree.json` (see scripts/prebuild.ts).
+ */
+export const perf = data as PerfData;
 
-export function highlighted(): Framework {
-  const found = bench.frameworks.find((f) => f.name === bench.highlight);
-  if (!found) throw new Error(`no results for ${bench.highlight}`);
-  return found;
-}
+export { fmtCompact, fmtInt, fmtMb, fmtMs, fmtPct } from "./format";
 
 export function testInfo(key: TestKey) {
-  const test = bench.tests.find((t) => t.key === key);
+  const test = perf.tests.find((t) => t.key === key);
   if (!test) throw new Error(`unknown test ${key}`);
   return test;
 }
 
-export { fmtCompact, fmtInt, fmtMb, fmtMs, fmtPct, fmtTimes, ordinal } from "./format";
-
-// ------------------------------------------------------------ comparisons
-
-export function rps(f: Framework, key: TestKey): number {
-  return f.results[key]?.rps ?? 0;
+export function result(key: TestKey): TestResult {
+  return perf.results[key];
 }
 
-/** Frameworks with a result for `key`, fastest first. */
-export function rankedBy(key: TestKey, category?: Framework["category"]): Framework[] {
-  return bench.frameworks
-    .filter((f) => f.results[key] && (!category || f.category === category))
-    .sort((a, b) => rps(b, key) - rps(a, key));
+/** Every test with its result, in the harness's order. */
+export function testsWithResults() {
+  return perf.tests.map((test) => ({ ...test, result: perf.results[test.key] }));
 }
 
-/** The highlighted framework's place in `key`, among all or one category. */
-export function rankIn(key: TestKey, category?: Framework["category"]): { rank: number; of: number } {
-  const list = rankedBy(key, category);
-  return { rank: list.findIndex((f) => f.name === bench.highlight) + 1, of: list.length };
+/** Errors across every measured run of every test. */
+export function totalErrors(): number {
+  return Object.values(perf.results).reduce((sum, r) => sum + r.runs.reduce((s, run) => s + run.errors, 0), 0);
 }
 
-/** Rank by a "lower is better" metric. */
-export function rankLowest(metric: (f: Framework) => number, category?: Framework["category"]): { rank: number; of: number } {
-  const list = bench.frameworks.filter((f) => !category || f.category === category).sort((a, b) => metric(a) - metric(b));
-  return { rank: list.findIndex((f) => f.name === bench.highlight) + 1, of: list.length };
+/** How many measured runs there were in all (tests × runs). */
+export function measuredRuns(): number {
+  return Object.values(perf.results).reduce((sum, r) => sum + r.runs.length, 0);
 }
 
-export function byName(name: string): Framework | undefined {
-  return bench.frameworks.find((f) => f.name === name);
+/** The worst p99/p50 ratio across the tests: how far the tail strays from the median. */
+export function worstTailRatio(): number {
+  return Math.max(...Object.values(perf.results).map((r) => r.latencyMs.p99 / r.latencyMs.p50));
 }
 
-/** The date range the results were measured in, e.g. "26 October 2026". */
+/** The largest change between the measured run and the repeat, in percent. */
+export function maxRepeatDelta(): number | null {
+  if (!perf.repeat) return null;
+  return Math.max(...perf.repeat.tests.map((t) => Math.abs(t.deltaPct)));
+}
+
+/** The largest spread between a test's three runs, as a percentage of its median. */
+export function maxRunSpread(): number {
+  return Math.max(
+    ...Object.values(perf.results).map((r) => {
+      const values = r.runs.map((run) => run.rps);
+      return ((Math.max(...values) - Math.min(...values)) / r.rps) * 100;
+    }),
+  );
+}
+
+/** Memory figures keep one decimal below 100 MB: 37.5, 4.2. */
+export function mb(n: number): number {
+  return n < 100 ? Math.round(n * 10) / 10 : Math.round(n);
+}
+
+/** CPU percent of one core as CPUs, one decimal: 771.98 → "7.7". */
+export function cpus(pct: number): string {
+  return (pct / 100).toFixed(1);
+}
+
+/** "October 26, 2026". */
 export function measuredOn(): string {
-  const dates = bench.frameworks.map((f) => f.startedAt).filter(Boolean).sort();
-  if (!dates.length) return "";
-  const fmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-  const first = fmt.format(new Date(dates[0]));
-  const last = fmt.format(new Date(dates[dates.length - 1]));
-  return first === last ? first : `${first} to ${last}`;
+  const fmt = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  return fmt.format(new Date(perf.startedAt));
+}
+
+/** A "Name x.y.z" version out of a README stack cell, e.g. `Rust 1.99.1`. */
+export function stackVersion(label: string, pattern: RegExp): string | null {
+  const row = perf.stack.find((r) => r.label === label);
+  return row ? (pattern.exec(row.html)?.[0] ?? null) : null;
 }

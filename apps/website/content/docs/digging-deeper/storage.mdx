@@ -5,9 +5,9 @@ description: "Named disks on object_store: putting, reading and streaming files,
 
 <Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, and hand out links that expire. It is built on [object_store](https://docs.rs/object_store), the storage layer of Apache Arrow.
 
-<Callout type="note" title="Local and memory disks only">
+<Callout type="note" title="Drivers">
 
-Two drivers exist today: `local` (a directory on the server) and `memory` (process memory, for tests and scratch data). S3, Google Cloud Storage and Azure drivers are not built yet, although object_store supports them; `DiskConfig` is non-exhaustive so they can be added without breaking your code. See the [roadmap](/docs/prologue/roadmap/).
+Disks use one of two drivers: `local` (a directory on the server) and `memory` (process memory, for tests and scratch data). Object storage drivers for S3, Google Cloud Storage and Azure are on the [roadmap](/docs/prologue/roadmap/#more-drivers); `DiskConfig` is non-exhaustive, so they arrive without breaking your code.
 
 </Callout>
 

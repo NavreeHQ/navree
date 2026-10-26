@@ -339,7 +339,7 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 }
 ```
 
-The rules follow [CASL](https://casl.js.org)'s model. `owner_id` is a column, so the same condition checks a single task and filters the list in SQL. Users with the `admin` role pass every check (`super_admin_role` in `src/app.rs`). [Authorization](/docs/security/authorization/) covers roles, permissions and field rules.
+Each rule allows an action on a subject, optionally under conditions on the record's columns. `owner_id` is a column, so the same condition checks a single task and filters the list in SQL. Users with the `admin` role pass every check (`super_admin_role` in `src/app.rs`). [Authorization](/docs/security/authorization/) covers roles, permissions and field rules.
 
 ## Try it
 

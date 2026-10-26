@@ -2,12 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PageActions } from "@/components/docs/page-actions";
 import { Toc } from "@/components/docs/toc";
 import { ArrowLeftIcon, ArrowRightIcon, EditIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
+import { PlannedBadge } from "@/components/site/planned-badge";
 import { allDocs, findDoc, neighbours, plain } from "@/lib/docs";
 import { renderMdx } from "@/lib/mdx";
-import { editUrl } from "@site";
+import { editUrl, site } from "@site";
+
+/** Every page is also published as Markdown (`scripts/agent-files.ts`). */
+const markdownPath = (slug: string) => `/docs/${slug}.md`;
 
 type Props = { params: Promise<{ slug: string[] }> };
 
@@ -25,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: doc.title,
     description,
-    alternates: { canonical: doc.href },
+    alternates: { canonical: doc.href, types: { "text/markdown": markdownPath(doc.slug) } },
     openGraph: { title: doc.title, description, url: doc.href, type: "article", images: ["/og.png"] },
   };
 }
@@ -43,17 +48,25 @@ export default async function DocPage({ params }: Props) {
     <div className="py-9 lg:py-12 xl:grid xl:grid-cols-[minmax(0,1fr)_13.5rem] xl:gap-14">
       <article className="min-w-0 max-w-[46rem]">
         <header className="mb-9">
-          <nav aria-label="Breadcrumb" className="text-sm text-fg-3">
-            <ol className="flex flex-wrap items-center gap-1.5">
-              <li>
-                <Link href="/docs/" className="transition-colors hover:text-fg">
-                  Docs
-                </Link>
-              </li>
-              <li aria-hidden>/</li>
-              <li>{doc.sectionTitle}</li>
-            </ol>
-          </nav>
+          <div className="flex min-h-8 items-center justify-between gap-4">
+            <nav aria-label="Breadcrumb" className="min-w-0 text-sm text-fg-3">
+              <ol className="flex flex-wrap items-center gap-1.5">
+                <li>
+                  <Link href="/docs/" className="transition-colors hover:text-fg">
+                    Docs
+                  </Link>
+                </li>
+                <li aria-hidden>/</li>
+                <li>{doc.sectionTitle}</li>
+              </ol>
+            </nav>
+            <PageActions
+              title={doc.title}
+              markdownPath={markdownPath(doc.slug)}
+              markdownUrl={`${site.url}${markdownPath(doc.slug)}`}
+            />
+          </div>
+          {site.showPlannedBadges && doc.status === "planned" ? <PlannedBadge className="mt-4" /> : null}
           <h1 className="mt-3 text-[2.25rem] leading-[1.12] font-semibold tracking-[-0.03em] text-balance text-fg sm:text-[2.625rem]">
             {doc.title}
           </h1>

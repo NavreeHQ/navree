@@ -3,7 +3,7 @@ title: "Console commands and the CLI"
 description: "The `navree` CLI (`new`, every `make:*` generator, `dev`), your app's own commands (`serve`, `migrate`, `queue:work`, ...), and writing your own."
 ---
 
-Navree has two command lines, much like Laravel's `laravel` installer and Artisan:
+Navree has two command lines:
 
 - **The `navree` CLI** creates apps, generates code and runs the development loop. It doesn't depend on any Navree crate: everything it knows about the framework is in the code it writes.
 - **Your app's binary** owns the runtime commands: `serve`, `migrate`, `queue:work` and the rest, registered by the modules you use, plus your own. `navree <command>` forwards to it, so you rarely call the binary yourself.
@@ -187,6 +187,20 @@ navree dev --no-web -- --addr 0.0.0.0:8080
 - With a `web/package.json`, it also starts the front end's dev server once, with `pnpm`, `yarn` or `npm` depending on the lockfile.
 
 Two limits: the listening socket isn't kept across restarts, so requests fail for the moment the new server takes to start (and open WebSockets drop and reconnect), and if `navree dev` itself is killed forcibly, the server it started keeps running.
+
+## Ecosystem commands
+
+The tools of the ecosystem add their own commands to the CLI:
+
+| Command | What it does |
+|---|---|
+| `navree new <name> --kit saas` | Creates an app from a [starter kit](/docs/getting-started/starter-kits/) (`saas`, `api` or `micro`). |
+| `navree dock up` | Starts the app's local services with [Dock](/docs/tools/dock/). |
+| `navree harbor:provision`, `navree deploy`, `navree deploy:rollback` | Prepare servers and ship releases with [Harbor](/docs/tools/harbor/). |
+| `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
+| `navree make:resource` | Generates a [Helm](/docs/tools/helm/) admin resource for an entity. |
+| `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |
+| `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
 
 ## Running your app's commands
 

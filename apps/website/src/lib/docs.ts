@@ -20,6 +20,12 @@ export type DocMeta = {
   description: string;
   /** Relative to `content/docs`, for the "Edit this page" link. */
   file: string;
+  /**
+   * `"planned"` when the front-matter says `status: "planned"`: the page
+   * documents something not built yet. Show `PlannedBadge` only while
+   * `site.showPlannedBadges` is true.
+   */
+  status?: "planned";
 };
 
 export type Doc = DocMeta & { source: string };
@@ -49,6 +55,7 @@ export function allDocs(): Doc[] {
         title: String(data.title ?? page),
         description: String(data.description ?? ""),
         file,
+        ...(data.status === "planned" ? { status: "planned" as const } : {}),
         source: content,
       });
     }

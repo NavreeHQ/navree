@@ -32,7 +32,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
       <LogoMark className="size-7 text-accent drop-shadow-[0_0_10px_rgb(61_255_143/0.45)]" />
-      <span className="text-[1.3125rem] font-semibold tracking-[-0.03em] text-fg">navree</span>
+      <span className="font-display text-[1.25rem] font-semibold tracking-[-0.03em] text-fg">navree</span>
     </span>
   );
 }

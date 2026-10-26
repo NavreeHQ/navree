@@ -1,0 +1,201 @@
+---
+title: "Resolving the workspace"
+description: "Find the current workspace from a header, a subdomain, a path prefix or a token claim, and check that the user belongs to it."
+---
+
+Every workspace request names its workspace somewhere: in a header, in the host name, in the URL or inside the access token. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user is a member before your handler runs. Handlers then take a `CurrentWorkspace`.
+
+## The resolvers
+
+A resolver finds an identifier: the workspace's slug (`acme`) or its id (a UUID). An identifier that parses as a UUID is looked up by id, anything else by slug.
+
+| Resolver | Reads | Example |
+|---|---|---|
+| `header` | The header named by `workspace.header` (default `X-Workspace`), trimmed | `X-Workspace: acme` |
+| `path` | The path segment after `workspace.path_prefix` (default `/w`) | `/api/w/acme/deals` |
+| `subdomain` | The first label of the host under `workspace.base_domain` | `acme.app.example.com` |
+| `claim` | The claim `workspace.claim` (default `workspace`) of the request's bearer JWT | `{"sub": "...", "workspace": "acme"}` |
+
+### Header
+
+The header suits API clients and single-page apps that keep the current workspace in client state. An empty value counts as no value.
+
+```http
+GET /api/v1/deals HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+X-Workspace: acme
+```
+
+### Path prefix
+
+With `path_prefix = "/w"`, the segment after the first `w` segment of the path is the identifier. Mount the routes that use it under the prefix, with a path parameter in its place:
+
+```rust title="src/deals/controller.rs"
+#[controller("/w/{workspace}/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    #[get("/")]
+    #[permissions("deals.read")]
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+        // GET /api/v1/w/acme/deals
+        // ...
+    }
+}
+```
+
+A prefix can have several segments (`/teams/t`). The resolver takes the first match in the path.
+
+### Subdomain
+
+Set `workspace.base_domain` to the domain your workspaces live under. The resolver takes the single label in front of it from the `Host` header (or the request URI's authority), ignoring the port and case:
+
+| `base_domain` | Host | Identifier |
+|---|---|---|
+| `app.example.com` | `acme.app.example.com` | `acme` |
+| `app.example.com` | `ACME.app.example.com:8443` | `acme` |
+| `app.example.com` | `app.example.com` | none |
+| `app.example.com` | `eu.acme.app.example.com` | none (two labels) |
+| `localhost:3000` | `acme.localhost:3000` | `acme` |
+
+Without `base_domain` the subdomain resolver finds nothing, which is why it can sit in the default list. Behind a reverse proxy, make sure the proxy passes the original `Host` header through.
+
+### Token claim
+
+The claim resolver reads a claim from the payload of the request's `Authorization: Bearer` JWT. It only runs for an authenticated request: the authentication layer has already verified the token's signature (a token that fails verification never produces a signed-in user), so the resolver reads the payload without verifying it again. A string claim is used as is, a number as its decimal form.
+
+Navree's own access tokens carry a fixed set of claims (`sub`, `iat`, `exp`, `iss`, `aud`, `jti`, `typ`), with no workspace claim. Use this resolver with tokens issued by an identity provider or a custom authentication strategy that adds one. Whatever the resolver finds, the membership check still applies, so a claim can only select a workspace the user belongs to.
+
+## Order
+
+`workspace.resolvers` lists the resolvers to try, in order. The first one that finds an identifier wins, and the rest are not consulted:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["subdomain", "header"]
+base_domain = "app.example.com"
+```
+
+The default is `["header", "path", "subdomain", "claim"]`. From the environment, use a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. A list with an unknown resolver or the same resolver twice fails the boot.
+
+## `CurrentWorkspace`
+
+Take `CurrentWorkspace` in a handler to get the resolved workspace and the user's membership. It dereferences to the workspace row, so `ws.name` and `ws.slug` work directly:
+
+```rust
+async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "workspace": ws.name,
+        "role": ws.role().as_str(),
+    }))
+}
+```
+
+| Method | Returns |
+|---|---|
+| `id()` | The workspace id |
+| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `created_at`, `updated_at`) |
+| `member()` | The user's `Member` row |
+| `role()` | Their `WorkspaceRole` |
+| `permissions()` | Their role's permission strings, sorted |
+| `ability()`, `access()` | Their abilities inside this workspace, as navree-access's `Ability` and `PrincipalAccess` |
+| `can(action, subject)` | A type-level ability check |
+| `has_permission(permission)` | Whether they hold `deals.export` (as `#[permissions]` checks it) |
+| `authorize(permission)` | `Ok(())`, or a 403 |
+| `scope(select)` | `select` limited to this workspace's rows (row isolation) |
+| `isolation()` | The configured `Isolation` |
+| `resolver()` | The resolver that found the workspace (`None` when a path parameter did) |
+
+The workspace is resolved once per request: the guard, `CurrentWorkspace`, `WorkspaceUow` and later extractors share the result.
+
+## The `InWorkspace` guard
+
+Route checks (`#[roles]`, `#[permissions]`, `#[can]`) run before extractors. To evaluate them against the member's role in the workspace, resolve the workspace in a guard first:
+
+```rust
+#[controller("/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    // every route: resolved, membership checked, workspace-scoped abilities
+}
+```
+
+- `InWorkspace::guard()` uses the configured resolvers.
+- `InWorkspace::from_path("workspace")` reads the route's own path parameter instead, whatever the configuration says. The built-in `/api/workspaces/{workspace}/...` routes use it.
+
+A route without the guard can still take `CurrentWorkspace`, but its route-level checks see the user's global roles and permissions, not their workspace role. Put the guard on every route that declares access checks and works inside a workspace.
+
+## Errors
+
+The guard and the extractor answer in Navree's JSON error shape:
+
+| Situation | Status | `message` |
+|---|---|---|
+| No signed-in user | 401 | `Unauthorized` |
+| No resolver found a workspace | 400 | `The request names no workspace.` |
+| No workspace with that slug or id | 404 | `Workspace not found.` |
+| The user is not a member | 403 | `You are not a member of this workspace.` |
+
+```json title="400 Bad Request"
+{ "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request" }
+```
+
+## Jobs and commands
+
+Outside HTTP there is no request to resolve. Load the workspace with the `Workspaces` service and scope a unit of work to it with `enter`:
+
+```rust
+use navree::db::Db;
+use navree::prelude::*;
+use navree::workspace::Workspaces;
+
+pub async fn nightly(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let (workspaces, db) = (ctx.get::<Workspaces>().await?, ctx.get::<Db>().await?);
+    for workspace in workspaces.all().await? {
+        let uow = db.uow(None, None).await;
+        workspaces.enter(&uow, workspace.id).await?;
+        // ... queries in `uow` see only this workspace's rows
+        uow.commit().await?;
+    }
+    Ok(())
+}
+```
+
+`enter` applies what a workspace request applies to its transaction (see [data isolation](/docs/workspaces/isolation/)). `workspaces.resolve("acme")` finds one workspace by slug or id.
+
+## Testing
+
+Send the header, the host or the bearer token with the test client:
+
+```rust
+let client = app.acting_as(principal(ada));
+
+client
+    .get("/api/v1/deals")
+    .header("X-Workspace", "acme")
+    .send()
+    .await
+    .assert_status(200);
+
+client
+    .get("/api/v1/deals")
+    .header("host", "acme.app.test") // with workspace.base_domain = "app.test"
+    .send()
+    .await
+    .assert_status(200);
+
+client
+    .get("/api/v1/deals")
+    .header("X-Workspace", "initech")
+    .send()
+    .await
+    .assert_error(404, "Workspace not found.");
+```
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/members-and-roles/" title="Members and roles">
+    What the resolved membership allows.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control">
+    Route access declarations and guards.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,456 @@
+---
+title: "Microservices"
+description: "Split an app into services that call each other and publish events over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, with the same modules, guards, validation and unit of work as your HTTP routes."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="micro" /> A Navree app starts as one binary and splits into services when it needs to. `navree-micro` carries the messages between them. A service answers **messages** (request-response: "give me deal 42") and reacts to **events** (fire-and-forget facts: "deal 42 was won"), over the transport you choose: NATS, Kafka, RabbitMQ, Redis Streams, MQTT or plain TCP.
+
+A message handler is written the way you write an HTTP route. It lives in a module, gets its dependencies injected, declares who may call it, validates its input with garde and runs in a unit of work that commits when it succeeds. Guards, access rules and the JSON error shape work the same way, so moving a feature from a route into a service changes how it is called, not how it is written.
+
+<Diagram name="microservices" />
+
+What you get:
+
+- **Request-response.** `#[message_pattern("deals.get")]` handlers reply to `ServiceClient::send`, with a deadline that travels with the message.
+- **Events.** `#[event_pattern("deal.won")]` handlers receive what `ServiceClient::emit` publishes, with fan-out to every interested service, retries, dead letters and a transactional outbox.
+- **Six transports, one API.** The transport is configuration: the handlers and the calls stay the same.
+- **Hybrid apps.** One binary serves HTTP and handles messages, or runs as a message consumer only.
+- **Context that follows the work.** The request id, the caller's credentials, the current workspace and the OpenTelemetry trace context travel with every message.
+- **Tests without a broker.** An in-memory transport, and `MicroFake` to stub other services and assert on what you sent and emitted.
+
+gRPC and GraphQL have packages of their own that share the same modules, guards and access rules: see [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/).
+
+## Installation
+
+`navree-micro` is the `micro` feature of the `navree` facade. Turn it on together with the feature of your transport:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats"] }
+```
+
+| Feature | Adds |
+|---|---|
+| `micro` | `MicroModule`, `ServiceClient`, the macros, the TCP and in-memory transports |
+| `micro-nats` | NATS, with JetStream for durable events |
+| `micro-kafka` | Kafka |
+| `micro-rabbitmq` | RabbitMQ (AMQP 0-9-1) |
+| `micro-redis` | Redis Streams |
+| `micro-mqtt` | MQTT 5 |
+
+The `micro` features are not part of the default `full` set, because each one brings a broker client. Every client is pure Rust and uses rustls for TLS, so a service still builds into one binary with no OpenSSL or C toolchain.
+
+With `micro` on, the prelude brings `MicroModule`, `ServiceClient`, `Payload`, the `#[message_handlers]` macro and the `m.message_handlers::<T>()` registration method.
+
+To start a new service from a template, use the `micro` [starter kit](/docs/getting-started/starter-kits/):
+
+```sh
+navree new deals --kit micro
+```
+
+It writes a service with one module, a message handler, an event handler, a test on the in-memory transport and NATS configured for development.
+
+## A first service
+
+This page and the rest of the section use the CRM split into services. `crm-api` keeps serving HTTP to the web app; the deals live in a `deals` service; a `notifications` service mails and notifies owners; an `activities` service keeps the timeline. The payloads they exchange live in a small shared crate:
+
+<FileTree title="The CRM as services">{`
+  Cargo.toml                  # the workspace
+  crates/
+    crm-contracts/ *          # payloads and patterns every service shares
+      src/
+        lib.rs
+        deals.rs
+  services/
+    crm-api/                  # HTTP for the web app; calls the services
+    deals/                    # answers deals.*; emits deal.won and deal.assigned
+    notifications/            # handles deal.won and deal.assigned
+    activities/               # handles deal.won
+`}</FileTree>
+
+<Steps>
+<Step title="Share the contract">
+
+Payloads are plain serde types. Put them in a crate both sides depend on, so a change to a payload is a compile error on both sides rather than a surprise at run time:
+
+```rust title="crates/crm-contracts/src/deals.rs"
+use garde::Validate;
+use navree::events::Event;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// `deals.get`: one deal. Replies with a [`DealView`].
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
+pub struct GetDeal {
+    #[garde(skip)]
+    pub id: Uuid,
+}
+
+/// A deal as other services see it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DealView {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub stage: Stage,
+    pub company_id: Uuid,
+    pub owner_id: Uuid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Qualified,
+    Proposal,
+    Negotiation,
+    Won,
+    Lost,
+}
+
+/// `deal.won`: a deal moved to `won`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub won_by: Uuid,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+```
+
+`DealWon` is an ordinary Navree [event](/docs/digging-deeper/events/): its `NAME` is the pattern it travels under, so the same type works on the in-process bus and between services.
+
+</Step>
+<Step title="Answer messages in the deals service">
+
+A message handler is an `#[injectable]` struct with a `#[message_handlers]` impl block. Each `#[message_pattern]` method answers one pattern:
+
+```rust title="services/deals/src/handlers.rs"
+use crm_contracts::deals::{DealView, GetDeal};
+use crm_core::Deal;
+use navree::prelude::*;
+
+use crate::service::DealService;
+
+#[injectable]
+pub struct DealsHandlers {
+    deals: Arc<DealService>,
+}
+
+#[message_handlers]
+impl DealsHandlers {
+    /// `deals.get`: the deal whose id is in the payload.
+    #[message_pattern("deals.get")]
+    #[can(Read, Deal, from = "id")]
+    async fn get(&self, uow: Uow, deal: Authorized<Deal, Read>) -> Result<DealView> {
+        self.deals.view(&uow, deal.into_inner()).await
+    }
+}
+```
+
+`#[can(Read, Deal, from = "id")]` reads the `id` field of the payload, loads that deal in the handler's unit of work, and refuses with a 404 or a 403 before the handler runs, exactly as it does for a route's `{id}` path parameter.
+
+Register the handlers in the module's `register` hook:
+
+```rust title="services/deals/src/lib.rs"
+#[module(
+    imports = [CrmCoreModule, AccessModule::for_feature::<Deal>()],
+    providers = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<DealsHandlers>();
+    }
+}
+```
+
+</Step>
+<Step title="Start the service">
+
+Add `MicroModule` to the app root, next to the platform modules:
+
+```rust title="services/deals/src/main.rs"
+use crm_core::{CrmCoreModule, platform};
+use deals::DealsModule;
+use navree::prelude::*;
+
+fn main() -> Result<(), BoxError> {
+    platform(Navree::app(), ConfigSources::defaults())
+        .module(MicroModule::from_config())
+        .module(CrmCoreModule)
+        .module(DealsModule)
+        .run()
+}
+```
+
+and name the service and its transport:
+
+```toml title="services/deals/config/app.toml"
+[http]
+addr = "127.0.0.1:8081"     # health checks and metrics
+
+[micro]
+service = "deals"
+transport = "nats"
+url = "nats://127.0.0.1:4222"
+```
+
+</Step>
+<Step title="Call it from the API">
+
+In `crm-api`, inject `ServiceClient` and send the message. The reply type comes from the binding:
+
+```rust title="services/crm-api/src/deals/controller.rs"
+use crm_contracts::deals::{DealView, GetDeal};
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealsController {
+    client: Arc<ServiceClient>,
+}
+
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl DealsController {
+    #[get("/{id}")]
+    async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<DealView>> {
+        let deal: DealView = self.client.send("deals.get", &GetDeal { id }).await?;
+        Ok(Json(deal))
+    }
+}
+```
+
+`crm-api` adds `MicroModule::from_config()` to its root too, with `micro.service = "crm-api"` and the same transport settings.
+
+</Step>
+<Step title="Run it">
+
+`navree dock up` starts NATS (with PostgreSQL and the other development services, see [Dock](/docs/tools/dock/)). Then run each service in its own terminal:
+
+```sh
+navree dock up
+cargo run -p deals -- serve
+cargo run -p crm-api -- serve
+```
+
+</Step>
+</Steps>
+
+A `GET /api/v1/deals/0199…` now goes to `crm-api`, which sends `deals.get` over NATS. The message carries the user's bearer token, the request id and the trace context. The deals service authenticates the token, checks that the user may read that deal, loads it in a unit of work and replies. If the deal doesn't exist, the 404 comes back to `crm-api`, and `?` hands it to the browser unchanged:
+
+```json title="404 Not Found"
+{ "statusCode": 404, "message": "Not Found", "error": "Not Found" }
+```
+
+Every service verifies forwarded tokens with its own `AuthModule`, so they share the signing secret: set the same `APP_AUTH__JWT__SECRET` in each. See [credentials](/docs/microservices/request-response/#credentials-and-access).
+
+## Handlers are module providers
+
+A message goes through the same pipeline as an HTTP request. The transport hands the listener an envelope (a pattern, headers and a payload); Navree turns it into request parts whose headers are the message headers, then:
+
+1. sets the request id from the message's `x-request-id`, and continues the caller's trace;
+2. authenticates the forwarded credentials with the app's `dyn Authenticator`;
+3. runs the handler's guards, then its access check (roles, permissions or `#[can]`);
+4. extracts the handler's arguments: `Payload<T>`, `Valid<Payload<T>>`, `Uow`, `CurrentPrincipal`, `Authorized<E, A>` and the rest;
+5. runs the handler inside a unit of work, which commits when it returns `Ok` and rolls back when it returns an error;
+6. replies (request-response) or acknowledges the message (events).
+
+Side by side:
+
+| | HTTP route | Message handler |
+|---|---|---|
+| Declared with | `#[controller]`, `#[get]`, `#[post]`, ... | `#[message_handlers]`, `#[message_pattern]`, `#[event_pattern]` |
+| Registered with | `controllers = [..]` in `#[module]` | `m.message_handlers::<T>()` |
+| Input | `Json<T>`, `Query<T>`, `Path<T>` | `Payload<T>` |
+| Validation | `Valid<Json<T>>` | `Valid<Payload<T>>` |
+| Access | `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]`, `#[can]` | The same on message patterns; events are facts and take none |
+| Guards | `#[guard(..)]` | `#[guard(..)]` |
+| Unit of work | `Uow`, commits below status 400 | `Uow`, commits when the handler returns `Ok` |
+| Errors | `AppError`, rendered as the JSON error | `AppError`, sent back as an error reply with the same JSON |
+| Time limit | `#[timeout("2s")]`, `http.timeout_secs` | `#[timeout("2s")]`, the caller's deadline |
+
+A handler struct can hold both kinds of pattern, and a module can register any number of handler structs next to its controllers. The services they use are the same providers your routes use: `DealService` doesn't know whether a route or a message called it.
+
+## Hybrid applications
+
+One binary can serve HTTP and handle messages. When `MicroModule` and `HttpModule` are both in the app, `serve` starts the HTTP server and the message listener together, and stops both on Ctrl-C or SIGTERM: the listener stops taking messages, finishes the ones in flight, and the app shuts down. That's how the deals service above answers `deals.get` and serves `/health/ready` from one process.
+
+`micro:listen` runs the listener alone, without binding an HTTP port:
+
+```sh
+cargo run -p notifications -- micro:listen
+```
+
+Use it for services with no HTTP routes, or to scale message consumers separately from the web tier: run `serve` with `micro.listen_with_serve = false` on the web servers and `micro:listen` on the workers, from the same build.
+
+| Command | HTTP | Messages |
+|---|---|---|
+| `serve` (app with `HttpModule` and `MicroModule`) | yes | yes, unless `micro.listen_with_serve = false` |
+| `serve` (app with `HttpModule` only) | yes | no |
+| `micro:listen` | no | yes |
+
+A listener reports to [readiness](/docs/digging-deeper/health-and-metrics/): with `ObserveModule` in the app, `/health/ready` includes a `micro` check that fails while the transport is disconnected, so an orchestrator stops sending traffic to an instance that can't reach the broker.
+
+## Configuration
+
+Add `MicroModule` once, in the app root. It is global: modules register handlers and inject `ServiceClient` without importing it. `from_config()`, and a plain `.module(MicroModule)`, read the `micro` section:
+
+```toml title="config/app.toml"
+[micro]
+service = "deals"                  # this service's name
+transport = "nats"                 # tcp, nats, kafka, rabbitmq, redis or mqtt
+url = "nats://127.0.0.1:4222"
+request_timeout_ms = 5000          # the default deadline of client.send
+concurrency = 64                   # messages one process handles at once
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.service` | `app.name`, else the binary's name | The service's name: its consumer group, its client id and the `navree-service` header of what it sends. |
+| `micro.transport` | none (required) | `tcp`, `nats`, `kafka`, `rabbitmq`, `redis` or `mqtt`. A missing or unknown value fails the boot. |
+| `micro.url` | the transport's local default | Where the broker is (`nats://127.0.0.1:4222`, `amqp://127.0.0.1:5672`, ...). |
+| `micro.codec` | `json` | How payloads are encoded: `json` or `msgpack`. See [serialization](/docs/microservices/transports/#serialization). |
+| `micro.request_timeout_ms` | `5000` | The deadline of a `send` that sets none. |
+| `micro.connect_timeout_ms` | `5000` | How long one connection attempt to the broker may take. |
+| `micro.concurrency` | `64` | Messages one process handles at once, over every pattern. |
+| `micro.listen_with_serve` | `true` | Whether `serve` starts the listener too. |
+| `micro.max_message_bytes` | `1048576` | The largest encoded payload, sent or received. |
+| `micro.forward_auth` | `true` | Forward the current request's `Authorization` header on `send`. |
+| `micro.outbox` | `true` with `DatabaseModule` | Publish events emitted inside a unit of work through the [outbox](/docs/microservices/events/#the-outbox). |
+| `micro.inbox` | `true` with `DatabaseModule` | Skip messages already handled, by message id. See [idempotency](/docs/microservices/events/#idempotency-and-the-inbox). |
+| `micro.inbox_retention_hours` | `72` | How long handled message ids (and `dedupe` replies) are kept. |
+| `micro.outbox_poll_ms` | `1000` | How often the outbox relay looks for events a crashed process left behind. |
+| `micro.auto_setup` | `true` in debug builds | Declare the streams, topics and queues the app needs at boot (`micro:setup` does it on demand). |
+
+Each transport has a section of its own (`micro.nats`, `micro.kafka`, ...), and events have retry and dead-letter settings under `micro.events`; see [transports](/docs/microservices/transports/) and [events](/docs/microservices/events/#retries-and-backoff).
+
+As environment variables: `APP_MICRO__SERVICE=deals`, `APP_MICRO__TRANSPORT=kafka`, `APP_MICRO__URL=nats://nats.internal:4222`. An invalid value fails the boot with a message that names the key.
+
+To configure the module in code, pass a transport to `for_root`, or `MicroOptions` for everything else:
+
+```rust
+use navree::micro::{MicroOptions, Transport};
+
+// The transport alone; every other setting keeps its default.
+Navree::app().module(MicroModule::for_root(Transport::nats("nats://127.0.0.1:4222")))
+
+// Or every option.
+Navree::app().module(MicroModule::for_root(MicroOptions {
+    service: "deals".into(),
+    transport: Transport::nats("nats://127.0.0.1:4222"),
+    request_timeout_ms: 2_000,
+    ..MicroOptions::default()
+}))
+```
+
+`MicroModule` contributes a migration set named `micro` (tables `micro_outbox`, `micro_inbox` and `micro_dead_letters`) when the app has `DatabaseModule`; `migrate` runs it with your other [migrations](/docs/database/migrations/).
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `micro:listen` | Handles messages without serving HTTP, until stopped. |
+| `micro:patterns [--json]` | Lists every message and event pattern: kind, handler, module and access. |
+| `micro:send <pattern> <json>` | Sends a request and prints the reply, for debugging. |
+| `micro:emit <pattern> <json>` | Publishes an event. |
+| `micro:setup` | Declares the streams, topics, exchanges and queues the app's patterns need. Safe to run again. |
+| `micro:failed` | Lists dead-lettered events. |
+| `micro:retry <id\|all>` | Puts dead-lettered events back on their pattern. |
+| `micro:flush` | Deletes every dead-lettered event. |
+
+`micro:patterns` is the message-side twin of `routes`:
+
+```text
+KIND     PATTERN          HANDLER        ACCESS                 MODULE
+message  deals.get        DealsHandlers  can:read Deal from id  DealsModule
+message  deals.move       DealsHandlers  can:move Deal from id  DealsModule
+event    company.renamed  CompanyNames   -                      DealsModule
+
+3 patterns
+```
+
+`company.renamed` is an event the deals service handles to keep the company names it stores next to its deals up to date. Event patterns have no access column: see [why](/docs/microservices/events/#access-and-the-actor).
+
+## Messages, gRPC or GraphQL
+
+All three share your modules, so you can mix them in one app:
+
+- **Messages** (this section) for traffic between your own services, especially events: they go through a broker, so a service can be down for a minute without losing work, and one event reaches every service that cares.
+- **[gRPC](/docs/microservices/grpc/)** for typed request-response APIs other teams or other languages call, with a `.proto` contract, streaming and Connect for browsers.
+- **[GraphQL](/docs/microservices/graphql/)** for front ends that pick the fields they need across many entities.
+
+## From modules to services
+
+Navree's modules already draw the lines between features: a module exports the services others may use and keeps the rest private. Splitting a module into its own service follows those lines:
+
+1. Move the module into its own binary, with `MicroModule` in the root.
+2. Add a `#[message_handlers]` struct whose handlers call the services the module used to export.
+3. In the modules that imported it, replace direct calls (`self.deals.show(&uow, id)`) with `self.client.send("deals.get", &GetDeal { id })`.
+4. Forward the in-process events other modules listened to with `m.forward_event::<DealWon>()`, and turn their listeners into `#[event_pattern]` handlers.
+
+Nothing else changes: the guards, the validation rules, the unit of work and the tests of the module come along. [Microservices](/docs/patterns/microservices/) in the architecture patterns walks through the whole split, and [the modular monolith](/docs/patterns/modular-monolith/) shows how to keep the option open from day one.
+
+## Testing
+
+`MicroFake` gives the app an in-memory transport. Send messages into the app's own handlers, stub the services it calls, and assert on what it sent and emitted:
+
+```rust title="services/deals/tests/get.rs"
+use crm_contracts::deals::{DealView, GetDeal};
+use navree::micro::MicroFake;
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn a_rep_reads_their_deal() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(MicroModule::for_root(micro.transport()))
+        .module(DealsModule)
+        .build()
+        .await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+
+    let deal: DealView = micro
+        .client()
+        .acting_as(principal(rep))
+        .send("deals.get", &GetDeal { id: deal_id })
+        .await
+        .unwrap();
+    assert_eq!(deal.owner_id, rep);
+
+    app.shutdown().await.unwrap();
+}
+```
+
+[Request-response](/docs/microservices/request-response/#testing) and [events](/docs/microservices/events/#testing) cover the fake in full.
+
+<LinkCards>
+  <LinkCard href="/docs/microservices/transports/" title="Transports">
+    NATS, Kafka, RabbitMQ, Redis Streams, MQTT and TCP: settings and delivery guarantees.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/request-response/" title="Request-response">
+    Message patterns, `ServiceClient::send`, deadlines and errors across services.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/events/" title="Events">
+    Event patterns, fan-out, retries, dead letters and the outbox.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/tracing/" title="Distributed tracing">
+    Follow one request through every service with OpenTelemetry.
+  </LinkCard>
+</LinkCards>

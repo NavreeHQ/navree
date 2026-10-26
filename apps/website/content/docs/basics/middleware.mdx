@@ -26,7 +26,7 @@ Every request passes through these layers, outermost first. The [request lifecyc
 | 4 | Timeout | 503 after `http.timeout_secs` | `http.timeout_secs` (30) |
 | 5 | Security headers | `nosniff`, `DENY` framing, `no-referrer`, HSTS and a strict CSP | `http.security_headers` (true) |
 | 6 | Compression | gzip or brotli | `http.compression` (true) |
-| 7 | Error rendering | The NestJS error format, error mappers, 5xx logs | |
+| 7 | Error rendering | The JSON error shape, error mappers, 5xx logs | |
 | 8 | Maintenance mode | 503 while the maintenance file exists | `http.maintenance_file`, `http.maintenance_except` |
 | 9 | Per-IP rate limit | 429 over the limit | `http.per_ip_rate_limit` (600 per minute) |
 | 10 | Body limit | 413 over the limit | `http.body_limit_bytes` (2 MiB) |

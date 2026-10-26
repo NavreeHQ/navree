@@ -38,10 +38,12 @@ export function MobileDocsNav({ nav }: { nav: SidebarNav }) {
       <button
         type="button"
         onClick={open}
-        className="flex h-12 w-full items-center gap-3 text-left text-sm"
+        className="flex h-12 w-full cursor-pointer items-center gap-3 text-left text-sm"
         aria-haspopup="dialog"
       >
-        <MenuIcon className="size-5 shrink-0 text-fg-2" />
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line-2 bg-ink-1">
+          <MenuIcon className="size-4 text-fg-1" />
+        </span>
         <span className="sr-only">Open the documentation menu. Current page: </span>
         <span className="min-w-0 truncate">
           {current ? (
@@ -67,17 +69,17 @@ export function MobileDocsNav({ nav }: { nav: SidebarNav }) {
       >
         <div className="flex h-full flex-col">
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-5">
-            <span className="text-sm font-semibold text-fg">Documentation</span>
+            <span className="font-mono text-eyebrow text-fg-2 uppercase">Documentation</span>
             <button
               type="button"
               onClick={() => dialog.current?.close()}
-              className="-mr-2 inline-flex size-10 items-center justify-center rounded-md text-fg-2 hover:text-fg"
+              className="-mr-2 inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-fg-2 transition-colors hover:bg-ink-2 hover:text-fg"
               aria-label="Close the menu"
             >
               <CloseIcon className="size-5" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6">
+          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
             <Sidebar nav={nav} onNavigate={() => dialog.current?.close()} />
           </div>
         </div>

@@ -5,7 +5,7 @@ description: "The type-keyed container: `#[injectable]` services, singleton, req
 
 ## Introduction
 
-A provider is anything the container can hand out: a service, a repository, a configuration section, a client for another API. Modules register providers, and other providers ask for them by type. Navree builds each provider when it's needed (singletons when the app boots) and passes it its dependencies: this is constructor injection, as in NestJS or Laravel's service container.
+A provider is anything the container can hand out: a service, a repository, a configuration section, a client for another API. Modules register providers, and other providers ask for them by type. Navree builds each provider when it's needed (singletons when the app boots) and passes it its dependencies: this is constructor injection. A provider never looks up a global or builds its own dependencies, so a test can hand it fakes.
 
 The container is keyed by type. Asking for `Arc<DealService>` gives you the `DealService` provider; asking for `Arc<dyn Clock>` gives you whatever the app registered as its `dyn Clock`. A key can also carry a name, so two providers of the same type can coexist. There are no global statics: each booted app has its own container.
 

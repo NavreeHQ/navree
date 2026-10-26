@@ -1,9 +1,9 @@
 ---
 title: "Authentication"
-description: "JWT access tokens, rotating refresh tokens with reuse detection, Passport-style strategies and the `CurrentUser` extractor."
+description: "JWT access tokens, rotating refresh tokens with reuse detection, pluggable strategies and the `CurrentUser` extractor."
 ---
 
-Navree authenticates API requests the way a NestJS app does. A client signs in with an email address and a password and gets two tokens: a short-lived JWT **access token**, which it sends as `Authorization: Bearer` with every request, and an opaque **refresh token**, which it trades for a new pair when the access token expires. `navree-auth` provides the routes, the token handling, Passport-style strategies and a `CurrentUser` extractor. Routes stay denied unless they say who may call them.
+Navree authenticates API requests with tokens. A client signs in with an email address and a password and gets two tokens: a short-lived JWT **access token**, which it sends as `Authorization: Bearer` with every request, and an opaque **refresh token**, which it trades for a new pair when the access token expires. `navree-auth` provides the routes, the token handling, pluggable strategies and a `CurrentUser` extractor. Routes stay denied unless they say who may call them.
 
 ## How it works
 
@@ -98,7 +98,7 @@ The routes are mounted under `{http.api_prefix}{auth.routes_prefix}`, which is `
 | `POST /api/auth/logout` | Signed in | 204 |
 | `GET /api/auth/me` | Signed in | 200: the user |
 
-The account routes (changing the profile and the password, password reset, email verification and two-factor authentication) are described in [Account flows](/docs/security/account-flows/). Every error uses Navree's NestJS-style format (see [Errors](/docs/basics/errors/)).
+The account routes (changing the profile and the password, password reset, email verification and two-factor authentication) are described in [Account flows](/docs/security/account-flows/). Every error uses Navree's JSON error shape (see [Errors](/docs/basics/errors/)).
 
 ### Signing in
 
@@ -325,7 +325,7 @@ Routes are denied by default: a route must declare who may call it. `#[controlle
 
 ### CurrentUser
 
-`CurrentUser` loads the signed-in user, like `@CurrentUser()` in NestJS:
+`CurrentUser` loads the signed-in user from the database, so a handler takes the user as an argument:
 
 ```rust title="src/modules/profile/mod.rs"
 use navree::auth::UserResource;
@@ -436,7 +436,7 @@ The OpenAPI document describes `UserResource` without the fields extensions add,
 
 ## Strategies
 
-Authentication is a chain of Passport-style strategies. `AuthModule` registers navree-http's authenticator, which runs every registered `dyn Strategy` in module dependency order, the built-in `JwtStrategy` (named `jwt`) first. Each strategy answers one of three ways:
+Authentication is a chain of strategies, each one a way of recognising a request's credentials. `AuthModule` registers navree-http's authenticator, which runs every registered `dyn Strategy` in module dependency order, the built-in `JwtStrategy` (named `jwt`) first. Each strategy answers one of three ways:
 
 | Answer | Meaning |
 |---|---|
@@ -617,7 +617,7 @@ Content-Type: application/json
 - The first refusal in each window is written to the audit log as `auth.throttled` (kind `security`), with the email address in its metadata.
 - `auth.login_throttle_per_minute = 0` turns the throttle off.
 
-The counters live in the app's cache when `CacheModule` is in the app, and in a private in-process cache otherwise. The only cache store today is the in-memory one (Redis drivers are on the [roadmap](/docs/prologue/roadmap/)), so with several API instances each counts attempts on its own.
+The counters live in the app's cache when `CacheModule` is in the app, and in a private in-process cache otherwise. The only cache store today is the in-memory one (Redis drivers are on the [roadmap](/docs/prologue/roadmap/#more-drivers)), so with several API instances each counts attempts on its own.
 
 The throttle is only as good as the client address. Behind a reverse proxy or a BFF, list the proxy in `http.trusted_proxies`, or every client shares the proxy's address and one person's wrong passwords lock everyone out of that account. See [Rate limiting](/docs/basics/rate-limiting/).
 
@@ -783,11 +783,18 @@ async fn shows_the_signed_in_users_profile() {
 
 See [HTTP tests](/docs/testing/http-tests/) for the test client.
 
+## Social sign-in and OAuth
+
+Two packages build on `navree-auth` and its users:
+
+- [Social sign-in](/docs/packages/social-sign-in/) lets people sign in with Google, GitHub, Apple, Microsoft and other providers, and links those accounts to Navree users.
+- The [OAuth server](/docs/packages/oauth-server/) issues tokens to third-party apps with OAuth 2.1 and OpenID Connect, with scopes and consent, and gives your users personal access tokens.
+
+For API keys of your own design, [write a strategy](#writing-your-own-strategy).
+
 ## Limits
 
-- **No session login.** `navree-auth` issues tokens only. Cookie sessions with CSRF protection are a separate, optional module ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) that `navree-auth` doesn't use.
-- **No API tokens.** There are no personal access tokens or API keys; [write a strategy](#writing-your-own-strategy) for them.
-- **No passkeys, social login or OAuth2 server.** They are deferred; see the [roadmap](/docs/prologue/roadmap/).
+- **Tokens, not sessions.** `navree-auth` issues tokens only. Cookie sessions with CSRF protection are a separate, optional module ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) that `navree-auth` doesn't use.
 - **Access tokens can't be revoked** before they expire, and they are signed with HS256 only.
 - **Refresh tokens are never pruned** from the database.
 
@@ -796,7 +803,7 @@ See [HTTP tests](/docs/testing/http-tests/) for the test client.
     Registration, password reset, email verification and two-factor authentication.
   </LinkCard>
   <LinkCard href="/docs/security/authorization/" title="Authorization">
-    Roles, permissions and CASL abilities, checked on routes and in SQL.
+    Roles, permissions and abilities, checked on routes and in SQL.
   </LinkCard>
   <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
     The application key, Argon2id and token helpers.

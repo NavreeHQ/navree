@@ -57,7 +57,7 @@ The file is local to each server. When you run several instances, run `down` on 
 
 ## What clients see
 
-Every request, except the [excepted paths](#paths-that-stay-up), gets a `503` in the [NestJS error format](/docs/basics/errors/), with your message:
+Every request, except the [excepted paths](#paths-that-stay-up), gets a `503` [JSON error](/docs/basics/errors/) with your message:
 
 ```http
 HTTP/1.1 503 Service Unavailable
@@ -83,7 +83,7 @@ Paths are matched exactly against the request path, with no prefix, wildcard or 
 
 <Callout type="note" title="No IP allow list, secret or custom page">
 
-Laravel's `down` can let some IP addresses through, set a secret bypass URL, render a page or redirect. Navree's has none of these: the only way through is a path in `http.maintenance_except`.
+`down` has no IP allow list, secret bypass URL, custom page or redirect: the only way through is a path in `http.maintenance_except`.
 
 </Callout>
 

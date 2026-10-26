@@ -102,11 +102,28 @@ The app is complete and working: a root module with every common platform module
 
 | Option | Default | What it does |
 |---|---|---|
+| `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
 | `--ui next` | `--ui none` | Also creates a Next.js front end in `web/`. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. |
 | `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
 
 ```sh
 navree new blog --ui next --navree-path ~/code/navree
+```
+
+### Starting from a kit
+
+A [starter kit](/docs/getting-started/starter-kits/) gives you a production-ready app instead of a blank one. The `saas` kit comes with a Next.js and shadcn/ui front end, sign-in, workspaces, billing, settings and an admin panel; `api` is API-only; `micro` is a microservice:
+
+```sh
+navree new acme --kit saas
+```
+
+## Local services with Dock
+
+A new app runs on SQLite and needs no other services. When yours uses PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS, [Dock](/docs/tools/dock/) runs them in containers (Docker or Podman). `navree dock:add <service>` adds a service to the app's `dock.toml`, and one command starts them all:
+
+```sh
+navree dock up
 ```
 
 ## Running the application
@@ -176,6 +193,9 @@ cargo run --quiet -- migrate
 <LinkCards>
   <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
     Build a small CRUD API with authentication, access rules and tests.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/" title="Starter kits">
+    Production-ready SaaS, API and microservice apps from one command.
   </LinkCard>
   <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
     `.env`, `config/app.toml` and `APP_*` variables.

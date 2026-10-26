@@ -1,0 +1,376 @@
+---
+title: "Workspaces"
+description: "Multi-tenancy at the workspace level, built in: workspaces, members, roles, invitations and data isolation."
+---
+
+A workspace is the unit your customers sign up as: a team, a company, an organization. Each workspace has members with roles, invites people by email and keeps its data apart from every other workspace's. `WorkspaceModule` gives every Navree app this structure out of the box: the tables, the services, the request extractor that finds the current workspace and checks membership, roles that feed [access control](/docs/security/authorization/), and three ways to isolate data.
+
+<Diagram name="multi-tenancy" />
+
+## Setting up
+
+<Badge feature="workspace" /> The `workspace` feature of the `navree` facade brings the `navree-workspace` crate. It is part of the default `full` feature, so a new app has it already. Add `WorkspaceModule` to your app root:
+
+```rust title="src/main.rs" {14}
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(EventsModule::for_root())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(WorkspaceModule::from_config())
+        .module(DealsModule)
+}
+```
+
+`WorkspaceModule` is global. It reads the `workspace` configuration section (`from_config()` and the plain `WorkspaceModule` both do; `WorkspaceModule::for_root(WorkspaceConfig { .. })` takes the options in code) and needs `DatabaseModule`. The rest is optional, and each piece turns on a part of the module:
+
+| Module | What it adds |
+|---|---|
+| `AuthModule` (or any authenticator) | Signed-in users. Every workspace route needs one. |
+| `AccessModule` | The route checks of the built-in routes, and `#[roles]`, `#[permissions]` and `#[can]` on your workspace routes. Required while `workspace.routes` is on. |
+| `EventsModule` | The [events](#events) the module emits. |
+| `MailModule` (with `ViewModule`) | The invitation mail. Without it, invitations are created but not mailed. |
+
+Users are identified by the id of the request's principal, so the module works with navree-auth's `users` table or with your own user store.
+
+## The tables
+
+The migration set `workspace` runs after `auth` and creates three tables:
+
+| Table | Columns |
+|---|---|
+| `workspaces` | `id`, `name`, `slug` (unique), `owner_id`, `created_at`, `updated_at` |
+| `workspace_members` | `id`, `workspace_id` (cascades on delete), `user_id`, `role`, `created_at`, `updated_at`; one row per workspace and user |
+| `workspace_invitations` | `id`, `workspace_id` (cascades on delete), `email`, `role`, `token_hash` (unique), `invited_by`, `expires_at`, `accepted_at`, `accepted_by`, `created_at` |
+
+User ids are not foreign keys. Invitation tokens are stored as SHA-256 digests. Tables of your own that reference `workspaces` run after the set: `MigrationSet::new("deals").after(["workspace"])`.
+
+## A first workspace route
+
+Here is a deals module whose routes work inside the current workspace. The `InWorkspace` guard finds the workspace, checks that the signed-in user belongs to it and evaluates the route's permissions against their role there:
+
+```rust title="src/deals/controller.rs"
+use navree::db::paginate;
+use navree::prelude::*;
+use sea_orm::ActiveValue::Set;
+use serde::Deserialize;
+use uuid::Uuid;
+
+use super::entity::{Deal, deal};
+
+#[derive(Deserialize)]
+pub struct NewDeal {
+    title: String,
+    amount_cents: i64,
+}
+
+#[injectable]
+pub struct DealsController;
+
+#[controller("/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    #[get("/")]
+    #[permissions("deals.read")]
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+        let select = WorkspaceRepo::<Deal>::select(ws.id());
+        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    }
+
+    #[post("/")]
+    #[permissions("deals.create")]
+    async fn store(
+        &self,
+        ws: CurrentWorkspace,
+        uow: Uow,
+        Json(input): Json<NewDeal>,
+    ) -> Result<Created<deal::Model>> {
+        let deal = WorkspaceRepo::<Deal>::insert(
+            &uow,
+            ws.id(),
+            deal::ActiveModel {
+                id: Set(Uuid::now_v7()),
+                owner_id: Set(ws.member().user_id),
+                title: Set(input.title),
+                amount_cents: Set(input.amount_cents),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    }
+}
+```
+
+The `deals` table has a `workspace_id` column, and the entity says so in one line:
+
+```rust title="src/deals/entity.rs"
+impl Subject for deal::Entity {
+    const SUBJECT: &'static str = "Deal";
+    const PERMISSION_PREFIX: &'static str = "deals";
+}
+
+/// Rows carry a `workspace_id` column.
+impl WorkspaceScoped for deal::Entity {}
+
+pub type Deal = deal::Entity;
+```
+
+`WorkspaceRepo` scopes every read to the workspace and sets the column on insert. Give members the permission in configuration:
+
+```toml title="config/app.toml"
+[workspace.roles.member]
+permissions = ["deals.*"]
+```
+
+A request names its workspace with the `X-Workspace` header (or a subdomain, a path prefix or a token claim, see [resolving the workspace](/docs/workspaces/resolution/)):
+
+```http
+POST /api/v1/deals HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+X-Workspace: acme
+Content-Type: application/json
+
+{"title": "Big one", "amount_cents": 500000}
+```
+
+## How a workspace request runs
+
+The diagram above is the path of every workspace request. Authentication runs first, so a guest gets a 401. An identifier that is a UUID is looked up by id, anything else by slug. Once the membership is confirmed, the member's abilities inside the workspace are built from their role (see [members and roles](/docs/workspaces/members-and-roles/)) and the isolation settings are applied to the request's unit of work (see [data isolation](/docs/workspaces/isolation/)). Then the route's `#[roles]`, `#[permissions]` and `#[can]` checks run, then the handler.
+
+Errors use Navree's JSON shape:
+
+```json title="403 Forbidden"
+{ "statusCode": 403, "message": "You are not a member of this workspace.", "error": "Forbidden" }
+```
+
+The guard (`InWorkspace::guard()`) resolves the workspace and checks the membership before the route's access checks. The `CurrentWorkspace` extractor does the same on its own when a route has no guard, but extractors run after the route's checks, so use the guard on any route that declares `#[roles]`, `#[permissions]` or `#[can]`.
+
+## Configuration
+
+Every key of the `workspace` section is optional:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["header", "path", "subdomain", "claim"]  # tried in order
+header = "X-Workspace"
+# base_domain = "app.example.com"   # acme.app.example.com names `acme`
+path_prefix = "/w"                  # /api/w/acme/... names `acme`
+claim = "workspace"                 # a claim of the bearer JWT
+isolation = "row"                   # row, schema or database
+routes = true                       # /api/workspaces and /api/invitations/accept
+users_table = "users"               # names and emails of members; "" for none
+schema_prefix = "workspace_"        # schema isolation
+# database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"  # database isolation
+
+[workspace.invitations]
+ttl_secs = 604800                   # seven days
+# url = "https://app.example.com/invitations/accept"
+# mail_template = "mail/workspace-invitation"
+require_matching_email = true
+
+[workspace.roles.member]
+permissions = ["deals.*"]
+```
+
+Environment variables follow the usual mapping (`APP_WORKSPACE__HEADER=X-Team`). Lists also accept a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. Invalid values fail the boot and name the key.
+
+## The services
+
+`WorkspaceModule` exports three services. Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through `Repo` so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
+
+| Service | Methods |
+|---|---|
+| `Workspaces` | `create(&uow, owner, NewWorkspace)`, `rename`, `for_user(user)`, `find`, `find_by_slug`, `resolve(slug_or_id)`, `membership`, `transfer_ownership`, `delete`, `enter`, `migrate`, `all` |
+| `Members` | `list(workspace)`, `find`, `add(&uow, workspace, user, role)`, `change_role`, `remove` |
+| `Invitations` | `invite(&uow, workspace, email, role, invited_by)`, `accept(&uow, token, user)`, `find_by_token`, `pending`, `revoke`, `prune_expired` |
+
+Creating a workspace makes its creator the owner:
+
+```rust
+let workspace = workspaces
+    .create(&uow, user_id, NewWorkspace::named("Acme Inc."))
+    .await?;
+assert_eq!(workspace.slug, "acme-inc");
+```
+
+The slug comes from the name (`Acme Inc.` becomes `acme-inc`, then `acme-inc-2` when that is taken), or from `NewWorkspace::named("Acme").slug("acme")`. A slug is lower-case letters, digits and single hyphens, at most 63 characters, and never a UUID. A taken slug is a 400 with `errors.slug = ["slug has already been taken"]`; renaming keeps the slug.
+
+## The routes
+
+Unless `workspace.routes` is `false`, the module mounts these routes under the API prefix. `{workspace}` is a slug or an id, and every route needs a signed-in user:
+
+| Route | Who |
+|---|---|
+| `GET /api/workspaces` | The caller's workspaces, each with their role |
+| `POST /api/workspaces` `{name, slug?}` | Anyone; 201, the caller becomes the owner |
+| `GET /api/workspaces/{workspace}` | Members |
+| `PATCH /api/workspaces/{workspace}` `{name}` | `workspace.update` |
+| `DELETE /api/workspaces/{workspace}` | `workspace.delete` |
+| `POST /api/workspaces/{workspace}/transfer` `{user_id}` | `workspace.transfer` |
+| `POST /api/workspaces/{workspace}/leave` | Members; 409 for the owner |
+| `GET`, `POST /api/workspaces/{workspace}/members` | `workspace.members.read`, `workspace.members.create` |
+| `PATCH`, `DELETE /api/workspaces/{workspace}/members/{user}` | `workspace.members.update`, `workspace.members.delete` |
+| `GET`, `POST /api/workspaces/{workspace}/invitations` | `workspace.invitations.read`, `workspace.invitations.create` |
+| `DELETE /api/workspaces/{workspace}/invitations/{invitation}` | `workspace.invitations.delete` |
+| `POST /api/invitations/accept` `{token}` | The invited user |
+
+A workspace comes back as:
+
+```json
+{
+  "__type": "Workspace",
+  "id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
+  "name": "Acme Inc.",
+  "slug": "acme-inc",
+  "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "role": "owner",
+  "created_at": "2026-10-26T09:00:00Z",
+  "updated_at": "2026-10-26T09:00:00Z"
+}
+```
+
+Lists are `{"data": [...]}`. The routes are in the OpenAPI document under the `Workspaces` tag. Set `workspace.routes = false` to write your own with the services.
+
+## Events
+
+With `EventsModule` in the app, every change emits an event once its unit of work commits; a rolled-back change emits nothing. They live in `navree::workspace::events`:
+
+| Event | Name | Payload |
+|---|---|---|
+| `WorkspaceCreated` | `workspace.created` | `workspace_id`, `name`, `slug`, `owner_id` |
+| `WorkspaceDeleted` | `workspace.deleted` | `workspace_id`, `slug` |
+| `OwnershipTransferred` | `workspace.ownership_transferred` | `workspace_id`, `from`, `to` |
+| `MemberAdded` | `workspace.member_added` | `workspace_id`, `user_id`, `role` |
+| `MemberRoleChanged` | `workspace.member_role_changed` | `workspace_id`, `user_id`, `from`, `to` |
+| `MemberRemoved` | `workspace.member_removed` | `workspace_id`, `user_id`, `role` |
+| `InvitationSent` | `workspace.invitation_sent` | `workspace_id`, `invitation_id`, `email`, `role`, `invited_by`, `expires_at` |
+| `InvitationAccepted` | `workspace.invitation_accepted` | `workspace_id`, `invitation_id`, `user_id`, `role` |
+
+A listener that seeds every new workspace:
+
+```rust title="src/onboarding.rs"
+use navree::events::{Listener, ModuleBuilderEventsExt};
+use navree::prelude::*;
+use navree::workspace::events::{InvitationAccepted, WorkspaceCreated};
+use navree::{BoxFuture, KernelError};
+
+pub struct Onboarding;
+
+impl Injectable for Onboarding {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Onboarding) })
+    }
+}
+
+impl Listener<WorkspaceCreated> for Onboarding {
+    fn handle<'a>(
+        &'a self,
+        event: &'a WorkspaceCreated,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            println!("seeding {}", event.slug);
+            Ok(())
+        })
+    }
+
+    // Runs on a queue worker (inline when the app has no queue).
+    fn queued(&self) -> bool {
+        true
+    }
+}
+
+#[module(register = Self::wire)]
+pub struct OnboardingModule;
+
+impl OnboardingModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<WorkspaceCreated, Onboarding>();
+    }
+}
+```
+
+## Testing
+
+Act as a user with `acting_as` and name the workspace with the header. `app` is the root function from `src/main.rs` above:
+
+```rust title="src/tests.rs"
+use navree::auth::AuthService;
+use navree::prelude::*;
+use navree::testing::{TestApp, TestAuthenticator, principal, temp_sqlite_url};
+use serde_json::json;
+
+use crate::app;
+
+#[tokio::test]
+async fn members_create_deals_in_their_workspace() {
+    let (url, _db) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("app.key", navree::crypto::generate_key())
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1)
+        .set("mail.transport", "array")
+        .set("workspace.roles.member.permissions", json!(["deals.*"]));
+    let app = TestApp::from_builder(TestAuthenticator::install(app(sources))).await;
+    let auth = app.get::<AuthService>().await;
+    let ada = auth.create_user("Ada", "ada@example.com", "secret-password").await.unwrap();
+    let grace = auth.create_user("Grace", "grace@example.com", "secret-password").await.unwrap();
+
+    let owner = app.acting_as(principal(ada.id));
+    owner
+        .post("/api/workspaces")
+        .json(&json!({ "name": "Acme" }))
+        .send()
+        .await
+        .assert_status(201);
+    owner
+        .post("/api/workspaces/acme/members")
+        .json(&json!({ "user_id": grace.id, "role": "member" }))
+        .send()
+        .await
+        .assert_status(201);
+
+    let member = app.acting_as(principal(grace.id));
+    member
+        .post("/api/v1/deals")
+        .header("X-Workspace", "acme")
+        .json(&json!({ "title": "Big one", "amount_cents": 500_000 }))
+        .send()
+        .await
+        .assert_status(201);
+    app.acting_as(principal(uuid::Uuid::now_v7()))
+        .get("/api/v1/deals")
+        .header("X-Workspace", "acme")
+        .send()
+        .await
+        .assert_error(403, "You are not a member of this workspace.");
+}
+```
+
+Each test gets its own SQLite file, so workspaces never leak between tests.
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/resolution/" title="Resolving the workspace">
+    Headers, subdomains, path prefixes and token claims, in the order you choose.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/members-and-roles/" title="Members and roles">
+    Built-in and app-defined roles, and permissions inside a workspace.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/invitations/" title="Invitations">
+    Invite by email, accept by token, revoke and expire.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
+    One table, one schema or one database per workspace.
+  </LinkCard>
+</LinkCards>

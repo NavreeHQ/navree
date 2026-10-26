@@ -1,0 +1,219 @@
+---
+title: "Agent skills"
+description: "Skills that teach coding agents how to build with Navree, one per common task: what each covers, installing them with `navree skills:install` or `npx skills add`, how agents use them, and writing skills for your own app."
+---
+
+## Introduction
+
+A coding agent knows Rust. It doesn't know that a Navree route without an access attribute won't compile, that services take the request's `&Uow`, or that `navree make:module` registers the module for you. **Agent skills** teach it, one task at a time.
+
+A skill is a folder with a `SKILL.md` file: YAML front-matter with a `name` and a `description` that says when to use it, then the steps, the commands, a code template, the checks to run and the mistakes to avoid for one task. Agents that support skills, Claude Code and a growing list of others, read every skill's description when a session starts and load a skill's body only when the task matches. A project can carry every Navree skill for the cost of a few lines each.
+
+The skills live in the [`skills/`](https://github.com/NavreeHQ/navree/tree/main/skills) directory of the Navree repository. Every API a skill names exists in the framework, and its code templates compile against the current `navree` crate.
+
+## The skills
+
+Start with **`navree`**. It explains what a Navree app is, how one is laid out, the rules every change follows, and which skill to load for each task, so an agent that loads it first finds the rest.
+
+| Skill | Use it to |
+|---|---|
+| `navree` | Understand a Navree app, its conventions and commands, and pick the right skill |
+| `navree-new-app` | Install the CLI, create an app with `navree new`, set `APP_KEY` and run `navree dev` |
+| `navree-modules-and-di` | Define modules and providers, wire dependencies, use `for_root` / `from_config` / `for_feature`, and fix boot-time graph errors |
+| `navree-controllers-and-routing` | Add controllers, routes, extractors, responses and access attributes, and debug 401, 403, 404, 405 or 415 on a route |
+| `navree-validation` | Validate bodies and query strings with garde DTOs, `unique` and `exists` rules, custom rules and messages |
+| `navree-errors-and-responses` | Return errors in Navree's JSON shape, map your error types to statuses, and shape responses, headers and downloads |
+| `navree-database` | Entities, `Repo`, the unit of work, transactions in jobs, migrations, seeders, factories and pagination |
+| `navree-auth` | Sign-in with JWT and rotating refresh tokens, the current user, account flows, two-factor and API keys |
+| `navree-access-control` | Roles, permissions, ability rules, record checks with `Authorized` and per-user list filters with `Accessible` |
+| `navree-workspaces` | Workspaces, members, roles and invitations, `CurrentWorkspace` and isolation by row, schema or database |
+| `navree-queues-and-scheduling` | Jobs, workers, retries and failed jobs, and cron-style schedules |
+| `navree-events-and-broadcasting` | Events and listeners, and live updates over the Pusher-protocol WebSocket server |
+| `navree-mail-and-notifications` | Mail with templates and transports, and notifications over the database, mail and broadcast channels |
+| `navree-storage` | Disks, uploads checked by content, downloads and signed temporary URLs |
+| `navree-cache-and-http-client` | The cache and locks, and outgoing HTTP with retries, the SSRF guard and `HttpClient::fake()` |
+| `navree-openapi` | The OpenAPI 3.1 document generated from your routes, `#[api(..)]` on routes, schemas and the docs UI |
+| `navree-config` | `.env`, `config/app.toml` and `APP_*` variables, the application key, and typed configuration sections |
+| `navree-testing` | `TestApp`, HTTP and database tests, acting as a user, the assertions and the fakes |
+| `navree-cli-generators` | The `navree` CLI, every `make:*` generator, the marker comments and console commands |
+| `navree-deployment` | Release builds, production settings, the processes to run, systemd units, migrations and health checks |
+| `navree-security-checklist` | A review before release: routes, abilities, input, rate limits, tokens, CORS, CSRF, secrets and the audit log |
+
+The [`skills/README.md`](https://github.com/NavreeHQ/navree/blob/main/skills/README.md) in the repository lists the same set. It grows with the framework, and `navree skills:install` always installs the skills of your Navree version.
+
+## What a skill looks like
+
+Every skill follows the same shape. This is the beginning of `navree-validation`:
+
+```text title="skills/navree-validation/SKILL.md"
+---
+name: navree-validation
+description: Validates request input in Navree with garde DTOs and the `Valid` and `ValidAsync` extractors. Covers DTO rules, Navree's extra rules (`one_of`, `uuid`, `date_ymd`, `confirmed`), required fields, nested data, database rules (`AsyncRule::unique`, `exists`), custom rules and messages, manual `ValidationErrors`, the 400 response shape and tests. Use when writing a request body or query DTO, adding or customizing validation rules or messages, checking uniqueness against the database, or when a test expects a 400 with `errors`.
+---
+
+# Validation
+
+Navree validates input before the handler runs. Describe the rules on a DTO
+with garde, take `Valid<Json<T>>` (or `Valid<Query<T>>`, `Valid<Form<T>>`)
+in the handler, and invalid input becomes a 400 with one message per broken
+rule. The DTO lives in the module's `dto.rs`.
+
+## Steps
+...
+```
+
+- **The description** is what the agent sees before it loads the skill. It says what the skill covers and, after "Use when", the situations and the words that should bring it in: "adding a role", "a 403 I don't expect", "database is locked".
+- **The body** gives the steps in order, then a template that compiles, the response or output to expect, the options, a test, the common mistakes and links to these docs.
+- **References.** Larger skills keep detail in a `references/` folder next to `SKILL.md` (`navree-database/references/migrations.md`), which the agent reads only when it needs that part.
+
+<FileTree title="skills/">{`
+  README.md
+  navree/
+    SKILL.md            # what Navree is; which skill for which task
+    references/
+      crates.md         # every facade module, crate and config section
+  navree-database/
+    SKILL.md
+    references/
+      migrations.md
+      seeding-and-pagination.md
+  navree-validation/
+    SKILL.md
+  ...
+`}</FileTree>
+
+## Installing skills
+
+Install the skills into your project, so every teammate's agent has them, and commit them with your code.
+
+<Tabs>
+<Tab label="navree CLI">
+
+From your app's directory:
+
+```sh
+navree skills:install
+```
+
+It copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read). Run it again after you upgrade Navree to get the skills of the new version; it replaces the `navree` and `navree-*` folders and leaves your own skills alone.
+
+</Tab>
+<Tab label="skills CLI">
+
+The `skills` CLI installs skills from a GitHub repository for the agents it finds in your project:
+
+```sh
+npx skills add NavreeHQ/navree
+```
+
+</Tab>
+<Tab label="By hand">
+
+Copy the folders of [`skills/`](https://github.com/NavreeHQ/navree/tree/main/skills) into your project's `.claude/skills/` for Claude Code, or `.agents/skills/` for other agents. You can copy only the skills you need, but keep `navree`: it indexes the rest.
+
+</Tab>
+</Tabs>
+
+<FileTree title="An app with the skills installed">{`
+  .agents/
+    skills/
+      navree/
+      navree-database/
+      ...
+  .claude/
+    skills/ *
+      navree/
+        SKILL.md
+      navree-database/
+        SKILL.md
+      ...
+  AGENTS.md
+  CLAUDE.md
+  Cargo.toml
+  src/
+`}</FileTree>
+
+The site serves the skills too, for agents that fetch them over HTTP: `https://navree.com/skills/index.json` lists every skill with its name and description, and each one is at `https://navree.com/skills/<name>/SKILL.md`.
+
+## How agents use skills
+
+You don't call a skill; the agent does, when your request matches its description. Ask in your own words:
+
+```text
+Add an endpoint that lets a manager reassign a deal to another rep, and test it.
+```
+
+An agent with the Navree skills reads `navree` (a Navree app, so the umbrella applies), then `navree-controllers-and-routing` for the route and `navree-access-control` for "a manager", and follows their steps: generate, write the route with `#[can(Manage, Deal)]`, take the input through `Valid<Json<T>>`, write the test with `TestApp`, then run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test`.
+
+To bring a skill in yourself, name it: "Use the navree-database skill to add a `lost_reason` column". In Claude Code, you can check which skills are installed by asking "Which skills do you have?".
+
+Skills work best with the other two pieces of Navree's agent support:
+
+- **`AGENTS.md`**, written by `navree new`, holds the conventions of your app and is read at the start of every session. Skills hold the how-to of each task and are read on demand. See [AGENTS.md and CLAUDE.md](/docs/ai/docs-for-agents/#agentsmd-and-claudemd).
+- **[Navigator](/docs/ai/navigator/)** lets the agent check its work against the running app: that the new route is in the route table, that the provider resolves, that the migration ran.
+
+## Writing your own skills
+
+The Navree skills know the framework; they don't know your app. Write skills for the tasks your team repeats, in the same folders, next to the Navree ones. A CRM team adds a pipeline stage now and then, and it touches four places:
+
+```text title=".claude/skills/crm-pipeline-stages/SKILL.md"
+---
+name: crm-pipeline-stages
+description: Adds, renames or reorders a deal stage in the CRM pipeline. Covers the Stage enum, win probabilities, board labels, closing rules for won and lost, the abilities that depend on stages, and the tests. Use when the user asks for a new pipeline stage, a stage rename, a different stage order, or a change to a stage's probability.
+---
+
+# Pipeline stages
+
+Stages are the `Stage` enum in `crates/crm-core/src/enums.rs`, stored as a
+string (at most 16 characters) in `deals.stage`. Board order is the enum's
+order. Paths are relative to `apps/crm-api/`.
+
+## Steps
+
+1. Add the variant to `Stage` inside `string_enum!`, in board order, with its
+   wire name (`Demo => "demo"`). Keep names to 16 characters: the column is
+   `String(StringLen::N(16))`, so no migration is needed.
+2. Give it a probability in `Stage::probability` and a column title in
+   `Stage::label`.
+3. If it closes a deal, add it to `Stage::is_closed` and to the closing
+   rules in `crates/crm-deals/src/stages.rs`.
+4. Check `crates/crm-core/src/abilities.rs`: the rules that forbid reps
+   from moving or deleting closed deals match on `won` and `lost`.
+5. Add the stage to the web app's board columns in `../crm-web`.
+6. Test: a deal created in the new stage, a move into it and out of it, and
+   the board response listing it in order (`crates/crm-deals/tests`).
+
+## Checks
+
+cargo test -p crm-deals -p crm-core
+cargo clippy --all-targets -- -D warnings
+
+## Common mistakes
+
+- Reordering variants changes the board order for everyone; say so in the
+  change description.
+- Renaming a wire name breaks existing rows: add a migration that updates
+  `deals.stage`, never rename in place.
+```
+
+What makes a skill work:
+
+- **One task per skill.** "Pipeline stages", not "Everything about deals". Small skills load only when needed and stay accurate.
+- **A description with the user's words.** The agent matches requests against it. List the situations ("a new pipeline stage", "a stage rename") and the symptoms ("deals disappear from the board").
+- **Steps in order, with paths.** Name the files, types and commands as they are in your code, and grep for each before you write it down. A skill that names an API that doesn't exist teaches the agent to invent.
+- **A way to check.** End with the commands that prove the change works.
+- **Mistakes you have seen.** The section agents learn most from is the one that lists what went wrong last time.
+
+Keep project skills in version control and review them like code. When a convention changes, change the skill in the same pull request.
+
+<LinkCards>
+  <LinkCard href="/docs/ai/navigator/" title="Navigator">
+    The MCP server that shows your agent the running app.
+  </LinkCard>
+  <LinkCard href="/docs/ai/docs-for-agents/" title="Docs for agents">
+    `llms.txt`, Markdown pages, AGENTS.md and CLAUDE.md.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="The CLI">
+    The generators the skills tell agents to use.
+  </LinkCard>
+</LinkCards>
