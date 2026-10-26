@@ -403,7 +403,7 @@ impl Conversations {
                     Role::User => "user".to_owned(),
                     Role::Assistant => "assistant".to_owned(),
                 }),
-                content: Set(serde_json::to_string(&message.parts).unwrap_or_else(|_| "[]".to_owned())),
+                content: Set(serde_json::to_string(&stored_parts(message)).unwrap_or_else(|_| "[]".to_owned())),
                 created_at: Set(Utc::now()),
             };
             row.insert(conn).await.map_err(db_error)?;
@@ -430,6 +430,20 @@ impl Conversations {
     }
 }
 
+/// The parts of `message` that are stored: everything but the provider's
+/// reasoning blocks. A provider binds those to the exact request that
+/// produced them (system prompt, tools, earlier messages), which a later
+/// run changes (a new summary, a new date, other tools), so a later run
+/// starts without them, as if they had been removed from the front.
+fn stored_parts(message: &Message) -> Vec<Part> {
+    message
+        .parts
+        .iter()
+        .filter(|part| !matches!(part, Part::Reasoning { .. }))
+        .cloned()
+        .collect()
+}
+
 /// The pending call of a conversation row.
 pub(crate) fn pending_of(row: &conversation::Model) -> Option<Pending> {
     row.pending
@@ -444,6 +458,21 @@ fn role_of(role: &str) -> Role {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reasoning_is_not_stored() {
+        let message = Message::new(
+            Role::Assistant,
+            vec![
+                Part::Reasoning {
+                    provider: "anthropic".into(),
+                    data: serde_json::json!({ "type": "thinking", "thinking": "", "signature": "sig" }),
+                },
+                Part::Text { text: "Looking.".into() },
+            ],
+        );
+        assert_eq!(stored_parts(&message), [Part::Text { text: "Looking.".into() }]);
+    }
 
     #[test]
     fn titles_are_the_opening_words() {

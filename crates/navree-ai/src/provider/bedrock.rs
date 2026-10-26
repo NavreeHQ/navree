@@ -17,7 +17,7 @@ use super::sigv4::{self, Credentials, Signable};
 use super::wire;
 use super::{
     Capabilities, ChatRequest, ChatResponse, ChunkStream, Driver, EmbedRequest, EmbedResponse,
-    StreamChunk,
+    StreamChunk, ToolChoice,
 };
 use crate::error::ProviderError;
 use crate::message::{AttachmentKind, Message, Part, Role, ToolCall};
@@ -297,12 +297,25 @@ pub(crate) fn body(request: &ChatRequest) -> Value {
                 })
             })
             .collect();
-        // Converse has no "none" choice; the last agent step says so in the
-        // system prompt instead.
+        // Tool blocks in the messages need the tool config.
         body["toolConfig"] = json!({ "tools": tools, "toolChoice": { "auto": {} } });
+        // Converse has no "none" choice: a note after the last message asks
+        // for an answer without tools (the earlier messages and the system
+        // prompt stay as they were).
+        if request.tool_choice == ToolChoice::None
+            && let Some(last) = body["messages"].as_array_mut().and_then(|m| m.last_mut())
+            && last["role"] == "user"
+            && let Some(content) = last["content"].as_array_mut()
+        {
+            content.push(json!({ "text": NO_TOOLS_NOTE }));
+        }
     }
     body
 }
+
+/// What the last step of an agent run asks on Converse.
+const NO_TOOLS_NOTE: &str = "You have reached the step limit of this run: answer now, without \
+                             calling tools.";
 
 fn messages(messages: &[Message]) -> Vec<Value> {
     let mut out: Vec<(Role, Vec<Value>)> = Vec::new();
@@ -574,7 +587,7 @@ mod tests {
     use super::*;
     use crate::message::{Attachment, ToolResult};
     use crate::provider::eventstream::encode;
-    use crate::provider::{ToolChoice, ToolDefinition};
+    use crate::provider::ToolDefinition;
 
     #[test]
     fn the_body_has_the_converse_shape() {
@@ -632,6 +645,23 @@ mod tests {
         assert_eq!(body["messages"][1]["content"][0]["toolUse"]["toolUseId"], "t1");
         assert_eq!(body["messages"][2]["content"][0]["toolResult"]["status"], "error");
         assert_eq!(body["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["type"], "object");
+        assert_eq!(body["messages"][2]["content"].as_array().unwrap().len(), 1);
+
+        // Converse has no "none" tool choice: the request asks for an answer
+        // without tools in a note after the last message, and the system
+        // prompt and earlier messages stay as they were.
+        let mut last_step = request.clone();
+        last_step.tool_choice = ToolChoice::None;
+        let body_none = super::body(&last_step);
+        assert_eq!(body_none["system"], body["system"]);
+        assert_eq!(
+            body_none["messages"].as_array().unwrap()[..2],
+            body["messages"].as_array().unwrap()[..2]
+        );
+        let tail = &body_none["messages"][2]["content"];
+        assert_eq!(tail[0], body["messages"][2]["content"][0]);
+        assert!(tail[1]["text"].as_str().unwrap().contains("without calling tools"), "{tail}");
+        assert!(body_none.get("toolConfig").is_some(), "tool blocks need the tool config");
     }
 
     #[test]
