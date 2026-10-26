@@ -1,7 +1,6 @@
 ---
 title: "Agents and tools"
 description: "Agents that call your services through typed `#[tool]` methods, under the signed-in user's permissions, with conversation memory, approvals, streaming, queued runs and `AiFake` tests."
-status: "planned"
 ---
 
 ## Introduction
@@ -88,9 +87,9 @@ impl Agent for DealsAssistant {
 | `fn options(&self)` | no | The [model, step limit and memory](#agent-options). |
 | `#[tool]` methods | no | What the agent can do. |
 
-`#[agent]` goes on the `impl Agent for ...` block. It takes the `#[tool]` methods out of the trait impl, generates their schemas and the dispatch code, and leaves the rest as a normal trait implementation.
+`#[agent]` goes on the `impl Agent for ...` block. It takes the `#[tool]` methods out of the trait impl into an inherent `impl`, generates their schemas and the dispatch code, and leaves the rest as a normal trait implementation. It comes from navree-macros and is re-exported as `navree::ai::agent`. Misuse is a compile error that points at the method: a tool without a doc comment, one that isn't `async`, one with more than one arguments value, an unknown `#[tool(..)]` option, or an access attribute on a method that isn't a tool.
 
-Register the agent in its module with `m.agent::<A>()`, which also registers it as a provider:
+Register the agent in its module with `m.agent::<A>()` (from `ModuleBuilderAiExt`, which the prelude imports), which registers it as a provider:
 
 ```rust title="crates/crm-deals/src/lib.rs"
 impl DealsModule {
@@ -103,11 +102,11 @@ impl DealsModule {
 }
 ```
 
-`navree make:agent deals assistant` generates an agent with one tool in `crates/.../agents/assistant.rs` and registers it at the module's `// navree:wire` marker.
+`navree make:agent deals assistant` generates an agent with one read-only tool in the deals module's `agents/assistant.rs` and registers it at the module's `// navree:wire` marker. The agent's `NAME` is `deals-assistant`.
 
 ## Tools
 
-A tool is an async method marked `#[tool]`. It takes `&self`, the run, and one arguments value, and returns a `Result` of anything that serializes:
+A tool is an async method marked `#[tool]`. It takes `&self`, the run, and one arguments value (or none), and returns a `Result` of anything that serializes, with an error that converts into `AppError`:
 
 ```rust title="crates/crm-deals/src/assistant.rs"
 #[agent]
@@ -171,10 +170,10 @@ impl Agent for DealsAssistant {
 }
 ```
 
-- **The doc comment is the tool's description.** The model chooses tools by it, so say what the tool does, what it returns and its limits.
+- **The doc comment is the tool's description.** The model chooses tools by it, so say what the tool does, what it returns and its limits. A tool without one doesn't compile.
 - **The method name is the tool's name** (`search_deals`). Rename a tool and old conversations that mention it still load; the model sees the new name.
-- **`#[tool(read_only)]`** marks a tool that changes nothing. Read-only tools may run in parallel, and only they are offered when you start a run with [`.read_only()`](#running-an-agent).
-- **The result** is serialized to JSON for the model. Return your API resources (`DealResource`, `ActivityResource`): they are already shaped for reading. Results above 16 KB are cut off with a note telling the model to narrow its request.
+- **`#[tool(read_only)]`** marks a tool that changes nothing. Read-only tools may run in parallel, and only they are offered when you start a run with [`.read_only()`](#running-an-agent). `#[tool(read_only, needs_approval)]` combines both flags.
+- **The result** is serialized to JSON for the model. Return your API resources (`DealResource`, `ActivityResource`): they are already shaped for reading. A result above 16 KB reaches the model as `{"truncated": true, "note": "...", "partial": "<the first 16 KB>"}`, the note telling it to narrow its request.
 
 ### Arguments
 
@@ -228,7 +227,7 @@ pub struct LogActivity {
 }
 ```
 
-The JSON Schema the model sees comes from `ToSchema`, with the field doc comments as descriptions. Before the method runs, the arguments are deserialized and validated. When they fail, the method doesn't run, and the model gets the messages your API would send, such as `subject should not be empty`, and usually corrects itself on the next step.
+The JSON Schema the model sees comes from `ToSchema`, with the field doc comments as descriptions. Before the method runs, the arguments are deserialized and validated with the same messages as a validated request. When they fail, the method doesn't run, and the model gets the 400 your API would send, such as `{"error": {"statusCode": 400, ..., "errors": {"subject": ["subject must be longer than or equal to 1 characters"]}}}`, and usually corrects itself on the next step.
 
 ### The run
 
@@ -241,7 +240,7 @@ The JSON Schema the model sees comes from `ToSchema`, with the field doc comment
 | `run.access()` | Their `PrincipalAccess`: roles, permissions and compiled abilities, with any token restrictions applied. |
 | `run.ability()` | `&Arc<Ability>`, for [checks in services](/docs/security/authorization/#checks-in-services). |
 | `run.accessible::<E, A>()` | An `Accessible<E, A>` list filter for the user. |
-| `run.authorize::<E, A>(id)` | Loads record `id` of `E` and checks `A` on it: an `Authorized<E, A>`, or a 404 or 403. |
+| `run.authorize::<E, A>(id)` | Loads record `id` of `E` in the tool call's unit of work and checks `A` on it: an `Authorized<E, A>`, or a 404 or 403. |
 | `run.uow()` | The tool call's unit of work. |
 | `run.now()` | The time from the app's `dyn Clock`. |
 | `run.conversation_id()` | The conversation, when the run has memory. |
@@ -251,7 +250,7 @@ The JSON Schema the model sees comes from `ToSchema`, with the field doc comment
 
 The model is not a security boundary. A user can ask it to do anything, and text it reads (an email body, a note) can tell it to do something else. So Navree enforces access in code, at three levels.
 
-**Which tools the model sees.** The access attributes of routes work on tools: `#[can(Action, Subject)]`, `#[permissions("...")]` and `#[roles("...")]`. A tool the user fails is left out of the tool list sent to the model, so the model can't call it or mention it. Tools without an attribute are available to every user the agent runs for.
+**Which tools the model sees.** The access attributes of routes work on tools: `#[can(Action, Subject)]` (the user may do the action on some records of the subject), `#[permissions("...")]` (every permission, without conditions) and `#[roles("...")]` (any of the roles; a super admin passes). Several attributes must all pass. A tool the user fails is left out of the tool list sent to the model, so the model can't call it or mention it, and a call to it anyway is refused with a 403. Tools without an attribute are available to every user the agent runs for. `#[can]` on a tool takes no `from = "..."`: load the record with `run.authorize` instead.
 
 ```rust
 /// Gives a deal to another member of the team.
@@ -288,13 +287,13 @@ async fn move_deal(&self, run: &AgentRun, args: MoveDealArgs) -> Result<DealReso
 {"error": {"statusCode": 403, "message": "Forbidden", "error": "Forbidden"}}
 ```
 
-Server errors (5xx) reach the model as `"The tool failed"`, never with their details, and are logged with the run's request id like any other server error.
+Server errors (5xx) reach the model as `"The tool failed"`, never with their details, and are logged at `error` with the agent, the tool and the run's request id. A tool that runs past `tool_timeout_secs` is a 504 the model reads as "The tool did not finish in time".
 
 Writes happen in the tool call's unit of work. It commits when the tool returns `Ok` and rolls back when it returns `Err`, so a failed tool leaves nothing half done. Rows written through `Repo` are [audited](/docs/security/audit-log/) with the user as the actor, and jobs and events dispatched by the tool are queued only when it commits, as in a request.
 
 <Callout type="warning" title="Content is not a command">
 
-Tool results can contain text written by anyone: a customer's email, a note, a company description. Navree marks tool results as data in the prompt, but no prompt makes a model immune to instructions hidden in content. Rely on the access checks above, and put tools that send mail, delete records or spend money behind [approval](#tools-that-need-approval).
+Tool results can contain text written by anyone: a customer's email, a note, a company description. Navree adds a line to every agent's instructions saying that tool results are data, not instructions, but no prompt makes a model immune to instructions hidden in content. Rely on the access checks above, and put tools that send mail, delete records or spend money behind [approval](#tools-that-need-approval).
 
 </Callout>
 
@@ -369,21 +368,22 @@ The run builder:
 | Method | What it does |
 |---|---|
 | `.acting_as(access)` | Runs as the user of an `Arc<PrincipalAccess>`, from the `CurrentAccess` extractor. Token restrictions carry over. |
-| `.acting_as_user(id)` | Runs as user `id` with their full access, loaded when the run starts. For jobs and commands. |
-| `.conversation(id)` | Continues conversation `id` (an `Option<Uuid>`; `None` starts a new one). |
+| `.acting_as_user(id)` | Runs as user `id` with their full access, loaded when the run starts (needs `AccessModule`). For jobs and commands. |
+| `.conversation(id)` | Continues conversation `id` (a `Uuid` or an `Option<Uuid>`; `None` starts a new one). Without this call the run stores nothing and `conversation_id` is `null`. |
+| `.approve(call_id)`, `.reject(call_id, reason)` | Answers a [pending approval](#tools-that-need-approval). |
 | `.read_only()` | Offers only `#[tool(read_only)]` tools. |
 | `.model(name)`, `.max_steps(n)` | Override the agent's options for this run. |
 | `.prompt(message)` | Runs and returns an `AgentReply`. |
 | `.structured::<T>(message)` | Runs, then returns the final answer as a `T`, like [`ai.structured`](/docs/ai/ai-sdk/#structured-output). |
 | `.stream(message)` | Runs and returns an `AgentStream`. See [streaming a run](#streaming-a-run). |
 
-A run needs a user: there is no anonymous agent. A job that works for no one in particular acts as a dedicated service account with the roles it needs.
+A run needs a user: there is no anonymous agent, and a run without one fails with `AiError::Unauthenticated` (a 401). A job that works for no one in particular acts as a dedicated service account with the roles it needs. Agents need `DatabaseModule` (each tool call's unit of work) and `AuthModule` (the user); an agent that isn't registered with `m.agent::<A>()` fails with `AiError::Config`.
 
 ### How a run works
 
-1. The model gets the instructions, the conversation so far, the new message and the tools the user may use.
-2. When it answers with tool calls, Navree validates the arguments, checks access and calls the methods, read-only ones in parallel, each in its own unit of work. The results go back to the model.
-3. Steps repeat until the model answers without a tool call, a tool [needs approval](#tools-that-need-approval), or the run reaches `max_steps`. At the limit the model is asked for a final answer without tools, so the user still gets a reply.
+1. The model gets the instructions, the conversation so far, the new message and the tools the user may use. The system prompt is built once per run, so every step of a run sends the same one.
+2. When it answers with tool calls, Navree validates the arguments, checks access and calls the methods, read-only ones in parallel, each in its own unit of work. The results go back to the model in one message, in the order of the calls.
+3. Steps repeat until the model answers without a tool call, a tool [needs approval](#tools-that-need-approval), or the run reaches `max_steps`. On the last step the model still sees the tools but may not call them, so the user gets a reply.
 
 Every model call goes through the [failover chain](/docs/ai/ai-sdk/#failover-and-retries) of the agent's model and counts against the user's [budget](/docs/ai/ai-sdk/#token-limits-and-budgets).
 
@@ -406,7 +406,8 @@ Every model call goes through the [failover chain](/docs/ai/ai-sdk/#failover-and
 With `Memory::Conversation`, the default, a run stores its messages and tool calls in your database, and a later run with the same `conversation_id` continues where it stopped. The `ai` migration set creates two tables, `ai_conversations` and `ai_messages`; it runs with your other [migrations](/docs/database/migrations/).
 
 - A conversation belongs to the user who started it and to its agent. Continuing someone else's conversation, or another agent's, is a 404.
-- The model sees the last `ai.memory.max_messages` messages (default 40). Older ones are folded into a summary written by `ai.memory.summary_model` (default `ai.default`), so long conversations keep their thread without growing the prompt.
+- The model sees the last `ai.memory.max_messages` messages (default 40, at least 2), starting at a user message. Older ones are folded into a running summary written by `ai.memory.summary_model` (default `ai.default`) and added to the instructions, so long conversations keep their thread without growing the prompt. A failed summary is logged and the run goes on.
+- Provider reasoning blocks are not stored: a later run starts without them.
 - Conversations untouched for `ai.memory.retention_days` (default 90) are deleted by `ai:prune`. Schedule it like `audit:prune`:
 
 ```rust
@@ -426,7 +427,7 @@ conversations.rename(user.id, conversation_id, "Q4 pipeline").await?;
 conversations.delete(user.id, conversation_id).await?;
 ```
 
-Every method takes the user's id and fails with a 404 for conversations that aren't theirs. A conversation's title is set from its first message, in a few words, by the summary model.
+Every method takes the user's id and fails with a 404 (`AiError::NotFound`) for conversations that aren't theirs. `list_for` returns the most recently changed first; each `ConversationSummary` has `id`, `agent`, `title`, `created_at` and `updated_at`, and each `StoredMessage` has `id`, `role`, `text` and `parts` (tool calls and results included) and `created_at`. A conversation's title is the opening words of its first message, at most 60 characters, until `rename` changes it.
 
 ## Tools that need approval
 
@@ -481,9 +482,9 @@ async fn approve(
 // told the user declined, and why.
 ```
 
-An unknown or already decided `call_id` is a 404.
+An unknown or already decided `call_id` is a 404. Approvals need memory: the pending call is stored with the conversation, so the run that stopped must have had a `.conversation(..)`.
 
-The tool's access checks run when it executes, after the approval, against the user's access at that moment. A new message instead of an answer rejects the pending call.
+The tool's access checks run when it executes, after the approval, against the access of the run that approves it. A new message instead of an answer rejects the pending call. The other calls of the step run at once; when the model asks for two calls that need approval in one step, the second is refused with a 409 telling the model to ask again after the user decides.
 
 ## Streaming a run
 
@@ -521,10 +522,10 @@ event: text
 data: {"text":" have been quiet since October 9."}
 
 event: done
-data: {"conversation_id":"0199c3a4-1b2e-7c40-9d1e-5a6b7c8d9e0f","usage":{"input_tokens":6120,"output_tokens":214}}
+data: {"model":"smart","provider":"anthropic","usage":{"input_tokens":6120,"output_tokens":214,"cached_input_tokens":0},"finish":"stop","conversation_id":"0199c3a4-1b2e-7c40-9d1e-5a6b7c8d9e0f"}
 ```
 
-Tool results stay on the server: the browser learns that a tool ran and whether it succeeded, not the data it returned. A pending approval arrives as `event: approval` with the same fields as `pending_approval`. Inside Rust, an `AgentStream` is a `Stream` of `StreamEvent`, with the `ToolCall`, `ToolResult` and `Approval` variants besides `Text` and `Done`.
+Tool results stay on the server: the browser learns that a tool ran and whether it succeeded, not the data it returned. A pending approval arrives as `event: approval` with the same fields as `pending_approval`. Inside Rust, an `AgentStream` is a `Stream` of `StreamEvent`, with the `ToolCall`, `ToolResult` and `Approval` variants besides `Text` and `Done`. Errors setting up the run (an unknown conversation, no user) fail `.stream(..).await`; later ones arrive as `event: error`. The run goes on in its own task and stops when the client disconnects.
 
 ## Running agents in queued jobs
 
@@ -630,7 +631,7 @@ async fn a_rep_cannot_move_another_reps_deal_through_the_assistant() {
 }
 ```
 
-- `FakeReply::tool_call(name, args)` makes the "model" call a tool. Arguments go through deserialization, validation and access checks like a real call, so a test can also send invalid arguments and assert on the error the model would get.
+- `FakeReply::tool_call(name, args)` makes the "model" call a tool, with the call ids `call_1`, `call_2`, ... Arguments go through deserialization, validation and access checks like a real call, so a test can also send invalid arguments and assert on the error the model would get.
 - `ai.tool_results(name)` returns what each call of the tool returned to the model, as JSON. `assert_tool_called(name)` and `assert_tool_not_called(name)` check that a call happened.
 - `ai.requests()` shows what the model was offered: `requests()[0].tools()` lists the tool names, which is how you test that `#[permissions(..)]` hides a tool from a user.
 - To test an agent without HTTP, run it directly: `crm.get::<Ai>().await.agent::<DealsAssistant>().acting_as_user(crm.user_id(Role::Rep1)).prompt("...").await`.
@@ -646,17 +647,20 @@ Test what your code decides (access, validation, which tool writes what) with th
 | `#[tool]`, `#[tool(read_only)]`, `#[tool(needs_approval)]` | A tool method. Takes `&self`, `&AgentRun` and one arguments value. |
 | `#[can(..)]`, `#[permissions(..)]`, `#[roles(..)]` | On a tool: who may use it. |
 | `AgentRun` | The run inside a tool: user, access, unit of work, clock. |
+| `AgentRunBuilder` | What `ai.agent::<A>()` returns. |
 | `AgentOptions`, `Memory` | Model, steps, memory. |
-| `AgentReply`, `AgentStream` | A finished run, or a streamed one. |
-| `Conversations` | Stored conversations, per user. |
+| `AgentReply`, `AgentStep`, `PendingApproval` | A finished run: its text, its tool calls and a call waiting for the user. |
+| `AgentStream` | A streamed run, and a server-sent events response. |
+| `Conversations`, `ConversationSummary`, `StoredMessage` | Stored conversations, per user; `prune(days, now)` is what `ai:prune` runs. |
+| `ToolSpec`, `ToolAccess` | A tool as `#[agent]` describes it, and its access rules. |
 | `m.agent::<A>()` | Registers an agent in a module. |
 | `navree make:agent <module> <name>` | Generates an agent. |
-| `ai:prune [--days N]` | Deletes old conversations. |
+| `ai:prune [--days N]` | Deletes conversations untouched for `N` days (default `ai.memory.retention_days`). |
 
 | Config key | Default | |
 |---|---|---|
 | `ai.memory.max_messages` | `40` | Messages the model sees before older ones are summarized. |
-| `ai.memory.summary_model` | `ai.default` | The model that writes summaries and titles. |
+| `ai.memory.summary_model` | `ai.default` | The model that writes summaries. |
 | `ai.memory.retention_days` | `90` | Age at which `ai:prune` deletes a conversation. |
 
 <LinkCards>
