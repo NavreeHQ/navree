@@ -106,7 +106,7 @@ fn a_first_deploy_starts_blue() {
       build     crm-api for x86_64-unknown-linux-gnu, in a container (0s)
       upload    app-1  releases/20261026-091512-3f2a9c1, 14.2 MB (0s)
       env       app-1  7 settings, 3 secrets
-      migrate   app-1  migrate done (0s)
+      migrate   app-1  2 migrations ran (0s)
       start     app-1  blue on 127.0.0.1:8081
       health    app-1  GET /health/ready 200 after 0.4 s
       switch    app-1  Caddy -> blue, current -> 20261026-091512-3f2a9c1
@@ -427,7 +427,7 @@ fn a_rolling_deploy_switches_web_servers_one_at_a_time() {
       env       web-1  4 settings, 3 secrets
       env       web-2  4 settings, 3 secrets
       env       worker-1  4 settings, 3 secrets
-      migrate   web-1  migrate done (0s)
+      migrate   web-1  2 migrations ran (0s)
       start     web-1  green on 127.0.0.1:8082
       health    web-1  GET /health/ready 200 after 0.4 s
       switch    web-1  Caddy -> green, current -> 20261026-091512-3f2a9c1

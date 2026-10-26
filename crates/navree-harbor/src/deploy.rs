@@ -297,13 +297,12 @@ impl Deployer<'_> {
                     return Err(error);
                 }
             };
-            let last = tail(&output, 1);
             self.progress.server_step(
                 "migrate",
                 &host.server().name,
                 &format!(
                     "{} ({})",
-                    if last.is_empty() { "done" } else { last.trim() },
+                    migrate_summary(&output),
                     elapsed(self.clock, migrate_started)
                 ),
             );
@@ -675,6 +674,28 @@ impl Deployer<'_> {
     }
 }
 
+/// `2 migrations ran` from the output of the app's `migrate` command (one
+/// `Migrated: <module>/<name>` line each, or `Nothing to migrate.`).
+pub fn migrate_summary(output: &str) -> String {
+    let ran = output
+        .lines()
+        .filter(|l| l.trim_start().starts_with("Migrated:"))
+        .count();
+    match ran {
+        0 if output.contains("Nothing to migrate") => "nothing to migrate".to_owned(),
+        0 => {
+            let last = tail(output, 1);
+            if last.trim().is_empty() {
+                "done".to_owned()
+            } else {
+                last.trim().to_owned()
+            }
+        }
+        1 => "1 migration ran".to_owned(),
+        n => format!("{n} migrations ran"),
+    }
+}
+
 /// Compares versions like `2.35` and `2.39` numerically.
 pub fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     let parts = |v: &str| -> Vec<u32> { v.split('.').map(|p| p.parse().unwrap_or(0)).collect() };
@@ -731,6 +752,21 @@ mod tests {
         assert_eq!(arm.platform, "linux/arm64");
         let musl = Target::new("x86_64", None, Some("x86_64-unknown-linux-musl"));
         assert_eq!(musl.triple, "x86_64-unknown-linux-musl");
+    }
+
+    #[test]
+    fn migrations_are_counted() {
+        assert_eq!(
+            migrate_summary("Migrated: deals/m1\nMigrated: deals/m2\n"),
+            "2 migrations ran"
+        );
+        assert_eq!(
+            migrate_summary("{\"level\":\"INFO\"}\nMigrated: deals/m1\n"),
+            "1 migration ran"
+        );
+        assert_eq!(migrate_summary("Nothing to migrate.\n"), "nothing to migrate");
+        assert_eq!(migrate_summary("all good\n"), "all good");
+        assert_eq!(migrate_summary(""), "done");
     }
 
     #[test]

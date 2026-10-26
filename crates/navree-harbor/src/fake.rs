@@ -219,7 +219,12 @@ impl Host for FakeHost {
                 output: format!("{command} failed"),
             });
         }
-        Ok(Output::ok(format!("{command} done\n")))
+        let output = if command == "migrate" {
+            "Migrated: deals/m20261026_091000_add_probability\nMigrated: deals/m20261026_091100_index_stage\n".to_owned()
+        } else {
+            format!("{command} done\n")
+        };
+        Ok(Output::ok(output))
     }
 
     fn start(&self, process: SlotProcess, slot: Slot, release: &str, env: &EnvFile) -> Result<()> {

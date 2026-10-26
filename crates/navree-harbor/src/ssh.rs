@@ -226,9 +226,7 @@ impl Ssh {
         } else {
             "bash -s"
         };
-        let cmd = self
-            .command(shell)
-            .stdin(format!("set -euo pipefail\n{script}"));
+        let cmd = self.command(shell).stdin(wrap_script(script));
         let output = self.exec.run(&cmd)?;
         if output.success() {
             Ok(output)
@@ -311,6 +309,15 @@ impl Ssh {
     }
 }
 
+/// What `bash -s` reads: strict mode, then the script in one brace group
+/// with standard input from `/dev/null`. Bash parses the whole group before
+/// running it, so no command in the script (apt-get, psql) can read the rest
+/// of the script from the SSH channel.
+pub fn wrap_script(script: &str) -> String {
+    let newline = if script.ends_with('\n') { "" } else { "\n" };
+    format!("set -euo pipefail\n{{\n{script}{newline}}} < /dev/null\n")
+}
+
 /// The host-key alias of a server: `harbor-<name>`.
 pub fn alias(server: &str) -> String {
     format!("harbor-{server}")
@@ -359,7 +366,10 @@ mod tests {
             call.args[call.args.len() - 2..],
             ["navree@203.0.113.10", "bash -s"]
         );
-        assert_eq!(call.stdin_text(), "set -euo pipefail\nuptime");
+        assert_eq!(
+            call.stdin_text(),
+            "set -euo pipefail\n{\nuptime\n} < /dev/null\n"
+        );
         assert_eq!(ssh.learned_host_key(), None);
     }
 

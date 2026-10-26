@@ -102,7 +102,7 @@ pub fn assert_bash_syntax(name: &str, script: &str) {
         .stdin
         .take()
         .unwrap()
-        .write_all(format!("set -euo pipefail\n{script}").as_bytes())
+        .write_all(navree_harbor::ssh::wrap_script(script).as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(
