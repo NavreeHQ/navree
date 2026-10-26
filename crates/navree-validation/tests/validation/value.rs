@@ -33,8 +33,8 @@ async fn garde_failures_are_400s_with_field_errors() {
         None,
     )
     .await
-    .err()
-    .expect("invalid");
+    .map(drop)
+    .expect_err("invalid");
     assert_eq!(error.status, 400);
     assert_eq!(
         errors(&body(&error)),
@@ -50,8 +50,8 @@ async fn garde_failures_are_400s_with_field_errors() {
 async fn serde_failures_name_the_field() {
     let error = validate_value::<CreateUser>(json!({ "email": "ada@example.com" }), None)
         .await
-        .err()
-        .expect("missing name");
+        .map(drop)
+        .expect_err("missing name");
     assert_eq!(error.status, 400);
     assert_eq!(
         errors(&body(&error)),
@@ -75,7 +75,7 @@ async fn the_apps_messages_apply() {
         Some(&ctx),
     )
     .await
-    .err()
-    .expect("invalid email");
+    .map(drop)
+    .expect_err("invalid email");
     assert_eq!(errors(&body(&error)), &json!({ "email": ["Bad email!"] }));
 }

@@ -16,8 +16,8 @@ use sea_orm::EntityTrait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::context::McpContext;
 use crate::content::{PromptMessage, ResourceContents};
+use crate::context::McpContext;
 use crate::schema::{PromptArgument, empty_object, input_schema, prompt_arguments};
 
 /// An MCP server: a service whose tools, resources and prompts are offered

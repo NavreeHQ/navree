@@ -13,11 +13,11 @@ use navree_db::{Db, Uow};
 use navree_http::{AccessSpec, AppError, ErrorMapper};
 use navree_kernel::AppContext;
 use rmcp::model::{
-    CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock,
-    ErrorCode, ErrorData, Extensions, GetPromptRequestParams, GetPromptResponse,
-    GetPromptResult, Implementation, InitializeResult, ListPromptsResult,
-    ListResourceTemplatesResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
-    Prompt, ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
+    CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ErrorCode,
+    ErrorData, Extensions, GetPromptRequestParams, GetPromptResponse, GetPromptResult,
+    Implementation, InitializeResult, ListPromptsResult, ListResourceTemplatesResult,
+    ListResourcesResult, ListToolsResult, PaginatedRequestParams, Prompt,
+    ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
     ResourceTemplate, ServerCapabilities, SubscribeRequestParams, SubscriptionFilter, Tool,
     UnsubscribeRequestParams,
 };
@@ -25,8 +25,8 @@ use rmcp::service::{NotificationContext, RequestContext, SubscriptionContext};
 use rmcp::{Peer, RoleServer, ServerHandler};
 use serde_json::{Map, Value, json};
 
-use crate::context::{ContextParts, McpClient, McpContext};
 use crate::content::PromptMessage;
+use crate::context::{ContextParts, McpClient, McpContext};
 use crate::item::{Call, Handler, McpOutput, PromptDef, ResourceDef, ToolDef};
 use crate::notifier::{Lists, McpNotifier};
 use crate::observe;
@@ -184,9 +184,9 @@ impl McpHandler {
                 session_id: Some(local.session_id.clone()),
             });
         }
-        let parts = extensions
-            .get::<http::request::Parts>()
-            .ok_or_else(|| ErrorData::internal_error("the MCP request has no HTTP request", None))?;
+        let parts = extensions.get::<http::request::Parts>().ok_or_else(|| {
+            ErrorData::internal_error("the MCP request has no HTTP request", None)
+        })?;
         let principal = parts
             .extensions
             .get::<AuthState>()
@@ -292,7 +292,11 @@ impl McpHandler {
 
     /// Runs one call: the declared record check and the handler in a unit
     /// of work that commits on `Ok`.
-    async fn run(&self, invocation: Invocation<'_>, handler: &Handler) -> Result<McpOutput, AppError> {
+    async fn run(
+        &self,
+        invocation: Invocation<'_>,
+        handler: &Handler,
+    ) -> Result<McpOutput, AppError> {
         let caller = invocation.caller;
         let uow = match &self.shared.db {
             Some(db) => Some(
@@ -380,9 +384,8 @@ impl McpHandler {
             .factory
             .as_ref()
             .ok_or_else(|| AppError::internal("record checks need AccessModule in the app"))?;
-        let uow = uow.ok_or_else(|| {
-            AppError::internal("record checks need DatabaseModule in the app")
-        })?;
+        let uow =
+            uow.ok_or_else(|| AppError::internal("record checks need DatabaseModule in the app"))?;
         factory
             .authorize_record(principal_access, uow, &can.action, &can.subject, &id)
             .await
@@ -456,8 +459,7 @@ impl McpHandler {
                 &entry.handler,
             )
             .await?;
-        resource_contents(output, uri, &entry.def)
-            .map(|mut contents| contents.swap_remove(0))
+        resource_contents(output, uri, &entry.def).map(|mut contents| contents.swap_remove(0))
     }
 }
 
@@ -575,7 +577,9 @@ fn prompt(def: &PromptDef) -> Prompt {
 /// content for other values.
 fn tool_success(output: McpOutput) -> CallToolResult {
     match output {
-        McpOutput::Json(Value::String(text)) => CallToolResult::success(vec![ContentBlock::text(text)]),
+        McpOutput::Json(Value::String(text)) => {
+            CallToolResult::success(vec![ContentBlock::text(text)])
+        }
         McpOutput::Json(value @ Value::Object(_)) => CallToolResult::structured(value),
         McpOutput::Json(value) => {
             let mut result = CallToolResult::success(vec![ContentBlock::text(value.to_string())]);
@@ -612,12 +616,17 @@ fn resource_contents(
     uri: &str,
     def: &ResourceDef,
 ) -> Result<Vec<rmcp::model::ResourceContents>, AppError> {
-    let text = |text: String, default_mime: &str| rmcp::model::ResourceContents::TextResourceContents {
-        uri: uri.to_owned(),
-        mime_type: Some(def.mime_type.clone().unwrap_or_else(|| default_mime.to_owned())),
-        text,
-        meta: None,
-    };
+    let text =
+        |text: String, default_mime: &str| rmcp::model::ResourceContents::TextResourceContents {
+            uri: uri.to_owned(),
+            mime_type: Some(
+                def.mime_type
+                    .clone()
+                    .unwrap_or_else(|| default_mime.to_owned()),
+            ),
+            text,
+            meta: None,
+        };
     match output {
         McpOutput::Json(Value::String(string)) => Ok(vec![text(string, "text/plain")]),
         McpOutput::Json(value) => Ok(vec![text(value.to_string(), "application/json")]),
@@ -699,8 +708,19 @@ impl ServerHandler for McpHandler {
             .tool(&name)
             .filter(|entry| self.visible(&access, &entry.def.access))
         else {
-            observe::call("tools/call", None, &caller.principal, &caller.request_id, client.as_ref(), started, "unknown");
-            return Err(ErrorData::invalid_params(format!("Unknown tool: {name}"), None));
+            observe::call(
+                "tools/call",
+                None,
+                &caller.principal,
+                &caller.request_id,
+                client.as_ref(),
+                started,
+                "unknown",
+            );
+            return Err(ErrorData::invalid_params(
+                format!("Unknown tool: {name}"),
+                None,
+            ));
         };
         let outcome = self
             .run(
@@ -720,11 +740,21 @@ impl ServerHandler for McpHandler {
         let (result, label) = match outcome {
             Ok(output) => (tool_success(output), "ok"),
             Err(error) => {
-                let error = self.report(error, "tools/call", &entry.def.name, &caller).await;
+                let error = self
+                    .report(error, "tools/call", &entry.def.name, &caller)
+                    .await;
                 (tool_error(&error), "error")
             }
         };
-        observe::call("tools/call", Some(&entry.def.name), &caller.principal, &caller.request_id, client.as_ref(), started, label);
+        observe::call(
+            "tools/call",
+            Some(&entry.def.name),
+            &caller.principal,
+            &caller.request_id,
+            client.as_ref(),
+            started,
+            label,
+        );
         Ok(CallToolResponse::Complete(result))
     }
 
@@ -797,7 +827,15 @@ impl ServerHandler for McpHandler {
             .resource(&uri)
             .filter(|(entry, _)| self.visible(&access, &entry.def.access))
         else {
-            observe::call("resources/read", None, &caller.principal, &caller.request_id, client.as_ref(), started, "unknown");
+            observe::call(
+                "resources/read",
+                None,
+                &caller.principal,
+                &caller.request_id,
+                client.as_ref(),
+                started,
+                "unknown",
+            );
             return Err(ErrorData::resource_not_found(
                 "Resource not found",
                 Some(json!({ "uri": uri })),
@@ -821,12 +859,32 @@ impl ServerHandler for McpHandler {
             .and_then(|output| resource_contents(output, &uri, &entry.def));
         match outcome {
             Ok(contents) => {
-                observe::call("resources/read", Some(&entry.def.name), &caller.principal, &caller.request_id, client.as_ref(), started, "ok");
-                Ok(ReadResourceResponse::Complete(ReadResourceResult::new(contents)))
+                observe::call(
+                    "resources/read",
+                    Some(&entry.def.name),
+                    &caller.principal,
+                    &caller.request_id,
+                    client.as_ref(),
+                    started,
+                    "ok",
+                );
+                Ok(ReadResourceResponse::Complete(ReadResourceResult::new(
+                    contents,
+                )))
             }
             Err(error) => {
-                let error = self.report(error, "resources/read", &entry.def.name, &caller).await;
-                observe::call("resources/read", Some(&entry.def.name), &caller.principal, &caller.request_id, client.as_ref(), started, "error");
+                let error = self
+                    .report(error, "resources/read", &entry.def.name, &caller)
+                    .await;
+                observe::call(
+                    "resources/read",
+                    Some(&entry.def.name),
+                    &caller.principal,
+                    &caller.request_id,
+                    client.as_ref(),
+                    started,
+                    "error",
+                );
                 Err(rpc_error(&error))
             }
         }
@@ -867,12 +925,17 @@ impl ServerHandler for McpHandler {
     ) -> Result<(), ErrorData> {
         let caller = self.caller(&context.extensions)?;
         if let Some(session) = caller.session_id {
-            self.shared.notifier.subscribe(&session, &request.uri, false);
+            self.shared
+                .notifier
+                .subscribe(&session, &request.uri, false);
         }
         Ok(())
     }
 
-    fn accepted_subscription_filter(&self, requested: &SubscriptionFilter) -> Option<SubscriptionFilter> {
+    fn accepted_subscription_filter(
+        &self,
+        requested: &SubscriptionFilter,
+    ) -> Option<SubscriptionFilter> {
         Some(requested.clone())
     }
 
@@ -945,14 +1008,24 @@ impl ServerHandler for McpHandler {
             .prompt(&request.name)
             .filter(|entry| self.visible(&access, &entry.def.access))
         else {
-            observe::call("prompts/get", None, &caller.principal, &caller.request_id, client.as_ref(), started, "unknown");
+            observe::call(
+                "prompts/get",
+                None,
+                &caller.principal,
+                &caller.request_id,
+                client.as_ref(),
+                started,
+                "unknown",
+            );
             return Err(ErrorData::invalid_params(
                 format!("Unknown prompt: {}", request.name),
                 None,
             ));
         };
-        let arguments =
-            coerce_prompt_arguments(&entry.def.arguments_schema, request.arguments.unwrap_or_default());
+        let arguments = coerce_prompt_arguments(
+            &entry.def.arguments_schema,
+            request.arguments.unwrap_or_default(),
+        );
         let outcome = self
             .run(
                 Invocation {
@@ -974,13 +1047,15 @@ impl ServerHandler for McpHandler {
                 let mut failed = None;
                 for message in prompt_messages(output) {
                     let embedded = match message.uri() {
-                        Some(uri) => match self.embedded(uri, &caller, &access, &context.peer).await {
-                            Ok(contents) => Some(contents),
-                            Err(error) => {
-                                failed = Some(error);
-                                break;
+                        Some(uri) => {
+                            match self.embedded(uri, &caller, &access, &context.peer).await {
+                                Ok(contents) => Some(contents),
+                                Err(error) => {
+                                    failed = Some(error);
+                                    break;
+                                }
                             }
-                        },
+                        }
                         None => None,
                     };
                     messages.push(message.into_mcp(embedded));
@@ -994,7 +1069,15 @@ impl ServerHandler for McpHandler {
         };
         match rendered {
             Ok(messages) => {
-                observe::call("prompts/get", Some(&entry.def.name), &caller.principal, &caller.request_id, client.as_ref(), started, "ok");
+                observe::call(
+                    "prompts/get",
+                    Some(&entry.def.name),
+                    &caller.principal,
+                    &caller.request_id,
+                    client.as_ref(),
+                    started,
+                    "ok",
+                );
                 let mut result = GetPromptResult::new(messages);
                 if let Some(description) = &entry.def.description {
                     result = result.with_description(description.clone());
@@ -1002,8 +1085,18 @@ impl ServerHandler for McpHandler {
                 Ok(GetPromptResponse::Complete(result))
             }
             Err(error) => {
-                let error = self.report(error, "prompts/get", &entry.def.name, &caller).await;
-                observe::call("prompts/get", Some(&entry.def.name), &caller.principal, &caller.request_id, client.as_ref(), started, "error");
+                let error = self
+                    .report(error, "prompts/get", &entry.def.name, &caller)
+                    .await;
+                observe::call(
+                    "prompts/get",
+                    Some(&entry.def.name),
+                    &caller.principal,
+                    &caller.request_id,
+                    client.as_ref(),
+                    started,
+                    "error",
+                );
                 Err(rpc_error(&error))
             }
         }

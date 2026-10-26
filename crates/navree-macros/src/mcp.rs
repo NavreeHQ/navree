@@ -35,7 +35,8 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> TokenStream {
         ));
     }
     let shared = take_attrs(&mut item.attrs, Site::Impl, &mut errors);
-    if let (Some(_), Some((restriction, at))) = (&shared.access.public, shared.access.restriction()) {
+    if let (Some(_), Some((restriction, at))) = (&shared.access.public, shared.access.restriction())
+    {
         errors.push(at.error(format!(
             "the impl block is #[public] but also declares {restriction}: {PUBLIC_CONFLICT}"
         )));
@@ -335,7 +336,11 @@ fn parse_keys(
         if !f(&key, &meta)? {
             return Err(meta.error(format!(
                 "unknown #[{}] key `{key}`: expected {expected}",
-                attr.path().segments.last().map(|s| s.ident.to_string()).unwrap_or_default()
+                attr.path()
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default()
             )));
         }
         seen.push(key);
@@ -482,7 +487,9 @@ fn uri_variables(uri: &str) -> Result<Vec<String>, String> {
             ));
         }
         if variables.iter().any(|v| v == name) {
-            return Err(format!("resource URI `{uri}` names the variable `{name}` twice"));
+            return Err(format!(
+                "resource URI `{uri}` names the variable `{name}` twice"
+            ));
         }
         variables.push(name.to_owned());
         rest = &rest[close + 1..];
@@ -570,7 +577,10 @@ fn collect_items(item: &mut ItemImpl, shared: &Attrs, errors: &mut Errors) -> Ve
         if !attrs.access.is_declared() && !attrs.access.malformed {
             errors.push(syn::Error::new(
                 ident.span(),
-                format!("MCP {} `{ident}` has no access declaration: {DECLARE_ACCESS}", args.kind()),
+                format!(
+                    "MCP {} `{ident}` has no access declaration: {DECLARE_ACCESS}",
+                    args.kind()
+                ),
             ));
         }
         let Some(params) = errors.keep(check_signature(method, &args, &attrs.access, &at)) else {
@@ -606,7 +616,10 @@ fn check_duplicates(items: &[ItemFn], errors: &mut Errors) {
         match seen.iter().find(|(k, n, _)| *k == kind && *n == name) {
             Some((_, _, first)) => errors.push(syn::Error::new(
                 item.ident.span(),
-                format!("`{}` and `{first}` are both the MCP {kind} `{name}`", item.ident),
+                format!(
+                    "`{}` and `{first}` are both the MCP {kind} `{name}`",
+                    item.ident
+                ),
             )),
             None => seen.push((kind, name, &item.ident)),
         }
@@ -672,7 +685,10 @@ fn check_signature(
         let ty = &*typed.ty;
         if is_context(ty) {
             if params.iter().any(|p| matches!(p, Param::Context)) {
-                errors.push(syn::Error::new_spanned(ty, "only one `&McpContext` parameter"));
+                errors.push(syn::Error::new_spanned(
+                    ty,
+                    "only one `&McpContext` parameter",
+                ));
             }
             params.push(Param::Context);
         } else if last_segment(ty).is_some_and(|segment| segment == "Authorized") {
@@ -719,7 +735,9 @@ fn check_signature(
 /// `&McpContext` (any path ending in `McpContext`).
 fn is_context(ty: &Type) -> bool {
     match ty {
-        Type::Reference(reference) => last_segment(&reference.elem).is_some_and(|s| s == "McpContext"),
+        Type::Reference(reference) => {
+            last_segment(&reference.elem).is_some_and(|s| s == "McpContext")
+        }
         _ => false,
     }
 }
@@ -743,7 +761,10 @@ fn output_kind(method: &ImplItemFn, args: &ItemArgs) -> syn::Result<Output> {
         ));
     };
     let Type::Path(path) = &**ty else {
-        return Err(syn::Error::new_spanned(ty, "an MCP item returns a `Result`"));
+        return Err(syn::Error::new_spanned(
+            ty,
+            "an MCP item returns a `Result`",
+        ));
     };
     let Some(last) = path.path.segments.last().filter(|s| s.ident == "Result") else {
         return Err(syn::Error::new_spanned(
@@ -755,10 +776,12 @@ fn output_kind(method: &ImplItemFn, args: &ItemArgs) -> syn::Result<Output> {
         return Ok(Output::Messages);
     }
     let ok = match &last.arguments {
-        PathArguments::AngleBracketed(arguments) => arguments.args.iter().find_map(|arg| match arg {
-            GenericArgument::Type(ty) => Some(ty),
-            _ => None,
-        }),
+        PathArguments::AngleBracketed(arguments) => {
+            arguments.args.iter().find_map(|arg| match arg {
+                GenericArgument::Type(ty) => Some(ty),
+                _ => None,
+            })
+        }
         _ => None,
     };
     let contents = ok.is_some_and(|ok| match last_segment(ok).as_deref() {
@@ -789,7 +812,8 @@ fn doc_comment(attrs: &[Attribute]) -> Option<String> {
         .filter_map(|attr| match &attr.meta {
             Meta::NameValue(value) => match &value.value {
                 Expr::Lit(ExprLit {
-                    lit: Lit::Str(text), ..
+                    lit: Lit::Str(text),
+                    ..
                 }) => Some(text.value()),
                 _ => None,
             },
@@ -887,7 +911,9 @@ fn item_expr(item: &ItemFn, mcp: &TokenStream) -> TokenStream {
         match param {
             Param::Context => arguments.push(quote!(#call.context())),
             Param::Args(ty) => {
-                bindings.extend(quote_spanned!(ty.span()=> let #var: #ty = #call.args::<#ty>().await?;));
+                bindings.extend(
+                    quote_spanned!(ty.span()=> let #var: #ty = #call.args::<#ty>().await?;),
+                );
                 arguments.push(quote!(#var));
             }
             Param::Record(ty) => {
@@ -972,9 +998,21 @@ mod tests {
     fn uri_variables_are_checked() {
         assert_eq!(uri_variables("crm://deals/{id}").unwrap(), ["id"]);
         assert!(uri_variables("crm://pipeline").unwrap().is_empty());
-        assert!(uri_variables("deals/{id}").unwrap_err().contains("no scheme"));
-        assert!(uri_variables("crm://{a}/{a}").unwrap_err().contains("twice"));
-        assert!(uri_variables("crm://{a-b}").unwrap_err().contains("variable name"));
+        assert!(
+            uri_variables("deals/{id}")
+                .unwrap_err()
+                .contains("no scheme")
+        );
+        assert!(
+            uri_variables("crm://{a}/{a}")
+                .unwrap_err()
+                .contains("twice")
+        );
+        assert!(
+            uri_variables("crm://{a-b}")
+                .unwrap_err()
+                .contains("variable name")
+        );
     }
 
     #[test]

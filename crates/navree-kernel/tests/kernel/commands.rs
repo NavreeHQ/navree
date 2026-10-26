@@ -356,7 +356,10 @@ async fn the_running_command_is_known_from_boot_on() {
         .boot()
         .await
         .expect("boot");
-    assert!(app.ctx().command().is_none(), "a plain boot runs no command");
+    assert!(
+        app.ctx().command().is_none(),
+        "a plain boot runs no command"
+    );
     assert_eq!(*seen.lock().unwrap(), ["boot none"]);
 }
 

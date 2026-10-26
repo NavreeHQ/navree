@@ -32,7 +32,9 @@ where
     C: IntoContents,
     E: Into<AppError>,
 {
-    Ok(McpOutput::Contents(result.map_err(Into::into)?.into_contents()))
+    Ok(McpOutput::Contents(
+        result.map_err(Into::into)?.into_contents(),
+    ))
 }
 
 /// A prompt's messages.
@@ -41,7 +43,9 @@ where
     M: IntoMessages,
     E: Into<AppError>,
 {
-    Ok(McpOutput::Messages(result.map_err(Into::into)?.into_messages()))
+    Ok(McpOutput::Messages(
+        result.map_err(Into::into)?.into_messages(),
+    ))
 }
 
 /// What a resource method may return besides a serializable value.

@@ -29,8 +29,8 @@ async fn prompts_list_their_arguments() {
         json!([{ "name": "deal_id", "description": "The deal to follow up on.", "required": true }])
     );
 
-    let summarize = serde_json::to_value(prompts.iter().find(|p| p.name == "summarize").unwrap())
-        .unwrap();
+    let summarize =
+        serde_json::to_value(prompts.iter().find(|p| p.name == "summarize").unwrap()).unwrap();
     let arguments = summarize["arguments"].as_array().unwrap();
     let include_lost = arguments
         .iter()
@@ -93,9 +93,12 @@ async fn string_arguments_are_coerced_and_validated() {
 async fn failures_and_unknown_prompts() {
     let app = app().await;
     let mcp = McpTestClient::new(app.acting_as(user())).initialize().await;
-    mcp.get_prompt("follow-up-email", json!({ "deal_id": Uuid::now_v7().to_string() }))
-        .await
-        .assert_error(404, "Not Found");
+    mcp.get_prompt(
+        "follow-up-email",
+        json!({ "deal_id": Uuid::now_v7().to_string() }),
+    )
+    .await
+    .assert_error(404, "Not Found");
     let error = mcp
         .get_prompt("no-such-prompt", json!({}))
         .await
@@ -107,7 +110,10 @@ async fn failures_and_unknown_prompts() {
 
     // A secret deal is refused when its resource is embedded.
     let secret = insert_deal(&app, Uuid::now_v7(), "Secret", "secret").await;
-    mcp.get_prompt("follow-up-email", json!({ "deal_id": secret.id.to_string() }))
-        .await
-        .assert_error(403, "Forbidden");
+    mcp.get_prompt(
+        "follow-up-email",
+        json!({ "deal_id": secret.id.to_string() }),
+    )
+    .await
+    .assert_error(403, "Forbidden");
 }

@@ -74,10 +74,14 @@ pub(crate) fn install(options: &LogOptions, console: Console) -> Result<LogContr
         }
         return Ok(installed.control.clone());
     }
-    install_into(&mut slot, Origin::Module(options.clone()), || match console {
-        Console::Stdout => build(options, levels, std::io::stdout, stdout_supports_color()),
-        Console::Stderr => build(options, levels, std::io::stderr, stderr_supports_color()),
-    })
+    install_into(
+        &mut slot,
+        Origin::Module(options.clone()),
+        || match console {
+            Console::Stdout => build(options, levels, std::io::stdout, stdout_supports_color()),
+            Console::Stderr => build(options, levels, std::io::stderr, stderr_supports_color()),
+        },
+    )
 }
 
 /// Installs a subscriber for tests, once per process: human-readable lines

@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use garde::Validate;
 use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, Authorized, MANAGE,
-    READ, Read, Rules, Subject, UPDATE, Update, field,
+    AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, Authorized, MANAGE, READ,
+    Read, Rules, Subject, UPDATE, Update, field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture, Principal};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
@@ -107,7 +107,9 @@ pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     rules
         .can(UPDATE, "Deal")
         .when(field("owner_id").eq(user.id));
-    rules.can("move", "Deal").when(field("owner_id").eq(user.id));
+    rules
+        .can("move", "Deal")
+        .when(field("owner_id").eq(user.id));
     if user.has_role("admin") {
         rules.can(MANAGE, "Deal");
     }
@@ -228,7 +230,11 @@ impl CrmMcp {
     /// stage or the user's own.
     #[mcp_tool(read_only)]
     #[can(Read, Deal)]
-    async fn list_deals(&self, cx: &McpContext, args: ListDeals) -> Result<Vec<DealResource>, AppError> {
+    async fn list_deals(
+        &self,
+        cx: &McpContext,
+        args: ListDeals,
+    ) -> Result<Vec<DealResource>, AppError> {
         let mut select = cx
             .accessible::<Deal, Read>()
             .apply(deal::Entity::find().order_by_asc(deal::Column::Title));
@@ -248,7 +254,11 @@ impl CrmMcp {
     /// Creates a deal owned by the user.
     #[mcp_tool(title = "Create a deal")]
     #[authenticated]
-    async fn create_deal(&self, cx: &McpContext, args: CreateDeal) -> Result<DealResource, AppError> {
+    async fn create_deal(
+        &self,
+        cx: &McpContext,
+        args: CreateDeal,
+    ) -> Result<DealResource, AppError> {
         let model = deal::ActiveModel {
             id: Set(Uuid::now_v7()),
             owner_id: Set(cx.user_id()),
@@ -264,7 +274,11 @@ impl CrmMcp {
     /// Creates a deal, then fails: nothing it wrote is kept.
     #[mcp_tool]
     #[authenticated]
-    async fn create_then_fail(&self, cx: &McpContext, args: CreateDeal) -> Result<DealResource, AppError> {
+    async fn create_then_fail(
+        &self,
+        cx: &McpContext,
+        args: CreateDeal,
+    ) -> Result<DealResource, AppError> {
         self.create_deal(cx, args).await?;
         Err(AppError::conflict("The pipeline is locked"))
     }
@@ -272,7 +286,11 @@ impl CrmMcp {
     /// Moves a deal to another stage.
     #[mcp_tool(destructive)]
     #[can(Update, Deal)]
-    async fn move_deal(&self, cx: &McpContext, args: MoveDealArgs) -> Result<DealResource, AppError> {
+    async fn move_deal(
+        &self,
+        cx: &McpContext,
+        args: MoveDealArgs,
+    ) -> Result<DealResource, AppError> {
         let deal = cx.authorize::<Deal, Move>(args.deal_id).await?;
         let mut model: deal::ActiveModel = deal.into_inner().into();
         model.stage = Set(args.stage.as_str().to_owned());
@@ -378,7 +396,10 @@ impl CrmMcp {
     #[mcp_resource("crm://files/{name}", mime = "application/pdf")]
     #[authenticated]
     async fn file(&self, name: String) -> Result<ResourceContents, AppError> {
-        Ok(ResourceContents::blob(format!("%PDF {name}").into_bytes(), "application/pdf"))
+        Ok(ResourceContents::blob(
+            format!("%PDF {name}").into_bytes(),
+            "application/pdf",
+        ))
     }
 
     /// Statistics for admins.
@@ -391,7 +412,11 @@ impl CrmMcp {
     /// Drafts a follow-up email to a deal's contact.
     #[mcp_prompt(name = "follow-up-email", title = "Draft a follow-up email")]
     #[can(Read, Deal)]
-    async fn follow_up(&self, cx: &McpContext, args: FollowUpArgs) -> Result<Vec<PromptMessage>, AppError> {
+    async fn follow_up(
+        &self,
+        cx: &McpContext,
+        args: FollowUpArgs,
+    ) -> Result<Vec<PromptMessage>, AppError> {
         let deal = cx.authorize::<Deal, Read>(args.deal_id).await?;
         Ok(vec![
             PromptMessage::resource(format!("crm://deals/{}", deal.id)),
@@ -410,7 +435,11 @@ impl CrmMcp {
         Ok(format!(
             "Summarize the last {} days{}.",
             args.days,
-            if args.include_lost { ", lost deals included" } else { "" }
+            if args.include_lost {
+                ", lost deals included"
+            } else {
+                ""
+            }
         ))
     }
 }

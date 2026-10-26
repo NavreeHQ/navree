@@ -37,10 +37,8 @@ impl UriTemplate {
                 .map(|i| open + i)
                 .ok_or_else(|| format!("resource URI `{template}` has an unclosed `{{`"))?;
             let name = &rest[open + 1..close];
-            let valid = !name.is_empty()
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_');
+            let valid =
+                !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
             if !valid {
                 return Err(format!(
                     "resource URI `{template}`: `{{{name}}}` is not a variable name (letters, digits and `_`)"
@@ -171,7 +169,10 @@ mod tests {
         assert_eq!(uri.matches("crm://companies/a/deals/1/x"), None);
 
         let file = UriTemplate::parse("docs://{name}.md").unwrap();
-        assert_eq!(file.matches("docs://read%20me.md"), params(&[("name", "read me")]));
+        assert_eq!(
+            file.matches("docs://read%20me.md"),
+            params(&[("name", "read me")])
+        );
         assert_eq!(file.matches("docs://bad%zz.md"), None);
     }
 

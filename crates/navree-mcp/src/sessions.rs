@@ -113,7 +113,10 @@ impl SessionStore for CacheSessionStore {
     }
 
     async fn store(&self, session_id: &str, state: &SessionState) -> Result<(), SessionStoreError> {
-        Ok(self.cache.put(&state_key(session_id), state, self.ttl).await?)
+        Ok(self
+            .cache
+            .put(&state_key(session_id), state, self.ttl)
+            .await?)
     }
 
     async fn delete(&self, session_id: &str) -> Result<(), SessionStoreError> {
@@ -138,7 +141,12 @@ mod tests {
         let second = Sessions::new(Some(cache.clone()), Duration::from_secs(60));
         assert_eq!(second.owner("s1").await, Some(user));
         second.forget("s1").await;
-        assert_eq!(Sessions::new(Some(cache), Duration::from_secs(60)).owner("s1").await, None);
+        assert_eq!(
+            Sessions::new(Some(cache), Duration::from_secs(60))
+                .owner("s1")
+                .await,
+            None
+        );
 
         let memory_only = Sessions::new(None, Duration::from_secs(60));
         assert_eq!(memory_only.owner("s2").await, None);

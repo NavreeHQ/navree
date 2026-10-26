@@ -24,7 +24,9 @@ async fn initialize_describes_the_server() {
 async fn the_list_shows_only_what_the_user_may_use() {
     let app = app().await;
     let rep = user();
-    let mcp = McpTestClient::new(app.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(rep.clone()))
+        .initialize()
+        .await;
     assert_eq!(
         names(&mcp.list_tools().await),
         [
@@ -90,7 +92,9 @@ async fn results_are_structured_content_and_json_text() {
     let rep = user();
     insert_deal(&app, rep.user_id, "Acme renewal", "lead").await;
     insert_deal(&app, Uuid::now_v7(), "Globex", "won").await;
-    let mcp = McpTestClient::new(app.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(rep.clone()))
+        .initialize()
+        .await;
 
     let result = mcp
         .call_tool("list_deals", json!({}))
@@ -114,7 +118,10 @@ async fn results_are_structured_content_and_json_text() {
     assert_eq!(won.len(), 1);
 
     let created = mcp
-        .call_tool("create_deal", json!({ "title": "Initech", "amount_cents": 5000 }))
+        .call_tool(
+            "create_deal",
+            json!({ "title": "Initech", "amount_cents": 5000 }),
+        )
         .await
         .assert_ok()
         .assert_json_path("title", json!("Initech"));
@@ -133,7 +140,9 @@ async fn strings_are_plain_text() {
     let app = app().await;
     let analyst = user();
     give_role(&app, analyst.user_id, "analyst", &["reports.view"]).await;
-    let mcp = McpTestClient::new(app.acting_as(analyst)).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(analyst))
+        .initialize()
+        .await;
     let report = mcp.call_tool("report_sales", json!({})).await.assert_ok();
     assert_eq!(report.text(), "Sales are up 12%.");
     assert!(report.structured().is_none());
@@ -147,9 +156,12 @@ async fn writes_commit_on_ok_and_roll_back_on_error() {
     mcp.call_tool("create_deal", json!({ "title": "Kept", "amount_cents": 1 }))
         .await
         .assert_ok();
-    mcp.call_tool("create_then_fail", json!({ "title": "Dropped", "amount_cents": 1 }))
-        .await
-        .assert_error(409, "The pipeline is locked");
+    mcp.call_tool(
+        "create_then_fail",
+        json!({ "title": "Dropped", "amount_cents": 1 }),
+    )
+    .await
+    .assert_error(409, "The pipeline is locked");
 
     let titles: Vec<String> = all_deals(&app).await.into_iter().map(|d| d.title).collect();
     assert_eq!(titles, ["Kept"]);
@@ -194,18 +206,27 @@ async fn record_checks_answer_403_or_404_in_the_result() {
     mcp.call_tool("move_deal", json!({ "deal_id": theirs.id, "stage": "won" }))
         .await
         .assert_error(403, "Forbidden");
-    mcp.call_tool("move_deal", json!({ "deal_id": Uuid::now_v7(), "stage": "won" }))
-        .await
-        .assert_error(404, "Not Found");
+    mcp.call_tool(
+        "move_deal",
+        json!({ "deal_id": Uuid::now_v7(), "stage": "won" }),
+    )
+    .await
+    .assert_error(404, "Not Found");
 
     // `#[can(Update, Deal, from = "deal_id")]` before the method.
-    mcp.call_tool("rename_deal", json!({ "deal_id": mine.id, "title": "Renamed" }))
-        .await
-        .assert_ok()
-        .assert_json_path("title", json!("Renamed"));
-    mcp.call_tool("rename_deal", json!({ "deal_id": theirs.id, "title": "Hijacked" }))
-        .await
-        .assert_error(403, "Forbidden");
+    mcp.call_tool(
+        "rename_deal",
+        json!({ "deal_id": mine.id, "title": "Renamed" }),
+    )
+    .await
+    .assert_ok()
+    .assert_json_path("title", json!("Renamed"));
+    mcp.call_tool(
+        "rename_deal",
+        json!({ "deal_id": theirs.id, "title": "Hijacked" }),
+    )
+    .await
+    .assert_error(403, "Forbidden");
     mcp.call_tool("rename_deal", json!({ "title": "No id" }))
         .await
         .assert_error(400, "deal_id should not be empty");
@@ -243,7 +264,9 @@ async fn token_abilities_limit_what_a_client_sees() {
     let app = app().await;
     let mut limited = user();
     limited.token_abilities = Some(vec!["deals.read".to_owned()]);
-    let mcp = McpTestClient::new(app.acting_as(limited)).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(limited))
+        .initialize()
+        .await;
     let tools = names(&mcp.list_tools().await);
     assert!(tools.contains(&"list_deals".to_owned()), "{tools:?}");
     assert!(!tools.contains(&"move_deal".to_owned()), "{tools:?}");

@@ -182,7 +182,12 @@ impl McpNotifier {
 
     /// Registers a `subscriptions/listen` stream; returns its id for
     /// [`close`](McpNotifier::close).
-    pub(crate) fn listen(&self, sink: SubscriptionSink, lists: Lists, resources: BTreeSet<String>) -> u64 {
+    pub(crate) fn listen(
+        &self,
+        sink: SubscriptionSink,
+        lists: Lists,
+        resources: BTreeSet<String>,
+    ) -> u64 {
         self.insert(Listener {
             session: None,
             channel: Channel::Sink(sink),
@@ -263,12 +268,30 @@ impl Channel {
 impl ChannelRef {
     async fn list_changed(self, kind: ListKind) -> Result<(), String> {
         match (self, kind) {
-            (ChannelRef::Peer(peer), ListKind::Tools) => peer.notify_tool_list_changed().await.map_err(|e| e.to_string()),
-            (ChannelRef::Peer(peer), ListKind::Resources) => peer.notify_resource_list_changed().await.map_err(|e| e.to_string()),
-            (ChannelRef::Peer(peer), ListKind::Prompts) => peer.notify_prompt_list_changed().await.map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Tools) => sink.notify_tool_list_changed().await.map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Resources) => sink.notify_resource_list_changed().await.map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Prompts) => sink.notify_prompt_list_changed().await.map_err(|e| e.to_string()),
+            (ChannelRef::Peer(peer), ListKind::Tools) => peer
+                .notify_tool_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
+            (ChannelRef::Peer(peer), ListKind::Resources) => peer
+                .notify_resource_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
+            (ChannelRef::Peer(peer), ListKind::Prompts) => peer
+                .notify_prompt_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
+            (ChannelRef::Sink(sink), ListKind::Tools) => sink
+                .notify_tool_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
+            (ChannelRef::Sink(sink), ListKind::Resources) => sink
+                .notify_resource_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
+            (ChannelRef::Sink(sink), ListKind::Prompts) => sink
+                .notify_prompt_list_changed()
+                .await
+                .map_err(|e| e.to_string()),
         }
     }
 }

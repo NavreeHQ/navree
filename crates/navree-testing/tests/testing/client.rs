@@ -200,7 +200,11 @@ async fn send_stream_returns_the_response_with_its_body_unread() {
     let client = app.client();
     let response = client.get("/api/demo/visits").send_stream().await;
     assert_eq!(response.status(), 200);
-    assert_eq!(client.cookie("visits").as_deref(), Some("1"), "cookies are kept");
+    assert_eq!(
+        client.cookie("visits").as_deref(),
+        Some("1"),
+        "cookies are kept"
+    );
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(body["visits"], 0);

@@ -61,7 +61,10 @@ async fn servers_of_several_modules_share_one_endpoint() {
     let app = builder().module(ReportsModule).build().await;
     let registry = app.get::<McpRegistry>().await;
     let names: Vec<&str> = registry.tools().map(|tool| tool.name.as_str()).collect();
-    assert!(names.contains(&"list_deals") && names.contains(&"revenue_today"), "{names:?}");
+    assert!(
+        names.contains(&"list_deals") && names.contains(&"revenue_today"),
+        "{names:?}"
+    );
 
     let mcp = McpTestClient::new(app.acting_as(user())).initialize().await;
     mcp.call_tool("revenue_today", json!({}))
@@ -76,11 +79,17 @@ async fn duplicate_names_fail_the_boot_naming_both_modules() {
         .module(ClashingModule)
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(drop)
+        .expect_err("the boot fails")
         .to_string();
-    assert!(error.contains("two MCP tools named `list_deals`"), "{error}");
-    assert!(error.contains("DealsModule") && error.contains("ClashingModule"), "{error}");
+    assert!(
+        error.contains("two MCP tools named `list_deals`"),
+        "{error}"
+    );
+    assert!(
+        error.contains("DealsModule") && error.contains("ClashingModule"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -93,8 +102,8 @@ async fn access_checks_need_the_access_module() {
         .module(McpModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(drop)
+        .expect_err("the boot fails")
         .to_string();
     assert!(error.contains("add AccessModule"), "{error}");
 }
@@ -105,8 +114,8 @@ async fn invalid_options_fail_the_boot_naming_the_key() {
         .config("mcp.session_ttl_secs", 0)
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(drop)
+        .expect_err("the boot fails")
         .to_string();
     assert!(error.contains("mcp.session_ttl_secs"), "{error}");
 
@@ -117,8 +126,8 @@ async fn invalid_options_fail_the_boot_naming_the_key() {
         }))
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(drop)
+        .expect_err("the boot fails")
         .to_string();
     assert!(error.contains("mcp.path"), "{error}");
 }
@@ -137,7 +146,11 @@ async fn for_root_takes_the_options_in_code() {
         .await;
     let settings = app.get::<McpSettings>().await;
     assert_eq!(
-        (settings.name.as_str(), settings.title.as_str(), settings.version.as_str()),
+        (
+            settings.name.as_str(),
+            settings.title.as_str(),
+            settings.version.as_str()
+        ),
         ("navree-crm", "Navree CRM", "1.4.0")
     );
     let mcp = McpTestClient::new(app.acting_as(user())).initialize().await;

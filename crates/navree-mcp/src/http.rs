@@ -217,9 +217,11 @@ impl Controller for McpController {
 /// 401s: `Bearer` with `auth = "bearer"`, `Bearer resource_metadata="..."`
 /// with `auth = "oauth"` (keeping an authenticator's `error` parameters).
 pub(crate) fn challenge_layer() -> GlobalLayer {
-    GlobalLayer::new(LayerSlot::Session, "mcp-challenge", |_ctx, router: Router| {
-        Ok(router.layer(from_fn(challenge)))
-    })
+    GlobalLayer::new(
+        LayerSlot::Session,
+        "mcp-challenge",
+        |_ctx, router: Router| Ok(router.layer(from_fn(challenge))),
+    )
 }
 
 async fn challenge(request: Request, next: Next) -> Response {
@@ -244,7 +246,10 @@ async fn challenge(request: Request, next: Next) -> Response {
             let metadata = format!("resource_metadata=\"{}\"", oauth.metadata_url());
             match existing.as_deref().and_then(|e| e.strip_prefix("Bearer")) {
                 Some(params) if !params.trim().is_empty() => {
-                    format!("Bearer {metadata}, {}", params.trim().trim_start_matches(','))
+                    format!(
+                        "Bearer {metadata}, {}",
+                        params.trim().trim_start_matches(',')
+                    )
                 }
                 _ => format!("Bearer {metadata}"),
             }

@@ -48,7 +48,12 @@ fn user_argument(args: &[String]) -> Result<String, BoxError> {
 /// client closes the stream or the app shuts down: what `mcp:serve` runs
 /// on stdin and stdout. The process acts as that user, with their roles
 /// and permissions.
-pub async fn serve_stdio<R, W>(ctx: &AppContext, user: &str, reader: R, writer: W) -> Result<(), BoxError>
+pub async fn serve_stdio<R, W>(
+    ctx: &AppContext,
+    user: &str,
+    reader: R,
+    writer: W,
+) -> Result<(), BoxError>
 where
     R: AsyncRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
@@ -99,7 +104,8 @@ async fn find_user(ctx: &AppContext, user: &str) -> Result<Uuid, BoxError> {
         }
         return Ok(id);
     }
-    let auth = auth.ok_or("mcp:serve --user <email> needs AuthModule in the app (or pass a user id)")?;
+    let auth =
+        auth.ok_or("mcp:serve --user <email> needs AuthModule in the app (or pass a user id)")?;
     let found = auth
         .find_by_email(user)
         .await?
@@ -117,8 +123,14 @@ mod tests {
 
     #[test]
     fn the_user_comes_from_the_flag() {
-        assert_eq!(user_argument(&args(&["--user", "ada@example.com"])).unwrap(), "ada@example.com");
-        assert_eq!(user_argument(&args(&["--user=ada@example.com"])).unwrap(), "ada@example.com");
+        assert_eq!(
+            user_argument(&args(&["--user", "ada@example.com"])).unwrap(),
+            "ada@example.com"
+        );
+        assert_eq!(
+            user_argument(&args(&["--user=ada@example.com"])).unwrap(),
+            "ada@example.com"
+        );
         assert!(user_argument(&args(&[])).is_err());
         assert!(user_argument(&args(&["--user"])).is_err());
     }
