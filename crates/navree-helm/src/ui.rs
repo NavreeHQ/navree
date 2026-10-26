@@ -1304,6 +1304,8 @@ struct Submission {
     meta: HashMap<String, String>,
     /// Files stored from a multipart form: field → path.
     files: HashMap<String, String>,
+    /// Uploads refused (wrong type, too large, empty): field → messages.
+    upload_errors: BTreeMap<String, Vec<String>>,
 }
 
 impl Submission {
@@ -1377,8 +1379,33 @@ async fn submission(
                     })?;
                 let disk = storage.disk(disk).map_err(AppError::internal)?;
                 let rules = UploadRules::new(spec.max_size, spec.accept.clone());
-                let stored = store_upload(field, &disk, &info.slug, rules).await?;
-                submission.files.insert(name, stored.path);
+                match store_upload(field, &disk, &info.slug, rules).await {
+                    Ok(stored) => {
+                        submission.files.insert(name, stored.path);
+                    }
+                    // A refused upload is shown under its field, with the
+                    // rest of the form kept.
+                    Err(error)
+                        if matches!(
+                            error.status,
+                            StatusCode::BAD_REQUEST | StatusCode::PAYLOAD_TOO_LARGE
+                        ) =>
+                    {
+                        let message = error
+                            .errors
+                            .as_deref()
+                            .and_then(|errors| errors.get(&name))
+                            .and_then(|messages| messages.first().cloned())
+                            .or_else(|| error.detail.clone())
+                            .unwrap_or_else(|| error.title.clone());
+                        submission
+                            .upload_errors
+                            .entry(name)
+                            .or_default()
+                            .push(message);
+                    }
+                    Err(error) => return Err(error),
+                }
             }
             None => {
                 let value = field
@@ -1578,6 +1605,18 @@ async fn create_record(
     let submission = submission(&panel.cx, info, request, true).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
+    if !submission.upload_errors.is_empty() {
+        let error = AppError::validation(submission.upload_errors.clone());
+        return form_page(
+            &frame,
+            resource.as_ref(),
+            StatusCode::BAD_REQUEST,
+            None,
+            Some(&submission.values),
+            Some(&error),
+        )
+        .await;
+    }
     let fields = form_fields_of(info, true);
     let input = form_input(&fields, &submission, None);
     match resource.create(frame.cx, input).await {
@@ -1692,6 +1731,18 @@ async fn update_record(
     let submission = submission(&panel.cx, info, request, true).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
+    if !submission.upload_errors.is_empty() {
+        let error = AppError::validation(submission.upload_errors.clone());
+        return form_page(
+            &frame,
+            resource.as_ref(),
+            StatusCode::BAD_REQUEST,
+            Some((&record, &item)),
+            Some(&submission.values),
+            Some(&error),
+        )
+        .await;
+    }
     let fields: Vec<&Field> = form_fields_of(info, false)
         .into_iter()
         .filter(|f| f.editable() && !item.readonly.contains(&f.name))

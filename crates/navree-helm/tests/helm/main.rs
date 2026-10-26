@@ -7,6 +7,7 @@ mod support;
 mod actions;
 mod api;
 mod boot;
+mod files;
 mod metrics;
 mod pages;
 mod signin;
