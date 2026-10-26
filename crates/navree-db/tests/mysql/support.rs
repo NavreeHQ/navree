@@ -1,0 +1,178 @@
+//! The MySQL server the suite runs against, and a scratch database per test.
+
+#![allow(dead_code)]
+
+use navree_db::{Db, DbOptions};
+use sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
+use uuid::Uuid;
+
+/// A MySQL or MariaDB server URL whose user may create and drop databases,
+/// e.g. `mysql://root:secret@127.0.0.1:3306/navree_test`.
+pub const URL_VARIABLE: &str = "NAVREE_TEST_MYSQL_URL";
+
+/// With `1`, a missing server fails the test instead of skipping it (CI).
+pub const REQUIRE_VARIABLE: &str = "NAVREE_TEST_REQUIRE_SERVICES";
+
+/// A fresh, empty database on the test server, dropped when the guard is
+/// dropped (also when the test panics). Declare it before the pools that
+/// use it, so they are dropped first.
+pub struct Scratch {
+    /// The server URL from the environment (used for `DROP DATABASE`).
+    admin: String,
+    /// The database name, `navree_db_<uuid>`.
+    pub name: String,
+    /// A `mysql://` URL of the scratch database.
+    pub url: String,
+}
+
+impl Scratch {
+    /// A scratch database, or `None` (after saying why) when
+    /// `NAVREE_TEST_MYSQL_URL` is not set. Panics when the variable is
+    /// missing and `NAVREE_TEST_REQUIRE_SERVICES=1`.
+    pub async fn new(test: &str) -> Option<Scratch> {
+        let Ok(admin) = std::env::var(URL_VARIABLE) else {
+            assert!(
+                std::env::var(REQUIRE_VARIABLE).as_deref() != Ok("1"),
+                "{test}: {URL_VARIABLE} is not set and {REQUIRE_VARIABLE}=1"
+            );
+            eprintln!("SKIPPED {test}: set {URL_VARIABLE}");
+            return None;
+        };
+        let name = format!("navree_db_{}", Uuid::now_v7().simple());
+        let conn = Database::connect(admin.as_str())
+            .await
+            .unwrap_or_else(|error| panic!("{test}: cannot connect to {URL_VARIABLE}: {error}"));
+        conn.execute_unprepared(&format!(
+            "CREATE DATABASE `{name}` CHARACTER SET utf8mb4"
+        ))
+        .await
+        .expect("creates the scratch database");
+        conn.close().await.expect("closes the admin connection");
+        let url = with_database(&admin, &name);
+        Some(Scratch { admin, name, url })
+    }
+
+    /// Options for the scratch database.
+    pub fn options(&self) -> DbOptions {
+        DbOptions {
+            url: self.url.clone(),
+            ..DbOptions::default()
+        }
+    }
+
+    /// The scratch database's URL with the `mariadb://` scheme.
+    pub fn mariadb_url(&self) -> String {
+        self.url.replacen("mysql://", "mariadb://", 1)
+    }
+
+    /// A pool on the scratch database.
+    pub async fn db(&self) -> Db {
+        Db::connect(&self.options()).await.expect("connects")
+    }
+
+    /// A pool on the scratch database with `options` changed by `f`.
+    pub async fn db_with(&self, f: impl FnOnce(&mut DbOptions)) -> Db {
+        let mut options = self.options();
+        f(&mut options);
+        Db::connect(&options).await.expect("connects")
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let admin = self.admin.clone();
+        let name = self.name.clone();
+        // `Drop` cannot await and the test's runtime may be shutting down,
+        // so the database is dropped from a thread with its own runtime.
+        let dropped = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("a runtime");
+            runtime.block_on(async move {
+                let conn = Database::connect(admin.as_str()).await?;
+                // An unfinished transaction of the test would block the drop.
+                conn.execute_unprepared("SET SESSION lock_wait_timeout = 10")
+                    .await?;
+                conn.execute_unprepared(&format!("DROP DATABASE IF EXISTS `{name}`"))
+                    .await?;
+                conn.close().await
+            })
+        })
+        .join();
+        match dropped {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => eprintln!("the scratch database {} was not dropped: {error}", self.name),
+            Err(_) => eprintln!("dropping the scratch database {} panicked", self.name),
+        }
+    }
+}
+
+/// `url` with its database replaced by `database` (the query is kept).
+pub fn with_database(url: &str, database: &str) -> String {
+    let (scheme, rest) = url.split_once("://").expect("a URL with a scheme");
+    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    let query = tail.find('?').map_or("", |at| &tail[at..]);
+    format!("{scheme}://{authority}/{database}{query}")
+}
+
+/// Runs `sql` and returns the first column of every row as text.
+pub async fn strings(conn: &impl ConnectionTrait, sql: &str) -> Vec<String> {
+    conn.query_all_raw(Statement::from_string(DbBackend::MySql, sql))
+        .await
+        .unwrap_or_else(|error| panic!("{sql}: {error}"))
+        .iter()
+        .map(|row| {
+            row.try_get_by_index::<Option<String>>(0)
+                .unwrap_or_else(|error| panic!("{sql}: {error}"))
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// Runs `sql` and returns the first column of its one row as text.
+pub async fn string(conn: &impl ConnectionTrait, sql: &str) -> String {
+    let mut values = strings(conn, sql).await;
+    assert_eq!(values.len(), 1, "{sql}: one row expected, got {values:?}");
+    values.remove(0)
+}
+
+/// `SELECT COUNT(*) FROM table`.
+pub async fn count(conn: &impl ConnectionTrait, table: &str) -> i64 {
+    let row = conn
+        .query_one_raw(Statement::from_string(
+            DbBackend::MySql,
+            format!("SELECT COUNT(*) AS n FROM `{table}`"),
+        ))
+        .await
+        .expect("count query")
+        .expect("count row");
+    row.try_get::<i64>("", "n").expect("count")
+}
+
+/// The base tables of the current database, sorted.
+pub async fn tables(conn: &impl ConnectionTrait) -> Vec<String> {
+    strings(
+        conn,
+        "SELECT CAST(table_name AS CHAR) FROM information_schema.tables \
+         WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' ORDER BY 1",
+    )
+    .await
+}
+
+#[test]
+fn replaces_the_database_of_a_url() {
+    assert_eq!(
+        with_database("mysql://root:pw@127.0.0.1:3306/navree_test", "scratch"),
+        "mysql://root:pw@127.0.0.1:3306/scratch"
+    );
+    assert_eq!(
+        with_database("mysql://root@db?ssl-mode=DISABLED", "scratch"),
+        "mysql://root@db/scratch?ssl-mode=DISABLED"
+    );
+    assert_eq!(
+        with_database("mysql://root@db/old?charset=utf8mb4", "new"),
+        "mysql://root@db/new?charset=utf8mb4"
+    );
+}
