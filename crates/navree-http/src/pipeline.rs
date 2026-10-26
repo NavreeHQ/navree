@@ -6,6 +6,7 @@
 //! `AuthContext` slot) and the router.
 
 use std::any::Any;
+use std::error::Error as StdError;
 use std::net::IpAddr;
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, OnceLock};
@@ -25,6 +26,10 @@ use http::{HeaderMap, Method, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, RequestScope};
+use navree_telemetry::{
+    EventKind, ExceptionReported, RequestHandled, RequestInfo, Telemetry, TelemetryContext,
+    TelemetryEvent, TracePolicy,
+};
 use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -75,11 +80,21 @@ fn request_id_of(request: &Request) -> Option<RequestId> {
 pub(crate) struct ContextState {
     pub(crate) ctx: AppContext,
     pub(crate) proxies: ProxyTrust,
+    /// The app's telemetry registry (disabled without sinks).
+    pub(crate) telemetry: Telemetry,
+    /// How a request's trace starts (`observe.tracing`).
+    pub(crate) policy: TracePolicy,
 }
 
+/// The `traceparent` and `tracestate` headers (W3C Trace Context).
+static TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
+static TRACESTATE: HeaderName = HeaderName::from_static("tracestate");
+
 /// Accepts a valid incoming `X-Request-Id` or generates one, records the
-/// client ip and the app context in the request extensions, runs the request
-/// in a tracing span, echoes the id and writes the request log line.
+/// client ip and the app context in the request extensions, starts or
+/// continues the request's trace (`traceparent`), runs the request in a
+/// tracing span and its [`TelemetryContext`], echoes the id, writes the
+/// request log line and emits [`RequestHandled`].
 pub(crate) async fn request_context(
     State(state): State<Arc<ContextState>>,
     mut request: Request,
@@ -93,14 +108,28 @@ pub(crate) async fn request_context(
     let header = HeaderValue::from_str(request_id.as_str())
         .unwrap_or_else(|_| HeaderValue::from_static("invalid"));
     let ip = ClientIp::resolve(request.headers(), request.extensions(), &state.proxies);
+    let trace = state.policy.start(
+        header_str(request.headers(), &TRACEPARENT),
+        header_str(request.headers(), &TRACESTATE),
+    );
+    let mut telemetry_context =
+        TelemetryContext::new(state.telemetry.clone()).with_request_id(request_id.as_str());
+    if let Some(trace) = trace {
+        telemetry_context = telemetry_context.with_trace(trace);
+    }
     request
         .headers_mut()
         .insert(X_REQUEST_ID.clone(), header.clone());
     request.extensions_mut().insert(request_id.clone());
     request.extensions_mut().insert(ip);
     request.extensions_mut().insert(state.ctx.clone());
+    request.extensions_mut().insert(telemetry_context.clone());
     // Request-scoped providers are built once per request (see `Scoped`).
     request.extensions_mut().insert(RequestScope::new());
+    let path = state
+        .telemetry
+        .enabled(EventKind::RequestHandled)
+        .then(|| request.uri().path().to_owned());
 
     let method = request.method().clone();
     // Every log line inside the request carries these fields; `user_id` is
@@ -114,16 +143,36 @@ pub(crate) async fn request_context(
     );
     request.extensions_mut().insert(RequestSpan(span.clone()));
     let start = Instant::now();
-    let mut response = next.run(request).instrument(span.clone()).await;
+    let mut response = telemetry_context
+        .clone()
+        .scope(next.run(request).instrument(span.clone()))
+        .await;
     response.headers_mut().insert(X_REQUEST_ID.clone(), header);
 
     let latency = start.elapsed();
-    let route = response
-        .extensions()
-        .get::<Arc<RouteMeta>>()
+    let matched = response.extensions().get::<Arc<RouteMeta>>().cloned();
+    let route = matched
+        .as_ref()
         .map_or_else(|| "unmatched".to_owned(), |meta| meta.full_path.clone());
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
     let status = response.status().as_u16();
+    if let Some(path) = path {
+        let event = RequestHandled {
+            method: method.to_string(),
+            route: matched.map(|meta| meta.full_path.clone()),
+            path,
+            status,
+            duration: latency,
+            user_id: user
+                .map(|user| user.to_string())
+                .or_else(|| telemetry_context.user_id().map(str::to_owned)),
+            workspace_id: telemetry_context.workspace_id().map(str::to_owned),
+            request_id: request_id.as_str().to_owned(),
+            client_ip: Some(ip.0.to_string()),
+        };
+        let telemetry = state.telemetry.clone();
+        telemetry_context.sync_scope(|| telemetry.emit(TelemetryEvent::RequestHandled(event)));
+    }
     span.in_scope(|| {
         tracing::info!(
             target: "navree::request",
@@ -151,9 +200,14 @@ pub(crate) async fn request_context(
 // Panic catcher and timeout (outside the error layer: they render themselves)
 // ---------------------------------------------------------------------------
 
-/// Turns a panicking handler or layer into a 500 error.
+/// Turns a panicking handler or layer into a 500 error (and an
+/// [`ExceptionReported`] event with the panic's location).
 pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
     let request_id = request_id_of(&request);
+    let telemetry = Telemetry::current();
+    let request_info = telemetry
+        .enabled(EventKind::ExceptionReported)
+        .then(|| (request.method().to_string(), request.uri().path().to_owned()));
     match AssertUnwindSafe(next.run(request)).catch_unwind().await {
         Ok(response) => response,
         Err(payload) => {
@@ -164,6 +218,24 @@ pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
                 panic = %message,
                 "request handler panicked"
             );
+            if let Some((method, path)) = request_info {
+                let location = TelemetryContext::with_current(|context| {
+                    context.panic_location().map(str::to_owned)
+                })
+                .flatten();
+                telemetry.emit(TelemetryEvent::ExceptionReported(ExceptionReported {
+                    message: message.clone(),
+                    chain: vec![message],
+                    location,
+                    panic: true,
+                    request: Some(RequestInfo {
+                        method,
+                        path,
+                        route: None,
+                        status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                    }),
+                }));
+            }
             AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR).render()
         }
     }
@@ -315,6 +387,7 @@ async fn finalize(
             error = %error.log_chain(),
             "request failed"
         );
+        report_exception(&error, &response, method, path);
     }
 
     let rendered = error.render();
@@ -326,6 +399,47 @@ async fn finalize(
         parts.headers.insert(name, value.clone());
     }
     Response::from_parts(parts, body)
+}
+
+/// Emits an [`ExceptionReported`] for a server error that is a failure (a
+/// 500, or any 5xx with an underlying error), not a deliberate 503 such as
+/// maintenance mode.
+fn report_exception(error: &AppError, response: &Response, method: &Method, path: &str) {
+    if error.status != StatusCode::INTERNAL_SERVER_ERROR && error.source.is_none() {
+        return;
+    }
+    let telemetry = Telemetry::current();
+    if !telemetry.enabled(EventKind::ExceptionReported) {
+        return;
+    }
+    let mut exception = match error.source.as_deref() {
+        Some(source) => ExceptionReported::from_error(source as &(dyn StdError + 'static)),
+        None => {
+            let message = error.detail.clone().unwrap_or_else(|| error.title.clone());
+            ExceptionReported {
+                chain: vec![message.clone()],
+                message,
+                location: None,
+                panic: false,
+                request: None,
+            }
+        }
+    };
+    exception.request = Some(RequestInfo {
+        method: method.to_string(),
+        path: path.to_owned(),
+        route: response
+            .extensions()
+            .get::<Arc<RouteMeta>>()
+            .map(|meta| meta.full_path.clone()),
+        status: error.status.as_u16(),
+    });
+    telemetry.emit(TelemetryEvent::ExceptionReported(exception));
+}
+
+/// The header's value, when it is valid text.
+fn header_str<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Option<&'a str> {
+    headers.get(name).and_then(|value| value.to_str().ok())
 }
 
 /// An error response with no body or a small plain-text body.
@@ -478,6 +592,9 @@ pub(crate) async fn authenticate(
     let user = state.0.as_ref().map(|p| p.user_id);
     if let (Some(user), Some(span)) = (user, parts.extensions.get::<RequestSpan>()) {
         span.0.record("user_id", tracing::field::display(user));
+    }
+    if let (Some(user), Some(context)) = (user, parts.extensions.get::<TelemetryContext>()) {
+        context.set_user_id(user);
     }
     parts.extensions.insert(state);
     let mut response = next.run(Request::from_parts(parts, body)).await;

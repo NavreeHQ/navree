@@ -1,15 +1,20 @@
 //! [`ObserveModule`].
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::HealthCheck;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, Resolver};
+use navree_kernel::{
+    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+};
+use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 
 use crate::controller::ObserveController;
+use crate::export::{self, Fanout, NoExport, SpanExport, WriterExport};
 use crate::metrics::MetricsRecorder;
-use crate::{Health, ObserveOptions};
+use crate::{Health, ObserveOptions, TracingOptions};
 
 /// The observability module. Global; provides and exports
 /// [`ObserveOptions`] and [`Health`] (every `dyn HealthCheck` of the app),
@@ -107,5 +112,85 @@ fn register(m: &mut ModuleBuilder, options: Option<ObserveOptions>) {
         .exports::<Health>()
         .provider::<MetricsRecorder>()
         .lifecycle::<MetricsRecorder>()
-        .controller::<ObserveController>();
+        .controller::<ObserveController>()
+        .factory(Factory::<TracingOptions>::new(|r: Resolver| async move {
+            let options = match r.app().try_get::<Config>().await {
+                Some(config) => TracingOptions::from_config(&config)?,
+                None => TracingOptions::default(),
+            };
+            Ok(Arc::new(options))
+        }))
+        .exports::<TracingOptions>()
+        .telemetry_sink_factory(
+            Factory::<dyn TelemetrySink>::new(|r: Resolver| async move {
+                let options = r.get::<TracingOptions>().await?;
+                span_exporter(&r.app(), &options).await
+            })
+            .deps(vec![ProviderKey::of::<TracingOptions>()]),
+        );
+}
+
+/// The telemetry sink that exports spans: a queue drained by a task on the
+/// app's tracker (flushed at shutdown), to stdout and/or OTLP; a sink that
+/// wants nothing when spans go nowhere.
+async fn span_exporter(
+    app: &AppContext,
+    options: &TracingOptions,
+) -> Result<Arc<dyn TelemetrySink>, BoxError> {
+    if !options.exports() {
+        return Ok(Arc::new(NoExport));
+    }
+    let mut exporters: Vec<Arc<dyn SpanExport>> = Vec::new();
+    if options.stdout {
+        exporters.push(Arc::new(WriterExport(Mutex::new(std::io::stdout()))));
+    }
+    if options.endpoint.is_some()
+        && let Some(exporter) = otlp_exporter(app, options).await?
+    {
+        exporters.push(exporter);
+    }
+    if exporters.is_empty() {
+        return Ok(Arc::new(NoExport));
+    }
+    let token = app.shutdown_token();
+    let (sink, task) = export::start(
+        Arc::new(Fanout(exporters)),
+        options.max_queue_size,
+        Duration::from_millis(options.timeout_ms),
+        async move { token.cancelled().await },
+    );
+    app.tracker().spawn(task);
+    Ok(Arc::new(sink))
+}
+
+/// The OTLP exporter for `observe.tracing.endpoint`.
+#[cfg(feature = "otel")]
+async fn otlp_exporter(
+    app: &AppContext,
+    options: &TracingOptions,
+) -> Result<Option<Arc<dyn SpanExport>>, BoxError> {
+    let version = match app.try_get::<Config>().await {
+        Some(config) => config.get_string("app.version"),
+        None => None,
+    };
+    let exporter = crate::otlp::OtlpExport::new(options, version)?;
+    Ok(Some(Arc::new(exporter)))
+}
+
+/// Without the `otel` feature there is no OTLP exporter: an endpoint set in
+/// the configuration fails the boot; one from `OTEL_EXPORTER_OTLP_ENDPOINT`
+/// is ignored with a warning.
+#[cfg(not(feature = "otel"))]
+async fn otlp_exporter(
+    _app: &AppContext,
+    options: &TracingOptions,
+) -> Result<Option<Arc<dyn SpanExport>>, BoxError> {
+    if options.endpoint_from_env {
+        tracing::warn!(
+            target: "navree::tracing",
+            "OTEL_EXPORTER_OTLP_ENDPOINT is set, but navree-observe was built without its `otel` feature: spans are not exported"
+        );
+        return Ok(None);
+    }
+    Err("observe.tracing.endpoint is set, but navree-observe was built without its `otel` feature: turn on the `otel` feature of the navree crate (or of navree-observe) to export spans over OTLP".into())
 }

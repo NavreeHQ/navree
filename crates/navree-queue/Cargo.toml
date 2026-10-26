@@ -18,6 +18,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }

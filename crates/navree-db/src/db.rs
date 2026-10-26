@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_kernel::WeakAppContext;
+use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
 use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbBackend, DbErr};
 use tokio::sync::OnceCell;
@@ -39,6 +40,18 @@ struct DbInner {
 impl Db {
     /// Opens a pool for `options` (creating the directory of a SQLite file).
     pub async fn connect(options: &DbOptions) -> Result<Db, DbErr> {
+        Self::connect_with_telemetry(options, Telemetry::disabled()).await
+    }
+
+    /// Opens a pool like [`connect`](Db::connect) that reports every
+    /// statement SeaORM times to `telemetry` as a `QueryExecuted` event (the
+    /// SQL with its placeholders, never the bound values; the connection is
+    /// the URL without its password). `DatabaseModule` connects this way
+    /// with the app's registry.
+    pub async fn connect_with_telemetry(
+        options: &DbOptions,
+        telemetry: Telemetry,
+    ) -> Result<Db, DbErr> {
         let mut connect = ConnectOptions::new(options.url.clone());
         connect
             .max_connections(options.max_connections)
@@ -57,7 +70,15 @@ impl Db {
         let mut conn = Database::connect(connect)
             .await
             .map_err(|error| connect_error(options, &error))?;
-        install_query_log(&mut conn, options.log_queries, options.slow_query_ms);
+        install_query_log(
+            &mut conn,
+            options.log_queries,
+            options.slow_query_ms,
+            QueryTelemetry {
+                telemetry,
+                connection: options.redacted_url(),
+            },
+        );
         Ok(Self::from_connection(conn))
     }
 
@@ -189,19 +210,43 @@ impl fmt::Debug for Db {
     }
 }
 
+/// Where statements are reported, and the connection's name in the events.
+struct QueryTelemetry {
+    telemetry: Telemetry,
+    connection: String,
+}
+
 /// Logs statements through `tracing` (target `navree_db::query`): every
 /// statement at debug level when `log_queries`, statements slower than
 /// `slow_query_ms` at warn level. Only the SQL text is logged, never the
 /// bound values. SeaORM does not time `execute_unprepared` statements, so
-/// those are not logged.
-fn install_query_log(conn: &mut DatabaseConnection, log_queries: bool, slow_query_ms: u64) {
-    if !log_queries && slow_query_ms == 0 {
+/// those are not logged. Also reports every statement to the telemetry
+/// sinks that want `QueryExecuted` events. Installs nothing when there is
+/// nothing to log and no telemetry registry.
+fn install_query_log(
+    conn: &mut DatabaseConnection,
+    log_queries: bool,
+    slow_query_ms: u64,
+    report: QueryTelemetry,
+) {
+    if !log_queries && slow_query_ms == 0 && report.telemetry.is_disabled() {
         return;
     }
     let slow = (slow_query_ms > 0).then(|| Duration::from_millis(slow_query_ms));
     conn.set_metric_callback(move |info| {
-        let elapsed_ms = info.elapsed.as_secs_f64() * 1000.0;
         let sql = info.statement.sql.as_str();
+        report
+            .telemetry
+            .emit_with(EventKind::QueryExecuted, || {
+                TelemetryEvent::QueryExecuted(QueryExecuted {
+                    sql: sql.to_owned(),
+                    duration: info.elapsed,
+                    rows: None,
+                    connection: report.connection.clone(),
+                    failed: info.failed,
+                })
+            });
+        let elapsed_ms = info.elapsed.as_secs_f64() * 1000.0;
         if slow.is_some_and(|slow| info.elapsed >= slow) {
             tracing::warn!(
                 target: "navree_db::query",

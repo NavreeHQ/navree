@@ -2,12 +2,14 @@
 
 use std::sync::Arc;
 
+use navree_config::Config;
 use navree_contracts::{Clock, SystemClock};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt};
 use navree_kernel::{
     AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
     Resolver,
 };
+use navree_telemetry::{Telemetry, TracePolicy};
 
 use crate::store::{CreateScheduleRuns, MIGRATION_MODULE};
 use crate::{RunStatus, Scheduler, SkipReason, TaskInfo};
@@ -68,7 +70,17 @@ fn register(m: &mut ModuleBuilder) {
                     Some(clock) => clock,
                     None => Arc::new(SystemClock),
                 };
-                Ok(Arc::new(Scheduler::new(&app, db, clock)?))
+                let telemetry = Telemetry::from_app(&app).await;
+                let policy = match app.try_get::<Config>().await {
+                    Some(config) => TracePolicy::from_settings(
+                        |key| config.get_string(key),
+                        |name| std::env::var(name).ok(),
+                    )?,
+                    None => TracePolicy::default(),
+                };
+                Ok(Arc::new(
+                    Scheduler::new(&app, db, clock)?.instrumented(telemetry, policy),
+                ))
             })
             .deps(vec![ProviderKey::of::<Db>()]),
         )

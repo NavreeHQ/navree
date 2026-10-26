@@ -9,3 +9,4 @@ mod levels;
 mod options;
 mod redaction;
 mod support;
+mod telemetry;
