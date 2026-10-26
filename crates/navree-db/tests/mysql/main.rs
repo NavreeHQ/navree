@@ -14,5 +14,7 @@ mod fixtures;
 mod support;
 
 mod connect;
+mod paginate;
+mod repo;
 mod text;
 mod uow;

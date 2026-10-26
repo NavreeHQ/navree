@@ -3,12 +3,50 @@
 //! variables, repositories, pagination, migrations and `migrate:fresh`.
 //! `tests/mysql` runs the same paths against a real server.
 
-use navree_db::Db;
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, MockDatabase, MockExecResult, MockRow};
+use navree_db::{
+    ChangeOp, CursorQuery, Db, PageMeta, PageQuery, Repo, cursor_paginate, cursor_paginate_desc,
+    paginate,
+};
+use sea_orm::{
+    ActiveValue::Set, ConnectionTrait, DbBackend, DbErr, EntityTrait, IntoActiveModel, IntoMockRow,
+    MockDatabase, MockExecResult, MockRow, QueryOrder, Value,
+};
 use uuid::Uuid;
+
+use crate::fixtures::note;
 
 /// The actor the scripted units of work run for.
 const ACTOR: Uuid = Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_0001);
+
+/// The columns SeaORM selects for a `notes` row.
+const NOTE_COLUMNS: &str = "`notes`.`id`, `notes`.`title`, `notes`.`body`";
+
+/// A `notes` row.
+fn a_note(n: u128, title: &str) -> note::Model {
+    note::Model {
+        id: Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_1000 + n),
+        title: title.to_owned(),
+        body: format!("body of {title}"),
+    }
+}
+
+/// Every statement sent so far as `(sql, values)` (drains the log).
+fn sent_raw(db: &Db) -> Vec<(String, Vec<Value>)> {
+    db.conn()
+        .clone()
+        .into_transaction_log()
+        .iter()
+        .flat_map(|transaction| transaction.statements())
+        .map(|statement| {
+            let values = statement
+                .values
+                .as_ref()
+                .map(|values| values.0.clone())
+                .unwrap_or_default();
+            (statement.sql.clone(), values)
+        })
+        .collect()
+}
 
 /// A scripted MySQL connection: statements answer with `execs` (one
 /// affected row each, in order) and queries with `queries` (in order).
@@ -202,6 +240,210 @@ async fn uow_locks_rows_for_update_on_mysql() {
     assert_eq!(uow.db().backend(), DbBackend::MySql);
     // Nothing was sent: the transaction is lazy.
     assert!(sent(&db).is_empty());
+}
+
+// --- Repositories ------------------------------------------------------------
+
+/// MySQL has no `RETURNING`: SeaORM reads a row back by its key after
+/// `INSERT` and `UPDATE`. `Repo::update` locks the row it reads first.
+#[tokio::test]
+async fn repo_writes_through_the_unit_of_work_with_mysql_statements() {
+    let created = a_note(1, "a");
+    let changed = note::Model {
+        body: "changed".to_owned(),
+        ..created.clone()
+    };
+    let db = scripted(
+        5,
+        vec![
+            vec![created.clone().into_mock_row()],
+            vec![created.clone().into_mock_row()],
+            vec![changed.clone().into_mock_row()],
+        ],
+    );
+    let uow = db.uow(None, None).await;
+    let inserted = Repo::<note::Entity>::insert(
+        &uow,
+        note::ActiveModel {
+            id: Set(created.id),
+            title: Set(created.title.clone()),
+            body: Set(created.body.clone()),
+        },
+    )
+    .await
+    .expect("inserts");
+    let mut am = inserted.into_active_model();
+    am.body = Set("changed".to_owned());
+    let updated = Repo::<note::Entity>::update(&uow, am)
+        .await
+        .expect("updates");
+    Repo::<note::Entity>::delete(&uow, updated)
+        .await
+        .expect("deletes");
+    let ops: Vec<ChangeOp> = uow.changes().iter().map(|change| change.op).collect();
+    assert_eq!(ops, [ChangeOp::Created, ChangeOp::Updated, ChangeOp::Deleted]);
+    assert_eq!(
+        uow.changes()[1].new,
+        Some(serde_json::json!({"body": "changed"}))
+    );
+    uow.commit().await.expect("commits");
+
+    let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    assert_eq!(
+        sql,
+        [
+            "BEGIN".to_owned(),
+            "SET @navree_actor = ?, @navree_request_id = ?".to_owned(),
+            "INSERT INTO `notes` (`id`, `title`, `body`) VALUES (?, ?, ?)".to_owned(),
+            format!("SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` = ? LIMIT ?"),
+            format!("SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` = ? LIMIT ? FOR UPDATE"),
+            "UPDATE `notes` SET `body` = ? WHERE `notes`.`id` = ?".to_owned(),
+            format!("SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` = ? LIMIT ?"),
+            "DELETE FROM `notes` WHERE `notes`.`id` = ?".to_owned(),
+            "SET @navree_actor = NULL, @navree_request_id = NULL".to_owned(),
+            "COMMIT".to_owned(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn repo_find_for_update_locks_the_row() {
+    let found = a_note(2, "b");
+    let db = scripted(2, vec![vec![found.clone().into_mock_row()]]);
+    let uow = db.uow(None, None).await;
+    let locked = Repo::<note::Entity>::find_for_update(&uow, found.id)
+        .await
+        .expect("reads");
+    assert_eq!(locked, Some(found.clone()));
+    // The log holds a transaction once it has ended.
+    uow.rollback().await.expect("rolls back");
+    let log = sent_raw(&db);
+    assert_eq!(
+        log[2],
+        (
+            format!("SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` = ? LIMIT ? FOR UPDATE"),
+            vec![found.id.into(), 1u64.into()]
+        )
+    );
+}
+
+// --- Pagination --------------------------------------------------------------
+
+/// A `COUNT(*)` row as MySQL returns it.
+fn count_row(n: i64) -> MockRow {
+    std::collections::BTreeMap::from([("num_items", Value::BigInt(Some(n)))]).into_mock_row()
+}
+
+#[tokio::test]
+async fn paginate_counts_then_reads_one_page() {
+    let rows: Vec<MockRow> = (10..20)
+        .map(|n| a_note(n, &format!("note-{n}")).into_mock_row())
+        .collect();
+    let db = scripted(0, vec![vec![count_row(23)], rows]);
+    let page = paginate(
+        note::Entity::find().order_by_asc(note::Column::Title),
+        db.conn(),
+        PageQuery::new(2, 10),
+    )
+    .await
+    .expect("pages");
+    assert_eq!(
+        page.meta,
+        PageMeta {
+            current_page: 2,
+            per_page: 10,
+            total: 23,
+            last_page: 3
+        }
+    );
+    assert_eq!(page.data.len(), 10);
+    assert_eq!(page.data[0].title, "note-10");
+    assert_eq!(
+        sent_raw(&db),
+        [
+            (
+                format!(
+                    "SELECT COUNT(*) AS num_items FROM (SELECT {NOTE_COLUMNS} FROM `notes`) AS `sub_query`"
+                ),
+                vec![]
+            ),
+            (
+                format!(
+                    "SELECT {NOTE_COLUMNS} FROM `notes` ORDER BY `notes`.`title` ASC LIMIT ? OFFSET ?"
+                ),
+                vec![10u64.into(), 10u64.into()]
+            ),
+        ]
+    );
+}
+
+/// A page past the end is empty and its rows are not queried.
+#[tokio::test]
+async fn paginate_past_the_end_reads_only_the_count() {
+    let db = scripted(0, vec![vec![count_row(3)]]);
+    let page = paginate(note::Entity::find(), db.conn(), PageQuery::new(u64::MAX, 100))
+        .await
+        .expect("pages");
+    assert!(page.data.is_empty());
+    assert_eq!(page.meta.total, 3);
+    assert_eq!(sent_raw(&db).len(), 1, "the count only");
+}
+
+#[tokio::test]
+async fn cursor_pages_filter_and_order_on_the_key() {
+    let notes: Vec<note::Model> = (0..5).map(|n| a_note(n, &format!("note-{n}"))).collect();
+    let rows = |range: std::ops::Range<usize>| -> Vec<MockRow> {
+        notes[range].iter().cloned().map(IntoMockRow::into_mock_row).collect()
+    };
+    let db = scripted(0, vec![rows(0..3), rows(2..5), rows(0..2)]);
+    let first = cursor_paginate(
+        note::Entity::find(),
+        note::Column::Id,
+        db.conn(),
+        CursorQuery::new(None, 2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.data, notes[0..2]);
+    let second = cursor_paginate(
+        note::Entity::find(),
+        note::Column::Id,
+        db.conn(),
+        CursorQuery::new(first.next_cursor.clone(), 2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.data, notes[2..4]);
+    let newest = cursor_paginate_desc(
+        note::Entity::find(),
+        note::Column::Id,
+        db.conn(),
+        CursorQuery::new(second.next_cursor.clone(), 2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(newest.next_cursor, None);
+    assert_eq!(
+        sent_raw(&db),
+        [
+            (
+                format!("SELECT {NOTE_COLUMNS} FROM `notes` ORDER BY `notes`.`id` ASC LIMIT ?"),
+                vec![3u64.into()]
+            ),
+            (
+                format!(
+                    "SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` > ? ORDER BY `notes`.`id` ASC LIMIT ?"
+                ),
+                vec![notes[1].id.into(), 3u64.into()]
+            ),
+            (
+                format!(
+                    "SELECT {NOTE_COLUMNS} FROM `notes` WHERE `notes`.`id` < ? ORDER BY `notes`.`id` DESC LIMIT ?"
+                ),
+                vec![notes[3].id.into(), 3u64.into()]
+            ),
+        ]
+    );
 }
 
 #[tokio::test]
