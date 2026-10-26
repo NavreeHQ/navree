@@ -85,6 +85,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access",
     ]),
+    // L6: ecosystem libraries (the facade sits beside them and re-exports
+    // them behind opt-in features).
+    rule("navree-oauth", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-db", "navree-access", "navree-auth", "navree-workspace",
+        // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+        "navree-testing",
+    ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
     rule("navree-cli", 6, &[]),
@@ -112,8 +120,9 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
-/// re-export and what navree-macros tests may dev-depend on.
+/// Every runtime crate (layers 0 to 5, and the ecosystem libraries of layer
+/// 6) plus navree-macros: what the facade may re-export and what
+/// navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
@@ -142,6 +151,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-auth",
     "navree-workspace",
+    "navree-oauth",
 ];
 
 /// Cargo dependency kind of an edge.

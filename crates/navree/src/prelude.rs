@@ -89,3 +89,6 @@ pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow,
 };
+
+#[cfg(feature = "oauth")]
+pub use navree_oauth::{OAuthServerModule, OAuthToken};
