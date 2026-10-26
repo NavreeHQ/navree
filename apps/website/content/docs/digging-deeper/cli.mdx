@@ -195,7 +195,7 @@ The tools of the ecosystem add their own commands to the CLI:
 | Command | What it does |
 |---|---|
 | `navree new <name> --kit saas` | Creates an app from a [starter kit](/docs/getting-started/starter-kits/) (`saas`, `api` or `micro`). |
-| `navree dock up` | Starts the app's local services with [Dock](/docs/tools/dock/). |
+| `navree dock up`, `navree dock down`, `navree dock:add <service>` | Start, stop and add the app's local services with [Dock](/docs/tools/dock/) (also `dock status`, `dock logs`, `dock env`, `dock shell` and `dock:remove`). |
 | `navree harbor:provision`, `navree deploy`, `navree deploy:rollback` | Prepare servers and ship releases with [Harbor](/docs/tools/harbor/). |
 | `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
 | `navree make:resource` | Generates a [Helm](/docs/tools/helm/) admin resource for an entity. |
@@ -204,7 +204,7 @@ The tools of the ecosystem add their own commands to the CLI:
 
 ## Running your app's commands
 
-Any command the CLI doesn't know is forwarded to your app: `navree migrate:fresh --seed` runs `cargo run --quiet -- migrate:fresh --seed` in the current directory and exits with the command's exit code. You can also run the binary directly, which is what you do in production:
+Any command the CLI doesn't know is forwarded to your app: `navree migrate:fresh --seed` runs `cargo run --quiet -- migrate:fresh --seed` in the current directory and exits with the command's exit code. When the app has a `dock.toml`, forwarded commands and `navree dev` also get its services' settings as environment variables ([Dock](/docs/tools/dock/#how-your-app-finds-the-services)). You can also run the binary directly, which is what you do in production:
 
 ```sh
 navree migrate:status

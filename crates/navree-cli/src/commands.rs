@@ -9,6 +9,7 @@ use anyhow::Context;
 use crate::cli::{Cli, Command};
 use crate::clock::Timestamp;
 use crate::dev::{self, DevOptions};
+use crate::dock;
 use crate::forward::forward;
 use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
@@ -44,15 +45,30 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                     debounce: Duration::from_millis(args.debounce_ms),
                     web: !args.no_web,
                     serve_args: args.serve_args.clone(),
+                    env: dock::app_env(&root)?,
                 },
             )?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::Dock(command) => dock::run(command, &app_root(cwd)?),
+        Command::DockAdd(args) => dock::add(&args.service, &app_root(cwd)?, &mut std::io::stdout()),
+        Command::DockRemove(args) => dock::remove(
+            &args.service,
+            args.volumes,
+            &app_root(cwd)?,
+            &mut std::io::stdout(),
+        ),
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");
             };
+            // The app's dock.toml services, when it has one.
+            let env = match project_root(cwd) {
+                Some(root) => dock::app_env(&root)?,
+                None => Vec::new(),
+            };
             let status = forward(command, args)
+                .with_env(env)
                 .run(cwd)
                 .context("cannot run cargo (is it installed and on PATH?)")?;
             Ok(status

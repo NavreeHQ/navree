@@ -7,12 +7,15 @@ description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with
 
 Two command lines:
 
-- **`navree`** (crate navree-cli) creates apps, generates code and runs the
-  dev loop. It depends on no Navree crate.
+- **`navree`** (crate navree-cli) creates apps, generates code, runs the
+  dev loop and the app's local services (`navree dock`, skill
+  `navree-dock`). It depends on no Navree runtime crate.
 - **The app's binary** owns runtime commands (`serve`, `migrate`,
   `queue:work`, ...). `navree <command>` forwards anything that isn't `new`,
-  `make:*` or `dev` as `cargo run --quiet -- <command>`. In production, run
-  the binary itself: `./my-app migrate`.
+  `make:*`, `dev` or `dock*` as `cargo run --quiet -- <command>`. In
+  production, run the binary itself: `./my-app migrate`. When the app has
+  a `dock.toml`, `navree dev` and forwarded commands get its services'
+  settings as environment variables.
 
 ## Generators
 

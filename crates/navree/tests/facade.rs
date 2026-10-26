@@ -361,6 +361,10 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Features left out of `full` on purpose: development tools an app's
+/// runtime never needs.
+const OPT_IN: &[&str] = &["dock"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +373,27 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    for feature in OPT_IN {
+        assert!(
+            features.table.contains_key(*feature),
+            "opt-in feature `{feature}` is gone"
+        );
+        assert!(
+            !full.contains(*feature),
+            "`full` turns on opt-in `{feature}`"
+        );
+    }
+}
+
+/// `navree::dock` is navree-dock, with the opt-in `dock` feature
+/// (`cargo test -p navree --features dock`).
+#[cfg(feature = "dock")]
+#[test]
+fn dock_is_reexported_with_its_feature() {
+    let file = navree::dock::DockFile::parse("[services.redis]\n", "shop").unwrap();
+    assert_eq!(navree::dock::DOCK_FILE, "dock.toml");
+    assert_eq!(file.env()[0].1, "redis://127.0.0.1:6379");
 }

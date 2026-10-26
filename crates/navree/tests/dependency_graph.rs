@@ -46,6 +46,10 @@ const HIERARCHY: &[Rule] = &[
     // L0
     rule("navree-kernel", 0, &[]),
     rule("navree-macros", 0, &[]),
+    // Dock: local development services (`navree dock`). A tool crate with
+    // no navree dependencies; the CLI uses it and the facade re-exports it
+    // behind the opt-in `dock` feature.
+    rule("navree-dock", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -87,7 +91,8 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
-    rule("navree-cli", 6, &[]),
+    // The CLI uses no runtime crate; navree-dock runs `navree dock`.
+    rule("navree-cli", 6, &["navree-dock"]),
     // L7 (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -112,11 +117,13 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
-/// re-export and what navree-macros tests may dev-depend on.
+/// Every runtime crate (layers 0 to 5) plus navree-macros and navree-dock:
+/// what the facade may re-export and what navree-macros tests may
+/// dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
+    "navree-dock",
     "navree-contracts",
     "navree-config",
     "navree-http",
@@ -539,8 +546,14 @@ fn navree_macros_may_dev_depend_on_runtime_crates_only() {
 }
 
 #[test]
-fn navree_cli_has_no_navree_dependencies() {
+fn navree_cli_depends_on_navree_dock_only() {
     let found = violations(&[edge("navree-cli", "navree-kernel", Kind::Normal)]);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        violations(&[edge("navree-cli", "navree-dock", Kind::Normal)]),
+        Vec::<String>::new()
+    );
+    let found = violations(&[edge("navree-dock", "navree-config", Kind::Normal)]);
     assert_eq!(found.len(), 1, "{found:?}");
 }
 

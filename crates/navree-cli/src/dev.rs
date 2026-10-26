@@ -28,6 +28,8 @@ pub struct DevOptions {
     pub web: bool,
     /// Arguments for the app's `serve` command.
     pub serve_args: Vec<String>,
+    /// Environment variables for the server (the app's Dock settings).
+    pub env: Vec<(String, String)>,
 }
 
 /// Directories whose changes need a rebuild (embedded templates live in
@@ -161,12 +163,13 @@ fn build(root: &Path, package: Option<&str>) -> anyhow::Result<PathBuf> {
         .context("cargo build produced no binary")
 }
 
-/// Starts `<copy of built> serve <args>` in `root`.
+/// Starts `<copy of built> serve <args>` in `root`, with `env` set.
 fn serve(
     root: &Path,
     built: &Path,
     generation: u64,
     args: &[String],
+    env: &[(String, String)],
 ) -> anyhow::Result<KillOnDrop> {
     let dir = built
         .parent()
@@ -184,6 +187,7 @@ fn serve(
     let child = std::process::Command::new(&copy)
         .arg("serve")
         .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .current_dir(root)
         .spawn()
         .with_context(|| format!("cannot start {}", copy.display()))?;
@@ -206,7 +210,7 @@ fn rebuild(
             // Stop the old server first: the new one binds the same port.
             current.take();
             *generation += 1;
-            match serve(root, &built, *generation, &options.serve_args) {
+            match serve(root, &built, *generation, &options.serve_args, &options.env) {
                 Ok(server) => *current = Some(server),
                 Err(error) => eprintln!("[navree dev] {error:#}"),
             }
