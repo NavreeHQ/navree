@@ -127,6 +127,12 @@ fn navree_new_output_compiles_against_the_workspace() {
 
     let ok = cargo(&root, &target, &["test", "--quiet"])
         && cargo(&root, &target, &["run", "--quiet", "--", "check"])
+        // Generated routes are documented: `navree check` passes.
+        && cargo(
+            &root,
+            &target,
+            &["run", "--quiet", "--", "conformity:check"],
+        )
         && cargo(
             &root,
             &target,
