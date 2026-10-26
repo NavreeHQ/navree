@@ -344,6 +344,9 @@ an HTTP handler or a gRPC method gives the AppError of the same meaning
 - HTTP-only attributes (`#[get]` and the verbs, `#[throttle]`, `#[timeout]`,
   `#[audit]`, `#[name]`, `#[api]`, `#[transactional]`) are compile errors.
 - Do not write `#[tonic::async_trait]` on the impl: the macro adds it.
+- Write each method's result type out (`Result<Response<T>>` or
+  `Result<Response<T>, Status>`): the macro reads `Response<T>` from it, so a
+  type alias for the whole result is a compile error.
 - `from = "id"` needs a unary request whose message has that field (string
   or integer, optional or not); an empty id is INVALID_ARGUMENT. The record
   is checked before the body runs.

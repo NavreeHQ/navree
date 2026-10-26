@@ -187,4 +187,45 @@ mod tests {
         let first = unknown.next().await.unwrap().unwrap();
         assert_eq!(first.status, ServingStatus::ServiceUnknown as i32);
     }
+
+    /// A check whose result the test flips.
+    struct Toggle(Arc<std::sync::atomic::AtomicBool>);
+
+    impl HealthCheck for Toggle {
+        fn name(&self) -> &str {
+            "toggle"
+        }
+
+        fn check(&self) -> BoxFuture<'_, HealthStatus> {
+            let up = self.0.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if up {
+                    HealthStatus::Up
+                } else {
+                    HealthStatus::Down("flipped".into())
+                }
+            })
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn watch_sends_the_status_again_when_it_changes() {
+        let up = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let health = health(vec![Arc::new(Toggle(up.clone()))]);
+        let mut stream = health
+            .watch(ask("crm.deals.v1.Deals"))
+            .await
+            .unwrap()
+            .into_inner();
+        let first = stream.next().await.unwrap().unwrap();
+        assert_eq!(first.status, ServingStatus::Serving as i32);
+
+        up.store(false, std::sync::atomic::Ordering::SeqCst);
+        let next = stream.next().await.unwrap().unwrap();
+        assert_eq!(next.status, ServingStatus::NotServing as i32);
+
+        up.store(true, std::sync::atomic::Ordering::SeqCst);
+        let next = stream.next().await.unwrap().unwrap();
+        assert_eq!(next.status, ServingStatus::Serving as i32);
+    }
 }
