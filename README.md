@@ -108,7 +108,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  packages built on other packages
-L6  navree-social  navree-webhooks  navree-oauth  navree-flags (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -151,6 +151,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
+| L6 | `navree-ai` | AI SDK: text, typed structured output and SSE streams from Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, failover, token budgets, agents with `#[tool]` methods run as the user, conversation memory, embeddings, vector stores (memory, pgvector, Qdrant) and `AiFake` (facade feature `ai`, opt-in) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 

@@ -84,6 +84,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
 | `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
+| `navree::ai` | navree-ai, plus `#[agent]` | `ai` (opt-in) | `AiModule`: the [AI SDK](/docs/ai/ai-sdk/), [agents and tools](/docs/ai/agents-and-tools/), [embeddings and vector stores](/docs/ai/embeddings-and-rag/) |
 
 The facade's root also has:
 
@@ -110,6 +111,7 @@ The facade's root also has:
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
 | Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
+| AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
 
@@ -121,7 +123,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries (`social`, `oauth`, `flags`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries (`social`, `oauth`, `flags`, `ai`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -146,6 +148,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
+| `ai` | `http`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
@@ -166,7 +169,7 @@ Turning a feature off removes the module's crate from the build, along with its 
 2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
 3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
 
-`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, and `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`); with the facade, that means the `http`, `access` and `flags` features.
+`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`), and `#[agent]` needs navree-ai (`::navree::ai`); with the facade, that means the `http`, `access`, `flags` and `ai` features.
 
 ## Using a crate on its own
 
