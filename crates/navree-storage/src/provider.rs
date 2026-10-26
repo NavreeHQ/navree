@@ -77,7 +77,11 @@ mod cloud {
         }
 
         /// A link that downloads `path` for `ttl`.
-        pub(crate) async fn get_url(&self, path: &str, ttl: Duration) -> object_store::Result<String> {
+        pub(crate) async fn get_url(
+            &self,
+            path: &str,
+            ttl: Duration,
+        ) -> object_store::Result<String> {
             let location = self.location(path)?;
             let url = self.signer.signed_url(Method::GET, &location, ttl).await?;
             Ok(url.into())

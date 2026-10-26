@@ -167,7 +167,8 @@ fn storage_error(error: &StorageError) -> Option<AppError> {
         StorageError::InvalidPath { .. } => Some(AppError::bad_request("Invalid file path.")),
         StorageError::Rejected { rejection, .. } => Some(match rejection {
             UploadRejection::TooLarge { .. } => {
-                AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE).with_detail(sentence(rejection))
+                AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE)
+                    .with_detail(sentence(rejection))
             }
             _ => AppError::bad_request(sentence(rejection)),
         }),

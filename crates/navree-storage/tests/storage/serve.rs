@@ -147,7 +147,12 @@ async fn active_content_is_served_as_an_attachment() {
 
     disk.put("data.unknownext", "?").await.unwrap();
     let unknown = app
-        .get(&disk.temporary_url("data.unknownext", expires_at).await.unwrap())
+        .get(
+            &disk
+                .temporary_url("data.unknownext", expires_at)
+                .await
+                .unwrap(),
+        )
         .await;
     assert_eq!(
         unknown.header("content-type"),

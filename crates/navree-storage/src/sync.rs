@@ -238,7 +238,12 @@ pub(crate) fn render(report: &SyncReport) -> String {
     }];
     let copy = if report.dry_run { "copy" } else { "copied" };
     let delete = if report.dry_run { "delete" } else { "deleted" };
-    lines.extend(report.copied.iter().map(|path| format!("  {copy:<8} {path}")));
+    lines.extend(
+        report
+            .copied
+            .iter()
+            .map(|path| format!("  {copy:<8} {path}")),
+    );
     lines.extend(
         report
             .deleted

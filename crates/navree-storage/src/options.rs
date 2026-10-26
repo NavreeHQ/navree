@@ -383,10 +383,7 @@ impl ConfigSection for StorageOptions {
 
 /// Checks one disk; the error is prefixed with the disk name by the caller.
 fn validate_disk(disk: &DiskConfig) -> Result<(), String> {
-    if disk
-        .public_url()
-        .is_some_and(|url| url.trim().is_empty())
-    {
+    if disk.public_url().is_some_and(|url| url.trim().is_empty()) {
         return Err("public_url must not be empty".to_owned());
     }
     if let Some(prefix) = disk.prefix()
@@ -416,9 +413,7 @@ fn validate_disk(disk: &DiskConfig) -> Result<(), String> {
             required("bucket", &config.bucket, "gcs")?;
             endpoint(config.endpoint.as_deref())?;
             if config.service_account_path.is_some() && config.service_account_key.is_some() {
-                return Err(
-                    "set service_account_path or service_account_key, not both".to_owned()
-                );
+                return Err("set service_account_path or service_account_key, not both".to_owned());
             }
         }
         DiskConfig::Azure(config) => {

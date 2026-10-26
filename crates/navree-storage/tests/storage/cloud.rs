@@ -63,7 +63,10 @@ mod gcs {
 
         let requests = server.received_requests().await.unwrap();
         let authorization = requests[0].headers["authorization"].to_str().unwrap();
-        assert!(authorization.starts_with("Bearer ey"), "a self-signed JWT: {authorization}");
+        assert!(
+            authorization.starts_with("Bearer ey"),
+            "a self-signed JWT: {authorization}"
+        );
     }
 
     #[tokio::test]
@@ -106,7 +109,10 @@ mod gcs {
             .temporary_url("avatars/a.png", Utc::now() + Duration::minutes(5))
             .await
             .unwrap();
-        assert!(download.contains("X-Goog-SignedHeaders=host&"), "{download}");
+        assert!(
+            download.contains("X-Goog-SignedHeaders=host&"),
+            "{download}"
+        );
         // Nothing was sent to the provider: signing is local.
         assert!(server.received_requests().await.unwrap().is_empty());
     }

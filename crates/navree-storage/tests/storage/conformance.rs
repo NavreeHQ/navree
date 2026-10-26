@@ -13,8 +13,7 @@ use futures_util::{TryStreamExt, stream};
 use http_body_util::BodyExt;
 use navree_contracts::HealthStatus;
 use navree_storage::{
-    Disk, DiskConfig, Storage, StorageError, SyncOptions, UploadRejection, UploadRules,
-    upload_path,
+    Disk, DiskConfig, Storage, StorageError, SyncOptions, UploadRejection, UploadRules, upload_path,
 };
 use tower::ServiceExt;
 
@@ -105,9 +104,12 @@ pub fn png(len: usize) -> Vec<u8> {
     png
 }
 
+/// One case of the suite.
+type Case = fn(&Subject) -> futures_util::future::BoxFuture<'_, ()>;
+
 /// Runs every case on `subject`.
 pub async fn run(subject: &Subject) {
-    let cases: [(&str, fn(&Subject) -> futures_util::future::BoxFuture<'_, ()>); 12] = [
+    let cases: [(&str, Case); 12] = [
         ("put_get_delete", |s| Box::pin(put_get_delete(s))),
         ("streams", |s| Box::pin(streams(s))),
         ("failed_stream_leaves_nothing", |s| {
@@ -120,7 +122,9 @@ pub async fn run(subject: &Subject) {
         ("temporary_url_downloads", |s| {
             Box::pin(temporary_url_downloads(s))
         }),
-        ("presigned_put_uploads", |s| Box::pin(presigned_put_uploads(s))),
+        ("presigned_put_uploads", |s| {
+            Box::pin(presigned_put_uploads(s))
+        }),
         ("presigned_put_binds_the_content_type", |s| {
             Box::pin(presigned_put_binds_the_content_type(s))
         }),
@@ -141,7 +145,10 @@ pub async fn run(subject: &Subject) {
         "health on `{}`",
         subject.disk.driver()
     );
-    assert!(subject.disk.list("").await.unwrap().is_empty(), "the probe cleans up");
+    assert!(
+        subject.disk.list("").await.unwrap().is_empty(),
+        "the probe cleans up"
+    );
 }
 
 /// Deletes every file of the disk.
@@ -158,7 +165,11 @@ async fn put_get_delete(subject: &Subject) {
         .await
         .unwrap();
     assert!(disk.exists("docs/readme.txt").await.unwrap(), "{driver}");
-    assert_eq!(disk.get("docs/readme.txt").await.unwrap(), "hello", "{driver}");
+    assert_eq!(
+        disk.get("docs/readme.txt").await.unwrap(),
+        "hello",
+        "{driver}"
+    );
     assert_eq!(disk.size("docs/readme.txt").await.unwrap(), 5, "{driver}");
 
     disk.put("docs/readme.txt", "hello again").await.unwrap();
@@ -205,7 +216,10 @@ async fn streams(subject: &Subject) {
     assert!(read[63 * 1024..].iter().all(|&b| b == 63));
 
     let empty = disk
-        .put_stream("big/empty.bin", stream::iter(Vec::<Result<Bytes, std::io::Error>>::new()))
+        .put_stream(
+            "big/empty.bin",
+            stream::iter(Vec::<Result<Bytes, std::io::Error>>::new()),
+        )
         .await
         .unwrap();
     assert_eq!(empty, 0);
@@ -223,7 +237,11 @@ async fn failed_stream_leaves_nothing(subject: &Subject) {
         .await
         .unwrap_err();
     assert!(matches!(error, StorageError::Stream { .. }), "{error:?}");
-    assert!(!disk.exists("broken.bin").await.unwrap(), "{}", disk.driver());
+    assert!(
+        !disk.exists("broken.bin").await.unwrap(),
+        "{}",
+        disk.driver()
+    );
     assert!(disk.list("").await.unwrap().is_empty(), "{}", disk.driver());
 }
 
@@ -259,7 +277,9 @@ async fn normalises_paths(subject: &Subject) {
     disk.put("/reports//2026/./q1.csv", "a,b").await.unwrap();
     assert_eq!(disk.get("reports/2026/q1.csv").await.unwrap(), "a,b");
     assert_eq!(disk.get(r"reports\2026\q1.csv").await.unwrap(), "a,b");
-    disk.put("my files/report (final) #2+ü.txt", "ok").await.unwrap();
+    disk.put("my files/report (final) #2+ü.txt", "ok")
+        .await
+        .unwrap();
     assert_eq!(
         disk.list("my files").await.unwrap(),
         vec!["my files/report (final) #2+ü.txt"],
@@ -313,7 +333,9 @@ async fn metadata(subject: &Subject) {
 
 async fn temporary_url_downloads(subject: &Subject) {
     let disk = &subject.disk;
-    disk.put("reports/q1 final.csv", "region,total\n").await.unwrap();
+    disk.put("reports/q1 final.csv", "region,total\n")
+        .await
+        .unwrap();
     let url = disk
         .temporary_url("reports/q1 final.csv", Utc::now() + Duration::minutes(5))
         .await
@@ -343,7 +365,10 @@ async fn presigned_put_uploads(subject: &Subject) {
     assert_eq!(upload.disk, disk.name());
     assert_eq!(upload.path, path);
     assert_eq!(upload.method, "PUT");
-    assert_eq!(upload.headers.get("content-type").map(String::as_str), Some("image/png"));
+    assert_eq!(
+        upload.headers.get("content-type").map(String::as_str),
+        Some("image/png")
+    );
     assert!(upload.expires_at > Utc::now() + Duration::minutes(9));
 
     let reply = subject
@@ -416,21 +441,30 @@ async fn presigned_put_binds_the_content_type(subject: &Subject) {
         .send("PUT", &upload.url, &headers, "<script>alert(1)</script>")
         .await;
     assert_eq!(reply.status, 403, "{}: {reply:?}", disk.driver());
-    assert!(!disk.exists("bound.png").await.unwrap(), "{}", disk.driver());
+    assert!(
+        !disk.exists("bound.png").await.unwrap(),
+        "{}",
+        disk.driver()
+    );
 }
 
 async fn accept_upload_rejects_and_deletes(subject: &Subject) {
     let disk = &subject.disk;
     let rules = UploadRules::new(1000, ["image/png"]);
 
-    disk.put("up/fake.png", "<svg onload=alert(1)>").await.unwrap();
+    disk.put("up/fake.png", "<svg onload=alert(1)>")
+        .await
+        .unwrap();
     let error = disk.accept_upload("up/fake.png", &rules).await.unwrap_err();
     assert!(
         matches!(&error, StorageError::Rejected { rejection: UploadRejection::Type { mime, .. }, .. } if mime == "text/plain"),
         "{}: {error:?}",
         disk.driver()
     );
-    assert!(!disk.exists("up/fake.png").await.unwrap(), "rejected files are deleted");
+    assert!(
+        !disk.exists("up/fake.png").await.unwrap(),
+        "rejected files are deleted"
+    );
 
     disk.put("up/big.png", png(1001)).await.unwrap();
     let error = disk.accept_upload("up/big.png", &rules).await.unwrap_err();
@@ -486,7 +520,10 @@ async fn sync_both_ways(subject: &Subject) {
     assert!(!disk.exists(".navree-health/probe").await.unwrap());
 
     // Nothing to do the second time.
-    let again = scratch.sync_to(disk, &SyncOptions::default()).await.unwrap();
+    let again = scratch
+        .sync_to(disk, &SyncOptions::default())
+        .await
+        .unwrap();
     assert!(again.copied.is_empty());
     assert_eq!(again.unchanged, 2);
 

@@ -67,7 +67,9 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
     })?;
     Ok(Backend {
         store: Arc::new(PrefixStore::new(backend.store, store_prefix)),
-        provider: backend.provider.map(|provider| provider.with_prefix(prefix)),
+        provider: backend
+            .provider
+            .map(|provider| provider.with_prefix(prefix)),
     })
 }
 
@@ -163,14 +165,13 @@ mod cloud {
             .clone()
             .or_else(|| from_env(&["AWS_REGION", "AWS_DEFAULT_REGION"]))
             .unwrap_or_else(|| "us-east-1".to_owned());
-        let endpoint = config.endpoint.clone().or_else(|| {
-            from_env(&["AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT_URL", "AWS_ENDPOINT"])
-        });
+        let endpoint = config
+            .endpoint
+            .clone()
+            .or_else(|| from_env(&["AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT_URL", "AWS_ENDPOINT"]));
         let path_style = config.path_style.unwrap_or(endpoint.is_some());
         let endpoint = match endpoint {
-            Some(endpoint) if !path_style => {
-                Some(bucket_subdomain(&endpoint, &config.bucket))
-            }
+            Some(endpoint) if !path_style => Some(bucket_subdomain(&endpoint, &config.bucket)),
             endpoint => endpoint.map(|url| url.trim_end_matches('/').to_owned()),
         };
         S3Address {
@@ -221,7 +222,8 @@ mod cloud {
             _ => {
                 for key in AWS_CREDENTIAL_ENV {
                     if let Some(value) = env.get(key)
-                        && let Ok(config_key) = key.to_ascii_lowercase().parse::<AmazonS3ConfigKey>()
+                        && let Ok(config_key) =
+                            key.to_ascii_lowercase().parse::<AmazonS3ConfigKey>()
                     {
                         builder = builder.with_config(config_key, value);
                     }

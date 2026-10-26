@@ -50,7 +50,10 @@ async fn sync_copies_what_is_missing_or_different() {
         )
         .await
         .unwrap();
-    assert_eq!((report.from.as_str(), report.to.as_str()), ("memory", "local"));
+    assert_eq!(
+        (report.from.as_str(), report.to.as_str()),
+        ("memory", "local")
+    );
     assert_eq!(report.copied, ["reports/q2.csv"]);
     assert!(report.deleted.is_empty());
     assert_eq!(local.get("reports/q2.csv").await.unwrap(), "a,b,c\n");
@@ -70,7 +73,10 @@ async fn failures_are_reported_and_the_sync_goes_on() {
     let root = tempfile::tempdir().unwrap();
     let storage = storage(root.path());
     let memory = storage.disk("memory").unwrap();
-    memory.put("taken", "a file where the target has a directory").await.unwrap();
+    memory
+        .put("taken", "a file where the target has a directory")
+        .await
+        .unwrap();
     memory.put("fine.txt", "ok").await.unwrap();
     std::fs::create_dir_all(root.path().join("taken").join("inside")).unwrap();
     std::fs::write(root.path().join("taken").join("inside").join("x"), "x").unwrap();
@@ -118,18 +124,37 @@ async fn the_command_syncs_named_disks() {
     app.run_command("storage:sync", args(&["local", "memory", "--dry-run"]))
         .await
         .unwrap();
-    assert!(!storage.disk("memory").unwrap().exists("a/b.txt").await.unwrap());
+    assert!(
+        !storage
+            .disk("memory")
+            .unwrap()
+            .exists("a/b.txt")
+            .await
+            .unwrap()
+    );
 
     app.run_command("storage:sync", args(&["local", "memory", "--prefix", "a"]))
         .await
         .unwrap();
     assert_eq!(
-        storage.disk("memory").unwrap().get("a/b.txt").await.unwrap(),
+        storage
+            .disk("memory")
+            .unwrap()
+            .get("a/b.txt")
+            .await
+            .unwrap(),
         "hello"
     );
 
-    for bad in [&["local"][..], &["local", "memory", "--force"], &["local", "nope"]] {
-        let error = app.run_command("storage:sync", args(bad)).await.unwrap_err();
+    for bad in [
+        &["local"][..],
+        &["local", "memory", "--force"],
+        &["local", "nope"],
+    ] {
+        let error = app
+            .run_command("storage:sync", args(bad))
+            .await
+            .unwrap_err();
         assert!(!error.to_string().is_empty(), "{bad:?}");
     }
 }
