@@ -49,7 +49,10 @@ async fn oauth_mode_serves_the_protected_resource_metadata() {
     let app = builder()
         .config("mcp.auth", "oauth")
         .config("app.url", "https://crm.example.com")
-        .config("mcp.oauth.scopes", json!(["deals.read", "activities.create"]))
+        .config(
+            "mcp.oauth.scopes",
+            json!(["deals.read", "activities.create"]),
+        )
         .config("mcp.title", "Navree CRM")
         .build()
         .await;
@@ -174,7 +177,14 @@ async fn the_path_comes_from_the_configuration() {
     let mcp_routes: Vec<String> = routes
         .iter()
         .filter(|route| route.name.as_deref() == Some("mcp"))
-        .map(|route| format!("{} {} {}", route.method, route.full_path, route.access.describe()))
+        .map(|route| {
+            format!(
+                "{} {} {}",
+                route.method,
+                route.full_path,
+                route.access.describe()
+            )
+        })
         .collect();
     assert_eq!(
         mcp_routes,
@@ -190,7 +200,9 @@ async fn the_path_comes_from_the_configuration() {
 async fn oversized_messages_are_refused() {
     let app = builder().config("mcp.max_request_bytes", 256).build().await;
     let rep = user();
-    let mcp = McpTestClient::new(app.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(rep.clone()))
+        .initialize()
+        .await;
     let response = app
         .acting_as(rep)
         .post("/mcp")
@@ -214,7 +226,9 @@ async fn sessions_in_the_cache_survive_a_move_to_another_process() {
         .build()
         .await;
     let rep = user();
-    let mcp = McpTestClient::new(first.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(first.acting_as(rep.clone()))
+        .initialize()
+        .await;
     let session = mcp.session_id().unwrap().to_owned();
 
     // The next request reaches another process sharing the cache.
@@ -238,7 +252,11 @@ async fn sessions_in_the_cache_survive_a_move_to_another_process() {
     };
     let restored = request(second.acting_as(rep)).await;
     assert_eq!(restored.status(), 200, "{}", restored.text());
-    assert!(restored.text().contains("list_deals"), "{}", restored.text());
+    assert!(
+        restored.text().contains("list_deals"),
+        "{}",
+        restored.text()
+    );
 
     // Another user cannot take the session over there either.
     let taken = request(second.acting_as(user())).await;

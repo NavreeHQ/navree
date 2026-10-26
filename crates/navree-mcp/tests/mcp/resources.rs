@@ -64,7 +64,10 @@ async fn templates_load_and_authorize_their_record() {
         .assert_json_path("title", json!("Acme renewal"))
         .assert_json_path("stage", json!("qualified"));
     assert_eq!(read.mime_type().as_deref(), Some("application/json"));
-    assert_eq!(read.contents()[0]["uri"], format!("crm://deals/{}", deal.id));
+    assert_eq!(
+        read.contents()[0]["uri"],
+        format!("crm://deals/{}", deal.id)
+    );
 
     mcp.read_resource(&format!("crm://deals/{}", Uuid::now_v7()))
         .await
@@ -99,8 +102,15 @@ async fn resources_a_token_may_not_read_are_unknown() {
     // A token limited to creating activities cannot read deals.
     let mut limited = user();
     limited.token_abilities = Some(vec!["activities.create".to_owned()]);
-    let mcp = McpTestClient::new(app.acting_as(limited)).initialize().await;
-    assert!(mcp.list_resource_templates().await.iter().all(|t| t.name != "deal"));
+    let mcp = McpTestClient::new(app.acting_as(limited))
+        .initialize()
+        .await;
+    assert!(
+        mcp.list_resource_templates()
+            .await
+            .iter()
+            .all(|t| t.name != "deal")
+    );
     let error = mcp
         .read_resource(&format!("crm://deals/{}", deal.id))
         .await

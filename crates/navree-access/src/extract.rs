@@ -120,7 +120,11 @@ pub struct Authorized<E: EntityTrait, A> {
 }
 
 impl<E: EntityTrait, A> Authorized<E, A> {
-    pub(crate) fn from_parts(model: Arc<E::Model>, record: Arc<Value>, ability: Arc<Ability>) -> Self {
+    pub(crate) fn from_parts(
+        model: Arc<E::Model>,
+        record: Arc<Value>,
+        ability: Arc<Ability>,
+    ) -> Self {
         Self {
             model,
             record,

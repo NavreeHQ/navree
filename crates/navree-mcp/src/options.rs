@@ -327,7 +327,10 @@ impl McpSettings {
 fn executable_name() -> String {
     std::env::current_exe()
         .ok()
-        .and_then(|path| path.file_stem().map(|stem| stem.to_string_lossy().into_owned()))
+        .and_then(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "navree-app".to_owned())
 }
@@ -474,7 +477,11 @@ mod tests {
         let app = config(json!({ "app": { "name": "crm", "version": "2.1.0" } }));
         let settings = McpSettings::resolve(&McpOptions::default(), Some(&app)).unwrap();
         assert_eq!(
-            (settings.name.as_str(), settings.title.as_str(), settings.version.as_str()),
+            (
+                settings.name.as_str(),
+                settings.title.as_str(),
+                settings.version.as_str()
+            ),
             ("crm", "crm", "2.1.0")
         );
         assert!(settings.oauth.is_none());
@@ -489,7 +496,10 @@ mod tests {
             ..McpOptions::default()
         };
         let settings = McpSettings::resolve(&named, Some(&app)).unwrap();
-        assert_eq!((settings.name.as_str(), settings.title.as_str()), ("navree-crm", "Navree CRM"));
+        assert_eq!(
+            (settings.name.as_str(), settings.title.as_str()),
+            ("navree-crm", "Navree CRM")
+        );
     }
 
     #[test]

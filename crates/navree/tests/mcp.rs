@@ -14,6 +14,7 @@ use navree::testing::{TestApp, principal};
 use serde::Deserialize;
 use serde_json::json;
 
+/// The arguments of `greet` and `greet-someone`.
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct Greet {
     /// Who to greet.
@@ -21,6 +22,7 @@ pub struct Greet {
     pub name: String,
 }
 
+/// A server with one tool, one resource and one prompt.
 #[injectable]
 pub struct HelloMcp;
 
@@ -42,10 +44,14 @@ impl HelloMcp {
     /// Starts a greeting.
     #[mcp_prompt(name = "greet-someone")]
     async fn greeting(&self, args: Greet) -> Result<Vec<PromptMessage>> {
-        Ok(vec![PromptMessage::user(format!("Greet {} warmly.", args.name))])
+        Ok(vec![PromptMessage::user(format!(
+            "Greet {} warmly.",
+            args.name
+        ))])
     }
 }
 
+/// Registers [`HelloMcp`].
 #[module(register = Self::wire)]
 pub struct HelloModule;
 
@@ -72,7 +78,9 @@ async fn an_app_serves_its_mcp_server_through_the_facade() {
         .build()
         .await;
     let user = principal(uuid::Uuid::now_v7());
-    let mcp = McpTestClient::new(app.acting_as(user.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(user.clone()))
+        .initialize()
+        .await;
 
     let tools = mcp.list_tools().await;
     assert_eq!(tools.len(), 1);

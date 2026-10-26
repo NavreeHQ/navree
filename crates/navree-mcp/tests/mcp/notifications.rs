@@ -66,7 +66,11 @@ async fn subscribed_sessions_hear_about_resource_updates() {
         .expect("the update arrives");
     assert_eq!(update["params"]["uri"], "crm://pipeline");
 
-    assert_eq!(notifier.resource_updated("crm://notes/x").await, 0, "not subscribed");
+    assert_eq!(
+        notifier.resource_updated("crm://notes/x").await,
+        0,
+        "not subscribed"
+    );
     mcp.request("resources/unsubscribe", json!({ "uri": "crm://pipeline" }))
         .await
         .result();
@@ -92,7 +96,11 @@ async fn list_changes_reach_every_session() {
 
     assert_eq!(notifier.tools_changed().await, 2);
     for stream in [&mut first_stream, &mut second_stream] {
-        assert!(next_with(stream, "notifications/tools/list_changed").await.is_some());
+        assert!(
+            next_with(stream, "notifications/tools/list_changed")
+                .await
+                .is_some()
+        );
     }
     assert_eq!(notifier.prompts_changed().await, 2);
     assert!(
@@ -116,7 +124,9 @@ async fn list_changes_reach_every_session() {
 async fn an_access_change_is_announced_with_the_next_request() {
     let app = app().await;
     let rep = user();
-    let mcp = McpTestClient::new(app.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(rep.clone()))
+        .initialize()
+        .await;
     let mut stream = mcp.listen().await;
     let before = mcp.list_tools().await;
     assert!(before.iter().all(|tool| tool.name != "purge_deals"));
@@ -132,7 +142,10 @@ async fn an_access_change_is_announced_with_the_next_request() {
         .notifications()
         .into_iter()
         .any(|n| n["method"] == "notifications/tools/list_changed");
-    assert!(on_stream.is_some() || on_request, "the list change is announced");
+    assert!(
+        on_stream.is_some() || on_request,
+        "the list change is announced"
+    );
     assert!(
         mcp.list_tools()
             .await

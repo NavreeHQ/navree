@@ -150,7 +150,10 @@ impl ResourceContents {
 
     /// `value` as JSON text (`application/json`).
     pub fn json<T: Serialize + ?Sized>(value: &T) -> Result<Self, serde_json::Error> {
-        Ok(Self::text(serde_json::to_string(value)?, "application/json"))
+        Ok(Self::text(
+            serde_json::to_string(value)?,
+            "application/json",
+        ))
     }
 
     /// The MIME type.
@@ -201,7 +204,10 @@ mod tests {
     #[test]
     fn messages_render_as_protocol_messages() {
         let user = serde_json::to_value(PromptMessage::user("hi").into_mcp(None)).unwrap();
-        assert_eq!(user, json!({ "role": "user", "content": { "type": "text", "text": "hi" } }));
+        assert_eq!(
+            user,
+            json!({ "role": "user", "content": { "type": "text", "text": "hi" } })
+        );
         let assistant = PromptMessage::assistant("sure").into_mcp(None);
         assert_eq!(
             serde_json::to_value(assistant).unwrap()["role"],
@@ -222,12 +228,16 @@ mod tests {
 
     #[test]
     fn blobs_are_base64() {
-        let contents = ResourceContents::blob(b"%PDF".to_vec(), "application/pdf").into_mcp("x://doc");
+        let contents =
+            ResourceContents::blob(b"%PDF".to_vec(), "application/pdf").into_mcp("x://doc");
         assert_eq!(
             serde_json::to_value(contents).unwrap(),
             json!({ "uri": "x://doc", "mimeType": "application/pdf", "blob": "JVBERg==" })
         );
         let json = ResourceContents::json(&json!({ "a": 1 })).unwrap();
-        assert_eq!((json.mime_type(), json.as_text()), ("application/json", Some("{\"a\":1}")));
+        assert_eq!(
+            (json.mime_type(), json.as_text()),
+            ("application/json", Some("{\"a\":1}"))
+        );
     }
 }

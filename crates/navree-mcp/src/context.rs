@@ -149,7 +149,12 @@ impl McpContext {
         E::Model: Send + Sync + 'static,
         A: ActionMarker,
     {
-        Authorized::load(self.uow(), self.inner.access.ability.clone(), &id.to_string()).await
+        Authorized::load(
+            self.uow(),
+            self.inner.access.ability.clone(),
+            &id.to_string(),
+        )
+        .await
     }
 
     /// The call's unit of work: tools write here; it commits when the

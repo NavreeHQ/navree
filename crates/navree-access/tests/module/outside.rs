@@ -34,10 +34,7 @@ async fn allows_checks_roles_permissions_and_type_level_abilities() {
     let factory = app.get::<AbilityFactory>().await;
     let writer = Uuid::now_v7();
     give_role(&app, writer, "writer", &["posts.publish", "reports.view"]).await;
-    let access = factory
-        .access_for(Some(&principal(writer)))
-        .await
-        .unwrap();
+    let access = factory.access_for(Some(&principal(writer))).await.unwrap();
 
     assert!(factory.allows(&access, &spec()));
     let roles = |roles: &[&str]| AccessSpec {
@@ -103,10 +100,7 @@ async fn authorize_record_loads_by_subject_and_checks_the_record() {
     let author = Uuid::now_v7();
     let own = insert_post(&app, "Mine", Some(author), "draft", false).await;
     let other = insert_post(&app, "Theirs", Some(Uuid::now_v7()), "draft", false).await;
-    let access = factory
-        .access_for(Some(&principal(author)))
-        .await
-        .unwrap();
+    let access = factory.access_for(Some(&principal(author))).await.unwrap();
     let uow = db.uow(Some(author), None).await;
 
     let record = factory
@@ -129,28 +123,24 @@ async fn authorize_record_loads_by_subject_and_checks_the_record() {
     let denied = factory
         .authorize_record(&access, &uow, "update", "Post", &other.id.to_string())
         .await
-        .err()
-        .expect("someone else's post");
+        .expect_err("someone else's post");
     assert_eq!(denied.status, StatusCode::FORBIDDEN);
 
     let missing = factory
         .authorize_record(&access, &uow, "update", "Post", &Uuid::now_v7().to_string())
         .await
-        .err()
-        .expect("no such post");
+        .expect_err("no such post");
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
     let malformed = factory
         .authorize_record(&access, &uow, "update", "Post", "not-a-uuid")
         .await
-        .err()
-        .expect("not an id");
+        .expect_err("not an id");
     assert_eq!(malformed.status, StatusCode::NOT_FOUND);
 
     let unknown = factory
         .authorize_record(&access, &uow, "read", "Invoice", "1")
         .await
-        .err()
-        .expect("no loader");
+        .expect_err("no loader");
     assert_eq!(unknown.status, StatusCode::INTERNAL_SERVER_ERROR);
     uow.rollback().await.unwrap();
 }
@@ -170,24 +160,29 @@ async fn authorized_load_checks_a_typed_record() {
         .unwrap();
     let uow = db.uow(Some(author), None).await;
 
-    let post = Authorized::<post::Entity, Update>::load(&uow, Arc::clone(&ability), &own.id.to_string())
-        .await
-        .expect("own post");
+    let post =
+        Authorized::<post::Entity, Update>::load(&uow, Arc::clone(&ability), &own.id.to_string())
+            .await
+            .expect("own post");
     assert_eq!(post.into_inner().title, "Mine");
-    let post = Authorized::<post::Entity, Read>::load(&uow, Arc::clone(&ability), &published.id.to_string())
-        .await
-        .expect("published post");
+    let post = Authorized::<post::Entity, Read>::load(
+        &uow,
+        Arc::clone(&ability),
+        &published.id.to_string(),
+    )
+    .await
+    .expect("published post");
     assert_eq!(post.title, "Public");
 
-    let denied = Authorized::<post::Entity, Read>::load(&uow, Arc::clone(&ability), &hidden.id.to_string())
-        .await
-        .err()
-        .expect("hidden post");
+    let denied =
+        Authorized::<post::Entity, Read>::load(&uow, Arc::clone(&ability), &hidden.id.to_string())
+            .await
+            .expect_err("hidden post");
     assert_eq!(denied.status, StatusCode::FORBIDDEN);
-    let missing = Authorized::<post::Entity, Read>::load(&uow, ability, &Uuid::now_v7().to_string())
-        .await
-        .err()
-        .expect("missing post");
+    let missing =
+        Authorized::<post::Entity, Read>::load(&uow, ability, &Uuid::now_v7().to_string())
+            .await
+            .expect_err("missing post");
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
     uow.rollback().await.unwrap();
 }

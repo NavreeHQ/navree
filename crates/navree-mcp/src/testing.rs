@@ -64,7 +64,9 @@ impl McpResponse {
     pub fn result(self) -> Value {
         match self {
             McpResponse::Result(result) => result,
-            McpResponse::Error(error) => panic!("expected a result, got the JSON-RPC error {error}"),
+            McpResponse::Error(error) => {
+                panic!("expected a result, got the JSON-RPC error {error}")
+            }
         }
     }
 
@@ -72,7 +74,9 @@ impl McpResponse {
     pub fn error(self) -> Value {
         match self {
             McpResponse::Error(error) => error,
-            McpResponse::Result(result) => panic!("expected a JSON-RPC error, got the result {result}"),
+            McpResponse::Result(result) => {
+                panic!("expected a JSON-RPC error, got the result {result}")
+            }
         }
     }
 }
@@ -215,7 +219,10 @@ impl McpTestClient {
     /// Calls tool `name` with `arguments`.
     pub async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
         let answer = self
-            .request("tools/call", json!({ "name": name, "arguments": arguments }))
+            .request(
+                "tools/call",
+                json!({ "name": name, "arguments": arguments }),
+            )
             .await;
         ToolResult::new(answer)
     }
@@ -249,7 +256,10 @@ impl McpTestClient {
     /// clients send them).
     pub async fn get_prompt(&self, name: &str, arguments: Value) -> PromptResult {
         let answer = self
-            .request("prompts/get", json!({ "name": name, "arguments": arguments }))
+            .request(
+                "prompts/get",
+                json!({ "name": name, "arguments": arguments }),
+            )
             .await;
         PromptResult::new(answer)
     }
@@ -283,7 +293,11 @@ impl McpTestClient {
             .header("mcp-protocol-version", self.protocol_version.clone())
             .send_stream()
             .await;
-        assert_eq!(response.status(), 200, "the MCP notification stream was refused");
+        assert_eq!(
+            response.status(),
+            200,
+            "the MCP notification stream was refused"
+        );
         NotificationStream {
             body: response.into_body(),
             buffer: String::new(),
@@ -327,7 +341,9 @@ impl McpTestClient {
         };
         let mut answer = None;
         for message in messages {
-            if message["id"] == json!(id) && (message.get("result").is_some() || message.get("error").is_some()) {
+            if message["id"] == json!(id)
+                && (message.get("result").is_some() || message.get("error").is_some())
+            {
                 answer = Some(match message.get("error") {
                     Some(error) => McpResponse::Error(error.clone()),
                     None => McpResponse::Result(message["result"].clone()),
@@ -416,10 +432,11 @@ fn at_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     if path.is_empty() {
         return Some(value);
     }
-    path.split('.').try_fold(value, |current, key| match current {
-        Value::Array(items) => key.parse::<usize>().ok().and_then(|i| items.get(i)),
-        _ => current.get(key),
-    })
+    path.split('.')
+        .try_fold(value, |current, key| match current {
+            Value::Array(items) => key.parse::<usize>().ok().and_then(|i| items.get(i)),
+            _ => current.get(key),
+        })
 }
 
 /// The answer to `tools/call`.
@@ -486,14 +503,19 @@ impl ToolResult {
     /// When it does not deserialize.
     pub fn json<T: DeserializeOwned>(&self) -> T {
         let value = self.json_value();
-        serde_json::from_value(value.clone())
-            .unwrap_or_else(|error| panic!("the tool result {value} is not the expected type: {error}"))
+        serde_json::from_value(value.clone()).unwrap_or_else(|error| {
+            panic!("the tool result {value} is not the expected type: {error}")
+        })
     }
 
     /// Asserts the call succeeded.
     #[track_caller]
     pub fn assert_ok(self) -> Self {
-        assert!(!self.is_error(), "expected the tool to succeed, got {:?}", self.answer);
+        assert!(
+            !self.is_error(),
+            "expected the tool to succeed, got {:?}",
+            self.answer
+        );
         self
     }
 
@@ -501,7 +523,11 @@ impl ToolResult {
     /// `message`.
     #[track_caller]
     pub fn assert_error<'a>(self, status: u16, message: impl Into<Option<&'a str>>) -> Self {
-        assert!(self.is_error(), "expected the tool to fail, got {:?}", self.answer);
+        assert!(
+            self.is_error(),
+            "expected the tool to fail, got {:?}",
+            self.answer
+        );
         let context = format!("{:?}", self.answer);
         assert_error_body(&self.json_value(), status, message.into(), &context);
         self
@@ -540,7 +566,9 @@ impl ResourceResult {
     /// The contents (`[{uri, mimeType, text | blob}]`); empty for an error.
     pub fn contents(&self) -> Vec<Value> {
         match &self.answer {
-            McpResponse::Result(result) => result["contents"].as_array().cloned().unwrap_or_default(),
+            McpResponse::Result(result) => {
+                result["contents"].as_array().cloned().unwrap_or_default()
+            }
             McpResponse::Error(_) => Vec::new(),
         }
     }
@@ -586,8 +614,9 @@ impl ResourceResult {
     /// When they do not deserialize.
     pub fn json<T: DeserializeOwned>(&self) -> T {
         let value = self.json_value();
-        serde_json::from_value(value.clone())
-            .unwrap_or_else(|error| panic!("the resource {value} is not the expected type: {error}"))
+        serde_json::from_value(value.clone()).unwrap_or_else(|error| {
+            panic!("the resource {value} is not the expected type: {error}")
+        })
     }
 
     /// Asserts the read succeeded.
@@ -644,7 +673,9 @@ impl PromptResult {
     /// The messages (`[{role, content}]`); empty for an error.
     pub fn messages(&self) -> Vec<Value> {
         match &self.answer {
-            McpResponse::Result(result) => result["messages"].as_array().cloned().unwrap_or_default(),
+            McpResponse::Result(result) => {
+                result["messages"].as_array().cloned().unwrap_or_default()
+            }
             McpResponse::Error(_) => Vec::new(),
         }
     }
@@ -694,7 +725,10 @@ mod tests {
     #[test]
     fn sse_bodies_yield_their_json_messages() {
         let body = "id: 0\nretry: 3000\ndata:\n\nevent: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n";
-        assert_eq!(sse_messages(body), [json!({ "jsonrpc": "2.0", "id": 1, "result": {} })]);
+        assert_eq!(
+            sse_messages(body),
+            [json!({ "jsonrpc": "2.0", "id": 1, "result": {} })]
+        );
     }
 
     #[test]

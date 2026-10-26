@@ -132,10 +132,12 @@ pub(crate) fn coerce_prompt_arguments(schema: &Value, arguments: Map<String, Val
                 .unwrap_or_default();
             let parsed = if kind.iter().any(|t| t == "string") {
                 None
-            } else if kind
-                .iter()
-                .any(|t| matches!(t.as_str(), "boolean" | "integer" | "number" | "array" | "object"))
-            {
+            } else if kind.iter().any(|t| {
+                matches!(
+                    t.as_str(),
+                    "boolean" | "integer" | "number" | "array" | "object"
+                )
+            }) {
                 serde_json::from_str::<Value>(text).ok()
             } else {
                 None
@@ -212,7 +214,10 @@ mod tests {
         let arguments = prompt_arguments(&input_schema::<ListDeals>());
         let mine = arguments.iter().find(|a| a.name == "mine").unwrap();
         assert!(mine.required);
-        assert_eq!(mine.description.as_deref(), Some("Only the user's own deals."));
+        assert_eq!(
+            mine.description.as_deref(),
+            Some("Only the user's own deals.")
+        );
         let query = arguments.iter().find(|a| a.name == "query").unwrap();
         assert!(!query.required);
     }

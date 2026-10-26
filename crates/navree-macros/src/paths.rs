@@ -78,7 +78,10 @@ fn resolve(
         return Some(quote!(#root::#module));
     }
     let found = lookup(krate.package)?;
-    match (found, NAMED_FROM_INSIDE.iter().find(|(p, _)| *p == krate.package)) {
+    match (
+        found,
+        NAMED_FROM_INSIDE.iter().find(|(p, _)| *p == krate.package),
+    ) {
         (FoundCrate::Itself, Some((_, name))) => {
             let name = format_ident!("{name}");
             Some(quote!(::#name))

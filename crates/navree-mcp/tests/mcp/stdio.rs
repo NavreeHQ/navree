@@ -69,13 +69,19 @@ async fn the_process_acts_as_the_user_given_by_id() {
     assert_eq!(whoami["session"], true, "the stdio session has an id");
 
     let read = client
-        .read_resource(ReadResourceRequestParams::new(format!("crm://deals/{}", deal.id)))
+        .read_resource(ReadResourceRequestParams::new(format!(
+            "crm://deals/{}",
+            deal.id
+        )))
         .await
         .unwrap();
     assert_eq!(read.contents.len(), 1);
 
     client.cancel().await.unwrap();
-    server.await.unwrap().expect("the server ends with the client");
+    server
+        .await
+        .unwrap()
+        .expect("the server ends with the client");
 }
 
 #[tokio::test]

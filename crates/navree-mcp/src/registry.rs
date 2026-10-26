@@ -67,9 +67,9 @@ impl McpRegistry {
         for contributed in ctx.contributions::<ServerRegistration>() {
             let registration = &contributed.value;
             let resolver = ctx.resolver_for(registration.module);
-            let server_items = (registration.resolve)(resolver)
-                .await
-                .map_err(|error| format!("MCP server `{}`: {error}", short(registration.type_name)))?;
+            let server_items = (registration.resolve)(resolver).await.map_err(|error| {
+                format!("MCP server `{}`: {error}", short(registration.type_name))
+            })?;
             for item in server_items {
                 items.push((contributed.module.name, short(registration.type_name), item));
             }
@@ -111,7 +111,10 @@ impl McpRegistry {
             match item.def {
                 ItemDef::Tool(def) => {
                     if let Some(problem) = tool_name_problem(&def.name) {
-                        errors.push(format!("MCP tool `{}` of `{server}` ({module}): {problem}", def.name));
+                        errors.push(format!(
+                            "MCP tool `{}` of `{server}` ({module}): {problem}",
+                            def.name
+                        ));
                     }
                     registry.tools.push(Entry {
                         def,
@@ -161,15 +164,24 @@ impl McpRegistry {
 
     /// The resource whose URI (or template) matches `uri`, with its
     /// variables; fixed URIs win over templates.
-    pub(crate) fn resource(&self, uri: &str) -> Option<(&Entry<ResourceDef>, BTreeMap<String, String>)> {
+    pub(crate) fn resource(
+        &self,
+        uri: &str,
+    ) -> Option<(&Entry<ResourceDef>, BTreeMap<String, String>)> {
         let fixed = self
             .resources
             .iter()
             .filter(|resource| !resource.uri.is_template());
-        let templates = self.resources.iter().filter(|resource| resource.uri.is_template());
-        fixed
-            .chain(templates)
-            .find_map(|resource| resource.uri.matches(uri).map(|params| (&resource.entry, params)))
+        let templates = self
+            .resources
+            .iter()
+            .filter(|resource| resource.uri.is_template());
+        fixed.chain(templates).find_map(|resource| {
+            resource
+                .uri
+                .matches(uri)
+                .map(|params| (&resource.entry, params))
+        })
     }
 
     /// The prompt named `name`.
@@ -223,7 +235,10 @@ impl fmt::Debug for McpRegistry {
                 "resources",
                 &self.resources().map(|r| &r.uri).collect::<Vec<_>>(),
             )
-            .field("prompts", &self.prompts().map(|p| &p.name).collect::<Vec<_>>())
+            .field(
+                "prompts",
+                &self.prompts().map(|p| &p.name).collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
@@ -281,15 +296,24 @@ mod tests {
             ("ReportsModule", "Reports", tool("list_deals")),
         ])
         .unwrap_err();
-        assert!(error.contains("two MCP tools named `list_deals`"), "{error}");
-        assert!(error.contains("DealsModule") && error.contains("ReportsModule"), "{error}");
+        assert!(
+            error.contains("two MCP tools named `list_deals`"),
+            "{error}"
+        );
+        assert!(
+            error.contains("DealsModule") && error.contains("ReportsModule"),
+            "{error}"
+        );
 
         let error = McpRegistry::build(vec![
             ("A", "S", resource("crm://pipeline", "pipeline")),
             ("B", "T", resource("crm://pipeline", "board")),
         ])
         .unwrap_err();
-        assert!(error.contains("resource URIs named `crm://pipeline`"), "{error}");
+        assert!(
+            error.contains("resource URIs named `crm://pipeline`"),
+            "{error}"
+        );
     }
 
     #[test]
