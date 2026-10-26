@@ -191,8 +191,8 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
             continue;
         }
         if found {
-            return Err(syn::Error::new(
-                attr.span(),
+            return Err(syn::Error::new_spanned(
+                attr,
                 "one #[searchable(..)] attribute per field: list every flag in it",
             ));
         }
