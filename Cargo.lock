@@ -2788,6 +2788,7 @@ dependencies = [
  "navree-dock",
  "navree-events",
  "navree-flags",
+ "navree-helm",
  "navree-http",
  "navree-http-client",
  "navree-kernel",
@@ -2961,6 +2962,7 @@ dependencies = [
  "notify-debouncer-mini",
  "serde",
  "serde_json",
+ "syn 3.0.9",
  "tempfile",
  "thiserror",
  "toml",
@@ -3099,6 +3101,44 @@ dependencies = [
  "tokio",
  "tracing",
  "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-helm"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "cookie",
+ "form_urlencoded",
+ "garde",
+ "http",
+ "moka",
+ "navree-access",
+ "navree-audit",
+ "navree-auth",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-queue",
+ "navree-storage",
+ "navree-testing",
+ "navree-validation",
+ "navree-view",
+ "pulldown-cmark",
+ "regex",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "totp-rs",
+ "tracing",
  "uuid",
 ]
 
@@ -4073,6 +4113,24 @@ dependencies = [
  "tempfile",
  "unarray",
 ]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "278e9268c93b9e498a2da46c34d90ba93a3255eb99009646398f34bc73ab36eb"
+dependencies = [
+ "bitflags",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "qrcode2"
