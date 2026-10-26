@@ -36,10 +36,11 @@
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
+//! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `dock`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
@@ -175,6 +176,15 @@ pub use navree_webhooks as webhooks;
 pub use navree_oauth as oauth;
 #[cfg(feature = "social")]
 pub use navree_social as social;
+
+/// Feature flags (the `flags` feature): navree-flags, re-exported whole,
+/// plus the `#[flag]` attribute macro (`use navree::flags::flag;`).
+#[cfg(feature = "flags")]
+pub mod flags {
+    pub use navree_flags::*;
+    /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
+    pub use navree_macros::flag;
+}
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

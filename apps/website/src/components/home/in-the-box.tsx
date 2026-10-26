@@ -38,6 +38,7 @@ const docs: Record<string, string> = {
   "navree-auth": "/docs/security/authentication/",
   "navree-workspace": "/docs/workspaces/introduction/",
   "navree-social": "/docs/packages/social-sign-in/",
+  "navree-flags": "/docs/packages/feature-flags/",
   navree: "/docs/architecture/facade-and-features/",
   "navree-cli": "/docs/digging-deeper/cli/",
 };

@@ -1,6 +1,7 @@
 //! [`RouteDef`] and its metadata: access declaration, guards, throttle,
 //! timeout, body limit, audit action and OpenAPI metadata.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -169,6 +170,19 @@ impl RouteDef {
         self.meta.body_limit = Some(bytes);
         self
     }
+
+    /// Adds an OpenAPI specification extension to the route's operation
+    /// (`name` should start with `x-`), such as navree-flags'
+    /// `x-navree-flag`. navree-api renders it as a member of the operation
+    /// object; a second call with the same name replaces the value.
+    pub fn extension(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
+        self.meta.extensions.insert(name.into(), value.into());
+        self
+    }
 }
 
 impl fmt::Debug for RouteDef {
@@ -213,6 +227,9 @@ pub struct RouteMeta {
     pub full_path: String,
     /// The HTTP method, e.g. `GET`.
     pub method: String,
+    /// OpenAPI specification extensions of the route's operation
+    /// (`x-...` members; see [`RouteDef::extension`]).
+    pub extensions: BTreeMap<String, serde_json::Value>,
 }
 
 /// Who may call a route. A route must declare at least one of these.
@@ -385,6 +402,25 @@ mod tests {
             call(Method::GET).await,
             http::StatusCode::METHOD_NOT_ALLOWED
         );
+    }
+
+    #[test]
+    fn extensions_are_collected_by_name() {
+        let route = RouteDef::new(Method::GET, "/", get(|| async {}))
+            .public()
+            .extension("x-navree-flag", "new-pipeline")
+            .extension("x-internal", serde_json::json!({"team": "deals"}))
+            .extension("x-navree-flag", "ai-summaries");
+        assert_eq!(route.meta.extensions.len(), 2);
+        assert_eq!(
+            route.meta.extensions["x-navree-flag"],
+            serde_json::json!("ai-summaries")
+        );
+        assert_eq!(
+            route.meta.extensions["x-internal"]["team"],
+            serde_json::json!("deals")
+        );
+        assert!(RouteMeta::default().extensions.is_empty());
     }
 
     #[test]
