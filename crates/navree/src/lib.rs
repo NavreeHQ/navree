@@ -23,7 +23,9 @@
 //! | `api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
 //! | `mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
 //! | `realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
-//! | `storage` | navree-storage | `storage` | `StorageModule`: disks and uploads |
+//! | `storage` | navree-storage | `storage` | `StorageModule`: disks, signed links, direct uploads, disk sync |
+//! | | | `storage-s3` | S3 disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces |
+//! | | | `storage-gcs`, `storage-azure` (opt-in) | Google Cloud Storage and Azure Blob Storage disks |
 //! | `session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 //! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
 //! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
@@ -40,7 +42,8 @@
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `dock`), and the `storage-s3` driver but
+//! not `storage-gcs` or `storage-azure`. A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read

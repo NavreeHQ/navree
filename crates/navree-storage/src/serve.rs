@@ -388,4 +388,40 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn upload_params_decode_and_refuse_duplicates() {
+        assert_eq!(
+            upload_params(Some("expires=10&type=image%2Fpng&max=100&size=5&signature=ab")),
+            Some(UploadParams {
+                expires: 10,
+                content_type: Some("image/png".into()),
+                max_bytes: 100,
+                size: Some(5),
+                signature: "ab".into(),
+            })
+        );
+        assert_eq!(
+            upload_params(Some("expires=10&max=100&signature=ab&x=1")),
+            Some(UploadParams {
+                expires: 10,
+                max_bytes: 100,
+                signature: "ab".into(),
+                ..UploadParams::default()
+            })
+        );
+        for bad in [
+            "expires=10&signature=ab",
+            "max=1&signature=ab",
+            "expires=10&max=1",
+            "expires=10&max=-1&signature=ab",
+            "expires=10&max=1&size=big&signature=ab",
+            "expires=10&max=1&type=a&type=b&signature=ab",
+            "expires=10&max=1&max=2&signature=ab",
+            "expires=10&max=1&type=%FF&signature=ab",
+        ] {
+            assert_eq!(upload_params(Some(bad)), None, "{bad}");
+        }
+        assert_eq!(upload_params(None), None);
+    }
 }

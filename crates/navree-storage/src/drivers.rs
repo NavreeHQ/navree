@@ -398,5 +398,44 @@ mod cloud {
             assert!(backend.provider.is_some());
             assert!(backend.store.to_string().contains("media"));
         }
+
+        /// The access key a link of `config` is signed with, given `vars`.
+        async fn signing_key_id(config: &S3Config, vars: &[(&str, &str)]) -> String {
+            let backend = s3("uploads", config, &env(vars)).unwrap();
+            let url = backend
+                .provider
+                .unwrap()
+                .get_url("a.txt", std::time::Duration::from_secs(60))
+                .await
+                .unwrap();
+            let credential = url
+                .split('&')
+                .find_map(|pair| pair.strip_prefix("X-Amz-Credential="))
+                .unwrap();
+            credential.split("%2F").next().unwrap().to_owned()
+        }
+
+        #[tokio::test]
+        async fn credentials_come_from_the_disk_then_the_environment() {
+            let vars = [
+                ("AWS_ACCESS_KEY_ID", "ENVKEY"),
+                ("AWS_SECRET_ACCESS_KEY", "env-secret"),
+                ("AWS_SESSION_TOKEN", "env-token"),
+            ];
+            let without = S3Config::new("media").endpoint("http://127.0.0.1:9");
+            assert_eq!(signing_key_id(&without, &vars).await, "ENVKEY");
+            let with = without.clone().credentials("DISKKEY", "disk-secret");
+            assert_eq!(signing_key_id(&with, &vars).await, "DISKKEY");
+
+            // The environment's session token belongs to its own keys only.
+            let backend = s3("uploads", &with, &env(&vars)).unwrap();
+            let url = backend
+                .provider
+                .unwrap()
+                .get_url("a.txt", std::time::Duration::from_secs(60))
+                .await
+                .unwrap();
+            assert!(!url.contains("env-token"), "{url}");
+        }
     }
 }
