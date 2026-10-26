@@ -5,6 +5,7 @@ mod budget;
 mod docs_surface;
 mod failover;
 mod module;
+mod rag;
 mod retrieval;
 mod streaming;
 mod support;
