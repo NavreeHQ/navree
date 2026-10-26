@@ -4,7 +4,8 @@
 //! an app root imports, the extractors and responses handlers use, the
 //! access markers, and every `ModuleBuilder` extension trait (imported as
 //! `_`, so `m.migrations(..)`, `m.controller::<C>()`, `m.job::<J>()`,
-//! `m.templates(..)` and friends resolve without naming the traits).
+//! `m.templates(..)`, `m.resource::<R>()` and friends resolve without
+//! naming the traits).
 //!
 //! Every name is gated by the feature of the crate it comes from. With
 //! `http`, `Result` here is `navree::Result` (error type `AppError` by
@@ -89,3 +90,6 @@ pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow,
 };
+
+#[cfg(feature = "helm")]
+pub use navree_helm::{HelmModule, ModuleBuilderHelmExt as _};

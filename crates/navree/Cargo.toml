@@ -22,6 +22,7 @@ full = [
     "crypto",
     "db",
     "events",
+    "helm",
     "http",
     "http-client",
     "log",
@@ -85,6 +86,20 @@ workspace = [
     "mail",
     "access",
 ]
+## L7
+## Helm: the admin panel generated from your entities.
+helm = [
+    "dep:navree-helm",
+    "http",
+    "view",
+    "db",
+    "crypto",
+    "storage",
+    "validation",
+    "audit",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 
@@ -103,6 +118,7 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
+navree-helm = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }

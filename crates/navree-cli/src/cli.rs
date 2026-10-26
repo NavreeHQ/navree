@@ -73,6 +73,9 @@ pub enum Command {
     /// Generate a test in a module (tests/NAME.rs).
     #[command(name = "make:test")]
     MakeTest(MakeArgs),
+    /// Generate a Helm admin-panel resource for an entity of a module (resources/ENTITY.rs).
+    #[command(name = "make:resource")]
+    MakeResource(MakeResourceArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
     /// A command of the app binary.
@@ -140,6 +143,18 @@ pub struct MakeArgs {
     pub module: String,
     /// The item name in snake_case.
     pub name: String,
+    /// The directory holding feature modules, relative to the app.
+    #[arg(long, default_value = MODULES_DIR)]
+    pub path: String,
+}
+
+/// `navree make:resource <module> <Entity> [--path src/modules]`.
+#[derive(Debug, Args)]
+pub struct MakeResourceArgs {
+    /// The module (a directory under --path, created by make:module).
+    pub module: String,
+    /// The entity, as `Deal` or `deal` (in entity.rs or entities/ENTITY.rs).
+    pub entity: String,
     /// The directory holding feature modules, relative to the app.
     #[arg(long, default_value = MODULES_DIR)]
     pub path: String,

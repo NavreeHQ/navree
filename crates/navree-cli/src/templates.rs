@@ -75,6 +75,7 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "make/policy.rs",
     "make/command.rs",
     "make/test.rs",
+    "make/resource.rs",
 ];
 
 /// A template failed to render (a bug in the template or its context).

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="csrf-token" content="{{ panel.csrf }}">
+<meta name="helm-base" content="{{ panel.base }}">
+<title>{{ page_title }} · {{ panel.title }}</title>
+<link rel="stylesheet" href="{{ panel.base }}/assets/helm.css?v={{ panel.version }}">
+<link rel="stylesheet" href="{{ panel.base }}/assets/theme.css?v={{ panel.version }}">
+<script src="{{ panel.base }}/assets/helm.js?v={{ panel.version }}" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="Admin panel">
+    <a class="brand" href="{{ panel.base }}">
+      {% if panel.logo %}<img src="{{ panel.logo }}" alt="" class="brand-logo">{% else %}<span class="brand-mark" aria-hidden="true"></span>{% endif %}
+      <span class="brand-title">{{ panel.title }}</span>
+    </a>
+    <details class="menu" open>
+      <summary class="menu-toggle">Menu</summary>
+      <nav aria-label="Main">
+        <ul class="nav">
+          <li><a href="{{ panel.base }}"{% if active == "dashboard" %} aria-current="page"{% endif %}>Dashboard</a></li>
+        </ul>
+        {% for group in menu %}
+        <p class="nav-group" id="nav-{{ loop.index }}">{{ group.title }}</p>
+        <ul class="nav" aria-labelledby="nav-{{ loop.index }}">
+          {% for item in group.items %}
+          <li><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ item.initial }}</span>{{ item.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endfor %}
+      </nav>
+    </details>
+  </aside>
+  <div class="main-column">
+    <header class="topbar">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="{{ panel.base }}">{{ panel.title }}</a></li>
+          {% for crumb in crumbs %}
+          <li>{% if crumb.url %}<a href="{{ crumb.url }}">{{ crumb.label }}</a>{% else %}<span aria-current="page">{{ crumb.label }}</span>{% endif %}</li>
+          {% endfor %}
+        </ol>
+      </nav>
+      <div class="user">
+        <span class="user-name" title="{{ user.email }}">{{ user.name }}</span>
+        {% if panel.csrf %}
+        <form method="post" action="{{ panel.base }}/logout">
+          <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+          <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+        </form>
+        {% endif %}
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      {% if flash %}
+      <div class="flash flash-{{ flash.tone }}" role="status">{{ flash.text }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+</body>
+</html>
