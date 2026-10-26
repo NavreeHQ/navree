@@ -257,7 +257,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-flags",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features flags",
     href: "/docs/packages/feature-flags/",
-    status: "planned",
+    status: "stable",
     signature: "flags.active::<NewPipeline>().await?",
   },
   {

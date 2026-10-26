@@ -376,8 +376,8 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries an app turns on by
-/// name (`features = ["social"]`, `features = ["oauth"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth"];
+/// name (`features = ["social"]`, `features = ["oauth"]`, `features = ["flags"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
@@ -419,4 +419,14 @@ fn opt_in_libraries_are_reexported_whole() {
     assert!(same::<navree::social::SocialModule, SocialModule>());
     let (_social, _fake): (navree::social::Social, navree::social::SocialFake) =
         navree::social::Social::fake();
+}
+
+/// `navree::flags` is navree-flags re-exported whole, and the `flags`
+/// feature puts its module and extractor in the prelude
+/// (`cargo test -p navree --features flags`).
+#[cfg(feature = "flags")]
+#[test]
+fn flags_is_reexported_with_its_feature() {
+    assert!(same::<navree::flags::FlagsModule, FlagsModule>());
+    assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
 }
