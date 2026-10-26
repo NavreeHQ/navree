@@ -134,6 +134,50 @@ async fn registering_an_entity_twice_is_harmless() {
         .await;
 }
 
+/// `people`, indexed under the contacts' index name.
+mod person {
+    use navree_search::Searchable;
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
+    #[sea_orm(table_name = "people")]
+    #[searchable(index = "contacts")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        #[searchable]
+        pub name: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_entities_cannot_share_an_index() {
+    use navree_kernel::{Module, ModuleBuilder};
+    struct People;
+    impl Module for People {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.import(SearchModule::for_feature::<person::Entity>());
+        }
+    }
+    let error = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(SearchModule::for_root(Engine::memory()))
+        .module(CrmModule)
+        .module(People)
+        .try_build()
+        .await
+        .err()
+        .expect("the boot fails");
+    assert!(error.to_string().contains("both use the search index `contacts`"), "{error}");
+}
+
 #[cfg(feature = "tantivy")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_app_on_tantivy_syncs_and_searches() {
