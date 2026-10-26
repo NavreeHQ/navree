@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ArrowRightIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { navigation } from "@/lib/docs";
 import { site } from "@site";
@@ -10,6 +11,14 @@ export const metadata: Metadata = {
   description: `Everything ${site.name} does, from installation to queues, real time and testing.`,
   alternates: { canonical: "/docs/" },
 };
+
+/** The four first steps, above the full index. */
+const startHere = [
+  { href: "/docs/getting-started/installation/", title: "Install the CLI", text: "Rust, the `navree` command and a new app." },
+  { href: "/docs/getting-started/your-first-app/", title: "Build your first app", text: "An entity, routes, auth and tests." },
+  { href: "/docs/patterns/overview/", title: "Choose an architecture", text: "Monolith, services, multi-tenant and more." },
+  { href: "/docs/ai/introduction/", title: "Set up your agent", text: "Skills, Navigator and docs for models." },
+];
 
 export default function DocsIndex() {
   const nav = navigation();
@@ -33,7 +42,32 @@ export default function DocsIndex() {
         .
       </p>
 
-      <div className="mt-12 grid gap-x-12 gap-y-12 md:grid-cols-2">
+      <nav aria-label="Start here" className="mt-10">
+        <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {startHere.map((step, i) => (
+            <li key={step.href}>
+              <Link
+                href={step.href}
+                className="group flex h-full flex-col rounded-2xl border border-line bg-ink-1 p-4 shadow-bezel transition-colors duration-200 hover:border-line-2 hover:bg-ink-2"
+              >
+                <span className="flex items-center justify-between font-mono text-xs text-fg-3 numeric">
+                  {String(i + 1).padStart(2, "0")}
+                  <ArrowRightIcon
+                    aria-hidden
+                    className="size-4 transition-[transform,color] duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5 group-hover:text-accent"
+                  />
+                </span>
+                <span className="mt-3 font-medium text-fg">{step.title}</span>
+                <span className="mt-1 text-sm leading-relaxed text-pretty text-fg-3">
+                  <InlineMarkdown text={step.text} />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <div className="mt-14 grid gap-x-12 gap-y-10 sm:gap-y-12 md:grid-cols-2">
         {nav.sections.map((section) => (
           <section key={section.slug} aria-labelledby={`section-${section.slug}`}>
             <h2 id={`section-${section.slug}`} className="border-b border-line pb-3 text-lg font-semibold text-fg">
@@ -42,9 +76,13 @@ export default function DocsIndex() {
             <ul className="mt-2">
               {section.pages.map((page) => (
                 <li key={page.slug}>
-                  <Link href={page.href} className="group -mx-3 block rounded-lg px-3 py-2.5 transition-colors hover:bg-ink-1">
+                  <Link
+                    href={page.href}
+                    className="group -mx-3 block rounded-lg px-3 py-2 transition-colors hover:bg-ink-1 sm:py-2.5"
+                  >
                     <span className="font-medium text-fg group-hover:text-accent">{page.title}</span>
-                    <span className="mt-0.5 block text-sm leading-relaxed text-fg-2">
+                    {/* On phones the index lists titles only; the pages say the rest. */}
+                    <span className="mt-0.5 block text-sm leading-relaxed text-fg-2 max-sm:hidden">
                       <InlineMarkdown text={page.description} />
                     </span>
                   </Link>

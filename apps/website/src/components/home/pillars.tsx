@@ -96,7 +96,7 @@ function Tile({ pillar, visual, wide, className }: { pillar: Pillar; visual: Rea
   return (
     <GlowCard className={cn("rounded-[1.25rem] shadow-bezel", className)}>
       <div className={cn("flex h-full flex-col", wide && "lg:flex-row")}>
-        <div className={cn("p-6 pb-5 sm:p-7 sm:pb-6", wide && "lg:w-[18.5rem] lg:shrink-0 lg:pr-4 xl:w-[20rem]")}>
+        <div className={cn("p-6 pb-5 sm:p-7 sm:pb-6", wide && "lg:w-[16.5rem] lg:shrink-0 lg:pr-4 xl:w-[20rem]")}>
           <p className="font-mono text-xs text-fg-3 numeric">{pillar.n}</p>
           <h3 className="mt-4 font-display text-display-sm font-semibold text-fg">
             <Link
@@ -126,6 +126,7 @@ export async function Pillars() {
   return (
     <HomeSection id="pillars">
       <SectionHeading
+        split
         id="pillars"
         eyebrow="The framework"
         title="Everything a backend needs, on from the first commit."

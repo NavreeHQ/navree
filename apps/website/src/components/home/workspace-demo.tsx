@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 type Deal = { title: string; company: string; amount: string; stage: string };
 type Space = { slug: string; name: string; initial: string; role: string; members: string[]; deals: Deal[] };
 
-/** Three workspaces of one app. Each sees only its own deals (three each, so switching never changes the height). */
+/** Three workspaces of one app. Each sees only its own deals (four each, so switching never changes the height). */
 const spaces: Space[] = [
   {
     slug: "acme",
@@ -20,6 +20,7 @@ const spaces: Space[] = [
       { title: "Fleet renewal", company: "Bluefin Labs", amount: "$48,000", stage: "Won" },
       { title: "Second warehouse", company: "Keystone Freight", amount: "$22,500", stage: "Proposal" },
       { title: "Pilot, three clinics", company: "Lumen Dental", amount: "$9,800", stage: "Qualified" },
+      { title: "Support renewal", company: "Corvid Analytics", amount: "$14,200", stage: "Lead" },
     ],
   },
   {
@@ -32,6 +33,7 @@ const spaces: Space[] = [
       { title: "Rail sensors, phase 2", company: "Meridian Rail", amount: "$131,000", stage: "Negotiation" },
       { title: "Cold-chain audit", company: "Northgate Foods", amount: "$16,400", stage: "Won" },
       { title: "Depot telemetry", company: "Harrow Transit", amount: "$27,300", stage: "Won" },
+      { title: "Fleet tracking pilot", company: "Saltmarsh Logistics", amount: "$9,600", stage: "Proposal" },
     ],
   },
   {
@@ -44,11 +46,15 @@ const spaces: Space[] = [
       { title: "Print fleet lease", company: "Orbit Print", amount: "$7,200", stage: "Lead" },
       { title: "Guest Wi-Fi rollout", company: "Pinecrest Hotels", amount: "$38,900", stage: "Proposal" },
       { title: "Data migration", company: "Driftwood Supply", amount: "$12,750", stage: "Qualified" },
+      { title: "Kiosk refresh", company: "Brightline Cinemas", amount: "$6,300", stage: "Won" },
     ],
   },
 ];
 
 const DOMAIN = "app.example.com";
+
+const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const sum = (deals: Deal[]) => dollars.format(deals.reduce((total, d) => total + Number(d.amount.replace(/[$,]/g, "")), 0));
 
 function Initial({ letter, active }: { letter: string; active?: boolean }) {
   return (
@@ -156,7 +162,19 @@ export function WorkspaceDemo() {
                   You are <span className="font-mono text-fg-1">{space.role}</span> in {space.name}
                 </p>
               </div>
-              <ul key={space.slug} className="mt-4 divide-y divide-line rounded-xl border border-line">
+              {/* The workspace's own totals: they change with the switcher, like everything else. */}
+              <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line">
+                {[
+                  { label: "Open pipeline", value: sum(space.deals.filter((d) => d.stage !== "Won")) },
+                  { label: "Won this quarter", value: sum(space.deals.filter((d) => d.stage === "Won")) },
+                ].map((stat) => (
+                  <div key={stat.label} className="bg-ink-1 px-3.5 py-2.5">
+                    <dt className="truncate text-xs text-fg-3">{stat.label}</dt>
+                    <dd className="mt-0.5 font-mono text-[0.9375rem] text-fg numeric">{stat.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <ul key={space.slug} className="mt-3 divide-y divide-line rounded-xl border border-line">
                 {space.deals.map((deal, i) => (
                   <li
                     key={deal.title}

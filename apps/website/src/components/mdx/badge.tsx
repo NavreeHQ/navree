@@ -24,7 +24,9 @@ export function Badge({
   } as const;
   return (
     <span
-      className={`badge mx-0.5 inline-flex translate-y-[-1px] items-center gap-1.5 rounded-full border px-2.5 py-px align-middle text-[0.8125rem] leading-6 font-medium ${tones[tone]}`}
+      className={`badge mx-0.5 inline-flex translate-y-[-1px] items-center gap-1.5 rounded-full border align-middle text-[0.8125rem] font-medium ${
+        feature ? "py-0.5 pr-0.5 pl-2.5 leading-5" : "px-2.5 py-px leading-6"
+      } ${tones[tone]}`}
     >
       {feature ? (
         <>

@@ -28,7 +28,7 @@ const session: TermLine[] = [
 ];
 
 const facts = [
-  { term: "One binary", text: "Your app, its workers and its scheduler are one static executable, configured by environment variables." },
+  { term: "One binary", text: "Your app, its workers and its scheduler are one executable, configured by environment variables." },
   { term: "Zero downtime", text: "The new release starts beside the old one and takes traffic only after its health check passes." },
   { term: "One-command rollback", text: "navree deploy:rollback goes back to the previous release the same way." },
   { term: "Your servers", text: "Harbor provisions any Ubuntu server over SSH: Caddy with TLS, PostgreSQL, Redis, a firewall and systemd units." },

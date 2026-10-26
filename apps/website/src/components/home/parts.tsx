@@ -26,20 +26,48 @@ export function HomeSection({
   );
 }
 
-/** Eyebrow, heading and lead: the top of every section. */
+/**
+ * Eyebrow, heading and lead: the top of every section. Sections whose
+ * content runs full width below use `split`: the heading on the left and the
+ * lead (and an optional link) on the right, bottom-aligned, the same header
+ * the architecture, ecosystem and performance sections draw.
+ */
 export function SectionHeading({
   id,
   eyebrow,
   title,
   lead,
+  action,
+  split,
   className,
 }: {
   id: string;
   eyebrow: string;
   title: ReactNode;
   lead?: ReactNode;
+  /** A link under the lead (split layout). */
+  action?: ReactNode;
+  split?: boolean;
   className?: string;
 }) {
+  if (split) {
+    return (
+      <div className={cn("grid gap-6 lg:grid-cols-12 lg:items-end lg:gap-12", className)}>
+        <div className="lg:col-span-7">
+          <p className="eyebrow">{eyebrow}</p>
+          <h2 id={id} className="mt-5 text-display-lg font-semibold text-balance text-fg">
+            {title}
+          </h2>
+        </div>
+        {lead || action ? (
+          <div className="lg:col-span-5 lg:pb-1">
+            {lead ? <div className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">{lead}</div> : null}
+            {action ? <div className="mt-5">{action}</div> : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className={cn("max-w-3xl", className)}>
       <p className="eyebrow">{eyebrow}</p>

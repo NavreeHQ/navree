@@ -8,6 +8,7 @@
     "dev": "node scripts/prebuild.ts && node scripts/agent-files.ts && next dev --port 3210",
     "build": "node scripts/prebuild.ts && node scripts/agent-files.ts && next build && node scripts/postbuild.ts",
     "serve": "node scripts/serve.ts",
+    "check:links": "node scripts/check-links.ts",
     "lint": "eslint",
     "typecheck": "node scripts/prebuild.ts && tsc --noEmit",
     "screenshots": "node scripts/screenshots.ts"

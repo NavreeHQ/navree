@@ -1,7 +1,5 @@
-import Link from "next/link";
-
 import { PerfHighlights } from "@/components/bench/perf-highlights";
-import { ArrowRightIcon } from "@/components/icons";
+import { ArrowLink } from "@/components/home/parts";
 import { perf } from "@/lib/bench";
 
 /**
@@ -28,16 +26,9 @@ export function PerformanceSection() {
               One {perf.label} binary on {perf.settings.app.count} CPUs, serving a CRM-style API with JWT auth, validation
               and pagination against PostgreSQL{checks ? `, after passing a ${checks}-check conformance test` : ""}.
             </p>
-            <Link
-              href="/performance/"
-              className="group mt-5 inline-flex items-center gap-2 rounded-md text-[0.9375rem] font-medium text-accent"
-            >
+            <ArrowLink href="/performance/" className="mt-5">
               How it&apos;s measured
-              <ArrowRightIcon
-                aria-hidden
-                className="size-4 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5"
-              />
-            </Link>
+            </ArrowLink>
           </div>
         </div>
         <PerfHighlights className="mt-12 lg:mt-16" />

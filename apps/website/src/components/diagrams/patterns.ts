@@ -137,7 +137,7 @@ permissions = ["projects.*"]`,
       "Other services must hear about every committed change.",
     ],
     how: [
-      "Typed `Event`s and `m.listen::<E, L>()`",
+      "Typed events (`Event`) and `m.listen::<E, L>()`",
       "Queued listeners and jobs on `queue:work`, with retries and backoff",
       "A transactional outbox: `jobs` and `micro_outbox` rows commit with the change",
       "Broadcasting over the built-in Pusher-protocol WebSocket server",

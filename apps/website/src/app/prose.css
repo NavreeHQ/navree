@@ -526,10 +526,18 @@
 
 /* ------------------------------------------------------------------- badge */
 
+/* The feature name sits in its own pill, concentric with the badge (and
+   clear of the prose inline-code chip). */
 .badge-code {
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-ink-3);
   font-family: var(--font-mono);
   font-size: 0.78rem;
+  line-height: 1.25rem;
   color: var(--color-fg);
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- link cards */

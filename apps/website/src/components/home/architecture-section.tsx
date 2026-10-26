@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { DiagramFigure, diagrams } from "@/components/diagrams";
 import { patterns } from "@/components/diagrams/patterns";
+import { ArrowLink } from "@/components/home/parts";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -22,10 +23,15 @@ export function ArchitectureSection() {
             One framework, every architecture.
           </h2>
         </div>
-        <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2 lg:col-span-5 lg:pb-1">
-          Every shape of backend is built from the same unit: the module. Start as one binary, then add workspaces, events or
-          services when the product needs them, without rewriting a module.
-        </p>
+        <div className="lg:col-span-5 lg:pb-1">
+          <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
+            Every shape of backend is built from the same unit: the module. Start as one binary, then add workspaces, events
+            or services when the product needs them, without rewriting a module.
+          </p>
+          <ArrowLink href="/architecture/" className="mt-5">
+            Explore every architecture
+          </ArrowLink>
+        </div>
       </header>
 
       <Tabs defaultValue={patterns[0].id} className="mt-12 gap-8 lg:mt-14">
@@ -84,19 +90,6 @@ export function ArchitectureSection() {
           ))}
         </div>
       </Tabs>
-
-      <div className="mt-10 flex lg:mt-12">
-        <Link
-          href="/architecture/"
-          className="group inline-flex w-fit items-center gap-1.5 text-[0.9375rem] font-medium text-fg-1 transition-colors hover:text-accent"
-        >
-          Explore every architecture
-          <ArrowRightIcon
-            aria-hidden
-            className="size-4 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5"
-          />
-        </Link>
-      </div>
     </section>
   );
 }

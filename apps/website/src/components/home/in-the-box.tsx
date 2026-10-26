@@ -11,6 +11,7 @@ type Crate = { name: string; layer: number; module: string | null; description: 
 const docs: Record<string, string> = {
   "navree-kernel": "/docs/architecture/modules/",
   "navree-macros": "/docs/basics/routing/",
+  "navree-dock": "/docs/tools/dock/",
   "navree-contracts": "/docs/architecture/crate-hierarchy/",
   "navree-config": "/docs/getting-started/configuration/",
   "navree-http": "/docs/basics/routing/",
@@ -61,23 +62,20 @@ export function InTheBox() {
   const layers = [...new Set(all.map((c) => c.layer))].sort((a, b) => b - a);
   return (
     <HomeSection id="in-the-box">
-      <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <SectionHeading
-          id="in-the-box"
-          eyebrow="In the box"
-          title="Everything in the box."
-          lead={
-            <p>
-              {all.length} crates in {layers.length} layers. A crate depends only on the layers below it, and a test checks every
-              edge. Depend on the <code className="inline-code">navree</code> facade to get every module, or turn its features off
-              to compile less.
-            </p>
-          }
-        />
-        <ArrowLink href="/docs/architecture/crate-hierarchy/" className="shrink-0 lg:mb-1.5">
-          How the layers work
-        </ArrowLink>
-      </div>
+      <SectionHeading
+        split
+        id="in-the-box"
+        eyebrow="In the box"
+        title="Everything in the box."
+        lead={
+          <p>
+            {all.length} crates in {layers.length} layers. A crate depends only on the layers below it, and a test checks every
+            edge. Depend on the <code className="inline-code">navree</code> facade to get every module, or turn its features off
+            to compile less.
+          </p>
+        }
+        action={<ArrowLink href="/docs/architecture/crate-hierarchy/">How the layers work</ArrowLink>}
+      />
 
       <div className="mt-12 overflow-hidden rounded-[1.25rem] border border-line bg-ink-1/40 lg:mt-14">
         {layers.map((layer, i) => {
@@ -108,7 +106,8 @@ export function InTheBox() {
                         <span className="font-mono text-[0.84rem] text-fg transition-colors group-hover:text-accent">{c.name}</span>
                         {c.module ? <span className="truncate font-mono text-[0.6875rem] text-fg-3">{c.module}</span> : null}
                       </span>
-                      <span className="mt-1 block text-[0.8125rem] leading-relaxed text-fg-3">{c.description}</span>
+                      {/* Phones list names only: 29 descriptions would run three screens. */}
+                      <span className="mt-1 block text-[0.8125rem] leading-relaxed text-fg-3 max-sm:sr-only">{c.description}</span>
                     </Link>
                   </li>
                 ))}

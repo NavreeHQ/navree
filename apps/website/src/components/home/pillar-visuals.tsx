@@ -107,14 +107,14 @@ export function ApiDocument({ errorHtml }: { errorHtml: string }) {
           {endpoints.map((e) => (
             <li
               key={e.method + e.path}
-              className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-3.5 py-2.5 sm:grid-cols-[3.25rem_minmax(0,1fr)_auto]"
+              className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-3.5 py-2.5 sm:grid-cols-[3.25rem_minmax(0,1fr)_auto] lg:grid-cols-[3.25rem_minmax(0,1fr)] xl:grid-cols-[3.25rem_minmax(0,1fr)_auto]"
             >
               <span className="font-mono text-xs font-medium text-fg-2">{e.method}</span>
               <span className="flex min-w-0 items-baseline gap-3">
                 <span className="truncate font-mono text-[0.8125rem] text-fg">{e.path}</span>
-                <span className="hidden truncate text-xs text-fg-3 md:inline">{e.summary}</span>
+                <span className="hidden truncate text-xs text-fg-3 md:inline lg:hidden xl:inline">{e.summary}</span>
               </span>
-              <span className="col-start-2 flex gap-1 sm:col-start-auto">
+              <span className="col-start-2 flex gap-1 sm:col-start-auto lg:col-start-2 xl:col-start-auto">
                 {e.codes.map((c) => (
                   <span
                     key={c}

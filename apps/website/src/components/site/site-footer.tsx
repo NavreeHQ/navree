@@ -82,7 +82,7 @@ export function SiteFooter() {
           <Link href="/" className="-ml-1 inline-flex rounded-md px-1 py-1" aria-label={`${site.name} home`}>
             <Logo />
           </Link>
-          <p className="mt-5 font-display text-[1.125rem] leading-snug font-semibold tracking-[-0.02em] text-fg">{site.headline}</p>
+          <p className="mt-5 font-display text-[1.125rem] leading-snug font-semibold tracking-[-0.02em] text-balance text-fg">{site.headline}</p>
           <p className="mt-2 text-sm leading-relaxed text-fg-2">{site.tagline}</p>
         </div>
         {columns.map((column) => (
@@ -101,7 +101,7 @@ export function SiteFooter() {
       <div className="border-t border-line">
         <div className="container-site flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-6 text-[0.8125rem] text-fg-3">
           <p>
-            {site.name} is free and open source, licensed {site.license}.
+            {site.name} is free and open source, licensed <span className="whitespace-nowrap">{site.license}</span>.
           </p>
           <p>{site.domain}</p>
         </div>

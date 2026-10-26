@@ -27,6 +27,7 @@ export async function Showcase() {
   return (
     <HomeSection id="code">
       <SectionHeading
+        split
         id="code"
         eyebrow="The code"
         title="Every Navree app reads the same way."
