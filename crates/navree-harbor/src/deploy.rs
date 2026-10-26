@@ -764,7 +764,10 @@ mod tests {
             migrate_summary("{\"level\":\"INFO\"}\nMigrated: deals/m1\n"),
             "1 migration ran"
         );
-        assert_eq!(migrate_summary("Nothing to migrate.\n"), "nothing to migrate");
+        assert_eq!(
+            migrate_summary("Nothing to migrate.\n"),
+            "nothing to migrate"
+        );
         assert_eq!(migrate_summary("all good\n"), "all good");
         assert_eq!(migrate_summary(""), "done");
     }
