@@ -361,6 +361,10 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Module features that `full` leaves out on purpose: ecosystem libraries an
+/// app turns on by name (`features = ["social"]`).
+const OPT_IN: [&str; 1] = ["social"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +373,24 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    let included: Vec<&&str> = OPT_IN
+        .iter()
+        .filter(|feature| full.contains(**feature))
+        .collect();
+    assert!(
+        included.is_empty(),
+        "opt-in features in `full`: {included:?}"
+    );
+}
+
+/// The opt-in ecosystem libraries are re-exported whole too.
+#[cfg(feature = "social")]
+#[test]
+fn opt_in_libraries_are_reexported_whole() {
+    assert!(same::<navree::social::SocialModule, SocialModule>());
+    let (_social, _fake): (navree::social::Social, navree::social::SocialFake) =
+        navree::social::Social::fake();
 }

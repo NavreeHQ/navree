@@ -108,6 +108,7 @@ navree list                                 # every command of the app
 | Shipping to production | `navree-deployment` |
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
+| Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 
 ## Common mistakes
 

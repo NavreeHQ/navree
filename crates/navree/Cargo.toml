@@ -85,6 +85,19 @@ workspace = [
     "mail",
     "access",
 ]
+## L6 (opt-in, not in `full`)
+## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
+## Discord, X and OpenID Connect providers, linked to navree-auth users.
+social = [
+    "dep:navree-social",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 
@@ -113,6 +126,7 @@ navree-queue = { workspace = true, optional = true }
 navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
+navree-social = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
