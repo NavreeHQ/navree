@@ -49,30 +49,32 @@ const HIERARCHY: &[Rule] = &[
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
+    // Telemetry events and trace context: every emitter (L2 and up) uses it.
+    rule("navree-telemetry", 1, &["navree-kernel", "navree-contracts"]),
     // L2
-    rule("navree-http", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
-    rule("navree-log", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    rule("navree-http", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
+    rule("navree-log", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-crypto", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-events", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
-    rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
-    rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
+    rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     // L3
-    rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
+    rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
-    rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
+    rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-api", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
-    rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-view"]),
+    rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view"]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
     rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
-    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-db"]),
-    rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-db"]),
+    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
+    rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
-    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-mail"]),
+    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
     // L5
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
@@ -83,7 +85,7 @@ const HIERARCHY: &[Rule] = &[
     // module needs no navree-auth (a sibling at L5).
     rule("navree-workspace", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
-        "navree-crypto", "navree-events", "navree-mail", "navree-access",
+        "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
     ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
@@ -119,6 +121,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-macros",
     "navree-contracts",
     "navree-config",
+    "navree-telemetry",
     "navree-http",
     "navree-log",
     "navree-crypto",

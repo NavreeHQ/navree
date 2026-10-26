@@ -10,6 +10,7 @@ use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
+use navree_telemetry::TelemetryContext;
 use sea_orm::{DbErr, SqlErr};
 use tokio::sync::OnceCell;
 
@@ -67,11 +68,14 @@ async fn unit_of_work(
     let uow = db.uow(actor, request_id).await;
     request.extensions_mut().insert(uow.clone());
 
-    let task = ctx.tracker().spawn(async move {
-        // After-commit hooks run outside the scope: by then it is finished.
-        let response = uow.scope(next.run(request)).await;
-        finish(&uow, response).await
-    });
+    // The task keeps the request's telemetry context (request id, trace).
+    let task = ctx
+        .tracker()
+        .spawn(TelemetryContext::propagate(async move {
+            // After-commit hooks run outside the scope: by then it is finished.
+            let response = uow.scope(next.run(request)).await;
+            finish(&uow, response).await
+        }));
     match task.await {
         Ok(response) => response,
         Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),

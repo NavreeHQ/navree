@@ -7,6 +7,7 @@ use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_telemetry::Telemetry;
 
 use crate::controller::NotificationsController;
 use crate::{Notifier, NotifyOptions, SendNotificationJob, migration};
@@ -117,6 +118,7 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 Ok(Arc::new(Notifier::new(
                     NotifyOptions::clone(&options),
                     r.app().downgrade(),
+                    Telemetry::from_app(&r.app()).await,
                 )))
             })
             .deps(vec![ProviderKey::of::<NotifyOptions>()]),

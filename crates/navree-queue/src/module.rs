@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
-use navree_config::{ConfigSection, ModuleBuilderConfigExt};
+use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, Dispatcher, JobRegistration};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_telemetry::{Telemetry, TracePolicy};
 
 use crate::store::{DatabaseStore, MemoryStore, Store};
 use crate::{Queue, QueueDriver, QueueOptions, commands, migration};
@@ -121,13 +122,24 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                     .contributions::<JobRegistration>()
                     .into_iter()
                     .map(|c| (*c.value).clone());
-                Ok(Arc::new(Queue::new(
-                    store,
-                    (*options).clone(),
-                    clock,
-                    registrations,
-                    Some(app.downgrade()),
-                )))
+                let telemetry = Telemetry::from_app(&app).await;
+                let policy = match app.try_get::<Config>().await {
+                    Some(config) => TracePolicy::from_settings(
+                        |key| config.get_string(key),
+                        |name| std::env::var(name).ok(),
+                    )?,
+                    None => TracePolicy::default(),
+                };
+                Ok(Arc::new(
+                    Queue::new(
+                        store,
+                        (*options).clone(),
+                        clock,
+                        registrations,
+                        Some(app.downgrade()),
+                    )
+                    .instrumented(telemetry, policy),
+                ))
             })
             .deps(queue_deps),
         )
