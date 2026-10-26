@@ -32,7 +32,7 @@ pub trait WorkspaceScoped: EntityTrait {
 }
 
 /// The workspace column of `E`.
-fn workspace_column<E: WorkspaceScoped>() -> Result<E::Column, DbErr> {
+pub(crate) fn workspace_column<E: WorkspaceScoped>() -> Result<E::Column, DbErr> {
     E::Column::from_str(E::WORKSPACE_COLUMN).map_err(|_| {
         DbErr::Custom(format!(
             "`{}` has no column `{}`: set WorkspaceScoped::WORKSPACE_COLUMN",
@@ -162,7 +162,7 @@ impl<E> fmt::Debug for WorkspaceRepo<E> {
     }
 }
 
-fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
+pub(crate) fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
     let mut columns = E::PrimaryKey::iter();
     match (columns.next(), columns.next()) {
         (Some(pk), None) => Ok(E::find().filter(pk.into_column().eq(id))),
@@ -173,7 +173,7 @@ fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
     }
 }
 
-fn not_found<E: EntityTrait>() -> DbErr {
+pub(crate) fn not_found<E: EntityTrait>() -> DbErr {
     DbErr::RecordNotFound(format!("{} (in this workspace)", E::default().table_name()))
 }
 
@@ -196,10 +196,32 @@ fn not_found<E: EntityTrait>() -> DbErr {
 /// across workspaces runs as a role with `BYPASSRLS`. Run the SQL in a
 /// migration (`manager.get_connection().execute_unprepared(&sql)`) on
 /// PostgreSQL only.
+///
+/// Two options widen and narrow it:
+///
+/// - [`organizations`](RlsPolicy::organizations): rows of every workspace
+///   of the organization in `navree.organization` (set by
+///   [`CurrentOrganization`](crate::CurrentOrganization)) are also
+///   readable, so organization dashboards read through
+///   [`OrgRepo`](crate::OrgRepo). Writes still need `navree.workspace`.
+/// - [`partitioned`](RlsPolicy::partitioned): while `navree.partition` is
+///   set (by [`CurrentPartition`](crate::CurrentPartition) and
+///   [`PartitionScope`](crate::PartitionScope) when the request names a
+///   partition), only that partition's rows are visible and writable.
+///
+/// ```
+/// use navree_workspace::RlsPolicy;
+///
+/// let sql = RlsPolicy::new("contacts").organizations().partitioned().create_sql();
+/// assert!(sql.contains("current_setting('navree.organization', true)"));
+/// assert!(sql.contains("\"partition_id\" = NULLIF(current_setting('navree.partition', true), '')::uuid"));
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RlsPolicy {
     table: String,
     column: String,
+    organizations: bool,
+    partition_column: Option<String>,
 }
 
 impl RlsPolicy {
@@ -208,12 +230,33 @@ impl RlsPolicy {
         Self {
             table: table.to_owned(),
             column: "workspace_id".to_owned(),
+            organizations: false,
+            partition_column: None,
         }
     }
 
     /// Uses `column` instead of `workspace_id`.
     pub fn column(mut self, column: &str) -> Self {
         self.column = column.to_owned();
+        self
+    }
+
+    /// Also lets organization requests read the rows of their
+    /// organization's workspaces (`navree.organization`).
+    pub fn organizations(mut self) -> Self {
+        self.organizations = true;
+        self
+    }
+
+    /// Limits rows to the request's partition (`navree.partition`, on the
+    /// `partition_id` column) whenever one is set.
+    pub fn partitioned(self) -> Self {
+        self.partition_column("partition_id")
+    }
+
+    /// [`partitioned`](RlsPolicy::partitioned) on `column`.
+    pub fn partition_column(mut self, column: &str) -> Self {
+        self.partition_column = Some(column.to_owned());
         self
     }
 
@@ -226,14 +269,29 @@ impl RlsPolicy {
     /// policy.
     pub fn create_sql(&self) -> String {
         let table = quote(&self.table);
-        let check = format!(
-            "{} = NULLIF(current_setting('navree.workspace', true), '')::uuid",
-            quote(&self.column)
+        let column = quote(&self.column);
+        let workspace = format!(
+            "{column} = NULLIF(current_setting('navree.workspace', true), '')::uuid"
         );
+        let mut using = workspace.clone();
+        let mut check = workspace;
+        if self.organizations {
+            using = format!(
+                "{using} OR {column} IN (SELECT \"id\" FROM \"workspaces\" WHERE \"organization_id\" = NULLIF(current_setting('navree.organization', true), '')::uuid)"
+            );
+        }
+        if let Some(partition) = &self.partition_column {
+            let partition = format!(
+                "(NULLIF(current_setting('navree.partition', true), '') IS NULL OR {} = NULLIF(current_setting('navree.partition', true), '')::uuid)",
+                quote(partition)
+            );
+            using = format!("({using}) AND {partition}");
+            check = format!("({check}) AND {partition}");
+        }
         format!(
             "ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;\n\
              ALTER TABLE {table} FORCE ROW LEVEL SECURITY;\n\
-             CREATE POLICY {name} ON {table}\n    USING ({check})\n    WITH CHECK ({check});",
+             CREATE POLICY {name} ON {table}\n    USING ({using})\n    WITH CHECK ({check});",
             name = quote(&self.name()),
         )
     }
@@ -310,6 +368,29 @@ impl IsolationDriver {
             values,
         ))
         .await?;
+        Ok(())
+    }
+
+    /// Sets the transaction-local setting `name` to `value` on `uow` (a
+    /// unit of work on the app's database) when it runs on PostgreSQL.
+    /// Begins the transaction. Nothing on other databases.
+    pub(crate) async fn apply_setting(
+        &self,
+        uow: &Uow,
+        name: &'static str,
+        value: Uuid,
+    ) -> Result<(), WorkspaceError> {
+        if uow.db().backend() != DbBackend::Postgres {
+            return Ok(());
+        }
+        uow.tx()
+            .await?
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT set_config($1, $2, true)",
+                [name.into(), value.to_string().into()],
+            ))
+            .await?;
         Ok(())
     }
 
@@ -457,6 +538,33 @@ mod tests {
             "DROP POLICY IF EXISTS \"we\"\"ird_workspace_isolation\" ON \"we\"\"ird\";\n\
              ALTER TABLE \"we\"\"ird\" NO FORCE ROW LEVEL SECURITY;\n\
              ALTER TABLE \"we\"\"ird\" DISABLE ROW LEVEL SECURITY;"
+        );
+    }
+
+    #[test]
+    fn organization_and_partition_options_extend_the_policy() {
+        let workspace =
+            "\"workspace_id\" = NULLIF(current_setting('navree.workspace', true), '')::uuid";
+        let organization = "\"workspace_id\" IN (SELECT \"id\" FROM \"workspaces\" WHERE \"organization_id\" = NULLIF(current_setting('navree.organization', true), '')::uuid)";
+        let partition = "(NULLIF(current_setting('navree.partition', true), '') IS NULL OR \"partition_id\" = NULLIF(current_setting('navree.partition', true), '')::uuid)";
+
+        let orgs = RlsPolicy::new("deals").organizations().create_sql();
+        assert!(orgs.contains(&format!("USING ({workspace} OR {organization})")));
+        assert!(orgs.contains(&format!("WITH CHECK ({workspace});")));
+
+        let parts = RlsPolicy::new("deals").partitioned().create_sql();
+        assert!(parts.contains(&format!("USING (({workspace}) AND {partition})")));
+        assert!(parts.contains(&format!("WITH CHECK (({workspace}) AND {partition});")));
+
+        let both = RlsPolicy::new("deals")
+            .organizations()
+            .partition_column("domain_id")
+            .create_sql();
+        assert!(both.contains(&format!("USING (({workspace} OR {organization}) AND (")));
+        assert!(both.contains("\"domain_id\" = NULLIF(current_setting('navree.partition'"));
+        assert_eq!(
+            RlsPolicy::new("deals").partitioned().name(),
+            "deals_workspace_isolation"
         );
     }
 }

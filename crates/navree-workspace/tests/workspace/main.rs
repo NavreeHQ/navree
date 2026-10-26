@@ -6,6 +6,8 @@ mod support;
 mod access;
 mod invitations;
 mod isolation;
+mod organizations;
+mod partitions;
 mod resolution;
 mod routes;
 mod services;

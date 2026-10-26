@@ -1,4 +1,5 @@
-//! The resolvers: where a request names its workspace.
+//! The resolvers: where a request names its workspace, organization or
+//! partition.
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -6,7 +7,69 @@ use http::header::{AUTHORIZATION, HOST};
 use http::request::Parts;
 use navree_contracts::AuthState;
 
-use crate::{ResolverKind, WorkspaceConfig};
+use crate::{OrganizationOptions, PartitionOptions, ResolverKind, WorkspaceConfig};
+
+/// The settings of one level's resolvers.
+#[derive(Clone, Debug)]
+pub(crate) struct Lookup<'a> {
+    pub(crate) resolvers: &'a [ResolverKind],
+    pub(crate) header: &'a str,
+    pub(crate) base_domain: Option<&'a str>,
+    pub(crate) path: Vec<&'a str>,
+    pub(crate) claim: &'a str,
+}
+
+impl<'a> Lookup<'a> {
+    /// The workspace resolvers (`workspace.*`).
+    pub(crate) fn workspace(config: &'a WorkspaceConfig) -> Self {
+        Self {
+            resolvers: &config.resolvers,
+            header: &config.header,
+            base_domain: config.base_domain.as_deref(),
+            path: config.path_segments(),
+            claim: &config.claim,
+        }
+    }
+
+    /// The organization resolvers (`workspace.organizations.*`).
+    pub(crate) fn organization(options: &'a OrganizationOptions) -> Self {
+        Self {
+            resolvers: &options.resolvers,
+            header: &options.header,
+            base_domain: options.base_domain.as_deref(),
+            path: options.path_segments(),
+            claim: &options.claim,
+        }
+    }
+
+    /// The partition resolvers (`workspace.partitions.*`; no subdomains).
+    pub(crate) fn partition(options: &'a PartitionOptions) -> Self {
+        Self {
+            resolvers: &options.resolvers,
+            header: &options.header,
+            base_domain: None,
+            path: options.path_segments(),
+            claim: &options.claim,
+        }
+    }
+
+    /// The identifier (a slug or an id) the request names, and the
+    /// resolver that found it: the resolvers run in order and the first
+    /// that finds one wins.
+    pub(crate) fn find(&self, parts: &Parts) -> Option<(ResolverKind, String)> {
+        self.resolvers.iter().find_map(|kind| {
+            let found = match kind {
+                ResolverKind::Header => from_header(parts, self.header),
+                ResolverKind::Subdomain => self
+                    .base_domain
+                    .and_then(|base| from_subdomain(host(parts)?, base)),
+                ResolverKind::Path => from_path(parts.uri.path(), &self.path),
+                ResolverKind::Claim => from_claim(parts, self.claim),
+            };
+            found.map(|identifier| (*kind, identifier))
+        })
+    }
+}
 
 /// The workspace identifier (a slug or an id) the request names, and the
 /// resolver that found it: the configured resolvers run in order and the
@@ -15,18 +78,7 @@ pub(crate) fn identifier(
     config: &WorkspaceConfig,
     parts: &Parts,
 ) -> Option<(ResolverKind, String)> {
-    config.resolvers.iter().find_map(|kind| {
-        let found = match kind {
-            ResolverKind::Header => from_header(parts, &config.header),
-            ResolverKind::Subdomain => config
-                .base_domain
-                .as_deref()
-                .and_then(|base| from_subdomain(host(parts)?, base)),
-            ResolverKind::Path => from_path(parts.uri.path(), &config.path_segments()),
-            ResolverKind::Claim => from_claim(parts, &config.claim),
-        };
-        found.map(|identifier| (*kind, identifier))
-    })
+    Lookup::workspace(config).find(parts)
 }
 
 /// The trimmed value of header `name`, if present and not empty.
@@ -227,5 +279,48 @@ mod tests {
         assert_eq!(identifier(&WorkspaceConfig::default(), &bare), None);
         let empty_header = parts("/api/deals", &[("x-workspace", "  ")], true);
         assert_eq!(identifier(&WorkspaceConfig::default(), &empty_header), None);
+    }
+
+    #[test]
+    fn organizations_and_partitions_have_their_own_resolvers() {
+        let token = jwt(serde_json::json!({ "organization": "org-claim", "partition": "eu" }));
+        let bearer = format!("Bearer {token}");
+        let request = parts(
+            "/api/o/acme-group/p/uk/reports",
+            &[
+                ("x-organization", "org-header"),
+                ("x-partition", "part-header"),
+                ("host", "org-sub.partners.test"),
+                ("authorization", bearer.as_str()),
+            ],
+            true,
+        );
+        let mut config = WorkspaceConfig::default();
+        config.organizations.base_domain = Some("partners.test".into());
+        let orgs = |config: &WorkspaceConfig| {
+            Lookup::organization(&config.organizations)
+                .find(&request)
+                .map(|(_, id)| id)
+        };
+        assert_eq!(orgs(&config).as_deref(), Some("org-header"));
+        config.organizations.resolvers = vec![ResolverKind::Path];
+        assert_eq!(orgs(&config).as_deref(), Some("acme-group"));
+        config.organizations.resolvers = vec![ResolverKind::Subdomain];
+        assert_eq!(orgs(&config).as_deref(), Some("org-sub"));
+        config.organizations.resolvers = vec![ResolverKind::Claim];
+        assert_eq!(orgs(&config).as_deref(), Some("org-claim"));
+
+        let partitions = |config: &WorkspaceConfig| {
+            Lookup::partition(&config.partitions)
+                .find(&request)
+                .map(|(_, id)| id)
+        };
+        assert_eq!(partitions(&config).as_deref(), Some("part-header"));
+        config.partitions.resolvers = vec![ResolverKind::Path];
+        assert_eq!(partitions(&config).as_deref(), Some("uk"));
+        config.partitions.resolvers = vec![ResolverKind::Claim];
+        assert_eq!(partitions(&config).as_deref(), Some("eu"));
+        // The workspace resolvers don't read the organization's header.
+        assert_eq!(identifier(&config, &request), None);
     }
 }

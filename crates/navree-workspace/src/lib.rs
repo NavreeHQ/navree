@@ -58,6 +58,7 @@ pub mod entity;
 pub mod events;
 
 mod access;
+mod access_requests;
 mod commands;
 mod config;
 mod controller;
@@ -65,17 +66,27 @@ mod core;
 mod current;
 mod directory;
 mod error;
+mod grants;
 mod invitations;
 mod isolation;
 mod members;
 mod migration;
 mod module;
+mod org_current;
+mod org_members;
 mod org_role;
+mod organizations;
+mod partitions;
 mod resolve;
 mod role;
+mod scoped;
 mod tenant;
 mod workspaces;
 
+pub use access_requests::{
+    AccessRequestInfo, AccessRequestStatus, AccessRequests, Approval, ApprovedRequest,
+    MAX_MESSAGE_LEN, NewAccessRequest,
+};
 pub use config::{
     InvitationOptions, Isolation, OrgRoleOptions, OrganizationOptions, PartitionOptions,
     ResolverKind, RoleOptions, WorkspaceConfig,
@@ -88,7 +99,9 @@ pub use controller::{
 pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
 pub use entity::{
-    INVITATION_SUBJECT, Invitation, MEMBER_SUBJECT, Member, WORKSPACE_SUBJECT, Workspace,
+    ACCESS_REQUEST_SUBJECT, AccessRequest, INVITATION_SUBJECT, Invitation, MEMBER_SUBJECT, Member,
+    ORG_MEMBER_SUBJECT, ORGANIZATION_SUBJECT, OrgMember, Organization, PARTITION_SUBJECT,
+    Partition, WORKSPACE_SUBJECT, Workspace,
 };
 pub use error::WorkspaceError;
 pub use invitations::{AcceptedInvitation, Invitations, SentInvitation, TOKEN_LEN};
@@ -96,7 +109,14 @@ pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};
 pub use migration::WORKSPACE_MIGRATIONS;
 pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
+pub use org_current::{CurrentOrganization, CurrentPartition, InOrganization, PartitionScope};
+pub use org_members::{OrgMemberInfo, OrgMembers};
 pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
+pub use organizations::{NewOrganization, OrgMembership, OrganizationChanges, Organizations};
+pub use partitions::{NewPartition, Partitions};
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
+pub use scoped::{OrgRepo, PartitionRepo, PartitionScoped};
 pub use tenant::WorkspaceDatabases;
-pub use workspaces::{MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify};
+pub use workspaces::{
+    GrantedBy, MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify,
+};

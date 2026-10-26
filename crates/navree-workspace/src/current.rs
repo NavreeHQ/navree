@@ -27,18 +27,23 @@ use crate::entity::{Member, Workspace};
 use crate::isolation::{WorkspaceRepo, WorkspaceScoped};
 use crate::resolve;
 use crate::tenant::WorkspaceDatabases;
+use crate::workspaces::{Admission, GrantedBy};
 use crate::{
     Isolation, ResolverKind, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole, Workspaces,
 };
 
 /// The workspace of the current request, resolved, loaded and checked:
-/// the signed-in user is a member of it.
+/// the signed-in user is a member of it or, with organizations on, reaches
+/// it through a membership of its organization.
 ///
 /// As an extractor it resolves the workspace with the configured resolvers
 /// (`workspace.resolvers`: header, path, subdomain, claim) unless a guard
 /// already did; it answers 401 for guests, 400 when the request names no
-/// workspace, 404 for an unknown one and 403 when the user is not a member
+/// workspace, 404 for an unknown one and 403 when the user may not enter it
 /// (in Navree's JSON error shape). It derefs to the [`Workspace`].
+///
+/// A membership of the workspace wins over an organization grant;
+/// [`granted_by`](CurrentWorkspace::granted_by) says which one applies.
 ///
 /// ```ignore
 /// async fn index(ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<deal::Model>>> {
@@ -58,6 +63,7 @@ struct Resolved {
     workspace: Workspace,
     member: Member,
     role: WorkspaceRole,
+    granted_by: GrantedBy,
     access: Arc<PrincipalAccess>,
     subjects: Arc<std::collections::BTreeMap<String, String>>,
     isolation: Isolation,
@@ -75,14 +81,28 @@ impl CurrentWorkspace {
         &self.0.workspace
     }
 
-    /// The signed-in user's membership.
+    /// The signed-in user's membership. For a user who enters through an
+    /// organization grant it is not stored: it carries the organization
+    /// membership's id and dates and the mapped role
+    /// ([`granted_by`](CurrentWorkspace::granted_by) tells them apart).
     pub fn member(&self) -> &Member {
         &self.0.member
+    }
+
+    /// The signed-in user's id.
+    pub fn user_id(&self) -> Uuid {
+        self.0.member.user_id
     }
 
     /// The signed-in user's role in the workspace.
     pub fn role(&self) -> &WorkspaceRole {
         &self.0.role
+    }
+
+    /// How the user entered: as a member, or through the workspace's
+    /// organization.
+    pub fn granted_by(&self) -> &GrantedBy {
+        &self.0.granted_by
     }
 
     /// The role's permissions (built-in plus `workspace.roles`), sorted.
@@ -231,17 +251,27 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             AppError::forbidden().with_detail("This token is limited to another workspace.")
         );
     }
-    let member = workspaces
-        .membership(workspace.id, principal.user_id)
+    let Admission {
+        member,
+        role,
+        granted_by,
+    } = workspaces
+        .admission(&workspace, principal.user_id)
         .await
         .map_err(app_error)?
         .ok_or(WorkspaceError::NotMember)
         .map_err(app_error)?;
-    let role = member.role();
     let roles = RoleTable::from_config(&config);
-    let access = workspace_access(&ctx, &principal, workspace.id, &role, &roles)
-        .await
-        .map_err(app_error)?;
+    let access = workspace_access(
+        &ctx,
+        &principal,
+        workspace.id,
+        workspace.organization_id,
+        &role,
+        &roles,
+    )
+    .await
+    .map_err(app_error)?;
     if config.isolation != Isolation::Database
         && let Some(uow) = parts.extensions.get::<Uow>()
     {
@@ -254,6 +284,7 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         workspace,
         member,
         role,
+        granted_by,
         access: access.clone(),
         subjects: subjects_of(&ctx).await,
         isolation: config.isolation,
@@ -267,12 +298,21 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
 }
 
 /// The error response of a [`WorkspaceError`].
-fn app_error(error: WorkspaceError) -> AppError {
+pub(crate) fn app_error(error: WorkspaceError) -> AppError {
     error.to_app_error()
 }
 
+/// Resolves the request's workspace with the configured resolvers (for the
+/// partition extractors).
+pub(crate) async fn current_workspace(parts: &mut Parts) -> Result<CurrentWorkspace, AppError> {
+    resolve_request(parts, &Source::Configured).await
+}
+
 /// The value of path parameter `name`, if the route has it.
-async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<String>, AppError> {
+pub(crate) async fn path_param(
+    parts: &mut Parts,
+    name: &str,
+) -> Result<Option<String>, AppError> {
     let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
         .await
         .map_err(|_| AppError::not_found())?;
