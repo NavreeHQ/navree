@@ -73,6 +73,9 @@ pub enum Command {
     /// Generate a test in a module (tests/NAME.rs).
     #[command(name = "make:test")]
     MakeTest(MakeArgs),
+    /// Generate an MCP server with one tool in a module (mcp/NAME.rs).
+    #[command(name = "make:mcp")]
+    MakeMcp(MakeArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
     /// Run the app's local services (dock.toml) with Docker or Podman.
@@ -108,6 +111,7 @@ impl Command {
             Command::MakePolicy(a) => (MakeKind::Policy, a),
             Command::MakeCommand(a) => (MakeKind::Command, a),
             Command::MakeTest(a) => (MakeKind::Test, a),
+            Command::MakeMcp(a) => (MakeKind::Mcp, a),
             _ => return None,
         };
         Some((kind, args, None))
