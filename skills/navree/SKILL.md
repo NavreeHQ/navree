@@ -108,6 +108,7 @@ navree list                                 # every command of the app
 | Shipping to production | `navree-deployment` |
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
+| Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 
 ## Common mistakes
 

@@ -89,3 +89,6 @@ pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow,
 };
+
+#[cfg(feature = "webhooks")]
+pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};

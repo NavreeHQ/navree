@@ -143,6 +143,50 @@ impl HttpClient {
         self.request(Method::DELETE, url)
     }
 
+    /// Checks `url` against this client's SSRF policy without sending
+    /// anything, for URLs stored to be called later (webhook endpoints,
+    /// callback URLs): the scheme must be `http` or `https`, and the host
+    /// must not be a refused address. A real client resolves a host name
+    /// and checks every address it resolves to (unless the name is on the
+    /// allow list); a fake client resolves no names, so it checks IP
+    /// literals only.
+    ///
+    /// Errors: [`HttpClientError::Build`] for a malformed URL or another
+    /// scheme, [`HttpClientError::Blocked`] for a refused destination, and
+    /// [`HttpClientError::Connect`] when the host name does not resolve.
+    /// Requests are still checked when they are sent (DNS answers can
+    /// change).
+    pub async fn check_destination(&self, url: &str) -> Result<(), HttpClientError> {
+        let url = Url::parse(url)
+            .map_err(|error| HttpClientError::Build(format!("invalid URL: {error}")))?;
+        self.inner.guard.check_url(&url)?;
+        let (Transport::Real(_), Some(url::Host::Domain(host))) =
+            (&self.inner.transport, url.host())
+        else {
+            return Ok(());
+        };
+        if self.inner.guard.host_allowed(host) {
+            return Ok(());
+        }
+        let port = url.port_or_known_default().unwrap_or(0);
+        let addrs = tokio::net::lookup_host((host, port))
+            .await
+            .map_err(|error| HttpClientError::Connect {
+                url: display_url(&url),
+                source: Box::new(error),
+            })?;
+        for addr in addrs {
+            self.inner
+                .guard
+                .check_ip(addr.ip())
+                .map_err(|reason| HttpClientError::Blocked {
+                    host: host.to_owned(),
+                    reason,
+                })?;
+        }
+        Ok(())
+    }
+
     /// The `User-Agent` header value.
     pub(crate) fn user_agent(&self) -> &HeaderValue {
         &self.inner.user_agent

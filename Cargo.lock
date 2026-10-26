@@ -2713,6 +2713,7 @@ dependencies = [
  "navree-testing",
  "navree-validation",
  "navree-view",
+ "navree-webhooks",
  "navree-workspace",
  "sea-orm",
  "sea-orm-migration",
@@ -3322,6 +3323,46 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "navree-webhooks"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "hex",
+ "hmac",
+ "http",
+ "navree-access",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-queue",
+ "navree-testing",
+ "navree-workspace",
+ "rand 0.10.3",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
