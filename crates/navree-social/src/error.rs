@@ -271,7 +271,12 @@ mod tests {
         let body = SocialError::InvalidState.into_app_error().body();
         assert_eq!(
             body,
-            json!({"statusCode": 400, "message": "Invalid or expired state", "error": "Bad Request"})
+            json!({
+                "statusCode": 400,
+                "message": "Invalid or expired state",
+                "error": "Bad Request",
+                "code": "bad_request",
+            })
         );
         assert_eq!(
             SocialError::WrongIntent.into_app_error().body()["message"],

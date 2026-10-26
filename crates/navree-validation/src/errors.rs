@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 ///         "statusCode": 400,
 ///         "message": ["email has already been taken", "name should not be empty"],
 ///         "error": "Bad Request",
+///         "code": "validation_failed",
 ///         "errors": {
 ///             "email": ["email has already been taken"],
 ///             "name": ["name should not be empty"],
