@@ -33,13 +33,15 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! A feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
-//! is not in `full`: it is a development tool (`navree dock`), for tools
-//! and tests that read `dock.toml`.
+//! (`auth` turns on `access`, `db`, `http`, ...). `full` (the default) turns
+//! on every module feature except the opt-in ones (`billing`, `dock`). The
+//! `postgres` feature adds navree-db's PostgreSQL driver. `axum` is
+//! re-exported with `http`. `dock` is a development tool (`navree dock`),
+//! for tools and tests that read `dock.toml`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -161,6 +163,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L7
+#[cfg(feature = "billing")]
+pub use navree_billing as billing;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]
