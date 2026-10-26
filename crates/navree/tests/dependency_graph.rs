@@ -13,7 +13,8 @@
 //!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 7).
 //!
 //! It also checks the external side of the graph: `Cargo.lock` must not contain
-//! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only).
+//! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only), nor the
+//! crates the crypto policy forbids (`rsa`, `p256`, `p384`, `ed25519-dalek`).
 //!
 //! Adding a workspace crate? Give it a row in [`HIERARCHY`] first.
 
@@ -301,12 +302,27 @@ const FORBIDDEN_NATIVE_PACKAGES: &[&str] = &[
     "openssl-sys",
 ];
 
-/// Names of forbidden packages listed in a `Cargo.lock`.
+/// Packages the crypto policy keeps out (ecosystem build plan §2): `rsa`
+/// (RUSTSEC-2023-0071) and the RustCrypto curve crates. Asymmetric
+/// signatures go through `ring`, wrapped in `navree_crypto::jose`.
+const FORBIDDEN_CRYPTO_PACKAGES: &[&str] = &["ed25519-dalek", "p256", "p384", "rsa"];
+
+/// Names of forbidden native packages listed in a `Cargo.lock`.
 fn forbidden_native_packages(lock: &str) -> Vec<String> {
+    listed_packages(lock, FORBIDDEN_NATIVE_PACKAGES)
+}
+
+/// Names of packages the crypto policy forbids, listed in a `Cargo.lock`.
+fn forbidden_crypto_packages(lock: &str) -> Vec<String> {
+    listed_packages(lock, FORBIDDEN_CRYPTO_PACKAGES)
+}
+
+/// The packages of `names` that a `Cargo.lock` lists.
+fn listed_packages(lock: &str, names: &[&str]) -> Vec<String> {
     lock.lines()
         .filter_map(|line| line.trim().strip_prefix("name = \""))
         .filter_map(|rest| rest.strip_suffix('"'))
-        .filter(|name| FORBIDDEN_NATIVE_PACKAGES.contains(name))
+        .filter(|name| names.contains(name))
         .map(str::to_owned)
         .collect()
 }
@@ -377,6 +393,21 @@ fn lockfile_has_no_aws_lc_openssl_native_tls_or_cmake() {
         found.is_empty(),
         "Cargo.lock contains forbidden native TLS/build packages: {found:?}; \
          use rustls with the `ring` provider (see root Cargo.toml)"
+    );
+}
+
+/// Crypto policy: no `rsa`, `p256`, `p384` or `ed25519-dalek`; RSA, ECDSA
+/// and Ed25519 go through `ring` (`navree_crypto::jose`).
+#[test]
+fn lockfile_follows_the_crypto_policy() {
+    let lockfile = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+    let lock = std::fs::read_to_string(&lockfile).expect("Cargo.lock is readable");
+    let found = forbidden_crypto_packages(&lock);
+    assert!(
+        found.is_empty(),
+        "Cargo.lock contains packages the crypto policy forbids: {found:?}; \
+         sign and verify with navree_crypto::jose (ring) instead, and check \
+         `cargo tree -i <package>` for the crate that pulls them in"
     );
 }
 
@@ -484,6 +515,33 @@ version = "0.9.109"
     assert_eq!(
         forbidden_native_packages(lock),
         vec!["aws-lc-sys".to_owned(), "openssl-sys".to_owned()]
+    );
+}
+
+#[test]
+fn forbidden_crypto_packages_are_found_in_a_lockfile() {
+    let lock = r#"
+version = 4
+
+[[package]]
+name = "rsa"
+version = "0.9.8"
+
+[[package]]
+name = "ring"
+version = "0.17.14"
+
+[[package]]
+name = "p256"
+version = "0.13.2"
+
+[[package]]
+name = "ed25519"
+version = "3.0.0"
+"#;
+    assert_eq!(
+        forbidden_crypto_packages(lock),
+        vec!["rsa".to_owned(), "p256".to_owned()]
     );
 }
 
