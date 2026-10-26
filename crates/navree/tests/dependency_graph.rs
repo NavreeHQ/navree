@@ -124,6 +124,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // Microservices: message handlers run through navree-http's guards and
+    // authorizer, navree-db's unit of work (outbox, inbox, dead letters) and
+    // navree-validation's `Valid`; `forward_event` uses navree-events;
+    // `MicroFake` answers with navree-testing's `TestResponse`.
+    rule("navree-micro", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
+        "navree-db", "navree-testing", "navree-validation",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -189,6 +197,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-micro",
 ];
 
 /// Cargo dependency kind of an edge.
