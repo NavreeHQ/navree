@@ -112,6 +112,7 @@ navree list                                 # every command of the app
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
+| AI features: summaries, drafts, extraction, an assistant that calls your services, answers from your own data, embeddings and vector search | `navree-ai` |
 
 ## Common mistakes
 

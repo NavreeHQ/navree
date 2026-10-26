@@ -108,7 +108,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 The `navree` binary (crate `navree-cli`) creates apps, generates code and runs the dev loop:
 
 - `navree new <name>`, with `--kit` for a [starter kit](/docs/getting-started/starter-kits/), `--ui next` for a Next.js front end that keeps tokens in httpOnly cookies, and `--navree-path` to choose the Navree checkout.
-- `navree make:module <name> [--crud]` and `make:<kind>` generators for controllers, services, entities, migrations, jobs, events, listeners, mail, notifications, policies, commands and tests. Generators never overwrite files; they register what they create at marker comments.
+- `navree make:module <name> [--crud]` and `make:<kind>` generators for controllers, services, entities, migrations, jobs, events, listeners, mail, notifications, policies, commands, AI agents and tests. Generators never overwrite files; they register what they create at marker comments.
 - `navree dev`, which rebuilds and restarts the app when its code changes, and keeps the last good build serving when a build fails.
 - The ecosystem's commands: `navree dock up`, `navree deploy`, `navree fleet`, `navree mcp` and `navree skills:install`.
 - Every other command is forwarded to the app's binary.
