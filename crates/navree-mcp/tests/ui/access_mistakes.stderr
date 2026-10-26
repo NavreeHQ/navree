@@ -1,0 +1,17 @@
+error: MCP tool `open_tool` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+  --> tests/ui/access_mistakes.rs:13:14
+   |
+13 |     async fn open_tool(&self) -> Result<u32, AppError> {
+   |              ^^^^^^^^^
+
+error: `mixed` is #[public] but also declares #[roles]: a public item needs no authorization; remove one of them
+  --> tests/ui/access_mistakes.rs:20:5
+   |
+20 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: #[authenticated] only applies to MCP items: `helper` has no #[mcp_tool], #[mcp_resource] or #[mcp_prompt]
+  --> tests/ui/access_mistakes.rs:26:5
+   |
+26 |     #[authenticated]
+   |     ^^^^^^^^^^^^^^^^

@@ -33,10 +33,32 @@ fn installed() -> MutexGuard<'static, Option<Installed>> {
     INSTALLED.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Installs the subscriber for `options` on first use; later calls reuse it
-/// and apply their levels (unless it was installed by [`init_for_tests`] or
-/// is foreign). Blocks briefly (opens the log file).
-pub(crate) fn install(options: &LogOptions) -> Result<LogControl, LogError> {
+/// Where console lines go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Console {
+    /// Standard output (the default).
+    Stdout,
+    /// Standard error: the app runs a command that speaks a protocol on
+    /// stdout (`CommandSpec::stdio`, such as `mcp:serve`).
+    Stderr,
+}
+
+impl Console {
+    /// Stderr when the running command owns stdout, else stdout.
+    pub(crate) fn for_command(command: Option<&navree_kernel::CommandSpec>) -> Self {
+        if command.is_some_and(|command| command.stdio) {
+            Console::Stderr
+        } else {
+            Console::Stdout
+        }
+    }
+}
+
+/// Installs the subscriber for `options`, writing console lines to
+/// `console`, on first use; later calls reuse it and apply their levels
+/// (unless it was installed by [`init_for_tests`] or is foreign). Blocks
+/// briefly (opens the log file).
+pub(crate) fn install(options: &LogOptions, console: Console) -> Result<LogControl, LogError> {
     let levels = options.check()?;
     let mut slot = installed();
     if let Some(installed) = slot.as_ref() {
@@ -52,8 +74,9 @@ pub(crate) fn install(options: &LogOptions) -> Result<LogControl, LogError> {
         }
         return Ok(installed.control.clone());
     }
-    install_into(&mut slot, Origin::Module(options.clone()), || {
-        build(options, levels, std::io::stdout, stdout_supports_color())
+    install_into(&mut slot, Origin::Module(options.clone()), || match console {
+        Console::Stdout => build(options, levels, std::io::stdout, stdout_supports_color()),
+        Console::Stderr => build(options, levels, std::io::stderr, stderr_supports_color()),
     })
 }
 
@@ -128,6 +151,12 @@ fn stdout_supports_color() -> bool {
         && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
 }
 
+/// Colours only on a terminal, and never when `NO_COLOR` is set.
+fn stderr_supports_color() -> bool {
+    std::io::stderr().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,11 +172,23 @@ mod tests {
             .as_ref()
             .map(|installed| installed.control.directives())
             .expect("installed");
-        let control = install(&LogOptions {
-            level: "error".to_owned(),
-            ..LogOptions::default()
-        })
+        let control = install(
+            &LogOptions {
+                level: "error".to_owned(),
+                ..LogOptions::default()
+            },
+            Console::Stdout,
+        )
         .expect("a boot reuses the test subscriber");
         assert_eq!(control.directives(), before, "test levels are kept");
+    }
+
+    #[test]
+    fn commands_that_own_stdout_log_to_stderr() {
+        let plain = navree_kernel::CommandSpec::new("serve", "", |_, _| async { Ok(()) });
+        let protocol = plain.clone().stdio();
+        assert_eq!(Console::for_command(None), Console::Stdout);
+        assert_eq!(Console::for_command(Some(&plain)), Console::Stdout);
+        assert_eq!(Console::for_command(Some(&protocol)), Console::Stderr);
     }
 }

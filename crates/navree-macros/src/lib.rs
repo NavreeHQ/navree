@@ -23,6 +23,7 @@ mod attr;
 mod controller;
 mod duration;
 mod injectable;
+mod mcp;
 mod module;
 mod path;
 mod paths;
@@ -305,4 +306,85 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::outside_controller("delete", item.into()).into()
+}
+
+/// Implements `navree_mcp::McpServer` for an inherent impl block whose
+/// methods are MCP tools, resources and prompts.
+///
+/// ```text
+/// #[mcp_server]
+/// impl CrmMcp {
+///     /// Lists the deals the user can see.            // the description
+///     #[mcp_tool(read_only)]
+///     #[can(Read, Deal)]
+///     async fn list_deals(&self, cx: &McpContext, args: ListDeals) -> Result<Vec<DealResource>> { .. }
+///
+///     /// A deal with its company and contact.
+///     #[mcp_resource("crm://deals/{id}", mime = "application/json")]
+///     #[can(Read, Deal, from = "id")]
+///     async fn deal(&self, cx: &McpContext, deal: Authorized<Deal, Read>) -> Result<DealResource> { .. }
+///
+///     #[mcp_prompt(name = "follow-up-email", title = "Draft a follow-up email")]
+///     #[can(Read, Deal)]
+///     async fn follow_up(&self, cx: &McpContext, args: FollowUpArgs) -> Result<Vec<PromptMessage>> { .. }
+/// }
+/// ```
+///
+/// | Attribute | On | Becomes |
+/// |---|---|---|
+/// | `#[mcp_tool]` | fn | a tool; keys `name = ".."`, `title = ".."` and the hints `read_only`, `destructive`, `idempotent`, `open_world` |
+/// | `#[mcp_resource("uri")]` | fn | a resource, or a resource template when the URI has `{variables}`; keys `name`, `title`, `mime` |
+/// | `#[mcp_prompt]` | fn | a prompt; keys `name`, `title` |
+/// | `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]`, `#[can(..)]` | fn, impl | who may list and use it, as on a route |
+///
+/// Each item is a non-generic `async fn` taking `&self` and returning a
+/// `Result`; the method name is its default name and its doc comment its
+/// description. Its other parameters are, in any order:
+///
+/// - `&McpContext` (the caller);
+/// - for tools and prompts, one arguments value (a struct deriving
+///   `Deserialize`, `utoipa::ToSchema` and `garde::Validate`; its schema is
+///   the tool's input schema or the prompt's arguments, and it is validated
+///   before the method runs);
+/// - for resource templates, parameters named like the URI's variables
+///   (any `FromStr` type, a 404 when the URI carries no valid value);
+/// - `Authorized<E, A>`, the record of the item's `#[can(A, E, from =
+///   "..")]` check (a tool argument, a prompt argument or a URI variable).
+///
+/// Tools and resources return anything that serializes; a resource may
+/// also return `ResourceContents` (or a `Vec` of them) and a prompt returns
+/// `Vec<PromptMessage>`, a `PromptMessage` or a `String`.
+///
+/// **Deny by default.** An item without an access declaration (on itself
+/// or on the impl block) does not compile. So do a URI without a scheme, a
+/// `from` naming no URI variable, a second arguments value, two items of a
+/// kind with the same name and a tool name with characters MCP does not
+/// allow. Needs `navree` (feature `mcp`) or `navree-mcp` among the
+/// dependencies; register the server with `m.mcp_server::<CrmMcp>()`.
+#[proc_macro_attribute]
+pub fn mcp_server(args: TokenStream, item: TokenStream) -> TokenStream {
+    mcp::expand(args.into(), item.into()).into()
+}
+
+/// Declares an MCP tool on a method of a [`macro@mcp_server`] impl block.
+/// `#[mcp_server]` consumes it; anywhere else it is a compile error.
+#[proc_macro_attribute]
+pub fn mcp_tool(_args: TokenStream, item: TokenStream) -> TokenStream {
+    mcp::outside("mcp_tool", item.into()).into()
+}
+
+/// Declares an MCP resource (`#[mcp_resource("crm://pipeline")]`) or
+/// resource template (`#[mcp_resource("crm://deals/{id}")]`) on a method of
+/// a [`macro@mcp_server`] impl block. `#[mcp_server]` consumes it; anywhere
+/// else it is a compile error.
+#[proc_macro_attribute]
+pub fn mcp_resource(_args: TokenStream, item: TokenStream) -> TokenStream {
+    mcp::outside("mcp_resource", item.into()).into()
+}
+
+/// Declares an MCP prompt on a method of a [`macro@mcp_server`] impl block.
+/// `#[mcp_server]` consumes it; anywhere else it is a compile error.
+#[proc_macro_attribute]
+pub fn mcp_prompt(_args: TokenStream, item: TokenStream) -> TokenStream {
+    mcp::outside("mcp_prompt", item.into()).into()
 }
