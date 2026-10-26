@@ -52,7 +52,12 @@ async fn for_root_takes_the_options_in_code() {
         .build()
         .await;
     let flags = app.get::<Flags>().await;
-    assert!(flags.active::<DealExport>(FlagScope::everyone()).await.unwrap());
+    assert!(
+        flags
+            .active::<DealExport>(FlagScope::everyone())
+            .await
+            .unwrap()
+    );
     assert_eq!(app.get::<FlagsOptions>().await.store, FlagStoreKind::Memory);
 }
 

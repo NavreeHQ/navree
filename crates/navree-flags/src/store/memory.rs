@@ -61,9 +61,7 @@ impl FlagStore for MemoryFlagStore {
         _uow: Option<&'a Uow>,
         state: &'a FlagState,
     ) -> BoxFuture<'a, Result<(), FlagsError>> {
-        self.lock()
-            .states
-            .insert(state.name.clone(), state.clone());
+        self.lock().states.insert(state.name.clone(), state.clone());
         ready(())
     }
 

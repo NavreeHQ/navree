@@ -81,7 +81,10 @@ async fn writes_through_the_fake_change_its_answers() {
         .await
         .unwrap();
     assert!(flags.active::<NewPipeline>(anyone).await.unwrap());
-    assert_eq!(flags.state::<NewPipeline>().await.unwrap().everyone, Some(true));
+    assert_eq!(
+        flags.state::<NewPipeline>().await.unwrap().everyone,
+        Some(true)
+    );
     flags.kill::<NewPipeline>().await.unwrap();
     assert!(!flags.active::<NewPipeline>(anyone).await.unwrap());
     flags.revive::<NewPipeline>().await.unwrap();
@@ -90,9 +93,17 @@ async fn writes_through_the_fake_change_its_answers() {
         .rollout::<NewPipeline>(Rollout::percent(100))
         .await
         .unwrap();
-    assert!(!flags.active::<NewPipeline>(anyone).await.unwrap(), "ignored");
+    assert!(
+        !flags.active::<NewPipeline>(anyone).await.unwrap(),
+        "ignored"
+    );
     assert_eq!(
-        flags.all(anyone).await.unwrap().into_iter().collect::<Vec<_>>(),
+        flags
+            .all(anyone)
+            .await
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
         [("new-pipeline".to_owned(), false)]
     );
 }

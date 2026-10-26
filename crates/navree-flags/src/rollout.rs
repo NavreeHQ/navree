@@ -189,7 +189,11 @@ mod tests {
     fn buckets_are_stable_and_spread() {
         let id = Uuid::parse_str("01966b54-4a3e-7c5e-8d3c-2f1d3c4b5a69").unwrap();
         let first = bucket("new-pipeline", id);
-        assert_eq!(bucket("new-pipeline", id), first, "the same input, the same bucket");
+        assert_eq!(
+            bucket("new-pipeline", id),
+            first,
+            "the same input, the same bucket"
+        );
         assert!(first < 100);
 
         // Different flags bucket the same ids differently, and ids spread
@@ -216,13 +220,25 @@ mod tests {
     #[test]
     fn builders_and_display() {
         assert_eq!(Rollout::percent(10).to_string(), "10% of users");
-        assert_eq!(Rollout::percent(25).of_workspaces().to_string(), "25% of workspaces");
-        assert_eq!(Rollout::plans(["pro", "business"]).to_string(), "plans pro,business");
         assert_eq!(
-            Rollout::percent(50).of_workspaces().on_plans(["pro", "business"]).to_string(),
+            Rollout::percent(25).of_workspaces().to_string(),
+            "25% of workspaces"
+        );
+        assert_eq!(
+            Rollout::plans(["pro", "business"]).to_string(),
+            "plans pro,business"
+        );
+        assert_eq!(
+            Rollout::percent(50)
+                .of_workspaces()
+                .on_plans(["pro", "business"])
+                .to_string(),
             "50% of workspaces on pro,business"
         );
-        assert_eq!(Rollout::percent(5).of_workspaces().of_users().of, RolloutUnit::Users);
+        assert_eq!(
+            Rollout::percent(5).of_workspaces().of_users().of,
+            RolloutUnit::Users
+        );
     }
 
     #[test]

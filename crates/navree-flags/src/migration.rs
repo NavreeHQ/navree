@@ -38,12 +38,7 @@ impl MigrationTrait for CreateFlagTables {
                     )
                     .col(ColumnDef::new("everyone").boolean().null())
                     .col(ColumnDef::new("rollout").json_binary().null())
-                    .col(
-                        ColumnDef::new("killed")
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
+                    .col(ColumnDef::new("killed").boolean().not_null().default(false))
                     .col(
                         ColumnDef::new("updated_at")
                             .timestamp_with_time_zone()

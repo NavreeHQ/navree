@@ -89,7 +89,11 @@ async fn admins_set_the_global_state_rollout_and_kill_switch() {
         body["flag"]["rollout"],
         json!({"percent": 25, "of": "workspaces"})
     );
-    assert_eq!(body["flag"]["updated_by"], json!(admin), "the request's user");
+    assert_eq!(
+        body["flag"]["updated_by"],
+        json!(admin),
+        "the request's user"
+    );
     assert_eq!(body["overrides"], json!([]));
 
     // Only the fields present change; null unsets.
@@ -151,15 +155,27 @@ async fn admins_manage_overrides() {
         ])
     );
     let flags = world.flags().await;
-    assert!(flags.active::<NewPipeline>(FlagScope::user(ada)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
 
     world
         .as_user(admin)
-        .delete(&format!("/api/admin/flags/new-pipeline/overrides?user_id={ada}"))
+        .delete(&format!(
+            "/api/admin/flags/new-pipeline/overrides?user_id={ada}"
+        ))
         .send()
         .await
         .assert_status(204);
-    assert!(!flags.active::<NewPipeline>(FlagScope::user(ada)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
     world
         .as_user(admin)
         .get("/api/admin/flags/new-pipeline")

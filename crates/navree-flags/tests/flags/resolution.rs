@@ -26,8 +26,18 @@ async fn defaults_and_overrides(flags: &Flags) {
     );
 
     // The defaults of `#[flag]`.
-    assert!(!flags.active::<NewPipeline>(FlagScope::user(ada)).await.unwrap());
-    assert!(flags.active::<DealExport>(FlagScope::user(ada)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
+    assert!(
+        flags
+            .active::<DealExport>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
 
     // On for one workspace, and for one user wherever they work.
     flags
@@ -38,7 +48,12 @@ async fn defaults_and_overrides(flags: &Flags) {
         .activate::<NewPipeline>(FlagScope::user(ada))
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     assert!(
         flags
             .active::<NewPipeline>(FlagScope::user(grace).workspace(acme))
@@ -101,21 +116,51 @@ async fn defaults_and_overrides(flags: &Flags) {
         .deactivate::<DealExport>(FlagScope::everyone())
         .await
         .unwrap();
-    assert!(!flags.active::<DealExport>(FlagScope::user(ada)).await.unwrap());
+    assert!(
+        !flags
+            .active::<DealExport>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
     flags
         .forget::<DealExport>(FlagScope::everyone())
         .await
         .unwrap();
-    assert!(flags.active::<DealExport>(FlagScope::user(ada)).await.unwrap());
+    assert!(
+        flags
+            .active::<DealExport>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
 
     // The kill switch beats every override; revive restores them.
     flags.kill::<NewPipeline>().await.unwrap();
-    assert!(!flags.active::<NewPipeline>(FlagScope::user(ada)).await.unwrap());
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     assert!(flags.state::<NewPipeline>().await.unwrap().killed);
     flags.revive::<NewPipeline>().await.unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::user(ada)).await.unwrap());
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::user(ada))
+            .await
+            .unwrap()
+    );
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
 
     // Every registered flag's value at once.
     let all = flags.all(FlagScope::user(ada)).await.unwrap();
@@ -154,17 +199,33 @@ async fn a_scope_with_a_user_and_a_workspace_is_not_a_write_target() {
 async fn percentage_rollouts_bucket_users_or_workspaces() {
     let world = World::new().await;
     let flags = world.flags().await;
-    let (inside, outside) = (id_in::<NewPipeline>(true, 25), id_in::<NewPipeline>(false, 25));
+    let (inside, outside) = (
+        id_in::<NewPipeline>(true, 25),
+        id_in::<NewPipeline>(false, 25),
+    );
 
     // By user (the default unit).
     flags
         .rollout::<NewPipeline>(Rollout::percent(25))
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::user(inside)).await.unwrap());
-    assert!(!flags.active::<NewPipeline>(FlagScope::user(outside)).await.unwrap());
     assert!(
-        !flags.active::<NewPipeline>(FlagScope::workspace(inside)).await.unwrap(),
+        flags
+            .active::<NewPipeline>(FlagScope::user(inside))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::user(outside))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(inside))
+            .await
+            .unwrap(),
         "a user rollout needs a user"
     );
 
@@ -201,7 +262,12 @@ async fn percentage_rollouts_bucket_users_or_workspaces() {
         .await
         .unwrap();
     for id in at_25 {
-        assert!(flags.active::<NewPipeline>(FlagScope::workspace(id)).await.unwrap());
+        assert!(
+            flags
+                .active::<NewPipeline>(FlagScope::workspace(id))
+                .await
+                .unwrap()
+        );
     }
 
     // An override beats the rollout; stopping it leaves the default.
@@ -209,23 +275,43 @@ async fn percentage_rollouts_bucket_users_or_workspaces() {
         .deactivate::<NewPipeline>(FlagScope::workspace(inside))
         .await
         .unwrap();
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(inside)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(inside))
+            .await
+            .unwrap()
+    );
     flags.stop_rollout::<NewPipeline>().await.unwrap();
     let state = flags.state::<NewPipeline>().await.unwrap();
     assert_eq!(state.rollout, None);
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(inside)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(inside))
+            .await
+            .unwrap()
+    );
 
     // 0% and 100%.
     flags
         .rollout::<NewPipeline>(Rollout::percent(100))
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::user(outside)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::user(outside))
+            .await
+            .unwrap()
+    );
     flags
         .rollout::<NewPipeline>(Rollout::percent(0))
         .await
         .unwrap();
-    assert!(!flags.active::<NewPipeline>(FlagScope::user(inside)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::user(inside))
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -264,18 +350,46 @@ async fn plan_rollouts_read_the_workspace_plan() {
         .rollout::<AiSummaries>(Rollout::plans(["pro", "business"]))
         .await
         .unwrap();
-    assert!(flags.active::<AiSummaries>(FlagScope::workspace(pro)).await.unwrap());
-    assert!(flags.active::<AiSummaries>(FlagScope::workspace(business)).await.unwrap());
-    assert!(!flags.active::<AiSummaries>(FlagScope::workspace(free)).await.unwrap());
-    assert!(!flags.active::<AiSummaries>(FlagScope::workspace(unknown)).await.unwrap());
     assert!(
-        !flags.active::<AiSummaries>(FlagScope::user(Uuid::now_v7())).await.unwrap(),
+        flags
+            .active::<AiSummaries>(FlagScope::workspace(pro))
+            .await
+            .unwrap()
+    );
+    assert!(
+        flags
+            .active::<AiSummaries>(FlagScope::workspace(business))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<AiSummaries>(FlagScope::workspace(free))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<AiSummaries>(FlagScope::workspace(unknown))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<AiSummaries>(FlagScope::user(Uuid::now_v7()))
+            .await
+            .unwrap(),
         "no workspace, no plan"
     );
 
     // The plan is cached: a second check asks the resolver nothing.
     let lookups = plans.lookups();
-    assert!(flags.active::<AiSummaries>(FlagScope::workspace(pro)).await.unwrap());
+    assert!(
+        flags
+            .active::<AiSummaries>(FlagScope::workspace(pro))
+            .await
+            .unwrap()
+    );
     assert_eq!(plans.lookups(), lookups);
 
     // Half of the Pro and Business workspaces.
@@ -284,11 +398,25 @@ async fn plan_rollouts_read_the_workspace_plan() {
     plans.set(inside, "pro");
     plans.set(outside, "pro");
     flags
-        .rollout::<AiSummaries>(Rollout::percent(50).of_workspaces().on_plans(["pro", "business"]))
+        .rollout::<AiSummaries>(
+            Rollout::percent(50)
+                .of_workspaces()
+                .on_plans(["pro", "business"]),
+        )
         .await
         .unwrap();
-    assert!(flags.active::<AiSummaries>(FlagScope::workspace(inside)).await.unwrap());
-    assert!(!flags.active::<AiSummaries>(FlagScope::workspace(outside)).await.unwrap());
+    assert!(
+        flags
+            .active::<AiSummaries>(FlagScope::workspace(inside))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !flags
+            .active::<AiSummaries>(FlagScope::workspace(outside))
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -325,29 +453,48 @@ async fn plan_rollouts_need_a_plan_resolver() {
 async fn checks_without_a_scope_follow_missing_scope() {
     let world = World::new().await;
     let flags = world.flags().await;
-    assert!(flags.active::<DealExport>(FlagScope::everyone()).await.unwrap());
+    assert!(
+        flags
+            .active::<DealExport>(FlagScope::everyone())
+            .await
+            .unwrap()
+    );
     flags
         .rollout::<NewPipeline>(Rollout::percent(100))
         .await
         .unwrap();
     assert!(
-        !flags.active::<NewPipeline>(FlagScope::everyone()).await.unwrap(),
+        !flags
+            .active::<NewPipeline>(FlagScope::everyone())
+            .await
+            .unwrap(),
         "nobody to bucket"
     );
 
     let strict = World::with(builder().config("flags.missing_scope", "off")).await;
     let flags = strict.flags().await;
     assert!(
-        !flags.active::<DealExport>(FlagScope::everyone()).await.unwrap(),
+        !flags
+            .active::<DealExport>(FlagScope::everyone())
+            .await
+            .unwrap(),
         "off unless on for everyone"
     );
     flags
         .activate::<DealExport>(FlagScope::everyone())
         .await
         .unwrap();
-    assert!(flags.active::<DealExport>(FlagScope::everyone()).await.unwrap());
     assert!(
-        flags.active::<DealExport>(FlagScope::user(Uuid::now_v7())).await.unwrap(),
+        flags
+            .active::<DealExport>(FlagScope::everyone())
+            .await
+            .unwrap()
+    );
+    assert!(
+        flags
+            .active::<DealExport>(FlagScope::user(Uuid::now_v7()))
+            .await
+            .unwrap(),
         "a check with a user is not a missing scope"
     );
 }
@@ -364,7 +511,11 @@ async fn unregistered_flags_are_errors() {
         FlagsError::Unregistered { name, .. } => assert_eq!(name, "forgotten"),
         other => panic!("expected Unregistered, got {other}"),
     }
-    assert!(error.to_string().contains("FlagsModule::for_feature::<Forgotten>()"));
+    assert!(
+        error
+            .to_string()
+            .contains("FlagsModule::for_feature::<Forgotten>()")
+    );
     assert!(
         flags
             .activate::<Forgotten>(FlagScope::everyone())
@@ -393,5 +544,10 @@ async fn users_principals_and_workspaces_convert_into_scopes() {
         session_id: None,
     };
     flags.activate::<AiSummaries>(&principal).await.unwrap();
-    assert!(flags.active::<AiSummaries>(FlagScope::user(owner)).await.unwrap());
+    assert!(
+        flags
+            .active::<AiSummaries>(FlagScope::user(owner))
+            .await
+            .unwrap()
+    );
 }

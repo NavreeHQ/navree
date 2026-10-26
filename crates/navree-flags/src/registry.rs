@@ -109,7 +109,8 @@ mod tests {
 
     #[test]
     fn invalid_names_are_refused() {
-        let error = FlagRegistry::new([definition("New Pipeline", "app::NewPipeline")]).unwrap_err();
+        let error =
+            FlagRegistry::new([definition("New Pipeline", "app::NewPipeline")]).unwrap_err();
         assert!(error.contains("app::NewPipeline"), "{error}");
     }
 }

@@ -150,7 +150,8 @@ impl Args {
 /// navree-flags' name rule: 1 to 100 characters, lower-case letters,
 /// digits, `-`, `_` and `.`, starting with a letter or a digit.
 fn check_name(name: &str) -> Result<(), String> {
-    let valid = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.');
+    let valid =
+        |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.');
     let starts_well = name
         .chars()
         .next()
@@ -211,8 +212,14 @@ mod tests {
                 pub struct NewPipeline;
             },
         );
-        assert!(out.contains("impl :: navree :: flags :: Flag for NewPipeline"), "{out}");
-        assert!(out.contains("const NAME : & 'static str = \"new-pipeline\""), "{out}");
+        assert!(
+            out.contains("impl :: navree :: flags :: Flag for NewPipeline"),
+            "{out}"
+        );
+        assert!(
+            out.contains("const NAME : & 'static str = \"new-pipeline\""),
+            "{out}"
+        );
         assert!(out.contains("const DEFAULT : bool = false"), "{out}");
         assert!(out.contains("const EXPOSE : bool = false"), "{out}");
         assert!(
@@ -221,21 +228,34 @@ mod tests {
             ),
             "{out}"
         );
-        assert!(out.contains("pub struct NewPipeline ;"), "the item is kept: {out}");
+        assert!(
+            out.contains("pub struct NewPipeline ;"),
+            "the item is kept: {out}"
+        );
     }
 
     #[test]
     fn arguments_set_the_name_default_and_exposure() {
         let out = expand_with_facade(
             quote!(name = "ai-summaries", default = true, expose),
-            quote!(pub struct AiSummaries;),
+            quote!(
+                pub struct AiSummaries;
+            ),
         );
         assert!(out.contains("\"ai-summaries\""), "{out}");
         assert!(out.contains("const DEFAULT : bool = true"), "{out}");
         assert!(out.contains("const EXPOSE : bool = true"), "{out}");
-        assert!(out.contains("const DESCRIPTION : & 'static str = \"\""), "{out}");
+        assert!(
+            out.contains("const DESCRIPTION : & 'static str = \"\""),
+            "{out}"
+        );
 
-        let hidden = expand_with_facade(quote!(expose = false), quote!(struct HttpCache;));
+        let hidden = expand_with_facade(
+            quote!(expose = false),
+            quote!(
+                struct HttpCache;
+            ),
+        );
         assert!(hidden.contains("\"http-cache\""), "{hidden}");
         assert!(hidden.contains("const EXPOSE : bool = false"), "{hidden}");
     }
@@ -243,14 +263,66 @@ mod tests {
     #[test]
     fn mistakes_are_reported() {
         let cases = [
-            (quote!(), quote!(pub struct Board { on: bool }), "a flag is a unit struct"),
-            (quote!(), quote!(pub enum Board { A }), "#[flag] goes on a unit struct"),
-            (quote!(), quote!(pub struct Board<T>;), "cannot be generic"),
-            (quote!(label = "x"), quote!(struct Board;), "unknown #[flag] key `label`"),
-            (quote!(name = "Board V2"), quote!(struct Board;), "invalid flag name `Board V2`"),
-            (quote!(name = ""), quote!(struct Board;), "invalid flag name ``"),
-            (quote!(default = "yes"), quote!(struct Board;), "expected boolean literal"),
-            (quote!(expose, expose), quote!(struct Board;), "duplicate `expose` key"),
+            (
+                quote!(),
+                quote!(
+                    pub struct Board {
+                        on: bool,
+                    }
+                ),
+                "a flag is a unit struct",
+            ),
+            (
+                quote!(),
+                quote!(
+                    pub enum Board {
+                        A,
+                    }
+                ),
+                "#[flag] goes on a unit struct",
+            ),
+            (
+                quote!(),
+                quote!(
+                    pub struct Board<T>;
+                ),
+                "cannot be generic",
+            ),
+            (
+                quote!(label = "x"),
+                quote!(
+                    struct Board;
+                ),
+                "unknown #[flag] key `label`",
+            ),
+            (
+                quote!(name = "Board V2"),
+                quote!(
+                    struct Board;
+                ),
+                "invalid flag name `Board V2`",
+            ),
+            (
+                quote!(name = ""),
+                quote!(
+                    struct Board;
+                ),
+                "invalid flag name ``",
+            ),
+            (
+                quote!(default = "yes"),
+                quote!(
+                    struct Board;
+                ),
+                "expected boolean literal",
+            ),
+            (
+                quote!(expose, expose),
+                quote!(
+                    struct Board;
+                ),
+                "duplicate `expose` key",
+            ),
         ];
         for (args, item, expected) in cases {
             let out = expand_with_facade(args, item);

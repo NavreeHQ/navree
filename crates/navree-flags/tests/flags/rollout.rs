@@ -38,7 +38,9 @@ proptest! {
 
 #[test]
 fn percentages_roughly_match_their_share() {
-    let ids: Vec<Uuid> = (0..10_000_u128).map(|n| Uuid::from_u128(n * 7919)).collect();
+    let ids: Vec<Uuid> = (0..10_000_u128)
+        .map(|n| Uuid::from_u128(n * 7919))
+        .collect();
     for percent in [10_u8, 25, 50, 90] {
         let inside = ids
             .iter()

@@ -139,8 +139,11 @@ fn register(m: &mut ModuleBuilder, options: Option<FlagsOptions>) {
     m.exports::<FlagsOptions>()
         .factory(Factory::<FlagRegistry>::new(|r: Resolver| async move {
             let registrations = r.app().contributions::<FlagRegistration>();
-            let registry =
-                FlagRegistry::new(registrations.into_iter().map(|contributed| contributed.value.0))?;
+            let registry = FlagRegistry::new(
+                registrations
+                    .into_iter()
+                    .map(|contributed| contributed.value.0),
+            )?;
             Ok(Arc::new(registry))
         }))
         .exports::<FlagRegistry>()
