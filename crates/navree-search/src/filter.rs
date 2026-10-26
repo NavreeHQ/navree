@@ -203,10 +203,9 @@ impl Filter {
                     CmpOp::Eq => json_eq(v, value),
                     CmpOp::Ne => !json_eq(v, value),
                     CmpOp::Lt => json_cmp(v, value) == Some(Ordering::Less),
-                    CmpOp::Lte => matches!(
-                        json_cmp(v, value),
-                        Some(Ordering::Less | Ordering::Equal)
-                    ),
+                    CmpOp::Lte => {
+                        matches!(json_cmp(v, value), Some(Ordering::Less | Ordering::Equal))
+                    }
                     CmpOp::Gt => json_cmp(v, value) == Some(Ordering::Greater),
                     CmpOp::Gte => matches!(
                         json_cmp(v, value),
@@ -558,7 +557,10 @@ mod tests {
         assert!(Filter::eq("flag", true).matches(&d));
         let not_in = Filter::Not(Box::new(Filter::is_in("stage", ["lost"]))).normalized();
         assert!(not_in.matches(&d));
-        assert!(not_in.matches(&doc(json!({}))), "no value is not in the list");
+        assert!(
+            not_in.matches(&doc(json!({}))),
+            "no value is not in the list"
+        );
     }
 
     fn settings() -> IndexSettings {
@@ -572,12 +574,8 @@ mod tests {
     #[test]
     fn access_rules_become_engine_filters() {
         let mut rules = Rules::new();
-        rules
-            .can(READ, "Deal")
-            .when(field("owner_id").eq("u1"));
-        rules
-            .cannot(READ, "Deal")
-            .when(field("locked").eq(true));
+        rules.can(READ, "Deal").when(field("owner_id").eq("u1"));
+        rules.cannot(READ, "Deal").when(field("locked").eq(true));
         let ability = rules.build();
         let AccessFilter::Exact(f) = access_filter(&ability, READ, "Deal", &settings()) else {
             panic!("translatable");

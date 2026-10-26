@@ -17,7 +17,11 @@ use crate::support::{
 };
 
 async fn reload(db: &Db, id: Uuid) -> crate::support::contact::Model {
-    Contact::find_by_id(id).one(db.conn()).await.unwrap().unwrap()
+    Contact::find_by_id(id)
+        .one(db.conn())
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 async fn found(search: &Search, text: &str) -> Vec<String> {
@@ -44,7 +48,10 @@ async fn inline_sync_indexes_committed_writes() {
     // An update replaces the document.
     let mut row = ada.clone().into_active_model();
     row.last_name = Set("Byron".into());
-    support::in_uow(&db, async |uow| Repo::<Contact>::update(uow, row).await.unwrap()).await;
+    support::in_uow(&db, async |uow| {
+        Repo::<Contact>::update(uow, row).await.unwrap()
+    })
+    .await;
     settle(&app).await;
     assert!(found(&search, "lovelace").await.is_empty());
     assert_eq!(found(&search, "byron").await, [ada.id.to_string()]);
@@ -53,7 +60,10 @@ async fn inline_sync_indexes_committed_writes() {
     let current = reload(&db, ada.id).await;
     let mut row = current.into_active_model();
     row.deleted_at = Set(Some(support::now()));
-    support::in_uow(&db, async |uow| Repo::<Contact>::update(uow, row).await.unwrap()).await;
+    support::in_uow(&db, async |uow| {
+        Repo::<Contact>::update(uow, row).await.unwrap()
+    })
+    .await;
     settle(&app).await;
     search.assert_not_indexed::<Contact>(ada.id).await;
 }
@@ -65,14 +75,20 @@ async fn deletes_and_rollbacks() {
     let search = app.get::<Search>().await;
     let [ada, grace] = insert_contacts(
         &db,
-        vec![new_contact("Ada", "Lovelace"), new_contact("Grace", "Hopper")],
+        vec![
+            new_contact("Ada", "Lovelace"),
+            new_contact("Grace", "Hopper"),
+        ],
     )
     .await
     .try_into()
     .unwrap();
     settle(&app).await;
 
-    support::in_uow(&db, async |uow| Repo::<Contact>::delete(uow, ada.clone()).await.unwrap()).await;
+    support::in_uow(&db, async |uow| {
+        Repo::<Contact>::delete(uow, ada.clone()).await.unwrap()
+    })
+    .await;
     settle(&app).await;
     search.assert_not_indexed::<Contact>(ada.id).await;
 
@@ -134,7 +150,10 @@ async fn queued_sync_jobs_run_on_the_queue_and_collapse() {
         let current = reload(&db, ada.id).await;
         let mut row = current.into_active_model();
         row.last_name = Set(name.into());
-        support::in_uow(&db, async |uow| Repo::<Contact>::update(uow, row).await.unwrap()).await;
+        support::in_uow(&db, async |uow| {
+            Repo::<Contact>::update(uow, row).await.unwrap()
+        })
+        .await;
     }
     assert_eq!(queue.pending_count("default").await.unwrap(), 1);
 
@@ -150,7 +169,10 @@ async fn sync_off_leaves_indexes_to_reindex_and_import() {
     let search = app.get::<Search>().await;
     let [ada, grace] = insert_contacts(
         &db,
-        vec![new_contact("Ada", "Lovelace"), new_contact("Grace", "Hopper")],
+        vec![
+            new_contact("Ada", "Lovelace"),
+            new_contact("Grace", "Hopper"),
+        ],
     )
     .await
     .try_into()
@@ -207,7 +229,10 @@ async fn raw_writes_need_a_reindex() {
         .await
         .unwrap();
     settle(&app).await;
-    assert!(found(&search, "byron").await.is_empty(), "raw SQL is not observed");
+    assert!(
+        found(&search, "byron").await.is_empty(),
+        "raw SQL is not observed"
+    );
     search.reindex::<Contact>([ada.id]).await.unwrap();
     settle(&app).await;
     assert_eq!(found(&search, "byron").await, [ada.id.to_string()]);
@@ -256,7 +281,10 @@ async fn hand_written_documents_read_related_rows_and_can_opt_out() {
 
     let mut row = renewal.clone().into_active_model();
     row.archived = Set(true);
-    support::in_uow(&db, async |uow| Repo::<Deal>::update(uow, row).await.unwrap()).await;
+    support::in_uow(&db, async |uow| {
+        Repo::<Deal>::update(uow, row).await.unwrap()
+    })
+    .await;
     settle(&app).await;
     search.assert_not_indexed::<Deal>(renewal.id).await;
 }

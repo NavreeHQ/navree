@@ -1,8 +1,8 @@
 //! navree-search integration tests: one binary.
 
 mod commands;
-mod conformance;
 mod config;
+mod conformance;
 mod derive;
 mod http;
 mod http_engines;

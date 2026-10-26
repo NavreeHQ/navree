@@ -589,8 +589,7 @@ mod tests {
     use serde_json::json;
 
     fn parse(value: serde_json::Value) -> Result<SearchOptions, String> {
-        let options: SearchOptions =
-            serde_json::from_value(value).map_err(|e| e.to_string())?;
+        let options: SearchOptions = serde_json::from_value(value).map_err(|e| e.to_string())?;
         options.check()?;
         Ok(options)
     }
@@ -628,7 +627,10 @@ mod tests {
         assert_eq!(nodes, &["https://ts-2:8108", "https://ts-3:8108"]);
         assert_eq!(key.as_deref(), Some("secret"));
         assert_eq!(options.index_name("contacts"), "crm_contacts");
-        assert!(!format!("{options:?}").contains("secret"), "keys are redacted");
+        assert!(
+            !format!("{options:?}").contains("secret"),
+            "keys are redacted"
+        );
 
         let options = parse(json!({"engine": "tantivy", "tantivy": {"path": "/var/idx"}})).unwrap();
         let Engine::Tantivy(t) = &options.engine else {

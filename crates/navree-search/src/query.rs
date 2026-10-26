@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
-use navree_access::{Ability, ActionMarker, Accessible, Subject};
+use navree_access::{Ability, Accessible, ActionMarker, Subject};
 use navree_db::{Page, PageQuery, Uow};
 use sea_orm::sea_query::SimpleExpr;
 use sea_orm::{ColumnTrait, QueryFilter};
@@ -292,7 +292,11 @@ impl<E: Searchable> SearchQuery<E> {
         let page = PageQuery::new(page.page, page.per_page);
         let (hits, total, rows) = self.run(page.offset(), page.per_page, false).await?;
         let models = load_in_order::<E>(&self.search, hits, rows).await?;
-        Ok(Page::new(models.into_iter().map(|h| h.record).collect(), page, total))
+        Ok(Page::new(
+            models.into_iter().map(|h| h.record).collect(),
+            page,
+            total,
+        ))
     }
 
     /// Like [`paginate`](SearchQuery::paginate), with each record's score

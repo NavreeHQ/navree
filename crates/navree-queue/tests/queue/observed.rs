@@ -15,7 +15,7 @@ use navree_queue::{Queue, QueueDriver, QueueModule};
 use navree_testing::TestApp;
 use sea_orm::{DatabaseTransaction, DbErr};
 
-use crate::support::{Journal, JobsModule, Record, options, start};
+use crate::support::{JobsModule, Journal, Record, options, start};
 
 /// While set, [`QueueingObserver`] queues its job and then fails the commit.
 #[derive(Default)]

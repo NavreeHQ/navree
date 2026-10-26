@@ -10,8 +10,8 @@ use navree_db::Db;
 use navree_kernel::BoxFuture;
 use sea_orm::sea_query::SimpleExpr;
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr, IdenStatic,
-    Iterable, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr, IdenStatic, Iterable,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::document::index_value;
@@ -19,6 +19,10 @@ use crate::searchable::{
     SearchContext, column_is_set, column_string, key_column, key_value, primary_key_string,
 };
 use crate::{Document, IndexSettings, SearchError, Searchable};
+
+/// Documents by record id: `None` for a record that is gone or kept out of
+/// the index.
+pub(crate) type Documents = Vec<(String, Option<Document>)>;
 
 /// What `SearchModule::for_feature::<E>()` contributes.
 pub(crate) struct IndexRegistration {
@@ -59,7 +63,7 @@ pub(crate) trait IndexOps: Send + Sync + 'static {
         ctx: &'a SearchContext,
         settings: &'a IndexSettings,
         ids: &'a [String],
-    ) -> BoxFuture<'a, Result<Vec<(String, Option<Document>)>, SearchError>>;
+    ) -> BoxFuture<'a, Result<Documents, SearchError>>;
 
     /// Rows `offset..offset + limit` by primary key (of `workspace` only,
     /// when given), as documents.
@@ -73,8 +77,10 @@ pub(crate) trait IndexOps: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<Chunk, SearchError>>;
 
     /// How many rows the table has.
-    fn count_rows<'a>(&'a self, conn: &'a DatabaseConnection)
-    -> BoxFuture<'a, Result<u64, SearchError>>;
+    fn count_rows<'a>(
+        &'a self,
+        conn: &'a DatabaseConnection,
+    ) -> BoxFuture<'a, Result<u64, SearchError>>;
 
     /// The workspace (column `column`) of each of these records.
     fn workspaces<'a>(
@@ -117,7 +123,7 @@ impl<E: Searchable> IndexOps for EntityIndex<E> {
         ctx: &'a SearchContext,
         settings: &'a IndexSettings,
         ids: &'a [String],
-    ) -> BoxFuture<'a, Result<Vec<(String, Option<Document>)>, SearchError>> {
+    ) -> BoxFuture<'a, Result<Documents, SearchError>> {
         Box::pin(async move {
             let column = key_column::<E>()?;
             let values: Vec<_> = ids.iter().filter_map(|id| key_value(&column, id)).collect();

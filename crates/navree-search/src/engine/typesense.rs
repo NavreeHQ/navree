@@ -68,7 +68,12 @@ impl TypesenseEngine {
     async fn collection_of(&self, index: &str) -> Result<Option<String>, SearchError> {
         let response = self
             .api
-            .send(Method::GET, &format!("/aliases/{}", encode(index)), None, &[404])
+            .send(
+                Method::GET,
+                &format!("/aliases/{}", encode(index)),
+                None,
+                &[404],
+            )
             .await?;
         if response.status().as_u16() == 404 {
             return Ok(None);
@@ -247,11 +252,7 @@ impl SearchEngine for TypesenseEngine {
                 self.api
                     .json(
                         Method::PUT,
-                        &format!(
-                            "/collections/{}/synonyms/{}",
-                            encode(index),
-                            encode(word)
-                        ),
+                        &format!("/collections/{}/synonyms/{}", encode(index), encode(word)),
                         Some(&Body::Json(json!({ "synonyms": all }))),
                     )
                     .await?;
@@ -261,7 +262,9 @@ impl SearchEngine for TypesenseEngine {
                     .json(
                         Method::PUT,
                         &format!("/stopwords/{}", encode(index)),
-                        Some(&Body::Json(json!({ "stopwords": settings.stop_word_list() }))),
+                        Some(&Body::Json(
+                            json!({ "stopwords": settings.stop_word_list() }),
+                        )),
                     )
                     .await?;
             }
@@ -337,14 +340,15 @@ impl SearchEngine for TypesenseEngine {
 
     fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
-            let settings = self.schema_of(index).ok_or_else(|| SearchError::Other(format!(
-                "the typesense index `{index}` was not prepared"
-            )))?;
+            let settings = self.schema_of(index).ok_or_else(|| {
+                SearchError::Other(format!("the typesense index `{index}` was not prepared"))
+            })?;
             let old = self.collection_of(index).await?;
             let collection = self.create_collection(index, &settings).await?;
             self.point_alias(index, &collection).await?;
             if let Some(old) = old {
-                self.delete_path(&format!("/collections/{}", encode(&old))).await?;
+                self.delete_path(&format!("/collections/{}", encode(&old)))
+                    .await?;
             }
             Ok(())
         })
@@ -353,7 +357,8 @@ impl SearchEngine for TypesenseEngine {
     fn drop_index<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             if let Some(collection) = self.collection_of(index).await? {
-                self.delete_path(&format!("/aliases/{}", encode(index))).await?;
+                self.delete_path(&format!("/aliases/{}", encode(index)))
+                    .await?;
                 self.delete_path(&format!("/collections/{}", encode(&collection)))
                     .await?;
             }
@@ -374,9 +379,11 @@ impl SearchEngine for TypesenseEngine {
             };
             let old = self.collection_of(index).await?;
             self.point_alias(index, &collection).await?;
-            self.delete_path(&format!("/aliases/{}", encode(staged))).await?;
+            self.delete_path(&format!("/aliases/{}", encode(staged)))
+                .await?;
             if let Some(old) = old.filter(|old| *old != collection) {
-                self.delete_path(&format!("/collections/{}", encode(&old))).await?;
+                self.delete_path(&format!("/collections/{}", encode(&old)))
+                    .await?;
             }
             Ok(())
         })
@@ -398,7 +405,11 @@ impl SearchEngine for TypesenseEngine {
                 params.push(("q".into(), text.to_owned()));
                 params.push((
                     "query_by".into(),
-                    text_fields.iter().map(|(f, _)| *f).collect::<Vec<_>>().join(","),
+                    text_fields
+                        .iter()
+                        .map(|(f, _)| *f)
+                        .collect::<Vec<_>>()
+                        .join(","),
                 ));
                 params.push((
                     "query_by_weights".into(),
@@ -427,7 +438,7 @@ impl SearchEngine for TypesenseEngine {
                 params.push(("sort_by".into(), sort.join(",")));
             }
             let per_page = query.limit.min(250);
-            let page = if per_page == 0 { 1 } else { query.offset / per_page + 1 };
+            let page = query.offset.checked_div(per_page).map_or(1, |p| p + 1);
             params.push(("page".into(), page.to_string()));
             params.push(("per_page".into(), per_page.to_string()));
             let title = settings.title_field().filter(|_| query.with_title);
@@ -439,7 +450,11 @@ impl SearchEngine for TypesenseEngine {
             if query.highlight.is_some() && !text.is_empty() {
                 params.push((
                     "highlight_full_fields".into(),
-                    text_fields.iter().map(|(f, _)| *f).collect::<Vec<_>>().join(","),
+                    text_fields
+                        .iter()
+                        .map(|(f, _)| *f)
+                        .collect::<Vec<_>>()
+                        .join(","),
                 ));
                 params.push(("highlight_start_tag".into(), MARK_OPEN.into()));
                 params.push(("highlight_end_tag".into(), MARK_CLOSE.into()));

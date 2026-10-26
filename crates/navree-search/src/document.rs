@@ -127,8 +127,8 @@ mod tests {
         assert_eq!(doc.id(), id.to_string());
         assert_eq!(doc.workspace_id(), Some("w1"));
         assert_eq!(doc.get("count"), Some(&json!(3)));
-        let round_trip: Document = serde_json::from_value(serde_json::to_value(&doc).unwrap())
-            .expect("deserializes");
+        let round_trip: Document =
+            serde_json::from_value(serde_json::to_value(&doc).unwrap()).expect("deserializes");
         assert_eq!(round_trip, doc);
     }
 

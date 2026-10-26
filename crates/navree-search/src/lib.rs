@@ -65,12 +65,12 @@ mod text;
 mod vector;
 
 pub use document::Document;
+#[cfg(feature = "tantivy")]
+pub use engine::TantivyEngine;
 pub use engine::{
     DatabaseEngine, EngineHit, EngineQuery, EngineResults, MeilisearchEngine, MemoryEngine,
     SearchEngine, SortBy, TypesenseEngine,
 };
-#[cfg(feature = "tantivy")]
-pub use engine::TantivyEngine;
 pub use error::SearchError;
 pub use filter::{CmpOp, Filter};
 pub use migration::{DOCUMENTS_TABLE, FTS_TABLE, SEARCH_MIGRATIONS};
@@ -80,7 +80,7 @@ pub use options::{
     VectorOptions, VectorStoreKind,
 };
 pub use query::{AcrossHit, AcrossQuery, Hit, SearchQuery, SimilarQuery};
-pub use searchable::{SearchContext, Searchable, __private};
+pub use searchable::{__private, SearchContext, Searchable};
 pub use service::{ImportReport, IndexStatus, Search};
 pub use settings::{FieldSettings, IndexSettings, WORKSPACE_FIELD};
 pub use sync::{SYNC_JOB, SyncDocuments};

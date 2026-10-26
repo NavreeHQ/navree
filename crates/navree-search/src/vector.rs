@@ -21,6 +21,10 @@ use crate::settings::WORKSPACE_FIELD;
 use crate::sql::Sql;
 use crate::{SearchError, SearchOptions};
 
+/// A record to embed: its id, its workspace, its filter payload and the
+/// text to embed.
+pub(crate) type EmbedRecord = (String, Option<String>, BTreeMap<String, Value>, String);
+
 /// Turns texts into vectors. Register one in the app as
 /// `Arc<dyn Embeddings>` (for example a wrapper around an embedding model's
 /// API); vector search uses it to embed records and query texts.
@@ -66,8 +70,11 @@ pub trait VectorStore: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<(), SearchError>>;
 
     /// Removes records.
-    fn delete<'a>(&'a self, index: &'a str, ids: &'a [String])
-    -> BoxFuture<'a, Result<(), SearchError>>;
+    fn delete<'a>(
+        &'a self,
+        index: &'a str,
+        ids: &'a [String],
+    ) -> BoxFuture<'a, Result<(), SearchError>>;
 
     /// Removes every record.
     fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>>;
@@ -92,7 +99,11 @@ pub trait VectorStore: Send + Sync + 'static {
 
 /// The similarity of `a` and `b` under `metric`, mapped into 0..1.
 pub(crate) fn similarity(metric: Metric, a: &[f32], b: &[f32]) -> f64 {
-    let dot: f64 = a.iter().zip(b).map(|(x, y)| f64::from(*x) * f64::from(*y)).sum();
+    let dot: f64 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| f64::from(*x) * f64::from(*y))
+        .sum();
     match metric {
         Metric::Cosine => {
             let na: f64 = a.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>().sqrt();
@@ -264,7 +275,12 @@ impl QdrantStore {
         timeout: Duration,
     ) -> Result<Self, BoxError> {
         Ok(Self {
-            api: Api::new("qdrant", vec![url.to_owned()], Auth::Header("api-key", key), timeout)?,
+            api: Api::new(
+                "qdrant",
+                vec![url.to_owned()],
+                Auth::Header("api-key", key),
+                timeout,
+            )?,
             dimensions,
             metric,
         })
@@ -273,7 +289,12 @@ impl QdrantStore {
     /// The store on a given HTTP client (a fake in tests).
     pub fn with_client(url: &str, dimensions: usize, metric: Metric, client: HttpClient) -> Self {
         Self {
-            api: Api::with_client("qdrant", vec![url.to_owned()], Auth::Header("api-key", None), client),
+            api: Api::with_client(
+                "qdrant",
+                vec![url.to_owned()],
+                Auth::Header("api-key", None),
+                client,
+            ),
             dimensions,
             metric,
         }
@@ -306,8 +327,12 @@ pub(crate) fn qdrant_filter(filter: &Filter) -> Value {
     match filter {
         Filter::Const(true) => json!({}),
         Filter::Const(false) => json!({ "must": [{ "has_id": [] }] }),
-        Filter::All(items) => json!({ "must": items.iter().map(qdrant_condition).collect::<Vec<_>>() }),
-        Filter::Any(items) => json!({ "should": items.iter().map(qdrant_condition).collect::<Vec<_>>() }),
+        Filter::All(items) => {
+            json!({ "must": items.iter().map(qdrant_condition).collect::<Vec<_>>() })
+        }
+        Filter::Any(items) => {
+            json!({ "should": items.iter().map(qdrant_condition).collect::<Vec<_>>() })
+        }
         other => json!({ "must": [qdrant_condition(other)] }),
     }
 }
@@ -441,7 +466,12 @@ impl VectorStore for QdrantStore {
             Ok(answer
                 .pointer("/result/0/vector")
                 .and_then(Value::as_array)
-                .map(|v| v.iter().filter_map(Value::as_f64).map(|x| x as f32).collect()))
+                .map(|v| {
+                    v.iter()
+                        .filter_map(Value::as_f64)
+                        .map(|x| x as f32)
+                        .collect()
+                }))
         })
     }
 
@@ -561,7 +591,13 @@ pub(crate) fn vector_literal(vector: &[f32]) -> String {
 }
 
 /// The nearest-neighbour query of the `pgvector` store.
-pub(crate) fn pgvector_nearest(index: &str, vector: &[f32], filter: &Filter, limit: u64, metric: Metric) -> Sql {
+pub(crate) fn pgvector_nearest(
+    index: &str,
+    vector: &[f32],
+    filter: &Filter,
+    limit: u64,
+    metric: Metric,
+) -> Sql {
     let operator = match metric {
         Metric::Cosine => "<=>",
         Metric::Dot => "<#>",
@@ -761,7 +797,11 @@ impl Vectors {
                 if db.backend() != DbBackend::Postgres {
                     return Err("the pgvector store needs a PostgreSQL database".into());
                 }
-                Arc::new(PgvectorStore::new(db.clone(), options.dimensions, options.metric))
+                Arc::new(PgvectorStore::new(
+                    db.clone(),
+                    options.dimensions,
+                    options.metric,
+                ))
             }
         };
         let embeddings = app
@@ -786,7 +826,12 @@ impl Vectors {
     }
 
     pub(crate) async fn prepare(&self, index: &str) -> Result<(), SearchError> {
-        if self.prepared.lock().unwrap_or_else(PoisonError::into_inner).contains(index) {
+        if self
+            .prepared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(index)
+        {
             return Ok(());
         }
         self.store.prepare(index).await?;
@@ -799,7 +844,10 @@ impl Vectors {
 
     /// Embeds `texts`, from the cache when it has them.
     pub(crate) async fn embed(&self, texts: &[String]) -> Result<Vec<Arc<Vec<f32>>>, SearchError> {
-        let keys: Vec<String> = texts.iter().map(|t| hex::encode(Sha256::digest(t.as_bytes()))).collect();
+        let keys: Vec<String> = texts
+            .iter()
+            .map(|t| hex::encode(Sha256::digest(t.as_bytes())))
+            .collect();
         let mut out: Vec<Option<Arc<Vec<f32>>>> = {
             let cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
             keys.iter().map(|k| cache.get(k).cloned()).collect()
@@ -808,7 +856,10 @@ impl Vectors {
         if !missing.is_empty() {
             let embeddings = self.embeddings.as_ref().ok_or(SearchError::NoEmbeddings)?;
             let batch: Vec<String> = missing.iter().map(|i| texts[*i].clone()).collect();
-            let vectors = embeddings.embed(&batch).await.map_err(SearchError::Embeddings)?;
+            let vectors = embeddings
+                .embed(&batch)
+                .await
+                .map_err(SearchError::Embeddings)?;
             if vectors.len() != batch.len() {
                 return Err(SearchError::Embeddings(
                     format!("{} texts gave {} vectors", batch.len(), vectors.len()).into(),
@@ -834,7 +885,10 @@ impl Vectors {
                 out[i] = Some(vector);
             }
         }
-        Ok(out.into_iter().map(|v| v.expect("every text embedded")).collect())
+        Ok(out
+            .into_iter()
+            .map(|v| v.expect("every text embedded"))
+            .collect())
     }
 
     pub(crate) async fn embed_one(&self, text: &str) -> Result<Vec<f32>, SearchError> {
@@ -846,7 +900,7 @@ impl Vectors {
     pub(crate) async fn upsert(
         &self,
         index: &str,
-        records: Vec<(String, Option<String>, BTreeMap<String, Value>, String)>,
+        records: Vec<EmbedRecord>,
     ) -> Result<(), SearchError> {
         if records.is_empty() {
             return Ok(());

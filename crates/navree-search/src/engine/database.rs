@@ -66,11 +66,21 @@ impl DatabaseEngine {
     }
 
     async fn query_all(&self, sql: Sql) -> Result<Vec<QueryResult>, SearchError> {
-        Ok(self.db.reader().await.query_all_raw(sql.statement()).await?)
+        Ok(self
+            .db
+            .reader()
+            .await
+            .query_all_raw(sql.statement())
+            .await?)
     }
 
     async fn query_count(&self, sql: Sql) -> Result<u64, SearchError> {
-        let row = self.db.reader().await.query_one_raw(sql.statement()).await?;
+        let row = self
+            .db
+            .reader()
+            .await
+            .query_one_raw(sql.statement())
+            .await?;
         let n: i64 = match row {
             Some(row) => row.try_get_by_index(0)?,
             None => 0,
@@ -267,7 +277,9 @@ impl SearchEngine for DatabaseEngine {
                 } else {
                     let mut delete = Sql::new(backend);
                     delete
-                        .push(&format!("DELETE FROM {DOCUMENTS_TABLE} WHERE index_name = "))
+                        .push(&format!(
+                            "DELETE FROM {DOCUMENTS_TABLE} WHERE index_name = "
+                        ))
                         .bind(index)
                         .push(" AND id = ")
                         .bind(document.id());
@@ -448,8 +460,12 @@ impl SearchEngine for DatabaseEngine {
             select.push(" ORDER BY ");
             select.order(query.sort, "d.fields");
             select.push("rank DESC, d.id ASC");
-            select.push(" LIMIT ").bind(i64::try_from(query.limit).unwrap_or(i64::MAX));
-            select.push(" OFFSET ").bind(i64::try_from(query.offset).unwrap_or(i64::MAX));
+            select
+                .push(" LIMIT ")
+                .bind(i64::try_from(query.limit).unwrap_or(i64::MAX));
+            select
+                .push(" OFFSET ")
+                .bind(i64::try_from(query.offset).unwrap_or(i64::MAX));
             let total = self.query_count(count).await?;
             let rows = if query.limit == 0 {
                 Vec::new()
@@ -538,7 +554,9 @@ fn build_from(
 ) {
     if terms.is_empty() {
         let rank = if postgres { "0.0::float8" } else { "0.0" };
-        select.push(&format!("{rank} AS rank FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
+        select.push(&format!(
+            "{rank} AS rank FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "
+        ));
         select.bind(index);
         count.push(&format!("FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
         count.bind(index);
@@ -587,10 +605,15 @@ fn postgres_from(
         tsquery(terms)
     };
     select.push("(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery(");
-    select.bind(language.clone()).push("::regconfig, ").bind(rank_query);
+    select
+        .bind(language.clone())
+        .push("::regconfig, ")
+        .bind(rank_query);
     select.push("), 32)");
     if options.trigram {
-        select.push(" + 0.5 * word_similarity(").bind(text.to_owned());
+        select
+            .push(" + 0.5 * word_similarity(")
+            .bind(text.to_owned());
         select.push(", d.content)");
     }
     select.push(")::float8 AS rank ");
@@ -599,14 +622,20 @@ fn postgres_from(
         sql.bind(index);
         if !options.trigram {
             sql.push(" AND d.search_vector @@ to_tsquery(");
-            sql.bind(language.clone()).push("::regconfig, ").bind(tsquery(terms));
+            sql.bind(language.clone())
+                .push("::regconfig, ")
+                .bind(tsquery(terms));
             sql.push(")");
             continue;
         }
         for term in &terms.terms {
             sql.push(" AND (d.search_vector @@ to_tsquery(");
-            sql.bind(language.clone()).push("::regconfig, ").bind(term_tsquery(term));
-            sql.push(") OR ").bind(term.word.clone()).push(" <% d.content)");
+            sql.bind(language.clone())
+                .push("::regconfig, ")
+                .bind(term_tsquery(term));
+            sql.push(") OR ")
+                .bind(term.word.clone())
+                .push(" <% d.content)");
         }
     }
 }
@@ -637,10 +666,7 @@ mod tests {
     #[test]
     fn fts5_queries_quote_words_and_prefix_the_last() {
         assert_eq!(fts5_query(&terms("ada lov")), "\"ada\" AND \"lov\"*");
-        assert_eq!(
-            fts5_query(&terms("acme ")),
-            "(\"acme\" OR \"acme corp\")"
-        );
+        assert_eq!(fts5_query(&terms("acme ")), "(\"acme\" OR \"acme corp\")");
     }
 
     #[test]
@@ -650,12 +676,21 @@ mod tests {
     }
 
     fn postgres_sql(text: &str, trigram: bool) -> (String, String) {
-        let (mut select, mut count) = (Sql::new(DbBackend::Postgres), Sql::new(DbBackend::Postgres));
+        let (mut select, mut count) =
+            (Sql::new(DbBackend::Postgres), Sql::new(DbBackend::Postgres));
         let options = PostgresOptions {
             trigram,
             ..PostgresOptions::default()
         };
-        build_from(&mut select, &mut count, "crm_deals", &terms(text), true, &options, text);
+        build_from(
+            &mut select,
+            &mut count,
+            "crm_deals",
+            &terms(text),
+            true,
+            &options,
+            text,
+        );
         (select.text().to_owned(), count.text().to_owned())
     }
 
@@ -672,7 +707,10 @@ mod tests {
             "FROM search_documents d WHERE d.index_name = $1 AND d.search_vector @@ to_tsquery($2::regconfig, $3)"
         );
         let (select, _) = postgres_sql("", false);
-        assert_eq!(select, "0.0::float8 AS rank FROM search_documents d WHERE d.index_name = $1");
+        assert_eq!(
+            select,
+            "0.0::float8 AS rank FROM search_documents d WHERE d.index_name = $1"
+        );
     }
 
     #[test]
@@ -686,7 +724,10 @@ mod tests {
              AND (d.search_vector @@ to_tsquery($5::regconfig, $6) OR $7 <% d.content) \
              AND (d.search_vector @@ to_tsquery($8::regconfig, $9) OR $10 <% d.content)"
         );
-        assert!(count.starts_with("FROM search_documents d WHERE d.index_name = $1 AND ("), "{count}");
+        assert!(
+            count.starts_with("FROM search_documents d WHERE d.index_name = $1 AND ("),
+            "{count}"
+        );
         assert_eq!(tsquery_any(&terms("ada lovlace")), "ada | lovlace:*");
     }
 
