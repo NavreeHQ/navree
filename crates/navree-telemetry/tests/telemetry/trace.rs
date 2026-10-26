@@ -215,6 +215,35 @@ mod policy {
     }
 
     #[test]
+    fn work_handed_over_inside_the_app_resumes_its_trace() {
+        // A queued job resumes the trace it was dispatched in, even on a
+        // public edge: the traceparent came from the app itself.
+        let policy = TracePolicy {
+            trust_incoming: false,
+            sample_ratio: 0.0,
+            ..TracePolicy::default()
+        };
+        let header = format!("00-{TRACE}-{PARENT}-01");
+        let trace = policy.resume(Some(&header)).expect("a trace");
+        assert_eq!(trace.trace_id.to_string(), TRACE);
+        assert_eq!(trace.parent_span_id.unwrap().to_string(), PARENT);
+        assert!(trace.sampled, "the dispatcher's decision holds");
+        assert_eq!(trace.link, None);
+
+        let fresh = policy.resume(None).expect("a new trace");
+        assert_eq!(fresh.parent_span_id, None);
+        assert!(!fresh.sampled, "a new trace follows the ratio");
+        let garbage = policy.resume(Some("garbage")).expect("a new trace");
+        assert_eq!(garbage.parent_span_id, None);
+
+        let off = TracePolicy {
+            enabled: false,
+            ..TracePolicy::default()
+        };
+        assert_eq!(off.resume(Some(&header)), None);
+    }
+
+    #[test]
     fn a_disabled_policy_starts_nothing() {
         let policy = TracePolicy {
             enabled: false,

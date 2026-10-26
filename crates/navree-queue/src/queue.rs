@@ -8,7 +8,7 @@ use std::time::Duration;
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
 use navree_kernel::{AppContext, WeakAppContext};
-use navree_telemetry::{Telemetry, TracePolicy};
+use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -245,8 +245,16 @@ impl Queue {
             created_at: now,
             unique_key,
             unique_for_ms,
+            trace_parent: current_traceparent(),
         })
     }
+}
+
+/// The `traceparent` of the current request's or job's span, when it has a
+/// trace: a dispatched job continues it.
+fn current_traceparent() -> Option<String> {
+    TelemetryContext::with_current(|context| context.trace().map(TraceContext::traceparent))
+        .flatten()
 }
 
 /// The envelope's `delay_secs`.
