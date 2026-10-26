@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use navree_kernel::BoxError;
+use navree_telemetry::{CacheEvent, CacheOperation, EventKind, Telemetry, TelemetryEvent};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio_util::task::TaskTracker;
@@ -60,9 +61,17 @@ impl From<Duration> for Ttl {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// With a telemetry registry ([`with_telemetry`](Cache::with_telemetry);
+/// `CacheModule` gives its cache the app's), every call is reported as a
+/// [`CacheEvent`]: a read as a hit or a miss, a store as a write, a removal
+/// as a forget, with the key as the caller wrote it.
 #[derive(Clone)]
 pub struct Cache {
     inner: Arc<Inner>,
+    telemetry: Telemetry,
+    /// The store's name in [`CacheEvent`]s.
+    store_name: Arc<str>,
 }
 
 struct Inner {
@@ -95,7 +104,9 @@ impl Cache {
     /// A cache over a fresh [`MemoryStore`], no prefix, one-hour default TTL.
     /// Handy in tests and scripts; apps get their `Cache` from `CacheModule`.
     pub fn memory() -> Self {
-        Self::new(Arc::new(MemoryStore::new()), "", DEFAULT_TTL)
+        let mut cache = Self::new(Arc::new(MemoryStore::new()), "", DEFAULT_TTL);
+        cache.store_name = Arc::from("memory");
+        cache
     }
 
     pub(crate) fn with_tracker(
@@ -112,7 +123,34 @@ impl Cache {
                 flights: Flights::default(),
                 tracker,
             }),
+            telemetry: Telemetry::disabled(),
+            store_name: Arc::from("custom"),
         }
+    }
+
+    /// This cache, reporting [`CacheEvent`]s to `telemetry`, naming the
+    /// store `store` in them (`memory`).
+    #[must_use]
+    pub fn with_telemetry(mut self, telemetry: Telemetry, store: &str) -> Self {
+        self.telemetry = telemetry;
+        self.store_name = Arc::from(store);
+        self
+    }
+
+    /// The registry this cache reports to (disabled unless set).
+    pub fn telemetry(&self) -> &Telemetry {
+        &self.telemetry
+    }
+
+    /// Reports a cache call on `key` (the caller's key).
+    pub(crate) fn report(&self, operation: CacheOperation, key: &str) {
+        self.telemetry.emit_with(EventKind::Cache, || {
+            TelemetryEvent::Cache(CacheEvent {
+                operation,
+                key: key.to_owned(),
+                store: self.store_name.to_string(),
+            })
+        });
     }
 
     /// The underlying store.
@@ -170,12 +208,16 @@ impl Cache {
 
     /// Whether `key` has a live value.
     pub async fn has(&self, key: &str) -> Result<bool, CacheError> {
-        Ok(self.inner.store.get(&self.full_key(key)).await?.is_some())
+        let found = self.inner.store.get(&self.full_key(key)).await?.is_some();
+        self.report(hit_or_miss(found), key);
+        Ok(found)
     }
 
     /// Removes `key`; `true` if a live value was removed.
     pub async fn forget(&self, key: &str) -> Result<bool, CacheError> {
-        self.inner.store.forget(&self.full_key(key)).await
+        let removed = self.inner.store.forget(&self.full_key(key)).await?;
+        self.report(CacheOperation::Forget, key);
+        Ok(removed)
     }
 
     /// Returns the value under `key` and removes it.
@@ -183,20 +225,25 @@ impl Cache {
         let slot = self.slot(key);
         let value = self.get_slot(&slot).await?;
         self.inner.store.forget(&slot.full).await?;
+        self.report(CacheOperation::Forget, key);
         Ok(value)
     }
 
     /// Adds `by` to the counter under `key` (missing counts as 0) and returns
     /// the new value; the entry keeps its TTL. Read it back with `get::<i64>`.
     pub async fn increment(&self, key: &str, by: i64) -> Result<i64, CacheError> {
-        self.inner.store.increment(&self.full_key(key), by).await
+        let value = self.inner.store.increment(&self.full_key(key), by).await?;
+        self.report(CacheOperation::Write, key);
+        Ok(value)
     }
 
     /// Subtracts `by` from the counter under `key` (see [`increment`](Cache::increment)).
     pub async fn decrement(&self, key: &str, by: i64) -> Result<i64, CacheError> {
         let full = self.full_key(key);
         let by = negate(&full, by)?;
-        self.inner.store.increment(&full, by).await
+        let value = self.inner.store.increment(&full, by).await?;
+        self.report(CacheOperation::Write, key);
+        Ok(value)
     }
 
     /// The value under `key`; on a miss, computes it with `f`, stores it for
@@ -303,7 +350,18 @@ impl Cache {
         }
     }
 
+    /// Reads `slot`, reporting a hit or a miss.
     pub(crate) async fn get_slot<T: DeserializeOwned>(
+        &self,
+        slot: &Slot<'_>,
+    ) -> Result<Option<T>, CacheError> {
+        let value = self.fetch_slot(slot).await?;
+        self.report(hit_or_miss(value.is_some()), slot.key);
+        Ok(value)
+    }
+
+    /// Reads `slot` without reporting.
+    async fn fetch_slot<T: DeserializeOwned>(
         &self,
         slot: &Slot<'_>,
     ) -> Result<Option<T>, CacheError> {
@@ -321,10 +379,13 @@ impl Cache {
     ) -> Result<(), CacheError> {
         if ttl == Some(Duration::ZERO) {
             self.inner.store.forget(&slot.full).await?;
+            self.report(CacheOperation::Forget, slot.key);
             return Ok(());
         }
         let bytes = encode(slot.key, value)?;
-        self.inner.store.put(&slot.full, bytes, ttl).await
+        self.inner.store.put(&slot.full, bytes, ttl).await?;
+        self.report(CacheOperation::Write, slot.key);
+        Ok(())
     }
 
     pub(crate) async fn add_slot<T: Serialize + ?Sized>(
@@ -337,7 +398,11 @@ impl Cache {
             return Ok(false);
         }
         let bytes = encode(slot.key, value)?;
-        self.inner.store.add(&slot.full, bytes, ttl).await
+        let added = self.inner.store.add(&slot.full, bytes, ttl).await?;
+        if added {
+            self.report(CacheOperation::Write, slot.key);
+        }
+        Ok(added)
     }
 
     pub(crate) async fn remember_slot<T, F, Fut>(
@@ -352,13 +417,16 @@ impl Cache {
         Fut: Future<Output = Result<T, BoxError>>,
     {
         if let Some(value) = self.read_lenient(&slot).await? {
+            self.report(CacheOperation::Hit, slot.key);
             return Ok(value);
         }
         let _flight = self.inner.flights.enter(&slot.full).await;
         // Another caller may have computed it while we waited.
         if let Some(value) = self.read_lenient(&slot).await? {
+            self.report(CacheOperation::Hit, slot.key);
             return Ok(value);
         }
+        self.report(CacheOperation::Miss, slot.key);
         let value = f().await.map_err(|source| CacheError::Compute {
             key: slot.key.to_owned(),
             source,
@@ -381,6 +449,7 @@ impl Cache {
     {
         let windows = Windows { fresh, stale };
         if let Some(value) = self.read_lenient(&slot).await? {
+            self.report(CacheOperation::Hit, slot.key);
             if self
                 .inner
                 .store
@@ -394,8 +463,10 @@ impl Cache {
         }
         let _flight = self.inner.flights.enter(&slot.full).await;
         if let Some(value) = self.read_lenient(&slot).await? {
+            self.report(CacheOperation::Hit, slot.key);
             return Ok(value);
         }
+        self.report(CacheOperation::Miss, slot.key);
         let value = f().await.map_err(|source| CacheError::Compute {
             key: slot.key.to_owned(),
             source,
@@ -404,6 +475,7 @@ impl Cache {
         windows
             .store(self.inner.store.as_ref(), &slot.full, bytes)
             .await?;
+        self.report(CacheOperation::Write, slot.key);
         Ok(value)
     }
 
@@ -468,7 +540,7 @@ impl Cache {
         &self,
         slot: &Slot<'_>,
     ) -> Result<Option<T>, CacheError> {
-        match self.get_slot(slot).await {
+        match self.fetch_slot(slot).await {
             Err(CacheError::Deserialize { key, .. }) => {
                 tracing::warn!(key = %key, "cached value could not be decoded; recomputing it");
                 Ok(None)
@@ -533,6 +605,15 @@ fn fresh_marker(full: &str) -> String {
 /// The key claimed while a background refresh of `full` runs.
 fn refresh_claim(full: &str) -> String {
     format!("{full}#navree:refresh")
+}
+
+/// A read that found a value is a hit, one that did not a miss.
+pub(crate) fn hit_or_miss(found: bool) -> CacheOperation {
+    if found {
+        CacheOperation::Hit
+    } else {
+        CacheOperation::Miss
+    }
 }
 
 /// `-by` for `decrement`; overflows only for `i64::MIN`.

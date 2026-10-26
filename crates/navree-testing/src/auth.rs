@@ -9,10 +9,15 @@ use navree_http::{AppError, Authenticator};
 use navree_kernel::{AppBuilder, AppContext, BoxFuture, ProviderKey};
 use uuid::Uuid;
 
-/// The principal a test request acts as (a request extension, which an
-/// HTTP client cannot forge).
+/// The principal a test request acts as: a request extension, which an
+/// HTTP client cannot forge, read by [`TestAuthenticator`]. [`TestClient`]
+/// sets it on requests [acting as](crate::TestClient::acting_as) someone;
+/// in-process clients of other protocols (navree-grpc's `TestChannel`) set
+/// it the same way.
+///
+/// [`TestClient`]: crate::TestClient
 #[derive(Clone, Debug)]
-pub(crate) struct ActingAs(pub(crate) Principal);
+pub struct ActingAs(pub Principal);
 
 /// A `dyn Authenticator` for tests: a request sent by a client
 /// [acting as](crate::TestClient::acting_as) a principal is authenticated as

@@ -22,6 +22,7 @@ missing_docs = "warn"
 navree = { path = "crates/navree", version = "0.1.0" }
 navree-kernel = { path = "crates/navree-kernel", version = "0.1.0" }
 navree-contracts = { path = "crates/navree-contracts", version = "0.1.0" }
+navree-telemetry = { path = "crates/navree-telemetry", version = "0.1.0" }
 navree-macros = { path = "crates/navree-macros", version = "0.1.0" }
 navree-config = { path = "crates/navree-config", version = "0.1.0" }
 navree-log = { path = "crates/navree-log", version = "0.1.0" }
@@ -52,6 +53,9 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
+navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
+navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
+navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
 navree-helm = { path = "crates/navree-helm", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
@@ -105,6 +109,27 @@ reqwest = { version = "0.13.5", default-features = false, features = [
     "stream",
 ] }
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
+# gRPC (navree-grpc): tonic on hyper and h2, TLS with rustls and ring, no
+# system `protoc` (protox compiles .proto files in pure Rust).
+tonic = { version = "0.14.6", default-features = false, features = [
+    "channel",
+    "codegen",
+    "router",
+    "tls-native-roots",
+    "tls-ring",
+] }
+tonic-prost = "0.14.6"
+tonic-web = "0.14.6"
+tonic-health = { version = "0.14.6", default-features = false }
+tonic-reflection = { version = "0.14.6", default-features = false, features = ["server"] }
+tonic-types = "0.14.6"
+tonic-prost-build = { version = "0.14.6", default-features = false }
+prost = "0.14.4"
+prost-types = "0.14.4"
+prost-reflect = { version = "0.16.5", features = ["serde"] }
+protox = "0.10.0"
+http-body = "1.0.1"
+hyper-util = { version = "0.1.21", features = ["http1", "http2", "server", "server-auto", "server-graceful", "service", "tokio"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
 
@@ -137,6 +162,22 @@ tracing-appender = "0.2.5"
 tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+# OTLP export of spans (navree-observe's optional `otel` feature): gRPC on
+# tonic with rustls + ring, HTTP/protobuf on reqwest. Never `tls-aws-lc`.
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = [
+    "grpc-tonic",
+    "http-proto",
+    "reqwest-client",
+    "tls-ring",
+    "tls-webpki-roots",
+    "trace",
+] }
+# Test receivers for the OTLP export (dev-dependencies only): the protobuf
+# messages, decoded by in-process OTLP/HTTP and OTLP/gRPC receivers on axum
+# (with `prost`, declared with the gRPC dependencies above).
+opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -223,6 +264,11 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# GraphQL (navree-graphql): no default features (no handlebars, no
+# multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+# Line diffs for `graphql:schema --check` (the version insta already uses).
+similar = "2.7.0"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
@@ -246,7 +292,7 @@ tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
 proptest = "1.12.0"
-# HTTP mock servers for provider integrations (navree-social).
+# HTTP mock servers for provider integrations (navree-social, navree-billing).
 wiremock = "0.6.5"
 
 # Keep debug info small: less memory, faster links (many agents build at once).

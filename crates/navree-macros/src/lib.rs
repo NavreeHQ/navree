@@ -1,7 +1,9 @@
 //! # navree-macros
 //!
 //! Attribute macros for Navree applications: `#[module]`, `#[injectable]`,
-//! `#[controller]` and the route attributes, and `#[flag]` (feature flags).
+//! `#[controller]` and the route attributes, `#[flag]` (feature flags),
+//! `#[resolver]` (GraphQL root fields, for navree-graphql), and
+//! `#[grpc_service]` (gRPC services, for navree-grpc).
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -12,9 +14,10 @@
 //! The generated code names the runtime crates through the `navree` facade when
 //! the crate being compiled depends on it (`::navree::kernel::…`,
 //! `::navree::http::…`, `::navree::access::…`, `::navree::flags::…`,
-//! honouring a rename in `Cargo.toml`), and otherwise through the individual
-//! crates (`::navree_kernel::…`, `::navree_http::…`, `::navree_access::…`,
-//! `::navree_flags::…`). Depending on
+//! `::navree::graphql::…`, `::navree::grpc::…`, honouring a rename in
+//! `Cargo.toml`), and otherwise through the individual crates
+//! (`::navree_kernel::…`, `::navree_http::…`, `::navree_access::…`,
+//! `::navree_flags::…`, `::navree_graphql::…`, `::navree_grpc::…`). Depending on
 //! neither is a compile error that names the missing crate.
 #![forbid(unsafe_code)]
 
@@ -24,10 +27,12 @@ mod attr;
 mod controller;
 mod duration;
 mod flag;
+mod grpc;
 mod injectable;
 mod module;
 mod path;
 mod paths;
+mod resolver;
 mod route;
 
 /// Implements `Injectable` for a struct by resolving each field from the
@@ -304,6 +309,97 @@ pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn flag(args: TokenStream, item: TokenStream) -> TokenStream {
     flag::expand(args.into(), item.into()).into()
+}
+
+/// Implements `navree_graphql::GraphqlResolver` for an inherent impl block
+/// whose methods are GraphQL root fields: `#[query]`, `#[mutation]` or
+/// `#[subscription]`.
+///
+/// ```text
+/// #[injectable]
+/// pub struct DealResolver { deals: Arc<DealService> }
+///
+/// #[resolver]
+/// impl DealResolver {
+///     #[query]
+///     #[can(Read, Deal, from = "id")]
+///     async fn deal(&self, ctx: &Context<'_>, id: Uuid) -> Result<DealObject> { .. }
+///
+///     #[mutation]
+///     #[authenticated]
+///     async fn move_deal(&self, ctx: &Context<'_>, id: Uuid, input: Valid<MoveDealInput>)
+///         -> Result<DealObject> { .. }
+///
+///     #[subscription]
+///     #[can(Read, Deal)]
+///     async fn deal_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = DealObject>> { .. }
+/// }
+/// ```
+///
+/// A field method is a non-generic `async fn` taking `&self`, optionally
+/// the async-graphql `&Context<'_>` next, then its GraphQL arguments as
+/// plain names (`id: Uuid`, with async-graphql's `#[graphql(..)]` argument
+/// attributes). It returns a value or a `Result` whose error converts into
+/// `async_graphql::Error`. Doc comments become field descriptions and
+/// `#[graphql(..)]` on the method (name, deprecation, complexity, ...)
+/// applies to the field. Methods without a field attribute stay plain
+/// methods.
+///
+/// **Deny by default.** Every field declares its access with `#[public]`,
+/// `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`,
+/// on the method or on the impl block (below `#[resolver]`); otherwise it
+/// does not compile. `#[can(Action, Subject, from = "id")]` names a field
+/// argument holding the record id. The checks run when the field resolves,
+/// before the method: guests get `UNAUTHENTICATED`, refusals `FORBIDDEN`.
+///
+/// An argument typed `Valid<T>` (navree-validation's) is parsed as `T` and
+/// validated with `T`'s garde rules before the method runs. Mutation fields
+/// run in a unit of work of their own (committed when the method returns
+/// `Ok`). The expansion names the runtime through `::navree::graphql` (or
+/// `::navree_graphql`), so it needs `navree` with the `graphql` feature (or
+/// `navree-graphql`) among the dependencies. Register the resolver with
+/// `ModuleBuilderGraphqlExt::resolver`; it must also be `Injectable`.
+#[proc_macro_attribute]
+pub fn resolver(args: TokenStream, item: TokenStream) -> TokenStream {
+    resolver::expand(args.into(), item.into()).into()
+}
+
+/// Serves a tonic service impl through navree-grpc's call pipeline and
+/// implements `navree_grpc::GrpcService` for the struct, so a module
+/// registers it with `m.grpc_service::<DealsGrpc>()`.
+///
+/// ```text
+/// #[grpc_service(server = DealsServer)]                                  // the generated server type
+/// #[grpc_service(server = DealsServer, interceptor = check_version)]     // a tonic interceptor
+/// ```
+///
+/// It goes on the impl of a generated service trait (`impl Deals for
+/// DealsGrpc`). Each method is the trait's, with three additions:
+///
+/// - the first parameter is tonic's `Request<T>`, or `Valid<Request<T>>`
+///   to run the message's garde rules first (`INVALID_ARGUMENT` with a
+///   `google.rpc.BadRequest` detail when one breaks);
+/// - Navree extractors may follow it (`Uow`, `CurrentPrincipal`,
+///   `Authorized<E, A>`, `Accessible<E, A>`, `Scoped<T>`, ...), run on the
+///   call's metadata and extensions;
+/// - the result may be `Result<Response<T>>` with an `AppError` (mapped to
+///   the gRPC status of the same meaning) or `Result<Response<T>, Status>`.
+///
+/// Access attributes work as on `#[controller]` routes and may sit on the
+/// methods or on the impl block (below `#[grpc_service]`): `#[public]`,
+/// `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]`, `#[can(Action,
+/// Subject)]` and `#[guard(expr)]`. **Deny by default:** a method that
+/// declares no access does not compile. `#[can(.., from = "id")]` reads the
+/// record id from the request message's field `id` (a string or an
+/// integer, optional or not), so it needs a unary request. The HTTP-only
+/// attributes (`#[get]`, `#[throttle]`, `#[timeout]`, `#[audit]`,
+/// `#[name]`, `#[api]`, `#[transactional]`) are errors here.
+///
+/// The expansion names `navree::grpc` (or `navree_grpc`) and, for
+/// `#[can]` with marker types, `navree::access` (or `navree_access`).
+#[proc_macro_attribute]
+pub fn grpc_service(args: TokenStream, item: TokenStream) -> TokenStream {
+    grpc::expand(args.into(), item.into()).into()
 }
 
 /// Declares a `GET` route on a method of a [`macro@controller`] impl block:

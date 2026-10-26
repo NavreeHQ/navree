@@ -39,6 +39,19 @@ pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {
     facade_module: "flags",
 };
 
+/// navree-graphql: `GraphqlResolver`, async-graphql and the field runtime
+/// (`#[resolver]`).
+pub(crate) const GRAPHQL: RuntimeCrate = RuntimeCrate {
+    package: "navree-graphql",
+    facade_module: "graphql",
+};
+
+/// navree-grpc: the call pipeline of `#[grpc_service]` methods.
+pub(crate) const GRPC: RuntimeCrate = RuntimeCrate {
+    package: "navree-grpc",
+    facade_module: "grpc",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

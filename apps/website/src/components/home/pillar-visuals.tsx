@@ -1,4 +1,13 @@
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon, SparkleIcon, TerminalIcon } from "lucide-react";
+import {
+  AudioWaveformIcon,
+  CheckIcon,
+  ChevronsUpDownIcon,
+  CommandIcon,
+  GalleryVerticalEndIcon,
+  PlusIcon,
+  SparkleIcon,
+  TerminalIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -99,7 +108,7 @@ export function ApiDocument({ errorHtml }: { errorHtml: string }) {
         label={
           <>
             <span className="truncate">GET /api/openapi.json</span>
-            <span className="shrink-0 rounded-full border border-line-2 px-2 py-px text-[0.6875rem] text-fg-2">OpenAPI 3.1</span>
+            <span className="shrink-0 rounded-sm border border-line-2 px-1.5 py-px text-xs text-fg-2">OpenAPI 3.1</span>
           </>
         }
       >
@@ -201,39 +210,48 @@ export function SecureList() {
   );
 }
 
-/* 06: a workspace switcher. */
+/* 06: a workspace switcher, open (the shadcn/ui team switcher, in ink). */
 const workspaces = [
-  { initial: "A", name: "Acme Inc", role: "Owner", active: true },
-  { initial: "G", name: "Globex", role: "Admin", active: false },
-  { initial: "I", name: "Initech", role: "Viewer", active: false },
+  { logo: GalleryVerticalEndIcon, name: "Acme Inc", role: "Owner", active: true },
+  { logo: AudioWaveformIcon, name: "Globex", role: "Admin", active: false },
+  { logo: CommandIcon, name: "Initech", role: "Viewer", active: false },
 ];
 
 export function SwitcherMock() {
   return (
     <Panel className="p-2">
-      <div className="flex items-center gap-2.5 rounded-lg border border-line-2 bg-ink-2 px-2.5 py-2">
-        <span className="inline-flex size-6 items-center justify-center rounded-md bg-fg font-display text-xs font-semibold text-ink-0">A</span>
-        <span className="flex-1 text-[0.8125rem] font-medium text-fg">Acme Inc</span>
-        <ChevronsUpDownIcon aria-hidden className="size-3.5 text-fg-3" />
+      <div className="flex h-12 items-center gap-2 rounded-sm bg-ink-2 p-2">
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm bg-fg text-ink-0">
+          <GalleryVerticalEndIcon aria-hidden className="size-4" strokeWidth={2} />
+        </span>
+        <span className="grid min-w-0 flex-1 leading-tight">
+          <span className="truncate text-sm font-medium text-fg">Acme Inc</span>
+          <span className="truncate text-xs text-fg-3">Pro plan</span>
+        </span>
+        <ChevronsUpDownIcon aria-hidden className="size-4 text-fg-3" strokeWidth={1.75} />
       </div>
-      <ul className="mt-1.5 space-y-0.5">
-        {workspaces.map((w) => (
-          <li key={w.name} className={cn("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5", w.active && "bg-ink-2/70")}>
-            <span className="inline-flex size-6 items-center justify-center rounded-md border border-line-2 bg-ink-1 font-display text-xs font-semibold text-fg-1">
-              {w.initial}
-            </span>
-            <span className="flex-1 text-[0.8125rem] text-fg-1">{w.name}</span>
-            <span className="font-mono text-[0.6875rem] text-fg-3">{w.role}</span>
-            <CheckIcon aria-hidden className={cn("size-3.5 text-accent", !w.active && "invisible")} />
-          </li>
-        ))}
-        <li className="flex items-center gap-2.5 border-t border-line px-2.5 pt-2 pb-1 text-[0.8125rem] text-fg-3">
-          <span className="inline-flex size-6 items-center justify-center">
-            <PlusIcon aria-hidden className="size-3.5" />
+      <div className="mt-1.5 rounded-md border border-line-2 bg-ink-1 p-1">
+        <p className="flex h-8 items-center px-2 text-xs text-fg-3">Workspaces</p>
+        <ul>
+          {workspaces.map((w, i) => (
+            <li key={w.name} className={cn("flex h-8 items-center gap-2 rounded-sm px-2", w.active && "bg-ink-3")}>
+              <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-line-2 bg-ink-1 text-fg-1">
+                <w.logo aria-hidden className="size-3.5" strokeWidth={2} />
+              </span>
+              <span className={cn("flex-1 text-sm", w.active ? "text-fg" : "text-fg-1")}>{w.name}</span>
+              <span className="font-mono text-xs text-fg-3">{w.role}</span>
+              <span className="w-7 text-right font-mono text-xs text-fg-3">⌘{i + 1}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="-mx-1 my-1 h-px bg-line" />
+        <p className="flex h-8 items-center gap-2 px-2 text-sm text-fg-3">
+          <span className="inline-flex size-6 items-center justify-center rounded-sm border border-dashed border-line-2">
+            <PlusIcon aria-hidden className="size-3.5" strokeWidth={1.75} />
           </span>
           Create workspace
-        </li>
-      </ul>
+        </p>
+      </div>
     </Panel>
   );
 }

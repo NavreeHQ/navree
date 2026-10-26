@@ -21,6 +21,7 @@ http-body-util = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 metrics = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

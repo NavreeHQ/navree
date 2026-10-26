@@ -14,7 +14,45 @@ pub const FAILED_JOBS_TABLE: &str = "failed_jobs";
 
 /// The migrations `QueueModule` contributes (module name `queue`).
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new("queue").migration(CreateQueueTables)
+    MigrationSet::new("queue")
+        .migration(CreateQueueTables)
+        .migration(AddJobsTraceParent)
+}
+
+/// Adds `jobs.trace_parent`: the W3C `traceparent` of the span that
+/// dispatched a job, so its attempts continue that trace (nullable; jobs
+/// queued before it start their own trace).
+struct AddJobsTraceParent;
+
+impl MigrationName for AddJobsTraceParent {
+    fn name(&self) -> &str {
+        "m20261026_000001_add_jobs_trace_parent"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for AddJobsTraceParent {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(JOBS_TABLE)
+                    .add_column(ColumnDef::new("trace_parent").string().null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(JOBS_TABLE)
+                    .drop_column("trace_parent")
+                    .to_owned(),
+            )
+            .await
+    }
 }
 
 /// Creates `jobs` and `failed_jobs`. Times are Unix milliseconds (`BIGINT`),

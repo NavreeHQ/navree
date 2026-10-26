@@ -1,0 +1,29 @@
+error: #[query] goes on a method of the impl block, not on the impl block
+ --> tests/ui/misused_attributes.rs:7:1
+  |
+7 | #[query]
+  | ^^^^^^^^
+
+error: a method is one field: `twice` already has #[query]
+  --> tests/ui/misused_attributes.rs:10:5
+   |
+10 |     #[mutation]
+   |     ^^^^^^^^^^^
+
+error: #[public] only applies to fields: `helper` has no #[query], #[mutation] or #[subscription]
+  --> tests/ui/misused_attributes.rs:16:5
+   |
+16 |     #[public]
+   |     ^^^^^^^^^
+
+error: field `not_async` must be an `async fn`
+  --> tests/ui/misused_attributes.rs:21:8
+   |
+21 |     fn not_async(&self) -> String {
+   |        ^^^^^^^^^
+
+error: field `nothing` must return a value (`-> Result<T>`)
+  --> tests/ui/misused_attributes.rs:27:14
+   |
+27 |     async fn nothing(&self) {}
+   |              ^^^^^^^

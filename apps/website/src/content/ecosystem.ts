@@ -243,7 +243,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-billing",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features billing",
     href: "/docs/packages/billing/",
-    status: "planned",
+    status: "stable",
     signature: "BillingModule::for_feature::<Workspace>()",
   },
   {
@@ -344,7 +344,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-grpc",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features grpc",
     href: "/docs/microservices/grpc/",
-    status: "planned",
+    status: "stable",
     signature: "#[grpc_service]",
   },
   {
@@ -358,7 +358,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-graphql",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features graphql",
     href: "/docs/microservices/graphql/",
-    status: "planned",
+    status: "stable",
     signature: "#[resolver]",
   },
   {
