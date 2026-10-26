@@ -62,7 +62,14 @@ async fn controllers_return_search_pages() {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), new_contact("Grace", "Hopper")]).await;
+    insert_contacts(
+        &db,
+        vec![
+            new_contact("Ada", "Lovelace"),
+            new_contact("Grace", "Hopper"),
+        ],
+    )
+    .await;
     settle(&app).await;
     app.client()
         .get("/api/v1/contacts/search")
@@ -78,7 +85,10 @@ async fn controllers_return_search_pages() {
         .query(&[("q", "ada"), ("by", "first_name")])
         .send()
         .await
-        .assert_error(400, "`first_name` is not a sortable field of the `contacts` index");
+        .assert_error(
+            400,
+            "`first_name` is not a sortable field of the `contacts` index",
+        );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

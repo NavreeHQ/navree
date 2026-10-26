@@ -108,7 +108,10 @@ pub struct IndexStatus {
 impl Search {
     /// Builds the service for `app`: the engine from `options`, and every
     /// entity registered with `SearchModule::for_feature`.
-    pub(crate) async fn build(app: &AppContext, options: SearchOptions) -> Result<Search, BoxError> {
+    pub(crate) async fn build(
+        app: &AppContext,
+        options: SearchOptions,
+    ) -> Result<Search, BoxError> {
         options
             .check()
             .map_err(|message| format!("invalid search options: {message}"))?;
@@ -124,7 +127,11 @@ impl Search {
                 continue;
             }
             let base = ops.settings();
-            let overrides = options.indexes.get(base.index()).cloned().unwrap_or_default();
+            let overrides = options
+                .indexes
+                .get(base.index())
+                .cloned()
+                .unwrap_or_default();
             let settings = base.with_overrides(&overrides.synonyms, &overrides.stop_words);
             settings.validate().map_err(|e| e.to_string())?;
             if let Some(other) = entries.iter().find(|e| {
@@ -147,7 +154,9 @@ impl Search {
             }));
         }
         let vectors = match &options.vectors {
-            Some(vector_options) => Some(Vectors::build(app, vector_options, &options, db.as_ref()).await?),
+            Some(vector_options) => {
+                Some(Vectors::build(app, vector_options, &options, db.as_ref()).await?)
+            }
             None => None,
         };
         Ok(Search {
@@ -308,7 +317,12 @@ impl Search {
             .contains(&entry.index, &id)
             .await
             .expect("the engine answers");
-        assert!(found, "expected {} {id} in the `{}` index", entry.settings.name(), entry.index);
+        assert!(
+            found,
+            "expected {} {id} in the `{}` index",
+            entry.settings.name(),
+            entry.index
+        );
     }
 
     /// Panics if `E`'s index holds the record `id` (tests).
@@ -321,7 +335,12 @@ impl Search {
             .contains(&entry.index, &id)
             .await
             .expect("the engine answers");
-        assert!(!found, "expected no {} {id} in the `{}` index", entry.settings.name(), entry.index);
+        assert!(
+            !found,
+            "expected no {} {id} in the `{}` index",
+            entry.settings.name(),
+            entry.index
+        );
     }
 
     /// The registered entry of `E`.
@@ -343,9 +362,7 @@ impl Search {
         self.inner
             .entries
             .iter()
-            .find(|e| {
-                e.settings.name().eq_ignore_ascii_case(name) || e.settings.index() == name
-            })
+            .find(|e| e.settings.name().eq_ignore_ascii_case(name) || e.settings.index() == name)
             .cloned()
             .ok_or_else(|| SearchError::UnknownIndex(name.to_owned()))
     }
@@ -495,20 +512,19 @@ impl Search {
         if let Some(vectors) = &self.inner.vectors
             && entry.settings.embed_fields().next().is_some()
         {
-            let texts: Vec<(String, Option<String>, BTreeMap<String, serde_json::Value>, String)> =
-                upserts
-                    .iter()
-                    .filter_map(|doc| {
-                        embedding_text(doc, &entry.settings).map(|text| {
-                            (
-                                doc.id().to_owned(),
-                                doc.workspace_id().map(str::to_owned),
-                                filter_payload(doc, &entry.settings),
-                                text,
-                            )
-                        })
+            let texts: Vec<crate::vector::EmbedRecord> = upserts
+                .iter()
+                .filter_map(|doc| {
+                    embedding_text(doc, &entry.settings).map(|text| {
+                        (
+                            doc.id().to_owned(),
+                            doc.workspace_id().map(str::to_owned),
+                            filter_payload(doc, &entry.settings),
+                            text,
+                        )
                     })
-                    .collect();
+                })
+                .collect();
             vectors.upsert(&entry.index, texts).await?;
             if !deletes.is_empty() {
                 vectors.delete(&entry.index, deletes).await?;
@@ -534,7 +550,10 @@ impl Search {
     }
 
     pub(crate) async fn push_entry_settings(&self, entry: &Entry) -> Result<(), SearchError> {
-        self.inner.engine.prepare(&entry.index, &entry.settings).await?;
+        self.inner
+            .engine
+            .prepare(&entry.index, &entry.settings)
+            .await?;
         if let Some(vectors) = &self.inner.vectors
             && entry.settings.embed_fields().next().is_some()
         {
@@ -593,7 +612,13 @@ impl Search {
                 let workspace_text = workspace.map(|w| w.to_string());
                 let chunk = entry
                     .ops
-                    .chunk(&ctx, &entry.settings, workspace_text.as_deref(), offset, chunk_size)
+                    .chunk(
+                        &ctx,
+                        &entry.settings,
+                        workspace_text.as_deref(),
+                        offset,
+                        chunk_size,
+                    )
                     .await;
                 self.finish_context(ctx).await;
                 let chunk = chunk?;
@@ -761,7 +786,10 @@ pub(crate) fn group_by_workspace(
     groups
 }
 
-fn make_engine(options: &SearchOptions, db: Option<&Db>) -> Result<Arc<dyn SearchEngine>, BoxError> {
+fn make_engine(
+    options: &SearchOptions,
+    db: Option<&Db>,
+) -> Result<Arc<dyn SearchEngine>, BoxError> {
     let timeout = std::time::Duration::from_secs(options.timeout_secs);
     Ok(match &options.engine {
         Engine::Postgres(pg) => {

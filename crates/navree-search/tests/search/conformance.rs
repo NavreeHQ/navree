@@ -47,12 +47,24 @@ async fn seed(engine: &dyn SearchEngine, index: &str) {
     engine.drop_index(index).await.unwrap();
     engine.prepare(index, &settings).await.unwrap();
     let docs = vec![
-        doc("1", "Lovelace renewal", "Analytical Engines", "negotiation", 5_000)
-            .field("closes", 1_000)
-            .workspace("w1"),
-        doc("2", "Babbage expansion", "Lovelace Analytics", "won", 12_000)
-            .field("closes", 3_000)
-            .workspace("w1"),
+        doc(
+            "1",
+            "Lovelace renewal",
+            "Analytical Engines",
+            "negotiation",
+            5_000,
+        )
+        .field("closes", 1_000)
+        .workspace("w1"),
+        doc(
+            "2",
+            "Babbage expansion",
+            "Lovelace Analytics",
+            "won",
+            12_000,
+        )
+        .field("closes", 3_000)
+        .workspace("w1"),
         doc("3", "Hopper <migration>", "Navy & Co", "negotiation", 900).workspace("w1"),
         doc("4", "Turing audit", "Bletchley", "lost", 2_000)
             .field("closes", 2_000)
@@ -118,7 +130,16 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     assert_eq!(sorted(ids(&all)), ["1", "2", "3", "4", "5"]);
 
     // Every word must match; the last one may be a prefix.
-    let found = search(engine, index, "lovelace ren", Filter::Const(true), &[], 0, 10).await;
+    let found = search(
+        engine,
+        index,
+        "lovelace ren",
+        Filter::Const(true),
+        &[],
+        0,
+        10,
+    )
+    .await;
     assert_eq!(ids(&found), ["1"]);
     let found = search(engine, index, "lov", Filter::Const(true), &[], 0, 10).await;
     assert_eq!(sorted(ids(&found)), ["1", "2", "5"]);
@@ -148,15 +169,36 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     assert_eq!(sorted(ids(&won)), ["2", "5"]);
     let not_won = search(engine, index, "", Filter::ne("stage", "won"), &[], 0, 10).await;
     assert_eq!(sorted(ids(&not_won)), ["1", "3", "4"]);
-    let some = search(engine, index, "", Filter::is_in("stage", ["lost", "won"]), &[], 0, 10).await;
+    let some = search(
+        engine,
+        index,
+        "",
+        Filter::is_in("stage", ["lost", "won"]),
+        &[],
+        0,
+        10,
+    )
+    .await;
     assert_eq!(sorted(ids(&some)), ["2", "4", "5"]);
-    let range = search(engine, index, "", Filter::range("amount", 2_000..=7_000), &[], 0, 10).await;
+    let range = search(
+        engine,
+        index,
+        "",
+        Filter::range("amount", 2_000..=7_000),
+        &[],
+        0,
+        10,
+    )
+    .await;
     assert_eq!(sorted(ids(&range)), ["1", "4", "5"]);
     let combined = search(
         engine,
         index,
         "lovelace",
-        Filter::All(vec![Filter::eq("stage", "won"), Filter::range("amount", ..10_000)]),
+        Filter::All(vec![
+            Filter::eq("stage", "won"),
+            Filter::range("amount", ..10_000),
+        ]),
         &[],
         0,
         10,
@@ -167,16 +209,37 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
         engine,
         index,
         "",
-        Filter::Any(vec![Filter::eq("stage", "lost"), Filter::range("amount", 10_000..)]),
+        Filter::Any(vec![
+            Filter::eq("stage", "lost"),
+            Filter::range("amount", 10_000..),
+        ]),
         &[],
         0,
         10,
     )
     .await;
     assert_eq!(sorted(ids(&either)), ["2", "4"]);
-    let workspace = search(engine, index, "", Filter::eq(WORKSPACE_FIELD, "w2"), &[], 0, 10).await;
+    let workspace = search(
+        engine,
+        index,
+        "",
+        Filter::eq(WORKSPACE_FIELD, "w2"),
+        &[],
+        0,
+        10,
+    )
+    .await;
     assert_eq!(sorted(ids(&workspace)), ["4", "5"]);
-    let nothing = search(engine, index, "lovelace", Filter::eq("stage", "lost"), &[], 0, 10).await;
+    let nothing = search(
+        engine,
+        index,
+        "lovelace",
+        Filter::eq("stage", "lost"),
+        &[],
+        0,
+        10,
+    )
+    .await;
     assert_eq!(nothing.total, 0);
     if caps.nulls {
         let open = search(engine, index, "", Filter::null("closes"), &[], 0, 10).await;
@@ -238,7 +301,13 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
         .upsert(
             index,
             &settings,
-            vec![doc("1", "Lovelace renewal 2027", "Analytical Engines", "won", 5_000)],
+            vec![doc(
+                "1",
+                "Lovelace renewal 2027",
+                "Analytical Engines",
+                "won",
+                5_000,
+            )],
         )
         .await
         .unwrap();
@@ -256,11 +325,18 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     engine.drop_index(staged).await.unwrap();
     engine.prepare(staged, &settings).await.unwrap();
     engine
-        .upsert(staged, &settings, vec![doc("9", "Fresh start", "New Co", "won", 1)])
+        .upsert(
+            staged,
+            &settings,
+            vec![doc("9", "Fresh start", "New Co", "won", 1)],
+        )
         .await
         .unwrap();
     let before = search(engine, index, "fresh", Filter::Const(true), &[], 0, 10).await;
-    assert_eq!(before.total, 0, "the staged index is not live before the swap");
+    assert_eq!(
+        before.total, 0,
+        "the staged index is not live before the swap"
+    );
     engine.swap(index, staged).await.unwrap();
     let after = search(engine, index, "", Filter::Const(true), &[], 0, 10).await;
     assert_eq!(ids(&after), ["9"]);
@@ -319,7 +395,8 @@ async fn tantivy_engine_conforms() {
 
 #[tokio::test]
 async fn meilisearch_server_conforms() {
-    let Some(url) = support::service("NAVREE_TEST_MEILISEARCH_URL", "meilisearch_server_conforms") else {
+    let Some(url) = support::service("NAVREE_TEST_MEILISEARCH_URL", "meilisearch_server_conforms")
+    else {
         return;
     };
     let key = std::env::var("NAVREE_TEST_MEILISEARCH_KEY").ok();
@@ -338,7 +415,8 @@ async fn meilisearch_server_conforms() {
 
 #[tokio::test]
 async fn typesense_server_conforms() {
-    let Some(url) = support::service("NAVREE_TEST_TYPESENSE_URL", "typesense_server_conforms") else {
+    let Some(url) = support::service("NAVREE_TEST_TYPESENSE_URL", "typesense_server_conforms")
+    else {
         return;
     };
     let key = std::env::var("NAVREE_TEST_TYPESENSE_KEY").unwrap_or_default();

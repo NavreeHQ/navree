@@ -25,7 +25,13 @@ fn record(id: &str, vector: [f32; 3], stage: &str, workspace: &str) -> VectorRec
     }
 }
 
-async fn nearest(store: &dyn VectorStore, index: &str, to: [f32; 3], filter: Filter, limit: u64) -> Vec<String> {
+async fn nearest(
+    store: &dyn VectorStore,
+    index: &str,
+    to: [f32; 3],
+    filter: Filter,
+    limit: u64,
+) -> Vec<String> {
     let found = store
         .nearest(index, &to, &filter.normalized(), limit)
         .await
@@ -33,7 +39,10 @@ async fn nearest(store: &dyn VectorStore, index: &str, to: [f32; 3], filter: Fil
     for pair in found.windows(2) {
         assert!(pair[0].score >= pair[1].score, "nearest first: {found:?}");
     }
-    assert!(found.iter().all(|m| (0.0..=1.0).contains(&m.score)), "{found:?}");
+    assert!(
+        found.iter().all(|m| (0.0..=1.0).contains(&m.score)),
+        "{found:?}"
+    );
     found.into_iter().map(|m| m.id).collect()
 }
 
@@ -58,17 +67,33 @@ pub async fn vector_suite(store: Arc<dyn VectorStore>) {
 
     // Nearest first, filtered by payload values, limited.
     let to = [1.0, 0.05, 0.0];
-    assert_eq!(nearest(store, index, to, Filter::Const(true), 10).await, ["1", "2", "3"]);
-    assert_eq!(nearest(store, index, to, Filter::eq("stage", "won"), 10).await, ["1", "3"]);
-    assert_eq!(nearest(store, index, to, Filter::ne("stage", "won"), 10).await, ["2"]);
-    assert_eq!(nearest(store, index, to, Filter::Const(true), 1).await, ["1"]);
+    assert_eq!(
+        nearest(store, index, to, Filter::Const(true), 10).await,
+        ["1", "2", "3"]
+    );
+    assert_eq!(
+        nearest(store, index, to, Filter::eq("stage", "won"), 10).await,
+        ["1", "3"]
+    );
+    assert_eq!(
+        nearest(store, index, to, Filter::ne("stage", "won"), 10).await,
+        ["2"]
+    );
+    assert_eq!(
+        nearest(store, index, to, Filter::Const(true), 1).await,
+        ["1"]
+    );
     assert_eq!(
         nearest(store, index, to, Filter::eq(WORKSPACE_FIELD, "w2"), 10).await,
         ["3"]
     );
 
     // A record's vector comes back.
-    let vector = store.get(index, "2").await.unwrap().expect("record 2 is stored");
+    let vector = store
+        .get(index, "2")
+        .await
+        .unwrap()
+        .expect("record 2 is stored");
     assert_eq!(vector.len(), 3);
     for (got, want) in vector.iter().zip([0.8f32, 0.3, 0.0]) {
         assert!((got - want).abs() < 1e-5, "{vector:?}");
@@ -89,10 +114,17 @@ pub async fn vector_suite(store: Arc<dyn VectorStore>) {
         .await
         .unwrap();
     assert_eq!(store.get(index, "1").await.unwrap(), None);
-    assert_eq!(nearest(store, index, to, Filter::Const(true), 10).await, ["2", "3"]);
+    assert_eq!(
+        nearest(store, index, to, Filter::Const(true), 10).await,
+        ["2", "3"]
+    );
     store.flush(index).await.unwrap();
     store.prepare(index).await.unwrap();
-    assert!(nearest(store, index, to, Filter::Const(true), 10).await.is_empty());
+    assert!(
+        nearest(store, index, to, Filter::Const(true), 10)
+            .await
+            .is_empty()
+    );
 }
 
 #[tokio::test]

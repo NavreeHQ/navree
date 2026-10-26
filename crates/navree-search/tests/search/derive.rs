@@ -17,7 +17,11 @@ fn field<'a>(fields: &'a [FieldSettings], name: &str) -> &'a FieldSettings {
 fn the_derive_reads_field_and_model_attributes() {
     let settings = Contact::settings();
     assert_eq!(settings.name(), "Contact");
-    assert_eq!(settings.index(), "contacts", "the index defaults to the table");
+    assert_eq!(
+        settings.index(),
+        "contacts",
+        "the index defaults to the table"
+    );
     assert_eq!(settings.soft_delete_column(), Some("deleted_at"));
     assert_eq!(settings.workspace_column(), None);
     let fields = settings.fields();
@@ -76,10 +80,16 @@ async fn the_derived_document_holds_the_key_and_marked_fields() {
     let ctx = search_context(&app, tx).await;
     let document = Contact::document(&model, &ctx).await.unwrap().unwrap();
     assert_eq!(document.id(), id.to_string());
-    assert_eq!(document.get("email_address"), Some(&json!("ada@lovelace.io")));
+    assert_eq!(
+        document.get("email_address"),
+        Some(&json!("ada@lovelace.io"))
+    );
     assert_eq!(document.get("title"), Some(&json!(null)));
     assert_eq!(document.get("score"), Some(&json!(7)));
-    assert_eq!(document.get("created_at"), Some(&json!("2026-10-26T12:00:00Z")));
+    assert_eq!(
+        document.get("created_at"),
+        Some(&json!("2026-10-26T12:00:00Z"))
+    );
     assert_eq!(document.get("deleted_at"), None);
     drop(search);
 }

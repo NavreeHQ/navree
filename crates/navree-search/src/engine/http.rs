@@ -88,9 +88,7 @@ impl Api {
     ) -> Result<Response, SearchError> {
         let mut last = String::from("no node configured");
         for node in &self.nodes {
-            let mut request = self
-                .client
-                .request(method.clone(), format!("{node}{path}"));
+            let mut request = self.client.request(method.clone(), format!("{node}{path}"));
             request = match &self.auth {
                 Auth::Bearer(Some(key)) => request.bearer(key),
                 Auth::Header(name, Some(key)) => request.header(*name, key.as_str()),

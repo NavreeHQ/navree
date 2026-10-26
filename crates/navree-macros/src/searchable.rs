@@ -204,9 +204,16 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
             match key_name(&meta.path).as_str() {
                 "boost" => {
                     let value: LitInt = meta.value()?.parse()?;
-                    let n: u8 = value.base10_parse().ok().filter(|n| (1..=10).contains(n)).ok_or_else(
-                        || syn::Error::new(value.span(), "the boost is a whole number from 1 to 10"),
-                    )?;
+                    let n: u8 = value
+                        .base10_parse()
+                        .ok()
+                        .filter(|n| (1..=10).contains(n))
+                        .ok_or_else(|| {
+                            syn::Error::new(
+                                value.span(),
+                                "the boost is a whole number from 1 to 10",
+                            )
+                        })?;
                     boost = Some(n);
                 }
                 "filter" => filter = true,
@@ -241,7 +248,9 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
             let value = rename.value();
             if value.is_empty()
                 || value.starts_with('_')
-                || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !value
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
             {
                 return Err(syn::Error::new(
                     rename.span(),
@@ -284,12 +293,18 @@ mod tests {
 
     #[test]
     fn fields_without_the_attribute_stay_out() {
-        assert!(field(quote!(pub updated_at: DateTimeUtc)).unwrap().is_none());
+        assert!(
+            field(quote!(pub updated_at: DateTimeUtc))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn a_plain_attribute_is_a_text_field_of_weight_one() {
-        let args = field(quote!(#[searchable] pub phone: Option<String>)).unwrap().unwrap();
+        let args = field(quote!(#[searchable] pub phone: Option<String>))
+            .unwrap()
+            .unwrap();
         assert_eq!((args.name.as_str(), args.boost), ("phone", Some(1)));
         let args = field(quote!(#[searchable(rename = "email_address")] pub email: String))
             .unwrap()
@@ -307,7 +322,9 @@ mod tests {
             .unwrap();
         assert_eq!(args.boost, Some(2));
         assert!(args.embed && !args.filter);
-        let args = field(quote!(#[searchable(filter, sort)] pub score: i64)).unwrap().unwrap();
+        let args = field(quote!(#[searchable(filter, sort)] pub score: i64))
+            .unwrap()
+            .unwrap();
         assert!(args.filter && args.sort && args.boost.is_none());
     }
 
@@ -315,9 +332,17 @@ mod tests {
     fn mistakes_are_reported() {
         assert!(error(quote!(#[searchable(boost = 11)] pub a: String)).contains("1 to 10"));
         assert!(error(quote!(#[searchable(boost = 0)] pub a: String)).contains("1 to 10"));
-        assert!(error(quote!(#[searchable(fuzzy)] pub a: String)).contains("unknown #[searchable] field argument `fuzzy`"));
-        assert!(error(quote!(#[searchable(rename = "_x")] pub a: String)).contains("letters, digits"));
-        assert!(error(quote!(#[searchable] #[searchable(filter)] pub a: String)).contains("one #[searchable(..)]"));
+        assert!(
+            error(quote!(#[searchable(fuzzy)] pub a: String))
+                .contains("unknown #[searchable] field argument `fuzzy`")
+        );
+        assert!(
+            error(quote!(#[searchable(rename = "_x")] pub a: String)).contains("letters, digits")
+        );
+        assert!(
+            error(quote!(#[searchable] #[searchable(filter)] pub a: String))
+                .contains("one #[searchable(..)]")
+        );
     }
 
     #[test]
@@ -333,24 +358,54 @@ mod tests {
         assert_eq!(args.soft_delete.unwrap().value(), "deleted_at");
         assert_eq!(args.workspace.unwrap().value(), "team_id");
 
-        let input: DeriveInput =
-            syn::parse2(quote!(#[searchable(table = "x")] struct Model { id: u32 })).unwrap();
+        let input: DeriveInput = syn::parse2(quote!(
+            #[searchable(table = "x")]
+            struct Model {
+                id: u32,
+            }
+        ))
+        .unwrap();
         let error = parse_model_args(&input).err().unwrap().to_string();
-        assert!(error.contains("unknown #[searchable] model argument `table`"), "{error}");
-        let input: DeriveInput =
-            syn::parse2(quote!(#[searchable(name = "")] struct Model { id: u32 })).unwrap();
+        assert!(
+            error.contains("unknown #[searchable] model argument `table`"),
+            "{error}"
+        );
+        let input: DeriveInput = syn::parse2(quote!(
+            #[searchable(name = "")]
+            struct Model {
+                id: u32,
+            }
+        ))
+        .unwrap();
         assert!(parse_model_args(&input).is_err());
     }
 
     #[test]
     fn enums_and_tuple_structs_are_refused() {
-        let error = try_expand(quote!(enum Model { A })).unwrap_err().to_string();
+        let error = try_expand(quote!(
+            enum Model {
+                A,
+            }
+        ))
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("SeaORM model struct"), "{error}");
-        let error = try_expand(quote!(struct Model(u32);)).unwrap_err().to_string();
+        let error = try_expand(quote!(
+            struct Model(u32);
+        ))
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("named fields"), "{error}");
-        let error = try_expand(quote!(struct Model { #[searchable] a: String, #[searchable(rename = "a")] b: String }))
-            .unwrap_err()
-            .to_string();
+        let error = try_expand(quote!(
+            struct Model {
+                #[searchable]
+                a: String,
+                #[searchable(rename = "a")]
+                b: String,
+            }
+        ))
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("two fields are indexed as `a`"), "{error}");
     }
 }

@@ -50,7 +50,14 @@ async fn paginate_returns_models_in_relevance_order() {
             "{engine}: the last name outranks the email"
         );
         assert_eq!(page.meta.total, 2);
-        assert_eq!((page.meta.current_page, page.meta.per_page, page.meta.last_page), (1, 15, 1));
+        assert_eq!(
+            (
+                page.meta.current_page,
+                page.meta.per_page,
+                page.meta.last_page
+            ),
+            (1, 15, 1)
+        );
 
         let second = search
             .query::<Contact>("")
@@ -81,7 +88,10 @@ async fn hits_carry_scores_and_highlights() {
     let json = serde_json::to_value(&page).unwrap();
     assert_eq!(json["data"][0]["first_name"], "Ada");
     assert!(json["data"][0]["_score"].is_number());
-    assert_eq!(json["data"][0]["_highlights"]["last_name"], "<mark>Lovelace</mark>");
+    assert_eq!(
+        json["data"][0]["_highlights"]["last_name"],
+        "<mark>Lovelace</mark>"
+    );
 
     let page = search
         .query::<Contact>("countess")
@@ -181,7 +191,9 @@ async fn rules_on_unindexed_columns_filter_the_loaded_rows() {
     let (app, _, rows) = seeded("memory").await;
     let search = app.get::<Search>().await;
     let mut rules = Rules::new();
-    rules.can(READ, "Contact").when(field("last_name").eq("Hopper"));
+    rules
+        .can(READ, "Contact")
+        .when(field("last_name").eq("Hopper"));
     let scope = Accessible::<Contact, Read>::new(Arc::new(rules.build()));
     let page = search
         .query::<Contact>("")
@@ -220,7 +232,10 @@ async fn workspace_scoped_indexes_need_a_workspace() {
     .await;
     settle(&app).await;
     let error = search.query::<Company>("acme").ids(10).await.unwrap_err();
-    assert!(matches!(error, SearchError::WorkspaceRequired { .. }), "{error}");
+    assert!(
+        matches!(error, SearchError::WorkspaceRequired { .. }),
+        "{error}"
+    );
     let found = search
         .query::<Company>("acme")
         .workspace(w2)
@@ -238,7 +253,11 @@ async fn date_ranges_and_sorts_compare_dates() {
     let date = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
     let deals = support::in_uow(&db, async |uow| {
         let mut out = Vec::new();
-        for (title, closes) in [("Q4 renewal", Some("2026-12-01")), ("Q1 renewal", Some("2027-02-01")), ("Open renewal", None)] {
+        for (title, closes) in [
+            ("Q4 renewal", Some("2026-12-01")),
+            ("Q1 renewal", Some("2027-02-01")),
+            ("Open renewal", None),
+        ] {
             out.push(
                 Repo::<Deal>::insert(
                     uow,
@@ -275,7 +294,11 @@ async fn date_ranges_and_sorts_compare_dates() {
         .unwrap();
     assert_eq!(
         by_close,
-        [deals[1].id.to_string(), deals[0].id.to_string(), deals[2].id.to_string()]
+        [
+            deals[1].id.to_string(),
+            deals[0].id.to_string(),
+            deals[2].id.to_string()
+        ]
     );
 }
 
@@ -330,13 +353,18 @@ async fn across_merges_indexes_by_score() {
     let uow = db.uow(None, None).await;
     let loaded = ada.load::<Contact>(&uow).await.unwrap().unwrap();
     assert_eq!(loaded.last_name, "Lovelace");
-    assert!(ada.load::<Deal>(&uow).await.unwrap().is_none(), "another kind");
+    assert!(
+        ada.load::<Deal>(&uow).await.unwrap().is_none(),
+        "another kind"
+    );
     uow.rollback().await.unwrap();
 
     let limited = search
         .across("lovelace")
         .include(Accessible::<Contact, Read>::new(all("Contact")))
-        .include(Accessible::<Deal, Read>::new(Arc::new(Rules::new().build())))
+        .include(Accessible::<Deal, Read>::new(Arc::new(
+            Rules::new().build(),
+        )))
         .limit(1)
         .run()
         .await

@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
-use sea_orm::DatabaseTransaction;
 use navree_kernel::{AppContext, WeakAppContext};
+use sea_orm::DatabaseTransaction;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 

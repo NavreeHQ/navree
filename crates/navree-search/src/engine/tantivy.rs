@@ -109,7 +109,8 @@ impl TantivyEngine {
         };
         std::fs::create_dir_all(&generation).map_err(|e| io_error(&generation, &e))?;
         let (schema, fields) = schema();
-        let directory = tantivy::directory::MmapDirectory::open(&generation).map_err(tantivy_error)?;
+        let directory =
+            tantivy::directory::MmapDirectory::open(&generation).map_err(tantivy_error)?;
         let tantivy_index = Index::open_or_create(directory, schema).map_err(tantivy_error)?;
         let writer = tantivy_index
             .writer(self.memory_budget)
@@ -196,7 +197,10 @@ fn text_query(terms: &QueryTerms, fields: &Fields, settings: &IndexSettings) -> 
         return Box::new(AllQuery);
     }
     let boosts: Vec<u8> = {
-        let mut b: Vec<u8> = settings.text_fields().map(|(_, b)| b.clamp(1, 10)).collect();
+        let mut b: Vec<u8> = settings
+            .text_fields()
+            .map(|(_, b)| b.clamp(1, 10))
+            .collect();
         b.sort_unstable();
         b.dedup();
         b
@@ -233,13 +237,22 @@ fn term_queries(term: &QueryTerm, field: Field) -> Vec<(Box<dyn Query>, f32)> {
         1.0,
     )];
     if term.prefix {
-        out.push((Box::new(FuzzyTermQuery::new_prefix(exact.clone(), 0, true)), 0.9));
+        out.push((
+            Box::new(FuzzyTermQuery::new_prefix(exact.clone(), 0, true)),
+            0.9,
+        ));
     }
     let budget = u8::try_from(typo_budget(term.word.chars().count())).unwrap_or(2);
     if budget > 0 {
-        out.push((Box::new(FuzzyTermQuery::new(exact.clone(), budget, true)), 0.7));
+        out.push((
+            Box::new(FuzzyTermQuery::new(exact.clone(), budget, true)),
+            0.7,
+        ));
         if term.prefix {
-            out.push((Box::new(FuzzyTermQuery::new_prefix(exact, budget, true)), 0.5));
+            out.push((
+                Box::new(FuzzyTermQuery::new_prefix(exact, budget, true)),
+                0.5,
+            ));
         }
     }
     for synonym in &term.synonyms {
@@ -248,7 +261,10 @@ fn term_queries(term: &QueryTerm, field: Field) -> Vec<(Box<dyn Query>, f32)> {
             .map(|w| Term::from_field_text(field, w))
             .collect();
         let query: Box<dyn Query> = if terms.len() == 1 {
-            Box::new(TermQuery::new(terms[0].clone(), IndexRecordOption::WithFreqs))
+            Box::new(TermQuery::new(
+                terms[0].clone(),
+                IndexRecordOption::WithFreqs,
+            ))
         } else {
             Box::new(PhraseQuery::new(terms))
         };
@@ -384,7 +400,9 @@ impl SearchEngine for TantivyEngine {
             let searcher = handle.reader.searcher();
             let fields = handle.fields;
             let tantivy_query = text_query(&terms, &fields, settings);
-            let limit = usize::try_from(searcher.num_docs()).unwrap_or(usize::MAX).max(1);
+            let limit = usize::try_from(searcher.num_docs())
+                .unwrap_or(usize::MAX)
+                .max(1);
             let found = searcher
                 .search(&tantivy_query, &TopDocs::with_limit(limit).order_by_score())
                 .map_err(tantivy_error)?;

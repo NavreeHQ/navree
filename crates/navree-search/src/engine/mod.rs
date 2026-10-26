@@ -108,8 +108,11 @@ pub trait SearchEngine: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<(), SearchError>>;
 
     /// Removes the documents with these ids (unknown ids are ignored).
-    fn delete<'a>(&'a self, index: &'a str, ids: &'a [String])
-    -> BoxFuture<'a, Result<(), SearchError>>;
+    fn delete<'a>(
+        &'a self,
+        index: &'a str,
+        ids: &'a [String],
+    ) -> BoxFuture<'a, Result<(), SearchError>>;
 
     /// Removes every document.
     fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>>;
@@ -119,8 +122,11 @@ pub trait SearchEngine: Send + Sync + 'static {
 
     /// Makes the documents of `staged` (a prepared index) the documents of
     /// `index` in one step and removes `staged`.
-    fn swap<'a>(&'a self, index: &'a str, staged: &'a str)
-    -> BoxFuture<'a, Result<(), SearchError>>;
+    fn swap<'a>(
+        &'a self,
+        index: &'a str,
+        staged: &'a str,
+    ) -> BoxFuture<'a, Result<(), SearchError>>;
 
     /// Runs a search.
     fn search<'a>(
@@ -133,13 +139,20 @@ pub trait SearchEngine: Send + Sync + 'static {
     fn count<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<u64, SearchError>>;
 
     /// Whether `index` holds a document with this id.
-    fn contains<'a>(&'a self, index: &'a str, id: &'a str)
-    -> BoxFuture<'a, Result<bool, SearchError>>;
+    fn contains<'a>(
+        &'a self,
+        index: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<bool, SearchError>>;
 }
 
 /// Compares two documents' values of a sort field: values of the same type
 /// in their order, documents without a value last (in both directions).
-pub(crate) fn compare_sort_values(a: Option<&Value>, b: Option<&Value>, descending: bool) -> Ordering {
+pub(crate) fn compare_sort_values(
+    a: Option<&Value>,
+    b: Option<&Value>,
+    descending: bool,
+) -> Ordering {
     let a = a.filter(|v| !v.is_null());
     let b = b.filter(|v| !v.is_null());
     match (a, b) {

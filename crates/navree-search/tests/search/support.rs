@@ -210,7 +210,8 @@ impl MigrationTrait for CreateTables {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let conn = manager.get_connection();
         for table in ["contacts", "companies", "deals"] {
-            conn.execute_unprepared(&format!("DROP TABLE {table}")).await?;
+            conn.execute_unprepared(&format!("DROP TABLE {table}"))
+                .await?;
         }
         Ok(())
     }

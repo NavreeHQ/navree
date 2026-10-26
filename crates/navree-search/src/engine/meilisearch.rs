@@ -29,7 +29,12 @@ impl MeilisearchEngine {
     /// The engine for the server at `url`, authenticating with `key`.
     pub fn new(url: &str, key: Option<String>, timeout: Duration) -> Result<Self, BoxError> {
         Ok(Self {
-            api: Api::new("meilisearch", vec![url.to_owned()], Auth::Bearer(key), timeout)?,
+            api: Api::new(
+                "meilisearch",
+                vec![url.to_owned()],
+                Auth::Bearer(key),
+                timeout,
+            )?,
             task_timeout: timeout * 6,
         })
     }
@@ -37,7 +42,12 @@ impl MeilisearchEngine {
     /// The engine on a given HTTP client (a fake in tests).
     pub fn with_client(url: &str, key: Option<String>, client: HttpClient) -> Self {
         Self {
-            api: Api::with_client("meilisearch", vec![url.to_owned()], Auth::Bearer(key), client),
+            api: Api::with_client(
+                "meilisearch",
+                vec![url.to_owned()],
+                Auth::Bearer(key),
+                client,
+            ),
             task_timeout: Duration::from_secs(30),
         }
     }
@@ -79,7 +89,12 @@ impl MeilisearchEngine {
         }
     }
 
-    async fn task(&self, method: Method, path: &str, body: Option<Body>) -> Result<(), SearchError> {
+    async fn task(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Body>,
+    ) -> Result<(), SearchError> {
         let answer = self.api.json(method, path, body.as_ref()).await?;
         self.wait(answer).await
     }
@@ -87,7 +102,12 @@ impl MeilisearchEngine {
     async fn exists(&self, index: &str) -> Result<bool, SearchError> {
         let response = self
             .api
-            .send(Method::GET, &format!("/indexes/{}", encode(index)), None, &[404])
+            .send(
+                Method::GET,
+                &format!("/indexes/{}", encode(index)),
+                None,
+                &[404],
+            )
             .await?;
         Ok(response.status().as_u16() != 404)
     }
@@ -103,7 +123,7 @@ impl std::fmt::Debug for MeilisearchEngine {
 pub(crate) fn index_settings(settings: &IndexSettings) -> Value {
     let mut text: Vec<(&str, u8)> = settings.text_fields().collect();
     // Meilisearch ranks attributes by their order: heaviest first.
-    text.sort_by(|a, b| b.1.cmp(&a.1));
+    text.sort_by_key(|field| std::cmp::Reverse(field.1));
     let mut filterable: Vec<&str> = settings
         .fields()
         .iter()
@@ -313,11 +333,7 @@ impl SearchEngine for MeilisearchEngine {
             if let Some(title) = title {
                 retrieve.push(title.to_owned());
             }
-            let page = if query.limit == 0 {
-                1
-            } else {
-                query.offset / query.limit + 1
-            };
+            let page = query.offset.checked_div(query.limit).map_or(1, |p| p + 1);
             let mut body = json!({
                 "q": query.text,
                 "hitsPerPage": query.limit,

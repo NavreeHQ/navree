@@ -106,12 +106,13 @@ async fn invalid_configuration_fails_the_boot_naming_the_key() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_postgres_engine_needs_the_database() {
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .module(SearchModule::for_root(Engine::postgres()))
         .try_build()
         .await
-        .err()
-        .expect("no database");
+    else {
+        panic!("the boot succeeded without a database");
+    };
     assert!(error.to_string().contains("DatabaseModule"), "{error}");
 }
 
@@ -165,7 +166,7 @@ async fn two_entities_cannot_share_an_index() {
             m.import(SearchModule::for_feature::<person::Entity>());
         }
     }
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .temp_database()
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(Engine::memory()))
@@ -173,9 +174,15 @@ async fn two_entities_cannot_share_an_index() {
         .module(People)
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
-    assert!(error.to_string().contains("both use the search index `contacts`"), "{error}");
+    else {
+        panic!("the boot succeeded with a shared index");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("both use the search index `contacts`"),
+        "{error}"
+    );
 }
 
 #[cfg(feature = "tantivy")]
@@ -183,16 +190,17 @@ async fn two_entities_cannot_share_an_index() {
 async fn an_app_on_tantivy_syncs_and_searches() {
     let dir = tempfile::tempdir().unwrap();
     let app = crate::support::builder("tantivy", "inline")
-        .config("search.tantivy.path", dir.path().to_string_lossy().to_string())
+        .config(
+            "search.tantivy.path",
+            dir.path().to_string_lossy().to_string(),
+        )
         .config("search.tantivy.memory_budget_mb", 15)
         .build()
         .await;
     let db = app.get::<navree_db::Db>().await;
-    let rows = crate::support::insert_contacts(
-        &db,
-        vec![crate::support::new_contact("Ada", "Lovelace")],
-    )
-    .await;
+    let rows =
+        crate::support::insert_contacts(&db, vec![crate::support::new_contact("Ada", "Lovelace")])
+            .await;
     crate::support::settle(&app).await;
     let search = app.get::<Search>().await;
     assert_eq!(search.engine().name(), "tantivy");
@@ -202,7 +210,11 @@ async fn an_app_on_tantivy_syncs_and_searches() {
         .await
         .unwrap();
     assert_eq!(found, [rows[0].id.to_string()]);
-    app.run_command("search:import", &["Contact", "--fresh"]).await.unwrap();
-    search.assert_indexed::<crate::support::Contact>(rows[0].id).await;
+    app.run_command("search:import", &["Contact", "--fresh"])
+        .await
+        .unwrap();
+    search
+        .assert_indexed::<crate::support::Contact>(rows[0].id)
+        .await;
     app.shutdown().await.unwrap();
 }

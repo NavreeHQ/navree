@@ -147,11 +147,7 @@ impl QueryTerms {
     ) -> QueryTerms {
         let stop: Vec<String> = stop_words.iter().map(|w| w.to_lowercase()).collect();
         let all = words(text);
-        let kept: Vec<String> = all
-            .iter()
-            .filter(|w| !stop.contains(w))
-            .cloned()
-            .collect();
+        let kept: Vec<String> = all.iter().filter(|w| !stop.contains(w)).cloned().collect();
         // A query made only of stop words still searches for them.
         let kept = if kept.is_empty() { all } else { kept };
         let last = kept.len().saturating_sub(1);
@@ -379,7 +375,11 @@ mod tests {
         assert_eq!(match_quality("lov", "lovelace", true), 0.9);
         assert_eq!(match_quality("lov", "lovelace", false), 0.0);
         assert_eq!(match_quality("lovlace", "lovelace", false), 0.7);
-        assert_eq!(match_quality("ada", "adb", false), 0.0, "short words need exact");
+        assert_eq!(
+            match_quality("ada", "adb", false),
+            0.0,
+            "short words need exact"
+        );
         assert_eq!(match_quality("lovek", "lovelace", true), 0.5);
     }
 

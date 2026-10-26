@@ -25,7 +25,10 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .filter_in("owner_id", [uuid::Uuid::nil()])
         .range("score", 10..20)
         .filter_null("score")
-        .filter_by(Filter::Any(vec![Filter::eq("status", "a"), Filter::null("status")]))
+        .filter_by(Filter::Any(vec![
+            Filter::eq("status", "a"),
+            Filter::null("status"),
+        ]))
         .sort_asc("score")
         .sort_desc("created_at")
         .accessible(scope.clone())
@@ -44,7 +47,11 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .accessible(scope.clone())
         .limit(10);
     let _: Result<Vec<Hit<contact::Model>>, SearchError> = similar.run().await;
-    let _ = search.similar_to::<Contact>(uuid::Uuid::nil()).limit(5).run().await;
+    let _ = search
+        .similar_to::<Contact>(uuid::Uuid::nil())
+        .limit(5)
+        .run()
+        .await;
 
     let across: AcrossQuery = search.across("ada").include::<Contact>(scope).limit(10);
     let hits: Vec<AcrossHit> = across.run().await.unwrap();
@@ -61,7 +68,9 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
     let _: u8 = search.without_syncing(async { 1u8 }).await;
     let _: Result<(), SearchError> = search.flush_pending().await;
     search.assert_indexed::<Contact>(uuid::Uuid::nil()).await;
-    search.assert_not_indexed::<Contact>(uuid::Uuid::nil()).await;
+    search
+        .assert_not_indexed::<Contact>(uuid::Uuid::nil())
+        .await;
     let _: &Arc<dyn SearchEngine> = search.engine();
     let _: &SearchOptions = search.options();
 }
@@ -89,7 +98,11 @@ fn the_documented_names_exist() {
         );
     }
     assert_eq!(SyncMode::default(), SyncMode::Queued);
-    let _ = [VectorStoreKind::Pgvector, VectorStoreKind::Qdrant, VectorStoreKind::Memory];
+    let _ = [
+        VectorStoreKind::Pgvector,
+        VectorStoreKind::Qdrant,
+        VectorStoreKind::Memory,
+    ];
 
     // Settings and documents.
     let settings = IndexSettings::new("Deal", "deals")
@@ -106,7 +119,10 @@ fn the_documented_names_exist() {
 
     // The job, tables and migration set.
     assert_eq!(SYNC_JOB, "search.sync");
-    assert_eq!(<SyncDocuments as navree_contracts::Job>::NAME, "search.sync");
+    assert_eq!(
+        <SyncDocuments as navree_contracts::Job>::NAME,
+        "search.sync"
+    );
     assert_eq!(SEARCH_MIGRATIONS, "search");
     assert_eq!(
         (DOCUMENTS_TABLE, FTS_TABLE, VECTORS_TABLE),
@@ -127,12 +143,23 @@ async fn the_documented_commands_and_config_keys_exist() {
         .config("search.postgres.trigram", false)
         .config("search.tantivy.path", "storage/search")
         .config("search.tantivy.memory_budget_mb", 64)
-        .config("search.indexes.companies.synonyms", serde_json::json!({"acme": ["acme corp"]}))
-        .config("search.indexes.companies.stop_words", serde_json::json!(["inc"]))
+        .config(
+            "search.indexes.companies.synonyms",
+            serde_json::json!({"acme": ["acme corp"]}),
+        )
+        .config(
+            "search.indexes.companies.stop_words",
+            serde_json::json!(["inc"]),
+        )
         .build()
         .await;
     let commands: Vec<&str> = app.ctx().commands().iter().map(|c| c.name).collect();
-    for name in ["search:import", "search:flush", "search:settings", "search:status"] {
+    for name in [
+        "search:import",
+        "search:flush",
+        "search:settings",
+        "search:status",
+    ] {
         assert!(commands.contains(&name), "{name} missing from {commands:?}");
     }
     let options = app.get::<SearchOptions>().await;

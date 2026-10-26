@@ -73,7 +73,9 @@ async fn meilisearch_creates_indexes_and_pushes_settings() {
     Mock::given(method("POST"))
         .and(path("/indexes"))
         .and(header("authorization", "Bearer masterKey"))
-        .and(body_partial_json(json!({ "uid": "crm_contacts", "primaryKey": "id" })))
+        .and(body_partial_json(
+            json!({ "uid": "crm_contacts", "primaryKey": "id" }),
+        ))
         .respond_with(task(1))
         .expect(1)
         .mount(&server)
@@ -84,7 +86,12 @@ async fn meilisearch_creates_indexes_and_pushes_settings() {
         .expect(1)
         .mount(&server)
         .await;
-    let engine = MeilisearchEngine::new(&server.uri(), Some("masterKey".into()), Duration::from_secs(5)).unwrap();
+    let engine = MeilisearchEngine::new(
+        &server.uri(),
+        Some("masterKey".into()),
+        Duration::from_secs(5),
+    )
+    .unwrap();
     engine.prepare("crm_contacts", &settings()).await.unwrap();
     let patch = &requests_to(&server, "PATCH", "/indexes/crm_contacts/settings").await[0];
     assert_eq!(
@@ -130,11 +137,17 @@ async fn meilisearch_writes_wait_for_their_task() {
         .upsert(
             "crm_contacts",
             &settings(),
-            vec![Document::new("a1").field("last_name", "Lovelace").workspace("w1")],
+            vec![
+                Document::new("a1")
+                    .field("last_name", "Lovelace")
+                    .workspace("w1"),
+            ],
         )
         .await
         .unwrap_err();
-    assert!(matches!(error, SearchError::Engine { ref message, .. } if message == "invalid document id"));
+    assert!(
+        matches!(error, SearchError::Engine { ref message, .. } if message == "invalid document id")
+    );
     let sent = &requests_to(&server, "POST", "/indexes/crm_contacts/documents").await[0];
     assert_eq!(
         body(sent),
@@ -163,7 +176,11 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
         .await;
     let engine = MeilisearchEngine::new(&server.uri(), None, Duration::from_secs(5)).unwrap();
     let settings = settings();
-    let filter = Filter::All(vec![Filter::eq("status", "customer"), Filter::eq("_workspace", "w1")]).normalized();
+    let filter = Filter::All(vec![
+        Filter::eq("status", "customer"),
+        Filter::eq("_workspace", "w1"),
+    ])
+    .normalized();
     let tags = HighlightTags::default();
     let results = engine
         .search(
@@ -172,7 +189,10 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
                 settings: &settings,
                 text: "lovlace",
                 filter: &filter,
-                sort: &[SortBy { field: "score".into(), descending: true }],
+                sort: &[SortBy {
+                    field: "score".into(),
+                    descending: true,
+                }],
                 offset: 2,
                 limit: 2,
                 highlight: Some(&tags),
@@ -185,7 +205,10 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
     assert_eq!(results.hits[0].id, "a1");
     assert_eq!(results.hits[0].score, 0.94);
     assert_eq!(
-        results.hits[0].highlights.get("last_name").map(String::as_str),
+        results.hits[0]
+            .highlights
+            .get("last_name")
+            .map(String::as_str),
         Some("<mark>Lovelace</mark> &lt;3")
     );
     assert!(!results.hits[0].highlights.contains_key("email"));
@@ -193,9 +216,15 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
     assert_eq!(results.hits[1].id, "2");
     let sent = body(&requests_to(&server, "POST", "/indexes/crm_contacts/search").await[0]);
     assert_eq!(sent["q"], "lovlace");
-    assert_eq!(sent["filter"], "(status = \"customer\" AND _workspace = \"w1\")");
+    assert_eq!(
+        sent["filter"],
+        "(status = \"customer\" AND _workspace = \"w1\")"
+    );
     assert_eq!(sent["sort"], json!(["score:desc"]));
-    assert_eq!((sent["page"].clone(), sent["hitsPerPage"].clone()), (json!(2), json!(2)));
+    assert_eq!(
+        (sent["page"].clone(), sent["hitsPerPage"].clone()),
+        (json!(2), json!(2))
+    );
     assert_eq!(sent["attributesToRetrieve"], json!(["id", "last_name"]));
     assert_eq!(sent["highlightPreTag"], OPEN);
 }
@@ -213,7 +242,13 @@ async fn meilisearch_outages_are_unavailable() {
         .mount(&server)
         .await;
     let engine = MeilisearchEngine::new(&server.uri(), None, Duration::from_secs(2)).unwrap();
-    assert!(engine.count("crm_contacts").await.unwrap_err().is_unavailable());
+    assert!(
+        engine
+            .count("crm_contacts")
+            .await
+            .unwrap_err()
+            .is_unavailable()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -272,7 +307,11 @@ async fn an_app_on_meilisearch_syncs_and_searches() {
         .paginate(navree_db::PageQuery::default())
         .await
         .unwrap();
-    assert_eq!(page.data.len(), 1, "records gone from the database are dropped");
+    assert_eq!(
+        page.data.len(),
+        1,
+        "records gone from the database are dropped"
+    );
     assert_eq!(page.data[0].first_name, "Ada");
 }
 
@@ -310,7 +349,9 @@ async fn typesense_builds_collections_behind_aliases() {
     mount_typesense_collection(&server).await;
     Mock::given(method("PUT"))
         .and(path("/collections/crm_deals/synonyms/acme"))
-        .and(body_partial_json(json!({"synonyms": ["acme", "acme corp"]})))
+        .and(body_partial_json(
+            json!({"synonyms": ["acme", "acme corp"]}),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
         .expect(1)
         .mount(&server)
@@ -319,10 +360,13 @@ async fn typesense_builds_collections_behind_aliases() {
         .and(path("/collections/crm_deals/documents/import"))
         .and(query_param("action", "upsert"))
         .and(header("x-typesense-api-key", "xyz"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("{\"success\":true}\n{\"success\":true}"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string("{\"success\":true}\n{\"success\":true}"),
+        )
         .mount(&server)
         .await;
-    let engine = TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
+    let engine =
+        TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
     engine.prepare("crm_deals", &deal_settings()).await.unwrap();
     let created = body(&requests_to(&server, "POST", "/collections").await[0]);
     assert!(created["name"].as_str().unwrap().starts_with("crm_deals_"));
@@ -334,7 +378,9 @@ async fn typesense_builds_collections_behind_aliases() {
             "crm_deals",
             &deal_settings(),
             vec![
-                Document::new("1").field("title", "Renewal").field("company_name", None::<String>),
+                Document::new("1")
+                    .field("title", "Renewal")
+                    .field("company_name", None::<String>),
                 Document::new("2").field("title", "Pilot").workspace("w1"),
             ],
         )
@@ -345,8 +391,15 @@ async fn typesense_builds_collections_behind_aliases() {
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert_eq!(lines[0], json!({"id": "1", "title": "Renewal"}), "nulls are left out");
-    assert_eq!(lines[1], json!({"id": "2", "title": "Pilot", "_workspace": "w1"}));
+    assert_eq!(
+        lines[0],
+        json!({"id": "1", "title": "Renewal"}),
+        "nulls are left out"
+    );
+    assert_eq!(
+        lines[1],
+        json!({"id": "2", "title": "Pilot", "_workspace": "w1"})
+    );
 }
 
 #[tokio::test]
@@ -359,9 +412,14 @@ async fn typesense_reports_refused_documents() {
         ))
         .mount(&server)
         .await;
-    let engine = TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
+    let engine =
+        TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
     let error = engine
-        .upsert("crm_deals", &deal_settings(), vec![Document::new("1"), Document::new("2")])
+        .upsert(
+            "crm_deals",
+            &deal_settings(),
+            vec![Document::new("1"), Document::new("2")],
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains("must be an int64"), "{error}");
@@ -391,7 +449,11 @@ async fn typesense_searches_and_fails_over_between_nodes() {
     )
     .unwrap();
     let settings = deal_settings();
-    let filter = Filter::All(vec![Filter::eq("stage", "won"), Filter::range("amount", 100..)]).normalized();
+    let filter = Filter::All(vec![
+        Filter::eq("stage", "won"),
+        Filter::range("amount", 100..),
+    ])
+    .normalized();
     let tags = HighlightTags::default();
     let results = engine
         .search(
@@ -400,7 +462,10 @@ async fn typesense_searches_and_fails_over_between_nodes() {
                 settings: &settings,
                 text: "acme",
                 filter: &filter,
-                sort: &[SortBy { field: "amount".into(), descending: false }],
+                sort: &[SortBy {
+                    field: "amount".into(),
+                    descending: false,
+                }],
                 offset: 0,
                 limit: 2,
                 highlight: Some(&tags),
@@ -412,17 +477,27 @@ async fn typesense_searches_and_fails_over_between_nodes() {
     assert_eq!(results.total, 3);
     assert_eq!(results.hits[0].score, 1.0);
     assert_eq!(results.hits[1].score, 0.5);
-    assert_eq!(results.hits[0].highlights["title"], "<mark>Acme</mark> renewal");
-    assert_eq!(results.hits[1].highlights["company_name"], "<mark>Acme</mark> Corp");
+    assert_eq!(
+        results.hits[0].highlights["title"],
+        "<mark>Acme</mark> renewal"
+    );
+    assert_eq!(
+        results.hits[1].highlights["company_name"],
+        "<mark>Acme</mark> Corp"
+    );
     assert_eq!(results.hits[0].title.as_deref(), Some("Acme renewal"));
     let sent = &requests_to(&server, "GET", "/collections/crm_deals/documents/search").await[0];
-    let params: std::collections::HashMap<String, String> = sent.url.query_pairs().into_owned().collect();
+    let params: std::collections::HashMap<String, String> =
+        sent.url.query_pairs().into_owned().collect();
     assert_eq!(params["q"], "acme");
     assert_eq!(params["query_by"], "title,company_name");
     assert_eq!(params["query_by_weights"], "3,2");
     assert_eq!(params["filter_by"], "(stage:=`won` && amount:>=100)");
     assert_eq!(params["sort_by"], "amount:asc,_text_match:desc");
-    assert_eq!((params["page"].as_str(), params["per_page"].as_str()), ("1", "2"));
+    assert_eq!(
+        (params["page"].as_str(), params["per_page"].as_str()),
+        ("1", "2")
+    );
     assert_eq!(params["include_fields"], "id,title");
 
     let error = engine
@@ -450,12 +525,16 @@ async fn typesense_swaps_aliases_on_fresh_imports() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/aliases/crm_deals__fresh"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"collection_name": "crm_deals_2"})))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"collection_name": "crm_deals_2"})),
+        )
         .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path("/aliases/crm_deals"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"collection_name": "crm_deals_1"})))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"collection_name": "crm_deals_1"})),
+        )
         .mount(&server)
         .await;
     Mock::given(method("PUT"))
@@ -477,7 +556,8 @@ async fn typesense_swaps_aliases_on_fresh_imports() {
         .expect(1)
         .mount(&server)
         .await;
-    let engine = TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
+    let engine =
+        TypesenseEngine::new(&server.uri(), &[], "xyz".into(), Duration::from_secs(5)).unwrap();
     engine.swap("crm_deals", "crm_deals__fresh").await.unwrap();
 }
 
@@ -486,13 +566,17 @@ async fn qdrant_stores_points_with_payload_filters() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/collections/crm_contacts"))
-        .respond_with(ResponseTemplate::new(404).set_body_json(json!({"status": {"error": "Not found"}})))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_json(json!({"status": {"error": "Not found"}})),
+        )
         .up_to_n_times(1)
         .mount(&server)
         .await;
     Mock::given(method("PUT"))
         .and(path("/collections/crm_contacts"))
-        .and(body_partial_json(json!({"vectors": {"size": 3, "distance": "Cosine"}})))
+        .and(body_partial_json(
+            json!({"vectors": {"size": 3, "distance": "Cosine"}}),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"result": true})))
         .expect(1)
         .mount(&server)
@@ -500,7 +584,9 @@ async fn qdrant_stores_points_with_payload_filters() {
     Mock::given(method("PUT"))
         .and(path("/collections/crm_contacts/points"))
         .and(query_param("wait", "true"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"result": {"status": "completed"}})))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"result": {"status": "completed"}})),
+        )
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -513,7 +599,14 @@ async fn qdrant_stores_points_with_payload_filters() {
         })))
         .mount(&server)
         .await;
-    let store = QdrantStore::new(&server.uri(), Some("k".into()), 3, Metric::Cosine, Duration::from_secs(5)).unwrap();
+    let store = QdrantStore::new(
+        &server.uri(),
+        Some("k".into()),
+        3,
+        Metric::Cosine,
+        Duration::from_secs(5),
+    )
+    .unwrap();
     store.prepare("crm_contacts").await.unwrap();
     store
         .upsert(
@@ -521,13 +614,18 @@ async fn qdrant_stores_points_with_payload_filters() {
             vec![VectorRecord {
                 id: "a1".into(),
                 vector: vec![1.0, 0.0, 0.0],
-                payload: [("status".to_owned(), json!("customer"))].into_iter().collect(),
+                payload: [("status".to_owned(), json!("customer"))]
+                    .into_iter()
+                    .collect(),
             }],
         )
         .await
         .unwrap();
     let points = body(&requests_to(&server, "PUT", "/collections/crm_contacts/points").await[0]);
-    assert_eq!(points["points"][0]["payload"], json!({"status": "customer", "_id": "a1"}));
+    assert_eq!(
+        points["points"][0]["payload"],
+        json!({"status": "customer", "_id": "a1"})
+    );
     assert_eq!(points["points"][0]["vector"], json!([1.0, 0.0, 0.0]));
     assert!(uuid::Uuid::parse_str(points["points"][0]["id"].as_str().unwrap()).is_ok());
 
@@ -543,8 +641,12 @@ async fn qdrant_stores_points_with_payload_filters() {
     assert_eq!(found[0].id, "a1");
     assert_eq!(found[0].score, 1.0);
     assert_eq!(found[1].score, 0.5);
-    let query = body(&requests_to(&server, "POST", "/collections/crm_contacts/points/search").await[0]);
-    assert_eq!(query["filter"], json!({"must": [{"key": "status", "match": {"value": "customer"}}]}));
+    let query =
+        body(&requests_to(&server, "POST", "/collections/crm_contacts/points/search").await[0]);
+    assert_eq!(
+        query["filter"],
+        json!({"must": [{"key": "status", "match": {"value": "customer"}}]})
+    );
     assert_eq!(query["limit"], 2);
     let sent = &requests_to(&server, "PUT", "/collections/crm_contacts").await[0];
     assert_eq!(sent.headers.get("api-key").unwrap(), "k");

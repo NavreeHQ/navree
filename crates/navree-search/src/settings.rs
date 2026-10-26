@@ -332,7 +332,10 @@ mod tests {
         assert!(settings.is_filterable(WORKSPACE_FIELD));
         assert_eq!(settings.fields().len(), 2);
         assert_eq!(settings.max_boost(), 2);
-        assert_eq!(settings.embed_fields().collect::<Vec<_>>(), ["email_address"]);
+        assert_eq!(
+            settings.embed_fields().collect::<Vec<_>>(),
+            ["email_address"]
+        );
     }
 
     #[test]

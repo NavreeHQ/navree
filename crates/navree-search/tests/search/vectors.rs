@@ -10,7 +10,12 @@ use sea_orm::IntoActiveModel;
 
 use crate::support::{self, Contact, insert_contacts, new_contact, settle};
 
-fn with_notes(first: &str, last: &str, notes: &str, status: &str) -> crate::support::contact::ActiveModel {
+fn with_notes(
+    first: &str,
+    last: &str,
+    notes: &str,
+    status: &str,
+) -> crate::support::contact::ActiveModel {
     let mut row = new_contact(first, last);
     row.notes = Set(Some(notes.to_owned()));
     row.status = Set(status.to_owned());
@@ -38,7 +43,10 @@ async fn similar_finds_records_by_meaning() {
         .run()
         .await
         .unwrap();
-    let names: Vec<&str> = similar.iter().map(|h| h.record.first_name.as_str()).collect();
+    let names: Vec<&str> = similar
+        .iter()
+        .map(|h| h.record.first_name.as_str())
+        .collect();
     assert_eq!(names, ["Ada", "Alan"]);
     assert!(similar[0].score > 0.9 && similar[0].score <= 1.0);
 
@@ -59,7 +67,10 @@ async fn similar_finds_records_by_meaning() {
         .await
         .unwrap();
     assert_eq!(like_ada.len(), 1);
-    assert_eq!(like_ada[0].record.id, rows[2].id, "the record itself is left out");
+    assert_eq!(
+        like_ada[0].record.id, rows[2].id,
+        "the record itself is left out"
+    );
 
     // Re-syncing an unchanged record embeds nothing new.
     let before = embeddings.calls.load(Ordering::SeqCst);
@@ -110,11 +121,18 @@ async fn deleted_records_leave_the_vector_store() {
     let (app, _) = support::vector_app().await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let rows = insert_contacts(&db, vec![with_notes("Ada", "Lovelace", "onboarding", "lead")]).await;
+    let rows = insert_contacts(
+        &db,
+        vec![with_notes("Ada", "Lovelace", "onboarding", "lead")],
+    )
+    .await;
     settle(&app).await;
     let mut row = rows[0].clone().into_active_model();
     row.deleted_at = Set(Some(support::now()));
-    support::in_uow(&db, async |uow| Repo::<Contact>::update(uow, row).await.unwrap()).await;
+    support::in_uow(&db, async |uow| {
+        Repo::<Contact>::update(uow, row).await.unwrap()
+    })
+    .await;
     settle(&app).await;
     assert!(
         search
@@ -124,7 +142,14 @@ async fn deleted_records_leave_the_vector_store() {
             .unwrap()
             .is_empty()
     );
-    assert!(search.similar::<Contact>("onboarding").run().await.unwrap().is_empty());
+    assert!(
+        search
+            .similar::<Contact>("onboarding")
+            .run()
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

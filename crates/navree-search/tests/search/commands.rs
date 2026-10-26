@@ -26,7 +26,9 @@ async fn import_indexes_every_row_and_skips_filtered_ones() {
             ],
         )
         .await;
-        app.run_command("search:import", &["Contact"]).await.unwrap();
+        app.run_command("search:import", &["Contact"])
+            .await
+            .unwrap();
         search.assert_indexed::<Contact>(rows[0].id).await;
         search.assert_indexed::<Contact>(rows[1].id).await;
         search.assert_not_indexed::<Contact>(rows[2].id).await;
@@ -93,7 +95,10 @@ async fn fresh_imports_swap_in_a_rebuilt_index() {
         // rebuilds the index from the rows and swaps it in.
         let mut row = deal.clone().into_active_model();
         row.archived = Set(true);
-        support::in_uow(&db, async |uow| Repo::<Deal>::update(uow, row).await.unwrap()).await;
+        support::in_uow(&db, async |uow| {
+            Repo::<Deal>::update(uow, row).await.unwrap()
+        })
+        .await;
         search.assert_indexed::<Deal>(deal.id).await;
         app.run_command("search:import", &["Deal", "--fresh"])
             .await
@@ -105,7 +110,10 @@ async fn fresh_imports_swap_in_a_rebuilt_index() {
             "{engine}: the staged index is gone"
         );
         let report = search.import_fresh::<Deal>().await.unwrap();
-        assert_eq!((report.rows, report.skipped, report.index.as_str()), (1, 1, "crm_deals"));
+        assert_eq!(
+            (report.rows, report.skipped, report.index.as_str()),
+            (1, 1, "crm_deals")
+        );
     }
 }
 

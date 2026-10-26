@@ -12,9 +12,7 @@ use std::sync::Arc;
 
 use navree_db::{DatabaseModule, Db, PageQuery, Repo};
 use navree_queue::{Queue, QueueModule};
-use navree_search::{
-    DatabaseEngine, Metric, PgvectorStore, PostgresOptions, Search, SearchModule,
-};
+use navree_search::{DatabaseEngine, Metric, PgvectorStore, PostgresOptions, Search, SearchModule};
 use navree_testing::{TestApp, TestAppBuilder};
 use sea_orm::{ActiveValue::Set, ConnectionTrait, Database, IntoActiveModel};
 use uuid::Uuid;

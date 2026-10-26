@@ -81,7 +81,10 @@ async fn import_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErr
         );
         let started = Instant::now();
         let mut progress = |done: u64, total: u64| {
-            print!("\r{}", progress_bar(done, total, started.elapsed().as_secs_f64()));
+            print!(
+                "\r{}",
+                progress_bar(done, total, started.elapsed().as_secs_f64())
+            );
             let _ = std::io::stdout().flush();
         };
         let report = search.import_entry(&entry, fresh, &mut progress).await?;
@@ -135,7 +138,20 @@ async fn status_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxEr
             ]
         })
         .collect();
-    print!("{}", table(["Name", "Index", "Engine", "Documents", "Rows", "Pending jobs"], &rows));
+    print!(
+        "{}",
+        table(
+            [
+                "Name",
+                "Index",
+                "Engine",
+                "Documents",
+                "Rows",
+                "Pending jobs"
+            ],
+            &rows
+        )
+    );
     Ok(())
 }
 
@@ -144,7 +160,7 @@ pub(crate) fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -155,11 +171,9 @@ pub(crate) fn thousands(n: u64) -> String {
 /// `[=====     ] 50/100  1.2s`.
 pub(crate) fn progress_bar(done: u64, total: u64, seconds: f64) -> String {
     const WIDTH: u64 = 42;
-    let filled = if total == 0 {
-        WIDTH
-    } else {
-        (done.min(total) * WIDTH) / total
-    };
+    let filled = (done.min(total) * WIDTH)
+        .checked_div(total)
+        .unwrap_or(WIDTH);
     let filled = usize::try_from(filled).unwrap_or(0);
     let empty = usize::try_from(WIDTH).unwrap_or(0).saturating_sub(filled);
     format!(
@@ -210,7 +224,10 @@ mod tests {
     #[test]
     fn progress_bars_fill_with_the_work_done() {
         let bar = progress_bar(21, 42, 2.06);
-        assert!(bar.starts_with(&format!("[{}{}]", "=".repeat(21), " ".repeat(21))), "{bar}");
+        assert!(
+            bar.starts_with(&format!("[{}{}]", "=".repeat(21), " ".repeat(21))),
+            "{bar}"
+        );
         assert!(bar.ends_with("21/42  2.1s"), "{bar}");
         assert!(progress_bar(0, 0, 0.0).starts_with(&format!("[{}]", "=".repeat(42))));
     }
