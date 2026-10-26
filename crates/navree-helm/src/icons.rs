@@ -14,7 +14,7 @@ use serde_json::Value;
 const ICONS: &str = include_str!("assets/icons.txt");
 
 /// The icon of a resource or page whose `ICON` is empty or not embedded.
-pub(crate) const FALLBACK: &str = "square-dashed";
+pub(crate) const FALLBACK: &str = "folder";
 
 static SET: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     ICONS
