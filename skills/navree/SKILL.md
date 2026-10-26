@@ -108,6 +108,7 @@ navree list                                 # every command of the app
 | Shipping to production | `navree-deployment` |
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
+| Paid plans, subscriptions, trials, usage billing, invoices, Stripe or Paddle webhooks | `navree-billing` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
 
 ## Common mistakes
