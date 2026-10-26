@@ -9,6 +9,7 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory as ProviderFactory, Injectable,
     Lifecycle, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
+use navree_telemetry::Telemetry;
 use sea_orm::DbErr;
 
 use crate::http::{map_db_error, uow_layer};
@@ -100,7 +101,10 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         .factory(
             ProviderFactory::<Db>::new(|r: Resolver| async move {
                 let options = r.get::<DbOptions>().await?;
-                let db = Db::connect(&options).await?.with_app(r.app().downgrade());
+                let telemetry = Telemetry::from_app(&r.app()).await;
+                let db = Db::connect_with_telemetry(&options, telemetry)
+                    .await?
+                    .with_app(r.app().downgrade());
                 if options.migrate_on_boot {
                     migrate::run_up(&db, &migrate::sets_of(&r.app())).await?;
                 }

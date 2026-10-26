@@ -6,6 +6,7 @@ use std::time::Duration;
 use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_kernel::{CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_telemetry::Telemetry;
 use serde::{Deserialize, Serialize};
 
 use crate::cache::DEFAULT_TTL;
@@ -19,6 +20,16 @@ pub enum CacheStoreKind {
     /// In-process: [`MemoryStore`] and [`MemoryLockStore`] (`"memory"`).
     #[default]
     Memory,
+}
+
+impl CacheStoreKind {
+    /// The configuration name (`memory`), also the store's name in
+    /// telemetry `CacheEvent`s.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CacheStoreKind::Memory => "memory",
+        }
+    }
 }
 
 /// `CacheModule` settings: configuration section `cache`.
@@ -178,12 +189,16 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
         Factory::<Cache>::new(|r: Resolver| async move {
             let options = r.get::<CacheOptions>().await?;
             let store = r.get::<dyn CacheStore>().await?;
-            Ok(Arc::new(Cache::with_tracker(
-                store,
-                options.prefix.clone(),
-                options.default_ttl(),
-                Some(r.app().tracker()),
-            )))
+            let telemetry = Telemetry::from_app(&r.app()).await;
+            Ok(Arc::new(
+                Cache::with_tracker(
+                    store,
+                    options.prefix.clone(),
+                    options.default_ttl(),
+                    Some(r.app().tracker()),
+                )
+                .with_telemetry(telemetry, options.store.as_str()),
+            ))
         })
         .deps(vec![
             options_key.clone(),

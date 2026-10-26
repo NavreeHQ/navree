@@ -7,6 +7,7 @@ mod fake;
 mod module;
 mod suite;
 mod support;
+mod telemetry;
 
 use navree_queue::QueueDriver;
 
