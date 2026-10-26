@@ -227,9 +227,9 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
     let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
     let workspace = workspaces.resolve(&identifier).await.map_err(app_error)?;
     if pinned.is_some_and(|pin| pin != workspace.id) {
-        return Err(
-            AppError::forbidden().with_detail("This token is limited to another workspace.")
-        );
+        return Err(AppError::forbidden()
+            .with_code("token_workspace_mismatch")
+            .with_detail("This token is limited to another workspace."));
     }
     let member = workspaces
         .membership(workspace.id, principal.user_id)

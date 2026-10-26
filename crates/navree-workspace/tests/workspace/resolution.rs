@@ -172,7 +172,8 @@ async fn errors_follow_the_framework_shape() {
         .header("x-workspace", "acme")
         .send()
         .await
-        .assert_error(403, "You are not a member of this workspace.");
+        .assert_error(403, "You are not a member of this workspace.")
+        .assert_error_code(403, "not_a_member");
 }
 
 #[tokio::test]
@@ -271,7 +272,8 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
         .header("x-workspace", "globex")
         .send()
         .await
-        .assert_error(403, "This token is limited to another workspace.");
+        .assert_error(403, "This token is limited to another workspace.")
+        .assert_error_code(403, "token_workspace_mismatch");
     client
         .get("/api/w/globex/current")
         .header("x-test-pin", pin.as_str())
