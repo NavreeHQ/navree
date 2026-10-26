@@ -88,6 +88,7 @@ The `make:<kind>` generators add files in a directory per kind, inside the modul
 | `navree make:notification tasks task_due` | `notifications/task_due.rs` |
 | `navree make:policy tasks task` | `policies/task.rs` |
 | `navree make:command tasks prune_done` | `commands/prune_done.rs` |
+| `navree make:agent tasks assistant` | `agents/assistant.rs` |
 | `navree make:test tasks completing` | `tests/completing.rs` |
 
 Every generator also declares the new file's module and, where the item must be registered, adds the registration. [Console commands and the CLI](/docs/digging-deeper/cli/) covers each one.
