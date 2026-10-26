@@ -88,7 +88,7 @@ async fn management_routes_need_the_roles_manage_permission() {
         .get("/api/access/roles")
         .send()
         .await
-        .assert_error(403, None);
+        .assert_error_code(403, "forbidden");
     client
         .post("/api/access/roles")
         .json(&json!({ "name": "sneaky" }))
@@ -144,7 +144,8 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .json(&json!({ "permissions": [] }))
         .send()
         .await
-        .assert_error(404, "The role `nobody` does not exist.");
+        .assert_error(404, "The role `nobody` does not exist.")
+        .assert_error_code(404, "role_not_found");
 
     client
         .put(&format!("/api/access/users/{member}/roles"))
@@ -160,7 +161,8 @@ async fn management_routes_create_roles_and_sync_permissions_and_user_roles() {
         .send()
         .await
         .assert_validation_error("roles")
-        .assert_error(400, "The role `ghost` does not exist.");
+        .assert_error(400, "The role `ghost` does not exist.")
+        .assert_error_code(400, "validation_failed");
 
     let service = app.get::<AccessService>().await;
     assert_eq!(
