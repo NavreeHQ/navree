@@ -105,7 +105,10 @@ impl ConfiguredMicroModule {
     /// Registers the named client `name` (`micro.clients.<name>`) as a
     /// `ServiceClient` provider named `name`, for
     /// `#[inject(name = "billing")]`. Its settings come from the options
-    /// at boot; a missing section fails the boot.
+    /// at boot; a name without a `[micro.clients.<name>]` section fails the
+    /// boot. `for_root` registers every client of its options by itself;
+    /// `from_config` needs the names here, since the configuration is read
+    /// after the modules register.
     pub fn client(mut self, name: &str) -> Self {
         self.clients.push(name.to_owned());
         self
@@ -122,7 +125,14 @@ impl Module for ConfiguredMicroModule {
     }
 
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone(), &self.clients);
+        // `for_root` knows its clients; `from_config` names them in code.
+        let mut clients = self.clients.clone();
+        if let Some(options) = &self.options {
+            clients.extend(options.clients.keys().cloned());
+        }
+        clients.sort();
+        clients.dedup();
+        register(m, self.options.clone(), &clients);
     }
 }
 
