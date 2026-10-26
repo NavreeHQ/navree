@@ -7,16 +7,18 @@ use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
 use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
+use navree_contracts::ModuleBuilderConformityExt;
 use navree_db::{Db, DbOptions, MigrationSet, ModuleBuilderDbExt};
 use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
     ProviderKey, Resolver,
 };
-use sea_orm::{DbBackend, IntoActiveModel};
+use sea_orm::{DbBackend, EntityTrait, IntoActiveModel};
 use serde::Serialize;
 
 use crate::commands::commands;
+use crate::conformity::{self, EntityClass};
 use crate::controller::{InvitationController, WorkspaceController};
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
@@ -45,6 +47,9 @@ use crate::{Invitations, Isolation, Members, WorkspaceConfig, WorkspaceError, Wo
 /// - a request layer that commits the workspace database's unit of work
 ///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation);
 /// - the commands `workspace:migrate` and `workspace:prune-invitations`;
+/// - the conformity checks `workspace.entities`, `workspace.repo` and
+///   `workspace.tables` that `navree check` runs (see
+///   [`ModuleBuilderWorkspaceExt::workspace_entity`]);
 /// - the mapping of [`WorkspaceError`]s returned from handlers to error
 ///   responses.
 ///
@@ -246,6 +251,9 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
     for command in commands() {
         m.command(command);
     }
+    for check in conformity::checks() {
+        m.conformity_check(check);
+    }
 }
 
 impl Lifecycle for WorkspaceDatabases {
@@ -298,12 +306,26 @@ pub trait ModuleBuilderWorkspaceExt {
     /// Registers `E` as workspace-scoped: on routes guarded by
     /// [`InWorkspace`](crate::InWorkspace), a `can(.., from = "id")` check
     /// on `E`'s subject first confirms that the record belongs to the
-    /// current workspace (a 404 otherwise).
+    /// current workspace (a 404 otherwise). It also classifies `E` as a
+    /// workspace entity, like [`workspace_entity`](Self::workspace_entity).
     fn workspace_scoped<E>(&mut self) -> &mut Self
     where
         E: WorkspaceScoped + Subject,
         E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
         E::ActiveModel: Send + Sync;
+
+    /// Classifies `E` as a workspace entity: its rows belong to one
+    /// workspace (row isolation). `navree check` requires every entity of
+    /// the app to be classified, checks that workspace entities are reached
+    /// only through [`WorkspaceRepo`](crate::WorkspaceRepo), and that their
+    /// table has an indexed workspace column. Use it for entities that are
+    /// not access subjects (child records such as deal notes); subjects use
+    /// [`workspace_scoped`](Self::workspace_scoped).
+    fn workspace_entity<E: WorkspaceScoped>(&mut self) -> &mut Self;
+
+    /// Classifies `E` as a global entity: one set of rows shared by every
+    /// workspace (countries, plans, the app's own settings).
+    fn global_entity<E: EntityTrait>(&mut self) -> &mut Self;
 }
 
 impl ModuleBuilderWorkspaceExt for ModuleBuilder {
@@ -318,5 +340,14 @@ impl ModuleBuilderWorkspaceExt for ModuleBuilder {
         E::ActiveModel: Send + Sync,
     {
         self.contribute(ScopedSubject::of::<E>())
+            .contribute(EntityClass::workspace::<E>())
+    }
+
+    fn workspace_entity<E: WorkspaceScoped>(&mut self) -> &mut Self {
+        self.contribute(EntityClass::workspace::<E>())
+    }
+
+    fn global_entity<E: EntityTrait>(&mut self) -> &mut Self {
+        self.contribute(EntityClass::global::<E>())
     }
 }
