@@ -81,8 +81,8 @@ pub use extract::{Valid, ValidAsync};
 pub use failure::rule_error;
 pub use messages::{DEFAULT_MESSAGES, Messages};
 pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};
-pub use value::{validate, validate_json};
 pub use rules::confirmed;
+pub use value::{validate, validate_json};
 
 /// garde, the validation library behind [`Valid`].
 pub use garde;

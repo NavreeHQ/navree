@@ -73,7 +73,11 @@ impl Chunker {
             sections(text)
                 .into_iter()
                 .flat_map(|(path, body)| {
-                    let prefix = if path.is_empty() { String::new() } else { format!("{path}\n\n") };
+                    let prefix = if path.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{path}\n\n")
+                    };
                     let budget = self.max_tokens.saturating_sub(tokens(&prefix)).max(1);
                     split_plain(&body, budget, self.overlap.min(budget.saturating_sub(1)))
                         .into_iter()
@@ -82,7 +86,11 @@ impl Chunker {
                 })
                 .collect()
         } else {
-            split_plain(text, self.max_tokens, self.overlap.min(self.max_tokens.saturating_sub(1)))
+            split_plain(
+                text,
+                self.max_tokens,
+                self.overlap.min(self.max_tokens.saturating_sub(1)),
+            )
         };
         pieces
             .into_iter()
@@ -183,7 +191,11 @@ fn word_runs(sentence: &str, max: usize) -> Vec<String> {
             word = word.chars().skip(max_chars).collect();
             out.push(head);
         }
-        let candidate = if current.is_empty() { word.clone() } else { format!("{current} {word}") };
+        let candidate = if current.is_empty() {
+            word.clone()
+        } else {
+            format!("{current} {word}")
+        };
         if tokens(&candidate) > max && !current.is_empty() {
             out.push(std::mem::take(&mut current));
             current = word;
@@ -260,7 +272,11 @@ fn sections(text: &str) -> Vec<(String, String)> {
     let mut in_fence = false;
     let flush = |path: &[(usize, String)], body: &mut String, out: &mut Vec<(String, String)>| {
         if !body.trim().is_empty() {
-            let heading = path.iter().map(|(_, h)| h.as_str()).collect::<Vec<_>>().join(" > ");
+            let heading = path
+                .iter()
+                .map(|(_, h)| h.as_str())
+                .collect::<Vec<_>>()
+                .join(" > ");
             out.push((heading, body.trim().to_owned()));
         }
         body.clear();
@@ -295,7 +311,9 @@ mod tests {
 
     #[test]
     fn short_text_is_one_chunk() {
-        let chunks = Chunker::new().max_tokens(300).split("Pricing call with Dana.");
+        let chunks = Chunker::new()
+            .max_tokens(300)
+            .split("Pricing call with Dana.");
         assert_eq!(
             chunks,
             [Chunk {
@@ -316,7 +334,10 @@ mod tests {
             assert!(tokens(&chunk.text) <= 40, "{}", chunk.text);
             assert!(chunk.text.ends_with('.'), "{}", chunk.text);
         }
-        assert_eq!(chunks.iter().map(|c| c.index).collect::<Vec<_>>(), (0..chunks.len()).collect::<Vec<_>>());
+        assert_eq!(
+            chunks.iter().map(|c| c.index).collect::<Vec<_>>(),
+            (0..chunks.len()).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -328,7 +349,12 @@ mod tests {
         let chunks = Chunker::new().max_tokens(20).overlap(8).split(&text);
         assert!(chunks.len() > 2);
         for pair in chunks.windows(2) {
-            let last_of_first = pair[0].text.rsplit(". ").next().unwrap().trim_end_matches('.');
+            let last_of_first = pair[0]
+                .text
+                .rsplit(". ")
+                .next()
+                .unwrap()
+                .trim_end_matches('.');
             assert!(pair[1].text.contains(last_of_first), "{:?}", pair);
         }
     }

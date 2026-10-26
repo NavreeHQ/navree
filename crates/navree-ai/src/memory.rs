@@ -86,7 +86,10 @@ impl MigrationName for CreateConversationTables {
 }
 
 fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).timestamp_with_time_zone().not_null().to_owned()
+    ColumnDef::new(name)
+        .timestamp_with_time_zone()
+        .not_null()
+        .to_owned()
 }
 
 #[async_trait]
@@ -101,7 +104,12 @@ impl MigrationTrait for CreateConversationTables {
                     .col(ColumnDef::new("agent").string().not_null())
                     .col(ColumnDef::new("title").string().null())
                     .col(ColumnDef::new("summary").text().null())
-                    .col(ColumnDef::new("summarized_count").integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new("summarized_count")
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(ColumnDef::new("pending").text().null())
                     .col(timestamp("created_at"))
                     .col(timestamp("updated_at"))
@@ -232,7 +240,11 @@ fn not_found() -> AiError {
 pub(crate) fn title_of(text: &str) -> String {
     let mut title = String::new();
     for word in text.split_whitespace() {
-        let next = if title.is_empty() { word.to_owned() } else { format!("{title} {word}") };
+        let next = if title.is_empty() {
+            word.to_owned()
+        } else {
+            format!("{title} {word}")
+        };
         if next.chars().count() > 60 {
             if title.is_empty() {
                 title = word.chars().take(57).collect::<String>() + "...";
@@ -260,12 +272,18 @@ impl Conversations {
     }
 
     /// The user's conversations, most recently changed first.
-    pub async fn list_for(&self, user_id: Uuid, page: PageQuery) -> Result<Page<ConversationSummary>, AiError> {
+    pub async fn list_for(
+        &self,
+        user_id: Uuid,
+        page: PageQuery,
+    ) -> Result<Page<ConversationSummary>, AiError> {
         let select = conversation::Entity::find()
             .filter(conversation::Column::UserId.eq(user_id))
             .order_by_desc(conversation::Column::UpdatedAt)
             .order_by_desc(conversation::Column::Id);
-        let page = paginate(select, self.db()?.conn(), page).await.map_err(db_error)?;
+        let page = paginate(select, self.db()?.conn(), page)
+            .await
+            .map_err(db_error)?;
         Ok(page.map(|row| ConversationSummary {
             id: row.id,
             agent: row.agent,
@@ -276,7 +294,11 @@ impl Conversations {
     }
 
     /// The messages of the user's conversation, oldest first.
-    pub async fn messages(&self, user_id: Uuid, conversation_id: Uuid) -> Result<Vec<StoredMessage>, AiError> {
+    pub async fn messages(
+        &self,
+        user_id: Uuid,
+        conversation_id: Uuid,
+    ) -> Result<Vec<StoredMessage>, AiError> {
         self.owned(user_id, conversation_id).await?;
         let rows = message::Entity::find()
             .filter(message::Column::ConversationId.eq(conversation_id))
@@ -302,7 +324,12 @@ impl Conversations {
     }
 
     /// Renames the user's conversation.
-    pub async fn rename(&self, user_id: Uuid, conversation_id: Uuid, title: impl Into<String>) -> Result<(), AiError> {
+    pub async fn rename(
+        &self,
+        user_id: Uuid,
+        conversation_id: Uuid,
+        title: impl Into<String>,
+    ) -> Result<(), AiError> {
         let row = self.owned(user_id, conversation_id).await?;
         let mut active = row.into_active_model();
         active.title = Set(Some(title.into()));
@@ -351,7 +378,11 @@ impl Conversations {
     }
 
     /// The conversation row, if it is `user_id`'s.
-    async fn owned(&self, user_id: Uuid, conversation_id: Uuid) -> Result<conversation::Model, AiError> {
+    async fn owned(
+        &self,
+        user_id: Uuid,
+        conversation_id: Uuid,
+    ) -> Result<conversation::Model, AiError> {
         conversation::Entity::find_by_id(conversation_id)
             .one(self.db()?.conn())
             .await
@@ -361,7 +392,12 @@ impl Conversations {
     }
 
     /// Loads `user_id`'s conversation `id` with agent `agent`.
-    pub(crate) async fn load(&self, user_id: Uuid, agent: &str, id: Uuid) -> Result<Loaded, AiError> {
+    pub(crate) async fn load(
+        &self,
+        user_id: Uuid,
+        agent: &str,
+        id: Uuid,
+    ) -> Result<Loaded, AiError> {
         let row = self.owned(user_id, id).await?;
         if row.agent != agent {
             return Err(not_found());
@@ -376,7 +412,12 @@ impl Conversations {
     }
 
     /// Creates a conversation titled after `first_message`.
-    pub(crate) async fn create(&self, user_id: Uuid, agent: &str, first_message: &str) -> Result<conversation::Model, AiError> {
+    pub(crate) async fn create(
+        &self,
+        user_id: Uuid,
+        agent: &str,
+        first_message: &str,
+    ) -> Result<conversation::Model, AiError> {
         let now = Utc::now();
         let row = conversation::ActiveModel {
             id: Set(Uuid::now_v7()),
@@ -403,7 +444,8 @@ impl Conversations {
                     Role::User => "user".to_owned(),
                     Role::Assistant => "assistant".to_owned(),
                 }),
-                content: Set(serde_json::to_string(&stored_parts(message)).unwrap_or_else(|_| "[]".to_owned())),
+                content: Set(serde_json::to_string(&stored_parts(message))
+                    .unwrap_or_else(|_| "[]".to_owned())),
                 created_at: Set(Utc::now()),
             };
             row.insert(conn).await.map_err(db_error)?;
@@ -452,7 +494,11 @@ pub(crate) fn pending_of(row: &conversation::Model) -> Option<Pending> {
 }
 
 fn role_of(role: &str) -> Role {
-    if role == "assistant" { Role::Assistant } else { Role::User }
+    if role == "assistant" {
+        Role::Assistant
+    } else {
+        Role::User
+    }
 }
 
 #[cfg(test)]
@@ -468,16 +514,24 @@ mod tests {
                     provider: "anthropic".into(),
                     data: serde_json::json!({ "type": "thinking", "thinking": "", "signature": "sig" }),
                 },
-                Part::Text { text: "Looking.".into() },
+                Part::Text {
+                    text: "Looking.".into(),
+                },
             ],
         );
-        assert_eq!(stored_parts(&message), [Part::Text { text: "Looking.".into() }]);
+        assert_eq!(
+            stored_parts(&message),
+            [Part::Text {
+                text: "Looking.".into()
+            }]
+        );
     }
 
     #[test]
     fn titles_are_the_opening_words() {
         assert_eq!(title_of("Which deals are stuck?"), "Which deals are stuck?");
-        let long = "Which of my deals in negotiation have had no activity for two weeks and need a call?";
+        let long =
+            "Which of my deals in negotiation have had no activity for two weeks and need a call?";
         let title = title_of(long);
         assert!(title.chars().count() <= 63, "{title}");
         assert!(title.ends_with("..."));

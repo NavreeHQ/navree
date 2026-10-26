@@ -23,7 +23,9 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::run::{AgentRun, RunShared};
-use super::{Agent, AgentOptions, AgentReply, AgentStep, Memory, PendingApproval, ToolOutcome, ToolSpec};
+use super::{
+    Agent, AgentOptions, AgentReply, AgentStep, Memory, PendingApproval, ToolOutcome, ToolSpec,
+};
 use crate::ai::{Ai, Extra, Spec, extract_json};
 use crate::error::AiError;
 use crate::memory::{Conversations, Pending, pending_of};
@@ -156,7 +158,11 @@ impl<A: Agent> AgentRunBuilder<A> {
         let reply = run.execute(Input::Prompt(message), None).await?;
         let parse = |text: &str| {
             extract_json(text).and_then(|value| {
-                let value = if wrapped { schema::unwrap_value(value) } else { value };
+                let value = if wrapped {
+                    schema::unwrap_value(value)
+                } else {
+                    value
+                };
                 serde_json::from_value::<T>(value).map_err(|error| error.to_string())
             })
         };
@@ -224,9 +230,15 @@ impl<A: Agent> AgentRunBuilder<A> {
 
     /// Declines the tool call `call_id`: the model is told the user
     /// declined, and why, then continues.
-    pub async fn reject(self, call_id: impl Into<String>, reason: Option<String>) -> Result<AgentReply, AiError> {
+    pub async fn reject(
+        self,
+        call_id: impl Into<String>,
+        reason: Option<String>,
+    ) -> Result<AgentReply, AiError> {
         let call_id = call_id.into();
-        let mut run = self.setup(Input::Reject(call_id.clone(), reason.clone())).await?;
+        let mut run = self
+            .setup(Input::Reject(call_id.clone(), reason.clone()))
+            .await?;
         run.execute(Input::Reject(call_id, reason), None).await
     }
 
@@ -267,10 +279,9 @@ impl<A: Agent> AgentRunBuilder<A> {
             None => return Err(AiError::Unauthenticated),
         };
         let user_id = access.user.ok_or(AiError::Unauthenticated)?;
-        let auth = ctx
-            .get::<AuthService>()
-            .await
-            .map_err(|error| AiError::config(format!("agents need AuthModule (navree-auth): {error}")))?;
+        let auth = ctx.get::<AuthService>().await.map_err(|error| {
+            AiError::config(format!("agents need AuthModule (navree-auth): {error}"))
+        })?;
         let user = auth
             .find_user(user_id)
             .await
@@ -401,26 +412,41 @@ struct StepAnswer {
 impl<A: Agent> Running<A> {
     /// A fresh unit of work acting as the run's user.
     async fn uow(&self) -> navree_db::Uow {
-        let request_id = navree_db::Uow::current().and_then(|uow| uow.request_id().map(str::to_owned));
+        let request_id =
+            navree_db::Uow::current().and_then(|uow| uow.request_id().map(str::to_owned));
         self.db.uow(Some(self.shared.user.id), request_id).await
     }
 
     /// Runs `input` to the end, a pending approval or the step limit.
-    async fn execute(&mut self, input: Input, emit: Option<Emitter>) -> Result<AgentReply, AiError> {
+    async fn execute(
+        &mut self,
+        input: Input,
+        emit: Option<Emitter>,
+    ) -> Result<AgentReply, AiError> {
         let start = self.history.len();
         let mut steps = Vec::new();
         let mut usage = Usage::default();
         match input {
             Input::Prompt(text) => {
                 if let Some(pending) = self.pending.take() {
-                    let declined = declined(&pending.approval, "The user sent a new message instead of answering.");
+                    let declined = declined(
+                        &pending.approval,
+                        "The user sent a new message instead of answering.",
+                    );
                     self.history.push(results_message(&pending, declined));
                 }
                 self.last_prompt = text.clone();
                 self.history.push(Message::user(text));
             }
-            Input::Approve(call_id) | Input::Reject(call_id, _) if self.pending.as_ref().is_none_or(|p| p.approval.call_id != call_id) => {
-                return Err(AiError::not_found(format!("no tool call `{call_id}` is waiting for approval")));
+            Input::Approve(call_id) | Input::Reject(call_id, _)
+                if self
+                    .pending
+                    .as_ref()
+                    .is_none_or(|p| p.approval.call_id != call_id) =>
+            {
+                return Err(AiError::not_found(format!(
+                    "no tool call `{call_id}` is waiting for approval"
+                )));
             }
             Input::Approve(_) => {
                 let pending = self.pending.take().expect("checked above");
@@ -437,10 +463,15 @@ impl<A: Agent> Running<A> {
             Input::Reject(_, reason) => {
                 let pending = self.pending.take().expect("checked above");
                 let note = match reason {
-                    Some(reason) if !reason.trim().is_empty() => format!("The user declined this call: {reason}"),
+                    Some(reason) if !reason.trim().is_empty() => {
+                        format!("The user declined this call: {reason}")
+                    }
                     _ => "The user declined this call.".to_owned(),
                 };
-                self.history.push(results_message(&pending, declined(&pending.approval, &note)));
+                self.history.push(results_message(
+                    &pending,
+                    declined(&pending.approval, &note),
+                ));
             }
         }
         self.summarize().await;
@@ -493,7 +524,9 @@ impl<A: Agent> Running<A> {
         let run = AgentRun::new(self.shared.clone(), self.uow().await);
         let mut system = format!("{}\n\n{DATA_NOTE}", self.agent.instructions(&run));
         if let Some((summary, _)) = &self.summary {
-            system.push_str(&format!("\n\nSummary of the earlier conversation:\n{summary}"));
+            system.push_str(&format!(
+                "\n\nSummary of the earlier conversation:\n{summary}"
+            ));
         }
         if let Some(note) = &self.final_note {
             system.push_str(&format!("\n\n{note}"));
@@ -503,8 +536,17 @@ impl<A: Agent> Running<A> {
 
     /// One model call with the offered tools; on the last step the tools
     /// are listed but may not be called.
-    async fn model_call(&mut self, system: &str, last: bool, emit: Option<&Emitter>) -> Result<StepAnswer, AiError> {
-        let window_start = self.summary.as_ref().map_or(0, |(_, n)| *n).min(self.history.len());
+    async fn model_call(
+        &mut self,
+        system: &str,
+        last: bool,
+        emit: Option<&Emitter>,
+    ) -> Result<StepAnswer, AiError> {
+        let window_start = self
+            .summary
+            .as_ref()
+            .map_or(0, |(_, n)| *n)
+            .min(self.history.len());
         let spec = Spec {
             messages: self.history[window_start..].to_vec(),
             system: Some(system.to_owned()),
@@ -524,7 +566,11 @@ impl<A: Agent> Running<A> {
                     parameters: tool.parameters.clone(),
                 })
                 .collect(),
-            tool_choice: if last { ToolChoice::None } else { ToolChoice::Auto },
+            tool_choice: if last {
+                ToolChoice::None
+            } else {
+                ToolChoice::Auto
+            },
             ..Extra::default()
         };
         let Some(emit) = emit else {
@@ -560,7 +606,11 @@ impl<A: Agent> Running<A> {
                         parts.push(Part::Text { text });
                     }
                     parts.extend(calls);
-                    return Ok(StepAnswer { parts, usage, finish });
+                    return Ok(StepAnswer {
+                        parts,
+                        usage,
+                        finish,
+                    });
                 }
                 Ok(Some(Err(error))) => return Err(error.into_ai_error(&open.provider)),
                 Ok(None) => {
@@ -620,13 +670,19 @@ impl<A: Agent> Running<A> {
                 );
             }
         }
-        let read_only = |call: &ToolCall| self.offered.iter().any(|t| t.name == call.name && t.read_only);
-        let (parallel, sequential): (Vec<ToolCall>, Vec<ToolCall>) = if self.options.parallel_tools {
+        let read_only = |call: &ToolCall| {
+            self.offered
+                .iter()
+                .any(|t| t.name == call.name && t.read_only)
+        };
+        let (parallel, sequential): (Vec<ToolCall>, Vec<ToolCall>) = if self.options.parallel_tools
+        {
             run_now.into_iter().partition(|call| read_only(call))
         } else {
             (Vec::new(), run_now)
         };
-        let outcomes = futures_util::future::join_all(parallel.iter().map(|call| self.call(call, emit))).await;
+        let outcomes =
+            futures_util::future::join_all(parallel.iter().map(|call| self.call(call, emit))).await;
         for (call, outcome) in parallel.iter().zip(outcomes) {
             let (result, step) = outcome?;
             steps.push(step);
@@ -659,7 +715,11 @@ impl<A: Agent> Running<A> {
 
     /// Runs one tool call: access check, its own unit of work, the time
     /// limit; the result as the model reads it.
-    async fn call(&self, call: &ToolCall, emit: Option<&Emitter>) -> Result<(ToolResult, AgentStep), AiError> {
+    async fn call(
+        &self,
+        call: &ToolCall,
+        emit: Option<&Emitter>,
+    ) -> Result<(ToolResult, AgentStep), AiError> {
         let outcome = match self.offered.iter().find(|tool| tool.name == call.name) {
             None => ToolOutcome::unknown(&call.name),
             Some(tool) if !tool.allows(&self.shared.access, &self.shared.prefixes) => {
@@ -698,7 +758,10 @@ impl<A: Agent> Running<A> {
         let uow = self.uow().await;
         let run = AgentRun::new(self.shared.clone(), uow.clone());
         let limit = Duration::from_secs(self.options.tool_timeout_secs.max(1));
-        let future = uow.scope(self.agent.dispatch(&call.name, &run, call.arguments.clone()));
+        let future = uow.scope(
+            self.agent
+                .dispatch(&call.name, &run, call.arguments.clone()),
+        );
         let outcome = match tokio::time::timeout(limit, future).await {
             Ok(outcome) => outcome,
             Err(_) => ToolOutcome::Err(
@@ -737,7 +800,11 @@ impl<A: Agent> Running<A> {
     /// longer than `ai.memory.max_messages`.
     async fn summarize(&mut self) {
         let max = self.ai.options().memory.max_messages.max(2);
-        let done = self.summary.as_ref().map_or(0, |(_, n)| *n).min(self.history.len());
+        let done = self
+            .summary
+            .as_ref()
+            .map_or(0, |(_, n)| *n)
+            .min(self.history.len());
         if self.row.is_none() || self.history.len() - done <= max {
             return;
         }
@@ -756,14 +823,25 @@ impl<A: Agent> Running<A> {
         let transcript = self.history[done..cut]
             .iter()
             .map(|message| {
-                let who = if message.role == Role::User { "User" } else { "Assistant" };
+                let who = if message.role == Role::User {
+                    "User"
+                } else {
+                    "Assistant"
+                };
                 let text = message.text();
-                let tools: Vec<String> = message.tool_calls().map(|c| format!("[called {}]", c.name)).collect();
+                let tools: Vec<String> = message
+                    .tool_calls()
+                    .map(|c| format!("[called {}]", c.name))
+                    .collect();
                 format!("{who}: {text} {}", tools.join(" "))
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let previous = self.summary.as_ref().map(|(s, _)| s.clone()).unwrap_or_default();
+        let previous = self
+            .summary
+            .as_ref()
+            .map(|(s, _)| s.clone())
+            .unwrap_or_default();
         let model = self
             .ai
             .options()
@@ -773,7 +851,9 @@ impl<A: Agent> Running<A> {
             .or_else(|| self.ai.options().default_model().map(str::to_owned));
         let mut request = self
             .ai
-            .text(format!("Summary so far:\n{previous}\n\nNew messages:\n{transcript}"))
+            .text(format!(
+                "Summary so far:\n{previous}\n\nNew messages:\n{transcript}"
+            ))
             .system(
                 "You keep a running summary of a conversation between a user and an assistant: \
                  the facts, decisions, names, ids and open questions. Answer with the updated \
@@ -785,7 +865,9 @@ impl<A: Agent> Running<A> {
         }
         match request.await {
             Ok(response) => self.summary = Some((response.text, cut)),
-            Err(error) => tracing::warn!(target: "navree::ai", %error, "summarizing a conversation failed"),
+            Err(error) => {
+                tracing::warn!(target: "navree::ai", %error, "summarizing a conversation failed")
+            }
         }
     }
 
@@ -794,8 +876,13 @@ impl<A: Agent> Running<A> {
         let Some(row) = self.row.clone() else {
             return Ok(());
         };
-        self.conversations.append(row.id, &self.history[start..]).await?;
-        let summary = self.summary.as_ref().map(|(text, n)| (text.clone(), *n as i32));
+        self.conversations
+            .append(row.id, &self.history[start..])
+            .await?;
+        let summary = self
+            .summary
+            .as_ref()
+            .map(|(text, n)| (text.clone(), *n as i32));
         self.conversations
             .save_state(&row, self.pending.as_ref(), summary)
             .await
@@ -937,8 +1024,18 @@ mod tests {
             },
             order: vec!["a".into(), "b".into(), "c".into()],
             results: vec![
-                ToolResult { call_id: "c".into(), name: "x".into(), content: json!(3), is_error: false },
-                ToolResult { call_id: "a".into(), name: "x".into(), content: json!(1), is_error: false },
+                ToolResult {
+                    call_id: "c".into(),
+                    name: "x".into(),
+                    content: json!(3),
+                    is_error: false,
+                },
+                ToolResult {
+                    call_id: "a".into(),
+                    name: "x".into(),
+                    content: json!(1),
+                    is_error: false,
+                },
             ],
         };
         let message = results_message(&pending, declined(&pending.approval, "no"));

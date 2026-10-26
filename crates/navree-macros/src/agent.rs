@@ -6,8 +6,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{
-    Attribute, Expr, ExprLit, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Lit, LitStr, Meta,
-    Type,
+    Attribute, Expr, ExprLit, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Lit, LitStr, Meta, Type,
 };
 
 use crate::attr::Errors;
@@ -64,7 +63,10 @@ fn expand_inner(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream
             }
             ImplItem::Fn(method) => {
                 for attr in &method.attrs {
-                    if ["can", "permissions", "roles"].iter().any(|name| is(attr, name)) {
+                    if ["can", "permissions", "roles"]
+                        .iter()
+                        .any(|name| is(attr, name))
+                    {
                         errors.push(At::of(attr).error(format!(
                             "#[{}] only applies to #[tool] methods",
                             attr.path().segments[0].ident
@@ -91,7 +93,9 @@ fn expand_inner(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream
         None
     };
 
-    let specs = tools.iter().map(|tool| spec(tool, &ai, access_crate.as_ref()));
+    let specs = tools
+        .iter()
+        .map(|tool| spec(tool, &ai, access_crate.as_ref()));
     let arms = tools.iter().map(|tool| arm(tool, &ai));
     let methods = tools.iter().map(|tool| &tool.method);
 
@@ -139,7 +143,9 @@ fn expand_inner(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream
 /// Whether `attr` is `#[name]` (or `#[navree::name]`).
 fn is(attr: &Attribute, name: &str) -> bool {
     let path = attr.path();
-    path.segments.last().is_some_and(|segment| segment.ident == name)
+    path.segments
+        .last()
+        .is_some_and(|segment| segment.ident == name)
         && (path.segments.len() == 1
             || (path.segments.len() == 2
                 && matches!(
@@ -206,7 +212,11 @@ fn tool(mut method: ImplItemFn) -> syn::Result<Tool> {
 }
 
 /// `#[tool]`, `#[tool(read_only)]`, `#[tool(needs_approval)]`, or both.
-fn tool_flags(attr: &Attribute, read_only: &mut bool, needs_approval: &mut bool) -> syn::Result<()> {
+fn tool_flags(
+    attr: &Attribute,
+    read_only: &mut bool,
+    needs_approval: &mut bool,
+) -> syn::Result<()> {
     match &attr.meta {
         Meta::Path(_) => Ok(()),
         Meta::List(_) => attr.parse_nested_meta(|meta| {
@@ -223,9 +233,10 @@ fn tool_flags(attr: &Attribute, read_only: &mut bool, needs_approval: &mut bool)
                 )))
             }
         }),
-        Meta::NameValue(_) => Err(At::of(attr).error(
-            "expected #[tool], #[tool(read_only)] or #[tool(needs_approval)]",
-        )),
+        Meta::NameValue(_) => {
+            Err(At::of(attr)
+                .error("expected #[tool], #[tool(read_only)] or #[tool(needs_approval)]"))
+        }
     }
 }
 
@@ -243,7 +254,10 @@ fn signature(method: &ImplItemFn) -> syn::Result<Option<Option<Type>>> {
         )
     };
     if sig.asyncness.is_none() {
-        return Err(syn::Error::new(ident.span(), format!("the tool `{ident}` must be `async`")));
+        return Err(syn::Error::new(
+            ident.span(),
+            format!("the tool `{ident}` must be `async`"),
+        ));
     }
     if !sig.generics.params.is_empty() {
         return Err(syn::Error::new(
@@ -278,11 +292,17 @@ fn doc_comment(attrs: &[Attribute]) -> String {
     let mut paragraphs: Vec<String> = Vec::new();
     let mut current = String::new();
     for attr in attrs {
-        let Meta::NameValue(meta) = &attr.meta else { continue };
+        let Meta::NameValue(meta) = &attr.meta else {
+            continue;
+        };
         if !meta.path.is_ident("doc") {
             continue;
         }
-        let Expr::Lit(ExprLit { lit: Lit::Str(text), .. }) = &meta.value else {
+        let Expr::Lit(ExprLit {
+            lit: Lit::Str(text),
+            ..
+        }) = &meta.value
+        else {
             continue;
         };
         let line = text.value();
@@ -306,7 +326,10 @@ fn doc_comment(attrs: &[Attribute]) -> String {
 
 /// The `ToolSpec` expression of `tool`.
 fn spec(tool: &Tool, ai: &TokenStream, access_crate: Option<&TokenStream>) -> TokenStream {
-    let name = LitStr::new(&tool.method.sig.ident.to_string(), tool.method.sig.ident.span());
+    let name = LitStr::new(
+        &tool.method.sig.ident.to_string(),
+        tool.method.sig.ident.span(),
+    );
     let description = LitStr::new(&tool.description, Span::call_site());
     let schema = match &tool.args {
         Some(args) => quote_spanned!(args.span()=> #ai::__private::tool_schema::<#args>()),
@@ -374,15 +397,25 @@ mod tests {
 
     #[test]
     fn signatures() {
-        let ok: ImplItemFn = syn::parse_quote!(async fn a(&self, run: &AgentRun, args: Args) {});
+        let ok: ImplItemFn = syn::parse_quote!(
+            async fn a(&self, run: &AgentRun, args: Args) {}
+        );
         assert!(matches!(signature(&ok), Ok(Some(Some(_)))));
-        let no_args: ImplItemFn = syn::parse_quote!(async fn a(&self, run: &AgentRun) {});
+        let no_args: ImplItemFn = syn::parse_quote!(
+            async fn a(&self, run: &AgentRun) {}
+        );
         assert!(matches!(signature(&no_args), Ok(Some(None))));
-        let not_async: ImplItemFn = syn::parse_quote!(fn a(&self, run: &AgentRun) {});
+        let not_async: ImplItemFn = syn::parse_quote!(
+            fn a(&self, run: &AgentRun) {}
+        );
         assert!(signature(&not_async).is_err());
-        let owned_self: ImplItemFn = syn::parse_quote!(async fn a(self, run: &AgentRun) {});
+        let owned_self: ImplItemFn = syn::parse_quote!(
+            async fn a(self, run: &AgentRun) {}
+        );
         assert!(signature(&owned_self).is_err());
-        let too_many: ImplItemFn = syn::parse_quote!(async fn a(&self, r: &AgentRun, a: A, b: B) {});
+        let too_many: ImplItemFn = syn::parse_quote!(
+            async fn a(&self, r: &AgentRun, a: A, b: B) {}
+        );
         assert!(signature(&too_many).is_err());
     }
 }

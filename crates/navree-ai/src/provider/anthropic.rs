@@ -50,10 +50,7 @@ impl Anthropic {
     }
 
     /// The request, or a key error.
-    fn request(
-        &self,
-        body: &Value,
-    ) -> Result<navree_http_client::RequestBuilder, ProviderError> {
+    fn request(&self, body: &Value) -> Result<navree_http_client::RequestBuilder, ProviderError> {
         let key = self.api_key.as_deref().ok_or_else(|| ProviderError::Auth {
             message: format!(
                 "no API key: set APP_AI__PROVIDERS__{}__API_KEY",
@@ -85,8 +82,9 @@ impl Driver for Anthropic {
     ) -> BoxFuture<'a, Result<ChatResponse, ProviderError>> {
         Box::pin(async move {
             let body = body(request, false);
-            let answer = wire::send_json(self.request(&body)?, request.timeout, wire::common_message)
-                .await?;
+            let answer =
+                wire::send_json(self.request(&body)?, request.timeout, wire::common_message)
+                    .await?;
             parse_response(&answer)
         })
     }
@@ -224,7 +222,11 @@ fn messages(messages: &[Message]) -> Vec<Value> {
 
 /// Tool inputs must be objects.
 fn object_or_empty(value: &Value) -> Value {
-    if value.is_object() { value.clone() } else { json!({}) }
+    if value.is_object() {
+        value.clone()
+    } else {
+        json!({})
+    }
 }
 
 /// The parts, usage and finish of a whole answer.
@@ -286,7 +288,11 @@ fn finish(stop_reason: Option<&str>) -> Finish {
 #[derive(Debug)]
 enum Block {
     Text,
-    Tool { id: String, name: String, json: String },
+    Tool {
+        id: String,
+        name: String,
+        json: String,
+    },
     Reasoning(Value),
 }
 
@@ -328,7 +334,10 @@ impl StreamState {
             }
             Some("content_block_delta") => {
                 let delta = &data["delta"];
-                match (delta.get("type").and_then(Value::as_str), self.blocks.get_mut(&index)) {
+                match (
+                    delta.get("type").and_then(Value::as_str),
+                    self.blocks.get_mut(&index),
+                ) {
                     (Some("text_delta"), _) => {
                         let text = delta["text"].as_str().unwrap_or_default();
                         if text.is_empty() {
@@ -343,7 +352,8 @@ impl StreamState {
                     }
                     (Some("thinking_delta"), Some(Block::Reasoning(block))) => {
                         let more = delta["thinking"].as_str().unwrap_or_default();
-                        let thinking = format!("{}{more}", block["thinking"].as_str().unwrap_or_default());
+                        let thinking =
+                            format!("{}{more}", block["thinking"].as_str().unwrap_or_default());
                         block["thinking"] = json!(thinking);
                         Vec::new()
                     }
@@ -373,10 +383,12 @@ impl StreamState {
                         )))],
                     }
                 }
-                Some(Block::Reasoning(block)) => vec![Ok(StreamChunk::Reasoning(Part::Reasoning {
-                    provider: DRIVER.to_owned(),
-                    data: block,
-                }))],
+                Some(Block::Reasoning(block)) => {
+                    vec![Ok(StreamChunk::Reasoning(Part::Reasoning {
+                        provider: DRIVER.to_owned(),
+                        data: block,
+                    }))]
+                }
                 _ => Vec::new(),
             },
             Some("message_delta") => {
@@ -467,7 +479,9 @@ mod tests {
                     provider: "anthropic".into(),
                     data: json!({ "type": "thinking", "thinking": "", "signature": "sig" }),
                 },
-                Part::Text { text: "Looking.".into() },
+                Part::Text {
+                    text: "Looking.".into(),
+                },
                 Part::ToolCall(ToolCall {
                     id: "toolu_1".into(),
                     name: "search_deals".into(),
@@ -491,7 +505,11 @@ mod tests {
         let format = &body["output_config"]["format"];
         assert_eq!(format["type"], "json_schema");
         assert_eq!(format["schema"]["additionalProperties"], false);
-        assert!(format["schema"]["properties"]["a"].get("maxLength").is_none());
+        assert!(
+            format["schema"]["properties"]["a"]
+                .get("maxLength")
+                .is_none()
+        );
         let assistant = &body["messages"][1]["content"];
         assert_eq!(assistant[0]["type"], "thinking");
         assert_eq!(assistant[1]["type"], "text");
@@ -527,7 +545,9 @@ mod tests {
                 cached_input_tokens: 90
             }
         );
-        assert!(matches!(&response.parts[0], Part::Reasoning { provider, .. } if provider == "anthropic"));
+        assert!(
+            matches!(&response.parts[0], Part::Reasoning { provider, .. } if provider == "anthropic")
+        );
         assert_eq!(finish(Some("refusal")), Finish::Refused);
         assert_eq!(finish(Some("max_tokens")), Finish::MaxTokens);
         assert_eq!(finish(Some("end_turn")), Finish::Stop);

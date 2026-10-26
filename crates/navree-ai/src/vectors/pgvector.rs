@@ -35,7 +35,11 @@ impl PgVector {
         let result = self
             .db
             .conn()
-            .execute_raw(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                values,
+            ))
             .await
             .map_err(database)?;
         Ok(result.rows_affected())
@@ -118,7 +122,10 @@ pub(crate) fn filter_sql(filter: &Filter, values: &mut Vec<SqlValue>) -> String 
     let path = |field: &str| format!("'{{{}}}'", field.replace('.', ","));
     match filter {
         Filter::Eq(field, value) => {
-            let p = param(SqlValue::from(nested(field, value.clone()).to_string()), values);
+            let p = param(
+                SqlValue::from(nested(field, value.clone()).to_string()),
+                values,
+            );
             format!("metadata @> {p}::jsonb")
         }
         Filter::AnyOf(field, options) => {
@@ -128,7 +135,10 @@ pub(crate) fn filter_sql(filter: &Filter, values: &mut Vec<SqlValue>) -> String 
             let parts: Vec<String> = options
                 .iter()
                 .map(|value| {
-                    let p = param(SqlValue::from(nested(field, value.clone()).to_string()), values);
+                    let p = param(
+                        SqlValue::from(nested(field, value.clone()).to_string()),
+                        values,
+                    );
                     format!("metadata @> {p}::jsonb")
                 })
                 .collect();
@@ -164,11 +174,19 @@ pub(crate) fn filter_sql(filter: &Filter, values: &mut Vec<SqlValue>) -> String 
         Filter::Not(inner) => format!("NOT ({})", filter_sql(inner, values)),
         Filter::And(filters) => {
             let parts: Vec<String> = filters.iter().map(|f| filter_sql(f, values)).collect();
-            if parts.is_empty() { "TRUE".to_owned() } else { format!("({})", parts.join(" AND ")) }
+            if parts.is_empty() {
+                "TRUE".to_owned()
+            } else {
+                format!("({})", parts.join(" AND "))
+            }
         }
         Filter::Or(filters) => {
             let parts: Vec<String> = filters.iter().map(|f| filter_sql(f, values)).collect();
-            if parts.is_empty() { "FALSE".to_owned() } else { format!("({})", parts.join(" OR ")) }
+            if parts.is_empty() {
+                "FALSE".to_owned()
+            } else {
+                format!("({})", parts.join(" OR "))
+            }
         }
     }
 }
@@ -238,7 +256,11 @@ impl VectorDriver for PgVector {
         })
     }
 
-    fn upsert<'a>(&'a self, collection: &'a str, records: Vec<VectorRecord>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn upsert<'a>(
+        &'a self,
+        collection: &'a str,
+        records: Vec<VectorRecord>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             let sql = format!(
                 "INSERT INTO {} (id, embedding, text, metadata, updated_at) \
@@ -263,7 +285,11 @@ impl VectorDriver for PgVector {
         })
     }
 
-    fn delete<'a>(&'a self, collection: &'a str, ids: Vec<String>) -> BoxFuture<'a, Result<(), AiError>> {
+    fn delete<'a>(
+        &'a self,
+        collection: &'a str,
+        ids: Vec<String>,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             for id in ids {
                 self.execute(
@@ -276,7 +302,11 @@ impl VectorDriver for PgVector {
         })
     }
 
-    fn delete_where<'a>(&'a self, collection: &'a str, filter: &'a Filter) -> BoxFuture<'a, Result<(), AiError>> {
+    fn delete_where<'a>(
+        &'a self,
+        collection: &'a str,
+        filter: &'a Filter,
+    ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             let mut values = Vec::new();
             let condition = filter_sql(filter, &mut values);
@@ -299,11 +329,16 @@ impl VectorDriver for PgVector {
     ) -> BoxFuture<'a, Result<Vec<VectorMatch>, AiError>> {
         Box::pin(async move {
             self.check_backend()?;
-            let (sql, values) = search_sql(collection, self.metric, vector, filter, limit, min_score);
+            let (sql, values) =
+                search_sql(collection, self.metric, vector, filter, limit, min_score);
             let rows = self
                 .db
                 .conn()
-                .query_all_raw(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
+                .query_all_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    sql,
+                    values,
+                ))
                 .await
                 .map_err(database)?;
             rows.iter()
@@ -363,7 +398,14 @@ mod tests {
             .and(Filter::any_of("kind", ["call", "note"]))
             .and(Filter::gte("created_at", "2026-10-01"))
             .and(Filter::not(Filter::lt("count", 3)));
-        let (sql, values) = search_sql("notes", Metric::Cosine, &[0.5, 1.0], Some(&filter), 8, Some(0.2));
+        let (sql, values) = search_sql(
+            "notes",
+            Metric::Cosine,
+            &[0.5, 1.0],
+            Some(&filter),
+            8,
+            Some(0.2),
+        );
         assert_eq!(
             sql,
             "SELECT id, text, metadata, (1 - (embedding <=> $1::vector))::double precision AS score \
@@ -374,7 +416,10 @@ mod tests {
         );
         assert_eq!(values.len(), 7);
         assert_eq!(values[0], SqlValue::from("[0.5,1]".to_owned()));
-        assert_eq!(values[1], SqlValue::from("{\"subject_id\":\"d1\"}".to_owned()));
+        assert_eq!(
+            values[1],
+            SqlValue::from("{\"subject_id\":\"d1\"}".to_owned())
+        );
     }
 
     #[test]

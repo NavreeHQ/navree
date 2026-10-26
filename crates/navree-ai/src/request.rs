@@ -11,13 +11,13 @@ use serde_json::Value;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::AiError;
 use crate::ai::{Ai, Extra, Spec, extract_json};
 use crate::message::{Attachment, Message, Prompt};
 use crate::provider::OutputFormat;
 use crate::response::{Finish, TextResponse};
 use crate::schema;
 use crate::stream::TextStream;
-use crate::AiError;
 
 /// The options every request builder takes.
 macro_rules! request_options {
@@ -156,14 +156,18 @@ fn plain<T: DeserializeOwned>(value: &Value) -> Result<T, String> {
 }
 
 /// Deserializes and validates `value`, with the API's messages.
-fn validated<T: DeserializeOwned + garde::Validate<Context = ()>>(value: &Value) -> Result<T, String> {
-    navree_validation::validate_json::<T>(value, &navree_validation::Messages::default()).map_err(|errors| {
-        errors
-            .iter()
-            .flat_map(|(_, messages)| messages.iter().cloned())
-            .collect::<Vec<_>>()
-            .join("; ")
-    })
+fn validated<T: DeserializeOwned + garde::Validate<Context = ()>>(
+    value: &Value,
+) -> Result<T, String> {
+    navree_validation::validate_json::<T>(value, &navree_validation::Messages::default()).map_err(
+        |errors| {
+            errors
+                .iter()
+                .flat_map(|(_, messages)| messages.iter().cloned())
+                .collect::<Vec<_>>()
+                .join("; ")
+        },
+    )
 }
 
 impl<T> IntoFuture for StructuredRequest<T>
@@ -204,11 +208,17 @@ pub(crate) async fn structured<T>(
     for _ in 0..=ai.options().structured_retries {
         let answer = ai.complete(&spec, extra).await?;
         if answer.response.finish == Finish::Refused {
-            return Err(AiError::Refused { model: answer.model });
+            return Err(AiError::Refused {
+                model: answer.model,
+            });
         }
         let text = answer.response.text();
         let parsed = extract_json(&text).and_then(|value| {
-            let value = if wrapped { schema::unwrap_value(value) } else { value };
+            let value = if wrapped {
+                schema::unwrap_value(value)
+            } else {
+                value
+            };
             parse(&value)
         });
         match parsed {
@@ -224,7 +234,9 @@ pub(crate) async fn structured<T>(
             }
         }
     }
-    Err(AiError::InvalidOutput { message: last_error })
+    Err(AiError::InvalidOutput {
+        message: last_error,
+    })
 }
 
 /// A streamed request ([`Ai::stream`]); awaiting it returns a

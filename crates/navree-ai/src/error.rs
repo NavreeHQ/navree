@@ -178,10 +178,8 @@ impl AiError {
                 AppError::too_many_requests(retry_after.unwrap_or(Duration::from_secs(1)))
                     .with_detail("The AI provider is busy; try again shortly.")
             }
-            AiError::BudgetExceeded { retry_after } => {
-                AppError::too_many_requests(*retry_after)
-                    .with_detail("The daily AI usage limit is reached; it renews at midnight UTC.")
-            }
+            AiError::BudgetExceeded { retry_after } => AppError::too_many_requests(*retry_after)
+                .with_detail("The daily AI usage limit is reached; it renews at midnight UTC."),
             AiError::InvalidOutput { .. } => AppError::from_status(StatusCode::BAD_GATEWAY)
                 .with_detail("The AI model returned an answer in the wrong format.")
                 .with_source(self.clone()),
@@ -280,7 +278,8 @@ impl ProviderError {
     pub(crate) fn is_rate_limit(&self) -> bool {
         matches!(
             self,
-            ProviderError::RateLimited { .. } | ProviderError::Scripted(AiError::RateLimited { .. })
+            ProviderError::RateLimited { .. }
+                | ProviderError::Scripted(AiError::RateLimited { .. })
         )
     }
 
@@ -393,7 +392,9 @@ mod tests {
 
     #[test]
     fn provider_text_never_reaches_the_client() {
-        let body = AiError::request("openai", "secret prompt details").to_app_error().body();
+        let body = AiError::request("openai", "secret prompt details")
+            .to_app_error()
+            .body();
         assert!(!body.to_string().contains("secret"), "{body}");
     }
 

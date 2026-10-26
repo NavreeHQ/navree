@@ -166,7 +166,10 @@ impl Embeddings {
             for (index, vector) in batch.iter().zip(vectors) {
                 if ttl_days > 0 {
                     let ttl = Duration::from_secs(ttl_days * 24 * 3600);
-                    if let Err(error) = cache.put(&cache_key(&model, &texts[*index]), &vector.0, ttl).await {
+                    if let Err(error) = cache
+                        .put(&cache_key(&model, &texts[*index]), &vector.0, ttl)
+                        .await
+                    {
                         tracing::warn!(target: "navree::ai", %error, "caching an embedding failed");
                     }
                 }
@@ -210,7 +213,11 @@ impl Embeddings {
         self.ai.record(
             &success.model.name,
             &success.model.provider,
-            if success.position == 0 { "ok" } else { "failover" },
+            if success.position == 0 {
+                "ok"
+            } else {
+                "failover"
+            },
             Some(crate::Usage::new(response.input_tokens, 0)),
             None,
             &success.tried,
@@ -233,7 +240,10 @@ impl Embeddings {
 
 /// The cache key of `text` embedded by `model`.
 fn cache_key(model: &str, text: &str) -> String {
-    format!("ai:embed:{model}:{}", hex::encode(Sha256::digest(text.as_bytes())))
+    format!(
+        "ai:embed:{model}:{}",
+        hex::encode(Sha256::digest(text.as_bytes()))
+    )
 }
 
 #[cfg(test)]

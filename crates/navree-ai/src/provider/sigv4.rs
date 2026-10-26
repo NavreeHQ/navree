@@ -89,10 +89,7 @@ pub(crate) fn canonical_request(request: &Signable<'_>) -> String {
         .map(|(k, v)| (k.to_ascii_lowercase(), collapse(v)))
         .collect();
     headers.sort();
-    let canonical_headers: String = headers
-        .iter()
-        .map(|(k, v)| format!("{k}:{v}\n"))
-        .collect();
+    let canonical_headers: String = headers.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
     format!(
         "{}\n{path}\n{query}\n{canonical_headers}\n{}\n{}",
         request.method,
@@ -103,7 +100,10 @@ pub(crate) fn canonical_request(request: &Signable<'_>) -> String {
 
 /// `content-type;host;x-amz-date`.
 fn signed_headers(headers: &[(&str, &str)]) -> String {
-    let mut names: Vec<String> = headers.iter().map(|(k, _)| k.to_ascii_lowercase()).collect();
+    let mut names: Vec<String> = headers
+        .iter()
+        .map(|(k, _)| k.to_ascii_lowercase())
+        .collect();
     names.sort();
     names.join(";")
 }
@@ -238,7 +238,10 @@ mod tests {
             path: "/",
             query: &[("Action", "ListUsers"), ("Version", "2010-05-08")],
             headers: &[
-                ("Content-Type", "application/x-www-form-urlencoded; charset=utf-8"),
+                (
+                    "Content-Type",
+                    "application/x-www-form-urlencoded; charset=utf-8",
+                ),
                 ("Host", "iam.amazonaws.com"),
                 ("X-Amz-Date", "20150830T123600Z"),
             ],
@@ -287,7 +290,8 @@ mod tests {
     fn credentials_resolve_in_order() {
         let none = |_: &str| None::<String>;
         let no_file = |_: &Path| None::<String>;
-        let explicit = resolve_credentials((Some("A"), Some("S"), None), None, none, no_file).unwrap();
+        let explicit =
+            resolve_credentials((Some("A"), Some("S"), None), None, none, no_file).unwrap();
         assert_eq!(explicit.access_key_id, "A");
 
         let env = |name: &str| match name {

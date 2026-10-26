@@ -16,9 +16,7 @@ use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
 use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
 use crate::streaming::BodyStream;
-use crate::{
-    HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse,
-};
+use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse};
 use futures_util::StreamExt;
 
 /// The outgoing HTTP client: cheap to clone, shared as a singleton.

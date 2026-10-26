@@ -71,7 +71,10 @@ impl AgentRun {
 
     /// Loads record `id` of `E` in the tool call's unit of work and checks
     /// `A` on it: the record, or a 404 (no such record) or a 403.
-    pub async fn authorize<E, A>(&self, id: impl Into<sea_orm::Value>) -> Result<Authorized<E, A>, AppError>
+    pub async fn authorize<E, A>(
+        &self,
+        id: impl Into<sea_orm::Value>,
+    ) -> Result<Authorized<E, A>, AppError>
     where
         E: EntityTrait + Subject,
         E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
@@ -80,7 +83,9 @@ impl AgentRun {
     {
         let model = Repo::<E>::find(&self.uow, id)
             .await
-            .map_err(|error| navree_db::map_db_error(&error).unwrap_or_else(|| AppError::internal(error)))?
+            .map_err(|error| {
+                navree_db::map_db_error(&error).unwrap_or_else(|| AppError::internal(error))
+            })?
             .ok_or_else(AppError::not_found)?;
         Authorized::check(model, self.shared.access.ability.clone())
     }

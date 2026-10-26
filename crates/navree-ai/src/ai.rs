@@ -21,8 +21,7 @@ use crate::fake::AiFake;
 use crate::message::{Attachment, AttachmentKind, Message, Part, Prompt, Role};
 use crate::options::{AiOptions, ModelConfig};
 use crate::provider::{
-    self, ChatRequest, ChatResponse, ChunkStream, Driver, OutputFormat,
-    ToolChoice, ToolDefinition,
+    self, ChatRequest, ChatResponse, ChunkStream, Driver, OutputFormat, ToolChoice, ToolDefinition,
 };
 use crate::request::{StreamRequest, StructuredRequest, TextRequest};
 use crate::response::{TextResponse, Usage};
@@ -94,7 +93,12 @@ impl Spec {
         if self.attachments.is_empty() {
             return messages;
         }
-        let attachments: Vec<Part> = self.attachments.iter().cloned().map(Part::Attachment).collect();
+        let attachments: Vec<Part> = self
+            .attachments
+            .iter()
+            .cloned()
+            .map(Part::Attachment)
+            .collect();
         match messages.iter_mut().rev().find(|m| m.role == Role::User) {
             Some(message) => {
                 let mut parts = attachments;
@@ -330,16 +334,19 @@ impl Ai {
                 .unwrap_or_else(|| ModelConfig::new("fake", name));
             return Ok(Resolved {
                 name: name.to_owned(),
-                provider: if config.provider.is_empty() { "fake".to_owned() } else { config.provider.clone() },
+                provider: if config.provider.is_empty() {
+                    "fake".to_owned()
+                } else {
+                    config.provider.clone()
+                },
                 config,
                 driver: driver.clone(),
             });
         }
-        let config = options
-            .models
-            .get(name)
-            .cloned()
-            .ok_or_else(|| AiError::config(format!("unknown model `{name}` (not in ai.models)")))?;
+        let config =
+            options.models.get(name).cloned().ok_or_else(|| {
+                AiError::config(format!("unknown model `{name}` (not in ai.models)"))
+            })?;
         let driver = self
             .inner
             .drivers
@@ -362,7 +369,9 @@ impl Ai {
         match self.inner.options.default_model() {
             Some(name) => Ok(name.to_owned()),
             None if self.inner.fake.is_some() => Ok("default".to_owned()),
-            None => Err(AiError::config("no model is configured (ai.models is empty)")),
+            None => Err(AiError::config(
+                "no model is configured (ai.models is empty)",
+            )),
         }
     }
 
@@ -439,7 +448,12 @@ impl Ai {
     /// Runs `attempt` on each model of the chain, with retries, until one
     /// succeeds. Budgets are checked first; failures are logged and
     /// counted here, successes by the caller (once the tokens are known).
-    pub(crate) async fn failover<T, F>(&self, spec: &Spec, extra: &Extra, attempt: F) -> Result<Success<T>, AiError>
+    pub(crate) async fn failover<T, F>(
+        &self,
+        spec: &Spec,
+        extra: &Extra,
+        attempt: F,
+    ) -> Result<Success<T>, AiError>
     where
         F: Fn(Arc<dyn Driver>, ChatRequest) -> BoxFuture<'static, Result<T, ProviderError>>,
     {
@@ -468,14 +482,15 @@ impl Ai {
             let mut retry = 0;
             loop {
                 let timeout = request.timeout;
-                let outcome = tokio::time::timeout(timeout, attempt(model.driver.clone(), request.clone()))
-                    .await
-                    .unwrap_or_else(|_| {
-                        Err(ProviderError::unavailable(format!(
-                            "no answer within {} s",
-                            timeout.as_secs_f64()
-                        )))
-                    });
+                let outcome =
+                    tokio::time::timeout(timeout, attempt(model.driver.clone(), request.clone()))
+                        .await
+                        .unwrap_or_else(|_| {
+                            Err(ProviderError::unavailable(format!(
+                                "no answer within {} s",
+                                timeout.as_secs_f64()
+                            )))
+                        });
                 match outcome {
                     Ok(value) => {
                         return Ok(Success {
@@ -499,7 +514,8 @@ impl Ai {
                             error = %error.describe(),
                             "AI request attempt failed"
                         );
-                        let wait = backoff(options.retry_base_ms, retry).max(error.retry_after().unwrap_or_default());
+                        let wait = backoff(options.retry_base_ms, retry)
+                            .max(error.retry_after().unwrap_or_default());
                         last = Some((model.clone(), error));
                         if retry >= options.max_retries || wait > timeout {
                             break;
@@ -528,7 +544,15 @@ impl Ai {
                                 "AI request failed"
                             );
                         }
-                        self.record(&model.name, &model.provider, "error", None, spec.user, &tried, started);
+                        self.record(
+                            &model.name,
+                            &model.provider,
+                            "error",
+                            None,
+                            spec.user,
+                            &tried,
+                            started,
+                        );
                         return Err(ai_error);
                     }
                 }
@@ -540,12 +564,24 @@ impl Ai {
                 retry_after: error.retry_after(),
             },
             Some((model, ProviderError::Scripted(error))) => {
-                self.record(&model.name, &model.provider, "error", None, spec.user, &tried, started);
+                self.record(
+                    &model.name,
+                    &model.provider,
+                    "error",
+                    None,
+                    spec.user,
+                    &tried,
+                    started,
+                );
                 return Err(error);
             }
             Some((model, error)) => AiError::Unavailable {
                 provider: model.provider.clone(),
-                message: format!("every model failed (tried {}): {}", tried.join(", "), error.describe()),
+                message: format!(
+                    "every model failed (tried {}): {}",
+                    tried.join(", "),
+                    error.describe()
+                ),
             },
             None => match unsupported {
                 Some(message) => AiError::Unsupported { message },
@@ -573,7 +609,11 @@ impl Ai {
         self.record(
             &success.model.name,
             &success.model.provider,
-            if success.position == 0 { "ok" } else { "failover" },
+            if success.position == 0 {
+                "ok"
+            } else {
+                "failover"
+            },
             Some(response.usage),
             spec.user,
             &success.tried,
@@ -596,7 +636,11 @@ impl Ai {
     }
 
     /// A text answer.
-    pub(crate) async fn text_response(&self, spec: &Spec, extra: &Extra) -> Result<TextResponse, AiError> {
+    pub(crate) async fn text_response(
+        &self,
+        spec: &Spec,
+        extra: &Extra,
+    ) -> Result<TextResponse, AiError> {
         let answer = self.complete(spec, extra).await?;
         Ok(TextResponse {
             text: answer.response.text(),
@@ -608,7 +652,11 @@ impl Ai {
     }
 
     /// A streamed answer, failing over until the first chunk arrives.
-    pub(crate) async fn open_stream(&self, spec: &Spec, extra: &Extra) -> Result<OpenStream, AiError> {
+    pub(crate) async fn open_stream(
+        &self,
+        spec: &Spec,
+        extra: &Extra,
+    ) -> Result<OpenStream, AiError> {
         let success = self
             .failover(spec, extra, |driver, request| {
                 Box::pin(async move {
@@ -740,7 +788,8 @@ impl Ai {
             }
         }
         let usage = usage.unwrap_or_default();
-        let request_id = navree_db::Uow::current().and_then(|uow| uow.request_id().map(str::to_owned));
+        let request_id =
+            navree_db::Uow::current().and_then(|uow| uow.request_id().map(str::to_owned));
         tracing::info!(
             target: "navree::ai",
             model,
@@ -766,7 +815,10 @@ impl Ai {
 impl fmt::Debug for Ai {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Ai")
-            .field("models", &self.inner.options.models.keys().collect::<Vec<_>>())
+            .field(
+                "models",
+                &self.inner.options.models.keys().collect::<Vec<_>>(),
+            )
             .field("fake", &self.inner.fake.is_some())
             .finish_non_exhaustive()
     }
@@ -816,7 +868,10 @@ pub(crate) fn until_midnight(now: DateTime<Utc>) -> Duration {
         .and_then(|day| day.and_hms_opt(0, 0, 0))
         .map(|naive| naive.and_utc())
         .unwrap_or(now);
-    (midnight - now).to_std().unwrap_or_default().max(Duration::from_secs(1))
+    (midnight - now)
+        .to_std()
+        .unwrap_or_default()
+        .max(Duration::from_secs(1))
 }
 
 /// The JSON in a model's text: the whole text, or the inside of a code
@@ -874,7 +929,10 @@ mod tests {
     fn json_is_found_in_fences_and_prose() {
         assert_eq!(extract_json("{\"a\":1}").unwrap()["a"], 1);
         assert_eq!(extract_json("```json\n{\"a\":2}\n```").unwrap()["a"], 2);
-        assert_eq!(extract_json("Here you go: {\"a\":3} Thanks").unwrap()["a"], 3);
+        assert_eq!(
+            extract_json("Here you go: {\"a\":3} Thanks").unwrap()["a"],
+            3
+        );
         assert!(extract_json("no json here").is_err());
     }
 }

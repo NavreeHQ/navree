@@ -163,7 +163,11 @@ impl ToolAccess {
             }
             ToolAccess::Permissions(permissions) => permissions.iter().all(|permission| {
                 let (prefix, action) = permission.rsplit_once('.').unwrap_or((permission, ""));
-                let action = if action == "*" { navree_access::MANAGE } else { action };
+                let action = if action == "*" {
+                    navree_access::MANAGE
+                } else {
+                    action
+                };
                 let subject = prefixes.get(prefix).map(String::as_str).unwrap_or(prefix);
                 access.ability.has_unconditional(action, subject)
             }),
@@ -403,10 +407,14 @@ mod tests {
             }
             ToolOutcome::Ok(_) => panic!("invalid arguments must not run the tool"),
         }
-        let outcome = call_tool(serde_json::json!({ "subject": "Call Dana" }), |args: Args| async move {
-            Ok::<_, AppError>(serde_json::json!({ "logged": args.subject }))
-        })
-        .await;
+        let outcome =
+            call_tool(
+                serde_json::json!({ "subject": "Call Dana" }),
+                |args: Args| async move {
+                    Ok::<_, AppError>(serde_json::json!({ "logged": args.subject }))
+                },
+            )
+            .await;
         assert!(matches!(outcome, ToolOutcome::Ok(value) if value["logged"] == "Call Dana"));
     }
 }

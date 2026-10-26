@@ -136,7 +136,10 @@ mod tests {
 
     #[test]
     fn finish_serializes_in_snake_case() {
-        assert_eq!(serde_json::to_value(Finish::MaxTokens).unwrap(), "max_tokens");
+        assert_eq!(
+            serde_json::to_value(Finish::MaxTokens).unwrap(),
+            "max_tokens"
+        );
         assert_eq!(Finish::Refused.as_str(), "refused");
     }
 

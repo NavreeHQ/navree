@@ -49,7 +49,10 @@ impl Bedrock {
         Self {
             name: name.to_owned(),
             region,
-            base: config.url.clone().map(|u| u.trim_end_matches('/').to_owned()),
+            base: config
+                .url
+                .clone()
+                .map(|u| u.trim_end_matches('/').to_owned()),
             explicit: (
                 config.access_key_id.clone(),
                 config.secret_access_key.clone(),
@@ -79,7 +82,12 @@ impl Bedrock {
     }
 
     /// A signed `POST {base}/model/{model}/{action}` with `body`.
-    fn post(&self, model: &str, action: &str, body: &Value) -> Result<RequestBuilder, ProviderError> {
+    fn post(
+        &self,
+        model: &str,
+        action: &str,
+        body: &Value,
+    ) -> Result<RequestBuilder, ProviderError> {
         let region = self.region.as_deref().ok_or_else(|| ProviderError::Auth {
             message: format!(
                 "no region: set APP_AI__PROVIDERS__{}__REGION or AWS_REGION",
@@ -95,8 +103,11 @@ impl Bedrock {
             .base
             .clone()
             .unwrap_or_else(|| format!("https://bedrock-runtime.{region}.amazonaws.com"));
-        let url = Url::parse(&format!("{base}/model/{}/{action}", sigv4::uri_encode(model)))
-            .map_err(|error| ProviderError::request(format!("invalid Bedrock URL: {error}")))?;
+        let url = Url::parse(&format!(
+            "{base}/model/{}/{action}",
+            sigv4::uri_encode(model)
+        ))
+        .map_err(|error| ProviderError::request(format!("invalid Bedrock URL: {error}")))?;
         let host = match url.port() {
             Some(port) => format!("{}:{port}", url.host_str().unwrap_or_default()),
             None => url.host_str().unwrap_or_default().to_owned(),
@@ -265,7 +276,13 @@ impl Driver for Bedrock {
 fn floats(value: &Value) -> Vec<f32> {
     value
         .as_array()
-        .map(|values| values.iter().filter_map(Value::as_f64).map(|v| v as f32).collect())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_f64)
+                .map(|v| v as f32)
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -358,7 +375,9 @@ fn messages(messages: &[Message]) -> Vec<Value> {
                         "status": if result.is_error { "error" } else { "success" },
                     }
                 })),
-                Part::Reasoning { provider, data } if provider == DRIVER => blocks.push(data.clone()),
+                Part::Reasoning { provider, data } if provider == DRIVER => {
+                    blocks.push(data.clone())
+                }
                 _ => {}
             }
         }
@@ -390,10 +409,18 @@ fn document_name(name: Option<&str>) -> String {
         .map_or(name.unwrap_or("document"), |(stem, _)| stem)
         .chars()
         .map(|c| {
-            if c.is_ascii_alphanumeric() || " -()[]".contains(c) { c } else { '-' }
+            if c.is_ascii_alphanumeric() || " -()[]".contains(c) {
+                c
+            } else {
+                '-'
+            }
         })
         .collect();
-    if cleaned.trim().is_empty() { "document".to_owned() } else { cleaned }
+    if cleaned.trim().is_empty() {
+        "document".to_owned()
+    } else {
+        cleaned
+    }
 }
 
 /// A whole Converse answer.
@@ -405,7 +432,9 @@ pub(crate) fn parse_response(answer: &Value) -> Result<ChatResponse, ProviderErr
     let mut parts = Vec::new();
     for block in content {
         if let Some(text) = block.get("text").and_then(Value::as_str) {
-            parts.push(Part::Text { text: text.to_owned() });
+            parts.push(Part::Text {
+                text: text.to_owned(),
+            });
         } else if let Some(tool) = block.get("toolUse") {
             parts.push(Part::ToolCall(ToolCall {
                 id: tool["toolUseId"].as_str().unwrap_or_default().to_owned(),
@@ -452,8 +481,16 @@ fn finish(reason: Option<&str>) -> Finish {
 /// A tool call being streamed.
 #[derive(Debug)]
 enum Block {
-    Tool { id: String, name: String, input: String },
-    Reasoning { text: String, signature: Option<String>, redacted: Option<String> },
+    Tool {
+        id: String,
+        name: String,
+        input: String,
+    },
+    Reasoning {
+        text: String,
+        signature: Option<String>,
+        redacted: Option<String>,
+    },
 }
 
 /// The state of a streamed answer.
@@ -513,7 +550,12 @@ impl StreamState {
                         signature: None,
                         redacted: None,
                     });
-                    if let Block::Reasoning { text, signature, redacted } = block {
+                    if let Block::Reasoning {
+                        text,
+                        signature,
+                        redacted,
+                    } = block
+                    {
                         if let Some(more) = reasoning["text"].as_str() {
                             text.push_str(more);
                         }
@@ -546,9 +588,15 @@ impl StreamState {
                         )))],
                     }
                 }
-                Some(Block::Reasoning { text, signature, redacted }) => {
+                Some(Block::Reasoning {
+                    text,
+                    signature,
+                    redacted,
+                }) => {
                     let data = match redacted {
-                        Some(redacted) => json!({ "reasoningContent": { "redactedContent": redacted } }),
+                        Some(redacted) => {
+                            json!({ "reasoningContent": { "redactedContent": redacted } })
+                        }
                         None => json!({
                             "reasoningContent": { "reasoningText": { "text": text, "signature": signature } }
                         }),
@@ -586,8 +634,8 @@ mod tests {
 
     use super::*;
     use crate::message::{Attachment, ToolResult};
-    use crate::provider::eventstream::encode;
     use crate::provider::ToolDefinition;
+    use crate::provider::eventstream::encode;
 
     #[test]
     fn the_body_has_the_converse_shape() {
@@ -599,7 +647,9 @@ mod tests {
                 Message::new(
                     Role::User,
                     vec![
-                        Part::Text { text: "Read this".into() },
+                        Part::Text {
+                            text: "Read this".into(),
+                        },
                         Part::Attachment(Attachment::pdf(vec![1u8]).named("q4 report.pdf")),
                     ],
                 ),
@@ -642,9 +692,18 @@ mod tests {
         assert_eq!(first[0]["document"]["format"], "pdf");
         assert_eq!(first[0]["document"]["name"], "q4 report");
         assert_eq!(first[1]["text"], "Read this");
-        assert_eq!(body["messages"][1]["content"][0]["toolUse"]["toolUseId"], "t1");
-        assert_eq!(body["messages"][2]["content"][0]["toolResult"]["status"], "error");
-        assert_eq!(body["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["type"], "object");
+        assert_eq!(
+            body["messages"][1]["content"][0]["toolUse"]["toolUseId"],
+            "t1"
+        );
+        assert_eq!(
+            body["messages"][2]["content"][0]["toolResult"]["status"],
+            "error"
+        );
+        assert_eq!(
+            body["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["type"],
+            "object"
+        );
         assert_eq!(body["messages"][2]["content"].as_array().unwrap().len(), 1);
 
         // Converse has no "none" tool choice: the request asks for an answer
@@ -660,8 +719,17 @@ mod tests {
         );
         let tail = &body_none["messages"][2]["content"];
         assert_eq!(tail[0], body["messages"][2]["content"][0]);
-        assert!(tail[1]["text"].as_str().unwrap().contains("without calling tools"), "{tail}");
-        assert!(body_none.get("toolConfig").is_some(), "tool blocks need the tool config");
+        assert!(
+            tail[1]["text"]
+                .as_str()
+                .unwrap()
+                .contains("without calling tools"),
+            "{tail}"
+        );
+        assert!(
+            body_none.get("toolConfig").is_some(),
+            "tool blocks need the tool config"
+        );
     }
 
     #[test]
@@ -718,7 +786,10 @@ mod tests {
             ]
         );
         let throttled = encode(
-            &[(":message-type", "exception"), (":exception-type", "throttlingException")],
+            &[
+                (":message-type", "exception"),
+                (":exception-type", "throttlingException"),
+            ],
             br#"{"message":"Too many requests"}"#,
         );
         let message = &Decoder::default().feed(&throttled).unwrap()[0];

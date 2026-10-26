@@ -69,7 +69,7 @@ pub use chunker::{Chunk, Chunker};
 pub use embeddings::{Embedding, Embeddings};
 pub use error::AiError;
 pub use fake::{AiFake, FakeReply, FakeRequest};
-pub use memory::{ConversationSummary, Conversations, StoredMessage, AI_MIGRATIONS};
+pub use memory::{AI_MIGRATIONS, ConversationSummary, Conversations, StoredMessage};
 pub use message::{Attachment, AttachmentKind, Message, Part, Prompt, Role, ToolCall, ToolResult};
 pub use module::{AiModule, ModuleBuilderAiExt};
 pub use options::{
@@ -102,7 +102,9 @@ pub use utoipa;
 /// What `#[agent]` expands to. Not a public API.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::agent::{ToolOutcome, call_tool, call_tool_no_args, no_args_schema, tool_schema};
+    pub use crate::agent::{
+        ToolOutcome, call_tool, call_tool_no_args, no_args_schema, tool_schema,
+    };
     pub use navree_kernel::BoxFuture;
     pub use serde_json::Value;
 }

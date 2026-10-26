@@ -61,7 +61,10 @@ async fn earlier_turns_continue_a_conversation() {
     let messages = fake.requests()[0].messages().to_vec();
     assert_eq!(messages.len(), 3);
     assert_eq!(messages[1].role, Role::Assistant);
-    assert_eq!(fake.requests()[0].last_user_message(), "Shorter, and without the colon.");
+    assert_eq!(
+        fake.requests()[0].last_user_message(),
+        "Shorter, and without the colon."
+    );
 }
 
 #[tokio::test]
@@ -69,7 +72,11 @@ async fn the_default_model_and_its_max_tokens_apply() {
     let fake = AiFake::new();
     let ai = fake.ai_with(AiOptions {
         default: "smart".into(),
-        models: [("smart".to_owned(), ModelConfig::new("anthropic", "claude-opus-5-5").max_tokens(777))].into(),
+        models: [(
+            "smart".to_owned(),
+            ModelConfig::new("anthropic", "claude-opus-5-5").max_tokens(777),
+        )]
+        .into(),
         ..AiOptions::default()
     });
     fake.respond(FakeReply::text("ok"));
@@ -124,8 +131,11 @@ async fn a_request_nothing_answers_fails_naming_the_prompt() {
 #[tokio::test]
 async fn respond_when_answers_matching_requests_every_time() {
     let fake = AiFake::new();
-    fake.respond_when(|r| r.last_user_message().contains("Globex"), FakeReply::text("Globex!"))
-        .respond(FakeReply::text("queued"));
+    fake.respond_when(
+        |r| r.last_user_message().contains("Globex"),
+        FakeReply::text("Globex!"),
+    )
+    .respond(FakeReply::text("queued"));
     let ai = fake.ai();
 
     assert_eq!(ai.text("About Globex").await.unwrap().text, "Globex!");
@@ -174,9 +184,16 @@ struct FollowUpEmail {
 #[tokio::test]
 async fn structured_output_is_a_typed_value_with_the_schema_attached() {
     let fake = AiFake::new();
-    fake.respond(FakeReply::json(json!({ "sentiment": "at_risk", "reason": "They asked to cancel." })));
+    fake.respond(FakeReply::json(
+        json!({ "sentiment": "at_risk", "reason": "They asked to cancel." }),
+    ));
 
-    let triage = fake.ai().structured::<Triage>("I want to cancel.").model("fast").await.unwrap();
+    let triage = fake
+        .ai()
+        .structured::<Triage>("I want to cancel.")
+        .model("fast")
+        .await
+        .unwrap();
 
     assert_eq!(triage.sentiment, Sentiment::AtRisk);
     assert_eq!(triage.reason, "They asked to cancel.");
@@ -188,7 +205,11 @@ async fn an_enum_alone_is_structured_too() {
     let fake = AiFake::new();
     fake.respond(FakeReply::json(json!({ "value": "neutral" })));
 
-    let sentiment = fake.ai().structured::<Sentiment>("Thanks for the update.").await.unwrap();
+    let sentiment = fake
+        .ai()
+        .structured::<Sentiment>("Thanks for the update.")
+        .await
+        .unwrap();
 
     assert_eq!(sentiment, Sentiment::Neutral);
 }
@@ -201,13 +222,21 @@ async fn answers_that_do_not_deserialize_are_sent_back_for_repair() {
         FakeReply::json(json!({ "sentiment": "at_risk", "reason": "Cancelling." })),
     ]);
 
-    let triage = fake.ai().structured::<Triage>("I want to cancel.").await.unwrap();
+    let triage = fake
+        .ai()
+        .structured::<Triage>("I want to cancel.")
+        .await
+        .unwrap();
 
     assert_eq!(triage.sentiment, Sentiment::AtRisk);
     fake.assert_prompt_count(2);
     let repair = &fake.requests()[1];
     assert_eq!(repair.messages()[1].text(), "Sure! It is at risk.");
-    assert!(repair.last_user_message().contains("does not match the required JSON schema"));
+    assert!(
+        repair
+            .last_user_message()
+            .contains("does not match the required JSON schema")
+    );
 }
 
 #[tokio::test]
@@ -226,7 +255,11 @@ async fn a_repair_still_carries_the_attachments() {
 
     let requests = fake.requests();
     for request in &requests {
-        let attachments: usize = request.messages().iter().map(|m| m.attachments().count()).sum();
+        let attachments: usize = request
+            .messages()
+            .iter()
+            .map(|m| m.attachments().count())
+            .sum();
         assert_eq!(attachments, 1, "{:?}", request.messages());
     }
     assert_eq!(requests[1].messages()[0].text(), "How does this read?");
@@ -238,7 +271,9 @@ async fn validated_checks_the_garde_rules_and_repairs() {
     let fake = AiFake::new();
     fake.respond_with([
         FakeReply::json(json!({ "subject": "x".repeat(100), "body": "Hi", "send_on": null })),
-        FakeReply::json(json!({ "subject": "Next steps", "body": "Hi Dana", "send_on": "2026-10-30" })),
+        FakeReply::json(
+            json!({ "subject": "Next steps", "body": "Hi Dana", "send_on": "2026-10-30" }),
+        ),
     ]);
 
     let email = fake
@@ -260,9 +295,15 @@ async fn validated_checks_the_garde_rules_and_repairs() {
 #[tokio::test]
 async fn without_validated_the_rules_are_not_checked() {
     let fake = AiFake::new();
-    fake.respond(FakeReply::json(json!({ "subject": "x".repeat(100), "body": "Hi", "send_on": null })));
+    fake.respond(FakeReply::json(
+        json!({ "subject": "x".repeat(100), "body": "Hi", "send_on": null }),
+    ));
 
-    let email = fake.ai().structured::<FollowUpEmail>("Write a follow-up.").await.unwrap();
+    let email = fake
+        .ai()
+        .structured::<FollowUpEmail>("Write a follow-up.")
+        .await
+        .unwrap();
 
     assert_eq!(email.subject.len(), 100);
 }
@@ -288,9 +329,19 @@ async fn a_refusal_fails_a_structured_request() {
     let fake = AiFake::new();
     fake.respond(FakeReply::refusal());
 
-    let error = fake.ai().structured::<Triage>("x").model("fast").await.unwrap_err();
+    let error = fake
+        .ai()
+        .structured::<Triage>("x")
+        .model("fast")
+        .await
+        .unwrap_err();
 
-    assert_eq!(error, AiError::Refused { model: "fast".into() });
+    assert_eq!(
+        error,
+        AiError::Refused {
+            model: "fast".into()
+        }
+    );
 }
 
 #[tokio::test]
@@ -298,7 +349,13 @@ async fn timeouts_are_per_request() {
     let fake = AiFake::new();
     fake.respond(FakeReply::text("ok"));
 
-    let response = fake.ai().text("hi").timeout(Duration::from_secs(1)).stop(["END"]).temperature(0.1).await;
+    let response = fake
+        .ai()
+        .text("hi")
+        .timeout(Duration::from_secs(1))
+        .stop(["END"])
+        .temperature(0.1)
+        .await;
 
     assert!(response.is_ok());
 }

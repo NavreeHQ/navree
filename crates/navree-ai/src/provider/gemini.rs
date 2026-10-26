@@ -104,13 +104,24 @@ impl Driver for Gemini {
     ) -> BoxFuture<'a, Result<ChunkStream, ProviderError>> {
         Box::pin(async move {
             let request_body = body(request);
-            let url = format!("{}?alt=sse", self.url(&request.model, "streamGenerateContent"));
-            let response =
-                wire::open_stream(self.post(url, &request_body)?, request.timeout, wire::common_message)
-                    .await?;
+            let url = format!(
+                "{}?alt=sse",
+                self.url(&request.model, "streamGenerateContent")
+            );
+            let response = wire::open_stream(
+                self.post(url, &request_body)?,
+                request.timeout,
+                wire::common_message,
+            )
+            .await?;
             let events = Box::pin(wire::sse_events(response));
             let stream = futures_util::stream::unfold(
-                (events, State::default(), std::collections::VecDeque::new(), false),
+                (
+                    events,
+                    State::default(),
+                    std::collections::VecDeque::new(),
+                    false,
+                ),
                 |(mut events, mut state, mut pending, mut done)| async move {
                     loop {
                         if let Some(item) = pending.pop_front() {
@@ -178,12 +189,20 @@ impl Driver for Gemini {
             .await?;
             let vectors = answer["embeddings"]
                 .as_array()
-                .ok_or_else(|| ProviderError::unavailable("an embeddings answer without embeddings"))?
+                .ok_or_else(|| {
+                    ProviderError::unavailable("an embeddings answer without embeddings")
+                })?
                 .iter()
                 .map(|item| {
                     item["values"]
                         .as_array()
-                        .map(|values| values.iter().filter_map(Value::as_f64).map(|v| v as f32).collect())
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(Value::as_f64)
+                                .map(|v| v as f32)
+                                .collect()
+                        })
                         .unwrap_or_default()
                 })
                 .collect();
@@ -315,7 +334,10 @@ impl State {
     fn on_response(&mut self, value: &Value) -> Result<Vec<StreamChunk>, ProviderError> {
         if let Some(error) = value.get("error") {
             return Err(ProviderError::unavailable(
-                error["message"].as_str().unwrap_or("stream error").to_owned(),
+                error["message"]
+                    .as_str()
+                    .unwrap_or("stream error")
+                    .to_owned(),
             ));
         }
         if let Some(meta) = value.get("usageMetadata") {
@@ -333,7 +355,12 @@ impl State {
         let Some(candidate) = value.pointer("/candidates/0") else {
             return Ok(chunks);
         };
-        for part in candidate.pointer("/content/parts").and_then(Value::as_array).into_iter().flatten() {
+        for part in candidate
+            .pointer("/content/parts")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             if part.get("thought").and_then(Value::as_bool) == Some(true) {
                 continue;
             }
@@ -441,15 +468,24 @@ mod tests {
         let body = body(&request());
         assert_eq!(body["systemInstruction"]["parts"][0]["text"], "Be brief.");
         assert_eq!(body["generationConfig"]["maxOutputTokens"], 64);
-        assert_eq!(body["generationConfig"]["responseMimeType"], "application/json");
+        assert_eq!(
+            body["generationConfig"]["responseMimeType"],
+            "application/json"
+        );
         assert_eq!(body["contents"][1]["role"], "model");
-        assert_eq!(body["contents"][1]["parts"][0]["functionCall"]["id"], "fc_1");
+        assert_eq!(
+            body["contents"][1]["parts"][0]["functionCall"]["id"],
+            "fc_1"
+        );
         assert_eq!(body["contents"][1]["parts"][0]["thoughtSignature"], "sig");
         assert_eq!(
             body["contents"][2]["parts"][0]["functionResponse"]["response"],
             json!({ "result": [1, 2] })
         );
-        assert_eq!(body["tools"][0]["functionDeclarations"][0]["name"], "lookup");
+        assert_eq!(
+            body["tools"][0]["functionDeclarations"][0]["name"],
+            "lookup"
+        );
         assert_eq!(body["toolConfig"]["functionCallingConfig"]["mode"], "AUTO");
     }
 

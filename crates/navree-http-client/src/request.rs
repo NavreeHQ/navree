@@ -184,8 +184,7 @@ impl RequestBuilder {
     #[allow(clippy::type_complexity)]
     fn prepare(
         self,
-    ) -> Result<(HttpClient, PreparedRequest, Option<u32>, Option<Duration>), HttpClientError>
-    {
+    ) -> Result<(HttpClient, PreparedRequest, Option<u32>, Option<Duration>), HttpClientError> {
         if let Some(error) = self.error {
             return Err(error);
         }
