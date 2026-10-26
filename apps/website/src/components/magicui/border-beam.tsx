@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion, type MotionStyle, type Transition } from "motion/react";
+import { motion, type MotionStyle, type Transition } from "motion/react";
 import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 interface BorderBeamProps {
   /** The length of the beam in px. */

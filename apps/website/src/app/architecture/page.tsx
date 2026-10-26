@@ -342,7 +342,7 @@ function Kits() {
         </ul>
         <div className="mt-10 flex flex-wrap items-center gap-3">
           <PrimaryLink href="/docs/getting-started/starter-kits/">Explore the starter kits</PrimaryLink>
-          <SecondaryLink href="/docs/patterns/overview/">Compare the architectures</SecondaryLink>
+          <SecondaryLink href="/docs/patterns/overview/">Read the patterns guide</SecondaryLink>
         </div>
       </div>
     </section>

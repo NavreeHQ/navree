@@ -10,10 +10,10 @@ import {
   type DOMMotionComponents,
   type MotionProps,
   type Variants,
-  useReducedMotion,
 } from "motion/react"
 
 import { cn } from "@/lib/utils"
+import { useReducedMotion } from "@/lib/use-reduced-motion"
 
 type AnimationType = "text" | "word" | "character" | "line"
 type AnimationVariant =

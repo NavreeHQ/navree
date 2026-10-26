@@ -1,9 +1,10 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion, type MotionProps } from "motion/react";
+import { AnimatePresence, motion, type MotionProps } from "motion/react";
 import { Children, memo, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 export function AnimatedListItem({ children }: { children: ReactNode }) {
   const animations: MotionProps = {

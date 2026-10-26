@@ -47,9 +47,11 @@ export default async function DocPage({ params }: Props) {
   return (
     <div className="py-9 lg:py-12 xl:grid xl:grid-cols-[minmax(0,1fr)_13.5rem] xl:gap-14">
       <article className="min-w-0 max-w-[46rem]">
-        <header className="mb-9">
-          <div className="flex min-h-8 items-center justify-between gap-4">
-            <nav aria-label="Breadcrumb" className="min-w-0 text-sm text-fg-3">
+        <header className="mb-9 flex flex-col">
+          {/* Below lg the sticky docs bar already names the section and page, so the
+              actions move under the description instead of floating alone above the title. */}
+          <div className="flex min-h-8 items-center gap-4 max-lg:order-last max-lg:mt-6 lg:justify-between">
+            <nav aria-label="Breadcrumb" className="hidden min-w-0 text-sm text-fg-3 lg:block">
               <ol className="flex flex-wrap items-center gap-1.5">
                 <li>
                   <Link href="/docs/" className="transition-colors hover:text-fg">

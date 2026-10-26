@@ -1,7 +1,10 @@
 "use client";
 
-import { motion, useInView, useReducedMotion, type MotionProps, type UseInViewOptions, type Variants } from "motion/react";
+import { motion, useInView, type MotionProps, type UseInViewOptions, type Variants } from "motion/react";
 import { useRef, type ReactNode } from "react";
+
+import { useReducedMotion } from "@/lib/use-reduced-motion";
+import { cn } from "@/lib/utils";
 
 type MarginType = UseInViewOptions["margin"];
 
@@ -73,7 +76,8 @@ export function BlurFade({
         ease: [0.22, 1, 0.36, 1],
         ...(shouldTransitionFilter ? { filter: { duration } } : {}),
       }}
-      className={className}
+      // Before the page's JavaScript runs, reduced-motion visitors still see the content.
+      className={cn(className, "motion-reduce:opacity-100! motion-reduce:transform-none! motion-reduce:filter-none!")}
       {...props}
     >
       {children}

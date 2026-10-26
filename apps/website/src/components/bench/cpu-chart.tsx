@@ -24,12 +24,14 @@ export function CpuChart() {
         <table className="block w-full border-collapse text-left text-sm xl:table xl:table-fixed">
           <thead className="hidden border-b border-line xl:table-header-group">
             <tr className="font-mono text-[0.75rem] tracking-[0.06em] text-fg-3 uppercase">
-              <th scope="col" className="w-[11rem] px-6 py-3 font-normal">
+              <th scope="col" className="w-[13.5rem] px-6 py-3 align-top font-normal">
                 Test
               </th>
               {columns.map((c) => (
                 <th key={c.key} scope="col" className="px-6 py-3 font-normal">
-                  {c.label} <span className="text-fg-3/80 normal-case">· {c.count} CPUs</span>
+                  {c.label}
+                  {/* The CPU count on its own line keeps every header the same two-line shape. */}
+                  <span className="mt-0.5 block tracking-normal text-fg-3/80 normal-case">{c.count} CPUs</span>
                 </th>
               ))}
             </tr>

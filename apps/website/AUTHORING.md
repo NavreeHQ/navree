@@ -399,6 +399,7 @@ to get something done.
 pnpm lint          # ESLint
 pnpm typecheck     # tsc (runs the prebuild first)
 pnpm build         # static export to out/
+pnpm check:links   # every internal link and #anchor in out/ resolves
 pnpm serve         # serves out/ at http://127.0.0.1:3211, like a static host
 ```
 

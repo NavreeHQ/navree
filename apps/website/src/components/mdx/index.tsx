@@ -27,8 +27,11 @@ function heading(Tag: "h2" | "h3" | "h4") {
   };
 }
 
+/** A root-relative link to a file (`/llms.txt`, `/docs/x.md`), not a page: the router can't prefetch it. */
+const isFile = (href: string) => /\.[a-z0-9]+$/i.test(href.split(/[?#]/)[0]);
+
 function Anchor({ href = "", children, ...rest }: ComponentProps<"a">) {
-  if (href.startsWith("/")) {
+  if (href.startsWith("/") && !isFile(href)) {
     return (
       <Link href={href} {...rest}>
         {children}

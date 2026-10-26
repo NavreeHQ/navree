@@ -81,24 +81,25 @@ const isolation: { name: string; code: string; glyph: ReactNode; text: string }[
 export function Workspaces() {
   return (
     <HomeSection id="workspaces">
-      <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <SectionHeading
-          id="workspaces"
-          eyebrow="Workspaces"
-          title="Multi-tenant from the first commit."
-          lead={
-            <p>
-              Workspaces are a core module, on by default. Members, roles (<span className="text-fg-1">Owner</span>,{" "}
-              <span className="text-fg-1">Admin</span>, <span className="text-fg-1">Member</span>,{" "}
-              <span className="text-fg-1">Viewer</span> and your own), invitations by email and workspace-scoped permissions come
-              with it. Pick a workspace below.
-            </p>
-          }
-        />
-        <ArrowLink href="/docs/workspaces/introduction/" className="shrink-0 lg:mb-1.5">
-          Read about workspaces
-        </ArrowLink>
-      </div>
+      <SectionHeading
+        split
+        id="workspaces"
+        eyebrow="Workspaces"
+        title={
+          <>
+            <span className="lg:block">Multi-tenant from </span>the first commit.
+          </>
+        }
+        lead={
+          <p>
+            Workspaces are a core module, on by default. Members, roles (<span className="text-fg-1">Owner</span>,{" "}
+            <span className="text-fg-1">Admin</span>, <span className="text-fg-1">Member</span>,{" "}
+            <span className="text-fg-1">Viewer</span> and your own), invitations by email and workspace-scoped permissions come
+            with it. Pick a workspace below.
+          </p>
+        }
+        action={<ArrowLink href="/docs/workspaces/introduction/">Read about workspaces</ArrowLink>}
+      />
 
       <div className="mt-12 lg:mt-14">
         <WorkspaceDemo />

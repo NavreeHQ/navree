@@ -43,8 +43,9 @@ that exports a company's contacts to CSV and mails the requester a link.
 ```text title="https://navree.com/llms.txt"
 # Navree
 
-> The complete backend framework for Rust. Modular, API-first and AI-native.
-> Everything your backend needs, checked by the compiler.
+> The complete backend framework for Rust. Modular, API-first and AI-native. Everything your backend needs, checked by the compiler.
+
+Navree is a batteries-included Rust framework for building secure, scalable server-side applications. ...
 
 ## Prologue
 
@@ -61,6 +62,8 @@ that exports a company's contacts to CSV and mails the requester a link.
 - [Validation](https://navree.com/docs/basics/validation.md): Validate request bodies and query strings with `Valid<Json<T>>` on garde, with field-level messages and `unique` / `exists` database rules.
 ...
 ```
+
+The index ends with an "Agent skills" section: one line per [agent skill](/docs/ai/agent-skills/), linking its `SKILL.md` on navree.com, and the address of `/skills/index.json`, which lists them all.
 
 An agent that starts from `llms.txt` reads the index (a few thousand tokens), picks the pages that matter for the task and fetches only those. That is the best default: small, current and specific.
 

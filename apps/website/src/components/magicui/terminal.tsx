@@ -3,7 +3,6 @@
 import {
   motion,
   useInView,
-  useReducedMotion,
   type DOMMotionComponents,
   type HTMLMotionProps,
   type MotionProps,
@@ -22,6 +21,7 @@ import {
 } from "react";
 
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 /*
  * Magic UI Terminal, restyled for Navree: an ink window with a title bar,

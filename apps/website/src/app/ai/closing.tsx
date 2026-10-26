@@ -7,6 +7,22 @@ import { navigation } from "@/lib/docs";
 
 import { PrimaryCta } from "./parts";
 
+/**
+ * One short line per page for the closing grid (the pages' own descriptions
+ * are written for the page header and run too long to scan here). Pages not
+ * listed fall back to their description.
+ */
+const blurbs: Record<string, string> = {
+  "ai/introduction": "Both sides of AI in Navree, and the four-step agent setup.",
+  "ai/agent-skills": "One skill per common task, for any coding agent.",
+  "ai/navigator": "`navree mcp`: the running app, read-only, for your agent.",
+  "ai/docs-for-agents": "Every page as Markdown, `llms.txt` and `llms-full.txt`.",
+  "ai/ai-sdk": "Text, typed output and streams from any provider, behind `Ai`.",
+  "ai/agents-and-tools": "Agents that call your services as the signed-in user.",
+  "ai/embeddings-and-rag": "Vectors from your records, and answers from your own data.",
+  "ai/mcp-servers": "Your app's tools, resources and prompts in any MCP client.",
+};
+
 /** The end of the page: every page of the AI docs, from the docs manifest. */
 export function AiClosing() {
   const section = navigation().sections.find((s) => s.slug === "ai");
@@ -44,8 +60,8 @@ export function AiClosing() {
                         className="size-4 shrink-0 text-fg-3 transition-[transform,color] duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5 group-hover:text-accent"
                       />
                     </span>
-                    <span className="line-clamp-2 text-sm leading-relaxed text-fg-3">
-                      <InlineMarkdown text={page.description} />
+                    <span className="text-sm leading-relaxed text-pretty text-fg-3">
+                      <InlineMarkdown text={blurbs[page.slug] ?? page.description} />
                     </span>
                   </Link>
                 </li>

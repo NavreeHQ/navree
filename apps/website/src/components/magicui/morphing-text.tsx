@@ -1,9 +1,9 @@
 "use client";
 
-import { useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useId, useRef } from "react";
 
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 const morphTime = 1.5;
 const cooldownTime = 1.75;

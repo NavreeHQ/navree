@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring } from "motion/react";
+import { motion, useMotionTemplate, useMotionValue, useSpring } from "motion/react";
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 interface MagicCardProps {
   children?: ReactNode;

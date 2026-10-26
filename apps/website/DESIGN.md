@@ -80,6 +80,11 @@ running light: `<p className="eyebrow">Workspaces</p>`.
   `gap-8`, `gap-12`). Bento grids use `gap-3`. Heading to body `mt-5`/`mt-6`;
   eyebrow to heading `mt-4`/`mt-5`; heading block to content `mt-12` to
   `mt-16`.
+- **Section headers:** eyebrow, H2 (`text-display-lg`), then the lead. When
+  the section's content runs full width below (grids, mocks, tables), put
+  the heading in 7 of 12 columns and the lead, plus at most one arrow link,
+  in the other 5, bottom-aligned (`SectionHeading split` on the homepage).
+  Every homepage section and page section follows one of these two shapes.
 - **Header height:** `var(--header-h)` (4rem). Sticky things sit at
   `top-(--header-h)`.
 - **Responsive:** perfect at 390 and 1440, no horizontal scroll from 320 up.
