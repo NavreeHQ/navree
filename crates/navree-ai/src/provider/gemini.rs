@@ -120,16 +120,17 @@ impl Driver for Gemini {
                             return None;
                         }
                         match events.next().await {
-                            Some(Ok(event)) => match serde_json::from_str::<Value>(&event.data) {
-                                Ok(value) => match state.on_response(&value) {
-                                    Ok(chunks) => pending.extend(chunks.into_iter().map(Ok)),
-                                    Err(error) => {
-                                        done = true;
-                                        pending.push_back(Err(error));
+                            Some(Ok(event)) => {
+                                if let Ok(value) = serde_json::from_str::<Value>(&event.data) {
+                                    match state.on_response(&value) {
+                                        Ok(chunks) => pending.extend(chunks.into_iter().map(Ok)),
+                                        Err(error) => {
+                                            done = true;
+                                            pending.push_back(Err(error));
+                                        }
                                     }
-                                },
-                                Err(_) => {}
-                            },
+                                }
+                            }
                             Some(Err(error)) => {
                                 done = true;
                                 pending.push_back(Err(error));

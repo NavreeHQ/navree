@@ -39,9 +39,10 @@ fn check_refuses_a_record_the_ability_does_not_allow() {
     rules.can("update", "Post").when(field("author_id").eq(me));
     let ability = Arc::new(rules.build());
 
-    let error = Authorized::<post::Entity, Update>::check(post(Uuid::now_v7()), ability)
-        .err()
-        .expect("someone else's post is refused");
+    let Err(error) = Authorized::<post::Entity, Update>::check(post(Uuid::now_v7()), ability)
+    else {
+        panic!("someone else's post is refused");
+    };
 
     assert_eq!(error.status.as_u16(), 403);
 }

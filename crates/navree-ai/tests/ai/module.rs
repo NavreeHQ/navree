@@ -54,24 +54,26 @@ async fn models_and_providers_come_from_configuration_and_the_environment() {
 
 #[tokio::test]
 async fn invalid_configuration_fails_the_boot_naming_the_key() {
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .config("ai.models", json!({ "smart": { "provider": "anthropic", "model": "x", "fallbacks": ["ghost"] } }))
         .module(AiModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("the boot fails");
+    };
     let message = format!("{error}");
     assert!(message.contains("ai.models.smart.fallbacks"), "{message}");
 
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .config("ai.default", "nope")
         .config("ai.models", json!({ "a": { "provider": "openai", "model": "x" } }))
         .module(AiModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("the boot fails");
+    };
     assert!(format!("{error}").contains("ai.default"), "{error}");
 }
 
