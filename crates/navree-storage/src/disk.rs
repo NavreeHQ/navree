@@ -332,7 +332,9 @@ impl Disk {
         provider: &Provider,
         expires_at: DateTime<Utc>,
     ) -> Result<std::time::Duration, StorageError> {
-        let seconds = (expires_at - Utc::now()).num_seconds().max(1);
+        // Rounded up: a link asked for "in one hour" lasts 3600 seconds.
+        let millis = (expires_at - Utc::now()).num_milliseconds();
+        let seconds = millis.saturating_add(999).div_euclid(1000).max(1);
         let ttl = std::time::Duration::from_secs(seconds.unsigned_abs());
         match provider.max_ttl() {
             Some(max) if ttl > max => Err(StorageError::Signing {
