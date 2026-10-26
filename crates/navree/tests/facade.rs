@@ -25,6 +25,10 @@ fn every_module_crate_is_reexported_whole() {
         navree::contracts::RequestId,
     >());
     assert!(same::<navree::config::ConfigModule, ConfigModule>());
+    assert!(same::<
+        navree::telemetry::TelemetryModule,
+        navree::telemetry::TelemetryModule,
+    >());
     // L2
     assert!(same::<navree::http::HttpModule, HttpModule>());
     assert!(same::<navree::log::LoggerModule, LoggerModule>());

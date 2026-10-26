@@ -24,6 +24,9 @@ pub use navree_kernel::{
     Resolver,
 };
 
+#[cfg(feature = "telemetry")]
+pub use navree_telemetry::ModuleBuilderTelemetryExt as _;
+
 #[cfg(feature = "http")]
 pub use crate::Result;
 #[cfg(feature = "http")]

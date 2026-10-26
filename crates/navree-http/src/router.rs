@@ -15,8 +15,10 @@ use axum::response::{IntoResponse, Response};
 use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, StatusCode};
+use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, BoxError};
+use navree_telemetry::{EventKind, Telemetry, TracePolicy};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
@@ -105,14 +107,34 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     if let Some(cors) = cors_layer(&options.cors)? {
         router = router.layer(cors);
     }
+    let telemetry = Telemetry::from_app(ctx).await;
+    if telemetry.enabled(EventKind::ExceptionReported) {
+        navree_telemetry::capture_panic_locations();
+    }
+    let policy = match ctx.try_get::<Config>().await {
+        Some(config) => trace_policy(&config, |name| std::env::var(name).ok())?,
+        None => TracePolicy::default(),
+    };
     router = router.layer(from_fn_with_state(
         Arc::new(ContextState {
             ctx: ctx.clone(),
             proxies: ProxyTrust::new(options.trust_proxy, &options.trusted_proxies),
+            telemetry,
+            policy,
         }),
         pipeline::request_context,
     ));
     Ok(router)
+}
+
+/// The keys of `observe.tracing` that decide how a request's trace starts:
+/// `enabled`, `trust_incoming` and `sample_ratio` (falling back to the
+/// `OTEL_TRACES_SAMPLER_ARG` environment variable, read through `env`).
+pub(crate) fn trace_policy(
+    config: &Config,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<TracePolicy, String> {
+    TracePolicy::from_settings(|key| config.get_string(key), env)
 }
 
 /// Every route of the app with its mounted path and metadata, modules in
@@ -683,5 +705,59 @@ mod tests {
     fn short_names_drop_the_module_path() {
         assert_eq!(short_name("app::deals::DealController"), "DealController");
         assert_eq!(short_name("Plain"), "Plain");
+    }
+}
+
+#[cfg(test)]
+mod trace_policy_tests {
+    use navree_config::{Config, ConfigSources};
+    use serde_json::json;
+
+    use super::trace_policy;
+
+    fn config(sources: ConfigSources) -> Config {
+        Config::load(&sources).expect("valid config")
+    }
+
+    #[test]
+    fn defaults_without_keys() {
+        let policy = trace_policy(&config(ConfigSources::new()), |_| None).unwrap();
+        assert!(policy.enabled && policy.trust_incoming);
+        assert_eq!(policy.sample_ratio, 1.0);
+    }
+
+    #[test]
+    fn keys_override_the_defaults() {
+        let sources = ConfigSources::new()
+            .set("observe.tracing.enabled", json!(false))
+            .set("observe.tracing.trust_incoming", json!("false"))
+            .set("observe.tracing.sample_ratio", json!(0.25));
+        let policy = trace_policy(&config(sources), |_| None).unwrap();
+        assert!(!policy.enabled);
+        assert!(!policy.trust_incoming);
+        assert_eq!(policy.sample_ratio, 0.25);
+    }
+
+    #[test]
+    fn the_otel_sampler_arg_applies_when_the_key_is_unset() {
+        let env = |name: &str| (name == "OTEL_TRACES_SAMPLER_ARG").then(|| "0.5".to_owned());
+        let policy = trace_policy(&config(ConfigSources::new()), env).unwrap();
+        assert_eq!(policy.sample_ratio, 0.5);
+        let sources = ConfigSources::new().set("observe.tracing.sample_ratio", json!(0.1));
+        let policy = trace_policy(&config(sources), env).unwrap();
+        assert_eq!(policy.sample_ratio, 0.1, "the section wins");
+    }
+
+    #[test]
+    fn invalid_values_name_their_key() {
+        let sources = ConfigSources::new().set("observe.tracing.sample_ratio", json!(1.5));
+        let error = trace_policy(&config(sources), |_| None).unwrap_err();
+        assert!(error.contains("observe.tracing.sample_ratio"), "{error}");
+        let sources = ConfigSources::new().set("observe.tracing.enabled", json!("maybe"));
+        let error = trace_policy(&config(sources), |_| None).unwrap_err();
+        assert!(error.contains("observe.tracing.enabled"), "{error}");
+        let env = |_: &str| Some("lots".to_owned());
+        let error = trace_policy(&config(ConfigSources::new()), env).unwrap_err();
+        assert!(error.contains("OTEL_TRACES_SAMPLER_ARG"), "{error}");
     }
 }
