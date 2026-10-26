@@ -309,8 +309,8 @@ async fn across_merges_indexes_by_score() {
     };
     let results = search
         .across("lovelace")
-        .include(Accessible::<Contact, Read>::new(all("Contact")))
-        .include(Accessible::<Deal, Read>::new(all("Deal")))
+        .include::<Contact>(Accessible::<Contact, Read>::new(all("Contact")))
+        .include::<Deal>(Accessible::<Deal, Read>::new(all("Deal")))
         .limit(10)
         .run()
         .await
@@ -343,4 +343,32 @@ async fn across_merges_indexes_by_score() {
         .unwrap();
     assert_eq!(limited.len(), 1);
     assert_eq!(limited[0].kind, "Contact");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn configured_synonyms_and_stop_words_apply() {
+    for engine in ["memory", "postgres"] {
+        let app = support::builder(engine, "inline")
+            .config(
+                "search.indexes.contacts.synonyms",
+                serde_json::json!({ "bob": ["robert"] }),
+            )
+            .config("search.indexes.contacts.stop_words", "the,of")
+            .build()
+            .await;
+        let db = app.get::<Db>().await;
+        let rows = insert_contacts(&db, vec![new_contact("Robert", "Noyce")]).await;
+        settle(&app).await;
+        let search = app.get::<Search>().await;
+        assert_eq!(
+            search.query::<Contact>("bob ").ids(10).await.unwrap(),
+            [rows[0].id.to_string()],
+            "{engine}: synonyms"
+        );
+        assert_eq!(
+            search.query::<Contact>("the noyce").ids(10).await.unwrap(),
+            [rows[0].id.to_string()],
+            "{engine}: stop words"
+        );
+    }
 }

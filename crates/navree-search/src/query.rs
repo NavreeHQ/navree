@@ -81,6 +81,8 @@ pub(crate) struct Access {
 
 impl Access {
     fn of<E: Searchable + Subject, A: ActionMarker>(scope: &Accessible<E, A>) -> Self {
+        // Kept generic over the action so `include` and `accessible` take
+        // any `Accessible<E, A>`.
         Self {
             ability: scope.ability().clone(),
             action: A::NAME,
@@ -695,11 +697,10 @@ impl AcrossQuery {
     }
 
     /// Searches `E`'s index too, limited to what the scope's principal may
-    /// access.
-    pub fn include<E, A>(mut self, scope: Accessible<E, A>) -> Self
+    /// access (`.include::<Contact>(scope)`).
+    pub fn include<E>(mut self, scope: Accessible<E, impl ActionMarker>) -> Self
     where
         E: Searchable + Subject,
-        A: ActionMarker,
     {
         self.includes.push(Include {
             entity: TypeId::of::<E>(),
