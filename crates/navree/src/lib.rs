@@ -33,6 +33,7 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //!
 //! A feature also turns on the features of the crates its crate builds on
 //! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
@@ -158,6 +159,17 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L6 (opt-in)
+/// navree-graphql, plus the `#[resolver]` macro
+/// (`use navree::graphql::{ContextExt, Result, resolver};`).
+#[cfg(feature = "graphql")]
+pub mod graphql {
+    pub use navree_graphql::*;
+    /// `#[resolver]`: GraphQL root fields on an impl block (see
+    /// [`navree_macros::resolver`]).
+    pub use navree_macros::resolver;
+}
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).
