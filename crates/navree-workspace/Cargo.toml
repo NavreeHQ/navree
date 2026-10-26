@@ -1,0 +1,47 @@
+[package]
+name = "navree-workspace"
+description = "Navree WorkspaceModule: multi-tenancy at the workspace level, with members, roles, invitations and row, schema or database isolation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL driver (row-level security and schema isolation run there).
+postgres = ["navree-db/postgres"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-mail = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

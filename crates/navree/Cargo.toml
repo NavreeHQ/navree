@@ -1,6 +1,6 @@
 [package]
 name = "navree"
-description = "Navree: a Laravel-class, NestJS-structured application framework on Rust and Tokio (facade crate)."
+description = "Navree: the complete backend framework for Rust. Modular, API-first and AI-native (facade crate)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -36,6 +36,7 @@ full = [
     "testing",
     "validation",
     "view",
+    "workspace",
 ]
 # Each module feature turns on the features of the navree crates it builds
 # on (spec §3), so `navree::<dependency>` is always there to name their types.
@@ -74,6 +75,16 @@ auth = [
     "mail",
     "access",
 ]
+## Workspaces: multi-tenancy with members, roles, invitations and isolation.
+workspace = [
+    "dep:navree-workspace",
+    "http",
+    "db",
+    "crypto",
+    "events",
+    "mail",
+    "access",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 
@@ -87,6 +98,7 @@ navree-access = { workspace = true, optional = true }
 navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
+navree-workspace = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }

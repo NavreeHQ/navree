@@ -54,6 +54,7 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::notify::NotifyModule, NotifyModule>());
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
+    assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -88,6 +89,14 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<Abilities, navree::access::Abilities>());
     assert!(same::<Rules, navree::access::Rules>());
     assert!(same::<AbilityCtx, navree::access::AbilityCtx>());
+    // Workspaces.
+    assert!(same::<CurrentWorkspace, navree::workspace::CurrentWorkspace>());
+    assert!(same::<InWorkspace, navree::workspace::InWorkspace>());
+    assert!(same::<WorkspaceUow, navree::workspace::WorkspaceUow>());
+    assert!(same::<
+        WorkspaceRepo<DummyEntity>,
+        navree::workspace::WorkspaceRepo<DummyEntity>,
+    >());
     for (marker, name) in [
         (TypeId::of::<Read>(), Read::NAME),
         (TypeId::of::<Create>(), Create::NAME),

@@ -79,6 +79,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
         "navree-access",
     ]),
+    // Workspaces: user ids come from the request's `Principal`, so the
+    // module needs no navree-auth (a sibling at L5).
+    rule("navree-workspace", 5, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
+        "navree-crypto", "navree-events", "navree-mail", "navree-access",
+    ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
     rule("navree-cli", 6, &[]),
@@ -135,6 +141,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-schedule",
     "navree-notify",
     "navree-auth",
+    "navree-workspace",
 ];
 
 /// Cargo dependency kind of an edge.
