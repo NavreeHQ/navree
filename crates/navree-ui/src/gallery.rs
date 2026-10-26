@@ -53,7 +53,10 @@ pub const PAGES: [GalleryPage; 3] = [
 
 /// The gallery's own templates.
 pub const GALLERY_TEMPLATES: &[(&str, &str)] = &[
-    ("ui/gallery.html", include_str!("../templates/ui/gallery.html")),
+    (
+        "ui/gallery.html",
+        include_str!("../templates/ui/gallery.html"),
+    ),
     (
         "ui/gallery-dashboard.html",
         include_str!("../templates/ui/gallery-dashboard.html"),
@@ -108,7 +111,12 @@ pub fn views() -> Result<Views, ViewError> {
 
 /// Renders gallery page `slug` (`""`, `"dashboard"` or `"sign-in"`) with
 /// the assets at `assets_url`.
-pub fn render(views: &Views, slug: &str, assets_url: &str, links: &Links) -> Result<String, ViewError> {
+pub fn render(
+    views: &Views,
+    slug: &str,
+    assets_url: &str,
+    links: &Links,
+) -> Result<String, ViewError> {
     let page = PAGES
         .iter()
         .find(|page| page.slug == slug)
@@ -138,7 +146,10 @@ pub fn context(slug: &str, assets_url: &str, links: &Links) -> Value {
         "sign-in" => ("Sign in", vec![Crumb::page("Sign in")]),
         _ => (
             "Components",
-            vec![Crumb::link("Develop", links.of("")), Crumb::page("Components")],
+            vec![
+                Crumb::link("Develop", links.of("")),
+                Crumb::page("Components"),
+            ],
         ),
     };
     let shell = shell(links)
@@ -163,8 +174,8 @@ pub fn context(slug: &str, assets_url: &str, links: &Links) -> Value {
         "sparks": {
             "revenue": Sparkline::new([12.0, 14.0, 13.0, 17.0, 16.0, 19.0, 22.0, 21.0, 25.0]),
             "users": Sparkline::new([30.0, 32.0, 31.0, 35.0, 38.0, 37.0, 41.0, 44.0, 46.0]),
-            "errors": Sparkline::new([9.0, 7.0, 8.0, 6.0, 7.0, 5.0, 4.0, 5.0, 3.0]).trend("up"),
-            "latency": Sparkline::new([42.0, 44.0, 41.0, 48.0, 52.0, 49.0, 55.0, 58.0, 61.0]).trend("down"),
+            "errors": Sparkline::new([9.0, 7.0, 8.0, 6.0, 7.0, 5.0, 4.0, 5.0, 3.0]),
+            "latency": Sparkline::new([42.0, 44.0, 41.0, 48.0, 52.0, 49.0, 55.0, 58.0, 61.0]),
         },
         "form_errors": form_errors(),
         "roles": [["admin", "Admin"], ["manager", "Manager"], ["rep", "Sales rep"]],
@@ -231,9 +242,7 @@ fn shell(links: &Links) -> Shell {
         .switch(MenuItem::link("Add a workspace", "#workspaces/new").icon("plus"))
         .group(
             NavGroup::new("Platform")
-                .item(
-                    NavItem::new("Dashboard", links.of("dashboard")).icon("layout-dashboard"),
-                )
+                .item(NavItem::new("Dashboard", links.of("dashboard")).icon("layout-dashboard"))
                 .item(
                     NavItem::new("Users", "#users")
                         .icon("users")
@@ -247,7 +256,11 @@ fn shell(links: &Links) -> Shell {
         )
         .group(
             NavGroup::new("Operate")
-                .item(NavItem::new("Lighthouse", "#lighthouse").icon("activity").badge("12"))
+                .item(
+                    NavItem::new("Lighthouse", "#lighthouse")
+                        .icon("activity")
+                        .badge("12"),
+                )
                 .item(NavItem::new("Fleet", "#fleet").icon("boxes"))
                 .item(NavItem::new("Logbook", "#logbook").icon("scroll-text"))
                 .item(NavItem::new("Schedule", "#schedule").icon("clock")),
@@ -268,10 +281,22 @@ fn shell(links: &Links) -> Shell {
         )
         .commands(
             CommandGroup::new("Actions")
-                .item(Command::dialog("Invite a user", "invite-dialog").icon("user-plus").hint("Users"))
+                .item(
+                    Command::dialog("Invite a user", "invite-dialog")
+                        .icon("user-plus")
+                        .hint("Users"),
+                )
                 .item(Command::link("Create a workspace", "#workspaces/new").icon("plus"))
-                .item(Command::link("Run a scheduled task", "#schedule").icon("play").keywords("cron job"))
-                .item(Command::link("Open the documentation", "https://navree.com/docs").icon("book-open").hint("navree.com")),
+                .item(
+                    Command::link("Run a scheduled task", "#schedule")
+                        .icon("play")
+                        .keywords("cron job"),
+                )
+                .item(
+                    Command::link("Open the documentation", "https://navree.com/docs")
+                        .icon("book-open")
+                        .hint("navree.com"),
+                ),
         )
         .toast(Toast::success("Signed in").description("Welcome back, Ada."))
 }
@@ -287,14 +312,78 @@ struct User {
 }
 
 const USERS: [User; 8] = [
-    User { id: "u_01", name: "Ada Lovelace", email: "ada@acme.test", role: "Admin", status: ("Active", Tone::Success), deals: "24", seen: "2 min ago" },
-    User { id: "u_02", name: "Grace Hopper", email: "grace@acme.test", role: "Manager", status: ("Active", Tone::Success), deals: "18", seen: "1 hour ago" },
-    User { id: "u_03", name: "Alan Turing", email: "alan@acme.test", role: "Sales rep", status: ("Invited", Tone::Warning), deals: "0", seen: "Never" },
-    User { id: "u_04", name: "Katherine Johnson", email: "katherine@acme.test", role: "Sales rep", status: ("Active", Tone::Success), deals: "31", seen: "Yesterday" },
-    User { id: "u_05", name: "Edsger Dijkstra", email: "edsger@acme.test", role: "Sales rep", status: ("Suspended", Tone::Danger), deals: "7", seen: "3 weeks ago" },
-    User { id: "u_06", name: "Barbara Liskov", email: "barbara@acme.test", role: "Manager", status: ("Active", Tone::Success), deals: "15", seen: "5 hours ago" },
-    User { id: "u_07", name: "Donald Knuth", email: "donald@acme.test", role: "Sales rep", status: ("Active", Tone::Success), deals: "11", seen: "2 days ago" },
-    User { id: "u_08", name: "Margaret Hamilton", email: "margaret@acme.test", role: "Admin", status: ("Active", Tone::Success), deals: "9", seen: "Today" },
+    User {
+        id: "u_01",
+        name: "Ada Lovelace",
+        email: "ada@acme.test",
+        role: "Admin",
+        status: ("Active", Tone::Success),
+        deals: "24",
+        seen: "2 min ago",
+    },
+    User {
+        id: "u_02",
+        name: "Grace Hopper",
+        email: "grace@acme.test",
+        role: "Manager",
+        status: ("Active", Tone::Success),
+        deals: "18",
+        seen: "1 hour ago",
+    },
+    User {
+        id: "u_03",
+        name: "Alan Turing",
+        email: "alan@acme.test",
+        role: "Sales rep",
+        status: ("Invited", Tone::Warning),
+        deals: "0",
+        seen: "Never",
+    },
+    User {
+        id: "u_04",
+        name: "Katherine Johnson",
+        email: "katherine@acme.test",
+        role: "Sales rep",
+        status: ("Active", Tone::Success),
+        deals: "31",
+        seen: "Yesterday",
+    },
+    User {
+        id: "u_05",
+        name: "Edsger Dijkstra",
+        email: "edsger@acme.test",
+        role: "Sales rep",
+        status: ("Suspended", Tone::Danger),
+        deals: "7",
+        seen: "3 weeks ago",
+    },
+    User {
+        id: "u_06",
+        name: "Barbara Liskov",
+        email: "barbara@acme.test",
+        role: "Manager",
+        status: ("Active", Tone::Success),
+        deals: "15",
+        seen: "5 hours ago",
+    },
+    User {
+        id: "u_07",
+        name: "Donald Knuth",
+        email: "donald@acme.test",
+        role: "Sales rep",
+        status: ("Active", Tone::Success),
+        deals: "11",
+        seen: "2 days ago",
+    },
+    User {
+        id: "u_08",
+        name: "Margaret Hamilton",
+        email: "margaret@acme.test",
+        role: "Admin",
+        status: ("Active", Tone::Success),
+        deals: "9",
+        seen: "Today",
+    },
 ];
 
 fn users_table() -> Table {
@@ -305,11 +394,21 @@ fn users_table() -> Table {
             .cell(Cell::status(user.status.0, user.status.1))
             .cell(Cell::number(user.deals))
             .cell(Cell::muted(user.seen))
-            .action(MenuItem::link("View profile", format!("#users/{}", user.id)).icon("user-round"))
+            .action(
+                MenuItem::link("View profile", format!("#users/{}", user.id)).icon("user-round"),
+            )
             .action(MenuItem::link("Edit", format!("#users/{}/edit", user.id)).icon("pencil"))
-            .action(MenuItem::link("Copy ID", "#copy").icon("copy").shortcut(user.id))
+            .action(
+                MenuItem::link("Copy ID", "#copy")
+                    .icon("copy")
+                    .shortcut(user.id),
+            )
             .action(MenuItem::separator())
-            .action(MenuItem::dialog("Remove", "remove-dialog").icon("trash-2").danger());
+            .action(
+                MenuItem::dialog("Remove", "remove-dialog")
+                    .icon("trash-2")
+                    .danger(),
+            );
         if i == 1 { row.selected() } else { row }
     });
     Table::new("users")
@@ -321,7 +420,11 @@ fn users_table() -> Table {
         .column(Column::new("seen", "Last seen").hide_on_mobile())
         .rows(rows)
         .bulk(Action::link("Export", "#export").icon("download").ghost())
-        .bulk(Action::dialog("Remove", "remove-dialog").icon("trash-2").danger())
+        .bulk(
+            Action::dialog("Remove", "remove-dialog")
+                .icon("trash-2")
+                .danger(),
+        )
         .sort("name", "?sort={sort}")
         .page(PageInfo::new(1, 8, 1204), "?page={page}")
         .per_page("?per_page={per_page}", &[8, 15, 25, 50])
@@ -329,11 +432,46 @@ fn users_table() -> Table {
 
 fn deals_table() -> Table {
     let deals = [
-        ("d_311", "Northwind renewal", "Northwind Traders", ("Won", Tone::Success), "$48,000", true),
-        ("d_310", "Globex expansion", "Globex Corporation", ("Negotiation", Tone::Neutral), "$126,500", false),
-        ("d_309", "Initech pilot", "Initech", ("Proposal", Tone::Neutral), "$12,800", false),
-        ("d_308", "Umbrella security audit", "Umbrella Corp.", ("Lost", Tone::Outline), "$64,000", false),
-        ("d_307", "Hooli workspace seats", "Hooli", ("Won", Tone::Success), "$9,600", true),
+        (
+            "d_311",
+            "Northwind renewal",
+            "Northwind Traders",
+            ("Won", Tone::Success),
+            "$48,000",
+            true,
+        ),
+        (
+            "d_310",
+            "Globex expansion",
+            "Globex Corporation",
+            ("Negotiation", Tone::Neutral),
+            "$126,500",
+            false,
+        ),
+        (
+            "d_309",
+            "Initech pilot",
+            "Initech",
+            ("Proposal", Tone::Neutral),
+            "$12,800",
+            false,
+        ),
+        (
+            "d_308",
+            "Umbrella security audit",
+            "Umbrella Corp.",
+            ("Lost", Tone::Outline),
+            "$64,000",
+            false,
+        ),
+        (
+            "d_307",
+            "Hooli workspace seats",
+            "Hooli",
+            ("Won", Tone::Success),
+            "$9,600",
+            true,
+        ),
     ];
     Table::new("deals")
         .caption("Recent deals")
@@ -341,13 +479,21 @@ fn deals_table() -> Table {
         .column(Column::new("company", "Company").hide_on_mobile())
         .column(Column::new("stage", "Stage"))
         .column(Column::new("amount", "Amount").numeric())
-        .rows(deals.into_iter().map(|(id, title, company, stage, amount, won)| {
-            Row::new(id)
-                .cell(Cell::strong(title).href(format!("#deals/{id}")))
-                .cell(Cell::muted(company))
-                .cell(Cell::badge(stage.0, stage.1))
-                .cell(if won { Cell::positive(amount) } else { Cell::number(amount) })
-        }))
+        .rows(
+            deals
+                .into_iter()
+                .map(|(id, title, company, stage, amount, won)| {
+                    Row::new(id)
+                        .cell(Cell::strong(title).href(format!("#deals/{id}")))
+                        .cell(Cell::muted(company))
+                        .cell(Cell::badge(stage.0, stage.1))
+                        .cell(if won {
+                            Cell::positive(amount)
+                        } else {
+                            Cell::number(amount)
+                        })
+                }),
+        )
 }
 
 fn empty_table() -> Table {
@@ -383,15 +529,22 @@ fn requests_chart() -> Chart {
         388.0, 561.0, 589.0, 602.0, 577.0, 631.0, 455.0, 431.0, 644.0, 672.0, 698.0, 655.0, 712.0,
         540.0, 518.0, 731.0, 768.0,
     ];
-    let last_month = values.iter().enumerate().map(|(i, v)| v * 0.82 + (i % 5) as f64 * 9.0);
+    let last_month = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| v * 0.82 + (i % 5) as f64 * 9.0);
     Chart::lines(days)
-        .series("Requests per minute", SeriesTone::Accent, values)
+        .series("Requests per minute", SeriesTone::Bright, values)
         .dashed_series("Previous 30 days", SeriesTone::Muted, last_month)
 }
 
 fn signups_chart() -> Chart {
     Chart::bars(["May", "Jun", "Jul", "Aug", "Sep", "Oct"])
-        .series("Sign-ups", SeriesTone::Muted, [182.0, 214.0, 198.0, 263.0, 241.0, 318.0])
+        .series(
+            "Sign-ups",
+            SeriesTone::Muted,
+            [182.0, 214.0, 198.0, 263.0, 241.0, 318.0],
+        )
         .highlight(5)
         .size(ChartSize::Medium)
 }
@@ -427,10 +580,14 @@ fn dropdown_menu() -> Vec<MenuItem> {
         MenuItem::link("Role", "#").checked(true),
         MenuItem::link("Last seen", "#").checked(false),
         MenuItem::separator(),
-        MenuItem::link("Export as CSV", "#export").icon("download").shortcut("Ctrl E"),
+        MenuItem::link("Export as CSV", "#export")
+            .icon("download")
+            .shortcut("Ctrl E"),
         MenuItem::link("Import users", "#import").icon("upload"),
         MenuItem::separator(),
-        MenuItem::dialog("Delete all", "remove-dialog").icon("trash-2").danger(),
+        MenuItem::dialog("Delete all", "remove-dialog")
+            .icon("trash-2")
+            .danger(),
     ]
 }
 

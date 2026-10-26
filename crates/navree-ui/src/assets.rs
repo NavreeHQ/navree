@@ -79,7 +79,12 @@ pub fn version() -> &'static str {
     static VERSION: LazyLock<String> = LazyLock::new(|| {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
         for asset in ASSETS {
-            for byte in asset.path.bytes().chain([0]).chain(asset.bytes.iter().copied()) {
+            for byte in asset
+                .path
+                .bytes()
+                .chain([0])
+                .chain(asset.bytes.iter().copied())
+            {
                 hash ^= u64::from(byte);
                 hash = hash.wrapping_mul(0x0100_0000_01b3);
             }

@@ -1,0 +1,138 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{{ ui.stat(\"Revenue\", \"$48,210\", delta=\"+12.5%\", trend=\"up\", note=\"vs. last month\", icon=\"wallet\", spark=spark) }}\n{{ ui.stat(\"Errors\", \"0.4%\", delta=\"-0.1%\", trend=\"down\", tone=\"positive\") }}\n{{ ui.chart_card(\"Sign-ups\", bars, description=\"Per month\", value=\"320\") }}\n{{ ui.chart_card(\"Requests\", lines_chart) }}\"#,\njson!({\n    \"spark\": Sparkline::new([1.0, 3.0, 2.0, 5.0]), \"bars\": bars,\n    \"lines_chart\": lines_chart,\n}),)"
+---
+<div class="ui-card ui-stat">
+<div class="ui-stat__label">
+<span>Revenue</span>
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/>
+<path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>
+</svg>
+</div>
+<div class="ui-stat__value">$48,210</div>
+<div class="ui-stat__meta">
+<span class="ui-delta ui-delta--up">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 7h6v6"/>
+<path d="m22 7-8.5 8.5-5-5L2 17"/>
+</svg>+12.5%</span>
+<span>vs. last month</span>
+</div>
+<svg class="ui-stat__spark ui-spark ui-spark--neutral" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+<path class="ui-spark__area" d="M0 30 L33.333 16 L66.667 23 L100 2 L100 32 L0 32 Z"/>
+<path class="ui-spark__line" d="M0 30 L33.333 16 L66.667 23 L100 2" vector-effect="non-scaling-stroke"/>
+</svg>
+</div>
+<div class="ui-card ui-stat">
+<div class="ui-stat__label">
+<span>Errors</span>
+</div>
+<div class="ui-stat__value">0.4%</div>
+<div class="ui-stat__meta">
+<span class="ui-delta ui-delta--up">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 17h6v-6"/>
+<path d="m22 17-8.5-8.5-5 5L2 7"/>
+</svg>-0.1%</span>
+</div>
+</div>
+<section class="ui-card">
+<header class="ui-card__header">
+<div>
+<h2 class="ui-card__title">Sign-ups</h2>
+<p class="ui-card__desc">Per month</p>
+</div>
+<span class="ui-stat__value ui-chart__value">320</span>
+</header>
+<div class="ui-card__body">
+<figure class="ui-chart ui-chart--md" role="img" aria-label="Sign-ups from May to Jul, up to 320">
+<div class="ui-chart__y" aria-hidden="true">
+<span>400</span>
+<span>300</span>
+<span>200</span>
+<span>100</span>
+<span>0</span>
+</div>
+<div class="ui-chart__plot">
+<svg class="ui-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+<line class="ui-chart__grid" x1="0" x2="100" y1="100.0" y2="100.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="75.0" y2="75.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="50.0" y2="50.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="25.0" y2="25.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="0.0" y2="0.0" vector-effect="non-scaling-stroke"/>
+<rect class="ui-chart__bar" x="6.0" y="55.0" width="21.333" height="45.0">
+<title>May: 180</title>
+</rect>
+<rect class="ui-chart__bar" x="39.333" y="47.5" width="21.333" height="52.5">
+<title>Jun: 210</title>
+</rect>
+<rect class="ui-chart__bar ui-chart__bar--accent" x="72.667" y="20.0" width="21.333" height="80.0">
+<title>Jul: 320</title>
+</rect>
+</svg>
+</div>
+<div class="ui-chart__x" aria-hidden="true">
+<span>May</span>
+<span>Jun</span>
+<span>Jul</span>
+</div>
+</figure>
+</div>
+</section>
+<section class="ui-card">
+<header class="ui-card__header">
+<div>
+<h2 class="ui-card__title">Requests</h2>
+</div>
+<div class="ui-legend">
+<span class="ui-legend__item">
+<span class="ui-legend__swatch ui-legend__swatch--bright" aria-hidden="true">
+</span>Requests</span>
+<span class="ui-legend__item">
+<span class="ui-legend__swatch ui-legend__swatch--muted ui-legend__swatch--dashed" aria-hidden="true">
+</span>Last week</span>
+</div>
+</header>
+<div class="ui-card__body">
+<figure class="ui-chart ui-chart--md" role="img" aria-label="Requests and Last week from Mon to Thu, up to 40 rpm">
+<div class="ui-chart__y" aria-hidden="true">
+<span>40 rpm</span>
+<span>30 rpm</span>
+<span>20 rpm</span>
+<span>10 rpm</span>
+<span>0 rpm</span>
+</div>
+<div class="ui-chart__plot">
+<svg class="ui-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+<line class="ui-chart__grid" x1="0" x2="100" y1="100.0" y2="100.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="75.0" y2="75.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="50.0" y2="50.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="25.0" y2="25.0" vector-effect="non-scaling-stroke"/>
+<line class="ui-chart__grid" x1="0" x2="100" y1="0.0" y2="0.0" vector-effect="non-scaling-stroke"/>
+<path class="ui-chart__area ui-chart__area--bright" d="M0 75 L33.333 25 L66.667 50 L100 0 L100 100 L0 100 Z"/>
+<path class="ui-chart__line ui-chart__line--bright" d="M0 75 L33.333 25 L66.667 50 L100 0" vector-effect="non-scaling-stroke"/>
+<path class="ui-chart__line ui-chart__line--muted ui-chart__line--dashed" d="M0 80 L33.333 70 L66.667 25 L100 37.5" vector-effect="non-scaling-stroke"/>
+<rect class="ui-chart__hover" x="0.0" y="0" width="16.667" height="100">
+<title>Mon: Requests: 10 rpm, Last week: 8 rpm</title>
+</rect>
+<rect class="ui-chart__hover" x="16.666" y="0" width="33.333" height="100">
+<title>Tue: Requests: 30 rpm, Last week: 12 rpm</title>
+</rect>
+<rect class="ui-chart__hover" x="50.0" y="0" width="33.333" height="100">
+<title>Wed: Requests: 20 rpm, Last week: 30 rpm</title>
+</rect>
+<rect class="ui-chart__hover" x="83.333" y="0" width="16.667" height="100">
+<title>Thu: Requests: 40 rpm, Last week: 25 rpm</title>
+</rect>
+</svg>
+</div>
+<div class="ui-chart__x ui-chart__x--line" aria-hidden="true">
+<span>Mon</span>
+<span>Tue</span>
+<span>Wed</span>
+<span>Thu</span>
+</div>
+</figure>
+</div>
+</section>

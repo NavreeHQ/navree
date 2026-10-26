@@ -1,0 +1,24 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{% call(tab) ui.tabs(\"deal\", [{\"id\": \"overview\", \"label\": \"Overview\"}, {\"id\": \"files\", \"label\": \"Files\", \"count\": 3}], selected=\"files\") %}<p>{{ tab.label }} panel</p>{% endcall %}\n{{ ui.link_tabs([{\"label\": \"General\", \"href\": \"/s\", \"active\": true}, {\"label\": \"Members\", \"href\": \"/s/m\", \"count\": 24}], variant=\"line\") }}\"#,\njson!({}),)"
+---
+<div class="ui-tabs" data-ui-tabs>
+<div class="ui-tabs__list" role="tablist">
+<button type="button" class="ui-tabs__tab" role="tab" id="deal-tab-overview" aria-controls="deal-panel-overview" aria-selected="false" tabindex="-1">Overview</button>
+<button type="button" class="ui-tabs__tab" role="tab" id="deal-tab-files" aria-controls="deal-panel-files" aria-selected="true" tabindex="0">Files<span class="ui-tabs__count">3</span>
+</button>
+</div>
+<div class="ui-tabs__panel" role="tabpanel" id="deal-panel-overview" aria-labelledby="deal-tab-overview" tabindex="0" hidden>
+<p>Overview panel</p>
+</div>
+<div class="ui-tabs__panel" role="tabpanel" id="deal-panel-files" aria-labelledby="deal-tab-files" tabindex="0">
+<p>Files panel</p>
+</div>
+</div>
+<nav class="ui-tabs ui-tabs--line" aria-label="Sections">
+<div class="ui-tabs__list">
+<a class="ui-tabs__tab" href="&#x2f;s" aria-current="page">General</a>
+<a class="ui-tabs__tab" href="&#x2f;s&#x2f;m">Members<span class="ui-tabs__count">24</span>
+</a>
+</div>
+</nav>
