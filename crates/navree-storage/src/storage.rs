@@ -4,14 +4,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use object_store::ObjectStore;
-use object_store::local::LocalFileSystem;
-use object_store::memory::InMemory;
-
 use navree_config::ConfigSection;
 
 use crate::signing::Signer;
-use crate::{Disk, DiskConfig, StorageError, StorageOptions};
+use crate::{Disk, StorageError, StorageOptions, drivers};
 
 /// The app's disks, by name (what `StorageModule` provides).
 #[derive(Clone)]
@@ -21,26 +17,25 @@ pub struct Storage {
 }
 
 impl Storage {
-    /// Builds the disks of `options`. Temporary URLs are signed with an
+    /// Builds the disks of `options`. The app's own links (temporary URLs
+    /// and presigned uploads of local and memory disks) are signed with an
     /// HMAC-SHA-256 keyed by `signing_key`.
     ///
-    /// This blocks: it creates the root directories of local disks. Inside
-    /// an async runtime call it from `tokio::task::spawn_blocking` (the
-    /// module does).
+    /// This blocks: it creates the root directories of local disks and may
+    /// read cloud credential files. Inside an async runtime call it from
+    /// `tokio::task::spawn_blocking` (the module does). Cloud disks make no
+    /// request until they are used.
     pub fn new(options: &StorageOptions, signing_key: &[u8]) -> Result<Self, StorageError> {
         options.validate().map_err(StorageError::InvalidOptions)?;
         let signer = Arc::new(Signer::new(signing_key));
         let mut disks = BTreeMap::new();
         for (name, config) in &options.disks {
-            let store = build_store(name, config)?;
-            let public_url = match config {
-                DiskConfig::Local { public_url, .. } => public_url.as_deref(),
-                DiskConfig::Memory => None,
-            };
+            let backend = drivers::build(name, config)?;
             let disk = Disk::new(
                 name.clone(),
-                store,
-                public_url,
+                config.driver(),
+                backend,
+                config.public_url(),
                 options.base_url.as_deref(),
                 signer.clone(),
             );
@@ -70,26 +65,6 @@ impl Storage {
     /// The default disk.
     pub fn default_disk(&self) -> Disk {
         self.disks[&self.default].clone()
-    }
-}
-
-/// The object store behind one disk.
-fn build_store(name: &str, config: &DiskConfig) -> Result<Arc<dyn ObjectStore>, StorageError> {
-    match config {
-        DiskConfig::Local { root, .. } => {
-            let local_root =
-                |source: Box<dyn std::error::Error + Send + Sync>| StorageError::LocalRoot {
-                    disk: name.to_owned(),
-                    root: root.clone(),
-                    source,
-                };
-            std::fs::create_dir_all(root).map_err(|e| local_root(e.into()))?;
-            let store = LocalFileSystem::new_with_prefix(root)
-                .map_err(|e| local_root(e.into()))?
-                .with_automatic_cleanup(true);
-            Ok(Arc::new(store))
-        }
-        DiskConfig::Memory => Ok(Arc::new(InMemory::new())),
     }
 }
 
