@@ -180,7 +180,14 @@ export const sections: DocsSection[] = [
     // Owner: D
     slug: "testing",
     title: "Testing",
-    pages: ["getting-started", "http-tests", "database-tests", "fakes"],
+    pages: [
+      "getting-started",
+      "http-tests",
+      "database-tests",
+      "fakes",
+      "isolation-tests",
+      "conformity-checks",
+    ],
   },
   {
     // Owner: F
