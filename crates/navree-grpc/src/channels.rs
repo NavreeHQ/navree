@@ -256,6 +256,26 @@ mod tests {
         let timeout = grpc_timeout(sent).unwrap();
         assert!(timeout <= Duration::from_millis(1500), "{timeout:?}");
 
+        // Metadata set on the request wins over the forwarded values.
+        let mut request = http::Request::new(tonic::body::Body::empty());
+        request
+            .headers_mut()
+            .insert(AUTHORIZATION, HeaderValue::from_static("Bearer service-token"));
+        request
+            .headers_mut()
+            .insert(&X_WORKSPACE, HeaderValue::from_static("globex"));
+        request
+            .headers_mut()
+            .insert(&X_REQUEST_ID, HeaderValue::from_static("req-own"));
+        context
+            .clone()
+            .scope(async { channel.apply(&mut request) })
+            .await;
+        let sent = request.headers();
+        assert_eq!(sent[AUTHORIZATION], "Bearer service-token");
+        assert_eq!(sent[&X_WORKSPACE], "globex");
+        assert_eq!(sent[&X_REQUEST_ID], "req-own");
+
         // Outside any call: only the channel's own timeout.
         let mut request = http::Request::new(tonic::body::Body::empty());
         channel.apply(&mut request);

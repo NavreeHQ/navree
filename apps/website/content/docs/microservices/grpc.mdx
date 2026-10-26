@@ -185,7 +185,7 @@ The methods are tonic's, with three additions that `#[grpc_service]` handles:
 
 - **The first parameter is tonic's `Request<T>`**, as the trait declares it, or `Valid<Request<T>>` to validate the message with its garde rules first.
 - **Navree extractors may follow it**: `Uow`, `CurrentPrincipal`, `CurrentUser`, `Abilities`, `Accessible<E, A>`, `Authorized<E, A>`, `Scoped<T>`, `CurrentWorkspace` and your own (any `FromRequestParts` whose rejection is an `AppError`). The macro generates the method tonic expects and runs the extractors on the call's metadata and extensions.
-- **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, a `Status` from another service and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too.
+- **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, a `Status` from another service and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too. Write the result type out: the macro reads `Response<T>` from it, so a type alias for the whole result is an error.
 
 The macro also adds tonic's `#[async_trait]` to the impl block, so you don't write it.
 
