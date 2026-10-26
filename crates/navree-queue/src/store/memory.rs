@@ -4,7 +4,10 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use crate::QueueError;
+use crate::batch::{BatchRow, BatchStep, Finish, Finished};
 use crate::record::{FailedJob, NewJob, ReservedJob, RetryTarget, from_millis, stale_after_ms};
+use crate::store::PrepareCallback;
 
 /// A stored job.
 #[derive(Clone, Debug)]
@@ -33,6 +36,8 @@ struct State {
     jobs: BTreeMap<String, Stored>,
     /// Oldest first.
     failed: Vec<FailedJob>,
+    /// By id.
+    batches: BTreeMap<String, BatchRow>,
 }
 
 /// Jobs in memory.
@@ -93,6 +98,7 @@ impl MemoryStore {
             payload: stored.job.payload.clone(),
             options: stored.job.options.clone(),
             attempts: stored.attempts,
+            membership: stored.job.membership.clone(),
         })
     }
 
@@ -115,25 +121,115 @@ impl MemoryStore {
 
     pub(crate) fn fail(&self, job: &ReservedJob, worker: &str, error: &str, now: i64) -> bool {
         let mut state = self.state();
-        let held = state
-            .jobs
-            .get(&job.id)
-            .is_some_and(|s| s.reserved_by.as_deref() == Some(worker));
-        if !held {
+        if !state.held(job, worker) {
             return false;
         }
         state.jobs.remove(&job.id);
-        state.failed.push(FailedJob {
-            id: job.id.clone(),
-            queue: job.queue.clone(),
-            job_type: job.job_type.clone(),
-            payload: job.payload.clone(),
-            options: job.options.clone(),
-            error: error.to_owned(),
-            attempts: job.attempts,
-            failed_at: from_millis(now),
-        });
+        state.failed.push(failed_job(job, error, now));
         true
+    }
+
+    /// Stores a batch with its jobs (and, for a batch with no jobs, the
+    /// callbacks already due).
+    pub(crate) fn insert_batch(&self, row: BatchRow, jobs: Vec<NewJob>) {
+        let mut state = self.state();
+        state.batches.insert(row.id.clone(), row);
+        for job in jobs {
+            state.insert_new(job);
+        }
+    }
+
+    /// Finishes a reserved job of a batch (one of its jobs or callbacks):
+    /// removes it (into the failed jobs when it failed), updates the batch
+    /// and queues the callbacks that became due.
+    pub(crate) fn finish_batch_job(
+        &self,
+        job: &ReservedJob,
+        worker: &str,
+        finish: Finish,
+        error: &str,
+        now: i64,
+        prepare: &PrepareCallback<'_>,
+    ) -> Result<Finished, QueueError> {
+        let mut state = self.state();
+        if !state.held(job, worker) {
+            return Ok(Finished::Lost);
+        }
+        let batch = job
+            .membership
+            .batch_id
+            .as_ref()
+            .and_then(|id| state.batches.get(id).cloned());
+        let step = match batch {
+            Some(mut row) => {
+                let was_settled = row.settled();
+                let due = if job.membership.callback {
+                    row.callback_finished(finish == Finish::Failed);
+                    Vec::new()
+                } else {
+                    row.job_finished(&job.id, finish, now)
+                };
+                let callbacks = due
+                    .into_iter()
+                    .map(|envelope| prepare(envelope, &row))
+                    .collect::<Result<Vec<_>, _>>()?;
+                for callback in callbacks {
+                    state.insert_new(callback);
+                }
+                let settled_now = !was_settled && row.settled();
+                state.batches.insert(row.id.clone(), row.clone());
+                Some(BatchStep {
+                    batch: row,
+                    settled_now,
+                })
+            }
+            None => None,
+        };
+        state.jobs.remove(&job.id);
+        if finish == Finish::Failed {
+            state.failed.push(failed_job(job, error, now));
+        }
+        Ok(Finished::Done(step))
+    }
+
+    pub(crate) fn find_batch(&self, id: &str) -> Option<BatchRow> {
+        self.state().batches.get(id).cloned()
+    }
+
+    /// Newest first, at most `limit`.
+    pub(crate) fn batches(&self, limit: usize) -> Vec<BatchRow> {
+        let mut batches: Vec<BatchRow> = self.state().batches.values().cloned().collect();
+        batches.sort_by(|a, b| (b.created_at, &b.id).cmp(&(a.created_at, &a.id)));
+        batches.truncate(limit);
+        batches
+    }
+
+    /// Cancels batch `id` at `now` (unless it finished); the batch
+    /// afterwards, `None` when there is none.
+    pub(crate) fn cancel_batch(&self, id: &str, now: i64) -> Option<BatchRow> {
+        let mut state = self.state();
+        let row = state.batches.get_mut(id)?;
+        row.cancel(now);
+        Some(row.clone())
+    }
+
+    /// Deletes the batches that settled before `before`; returns how many.
+    pub(crate) fn prune_batches(&self, before: i64) -> u64 {
+        let mut state = self.state();
+        let count = state.batches.len();
+        state
+            .batches
+            .retain(|_, row| !(row.settled() && row.finished_at.is_some_and(|at| at < before)));
+        (count - state.batches.len()) as u64
+    }
+
+    /// How many stored jobs do the work of operation `operation_id`.
+    pub(crate) fn count_for_operation(&self, operation_id: &str) -> u64 {
+        self.state()
+            .jobs
+            .values()
+            .filter(|s| s.job.membership.operation_id.as_deref() == Some(operation_id))
+            .count() as u64
     }
 
     /// Newest first.
@@ -180,5 +276,40 @@ impl MemoryStore {
             .values()
             .filter(|s| s.job.queue == queue)
             .count() as u64
+    }
+}
+
+impl State {
+    /// Whether `worker` holds the reservation of `job`.
+    fn held(&self, job: &ReservedJob, worker: &str) -> bool {
+        self.jobs
+            .get(&job.id)
+            .is_some_and(|s| s.reserved_by.as_deref() == Some(worker))
+    }
+
+    /// Stores a job that is not unique (batch jobs and callbacks).
+    fn insert_new(&mut self, job: NewJob) {
+        self.jobs.insert(
+            job.id.clone(),
+            Stored {
+                job,
+                attempts: 0,
+                reserved_by: None,
+                reserved_at: None,
+            },
+        );
+    }
+}
+
+fn failed_job(job: &ReservedJob, error: &str, now: i64) -> FailedJob {
+    FailedJob {
+        id: job.id.clone(),
+        queue: job.queue.clone(),
+        job_type: job.job_type.clone(),
+        payload: job.payload.clone(),
+        options: job.options.clone(),
+        error: error.to_owned(),
+        attempts: job.attempts,
+        failed_at: from_millis(now),
     }
 }

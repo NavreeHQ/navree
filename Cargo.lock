@@ -3312,13 +3312,17 @@ dependencies = [
 name = "navree-queue"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
  "futures-util",
  "hex",
+ "http",
  "navree-config",
  "navree-contracts",
  "navree-db",
+ "navree-http",
  "navree-kernel",
+ "navree-realtime",
  "navree-testing",
  "sea-orm",
  "sea-orm-migration",
@@ -3331,6 +3335,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "utoipa",
  "uuid",
 ]
 
