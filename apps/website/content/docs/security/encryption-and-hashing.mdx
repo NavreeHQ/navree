@@ -1,10 +1,349 @@
 ---
 title: "Encryption and hashing"
-description: "AES-256-GCM encryption with key rotation, Argon2id hashing and secure tokens."
+description: "The application key, AES-256-GCM encryption with key rotation, Argon2id password hashing and secure token helpers."
 ---
 
-This page covers the crypto module: the application key, encrypting and decrypting values with AES-256-GCM, rotating keys without losing data, hashing passwords with Argon2id, and generating secure random tokens.
+`navree-crypto` holds the cryptography the rest of Navree builds on, and you can use it directly:
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-crypto` is the reference: run `cargo doc -p navree-crypto --open` in the repository.
+- `Encrypter` encrypts values with the application key (AES-256-GCM), and still decrypts them after you rotate the key;
+- `Hasher` hashes passwords with Argon2id, off the async worker threads;
+- helpers make random tokens, digests and signatures, and derive keys for other purposes from the application key.
+
+Keys, plaintexts and passwords never appear in `Debug` output or in error messages, so both are safe to log.
+
+## Setting up
+
+<Badge feature="crypto" /> The `crypto` feature of the `navree` facade (part of the default `full` feature) brings `navree-crypto`. `CryptoModule` is global and provides `Encrypter` and `Hasher` to every module:
+
+```rust title="src/main.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config()) // app.key, app.previous_keys, [hashing]
+```
+
+`CryptoModule::from_config()`, or a plain `.module(CryptoModule)`, reads the application key, the previous keys and the `hashing` section when the app boots. To pass them in code instead, use `CryptoModule::for_root`:
+
+```rust
+use navree::crypto::{CryptoOptions, HashingOptions};
+
+CryptoModule::for_root(
+    CryptoOptions::new(key)
+        .previous_key(old_key)
+        .hashing(HashingOptions {
+            memory_kib: 65_536,
+            ..HashingOptions::default()
+        }),
+)
+```
+
+A malformed key or invalid hashing options fail the boot, and the message names the option, never its value. A missing key doesn't: the app boots with a warning, so that `key:generate` can run, and every attempt to encrypt fails until a key is set.
+
+## The application key
+
+The application key is 32 random bytes (256 bits), written as `base64:` followed by their standard base64. Generate one with the `key:generate` command that `CryptoModule` registers:
+
+```sh
+navree key:generate
+```
+
+```text
+base64:SBX/SqDW7hzauxoG4ErzI/VwKYHHvjCO4Y/gTpsCF8c=
+```
+
+Like every app command, `key:generate` boots the whole app first, so in an app with `DatabaseModule` the database must be reachable.
+
+Put it in `.env`, which stays out of version control:
+
+```env title=".env"
+APP_KEY=base64:SBX/SqDW7hzauxoG4ErzI/VwKYHHvjCO4Y/gTpsCF8c=
+```
+
+`APP_KEY` maps to the top-level configuration key `key`; `app.key` (environment `APP_APP__KEY`) works too and wins when both are set. Surrounding whitespace is ignored, an empty value counts as unset, and a value that isn't `base64:` plus exactly 32 bytes fails the boot. In code, `navree::crypto::generate_key()` returns a new key in the same form.
+
+Every process of the app (`serve`, `queue:work`, `schedule:work`) and every instance must use the same key. It protects more than encrypted values:
+
+| What | How | Without a key |
+|---|---|---|
+| Encrypted values: two-factor secrets and recovery codes, session cookies, your own | `Encrypter` | Encrypting fails |
+| JWT access tokens, unless `auth.jwt.secret` is set | A key derived for `navree-auth.jwt` | A random key per process |
+| Signed URLs such as email verification links, unless `http.signing_key` is set | An HMAC of the application key | A random key per process |
+| Temporary file URLs | A key derived from the application key | A random key per process |
+| Broadcasts that workers relay to `serve`, unless `realtime.secret` is set | A key derived from the application key, only through `CryptoModule` | Broadcasts stay in their process |
+
+The application key never signs or encrypts anything for those other purposes itself: each gets its own derived key.
+
+## Encrypting values
+
+Inject `Arc<Encrypter>` wherever you need it. This service stores the credentials of a third-party integration:
+
+```rust title="src/modules/integrations/vault.rs"
+use navree::crypto::{CryptoError, Encrypter};
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct Webhook {
+    pub url: String,
+    pub secret: String,
+}
+
+/// Stores third-party credentials encrypted.
+#[injectable]
+pub struct IntegrationVault {
+    encrypter: Arc<Encrypter>,
+}
+
+impl IntegrationVault {
+    pub fn seal_token(&self, token: &str) -> Result<String, CryptoError> {
+        self.encrypter.encrypt_string(token)
+    }
+
+    pub fn open_token(&self, stored: &str) -> Result<String, CryptoError> {
+        self.encrypter.decrypt_string(stored)
+    }
+
+    pub fn seal_webhook(&self, webhook: &Webhook) -> Result<String, CryptoError> {
+        self.encrypter.encrypt_json(webhook)
+    }
+
+    pub fn open_webhook(&self, stored: &str) -> Result<Webhook, CryptoError> {
+        self.encrypter.decrypt_json(stored)
+    }
+}
+```
+
+| Method | |
+|---|---|
+| `encrypt(&[u8])`, `decrypt(&str)` | Bytes |
+| `encrypt_string(&str)`, `decrypt_string(&str)` | UTF-8 text |
+| `encrypt_json(&T)`, `decrypt_json::<T>(&str)` | Any `Serialize` / `DeserializeOwned` value, as JSON |
+| `current_kid()` | The id of the key new payloads use, or `None` without a key |
+| `derive_key(purpose)` | A key for another purpose; see [Derived keys](#derived-keys) |
+
+Each call encrypts with AES-256-GCM under a fresh random 96-bit nonce, so encrypting the same value twice gives two different payloads. Store payloads in a text column.
+
+There are no encrypted model attributes: encrypt before you write a column and decrypt after you read it, as the vault does.
+
+### The payload format
+
+A payload is a compact string, safe in URLs and cookies:
+
+```text
+v1._f81B5zB.eUcgbYYL9SDjskri.USm6z1Ab3ittlFZaXAKcx-6dVcEbORzLQvyf
+```
+
+| Part | |
+|---|---|
+| `v1` | The format version |
+| `_f81B5zB` | The key id: eight characters from a SHA-256 of the key, which can't be turned back into the key. It picks the key to decrypt with |
+| `eUcgbYYL9SDjskri` | The nonce |
+| the rest | The ciphertext and its 128-bit authentication tag |
+
+The parts are base64url without padding. The `v1.<kid>` header is authenticated with the ciphertext, so changing any part makes decryption fail. The header, the nonce and the tag make a payload about 50 characters longer than the base64 of its plaintext.
+
+### Errors
+
+Every method returns `navree::crypto::CryptoError`. Its messages never quote keys, plaintexts or decrypted data:
+
+| Error | When |
+|---|---|
+| `MissingKey` | No application key is configured |
+| `InvalidKey` | A key isn't `base64:` plus 32 bytes |
+| `InvalidPayload` | The payload isn't `v1.<kid>.<nonce>.<ciphertext>` |
+| `Decrypt` | The payload was changed, or its key isn't configured any more |
+| `NotUtf8`, `Json` | The decrypted bytes aren't the text or the JSON type asked for (`Json` gives only the category: `syntax`, `data`, `eof` or `io`) |
+| `Encrypt` | The plaintext is too long for AES-GCM |
+| `InvalidHash`, `InvalidHashingOptions`, `Hashing` | Password hashing; see below |
+
+## Rotating keys
+
+Rotate the application key when it may have leaked, or on a schedule. Old payloads stay readable: the current key encrypts, and previous keys only decrypt.
+
+<Steps>
+<Step title="Generate a new key">
+
+```sh
+navree key:generate
+```
+
+</Step>
+<Step title="Move the current key to the previous keys">
+
+```env title=".env"
+APP_KEY=base64:<the new key>
+APP_PREVIOUS_KEYS=base64:<the old key>
+```
+
+`APP_PREVIOUS_KEYS` (or `app.previous_keys`) is a comma-separated list, most recent first. In code it is `CryptoOptions::previous_key`.
+
+</Step>
+<Step title="Restart every process">
+
+Every process must read the same keys.
+
+</Step>
+</Steps>
+
+From then on, new payloads use the new key, and payloads made with an old key still decrypt: their key id picks the key. Nothing is re-encrypted for you, and there is no command for it. A value stays encrypted with the old key until your code writes it again, so keep an old key in `app.previous_keys` until nothing encrypted with it remains. That includes the two-factor secrets and recovery codes of `navree-auth`: drop the old key too early and those users can't sign in with a second factor.
+
+Previous keys only help to decrypt. Everything **derived** from the application key changes with it:
+
+- access tokens signed with a derived key fail with `401 Invalid token`; clients refresh, because refresh tokens are stored as digests and don't depend on the key;
+- signed links already mailed (email verification) and temporary file URLs stop working;
+- workers and `serve` must restart together, or relayed broadcasts fail their signature check.
+
+Set `auth.jwt.secret`, `http.signing_key` or `realtime.secret` when you want to rotate one of those separately.
+
+The same works on a standalone `Encrypter`:
+
+```rust
+use navree::crypto::{AppKey, CryptoError, Encrypter, generate_key};
+
+let old = AppKey::generate();
+let payload = Encrypter::new(old.clone()).encrypt_string("remember me")?;
+
+// After a rotation, the old key only decrypts.
+let current = AppKey::parse(&generate_key())?;
+let encrypter = Encrypter::new(current).with_previous_keys([old]);
+assert_eq!(encrypter.decrypt_string(&payload)?, "remember me");
+```
+
+## Derived keys
+
+`Encrypter::derive_key(purpose)` returns a 32-byte key for one purpose: an HMAC-SHA-256 of the application key over `navree-crypto/derive/v1:` and the purpose. The same key and purpose always give the same derived key, and knowing a derived key reveals nothing about the application key or about other purposes. Use it to sign things with `hmac_sha256` without reusing the encryption key:
+
+```rust
+use navree::crypto::{CryptoError, Encrypter, hmac_sha256};
+
+/// The signature of an outgoing webhook body (hex-encode it for a header).
+pub fn webhook_signature(encrypter: &Encrypter, body: &[u8]) -> Result<[u8; 32], CryptoError> {
+    let key = encrypter.derive_key("webhook-signing")?;
+    Ok(hmac_sha256(&key, body))
+}
+```
+
+Derived keys come from the current key only, so they change when you rotate it. `derive_key` fails with `MissingKey` without an application key.
+
+## Hashing passwords
+
+Inject `Arc<Hasher>` to hash and check secrets that people type. `navree-auth` uses it for passwords; this service uses it for PINs:
+
+```rust title="src/modules/kiosk/pins.rs"
+use navree::crypto::{CryptoError, Hasher};
+use navree::prelude::*;
+
+#[injectable]
+pub struct PinService {
+    hasher: Arc<Hasher>,
+}
+
+impl PinService {
+    pub async fn store(&self, pin: &str) -> Result<String, CryptoError> {
+        self.hasher.hash(pin).await
+    }
+
+    /// The new hash to store, if the stored one uses old parameters.
+    pub async fn check(&self, pin: &str, stored: &str) -> Result<Option<String>, CryptoError> {
+        if !self.hasher.verify(pin, stored).await? {
+            return Err(CryptoError::InvalidHash);
+        }
+        if self.hasher.needs_rehash(stored) {
+            return Ok(Some(self.hasher.hash(pin).await?));
+        }
+        Ok(None)
+    }
+}
+```
+
+- `hash(password)` returns a PHC string with a fresh random salt:
+
+  ```text
+  $argon2id$v=19$m=19456,t=2,p=1$uZEh5e8+yleAZG2TY9GsAQ$eaf0OcAi4+Ul/v0YhYZQsEnaveDhUyBaArHbEifabuc
+  ```
+
+- `verify(password, hash)` is `Ok(true)` or `Ok(false)`. It uses the parameters stored in the hash, so old hashes keep verifying after you change the options. A string that isn't an Argon2 hash, such as a bcrypt hash from another system, is `Err(CryptoError::InvalidHash)`.
+- `needs_rehash(hash)` is true when the hash isn't Argon2id version 19 with exactly the configured parameters. Hash the password again after a successful `verify` and store the new hash. `navree-auth` does this at every sign-in.
+
+### Parameters
+
+The defaults are OWASP's minimum recommendation for Argon2id:
+
+```toml title="config/app.toml"
+[hashing]
+memory_kib = 19456          # 19 MiB per hash
+iterations = 2
+parallelism = 1
+# max_concurrent_hashes = 8 # default: the number of CPUs
+```
+
+| Key | Default | |
+|---|---|---|
+| `hashing.memory_kib` | `19456` | Memory per hash, in KiB (Argon2's `m`) |
+| `hashing.iterations` | `2` | Passes over the memory (`t`) |
+| `hashing.parallelism` | `1` | Lanes (`p`) |
+| `hashing.max_concurrent_hashes` | the number of CPUs | How many hashes may run at once; at least 1 |
+
+Raising a cost makes `needs_rehash` true for existing hashes, so users' hashes are upgraded as they sign in. Values outside Argon2's limits, and `max_concurrent_hashes = 0`, fail the boot with a message that names `hashing`.
+
+Argon2id is slow and memory-hungry on purpose. Every `hash` and `verify` runs on Tokio's blocking thread pool, never on an async worker, behind a semaphore of `max_concurrent_hashes` permits. A permit is held until the hash finishes, even if the request that started it is cancelled, so a burst of logins waits its turn instead of exhausting memory. The peak is about `max_concurrent_hashes × memory_kib`: 8 × 19 MiB is 152 MiB on an 8-core machine. Lower `max_concurrent_hashes` on small machines.
+
+<Callout type="tip" title="Fast hashing in tests">
+
+Production parameters make every test that creates a user slow. Lower them in test configuration only:
+
+```rust
+TestApp::builder()
+    .config("hashing.memory_kib", 1024)
+    .config("hashing.iterations", 1)
+```
+
 </Callout>
+
+## Tokens and digests
+
+| Function | |
+|---|---|
+| `random_token(len)` | `len` random characters from `[A-Za-z0-9]`, from a cryptographically secure generator. 40 characters carry about 238 bits |
+| `sha256_hex(data)` | The SHA-256 digest as 64 lower-case hex characters |
+| `hmac_sha256(key, msg)` | HMAC-SHA-256 as 32 bytes; any key length |
+| `constant_time_eq(a, b)` | Compares two byte strings in a time that depends only on their lengths |
+| `generate_key()` | A new application key, `base64:...` |
+
+`AppKey` is the parsed key: `AppKey::parse`, `AppKey::generate`, `kid()`. Its `Debug` output is `AppKey([redacted])`.
+
+The usual pattern for an API token or a reset link: show the token once and store only its digest, then compare digests in constant time:
+
+```rust
+use navree::crypto::{constant_time_eq, random_token, sha256_hex};
+
+pub fn api_token() -> (String, String) {
+    // Show `plain` to the user once; store only the digest.
+    let plain = random_token(40);
+    let stored = sha256_hex(plain.as_bytes());
+    (plain, stored)
+}
+
+pub fn check(presented: &str, stored: &str) -> bool {
+    constant_time_eq(sha256_hex(presented.as_bytes()).as_bytes(), stored.as_bytes())
+}
+```
+
+Navree's own tokens work this way: refresh tokens (an id plus 48 random characters), password reset tokens (64) and two-factor recovery codes are all stored as SHA-256 digests (the recovery codes' digests are encrypted too).
+
+## Limits
+
+- One cipher (AES-256-GCM) and one application key at a time, plus previous keys for decryption. There are no per-record keys and no key management service integration.
+- Nothing re-encrypts stored values after a rotation.
+- Password hashes are Argon2id only: hashes from another system (bcrypt, say) can't be verified, so migrate those users with a password reset.
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    How the JWT signing key comes from the application key.
+  </LinkCard>
+  <LinkCard href="/docs/security/account-flows/" title="Account flows">
+    Two-factor secrets are encrypted with the application key.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    `.env`, `config/app.toml` and `APP_*` variables.
+  </LinkCard>
+</LinkCards>

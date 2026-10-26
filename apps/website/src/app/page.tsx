@@ -52,7 +52,7 @@ export default function Home() {
         lead={
           <p>
             Modules, providers, controllers and guards work the way you know from NestJS. The difference is underneath: one
-            small binary, no garbage collector, and types the compiler checks.
+            binary, no garbage collector, and types the compiler checks.
           </p>
         }
       >
@@ -78,7 +78,7 @@ export default function Home() {
         lead={
           <p>
             The same API on the same machine, after the same {checks ? `${checks}-check ` : ""}conformance test. {site.name}{" "}
-            holds its own where requests do real work and stays tiny in memory. Its own per-request overhead is high, and the
+            lands mid-field where requests do real work and stays tiny in memory. Its own per-request overhead is high, and the
             benchmarks page says why.
           </p>
         }
@@ -91,9 +91,9 @@ export default function Home() {
         title="Everything in the box"
         lead={
           <p>
-            {crates.length} crates in {layers} layers. A crate depends only on the layers below it, and a test checks every
-            edge. Depend on the <code className="inline-code">navree</code> facade to get them all, or turn its features off
-            to compile less.
+            {crates.length} crates in {layers} layers. A crate’s dependencies all sit in lower layers, and a test checks every
+            edge. Depend on the <code className="inline-code">navree</code> facade to get every module, or turn its features
+            off to compile less.
           </p>
         }
       >

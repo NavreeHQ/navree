@@ -1,10 +1,189 @@
 ---
 title: "Installation"
-description: "Install the Navree CLI and create your first application."
+description: "Install Rust and the `navree` CLI, create an app with `navree new`, and run it with `navree dev`."
 ---
 
-This page shows you how to install Rust and the `navree` command-line tool, create an application with `navree new`, and run it locally with `navree dev`. It also lists the system requirements and the optional extras, such as PostgreSQL and the Next.js front end.
+Navree is a Rust framework, so you need a Rust toolchain and the `navree` command-line tool. The CLI creates applications, generates code and runs the development loop. Your application is an ordinary Cargo package that depends on the `navree` crate.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-cli` is the reference: run `cargo doc -p navree-cli --open` in the repository.
+## Requirements
+
+| What | Version | Why |
+|---|---|---|
+| Rust | 1.95 or newer | Navree uses edition 2024. Install it with [rustup](https://rustup.rs). |
+| A C compiler | the one your Rust toolchain links with | SQLite is compiled from source (the bundled `libsqlite3-sys`). On Windows, that means the MSVC build tools. |
+| `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
+| Node.js and npm | Node.js 20.9 or newer | Only for the optional Next.js front end (`navree new --ui next`). |
+
+You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need a database server either. New apps use SQLite, and PostgreSQL is an opt-in feature (see [Database: getting started](/docs/database/getting-started/)).
+
+## Installing the CLI
+
+<Callout type="note" title="Navree is not on crates.io yet">
+
+The 0.1 crates haven't been published, so `cargo install navree-cli` doesn't work yet. Until they are, install the CLI from the Git repository. Once they're published, `cargo install navree-cli` will be all you need.
+
 </Callout>
+
+<Tabs>
+<Tab label="From Git">
+
+```sh
+cargo install --git https://github.com/NavreeHQ/navree navree-cli
+```
+
+Cargo builds the `navree` binary from the repository and puts it in `~/.cargo/bin`.
+
+</Tab>
+<Tab label="From a clone">
+
+```sh
+git clone https://github.com/NavreeHQ/navree
+cargo install --path navree/crates/navree-cli
+```
+
+Use a clone when you want to pick the Navree version your apps build against, or to work on Navree itself.
+
+</Tab>
+</Tabs>
+
+Check that it works:
+
+```sh
+navree --version
+```
+
+```text
+navree 0.1.0
+```
+
+### Where new apps get Navree from
+
+The CLI doesn't depend on the framework; it writes the dependency into your app's `Cargo.toml`. `navree new` picks it like this:
+
+1. With `--navree-path <path>`, the Navree checkout at that path (the repository, or its `crates/navree` directory).
+2. Otherwise, the checkout the CLI was built from, when it still exists. After `cargo install --path`, that is your clone. After `cargo install --git`, it is Cargo's own copy of the repository under `~/.cargo/git/checkouts`.
+3. Otherwise, the published crate: `navree = "0.1.0"`.
+
+Until the crates are published, the third case fails to build. For an app you plan to keep, clone the repository and either install the CLI from the clone or pass `--navree-path`. Cargo's Git checkouts are a cache that Cargo can clean up.
+
+### Adding Navree to an existing project
+
+To use Navree in a Cargo package you already have, add it from the Git repository:
+
+```sh
+cargo add --git https://github.com/NavreeHQ/navree navree
+```
+
+This adds a Git dependency with every module, since the `full` feature is on by default. The derive macros of serde, SeaORM and garde name their own crates, so add `serde`, `sea-orm` and `garde` too; a new app's `Cargo.toml` shows the versions and features.
+
+## Creating an application
+
+`navree new` creates an app in a new directory:
+
+```sh
+navree new blog
+```
+
+```text
+Created blog in /home/you/code/blog
+It depends on navree at /home/you/code/navree/crates/navree.
+
+Next steps:
+  cd blog
+  navree key:generate     # then set APP_KEY in .env
+  navree dev              # http://127.0.0.1:8080/api/docs
+```
+
+The name must start with a lower-case letter and use lower-case letters and digits separated by single `-` or `_`; Rust keywords and names such as `std`, `test` and `navree` are refused. The directory must not exist, or must be empty. `navree new` doesn't run Cargo or `git init`.
+
+The app is complete and working: a root module with every common platform module configured, JWT authentication at `/api/auth/*`, roles and abilities, an example `users` module, OpenAPI docs and tests. [Directory structure](/docs/getting-started/directory-structure/) walks through every file.
+
+### Options
+
+| Option | Default | What it does |
+|---|---|---|
+| `--ui next` | `--ui none` | Also creates a Next.js front end in `web/`. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. |
+| `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
+
+```sh
+navree new blog --ui next --navree-path ~/code/navree
+```
+
+## Running the application
+
+Generate an application key first. It encrypts data and signs tokens; without it, every restart signs every user out.
+
+```sh
+cd blog
+navree key:generate
+```
+
+```text
+base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+The first run compiles the framework, which takes a few minutes; later builds are incremental. The command boots the app, so log lines may appear before the key. Paste the key into `.env`:
+
+```env title=".env"
+APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+Then start the development server:
+
+```sh
+navree dev
+```
+
+`navree dev` builds the app, starts its `serve` command and watches the code. When a file in `src/`, `config/` or `migrations/` changes, or `Cargo.toml`, `.env` or `build.rs` does, it rebuilds and restarts the server. If a build fails, the previous build keeps serving. With a `web/` front end it also runs `npm run dev` there (or `pnpm`/`yarn`, chosen by the lockfile).
+
+The API listens on `http://127.0.0.1:8080`. Open `http://127.0.0.1:8080/api/docs` for the generated API reference, or check the health endpoint:
+
+```sh
+curl http://127.0.0.1:8080/health/live
+```
+
+```json
+{"status":"up"}
+```
+
+### Dev server options
+
+| Option | Default | What it does |
+|---|---|---|
+| `--debounce-ms <ms>` | `300` | How long files must be quiet before a rebuild. |
+| `--no-web` | off | Doesn't start the front end's dev server. |
+| `-- <args>` | none | Arguments for the app's `serve` command, such as `-- --addr 0.0.0.0:8080`. |
+
+<Callout type="note" title="Two limits of `navree dev`">
+
+The listening socket isn't kept open across restarts, so requests fail for the moment the server restarts. If `navree dev` itself is killed forcibly, the server it started keeps running; stop it by hand.
+
+</Callout>
+
+## Running the app's own commands
+
+Every command other than `new`, `make:*` and `dev` belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
+
+```sh
+navree migrate
+cargo run --quiet -- migrate
+```
+
+`navree list` prints every command your app has. Don't use `navree help` for that: it prints the CLI's own help. Your app's commands are covered in [Console commands and the CLI](/docs/digging-deeper/cli/).
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
+    Build a small CRUD API with authentication, access rules and tests.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    `.env`, `config/app.toml` and `APP_*` variables.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/directory-structure/" title="Directory structure">
+    What every generated file is for.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Release builds, processes and reverse proxies.
+  </LinkCard>
+</LinkCards>

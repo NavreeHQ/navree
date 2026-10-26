@@ -1,10 +1,316 @@
 ---
 title: "A tour of the CRM"
-description: "The reference CRM: API modules, abilities, the BFF web app and real time."
+description: "The reference CRM built with Navree: feature crates, roles and abilities, the deal pipeline, events, real time, scheduled reminders, the Next.js BFF and the tests."
 ---
 
-This page tours the reference CRM built with Navree: how the API is split into feature crates and modules, how roles and abilities decide who can do what, how the Next.js backend-for-frontend keeps tokens out of the browser, and how deal moves reach every open board in real time.
+Navree ships with a complete application built on it: a CRM for a small sales team, with companies, contacts, a deal pipeline, tasks and a dashboard. It lives in the repository next to the framework and is tested with it, so it shows how the pieces fit together in real code rather than in snippets. This page walks through it and links to the documentation of each feature it uses.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover.
-</Callout>
+There are two apps:
+
+- `apps/crm-api`, the API: a Navree application split into feature crates;
+- `apps/crm-web`, the front end: a Next.js 16 app whose server is a backend-for-frontend (BFF), so the browser never sees a token.
+
+## Running it
+
+You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite. Run each long-running command in its own terminal.
+
+<Steps>
+<Step title="Create an application key">
+
+The API reads `.env` and `config/app.toml` from its directory. Generate a key and put it in `apps/crm-api/.env` as `APP_KEY=base64:...`:
+
+```sh
+cd apps/crm-api
+cargo run -p crm-api -- key:generate
+```
+
+Without a key, the API signs tokens with a random key per process, so every restart signs everyone out.
+
+</Step>
+<Step title="Create and seed the database">
+
+```sh
+cargo run -p crm-api -- migrate:fresh --seed
+```
+
+This creates `storage/crm.db` with the schema, the roles, the four demo accounts and demo data: about 20 companies, 50 contacts, 30 deals across the pipeline and 60 activities, dated relative to today.
+
+</Step>
+<Step title="Start the API">
+
+```sh
+cargo run -p crm-api -- serve
+```
+
+The REST API and the WebSocket server listen on `http://127.0.0.1:8080`. The OpenAPI document is at `/api/openapi.json` and the docs UI at `/api/docs`.
+
+</Step>
+<Step title="Start the workers (optional)">
+
+```sh
+cargo run -p crm-api -- queue:work      # deal notifications and mail (mail goes to the log)
+cargo run -p crm-api -- schedule:work   # 08:00 UTC task reminders, daily audit pruning
+```
+
+</Step>
+<Step title="Start the web app">
+
+```sh
+cd apps/crm-web
+pnpm install
+pnpm dev   # http://localhost:3000
+```
+
+It talks to the API at `NAVREE_API_URL` (default `http://127.0.0.1:8080`). `pnpm dev:mock` runs it alone, against an in-browser mock of the API with the same demo accounts.
+
+</Step>
+</Steps>
+
+`cargo run -p crm-api -- list` shows every command the API has; see [Console commands and the CLI](/docs/digging-deeper/cli/).
+
+### Demo accounts
+
+Every account's password is `password123`.
+
+| Email | Role | Can |
+|---|---|---|
+| `admin@navree.test` | admin | Everything, including users, roles and the audit log |
+| `manager@navree.test` | manager | All customer records, reassign deals, export contacts, reopen won and lost deals (only an admin deletes them) |
+| `rep1@navree.test` | rep | Read everything, create records, edit and delete only their own; can't delete or reopen won or lost deals |
+| `rep2@navree.test` | rep | The same as rep1: a second owner, to see ownership rules and live updates |
+
+Open the deal board as `rep1` in one browser and as `manager` in another, and move a deal: it moves on the other board too.
+
+## How the API is organised
+
+<FileTree title="apps/crm-api">{`
+Cargo.toml              # the crm-api binary
+config/
+  app.toml              # development settings
+src/
+  main.rs               # crm_api::app(ConfigSources::defaults()).run()
+  app.rs                # the platform plus every CRM module
+  seed.rs               # the crm-demo seeder
+crates/
+  crm-core/             # entities, enums, migrations, roles, abilities, platform
+  crm-users/            # /api/v1/users, /api/v1/me
+  crm-companies/        # /api/v1/companies, /api/v1/contacts (and the CSV export)
+  crm-deals/            # /api/v1/deals, the board, moves, notifications
+  crm-activities/       # /api/v1/activities, /api/v1/dashboard, reminders
+  crm-testkit/          # TestCrm: a booted CRM for feature tests
+tests/                  # system tests of the whole API
+`}</FileTree>
+
+The app's root is short. `platform` adds every framework module the CRM uses, configured once, and the CRM's own modules come on top:
+
+```rust title="apps/crm-api/src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    platform(Navree::app(), sources)
+        .module(CrmCoreModule)
+        .module(UsersModule)
+        .module(CompaniesModule)
+        .module(ContactsModule)
+        .module(DealsModule)
+        .module(ActivitiesModule)
+        .module(DashboardModule)
+        .module(DemoModule)
+    // navree:modules
+}
+```
+
+### Why it is split into crates
+
+Each feature is its own crate, and the feature crates depend only on `crm-core`, never on each other:
+
+| Crate | What it holds |
+|---|---|
+| `crm-core` | What every feature shares: the SeaORM entities of every table (companies, contacts, deals, activities), the enums (`Stage`, `ContactStatus`, ...), the one `crm` migration set, roles, permissions and the abilities function, the custom actions `Move`, `Export` and `Complete`, embeds such as `OwnerRef`, the notification data shape, the roles seeder, and `platform()` |
+| `crm-users` | User administration for admins, and the `roles` field added to Navree's user resource |
+| `crm-companies` | Companies and contacts, with soft deletes and the contacts CSV export |
+| `crm-deals` | Deals, the pipeline board, moves, deal events, notifications and broadcasts |
+| `crm-activities` | Notes, calls, emails, meetings and tasks, the dashboard and the daily reminders |
+| `crm-testkit` | `TestCrm`, which boots the platform and the modules a test needs |
+
+Splitting this way keeps boundaries honest (a deal can't reach into the contacts code, only into shared entities), lets Cargo build and test the features in parallel, and gives each crate a test suite that boots only what it needs. The framework itself is organised the same way; see [The crate hierarchy](/docs/architecture/crate-hierarchy/) and [Modules](/docs/architecture/modules/).
+
+### The platform
+
+`crm_core::platform` is the list of framework modules, each configured from the app's configuration: Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail, Queue, Schedule, Validation, Auth (with public registration off: admins create accounts), Access, Audit, Notify, Realtime, Api and Observe. It also fills in a few CRM defaults when the configuration leaves them unset, such as the realtime key `navree-crm-key` and `http.trusted_proxies = "127.0.0.1,::1"` (the BFF calls from loopback; it names the browser in `X-Forwarded-For` only when `NAVREE_TRUSTED_PROXY_HOPS` is set, see [client addresses](#the-web-app) below).
+
+Last, a small module of its own registers the app's `dyn Clock` (the system clock, which tests replace with a fixed one) and the [channel authorisers](/docs/digging-deeper/broadcasting/#authorizing-channels) for `private-crm.deals` and `private-users.{id}`.
+
+## Roles and abilities
+
+The CRM has three roles, stored in [navree-access](/docs/security/authorization/)'s tables and created by the `crm-roles` seeder:
+
+| Role | Rules |
+|---|---|
+| `admin` | The super-admin role: `can manage all`, added after every other rule so it beats every `cannot` |
+| `manager` | The permissions `companies.manage`, `contacts.manage`, `contacts.export`, `deals.manage`, `activities.manage` and `users.read`, plus the base rules |
+| `rep` | The base rules |
+
+The base rules live in one function, `crm_core::abilities::define`, which the access module calls for every user. In short: read everything, create records, change and delete what you own, complete tasks assigned to you, and never delete (or, for reps, move) a won or lost deal:
+
+```rust title="crates/crm-core/src/abilities.rs"
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    if user.has_role(ADMIN) || !user.has_any_role(&[MANAGER, REP]) {
+        return;
+    }
+    for subject in [COMPANY, CONTACT, DEAL, ACTIVITY, USER] {
+        rules.can(READ, subject);
+    }
+    for subject in [COMPANY, CONTACT, DEAL, ACTIVITY] {
+        rules.can(CREATE, subject);
+    }
+    let own = || field("owner_id").eq(user.id);
+    for subject in [COMPANY, CONTACT, ACTIVITY] {
+        rules.can(UPDATE, subject).when(own());
+        rules.can(DELETE, subject).when(own());
+    }
+    rules.can(COMPLETE, ACTIVITY).when(field("assignee_id").eq(user.id));
+    rules.can(COMPLETE, ACTIVITY).when(own());
+    rules.can(UPDATE, DEAL).when(own());
+    rules.can(MOVE, DEAL).when(own());
+    rules.can(DELETE, DEAL).when(own());
+    // ... `cannot move` closed deals for reps, `cannot delete` closed deals for everyone
+}
+```
+
+The same rules are enforced in three places:
+
+- **Routes** declare what they need, such as `#[can(Move, Deal, from = "id")]`, which loads the deal and checks the rule against it before the handler runs (a `403` otherwise). See [Access control on routes](/docs/basics/access-control/).
+- **Lists** take an `Accessible<Deal, Read>` extractor that turns the rules into SQL filters, so a list only ever contains rows the user may read.
+- **The browser** gets the rules as CASL JSON from `GET /api/me/abilities` and hides the buttons a user can't use. Every API resource carries its subject type in `__type`, so CASL checks plain JSON objects.
+
+Ownership has one more rule: only users who can `manage` a record type may set someone else as its `owner_id`; a rep who tries gets a `403`.
+
+## The deal pipeline
+
+Deals move through six stages, each with a win probability: lead (10%), qualified (25%), proposal (50%), negotiation (75%), won (100%) and lost (0%). The board (`GET /api/v1/deals/board`) returns every stage in order with its count, its total and its deals, and the dashboard weights open deals by their stage's probability.
+
+Every stage keeps its deals at positions `0..n`. `POST /api/v1/deals/{id}/move` takes `{stage, position?, lost_reason?}`: the deal is placed at that index in the target stage and the deals after it shift down, in one transaction. Moving to `won` or `lost` sets `closed_at`; `lost` requires a `lost_reason` (a `400` otherwise); moving back to an open stage reopens the deal. Deleting a deal closes the gap it leaves and removes its activities.
+
+## Events, notifications and mail
+
+The deal service emits [events](/docs/digging-deeper/events/) inside the request's unit of work:
+
+- `DealAssigned` when a deal gets an owner other than the person making the change;
+- `DealWon` when a deal enters `won`.
+
+`DealsModule` subscribes one queued listener, `NotifyDealOwner`, to both:
+
+```rust title="crates/crm-deals/src/lib.rs"
+impl DealsModule {
+    /// The owner notifications (a queued listener of both events) and
+    /// their mail template.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>()
+            .templates(notification::TEMPLATES);
+    }
+}
+```
+
+The listener's job is committed with the deal, and `queue:work` runs it. It sends the owner a [notification](/docs/digging-deeper/notifications/) on three channels: stored for the notification bell (`GET /api/notifications`), broadcast on `private-users.{id}` and mailed from the embedded `mail/deal-notification` [templates](/docs/digging-deeper/views/). In development, mail goes to the log (`mail.transport = "log"`).
+
+## Real-time updates
+
+Two kinds of events reach browsers over the [WebSocket server](/docs/digging-deeper/broadcasting/):
+
+- **`deal.updated` on `private-crm.deals`**, with the deal as the API returns it, after every change to a deal commits. Every user who can read deals may subscribe, and the board refreshes the deal when it arrives.
+- **`notification.created` on `private-users.{id}`**, for each notification. Only that user may subscribe; the web app shows a toast and refreshes the bell.
+
+Notifications are sent by `queue:work`, which doesn't hold the sockets, so the CRM sets `realtime.relay_url = "auto"`: workers hand their broadcasts to `serve` over the [signed relay](/docs/digging-deeper/broadcasting/#broadcasting-from-workers). When an admin changes a user's role, or a user signs out, Navree ends their subscriptions, and their browser re-authorises each channel with its current access.
+
+## Scheduled reminders
+
+`ActivitiesModule` registers a command and two [schedules](/docs/digging-deeper/scheduling/):
+
+```rust title="crates/crm-activities/src/lib.rs"
+fn wire(&self, m: &mut ModuleBuilder) {
+    m.command(reminders::reminders_command());
+    m.templates(&reminders::TEMPLATES);
+    m.schedule(|s| {
+        s.command(TASK_REMINDERS_COMMAND, &[])
+            .daily_at(TASK_REMINDERS_AT)
+            .without_overlapping();
+        s.command("audit:prune", &[])
+            .daily_at(AUDIT_PRUNE_AT)
+            .without_overlapping();
+    });
+}
+```
+
+Every day at 08:00 UTC, `crm:task-reminders` sends everyone with open tasks due today one "Tasks due today" notification (stored, broadcast and mailed). At 03:00 UTC, `audit:prune` trims the [audit log](/docs/security/audit-log/). `schedule:work` runs them; you can also run the reminders by hand with `cargo run -p crm-api -- crm:task-reminders`.
+
+## The web app
+
+`apps/crm-web` is a Next.js 16 app (React, TanStack Query, shadcn/ui). Its server is a backend-for-frontend: the browser only calls same-origin routes, and the BFF calls Navree with the tokens, which never reach JavaScript.
+
+- **Login.** `POST /api/auth/login` on the BFF signs in at Navree, stores the JWT access token and the rotating refresh token in httpOnly cookies (`navree_at` and `navree_rt`; `SameSite=Lax`, `Secure` in production) and returns only `{user}`. Accounts with two-factor authentication get a challenge instead, kept in its own httpOnly cookie until the code step.
+- **Proxying.** Every other `/api/*` request, and `/broadcasting/auth`, is forwarded with `Authorization: Bearer`. On a `401` the BFF refreshes once (single-flight per refresh token, because reusing a rotated refresh token revokes its whole family), updates the cookies and retries; if that fails, it clears them and the browser goes to `/login`.
+- **CSRF.** Requests other than `GET`, `HEAD` and `OPTIONS` get a `403` unless their `Origin` is the app's own (or listed in `APP_ORIGINS`); a missing `Origin` is refused too. This protects the cookie hop.
+- **Client addresses.** The browser's own `X-Forwarded-For` never reaches Navree, so by default Navree sees every web user at the BFF's address. In production, put Next.js behind a reverse proxy and set `NAVREE_TRUSTED_PROXY_HOPS`: the BFF then forwards the client's address, which Navree believes only from the peers in `http.trusted_proxies`, so rate limits and the login throttle apply per browser.
+- **Types.** The API client is generated from the API's OpenAPI document with openapi-typescript; see [OpenAPI](/docs/digging-deeper/openapi/#typed-clients-from-the-document).
+- **Permissions.** CASL rules from `GET /api/me/abilities` decide what the UI shows, with `__type` as the subject type.
+- **Real time.** Laravel Echo with pusher-js connects straight to Navree's WebSocket and authorises private channels through the BFF; see [Through a backend-for-frontend](/docs/digging-deeper/broadcasting/#through-a-backend-for-frontend).
+
+`navree new --ui next` generates a smaller version of the same BFF for your own app; see [Creating an app](/docs/digging-deeper/cli/#creating-an-app).
+
+## Tests
+
+The CRM is tested at every level. `cargo test --workspace` runs its Rust tests together with the framework's.
+
+**Feature tests**, in each feature crate, boot the CRM with only that crate's module through `crm-testkit`. `TestCrm` uses a temporary SQLite database, hermetic settings (mail in memory, fast password hashing, no rate limit) and a fixed clock, and seeds the roles and demo accounts. `login_as` signs in through the real login route:
+
+```rust title="crates/crm-deals/tests/deals/moves.rs"
+#[tokio::test]
+async fn won_sets_closed_at() {
+    let crm = crm().await; // TestCrm::builder().module(DealsModule).build()
+    let rep = crm.login_as(Role::Rep1).await;
+    let acme = company(&crm, "Acme", rep.id()).await;
+    let id = id_of(&create_deal(&rep, new_deal("Acme renewal", acme, 100)).await);
+
+    crm.clock().advance(Duration::from_secs(10 * 60));
+    let won = move_deal(&rep, id, json!({ "stage": "won" })).await;
+    assert_eq!(won["stage"], "won");
+    assert_eq!(won["probability"], 100);
+    assert_eq!(won["closed_at"], "2026-10-26T10:10:00Z");
+    // ...
+}
+```
+
+The deals suite also checks the broadcasts over a real WebSocket, notifications sent from a separate worker app through the relay, and that role changes and sign-outs end subscriptions. Each feature crate has an `openapi` test that pins the schema names the web app imports.
+
+**System tests**, in `apps/crm-api/tests`, boot the whole API: `app.rs` (it boots, passes `check` and seeds), `e2e.rs` (a rep builds a pipeline, a manager reassigns a deal and the new owner is notified once the queue runs, and every change is in the audit trail), `bff.rs` (the login throttle and rate limits are per browser behind the BFF), `security_audit.rs` (security events reach the audit table) and `pool.rs` (no request needs two database connections at once).
+
+**Web tests**: Vitest covers the BFF route handlers, the API client, the CASL setup and the mock API (`pnpm test`). Playwright drives the whole system in a real Chromium: with `E2E_REAL_API=1 pnpm e2e` it starts the API on a fresh seeded database and the production build of the web app, then runs the end-to-end specs, such as signing in with tokens kept in httpOnly cookies only, a rep who can't edit another rep's deal, an admin adding a user, a task completed from the Today tab, and a deal moved in one browser moving on another person's board. Without `E2E_REAL_API=1`, only the smoke tests run, against the mock API.
+
+```sh
+cargo test --workspace              # framework and CRM API
+cd apps/crm-web && pnpm test        # Vitest
+E2E_REAL_API=1 pnpm e2e             # Playwright, the whole system
+```
+
+See [Testing](/docs/testing/getting-started/) for the tools these tests use.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
+    Build your own app, step by step.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions and abilities.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Real-time broadcasting">
+    The WebSocket server behind the live board.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    Testing routes the way the CRM does.
+  </LinkCard>
+</LinkCards>

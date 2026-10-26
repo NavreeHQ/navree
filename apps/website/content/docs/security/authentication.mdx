@@ -1,10 +1,807 @@
 ---
 title: "Authentication"
-description: "JWT access tokens, rotating refresh tokens, strategies and `CurrentUser`."
+description: "JWT access tokens, rotating refresh tokens with reuse detection, Passport-style strategies and the `CurrentUser` extractor."
 ---
 
-This page explains authentication in Navree: short-lived JWT access tokens, opaque rotating refresh tokens with reuse detection, the Passport-style `Strategy` trait, the global guard with its `#[public]` opt-out, and the `CurrentUser` extractor.
+Navree authenticates API requests the way a NestJS app does. A client signs in with an email address and a password and gets two tokens: a short-lived JWT **access token**, which it sends as `Authorization: Bearer` with every request, and an opaque **refresh token**, which it trades for a new pair when the access token expires. `navree-auth` provides the routes, the token handling, Passport-style strategies and a `CurrentUser` extractor. Routes stay denied unless they say who may call them.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-auth` is the reference: run `cargo doc -p navree-auth --open` in the repository.
+## How it works
+
+- `POST /api/auth/login` checks the password and returns an access token (an HS256 JWT, valid 15 minutes) and a refresh token (an opaque string, valid 30 days).
+- The client sends `Authorization: Bearer <access token>` with every request. The built-in JWT strategy verifies the signature and the expiry without touching the database.
+- When the access token expires, the client posts its refresh token to `POST /api/auth/refresh` and gets a new pair. The old refresh token stops working; presenting it again revokes the whole session.
+- `POST /api/auth/logout` revokes the session's refresh tokens.
+
+A browser app shouldn't hold the tokens in JavaScript at all. The [BFF pattern](#browser-apps-the-bff-pattern) below keeps them in httpOnly cookies on your web server, as the reference CRM does.
+
+## Setting up
+
+<Badge feature="auth" /> The `auth` feature of the `navree` facade (part of the default `full` feature) brings `navree-auth` and the crates it builds on: `crypto`, `db`, `http`, `validation`, `cache`, `mail` and `access`. Add `AuthModule` to your app root with the modules it needs:
+
+```rust title="src/main.rs"
+use navree::prelude::*;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(CryptoModule::from_config()) // APP_KEY, Argon2id
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(CacheModule::from_config()) // optional: shares the login throttle
+        .module(AuthModule::from_config()) // section `auth`
+        .run()
+}
+```
+
+| Module | Why |
+|---|---|
+| `CryptoModule` | Required. Hashes passwords with Argon2id and provides the key the JWTs are signed with. |
+| `DatabaseModule` | Required. Stores users and refresh tokens. |
+| `CacheModule` | Optional. The login throttle counts attempts in the app's cache, or in a private in-process cache without it. |
+| `MailModule` | Optional. Sends the password reset and verification mails of the [account flows](/docs/security/account-flows/). |
+| `AuditModule` | Optional. Records sign-ins and security events in the [audit log](/docs/security/audit-log/). |
+| `AccessModule` | Optional. Roles, permissions and abilities: see [Authorization](/docs/security/authorization/). |
+
+`AuthModule::from_config()` reads the `auth` configuration section (every key is listed under [Configuration](#configuration)). Invalid options fail the boot with a message that names the key, never a secret value.
+
+### The application key
+
+Sign tokens with a stable key. By default the JWT key is derived from the application key, so generate one and put it in `.env`:
+
+```sh
+navree key:generate
+```
+
+```text
+base64:mfPeqWFuSe93GQYipIfV8X4lDcR0+9JZT0yRCGGfMPo=
+```
+
+```env title=".env"
+APP_KEY=base64:mfPeqWFuSe93GQYipIfV8X4lDcR0+9JZT0yRCGGfMPo=
+```
+
+`navree key:generate` runs your app's `key:generate` command (it is `cargo run --quiet -- key:generate`). Like every app command, it boots the whole app first, so the database must be reachable. Without an application key or `auth.jwt.secret`, the app still boots but signs tokens with a random key per process, so every restart signs everyone out. The log warns about it. See [The signing key](#the-signing-key-jwt-secret-or-app_key) for the options.
+
+### Migrations
+
+`AuthModule` contributes the migration set `auth`, which creates three tables: `users`, `refresh_tokens` and `password_reset_tokens`. A migration set of yours whose tables reference `users` runs after it:
+
+```rust
+MigrationSet::new("posts").after(["auth"])
+```
+
+The constant `navree::auth::AUTH_MIGRATIONS` holds the name `auth`. See [Migrations](/docs/database/migrations/).
+
+### The users table
+
+| Column | |
+|---|---|
+| `id` | UUID v7 |
+| `name` | The display name |
+| `email` | Unique; stored trimmed and in lower case, compared the same way |
+| `password_hash` | The Argon2id PHC string. Never serialized, never in `Debug` output |
+| `email_verified_at` | Set by [email verification](/docs/security/account-flows/#email-verification) |
+| `two_factor_secret`, `two_factor_recovery_codes`, `two_factor_confirmed_at` | [Two-factor authentication](/docs/security/account-flows/#two-factor-authentication); never serialized |
+| `created_at`, `updated_at` | UTC |
+
+The entity is `navree::auth::user::Entity`, and `navree::auth::User` is its model. Its columns are fixed by `navree-auth`. Keep app-specific data about users in a table of your own that references `users.id`, and add it to the API's user resource with a [user resource extension](#the-user-resource).
+
+## The auth routes
+
+The routes are mounted under `{http.api_prefix}{auth.routes_prefix}`, which is `/api/auth` by default.
+
+| Route | Access | Success |
+|---|---|---|
+| `POST /api/auth/register` | Public; only when `auth.registration` is on | 201: the user and a token pair |
+| `POST /api/auth/login` | Public; [throttled](#the-login-throttle) | 200: the user and a token pair, or a two-factor challenge |
+| `POST /api/auth/refresh` | Public | 200: a new token pair |
+| `POST /api/auth/logout` | Signed in | 204 |
+| `GET /api/auth/me` | Signed in | 200: the user |
+
+The account routes (changing the profile and the password, password reset, email verification and two-factor authentication) are described in [Account flows](/docs/security/account-flows/). Every error uses Navree's NestJS-style format (see [Errors](/docs/basics/errors/)).
+
+### Signing in
+
+```http
+POST /api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{"email": "ada@example.com", "password": "correct horse battery"}
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
+  "expires_in": 900,
+  "refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4FaZwgRwDYO9BhvnHd3KPPgyzSJngXtYF3uZMZQ",
+  "token_type": "Bearer",
+  "user": {
+    "__type": "User",
+    "created_at": "2026-10-26T08:17:07.568377800Z",
+    "email": "ada@example.com",
+    "email_verified_at": null,
+    "id": "01a17748-e211-72fc-abb3-836e604457d0",
+    "name": "Ada Lovelace"
+  }
+}
+```
+
+`expires_in` is the access token's lifetime in seconds. `user` is the [user resource](#the-user-resource). An account with two-factor authentication gets a challenge instead of tokens; the client finishes the sign-in with a code, as [Account flows](/docs/security/account-flows/#signing-in-with-a-second-factor) describes.
+
+A wrong password and an unknown email get the same answer. For an unknown email Navree still verifies the password against a dummy hash, so the response time doesn't reveal which addresses have accounts:
+
+```json
+{"statusCode": 401, "message": "Invalid credentials", "error": "Unauthorized"}
+```
+
+A missing or malformed field is a 400 validation error: without a password, the message is `password should not be empty`.
+
+### Calling the API
+
+Send the access token in the `Authorization` header:
+
+```http
+GET /api/auth/me HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...
+```
+
+```json
+{
+  "__type": "User",
+  "created_at": "2026-10-26T08:17:07.568377800Z",
+  "email": "ada@example.com",
+  "email_verified_at": null,
+  "id": "01a17748-e211-72fc-abb3-836e604457d0",
+  "name": "Ada Lovelace"
+}
+```
+
+| Request | Response |
+|---|---|
+| No token on a route that needs a user | 401 `Unauthorized` |
+| A forged or malformed JWT, another issuer or audience, a token of another type | 401 `Invalid token`, with `WWW-Authenticate: Bearer error="invalid_token"` |
+| An expired JWT | 401 `Token expired`, with the same header |
+
+A token that is present but invalid is a 401 on **every** route, public ones included. Navree never quietly treats such a request as a guest. A client that holds a stale access token should drop it rather than send it, in particular to `login` and `refresh`.
+
+### Refreshing tokens
+
+```http
+POST /api/auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{"refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4FaZwgRwDYO9BhvnHd3KPPgyzSJngXtYF3uZMZQ"}
+```
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
+  "expires_in": 900,
+  "refresh_token": "01a17748-e21f-7764-92e3-307f059b7300.RqBqicxX3GwIxx8mYayt0ZgHxZAXLV81WoI65WWKWysYFRqw",
+  "token_type": "Bearer"
+}
+```
+
+The route is public: it needs no access token. The refresh token you sent is now spent, so store the new one. Sending a spent token again is treated as theft (see [Reuse detection](#reuse-detection)). An unknown, expired, revoked or spent token gets:
+
+```json
+{"statusCode": 401, "message": "Invalid refresh token", "error": "Unauthorized"}
+```
+
+### Signing out
+
+```http
+POST /api/auth/logout HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4FaZwgRwDYO9BhvnHd3KPPgyzSJngXtYF3uZMZQ"}
+```
+
+The answer is always `204 No Content`. What gets revoked depends on the body:
+
+| Body | Revokes |
+|---|---|
+| `{"refresh_token": "..."}` | That session: every refresh token of its family, if it belongs to the caller |
+| `{"all": true}` | Every session of the caller, on every device |
+| No body | Nothing (the call is still audited) |
+
+Logout needs a valid access token, so one user can't end another's session. When the app has a real-time broadcaster, the user's WebSocket subscriptions end too (see [Broadcasting](/docs/digging-deeper/broadcasting/)). The access token itself keeps working until it expires: the client throws it away.
+
+### Registering
+
+`POST /api/auth/register` with `{"name", "email", "password"}` creates an account and signs it in: the answer is `201 Created` with the same body as a login. It is public by default; turn it off with `auth.registration = false`. The [Account flows](/docs/security/account-flows/#registration) page covers the password rules and what to do instead.
+
+## Access tokens
+
+Access tokens are JWTs signed with HS256. Here are the header and the claims of a real one:
+
+```json
+{"typ": "JWT", "alg": "HS256"}
+```
+
+```json
+{
+  "sub": "01a17748-e211-72fc-abb3-836e604457d0",
+  "iat": 1793002627,
+  "exp": 1793003527,
+  "iss": "navree",
+  "jti": "01a17748e21b71c697cf968dfe4f9f6d",
+  "typ": "access"
+}
+```
+
+| Claim | |
+|---|---|
+| `sub` | The user's id |
+| `iat`, `exp` | Issued at and expires at, in Unix seconds: `exp` is `iat` plus `auth.jwt.access_ttl_secs` (900) |
+| `iss` | `auth.jwt.issuer` (`navree`) |
+| `aud` | `auth.jwt.audience`, only when it is configured |
+| `jti` | A unique token id |
+| `typ` | `access`, or `two_factor_challenge` for the [two-factor login step](/docs/security/account-flows/#signing-in-with-a-second-factor) |
+
+The claims carry no roles or permissions: [authorization](/docs/security/authorization/) looks them up for each request (cached until they change), so a role change applies to the next request.
+
+When it verifies a token, `JwtService` accepts only HS256 (an unsigned `alg: none` token is rejected) and checks:
+
+- the signature;
+- `iss`, and `aud` when an audience is configured (when none is, a token that carries one is rejected);
+- the token type, so a two-factor challenge token never works as an access token;
+- the expiry, with 30 seconds of leeway (`navree::auth::LEEWAY_SECS`) against the app's `dyn Clock`. A token issued more than 30 seconds in the future is rejected too.
+
+Access tokens are stateless. Nothing revokes one before it expires: not a logout, not a password change. Keep `auth.jwt.access_ttl_secs` short; refresh tokens are the part that gets revoked.
+
+You can sign and verify tokens yourself through `AuthService::jwt()`:
+
+```rust
+use navree::auth::TokenType;
+
+let token = auth.jwt().sign_access(user.id)?;
+let claims = auth.jwt().verify(&token, TokenType::Access)?;
+assert_eq!(claims.sub, user.id);
+```
+
+## Refresh tokens
+
+A refresh token looks like `<id>.<secret>`: the UUID v7 of its database row, a dot and 48 random base62 characters (about 285 bits). Navree stores only the SHA-256 digest of the whole token, so a copy of the database doesn't contain usable tokens. A refresh token is valid for `auth.jwt.refresh_ttl_secs` (30 days).
+
+### Rotation and families
+
+Each sign-in starts a **family**: one login session, on one device. Each refresh:
+
+1. revokes the presented token, recording its successor in `replaced_by`;
+2. issues the next token of the same family, valid for another 30 days from now.
+
+The lifetime slides: a client that refreshes at least once every 30 days stays signed in. Signing out ends the family.
+
+### Reuse detection
+
+A refresh token is single use. If a token that was already exchanged comes back, two parties hold a copy of it, and Navree can't tell which one is the legitimate client. So it:
+
+- revokes every token of the family, which signs the session out everywhere;
+- answers `401 Invalid refresh token`;
+- writes an `auth.refresh_reuse_detected` security entry to the [audit log](/docs/security/audit-log/).
+
+Both the thief and the real user have to sign in again. The user's other sessions are not affected.
+
+Two refreshes racing with the same token count as reuse too: the first one claims the token. A client that may refresh from several places at once (several tabs, parallel requests) must share one refresh call. The CRM's BFF keeps one refresh in flight per refresh token for exactly this reason.
+
+A refresh runs in its own transaction, so the revocation of a reused family stands although the request fails. A token that is merely unknown, expired or revoked by a logout gets the same 401 and revokes nothing.
+
+### The refresh_tokens table
+
+| Column | |
+|---|---|
+| `id` | The part of the token before the `.` |
+| `user_id`, `family_id` | The user and the login session |
+| `token_hash` | SHA-256 of the whole token, lower-case hex |
+| `expires_at`, `revoked_at` | Expiry, and when it was spent or revoked |
+| `replaced_by` | The id of the token it was exchanged for |
+| `ip`, `user_agent` | The client that received it (the user agent is cut to 512 characters) |
+| `created_at` | |
+
+<Callout type="warning" title="Old refresh tokens are kept">
+
+Spent, revoked and expired rows are never deleted, and there is no command to prune them yet. On a busy app, delete old rows yourself, for example with a [scheduled](/docs/digging-deeper/scheduling/) command of your own.
+
 </Callout>
+
+## Protecting routes
+
+Routes are denied by default: a route must declare who may call it. `#[controller]` refuses to compile a route without a declaration, and the app refuses to boot with a hand-written one. With `navree-auth` in the app, the declarations mean:
+
+| Declaration | Who may call the route |
+|---|---|
+| `#[public]` | Anyone, guests included |
+| `#[authenticated]` | Any signed-in user |
+| `#[roles(..)]`, `#[permissions(..)]`, `#[can(..)]` | Signed-in users the access rules allow; see [Authorization](/docs/security/authorization/) |
+
+[Access control on routes](/docs/basics/access-control/) covers the declarations in full. A guest on a protected route gets `401 Unauthorized`; a signed-in user who isn't allowed gets `403 Forbidden`.
+
+## The current user
+
+### CurrentUser
+
+`CurrentUser` loads the signed-in user, like `@CurrentUser()` in NestJS:
+
+```rust title="src/modules/profile/mod.rs"
+use navree::auth::UserResource;
+use navree::prelude::*;
+
+#[injectable]
+pub struct ProfileController;
+
+#[controller("/profile", version = "1")]
+impl ProfileController {
+    /// `GET /api/v1/profile`
+    #[get("/")]
+    #[authenticated]
+    async fn show(&self, CurrentUser(user): CurrentUser) -> Json<UserResource> {
+        Json(UserResource::from(&user))
+    }
+}
+
+#[module(controllers = [ProfileController])]
+pub struct ProfileModule;
+```
+
+It reads the `users` row once per request and keeps it for later extractors. It answers 401 for guests, and for a valid token whose user has been deleted since it was issued. Inside a request whose transaction is open, it reads through that transaction, so it never waits for a second database connection.
+
+### CurrentPrincipal and ClientMeta
+
+When you need only the user's id, `navree::http::CurrentPrincipal` gives you the request's `Principal` without a database query. `ClientMeta` gives the client's IP address, user agent and request id, which the `AuthService` methods take for their audit entries:
+
+```rust
+use navree::auth::ClientMeta;
+use navree::http::CurrentPrincipal;
+use navree::prelude::*;
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct WhoAmIController;
+
+#[controller("/whoami")]
+impl WhoAmIController {
+    #[get("/")]
+    #[authenticated]
+    async fn show(
+        &self,
+        CurrentPrincipal(principal): CurrentPrincipal,
+        meta: ClientMeta,
+    ) -> Json<Value> {
+        Json(json!({
+            "user_id": principal.user_id,
+            "ip": meta.ip,
+            "user_agent": meta.user_agent,
+        }))
+    }
+}
+```
+
+A `Principal` holds `user_id`, `via` (how the request authenticated: `AuthVia::Token` for JWTs), `token_abilities` (see [custom strategies](#writing-your-own-strategy)) and `session_id`.
+
+### The user resource
+
+The auth routes answer with `UserResource`:
+
+```json wrap
+{"__type": "User", "id": "...", "name": "...", "email": "...", "email_verified_at": null, "created_at": "..."}
+```
+
+`__type` is the user's subject type for [abilities in the front end](/docs/security/authorization/#abilities-in-the-front-end). To add fields to it (in `GET /api/auth/me` and in the `user` of the login and register answers), implement `UserResourceExtension` and register it. The CRM adds each user's roles:
+
+```rust title="apps/crm-api/crates/crm-users/src/resource.rs"
+use navree::access::AccessService;
+use navree::auth::{User, UserResourceExtension};
+use navree::prelude::*;
+use navree::{BoxError, BoxFuture};
+use serde_json::{Map, Value};
+
+/// Adds `roles` to the user resource of the auth routes.
+#[injectable]
+pub struct UserRolesExtension {
+    access: Arc<AccessService>,
+}
+
+impl UserResourceExtension for UserRolesExtension {
+    fn extend<'a>(
+        &'a self,
+        user: &'a User,
+        fields: &'a mut Map<String, Value>,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let roles = self.access.roles_of(user.id).await?;
+            fields.insert("roles".to_owned(), Value::from(roles));
+            Ok(())
+        })
+    }
+}
+```
+
+```rust
+// In the module's register function:
+m.user_resource_extension::<UserRolesExtension>();
+```
+
+Extensions run in module dependency order and may overwrite fields. `AuthService::present(&user)` builds the same JSON for your own routes.
+
+<Callout type="note">
+
+The OpenAPI document describes `UserResource` without the fields extensions add, so clients generated from it don't see them. The responses do include them.
+
+</Callout>
+
+## Strategies
+
+Authentication is a chain of Passport-style strategies. `AuthModule` registers navree-http's authenticator, which runs every registered `dyn Strategy` in module dependency order, the built-in `JwtStrategy` (named `jwt`) first. Each strategy answers one of three ways:
+
+| Answer | Meaning |
+|---|---|
+| `Ok(None)` | The request carries no credentials of this kind. The next strategy runs; if none recognises the request, it is a guest. |
+| `Ok(Some(principal))` | Authenticated. Later strategies don't run. |
+| `Err(error)` | Credentials of this kind are present but invalid. The request fails with `error` (usually a 401), even on a public route. It never falls through to another strategy or to a guest. |
+
+`JwtStrategy` only claims `Authorization: Bearer` values shaped like a JWT: three base64url segments separated by dots. Other bearer values, such as an opaque API key or the scrape token of the `/metrics` endpoint, are left to other strategies and to route guards.
+
+### Writing your own strategy
+
+Navree has no built-in API keys or personal access tokens. A strategy is how you add them. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its entity isn't shown):
+
+```rust title="src/modules/api_keys/strategy.rs"
+use navree::BoxFuture;
+use navree::auth::Strategy;
+use navree::axum::http::request::Parts;
+use navree::contracts::{AuthVia, Principal};
+use navree::crypto::sha256_hex;
+use navree::db::Db;
+use navree::prelude::*;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+use super::entity as api_key; // the `api_keys` table
+
+/// `X-Api-Key: <key>` for scripts and integrations.
+#[injectable]
+pub struct ApiKeyStrategy {
+    db: Arc<Db>,
+}
+
+impl Strategy for ApiKeyStrategy {
+    fn name(&self) -> &'static str {
+        "api-key"
+    }
+
+    fn authenticate<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+    ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
+        Box::pin(async move {
+            // No header: not ours, let the next strategy look.
+            let Some(key) = parts.headers.get("x-api-key") else {
+                return Ok(None);
+            };
+            // Keys are stored as SHA-256 digests, never in plain text.
+            let digest = sha256_hex(key.as_bytes());
+            let found = api_key::Entity::find()
+                .filter(api_key::Column::KeyHash.eq(digest))
+                .one(self.db.conn())
+                .await
+                .map_err(AppError::internal)?;
+            // A key we don't know is a 401, never a guest.
+            let Some(row) = found else {
+                return Err(AppError::unauthenticated().with_detail("Invalid API key"));
+            };
+            Ok(Some(Principal {
+                user_id: row.user_id,
+                via: AuthVia::Token,
+                // Narrows the user's abilities to these permissions.
+                token_abilities: Some(row.abilities.split(',').map(str::to_owned).collect()),
+                session_id: None,
+            }))
+        })
+    }
+}
+```
+
+Register it in a module with `strategy`, from `ModuleBuilderAuthExt` (in the prelude):
+
+```rust title="src/modules/api_keys/mod.rs"
+pub struct ApiKeysModule;
+
+impl Module for ApiKeysModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.strategy::<ApiKeyStrategy>();
+    }
+}
+```
+
+The strategy runs after the JWT strategy, so a request with a valid bearer token is authenticated by the JWT and never reaches it. `token_abilities` limits what the key may do: with the access module, the user's abilities are narrowed to those permission strings (`deals.read`, or `*` for everything). `None` means unrestricted. See [Tokens with limited abilities](/docs/security/authorization/#tokens-with-limited-abilities).
+
+## AuthService
+
+`AuthService` is the API behind the routes, for seeders, commands and your own controllers. It is global, so any provider can inject `Arc<AuthService>`.
+
+| Method | What it does |
+|---|---|
+| `register(&uow, NewUser { name, email, password })` | Creates an account with the password policy, in your unit of work |
+| `create_user(name, email, password)` | Creates an account without the password policy (seeders, commands, tests) |
+| `validate_user(email, password)` | The user, or `AuthError::InvalidCredentials` |
+| `attempt_login(email, password, &meta)` | The login flow: throttle, password check, then `LoginOutcome::Authenticated { user, tokens }` or `LoginOutcome::TwoFactorRequired { user, challenge_token }` |
+| `login(email, password, &meta)` | `attempt_login` for accounts without two-factor authentication; `AuthError::TwoFactorRequired` for the others |
+| `issue_tokens(&user, meta)` | A new session: an access token and the first refresh token of a new family |
+| `refresh(refresh_token, meta)` | Rotates a refresh token |
+| `logout(refresh_token, user_id, all)` | Ends one session, or all of them |
+| `revoke_all_refresh_tokens(user_id)` | Ends every session of a user |
+| `find_user(id)`, `find_by_email(email)` | Look up users |
+| `update_password(user_id, password)` | Sets a password with the policy; sessions are left alone |
+| `present(&user)` | The user resource, with its extensions |
+| `jwt()` | The `JwtService` |
+
+The account flows add more methods; see [Account flows](/docs/security/account-flows/#using-the-flows-from-code). Writes join the unit of work of the current task when there is an unfinished one (a request's, say) and otherwise commit their own transaction.
+
+This console command creates an admin account with a random password, using the access module to assign the role:
+
+```rust title="src/modules/admin/commands.rs"
+use navree::access::AccessService;
+use navree::auth::AuthService;
+use navree::crypto::random_token;
+use navree::db::Db;
+use navree::kernel::{AppContext, CommandSpec};
+use navree::prelude::*;
+
+/// `admin:create <email> <name...>`: an admin account with a random
+/// password, printed once.
+pub fn create_admin() -> CommandSpec {
+    CommandSpec::new(
+        "admin:create",
+        "Create an admin account: admin:create <email> <name>",
+        |ctx: AppContext, args: Vec<String>| async move {
+            let [email, name @ ..] = args.as_slice() else {
+                return Err("usage: admin:create <email> <name>".into());
+            };
+            let auth = ctx.get::<AuthService>().await?;
+            let access = ctx.get::<AccessService>().await?;
+            let db = ctx.get::<Db>().await?;
+
+            let password = random_token(20);
+            let user = auth.create_user(&name.join(" "), email, &password).await?;
+
+            let uow = db.uow(None, None).await;
+            access.assign_role(&uow, user.id, "admin").await?;
+            uow.commit().await?;
+
+            println!("Created {} with the password {password}", user.email);
+            Ok(())
+        },
+    )
+}
+```
+
+Register it with `m.command(create_admin())` and run it with `navree admin:create ada@example.com Ada Lovelace`. See [Console commands](/docs/digging-deeper/cli/).
+
+## The signing key: JWT secret or APP_KEY
+
+`AuthModule` picks the HS256 signing key when the app boots, in this order:
+
+1. **`auth.jwt.secret`**, when it is set (in `.env` as `APP_AUTH__JWT__SECRET`). It must be at least 32 bytes long; a shorter one fails the boot.
+2. **A key derived from the application key** (`app.key`, or `APP_KEY`): an HMAC-SHA-256 of the key for the purpose `navree-auth.jwt`, from `Encrypter::derive_key`. The application key itself never signs anything.
+3. **A random key per process**, with a warning in the log. Tokens stop working when the process restarts.
+
+The derived key is the default, and it is enough for most apps: one secret to manage, and rotating `APP_KEY` rotates the JWT key with it. Set a dedicated `auth.jwt.secret` when you want to rotate the two independently.
+
+Rotating the signing key, either way, invalidates every access token: requests get `401 Invalid token`. Refresh tokens don't depend on the key (they are stored as digests), so clients refresh and carry on. `app.previous_keys` doesn't help here: keys are derived from the current application key only.
+
+<Callout type="note" title="HS256 only">
+
+Tokens are signed with a shared secret, and only HS256 is supported: there are no RS256 keys or JWKS endpoint. Anything that can verify a token can also sign one, so don't hand the secret to other services. Every instance of your API needs the same key.
+
+</Callout>
+
+## The login throttle
+
+`POST /api/auth/login` allows `auth.login_throttle_per_minute` (5) failed attempts per email address and client IP address in a one-minute window. The next attempt, even with the right password, gets a 429 until the window ends:
+
+```http wrap
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{"statusCode": 429, "message": "Too many login attempts. Please try again in 60 seconds.", "error": "Too Many Requests"}
+```
+
+- The same account from another address, and other accounts from the same address, are not affected.
+- Each attempt is counted **before** the password is checked, so a burst of parallel guesses can't get more through than the limit. A successful login clears the count.
+- A wrong `current_password` when changing the email or the password, or a wrong password when turning two-factor authentication off, counts against the same limit.
+- The first refusal in each window is written to the audit log as `auth.throttled` (kind `security`), with the email address in its metadata.
+- `auth.login_throttle_per_minute = 0` turns the throttle off.
+
+The counters live in the app's cache when `CacheModule` is in the app, and in a private in-process cache otherwise. The only cache store today is the in-memory one (Redis drivers are on the [roadmap](/docs/prologue/roadmap/)), so with several API instances each counts attempts on its own.
+
+The throttle is only as good as the client address. Behind a reverse proxy or a BFF, list the proxy in `http.trusted_proxies`, or every client shares the proxy's address and one person's wrong passwords lock everyone out of that account. See [Rate limiting](/docs/basics/rate-limiting/).
+
+Registration, the forgot-password route and the reset-password route have no attempt throttle of their own (forgot-password only limits how often it mails one address). Only navree-http's per-IP limit (`http.per_ip_rate_limit`, 600 requests a minute by default) applies to them.
+
+## Browser apps: the BFF pattern
+
+A token in `localStorage` can be read by any script that runs on the page, so one cross-site scripting bug leaks every session. `navree-auth` has no cookie-based login of its own. For a web front end, use a **backend-for-frontend** (BFF): the browser talks only to your web server, on the same origin, and never sees a token. The web server keeps the tokens in httpOnly cookies and calls Navree with `Authorization: Bearer`.
+
+The CRM's front end, `apps/crm-web`, is a Next.js app with a BFF in `src/lib/bff`:
+
+- **Sign-in.** The browser posts its credentials to the BFF's `/api/auth/login`. The BFF calls Navree, stores the access token in a `navree_at` cookie (its `Max-Age` is `expires_in`) and the refresh token in `navree_rt` (30 days), both `HttpOnly; SameSite=Lax` and `Secure` in production, and returns only `{"user": ...}`. A two-factor challenge waits in a `navree_2fa` cookie that only `/api/auth/2fa` receives.
+- **Requests.** Every other `/api/*` call is forwarded with the bearer token from the cookie. On a 401 the BFF refreshes once, updates both cookies and retries. Concurrent requests share one refresh call, because a second use of a refresh token would revoke the session. If the refresh fails, it clears the cookies and the browser goes back to the sign-in page.
+- **Token responses.** When an `/api/auth/*` answer carries a token pair (changing the password returns one), the BFF puts it in the cookies and strips it from the body.
+- **Sign-out.** The BFF revokes the refresh token at Navree, then clears the cookies.
+- **CSRF.** Cookies are sent automatically, so every non-GET request must come from the app's own origin; anything else gets a 403.
+- **Client addresses.** The BFF never passes on the browser's own `X-Forwarded-For`, which anyone can forge. It sends the browser's address only when reverse proxies in front of it vouch for it: set `NAVREE_TRUSTED_PROXY_HOPS` to their number.
+
+```ts title="apps/crm-web/src/lib/bff/bff.ts"
+function setTokenCookies(headers: Headers, tokens: TokenPair): void {
+  const accessMaxAge = Math.max(1, Math.floor(tokens.expires_in ?? 900));
+  headers.append("set-cookie", cookie(ACCESS_COOKIE, tokens.access_token, { maxAge: accessMaxAge }));
+  headers.append("set-cookie", cookie(REFRESH_COOKIE, tokens.refresh_token, { maxAge: refreshMaxAge }));
+}
+```
+
+On the API side, list the BFF's address in `http.trusted_proxies` so the API believes the `X-Forwarded-For` it sends. The login throttle and the per-IP limits then apply per browser. When the BFF knows no client address, every browser reaches the API from the BFF's address and shares its limits.
+
+```toml title="apps/crm-api/config/app.toml"
+[http]
+# crm-web's BFF calls from here for every browser and names the browser in
+# X-Forwarded-For, so rate limits and the login throttle are per browser.
+trusted_proxies = ["127.0.0.1", "::1"]
+```
+
+[A tour of the CRM](/docs/example-app/crm-tour/) shows the BFF in context. Native and mobile clients call the API directly and keep the tokens in the platform's secure storage.
+
+## Configuration
+
+Every key is optional. The defaults:
+
+```toml title="config/app.toml"
+[auth]
+registration = true             # POST /auth/register (404 when false)
+login_throttle_per_minute = 5   # failed logins per email + IP; 0 = off
+password_min_length = 8
+routes_prefix = "/auth"         # under http.api_prefix: /api/auth/login
+
+[auth.jwt]
+# secret = "..."                # >= 32 bytes; default: derived from app.key
+issuer = "navree"
+# audience = "crm-web"
+access_ttl_secs = 900           # 15 minutes
+refresh_ttl_secs = 2592000      # 30 days
+```
+
+| Key | Default | |
+|---|---|---|
+| `auth.registration` | `true` | Mounts `POST /auth/register` |
+| `auth.login_throttle_per_minute` | `5` | Failed logins per email and IP per minute; `0` turns it off |
+| `auth.password_min_length` | `8` | In characters; at least 1 |
+| `auth.routes_prefix` | `"/auth"` | Under `http.api_prefix`; empty or starting with `/` |
+| `auth.jwt.secret` | unset | At least 32 bytes; unset means a key derived from `app.key` |
+| `auth.jwt.issuer` | `"navree"` | The `iss` claim written and required; not empty |
+| `auth.jwt.audience` | unset | The `aud` claim written and required |
+| `auth.jwt.access_ttl_secs` | `900` | Access token lifetime; at least 1 |
+| `auth.jwt.refresh_ttl_secs` | `2592000` | Refresh token lifetime (30 days); at least 1 |
+| `auth.password_reset.*` | | See [Password reset](/docs/security/account-flows/#password-reset) |
+| `auth.verification.*` | | See [Email verification](/docs/security/account-flows/#email-verification) |
+| `auth.two_factor.*` | | See [Two-factor authentication](/docs/security/account-flows/#two-factor-authentication) |
+
+Related settings: `app.key` (see [Encryption and hashing](/docs/security/encryption-and-hashing/)), the `hashing` section for password hashes, `http.trusted_proxies` for client addresses, and `http.signing_key` for the signed verification links.
+
+From the environment, prefix the key with `APP_` and use `__` between levels: `APP_AUTH__JWT__SECRET`, `APP_AUTH__REGISTRATION=false`. Keep secrets in `.env`, never in `config/app.toml`. A new app's `config/app.toml` sets `auth.registration`, and [`.env` doesn't override it](/docs/getting-started/configuration/#where-settings-come-from), so change that one in the TOML file or with a real environment variable.
+
+To configure the module in code instead, pass `AuthOptions` to `AuthModule::for_root`:
+
+```rust
+use navree::auth::{AuthOptions, JwtOptions};
+
+AuthModule::for_root(AuthOptions {
+    registration: false,
+    jwt: JwtOptions {
+        issuer: "crm".to_owned(),
+        audience: Some("crm-web".to_owned()),
+        access_ttl_secs: 600,
+        ..JwtOptions::default()
+    },
+    ..AuthOptions::default()
+})
+```
+
+## Audit entries
+
+With an [audit log](/docs/security/audit-log/) in the app, the module records:
+
+| Action | Kind | When |
+|---|---|---|
+| `auth.register` | `auth` | An account was registered (after the commit) |
+| `auth.login` | `auth` | A sign-in succeeded (`metadata.two_factor` says `totp` or `recovery_code` after a second factor) |
+| `auth.login_failed` | `security` | Wrong credentials; `metadata.email`, and the user as actor when the email is known |
+| `auth.throttled` | `security` | The first refusal of a throttle window; `metadata.flow` and, for logins, `metadata.email` |
+| `auth.refresh` | `auth` | A refresh token was rotated; `metadata.family_id` |
+| `auth.refresh_reuse_detected` | `security` | A spent refresh token came back and its family was revoked |
+| `auth.logout` | `auth` | `metadata.all` and `metadata.revoked` (how many tokens) |
+
+Entries carry the client's IP address, user agent and request id. Passwords and tokens are never recorded. The account flows add their own entries; see [Account flows](/docs/security/account-flows/#events-and-audit-entries).
+
+## Testing
+
+`TestApp::acting_as` works with the test authenticator, which `AuthModule` replaces. In an app with `AuthModule`, create a user and sign a real token for it:
+
+```rust title="src/modules/profile/tests.rs"
+use navree::auth::AuthService;
+use navree::crypto::generate_key;
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+use super::ProfileModule;
+
+#[tokio::test]
+async fn shows_the_signed_in_users_profile() {
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", generate_key())
+        // Fast hashing: tests don't need production-strength Argon2id.
+        .config("hashing.memory_kib", 1024)
+        .config("hashing.iterations", 1)
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(ProfileModule)
+        .build()
+        .await;
+
+    let auth = app.get::<AuthService>().await;
+    let user = auth
+        .create_user("Ada Lovelace", "ada@example.com", "correct horse battery")
+        .await
+        .unwrap();
+    let token = auth.jwt().sign_access(user.id).unwrap();
+
+    app.client()
+        .get("/api/v1/profile")
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("email", json!("ada@example.com"));
+
+    app.client()
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
+}
+```
+
+- To test the sign-in itself, post to `/api/auth/login` and read the tokens from the response. The CRM's test kit does this in `TestCrm::login_as`.
+- `TestAppBuilder::fake_auth()` puts the test authenticator back, so `acting_as` works, but then real bearer tokens don't: you can't mix the two in one app.
+- Override `dyn Clock` with a `FixedClock` to test expiry. The login throttle's windows run on the cache's timer, though, not on the app's clock: moving a `FixedClock` forward doesn't end a lockout. Use different email addresses, or set `auth.login_throttle_per_minute` to `0` in tests that don't test the throttle.
+
+See [HTTP tests](/docs/testing/http-tests/) for the test client.
+
+## Limits
+
+- **No session login.** `navree-auth` issues tokens only. Cookie sessions with CSRF protection are a separate, optional module ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) that `navree-auth` doesn't use.
+- **No API tokens.** There are no personal access tokens or API keys; [write a strategy](#writing-your-own-strategy) for them.
+- **No passkeys, social login or OAuth2 server.** They are deferred; see the [roadmap](/docs/prologue/roadmap/).
+- **Access tokens can't be revoked** before they expire, and they are signed with HS256 only.
+- **Refresh tokens are never pruned** from the database.
+
+<LinkCards>
+  <LinkCard href="/docs/security/account-flows/" title="Account flows">
+    Registration, password reset, email verification and two-factor authentication.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions and CASL abilities, checked on routes and in SQL.
+  </LinkCard>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    The application key, Argon2id and token helpers.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    The BFF that keeps the tokens out of the browser.
+  </LinkCard>
+</LinkCards>

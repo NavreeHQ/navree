@@ -1,10 +1,369 @@
 ---
 title: "Configuration"
-description: "Typed configuration from `.env`, TOML files and `APP_*` environment variables."
+description: "Typed configuration from `.env`, `config/app.toml` and `APP_*` environment variables: precedence, nesting, the application key and your own sections."
 ---
 
-This page explains how Navree loads configuration: `.env`, `config/*.toml` files and `APP_*` environment variables, merged into typed settings. It covers the precedence rules, secrets, per-environment files and how each module reads its own configuration section.
+Every setting of a Navree app lives in one configuration tree. The app builds it at boot from a `.env` file, `config/app.toml` and `APP_*` environment variables, and each module reads its own section of it as a typed Rust struct. A missing setting falls back to the module's default, and a setting of the wrong type, or one its module rejects, stops the boot with a message that names the section.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-config` is the reference: run `cargo doc -p navree-config --open` in the repository.
+`navree-config` does the loading, and `ConfigModule` makes the result available to every other module.
+
+## Where settings come from
+
+A generated app's `main` passes the conventional sources to the app root:
+
+```rust title="src/main.rs"
+use navree::config::ConfigSources;
+
+fn main() -> Result<(), navree::kernel::BoxError> {
+    // `.env`, then `config/app.toml`, then `APP_*` environment variables.
+    planner::app(ConfigSources::defaults()).run()
+}
+```
+
+`ConfigSources::defaults()` reads, in this order:
+
+1. `.env`
+2. `config/app.toml`
+3. the process's `APP_*` environment variables
+
+**Later sources win.** Tables merge key by key, so a later source only replaces the keys it sets; any other value (a string, a number, an array) is replaced whole. The paths are relative to the working directory, so run the app from its root. A missing file is skipped, and a malformed one fails the boot with the file name and line (and column, for TOML).
+
+<Callout type="warning" title="`.env` doesn't override `config/app.toml`">
+
+`.env` is read first, so a key that `config/app.toml` also sets keeps the TOML value. A new app's `config/app.toml` sets `http.addr`, `database.url`, `log.level` and `mail.transport`, so changing `APP_HTTP__ADDR`, `APP_DATABASE__URL`, `APP_LOG__LEVEL` or `APP_MAIL__TRANSPORT` in `.env` has no effect, even though the comments in the generated files say otherwise. Real environment variables do override the TOML file. Until this changes, put a setting in either `config/app.toml` or `.env`, not both, and use `.env` for keys the TOML file doesn't set, such as `APP_KEY`.
+
 </Callout>
+
+## Environment variables
+
+Variables that start with `APP_` map onto the tree. Navree strips the prefix, splits the rest on double underscores and lower-cases each part:
+
+| Variable | Key |
+|---|---|
+| `APP_DATABASE__URL` | `database.url` |
+| `APP_HTTP__CORS__ALLOWED_ORIGINS` | `http.cors.allowed_origins` |
+| `APP_LOG__LEVELS__NAVREE_QUEUE` | `log.levels.navree_queue` |
+| `APP_APP__URL` | `app.url` |
+| `APP_KEY` | `key` |
+
+A single underscore stays part of the name: `APP_HTTP__PER_IP_RATE_LIMIT` is `http.per_ip_rate_limit`. The prefix is matched case-insensitively, as Windows treats variable names. A variable with an empty part, such as `APP_HTTP____ADDR`, is ignored.
+
+Environment values are strings. Typed sections convert them when they read the tree, so `APP_DATABASE__MAX_CONNECTIONS=20` fills a `u32`, and `true`, `yes`, `on` and `1` fill a `bool`. Lists can't be written as environment variables directly, so the settings that take one also accept a comma-separated string, for example `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`. Each module's page says which of its settings do.
+
+## The `.env` file
+
+`.env` holds the settings of one machine: secrets and local overrides. `navree new` writes it as a copy of `.env.example`, and `.gitignore` excludes it. Commit `.env.example` instead, with the keys and no secrets.
+
+```env title=".env"
+# Encrypts data and signs tokens. Generate one with `navree key:generate`.
+APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+
+# The sender of every mail.
+APP_MAIL__FROM="Planner <hello@example.com>"
+```
+
+Entries map exactly like environment variables, and entries without the `APP_` prefix are ignored. Navree reads `.env` with its own parser and never copies its entries into the process environment, so `std::env::var` doesn't see them.
+
+The format:
+
+- `KEY=value`, one per line. Blank lines and lines starting with `#` are skipped, and an `export ` prefix is allowed.
+- Unquoted values are trimmed, and a `#` after whitespace starts a comment. Backslashes are literal, so `C:\Users` stays as it is.
+- `"Double-quoted"` values may span lines and understand `\n`, `\r`, `\t`, `\"`, `\\` and `\$`.
+- `'Single-quoted'` values may span lines and are taken literally.
+- `${NAME}` in unquoted and double-quoted values expands to an earlier entry of the same file, or to nothing. It never reads the process environment.
+
+A syntax error names the file and the line, never the value.
+
+## The `config/app.toml` file
+
+`config/app.toml` holds the settings every environment shares. Its tables are the sections:
+
+```toml title="config/app.toml"
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+
+[database]
+url = "sqlite://storage/planner.db?mode=rwc"
+# Run pending migrations at boot (handy in development; use `navree migrate`
+# in deployments).
+migrate_on_boot = true
+
+[log]
+level = "info"
+
+[mail]
+transport = "log"
+
+[queue]
+driver = "database"
+
+[auth]
+# Public sign-up at POST /api/auth/register.
+registration = true
+
+[api]
+title = "Planner API"
+```
+
+Keys keep the case you write them in. Everything a module doesn't find falls back to its default, so the file only needs the settings you change. Keep secrets out of it: it is committed.
+
+## The application key
+
+The application key is the app's master secret. It is 32 random bytes written as `base64:...`, and `key:generate` prints a new one:
+
+```sh
+navree key:generate
+```
+
+```text
+base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+Set it as `APP_KEY` in `.env` or in the environment; Navree reads `app.key`, falling back to the top-level `key` that `APP_KEY` maps to. Several modules depend on it:
+
+- `CryptoModule`'s encrypter uses it for AES-256-GCM encryption, for example of two-factor secrets.
+- `AuthModule` derives the JWT signing key from it, unless you set `auth.jwt.secret`.
+- `HttpModule` derives the key for signed URLs from it, unless you set `http.signing_key`.
+- `RealtimeModule` derives the key that signs broadcasts relayed between processes, unless you set `realtime.secret`.
+
+Without a key the app still boots, so that `key:generate` can run, and logs a warning. Encryption then fails, and JWTs and signed URLs use a random key per process: every restart signs everyone out and breaks every signed link. Every process of an app (the server, queue workers, the scheduler) needs the same key.
+
+A malformed key fails the boot, naming `app.key`.
+
+### Rotating the key
+
+To replace a key without losing encrypted data, move the old key to `app.previous_keys` (`APP_PREVIOUS_KEYS`, a comma-separated list, most recent first) and set the new one. Previous keys only decrypt; everything new is encrypted with the current key.
+
+```env title=".env"
+APP_KEY=base64:cAExPfRNoefxdVB2pZ7oA34O4hGgWrsD9ShGdZRVrRM=
+APP_PREVIOUS_KEYS=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+Previous keys don't apply to the keys derived for JWTs, signed URLs and relayed broadcasts: rotating `APP_KEY` signs every user out and invalidates outstanding signed links, unless those features have their own secrets. [Encryption and hashing](/docs/security/encryption-and-hashing/) has the details.
+
+## Typed configuration sections
+
+A module reads its settings as a struct that implements `ConfigSection`. The struct deserializes with serde, and `KEY` is its dotted path in the tree. Here is a `billing` section for a module of your own:
+
+```rust title="src/modules/billing/config.rs"
+use navree::config::ConfigSection;
+use navree::contracts::Secret;
+use serde::Deserialize;
+
+/// The `billing` section of the configuration.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct BillingConfig {
+    /// ISO 4217 code, e.g. `EUR`.
+    pub currency: String,
+    /// Days of free trial.
+    pub trial_days: u32,
+    /// The payment provider's API key (`APP_BILLING__API_KEY`).
+    pub api_key: Option<Secret<String>>,
+}
+
+impl Default for BillingConfig {
+    fn default() -> Self {
+        Self {
+            currency: "EUR".to_owned(),
+            trial_days: 14,
+            api_key: None,
+        }
+    }
+}
+
+impl ConfigSection for BillingConfig {
+    const KEY: &'static str = "billing";
+
+    fn validate(&self) -> Result<(), String> {
+        if self.currency.len() == 3 {
+            Ok(())
+        } else {
+            Err("currency must be a 3-letter ISO code".to_owned())
+        }
+    }
+}
+```
+
+Register the section in the module with `m.config::<T>()`. Its providers can then inject `Arc<BillingConfig>`:
+
+```rust title="src/modules/billing/mod.rs"
+use std::sync::Arc;
+
+use navree::config::ModuleBuilderConfigExt;
+use navree::kernel::ModuleBuilder;
+use navree::{injectable, module};
+
+#[injectable]
+pub struct InvoiceService {
+    config: Arc<BillingConfig>,
+}
+
+impl InvoiceService {
+    pub fn trial_days(&self) -> u32 {
+        self.config.trial_days
+    }
+}
+
+#[module(providers = [InvoiceService], exports = [InvoiceService], register = Self::wire)]
+pub struct BillingModule;
+
+impl BillingModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.config::<BillingConfig>();
+    }
+}
+```
+
+`m.config::<T>()` registers `T` as a singleton of this module (not exported), built when the app boots:
+
+- A missing section deserializes from an empty table, so `#[serde(default)]` fields take their defaults. Without `#[serde(default)]`, a missing required field fails the boot.
+- A value of the wrong type fails the boot, naming the section. The message never quotes the value, since it may be a secret.
+- `validate` runs next, and an error stops the boot too, with a message like this one:
+
+```text wrap
+failed to construct `planner::modules::billing::config::BillingConfig`: configuration section `billing` failed validation: currency must be a 3-letter ISO code
+```
+
+Wrap secrets in `Secret<T>`. It deserializes like `T`, prints `[redacted]` in `Debug` and `Display`, and has no `Serialize` impl, so it can't leak into a response or a log line. Read the value with `.expose()`.
+
+### Reading values directly
+
+Any provider can inject the whole tree as `Arc<Config>`. This is handy for a single value that several modules share, such as `app.url`:
+
+```rust
+use std::sync::Arc;
+
+use navree::config::Config;
+use navree::injectable;
+
+#[injectable]
+pub struct LinkBuilder {
+    config: Arc<Config>,
+}
+
+impl LinkBuilder {
+    /// `path` on the front end (`app.url`), or `path` itself without one.
+    pub fn link(&self, path: &str) -> String {
+        match self.config.get_string("app.url") {
+            Some(base) => format!("{}{path}", base.trim_end_matches('/')),
+            None => path.to_owned(),
+        }
+    }
+}
+```
+
+| Method | Returns |
+|---|---|
+| `get_string(key)` | The scalar at a dotted path as a string (numbers and booleans formatted), or `None`. |
+| `get_bool(key)` | `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0` (any case) or a number, as a `bool`. |
+| `section::<T>(key)` | The subtree deserialized as `T`; a `MissingSection` error when it is absent. |
+| `section_or_default::<T>(key)` | The same, or `T::default()` when absent. |
+| `typed::<T>()` | A `ConfigSection`, read and validated exactly as `m.config::<T>()` does. |
+
+## Custom sources
+
+`ConfigSources` is a builder, so an app can read other files or another prefix. Sources apply in the order you add them:
+
+| Method | Adds |
+|---|---|
+| `.dotenv(path)` | A `.env`-format file, mapped with the `APP_` prefix. |
+| `.file(path)` | A TOML file. |
+| `.env()` | The process's `APP_*` variables, read at boot. |
+| `.env_prefixed("MYAPP")` | Variables with another prefix (`MYAPP_` and `MYAPP` are the same). |
+| `.env_vars(prefix, pairs)` | A fixed list of variables, for tests. |
+| `.set(key, value)` | One value, applied above every source whatever the call order. An object merges into the existing table. |
+
+The benchmark's app, for example, maps the harness's own variables on top of the defaults:
+
+```rust title="src/main.rs"
+fn sources() -> ConfigSources {
+    const MAPPED: [(&str, &str); 3] = [
+        ("DATABASE_URL", "database.url"),
+        ("JWT_SECRET", "auth.jwt.secret"),
+        ("JWT_ISSUER", "auth.jwt.issuer"),
+    ];
+    MAPPED
+        .into_iter()
+        .filter_map(|(var, key)| std::env::var(var).ok().map(|value| (key, value)))
+        .fold(ConfigSources::defaults(), |sources, (key, value)| {
+            sources.set(key, value)
+        })
+}
+```
+
+## Environments
+
+Navree has no environment switch: nothing reads an `APP_ENV` variable or an `app.env` key, and there are no per-environment files by default. Each machine's settings come from its own `.env` file and environment variables.
+
+Two defaults depend on how the binary was built:
+
+| Setting | Debug build (`cargo run`, `navree dev`) | Release build (`cargo build --release`) |
+|---|---|---|
+| `log.format` | `pretty`, coloured on a terminal | `json`, one object per line |
+| `view.reload` | on: templates reload when they change | off: templates are read once |
+
+If you want a file per environment, add the source yourself. This reads `config/<APP_ENV>.toml` after `config/app.toml`, so its keys win:
+
+```rust title="src/main.rs"
+use navree::config::ConfigSources;
+
+/// `.env`, `config/app.toml`, then `config/<APP_ENV>.toml`, then `APP_*`
+/// variables.
+pub fn sources() -> ConfigSources {
+    let env = std::env::var("APP_ENV").unwrap_or_else(|_| "local".to_owned());
+    ConfigSources::new()
+        .dotenv(".env")
+        .file("config/app.toml")
+        .file(format!("config/{env}.toml"))
+        .env()
+}
+```
+
+A missing `config/<env>.toml` is skipped like any missing file. `APP_ENV` here is read from the process environment, not from `.env`, and it also lands in the tree as the top-level key `env`, which nothing uses.
+
+## Keeping secrets out of logs
+
+`Config`'s `Debug` output, and `Config::redacted()`, print the tree with secrets masked. A value is replaced by `[redacted]` when its key contains `password`, `secret`, `token`, `key`, `authorization` or `cookie` (in any case), and the password of any `scheme://user:password@host` URL is masked. Other values are shown as they are, so give secrets secret-looking names. Configuration errors never include values.
+
+## The framework's sections
+
+Each module documents its section on its own page:
+
+| Section | Module | Page |
+|---|---|---|
+| `app` (`key`, `previous_keys`, `url`) | several | [Encryption and hashing](/docs/security/encryption-and-hashing/) |
+| `http` | `HttpModule` | [Routing](/docs/basics/routing/), [Rate limiting](/docs/basics/rate-limiting/), [CORS and security headers](/docs/basics/cors-and-security-headers/) |
+| `log` | `LoggerModule` | [Logging](/docs/basics/logging/) |
+| `hashing` | `CryptoModule` | [Encryption and hashing](/docs/security/encryption-and-hashing/) |
+| `validation` | `ValidationModule` | [Validation](/docs/basics/validation/) |
+| `database` | `DatabaseModule` | [Database: getting started](/docs/database/getting-started/) |
+| `auth` | `AuthModule` | [Authentication](/docs/security/authentication/) |
+| `audit` | `AuditModule` | [The audit log](/docs/security/audit-log/) |
+| `cache` | `CacheModule` | [Cache](/docs/digging-deeper/cache/) |
+| `queue` | `QueueModule` | [Queues](/docs/digging-deeper/queues/) |
+| `mail` | `MailModule` | [Mail](/docs/digging-deeper/mail/) |
+| `notify` | `NotifyModule` | [Notifications](/docs/digging-deeper/notifications/) |
+| `storage` | `StorageModule` | [File storage](/docs/digging-deeper/storage/) |
+| `http_client` | `HttpClientModule` | [HTTP client](/docs/digging-deeper/http-client/) |
+| `realtime` | `RealtimeModule` | [Real-time broadcasting](/docs/digging-deeper/broadcasting/) |
+| `view` | `ViewModule` | [Views and templates](/docs/digging-deeper/views/) |
+| `api` | `ApiModule` | [OpenAPI](/docs/digging-deeper/openapi/) |
+| `observe` | `ObserveModule` | [Health and metrics](/docs/digging-deeper/health-and-metrics/) |
+| `session` | `SessionModule` | [Sessions and CSRF](/docs/basics/sessions-and-csrf/) |
+
+## Configuration in tests
+
+`TestApp::builder()` starts with no sources at all, so tests never read `.env`, `config/app.toml` or your environment. Add what a test needs with `.config(key, value)`, or pass a whole `ConfigSources` with `.sources(...)`; `.config` values stay on top:
+
+```rust
+let app = TestApp::builder()
+    .config("billing.trial_days", 30)
+    .module(BillingModule)
+    .build()
+    .await;
+assert_eq!(app.get::<InvoiceService>().await.trial_days(), 30);
+```
+
+To boot a whole app the way `main` does, build the sources with `ConfigSources::new()` and `.set(...)` rather than `ConfigSources::defaults()`, which reads the real `APP_*` variables of the machine running the tests. [Your first app](/docs/getting-started/your-first-app/#write-a-feature-test) shows the pattern, and [Testing](/docs/testing/getting-started/) covers the rest.

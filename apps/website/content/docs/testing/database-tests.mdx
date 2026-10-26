@@ -1,10 +1,259 @@
 ---
 title: "Database tests"
-description: "Preparing data with factories and asserting on the database."
+description: "A fresh SQLite database per test, preparing data with factories, seeders and the API, and asserting on rows, change events and audit entries."
 ---
 
-This page shows how to prepare data with factories and seeders, assert on what the database contains after a request, and keep tests isolated from each other.
+Most of what an API does ends up in the database, so most tests check it there: arrange some rows, call the API, then look at what it stored. Navree gives every test its own database, so tests never see each other's rows and need no cleanup.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-testing` and `navree-db` is the reference: run `cargo doc -p navree-testing --open` in the repository.
-</Callout>
+## A database for every test
+
+`TestApp::builder().temp_database()` points the app at a new SQLite file in a temporary directory and turns on `database.migrate_on_boot`. For an app you boot with `from_builder`, `temp_sqlite_url()` gives you the URL, and you set `database.migrate_on_boot` yourself ([booting your whole app](/docs/testing/getting-started/#booting-your-whole-app)). Every test starts from an empty database with every module's migrations applied, and the file is deleted with the app:
+
+```rust
+use navree::db::DatabaseModule;
+use navree::testing::TestApp;
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(CompaniesModule)
+        .module(DealsModule)
+        .build()
+        .await
+}
+```
+
+There is no equivalent of Laravel's `RefreshDatabase` trait to remember, and tests aren't wrapped in a transaction that rolls back at the end. Each request commits or rolls back as it would in production, so a test can check what was committed, after-commit hooks included.
+
+These databases are SQLite only. There is no PostgreSQL counterpart: `temp_database()` always creates a SQLite file, and nothing creates a PostgreSQL database per test.
+
+To reach the database in a test, resolve `Db` from the app and query the pool with `db.conn()`:
+
+```rust
+use navree::db::Db;
+
+let db = app.get::<Db>().await;
+```
+
+## Preparing data
+
+### With factories
+
+[Factories](/docs/database/seeding-and-factories/#factories) insert records with defaults you override where the test cares:
+
+```rust
+use navree::db::{create, create_many};
+
+let owner = Uuid::now_v7();
+let acme = create(&CompanyFactory { owner_id: owner }, db.conn()).await.unwrap();
+create_many(&DealFactory::new(acme.id, owner), db.conn(), 3).await.unwrap();
+create_many(&DealFactory::new(acme.id, owner).stage(Stage::Won), db.conn(), 2)
+    .await
+    .unwrap();
+```
+
+Factories write directly, without your services' rules and without change events. That makes them quick for the data a test merely needs, but not for the behaviour under test.
+
+### With seeders
+
+Run your seeders as the `db:seed` command would:
+
+```rust
+app.run_command("db:seed", &["demo-companies"]).await.unwrap();
+```
+
+or call the functions your seeders use. The CRM's test kit seeds its roles and demo accounts with `ensure_demo_accounts(app.ctx())`, the same function its `crm-demo` seeder calls.
+
+### Through the API
+
+Creating data through your own endpoints exercises the most code, and stays correct when your rules change. The CRM's tests keep small helpers for it:
+
+```rust title="tests/api/support.rs"
+/// `POST /api/v1/companies` as `client`, expecting a 201.
+pub async fn create_company(client: &CrmClient, body: Value) -> Value {
+    client
+        .post("/api/v1/companies")
+        .json(&body)
+        .send()
+        .await
+        .assert_status(201)
+        .json_value()
+}
+```
+
+For records another module owns, whose API isn't part of the test app, the CRM inserts the row directly with SeaORM, as `insert_deal` in the same file does.
+
+## Asserting on the database
+
+After a request, query the table with SeaORM and check what's there:
+
+```rust
+use sea_orm::EntityTrait;
+
+#[tokio::test]
+async fn creating_a_deal_stores_it() {
+    let app = app().await;
+    let db = app.get::<Db>().await;
+    let me = Uuid::now_v7();
+    let acme = create(&CompanyFactory { owner_id: me }, db.conn()).await.unwrap();
+
+    let body = app
+        .acting_as(principal(me))
+        .post("/api/v1/deals")
+        .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": acme.id }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+
+    let id: Uuid = serde_json::from_value(body["id"].clone()).unwrap();
+    let stored = deal::Entity::find_by_id(id)
+        .one(db.conn())
+        .await
+        .unwrap()
+        .expect("the deal is stored");
+    assert_eq!(stored.title, "Acme renewal");
+    assert_eq!(stored.owner_id, me);
+    assert_eq!(stored.stage, Stage::Lead);
+}
+```
+
+Counting is often enough, and it is the way to check that a rejected request left nothing behind:
+
+```rust
+use sea_orm::PaginatorTrait;
+
+app.acting_as(principal(Uuid::now_v7()))
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "", "amount_cents": 100, "company_id": Uuid::now_v7() }))
+    .send()
+    .await
+    .assert_validation_error("title");
+
+assert_eq!(deal::Entity::find().count(db.conn()).await.unwrap(), 0);
+```
+
+Checking the row also proves what the API can't show. A [soft-deleted](/docs/database/entities-and-repositories/#soft-deletes) company answers 404, but its row must still be there:
+
+```rust
+#[tokio::test]
+async fn deleting_a_company_keeps_its_row() {
+    let app = app().await;
+    let db = app.get::<Db>().await;
+    let me = Uuid::now_v7();
+    let company = create(&CompanyFactory { owner_id: me }, db.conn()).await.unwrap();
+    let path = format!("/api/v1/companies/{}", company.id);
+    let client = app.acting_as(principal(me));
+
+    client.delete(&path).send().await.assert_status(204);
+    client.get(&path).send().await.assert_error(404, None);
+
+    let row = company::Entity::find_by_id(company.id)
+        .one(db.conn())
+        .await
+        .unwrap()
+        .expect("the row is kept");
+    assert!(row.deleted_at.is_some());
+    app.shutdown().await.unwrap();
+}
+```
+
+### Change events
+
+To test what a service records for the audit trail, run it in a unit of work of your own and read `uow.changes()` before rolling back:
+
+```rust
+use navree::db::{ChangeOp, Repo};
+use sea_orm::ActiveValue::Set;
+use sea_orm::IntoActiveModel;
+
+let uow = db.uow(Some(owner), None).await;
+let mut active = deal.clone().into_active_model();
+active.stage = Set(Stage::Won);
+Repo::<deal::Entity>::update(&uow, active).await.unwrap();
+
+let changes = uow.changes();
+assert_eq!(changes.len(), 1);
+assert_eq!(changes[0].op, ChangeOp::Updated);
+assert_eq!(changes[0].old, Some(json!({ "stage": "lead" })));
+assert_eq!(changes[0].new, Some(json!({ "stage": "won" })));
+uow.rollback().await.unwrap();
+```
+
+### Audit entries
+
+With `AuditModule` in the app, the change observer writes data entries inside each request's transaction. Security entries (sign-ins, denials) go through a background writer, so call `flush()` before you read them. The CRM reads them through `AuditLog::list`:
+
+```rust
+use navree::audit::{AuditFilter, AuditLog};
+use navree::db::PageQuery;
+
+let log = crm.get::<AuditLog>().await;
+log.flush().await;
+let denied = log
+    .list(
+        &AuditFilter {
+            action: Some("access.denied".to_owned()),
+            ..AuditFilter::default()
+        },
+        PageQuery::new(1, 100),
+    )
+    .await
+    .expect("the audit log lists")
+    .data;
+assert_eq!(denied[0].actor_id, Some(rep.id()));
+```
+
+See [the audit log](/docs/security/audit-log/) for the filters and the entry fields.
+
+## Time
+
+Rows store timestamps, and a test that compares them with `Utc::now()` is fragile. Inject the app's `dyn Clock` in your services and give the test app a `FixedClock`; then `created_at` is exactly the time you set, and `clock.advance(..)` moves it. See [the clock](/docs/testing/fakes/#the-clock).
+
+## Commands and migrations
+
+`app.run_command` runs any registered command against the test's database. Rolling all migrations back and running them again checks your `down` methods:
+
+```rust
+use navree::db::Migrator;
+
+app.run_command("migrate:rollback", &[]).await?;
+let status = Migrator::status(app.ctx()).await?;
+assert!(status.iter().all(|migration| !migration.applied));
+app.run_command("migrate", &[]).await?;
+```
+
+## Catching pool starvation
+
+On SQLite, a request that holds its unit of work's connection and then waits for a second one can starve the pool under load ([SQLite and concurrency](/docs/database/unit-of-work/#sqlite-and-concurrency)). The CRM catches such code with a pool of one connection and a short timeout, where any request needing a second connection fails at once:
+
+```rust
+async fn crm() -> TestCrm {
+    TestCrm::builder()
+        .app(crm_api::app)
+        .config("database.max_connections", 1)
+        .config("database.min_connections", 1)
+        .config("database.connect_timeout_secs", 1)
+        .build()
+        .await
+}
+```
+
+Its test then calls every route that combines a record check, `CurrentUser` and embedded users, and asserts they all succeed quickly. Tests that send many requests at once need real threads: `#[tokio::test(flavor = "multi_thread", worker_threads = 4)]`.
+
+## Cleaning up
+
+Dropping a `TestApp` deletes its database directory. On Windows, a pool that is still open keeps the files, so end tests with `app.shutdown().await` (or the CRM's `crm.shutdown().await`), which closes the pool first.
+
+<LinkCards>
+  <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding and factories">
+    Writing the factories and seeders tests use.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    Requests, signed-in users and response assertions.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    The clock, the queue, mail and outgoing HTTP.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,383 @@
 ---
 title: "Mail"
-description: "Mail from templates, transports and queued sending."
+description: "Mailables rendered from MiniJinja templates; the SMTP, log, array and failover transports; queued sending; configuration, previewing and testing."
 ---
 
-This page covers sending mail: building messages from MiniJinja templates, the SMTP, log, array and failover transports, queueing mail so requests don't wait for SMTP, and checking sent mail in tests.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-mail` is the reference: run `cargo doc -p navree-mail --open` in the repository.
-</Callout>
+<Badge feature="mail" /> `MailModule` sends email. You describe a message as a **mailable**, usually a pair of [MiniJinja templates](/docs/digging-deeper/views/), one HTML and one plain text, plus the data they need. The `Mailer` renders it, fills in the default sender, checks the message and hands it to a **transport**:
+
+| Transport | What it does |
+|---|---|
+| SMTP | Delivers over SMTP with [lettre](https://docs.rs/lettre), on Tokio, with rustls and a connection pool. |
+| log | Writes each message to the log instead of sending it. For development. |
+| array | Keeps messages in memory. For tests. |
+| failover | Tries several transports in order until one delivers. |
+
+`Mailer::queue` hands the rendered message to the [queue](/docs/digging-deeper/queues/), so a request doesn't wait for the SMTP server. The CRM's account mails (password resets, email verification) go out this way. Its deal notifications and task reminders are mailed by the [notification](/docs/digging-deeper/notifications/) mail channel, from a queue worker and from the scheduler.
+
+## Configuration
+
+`MailModule` renders templates with `ViewModule`, so the app needs both:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(ViewModule::from_config())
+    .module(MailModule::from_config())
+    // ...
+```
+
+The module is global: any provider can inject `Arc<Mailer>`. `from_config()`, and a plain `.module(MailModule)`, read the `mail` section. This is the CRM's:
+
+```toml title="config/app.toml"
+[mail]
+from = "Navree CRM <crm@navree.test>"
+# Mails are written to the log in development.
+transport = "log"
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mail.from` | `hello@example.com` | The default sender, `crm@navree.test` or `Navree CRM <crm@navree.test>`. Empty means no default: every message must then set its own. |
+| `mail.transport` | `log` | How mail is delivered: see [transports](#transports). |
+| `mail.queue` | none | The queue `Mailer::queue` dispatches to. Without it, queued mail goes on the `default` queue. |
+
+Each key has an environment variable: `APP_MAIL__FROM`, `APP_MAIL__TRANSPORT` and `APP_MAIL__QUEUE`. An SMTP URL usually holds a password, so keep it out of committed files: set it as an environment variable, which overrides `config/app.toml`, or in `.env`. A `.env` entry only counts for keys that `config/app.toml` doesn't set, because `.env` is read first (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). The CRM's file above sets both `from` and `transport`, and a new app's sets `transport`: remove a key from `[mail]` before you set it in `.env`.
+
+```env title=".env"
+APP_MAIL__FROM="Navree CRM <crm@navree.test>"
+APP_MAIL__TRANSPORT=smtps://crm%40navree.test:app-password@smtp.navree.test
+```
+
+The boot fails when the sender doesn't parse, the SMTP URL is invalid or a failover lists no transport. Nothing connects at boot: the SMTP connection opens with the first message.
+
+To configure the module in code instead, use `for_root`:
+
+```rust
+use navree::mail::{MailOptions, TransportConfig};
+
+Navree::app()
+    .module(ViewModule::from_config())
+    .module(MailModule::for_root(MailOptions {
+        from: "Navree CRM <crm@navree.test>".into(),
+        transport: TransportConfig::Failover(vec![
+            TransportConfig::smtp("smtps://crm:secret@smtp.navree.test"),
+            TransportConfig::Log,
+        ]),
+        queue: Some("mail".into()),
+    }))
+```
+
+### Transports
+
+`mail.transport` is either a short string or a table with a `type`:
+
+| Transport | Short form | Table form |
+|---|---|---|
+| SMTP | `"smtps://user:pass@host"` or `"smtp://..."` | `{ type = "smtp", url = "smtps://user:pass@host" }` |
+| log | `"log"` | `{ type = "log" }` |
+| array | `"array"` | `{ type = "array" }` |
+| failover | none | `{ type = "failover", transports = ["smtps://user:pass@host", "log"] }` |
+
+#### SMTP
+
+The URL says how to connect: `scheme://user:password@host:port?tls=mode`.
+
+| URL | Security | Default port |
+|---|---|---|
+| `smtps://user:pass@smtp.example.com` | TLS from the first byte | 465 |
+| `smtp://user:pass@smtp.example.com?tls=required` | STARTTLS, required | 587 |
+| `smtp://user:pass@smtp.example.com?tls=opportunistic` | STARTTLS when the server offers it | 587 |
+| `smtp://localhost:1025` | none | 25 |
+
+Use plain `smtp://` only for a local relay or a development mail catcher: credentials would travel unencrypted. Percent-encode reserved characters in the user name and password (`@` is `%40`). The URL never appears in `Debug` output, errors or logs.
+
+When a message has both an HTML and a text body, SMTP sends them as `multipart/alternative`, so mail clients show the one they prefer. Bcc recipients go in the SMTP envelope only, never in the headers.
+
+#### Log
+
+The log transport writes each message's sender, recipients and subject at `info` level with target `navree::mail`. The bodies are logged only at `debug` with target `navree::mail::body`, because they may hold password-reset links or other tokens. To see them in development:
+
+```env title=".env"
+APP_LOG__LEVELS=navree::mail::body=debug
+```
+
+#### Failover
+
+A failover transport tries its transports in order until one delivers. Each failure is logged as a warning; when they all fail, the error lists each one. As environment variables:
+
+```env title=".env"
+APP_MAIL__TRANSPORT__TYPE=failover
+APP_MAIL__TRANSPORT__TRANSPORTS=smtps://user:pass@smtp.navree.test,log
+```
+
+`transports` takes a list in TOML, or one comma-separated string of short forms.
+
+## Mail templates
+
+Mail bodies are [templates](/docs/digging-deeper/views/) rendered by `ViewModule`:
+
+- Files under the template directories (`view.dirs`, `resources/views` by default), so `resources/views/mail/welcome.html` is the template `mail/welcome.html`.
+- Or templates a module embeds in the binary with `m.templates(...)`. A file of the same name overrides an embedded template.
+
+The CRM embeds its deal notification mail in `crm-deals`:
+
+```rust title="crm-deals/src/notification.rs"
+/// The mail template (`.html` and `.txt`) of deal notifications, with
+/// context `{name, title, message, url}`.
+pub const MAIL_TEMPLATE: &str = "mail/deal-notification";
+
+pub(crate) const TEMPLATES: &[(&str, &str)] = &[
+    (
+        "mail/deal-notification.html",
+        include_str!("../templates/mail/deal-notification.html"),
+    ),
+    (
+        "mail/deal-notification.txt",
+        include_str!("../templates/mail/deal-notification.txt"),
+    ),
+];
+```
+
+`DealsModule` registers them with `m.templates(notification::TEMPLATES)`. The two files:
+
+<CodeGroup>
+
+```html title="deal-notification.html"
+<p>Hi {{ name }},</p>
+<p>{{ message }}</p>
+<p><a href="{{ url }}">Open the deal</a></p>
+```
+
+```text title="deal-notification.txt"
+Hi {{ name }},
+
+{{ message }}
+
+Open the deal: {{ url }}
+```
+
+</CodeGroup>
+
+A few rules matter for mail:
+
+- `.html` templates escape every value they print; `.txt` templates print values as they are.
+- Printing a variable the context doesn't define fails the render, so a typo can't send a mail with a blank where a name should be. `{% if title %}` still works for optional values.
+- `{{ amount_cents|money(currency) }}` formats an amount in cents (`$1,234.56`), and `{{ created_at|date("%d %b %Y") }}` a date.
+
+## Sending mail
+
+### Template mail
+
+`TemplateMail` covers most mail: recipients, a subject, a template name without its extension, and the context. It renders `{template}.html` as the HTML body and `{template}.txt` as the text body, whichever exist (at least one must). Inject `Arc<Mailer>` to send it:
+
+```rust title="src/modules/users/onboarding.rs"
+use navree::mail::{MailError, Mailer, TemplateMail};
+use navree::prelude::*;
+use serde_json::json;
+
+#[injectable]
+pub struct Onboarding {
+    mailer: Arc<Mailer>,
+}
+
+impl Onboarding {
+    pub async fn welcome(&self, name: &str, email: &str) -> Result<(), MailError> {
+        let mail = TemplateMail::new(email, "Welcome to the CRM", "mail/welcome")
+            .context(json!({ "name": name }));
+        self.mailer.queue(&mail).await
+    }
+}
+```
+
+- `send(&mail)` renders and delivers now, and returns the transport's error if delivery fails.
+- `queue(&mail)` renders now and leaves delivery to a queue worker: see [queueing mail](#queueing-mail).
+
+A template name with an extension renders only that template: `mail/welcome.txt` as the text body, any other extension as the HTML body. `TemplateMail`'s fields are public (`to`, `subject`, `template`, `context`), so you can also build it as a struct, as the CRM's notifications do.
+
+### Mailables
+
+For mail that computes its subject or recipients, or uses several templates, implement `Mailable`. Its `build` method gets the app's `Views` and returns a `Message`:
+
+```rust title="src/modules/deals/mail/deal_won.rs"
+use navree::mail::{MailError, Mailable, Message};
+use navree::view::Views;
+use serde_json::json;
+
+pub struct DealWonMail {
+    pub to: String,
+    pub owner_name: String,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+}
+
+impl Mailable for DealWonMail {
+    fn build(&self, views: &Views) -> Result<Message, MailError> {
+        let context = json!({
+            "name": self.owner_name,
+            "title": self.title,
+            "amount_cents": self.amount_cents,
+            "currency": self.currency,
+        });
+        Ok(Message::new()
+            .to(&self.to)
+            .bcc("sales-log@navree.test")
+            .reply_to("Sales team <sales@navree.test>")
+            .subject(format!("Won: {}", self.title))
+            .html(views.render("mail/deal-won.html", &context)?)
+            .text(views.render("mail/deal-won.txt", &context)?))
+    }
+}
+```
+
+Send it like any mailable: `mailer.queue(&mail).await?`. The CLI generates one, with its two templates, in a module:
+
+```sh
+navree make:mail deals deal_won
+```
+
+It writes `mail/deal_won.rs`, `deal_won.html` and `deal_won.txt` in the module and registers the templates in its `register` hook.
+
+### Messages
+
+`Message` is the rendered email. Its setters share the field names: `from`, `to`, `cc`, `bcc`, `reply_to`, `subject`, `html` and `text`; `to`, `cc` and `bcc` add one address per call. A message is a mailable too, so you can send one without templates:
+
+```rust
+mailer
+    .send_message(
+        Message::new()
+            .to("ops@navree.test")
+            .subject("Nightly import finished")
+            .text("12 companies and 40 contacts were imported."),
+    )
+    .await?;
+```
+
+Addresses are `ada@example.com` or `Ada Lovelace <ada@example.com>`. Leave `from` unset to use `mail.from`.
+
+### Validation and errors
+
+Before a message reaches a transport, the mailer fills in the default sender and checks that:
+
+- it has a sender, and at least one recipient in `to`, `cc` or `bcc`;
+- every address parses, `reply_to` included;
+- the subject holds no line break.
+
+Every method returns `Result<_, MailError>`:
+
+| Variant | When |
+|---|---|
+| `MissingSender` | No `from`, and `mail.from` is empty. |
+| `NoRecipients` | No `to`, `cc` or `bcc`. |
+| `InvalidAddress` | An address doesn't parse; names the field and the address. |
+| `InvalidHeader` | The subject contains a line break. |
+| `View` | A template is missing or failed to render. |
+| `Transport` | The transport failed, for example the SMTP server refused the message. |
+| `AllTransportsFailed` | Every transport of a failover failed. |
+| `Queue` | Dispatching the `mail.send` job failed. |
+| `Config` | The mail configuration is invalid. |
+
+Errors and `info`-level logs never contain message bodies or SMTP credentials.
+
+## Queueing mail
+
+`queue` renders and checks the message at once, so a template or address error comes back to the caller before anything is queued. It then dispatches the job `mail.send` (`SendMailJob`), whose payload is the rendered message, and returns. A [queue worker](/docs/digging-deeper/queues/#running-workers) sends it and retries it if the SMTP server fails, with the default job options: three attempts, with exponential backoff.
+
+- `MailModule` registers `mail.send`, so there is nothing else to wire. Set `mail.queue` to send mail from its own queue, and run a worker for it: `queue:work --queue mail,default`.
+- Like every dispatch, queued mail [joins the request's unit of work](/docs/digging-deeper/queues/#jobs-and-transactions): a request that fails sends no mail.
+- The payload holds the whole message, bodies included, until a worker sends it. With the database driver it sits in the `jobs` table, which matters for mail that carries reset links or other tokens.
+- In an app without a queue (no `dyn Dispatcher`), `queue` sends at once and logs a warning the first time. It doesn't wait for the unit of work: inside a request that then fails, the mail has already gone.
+
+## Previewing mail
+
+Navree 0.1 has no route that shows a mail in the browser. While you work on a template:
+
+- **Use the log transport** (the CRM's development setting) with `navree::mail::body` at `debug`, as [above](#log), to read each body in the log.
+- **Use a mail catcher.** Run one such as [Mailpit](https://mailpit.axllent.org/) and point the SMTP transport at it with `APP_MAIL__TRANSPORT=smtp://localhost:1025`. Open its web UI to see every mail rendered, HTML and text.
+- **Render it in code.** `build` a mailable against a set of templates and print it, from a test or a small command:
+
+```rust
+use navree::mail::{Mailable, TemplateMail};
+use navree::view::Views;
+use serde_json::json;
+
+let views = Views::from_templates(TEMPLATES.iter().copied())?;
+let message = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
+    .context(json!({ "name": "Ada" }))
+    .build(&views)?;
+println!("{}", message.html.unwrap_or_default());
+```
+
+In an app, render with the app's own templates by resolving `Views`: `app.get::<Views>().await`.
+
+## Testing
+
+Set the transport to `array` in tests. The mailer then keeps every message in memory, and `Mailer::array_transport` returns that store for assertions:
+
+```rust title="tests/onboarding.rs"
+use navree::mail::{Mailer, TemplateMail};
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn new_users_get_a_welcome_mail() {
+    let app = TestApp::builder()
+        .config("mail.transport", "array")
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(UsersModule)
+        .build()
+        .await;
+
+    let mailer = app.get::<Mailer>().await;
+    mailer
+        .queue(
+            &TemplateMail::new("ada@example.com", "Welcome to the CRM", "mail/welcome")
+                .context(json!({ "name": "Ada" })),
+        )
+        .await
+        .unwrap();
+
+    let sent = mailer.array_transport().expect("the array transport").sent();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].to, ["ada@example.com"]);
+    assert!(sent[0].text.as_deref().unwrap().contains("Hi Ada"));
+    mailer
+        .array_transport()
+        .unwrap()
+        .assert_sent(|m| m.subject == "Welcome to the CRM");
+    app.shutdown().await.unwrap();
+}
+```
+
+- `sent()` returns every message, oldest first; `assert_sent(predicate)`, `assert_nothing_sent()` and `clear()` do what they say. A failed assertion lists the recipients and subjects that were sent, not the bodies.
+- This app has no queue, so `queue` sends at once. In an app with `QueueModule`, queued mail reaches the array transport only when its job runs: run the queue first with `Queue::run_pending`, as the CRM's tests do with `crm.run_queue()`. To check that mail was queued without sending it, use the [queue fake](/docs/digging-deeper/queues/#faking-the-queue) and look for `SendMailJob`: `fake.assert_dispatched::<SendMailJob>(|job| job.message.subject == "Welcome to the CRM")`.
+- To keep a handle on the transport yourself, create an `ArrayTransport`, keep a clone and install it with `.override_value::<dyn MailTransport>(Arc::new(array.clone()))`.
+
+The CRM reads its sent mail like this in `crm-deals/tests/deals/notifications.rs`:
+
+```rust
+/// The mails sent so far.
+async fn mails(crm: &TestCrm) -> Vec<Message> {
+    crm.get::<Mailer>()
+        .await
+        .array_transport()
+        .expect("the array transport")
+        .sent()
+}
+```
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/views/" title="Views and templates">
+    Template files, embedding, escaping and filters.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Mail as one channel of a notification.
+  </LinkCard>
+  <LinkCard href="/docs/security/account-flows/" title="Account flows">
+    Password-reset and verification mail.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,294 @@
 ---
 title: "Health and metrics"
-description: "Health checks, readiness and Prometheus metrics."
+description: "Liveness and readiness endpoints, custom health checks, and Prometheus metrics with an optional bearer token."
 ---
 
-This page covers the observability endpoints: liveness and readiness checks, writing your own health checks, and the Prometheus metrics endpoint with its bearer-token guard.
+<Badge feature="observe" /> Load balancers and orchestrators need to know whether your app is alive and ready for traffic, and you want numbers on how it behaves. `navree-observe` serves both: a liveness probe, a readiness probe that runs every registered health check, and a Prometheus endpoint with the request metrics Navree records for you.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-observe` is the reference: run `cargo doc -p navree-observe --open` in the repository.
+## Setup
+
+Add `ObserveModule` to your app:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(ObserveModule::from_config()) // section `observe`
+}
+```
+
+It mounts three routes. Their paths are absolute (no API prefix, no version), they are public, and every response carries `Cache-Control: no-store`:
+
+| Route | What it answers |
+|---|---|
+| `GET /health/live` | `200 {"status":"up"}` while the process serves HTTP. |
+| `GET /health/ready` | `200` when every health check is up, `503` when one is down, with a report. |
+| `GET /metrics` | The Prometheus text exposition (unless `observe.metrics` is off). |
+
+All three keep answering in [maintenance mode](/docs/digging-deeper/maintenance-mode/): they are in the default `http.maintenance_except` list, so an orchestrator doesn't restart instances that are only down for maintenance.
+
+The `observe` section is optional:
+
+```toml title="config/app.toml"
+[observe]
+metrics = true
+metrics_token = "a-long-random-string"   # better: APP_OBSERVE__METRICS_TOKEN in .env
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `observe.metrics` | `true` | Install the Prometheus recorder and serve `GET /metrics`. |
+| `observe.metrics_token` | none | When set, `GET /metrics` requires `Authorization: Bearer <token>`. An empty token fails the boot. |
+
+In code: `ObserveModule::for_root(ObserveOptions { metrics: true, metrics_token: Some(Secret::new(token)) })`, with `Secret` from `navree::contracts`.
+
+## Liveness
+
+`GET /health/live` runs no checks: it only proves the process answers HTTP. Use it for restarts, so a slow database never gets a healthy process killed.
+
+```json title="200 OK"
+{"status":"up"}
+```
+
+## Readiness
+
+`GET /health/ready` runs every registered health check concurrently and reports each one. Use it to decide whether an instance gets traffic. This is the reference CRM's answer:
+
+```json title="200 OK" wrap
+{"status":"up","checks":{"cache":{"status":"up","latency_ms":3},"database":{"status":"up","latency_ms":3}}}
+```
+
+When a check is down, the status is `503` and the check carries its reason:
+
+```json title="503 Service Unavailable" wrap
+{"status":"down","checks":{"database":{"status":"up","latency_ms":2},"payments":{"status":"down","latency_ms":1000,"error":"request to https://status.payments.example.com/v1/ping timed out"}}}
+```
+
+- Each check has 2 seconds (`DEFAULT_CHECK_TIMEOUT`). A check that takes longer, or panics, is down.
+- Down checks are logged as warnings under the `navree::health` target.
+- Two checks with the same name are reported as `name`, `name#2`, and so on.
+- With no checks registered, the app is ready.
+
+Navree's modules register these checks when you add them:
+
+| Check | Module | What it does |
+|---|---|---|
+| `database` | `DatabaseModule` | Pings the connection pool. |
+| `cache` | `CacheModule` | Writes, reads back and forgets a key. |
+| `storage` | `StorageModule` | Writes, reads back and deletes a small file on every disk. |
+
+<Callout type="warning" title="The readiness report is public">
+
+Anyone who can reach `/health/ready` sees each check's name and error message, and every request runs every check. Keep secrets and internal details out of `HealthStatus::Down` messages, and don't expose the route to the internet if your checks are expensive: let your load balancer reach it on an internal network.
+
 </Callout>
+
+## Writing a health check
+
+A health check implements `HealthCheck` from `navree::contracts`: a name and an async `check` that returns `HealthStatus::Up` or `HealthStatus::Down(reason)`. Register it as a multi-binding of `dyn HealthCheck`; readiness collects every one at boot:
+
+```rust title="src/modules/payments/health.rs"
+use std::time::Duration;
+
+use navree::BoxFuture;
+use navree::contracts::{HealthCheck, HealthStatus};
+use navree::http_client::HttpClient;
+use navree::prelude::*;
+
+/// Ready when the payment provider answers its status endpoint.
+pub struct PaymentsHealth {
+    http: Arc<HttpClient>,
+}
+
+impl HealthCheck for PaymentsHealth {
+    fn name(&self) -> &str {
+        "payments"
+    }
+
+    fn check(&self) -> BoxFuture<'_, HealthStatus> {
+        Box::pin(async move {
+            let response = self
+                .http
+                .get("https://status.payments.example.com/v1/ping")
+                .timeout(Duration::from_secs(1))
+                .retries(0)
+                .send()
+                .await;
+            match response {
+                Ok(response) if response.is_success() => HealthStatus::Up,
+                Ok(response) => HealthStatus::Down(format!("status {}", response.status())),
+                Err(error) => HealthStatus::Down(error.to_string()),
+            }
+        })
+    }
+}
+
+#[module(register = Self::wire)]
+pub struct PaymentsModule;
+
+impl PaymentsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.multi(Factory::<dyn HealthCheck>::new(|r: Resolver| async move {
+            let http = r.get::<HttpClient>().await?;
+            Ok(Arc::new(PaymentsHealth { http }) as Arc<dyn HealthCheck>)
+        }));
+    }
+}
+```
+
+Keep checks fast and give outgoing calls a timeout below the 2-second budget, as above. A [`HttpClientError`](/docs/digging-deeper/http-client/#errors) message never contains query strings or credentials, so it is safe to report.
+
+To run the checks from your own code, inject `Arc<Health>` (from `navree::observe`): `health.check().await` returns a `HealthReport` with `is_up()` and the `checks` map.
+
+### Probes in Kubernetes
+
+```yaml title="deployment.yaml"
+livenessProbe:
+  httpGet: { path: /health/live, port: 8080 }
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /health/ready, port: 8080 }
+  periodSeconds: 5
+  timeoutSeconds: 3
+```
+
+## Metrics
+
+`GET /metrics` serves every metric recorded in the process in the [Prometheus text format](https://prometheus.io/docs/instrumenting/exposition_formats/). Navree's HTTP pipeline records two for every request:
+
+| Metric | Type | Labels |
+|---|---|---|
+| `http_requests_total` | counter | `method`, `route`, `status` |
+| `http_request_duration_seconds` | histogram | `method`, `route`, `status` |
+
+`route` is the route's template (`/api/v1/deals/{id}`), not the request path, so the number of series stays small; requests that match no route are labelled `unmatched`. Histograms whose name ends in `_seconds` use the buckets 5 ms, 10 ms, 25 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2.5 s, 5 s and 10 s.
+
+```text title="GET /metrics"
+# HELP http_requests_total HTTP requests by method, route template and status.
+# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/api/v1/deals",status="401"} 1
+http_requests_total{method="GET",route="/health/live",status="200"} 2
+http_requests_total{method="GET",route="/health/ready",status="200"} 1
+
+# HELP http_request_duration_seconds HTTP request latency by method, route template and status.
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{method="GET",route="/api/v1/deals",status="401",le="0.005"} 1
+http_request_duration_seconds_bucket{method="GET",route="/api/v1/deals",status="401",le="0.01"} 1
+...
+http_request_duration_seconds_sum{method="GET",route="/api/v1/deals",status="401"} 0.0010231
+http_request_duration_seconds_count{method="GET",route="/api/v1/deals",status="401"} 1
+```
+
+These are the only metrics Navree records today: there are no built-in metrics for the queue, the cache or the database pool yet, and no OpenTelemetry or Sentry integration (see the [roadmap](/docs/prologue/roadmap/)).
+
+### Protecting the endpoint
+
+Metrics reveal your routes and traffic. Set `observe.metrics_token` to require a bearer token:
+
+```sh
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:8080/metrics
+```
+
+A missing or wrong token gets `401` with `WWW-Authenticate: Bearer`, and the attempt is logged as a warning under `navree::security`. Tokens are compared in constant time. In Prometheus, pass the token in the scrape job:
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: crm-api
+    metrics_path: /metrics
+    authorization:
+      credentials_file: /etc/prometheus/crm-metrics-token
+    static_configs:
+      - targets: ["crm-api:8080"]
+```
+
+### Recording your own metrics
+
+Navree uses the [metrics](https://docs.rs/metrics) facade, so anything your code records with its macros shows up on `/metrics`. Add the crate (the version Navree uses is 0.24) and record:
+
+```toml title="Cargo.toml"
+metrics = "0.24"
+```
+
+```rust
+use std::time::Instant;
+
+let started = Instant::now();
+// ... write the export ...
+metrics::counter!("invoices_exported_total").increment(rows.len() as u64);
+metrics::histogram!("invoice_export_duration_seconds").record(started.elapsed().as_secs_f64());
+```
+
+Keep label values bounded (ids and paths make the number of series explode), and end duration histograms in `_seconds` to get the buckets above.
+
+### Turning metrics off
+
+With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mounted. Do that when another library installs its own `metrics` recorder: there is one per process, and `ObserveModule` fails the boot if another one is already installed.
+
+## Testing
+
+The Prometheus recorder is installed once per process, so every app booted by your tests shares it. Turn metrics off in tests (`observe.metrics = false`), or assert on counts with `>=` rather than exact values. Test health checks through the route:
+
+```rust title="tests/health.rs"
+use navree::BoxFuture;
+use navree::contracts::{HealthCheck, HealthStatus};
+use navree::prelude::*;
+use navree::testing::TestApp;
+
+struct AlwaysDown;
+
+impl HealthCheck for AlwaysDown {
+    fn name(&self) -> &str {
+        "payments"
+    }
+
+    fn check(&self) -> BoxFuture<'_, HealthStatus> {
+        Box::pin(async { HealthStatus::Down("connection refused".into()) })
+    }
+}
+
+#[module(register = Self::wire)]
+struct DownModule;
+
+impl DownModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.multi(Factory::<dyn HealthCheck>::new(|_| async {
+            Ok(Arc::new(AlwaysDown) as Arc<dyn HealthCheck>)
+        }));
+    }
+}
+
+#[tokio::test]
+async fn readiness_fails_when_payments_are_down() {
+    let app = TestApp::builder()
+        .config("observe.metrics", false)
+        .module(ObserveModule::from_config())
+        .module(DownModule)
+        .build()
+        .await;
+
+    app.client()
+        .get("/health/ready")
+        .send()
+        .await
+        .assert_status(503)
+        .assert_json_path("checks.payments.error", "connection refused".into());
+    app.shutdown().await.unwrap();
+}
+```
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/basics/logging/" title="Logging">
+    Request logs, levels and redaction.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running Navree behind a load balancer.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/maintenance-mode/" title="Maintenance mode">
+    What stays up while the app is down.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,685 @@
 ---
 title: "Your first app"
-description: "Build a small CRUD API with authentication and tests, from `navree new` to green tests."
+description: "Build a small task-list API with an entity, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests."
 ---
 
-This tutorial takes you from `navree new` to a working CRUD API. You generate a module with `navree make:module`, define an entity and its migration, add a controller with validation and access rules, sign users in with JWTs, and finish with feature tests that run against an in-process server.
+This tutorial builds **Planner**, a small JSON API for to-do lists. People sign up, sign in, create tasks and tick them off, and nobody can see or change anyone else's tasks. Along the way you use the generators, write a migration and an entity, validate input, protect routes with access attributes, and finish with feature tests that sign up real users.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-cli` and `navree` is the reference: run `cargo doc -p navree-cli --open` in the repository.
+Every command and file below comes from a real run of the CLI, and the finished app passes its tests and `cargo clippy -- -D warnings`.
+
+## Before you start
+
+You need Rust 1.95 or newer and the `navree` CLI. [Installation](/docs/getting-started/installation/) covers both. The commands use a POSIX shell; on Windows, run them in Git Bash or WSL, or adapt the `curl` quoting for PowerShell.
+
+## Create the app
+
+```sh
+navree new planner
+cd planner
+navree key:generate
+```
+
+`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. `navree key:generate` compiles the app (a few minutes the first time) and prints a key. Put it in `.env`:
+
+```env title=".env"
+APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+The app already has accounts: `AuthModule` serves `/api/auth/register`, `/api/auth/login` and the rest, and stores users in its own `users` table. You add the tasks.
+
+## Generate the tasks module
+
+A feature lives in a module: a directory under `src/modules/` with its routes, logic, table and tests. Generate one with the full set of create, read, update and delete routes:
+
+```sh
+navree make:module tasks --crud
+```
+
+```text
+  created  src/modules/tasks/mod.rs
+  created  src/modules/tasks/controller.rs
+  created  src/modules/tasks/service.rs
+  created  src/modules/tasks/entity.rs
+  created  src/modules/tasks/dto.rs
+  created  src/modules/tasks/migrations/mod.rs
+  created  src/modules/tasks/migrations/m20261026_081038_create_tasks_table.rs
+  created  src/modules/tasks/tests/mod.rs
+  updated  src/modules/mod.rs
+  updated  src/app.rs
+```
+
+The generator also declared the module in `src/modules/mod.rs` and added it to the app root in `src/app.rs`:
+
+```rust title="src/app.rs" {3}
+        // Feature modules (`navree make:module` adds new ones above the marker).
+        .module(modules::users::UsersModule)
+        .module(modules::tasks::TasksModule)
+    // navree:modules
+```
+
+<Callout type="warning" title="Stop `navree dev` while you edit the migration">
+
+New apps run pending migrations at boot (`database.migrate_on_boot = true`). If `navree dev` is running, it rebuilds as soon as the generator writes its files and creates the `tasks` table before you've edited the migration. If that happens, finish the edits below, then run `navree migrate:fresh` to drop every table and run all migrations again. It deletes your development data.
+
 </Callout>
+
+The module's files:
+
+| File | What it holds |
+|---|---|
+| `mod.rs` | `TasksModule`: its providers, controller, the import that registers `Task` with the access module, and its migrations |
+| `controller.rs` | `TaskController`: five routes under `/api/v1/tasks`, each with an access check |
+| `service.rs` | `TaskService`: listing, creating, updating and deleting, in the request's unit of work |
+| `entity.rs` | The SeaORM entity for the `tasks` table, and `Task`, the access subject |
+| `dto.rs` | The request bodies and their validation rules |
+| `migrations/` | The migration that creates the `tasks` table |
+| `tests/mod.rs` | Tests that boot the module on a fresh SQLite database |
+
+A generated resource has a `name` column. A task needs a `title` and a `done` flag, so the next sections change the migration, the entity, the request bodies and the service.
+
+## Define the table
+
+Open the migration and replace the `name` column with `title` and `done`:
+
+```rust title="src/modules/tasks/migrations/m20261026_081038_create_tasks_table.rs"
+Table::create()
+    .table(Tasks::Table)
+    .col(ColumnDef::new(Tasks::Id).uuid().not_null().primary_key())
+    .col(ColumnDef::new(Tasks::OwnerId).uuid().null())
+    .col(ColumnDef::new(Tasks::Name).string().not_null()) // [!code --]
+    .col(ColumnDef::new(Tasks::Title).string().not_null()) // [!code ++]
+    .col( // [!code ++]
+        ColumnDef::new(Tasks::Done) // [!code ++]
+            .boolean() // [!code ++]
+            .not_null() // [!code ++]
+            .default(false), // [!code ++]
+    ) // [!code ++]
+    // ... created_at and updated_at
+```
+
+The column names come from the `Tasks` enum at the bottom of the file:
+
+```rust title="src/modules/tasks/migrations/m20261026_081038_create_tasks_table.rs"
+#[derive(DeriveIden)]
+enum Tasks {
+    Table,
+    Id,
+    OwnerId,
+    Name, // [!code --]
+    Title, // [!code ++]
+    Done, // [!code ++]
+    CreatedAt,
+    UpdatedAt,
+}
+```
+
+Migrations are SeaORM migrations. Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
+
+## Update the entity
+
+The entity is the Rust shape of a row. It is also what the API returns, since the generated routes serialize it as it is:
+
+```rust title="src/modules/tasks/entity.rs"
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+#[sea_orm(table_name = "tasks")]
+pub struct Model {
+    /// A UUID v7, so ids sort by creation time.
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+    /// The user who created it (abilities can test `owner_id`).
+    pub owner_id: Option<Uuid>,
+    pub name: String, // [!code --]
+    /// What needs doing. // [!code ++]
+    pub title: String, // [!code ++]
+    /// Whether it is done. // [!code ++]
+    pub done: bool, // [!code ++]
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+}
+```
+
+Below the model, the generator declared the access subject. Rules call it `Task` and permissions start with `tasks.`:
+
+```rust title="src/modules/tasks/entity.rs"
+impl Subject for Entity {
+    const SUBJECT: &'static str = "Task";
+    const PERMISSION_PREFIX: &'static str = "tasks";
+}
+
+pub type Task = Entity;
+```
+
+## Validate the input
+
+Request bodies are plain structs with [garde](https://docs.rs/garde) rules. The `Valid` extractor checks them before the handler runs. Replace `dto.rs`:
+
+```rust title="src/modules/tasks/dto.rs"
+//! Request bodies of the tasks API, with their validation rules
+//! (checked by the `Valid` extractor before the handler runs).
+
+use garde::Validate;
+use serde::Deserialize;
+
+/// The body of `POST /api/v1/tasks`.
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateTask {
+    /// 1 to 200 characters.
+    #[garde(length(min = 1, max = 200))]
+    pub title: String,
+}
+
+/// The body of `PATCH /api/v1/tasks/{id}`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateTask {
+    /// 1 to 200 characters.
+    #[garde(length(min = 1, max = 200))]
+    pub title: Option<String>,
+    /// Marks the task done or not done.
+    #[garde(skip)]
+    pub done: Option<bool>,
+}
+
+impl UpdateTask {
+    /// The fields this update changes, for field-level ability checks.
+    pub fn changed_fields(&self) -> Vec<&'static str> {
+        let mut fields = Vec::new();
+        if self.title.is_some() {
+            fields.push("title");
+        }
+        if self.done.is_some() {
+            fields.push("done");
+        }
+        fields
+    }
+}
+```
+
+garde requires a rule on every field, so `done` says `#[garde(skip)]`; serde already guarantees it is a boolean. `changed_fields` feeds field-level access rules, which you can add later without touching the controller. [Validation](/docs/basics/validation/) lists the rules and the error format.
+
+## Write the service
+
+The service does the work. Change the two methods that set columns:
+
+```rust title="src/modules/tasks/service.rs"
+/// Creates a task owned by the acting user.
+pub async fn create(&self, uow: &Uow, input: CreateTask) -> Result<Model, DbErr> {
+    let now = Utc::now();
+    let task = ActiveModel {
+        id: Set(Uuid::now_v7()),
+        owner_id: Set(uow.actor()),
+        name: Set(input.name), // [!code --]
+        title: Set(input.title), // [!code ++]
+        done: Set(false), // [!code ++]
+        created_at: Set(now),
+        updated_at: Set(now),
+    };
+    Repo::<Entity>::insert(uow, task).await
+}
+
+/// Applies the fields present in `input`.
+pub async fn update(&self, uow: &Uow, task: Model, input: UpdateTask) -> Result<Model, DbErr> {
+    let mut active: ActiveModel = task.into();
+    if let Some(name) = input.name { // [!code --]
+        active.name = Set(name); // [!code --]
+    } // [!code --]
+    if let Some(title) = input.title { // [!code ++]
+        active.title = Set(title); // [!code ++]
+    } // [!code ++]
+    if let Some(done) = input.done { // [!code ++]
+        active.done = Set(done); // [!code ++]
+    } // [!code ++]
+    active.updated_at = Set(Utc::now());
+    Repo::<Entity>::update(uow, active).await
+}
+```
+
+`Uow` is the request's unit of work: a transaction that opens on first use and commits when the response status is below 400, or rolls back otherwise. `uow.actor()` is the signed-in user's id, so every task records its owner. `Repo` writes through the unit of work and records a change event for each write, which the audit log and change observers receive at commit. See [The unit of work](/docs/database/unit-of-work/).
+
+## Protect the routes
+
+The controller needs no changes. Here is what the generator wrote:
+
+```rust title="src/modules/tasks/controller.rs"
+#[controller("/tasks", version = "1")]
+impl TaskController {
+    /// Lists the tasks the user may read, newest first
+    /// (`?page=2&per_page=50`).
+    #[get("/")]
+    #[can(Read, Task)]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Task, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Model>> {
+        Ok(self.tasks.list(&uow, scope, page).await?)
+    }
+
+    /// Creates a task owned by the caller.
+    #[post("/")]
+    #[can(Create, Task)]
+    async fn store(
+        &self,
+        uow: Uow,
+        Valid(Json(input)): Valid<Json<CreateTask>>,
+    ) -> Result<Created<Model>> {
+        let task = self.tasks.create(&uow, input).await?;
+        Ok(Created(format!("/api/v1/tasks/{}", task.id), task))
+    }
+
+    /// Updates the fields present in the body.
+    #[patch("/{id}")]
+    #[can(Update, Task, from = "id")]
+    async fn update(
+        &self,
+        uow: Uow,
+        task: Authorized<Task, Update>,
+        Valid(Json(input)): Valid<Json<UpdateTask>>,
+    ) -> Result<Json<Model>> {
+        task.check_fields(&input.changed_fields())?;
+        let task = self.tasks.update(&uow, task.into_inner(), input).await?;
+        Ok(Json(task))
+    }
+
+    // ... show and destroy
+}
+```
+
+- `#[controller("/tasks", version = "1")]` mounts the routes at `/api/v1/tasks`: the `http.api_prefix`, the version, then the path.
+- `#[can(Create, Task)]` lets the request through only if the caller's abilities allow creating a `Task`. A guest gets 401 and a signed-in user without the ability gets 403.
+- `#[can(Update, Task, from = "id")]` loads the task named by the `{id}` path parameter, checks the ability against that record, and hands it to the handler as `Authorized<Task, Update>`. A missing task is a 404.
+- `Accessible<Task, Read>` turns the same rules into a SQL filter, so the list holds only the tasks the user may read.
+
+Routes are deny-by-default: a route without `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]` doesn't compile. [Access control on routes](/docs/basics/access-control/) lists every attribute.
+
+## Decide who may do what
+
+The `#[can]` checks consult the user's abilities. Right now nobody has any on `Task`, so every task route answers 403. Generate a policy:
+
+```sh
+navree make:policy tasks task
+```
+
+```text
+  created  src/modules/tasks/policies/task.rs
+  created  src/modules/tasks/policies/mod.rs
+  updated  src/modules/tasks/mod.rs
+  updated  src/abilities.rs
+```
+
+The generator also calls the policy from the app's abilities function:
+
+```rust title="src/abilities.rs" {3}
+    ctx.grant_permissions(rules);
+    // Module policies (`navree make:policy` adds them above the marker).
+    crate::modules::tasks::policies::task::define(ctx, rules);
+    // navree:policies
+```
+
+Now write the rules: any signed-in user may create tasks, and may read, update and delete their own.
+
+```rust title="src/modules/tasks/policies/task.rs"
+//! Abilities on `Task`, added to every user's rules by the app's
+//! abilities function (`src/abilities.rs`).
+
+use navree::access::{AbilityCtx, CREATE, DELETE, READ, Rules, UPDATE, field};
+
+/// The rules on `Task` for one user (or guest). Rules and conditions
+/// name database columns; later rules win.
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    rules.can(CREATE, "Task");
+    for action in [READ, UPDATE, DELETE] {
+        rules
+            .can(action, "Task")
+            .when(field("owner_id").eq(user.id));
+    }
+}
+```
+
+The rules follow [CASL](https://casl.js.org)'s model. `owner_id` is a column, so the same condition checks a single task and filters the list in SQL. Users with the `admin` role pass every check (`super_admin_role` in `src/app.rs`). [Authorization](/docs/security/authorization/) covers roles, permissions and field rules.
+
+## Try it
+
+Start the app:
+
+```sh
+navree dev
+```
+
+Sign up. Registration is on in new apps (`auth.registration = true`), and it returns tokens straight away:
+
+```sh
+curl -s -X POST http://127.0.0.1:8080/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada","email":"ada@example.com","password":"correct horse"}'
+```
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 900,
+  "refresh_token": "01a17746-ba88-7403-9c7b-1745d2ce4cc6.XPfb8pg4HWAME1TAx4nwNQo2...",
+  "token_type": "Bearer",
+  "user": {
+    "__type": "User",
+    "created_at": "2026-10-26T08:14:46.406702500Z",
+    "email": "ada@example.com",
+    "email_verified_at": null,
+    "id": "01a17746-ba87-7343-b9dd-cbe3dcd0add6",
+    "name": "Ada"
+  }
+}
+```
+
+The access token is a JWT that lasts 15 minutes; `POST /api/auth/refresh` with the refresh token gets a new pair, and `POST /api/auth/login` signs in again later. Copy the access token into a shell variable:
+
+```sh
+TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...   # the access_token from the response
+```
+
+Create a task:
+
+```sh
+curl -s -X POST http://127.0.0.1:8080/api/v1/tasks \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Write the docs"}'
+```
+
+```json
+{
+  "id": "01a17746-cd83-7311-8275-b4a3a5ee89fd",
+  "owner_id": "01a17746-ba87-7343-b9dd-cbe3dcd0add6",
+  "title": "Write the docs",
+  "done": false,
+  "created_at": "2026-10-26T08:14:51.267783400Z",
+  "updated_at": "2026-10-26T08:14:51.267783400Z"
+}
+```
+
+The status is `201 Created`, with `Location: /api/v1/tasks/01a17746-...`. List your tasks:
+
+```sh
+curl -s http://127.0.0.1:8080/api/v1/tasks -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "01a17746-cd83-7311-8275-b4a3a5ee89fd",
+      "owner_id": "01a17746-ba87-7343-b9dd-cbe3dcd0add6",
+      "title": "Write the docs",
+      "done": false,
+      "created_at": "2026-10-26T08:14:51.267783400Z",
+      "updated_at": "2026-10-26T08:14:51.267783400Z"
+    }
+  ],
+  "meta": { "current_page": 1, "per_page": 15, "total": 1, "last_page": 1 }
+}
+```
+
+Tick it off with `PATCH`:
+
+```sh
+curl -s -X PATCH http://127.0.0.1:8080/api/v1/tasks/01a17746-cd83-7311-8275-b4a3a5ee89fd \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"done":true}'
+```
+
+Invalid input never reaches the handler. An empty title is a 400 in Navree's error format, with the messages per field under `errors`:
+
+```json
+{
+  "statusCode": 400,
+  "message": ["title must be longer than or equal to 1 characters"],
+  "error": "Bad Request",
+  "errors": { "title": ["title must be longer than or equal to 1 characters"] }
+}
+```
+
+Without a token, the API answers 401. With a token for another user, Grace, `GET /api/v1/tasks` shows none of Ada's tasks, and `GET /api/v1/tasks/{id}` of Ada's task is a 403:
+
+```json
+{"statusCode":403,"message":"Forbidden","error":"Forbidden"}
+```
+
+<Callout type="note" title="403, not 404">
+
+A record check runs against the loaded record, so another user's task answers 403 rather than 404. That tells a caller the id exists. If that matters for a resource, use ids that can't be guessed (new records get UUID v7 ids) or check ownership in your own query.
+
+</Callout>
+
+Two commands help you see what is going on. `navree routes` prints a table of every route: its method, path, name, access rule and module. These are the tasks rows, without the name column (the generated routes have no names):
+
+```text
+GET     /api/v1/tasks          can:read Task             TasksModule
+POST    /api/v1/tasks          can:create Task           TasksModule
+DELETE  /api/v1/tasks/{id}     can:delete Task from id   TasksModule
+GET     /api/v1/tasks/{id}     can:read Task from id     TasksModule
+PATCH   /api/v1/tasks/{id}     can:update Task from id   TasksModule
+```
+
+`navree access:explain <user id> <action> <subject>` shows which rule decides a check:
+
+```sh
+navree access:explain 01a17746-ba87-7343-b9dd-cbe3dcd0add6 read Task
+```
+
+```text
+User 01a17746-ba87-7343-b9dd-cbe3dcd0add6 may `read` Task
+Decided by rule #2: can read Task where {"owner_id":"01a17746-ba87-7343-b9dd-cbe3dcd0add6"}
+Roles: (none)
+```
+
+## Update the module's tests
+
+The generator's tests in `src/modules/tasks/tests/mod.rs` still send and check `name`. Replace every `name` in that file with `title`: the JSON bodies, the `assert_json_path` paths (`data.0.name` becomes `data.0.title`) and `assert_validation_error("name")`.
+
+These tests boot only the tasks module, with `acting_as(principal(id))` standing in for a signed-in user and their own test abilities, so they stay fast and focused. [Testing](/docs/testing/getting-started/) explains `TestApp`.
+
+## Write a feature test
+
+Now test the whole app the way a client uses it: real sign-ups, real bearer tokens and the real abilities. Create `tests/tasks.rs`:
+
+```rust title="tests/tasks.rs"
+//! The tasks API end to end: real accounts, real access tokens.
+
+use navree::config::ConfigSources;
+use navree::crypto::generate_key;
+use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+use serde_json::{Value, json};
+
+/// The whole app on a fresh database, with fast password hashing.
+async fn app() -> (TestApp, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("http.per_ip_rate_limit", Value::Null)
+        .set("mail.transport", "array")
+        .set("observe.metrics", false)
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1);
+    let app = TestApp::from_builder(planner::app(sources)).await;
+    (app, guard)
+}
+
+/// Registers an account and returns its access token.
+async fn sign_up(app: &TestApp, email: &str) -> String {
+    let body = app
+        .client()
+        .post("/api/auth/register")
+        .json(&json!({ "name": "Ada", "email": email, "password": "correct horse" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    body["access_token"].as_str().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn guests_cannot_list_tasks() {
+    let (app, _guard) = app().await;
+    app.client()
+        .get("/api/v1/tasks")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn users_manage_their_own_tasks() {
+    let (app, _guard) = app().await;
+    let token = sign_up(&app, "ada@example.com").await;
+    let client = app.client();
+
+    let task = client
+        .post("/api/v1/tasks")
+        .bearer(&token)
+        .json(&json!({ "title": "Write the docs" }))
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("done", json!(false))
+        .json_value();
+    let path = format!("/api/v1/tasks/{}", task["id"].as_str().unwrap());
+
+    client
+        .patch(&path)
+        .bearer(&token)
+        .json(&json!({ "done": true }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("done", json!(true));
+    client
+        .get("/api/v1/tasks")
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(1))
+        .assert_json_path("data.0.title", json!("Write the docs"));
+}
+
+#[tokio::test]
+async fn other_users_cannot_see_or_change_them() {
+    let (app, _guard) = app().await;
+    let ada = sign_up(&app, "ada@example.com").await;
+    let grace = sign_up(&app, "grace@example.com").await;
+    let client = app.client();
+
+    let task = client
+        .post("/api/v1/tasks")
+        .bearer(&ada)
+        .json(&json!({ "title": "Private" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let path = format!("/api/v1/tasks/{}", task["id"].as_str().unwrap());
+
+    client
+        .get("/api/v1/tasks")
+        .bearer(&grace)
+        .send()
+        .await
+        .assert_json_path("meta.total", json!(0));
+    client
+        .get(&path)
+        .bearer(&grace)
+        .send()
+        .await
+        .assert_status(403);
+    client
+        .delete(&path)
+        .bearer(&grace)
+        .send()
+        .await
+        .assert_status(403);
+}
+
+#[tokio::test]
+async fn titles_are_validated() {
+    let (app, _guard) = app().await;
+    let token = sign_up(&app, "ada@example.com").await;
+    app.client()
+        .post("/api/v1/tasks")
+        .bearer(&token)
+        .json(&json!({ "title": "" }))
+        .send()
+        .await
+        .assert_validation_error("title");
+}
+```
+
+A few things make this test fast and hermetic:
+
+- `ConfigSources::new()` starts empty, so the test never reads `.env`, `config/app.toml` or your environment. Each `.set` supplies a setting the app needs.
+- `temp_sqlite_url()` gives each test its own SQLite file, deleted when the `TempDirGuard` drops.
+- `hashing.memory_kib` and `hashing.iterations` make Argon2id cheap. Keep the defaults in production.
+- `http.per_ip_rate_limit` set to null turns off the 600-requests-a-minute limit, which every in-process request would share.
+- `TestApp::from_builder(planner::app(sources))` boots exactly what `main` boots, and the client calls it in-process, without a network socket.
+
+Run everything:
+
+```sh
+cargo test
+```
+
+```text
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+The first line is the module tests in `src/` (users and tasks), the second the app tests the template wrote in `tests/app.rs`, and the third your new feature tests. Cargo also prints empty results for the binary and the doc tests, left out here.
+
+## What you built
+
+<FileTree title="planner/src/modules/tasks">{`
+mod.rs              # TasksModule
+controller.rs       # five routes, each with #[can]
+service.rs          # TaskService
+entity.rs           # the tasks table and the Task subject
+dto.rs              # CreateTask, UpdateTask and their rules
+migrations/
+  mod.rs
+  m20261026_081038_create_tasks_table.rs
+policies/
+  mod.rs
+  task.rs *         # who may do what with tasks
+tests/
+  mod.rs            # module tests
+`}</FileTree>
+
+Planner has sign-up and sign-in with rotating refresh tokens, a validated CRUD API whose every route checks abilities, per-user data enforced in SQL, OpenAPI docs at `/api/docs`, health checks at `/health/live` and `/health/ready`, and tests at two levels.
+
+## Where to go next
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/modules/" title="Modules">
+    How modules declare providers, controllers, imports and exports.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions, field rules and SQL filters.
+  </LinkCard>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    SeaORM entities and `Repo` in depth.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Send work to the background with `navree make:job`.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Build a release binary and run it behind a proxy.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    A larger app built the same way.
+  </LinkCard>
+</LinkCards>

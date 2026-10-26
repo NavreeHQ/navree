@@ -1,10 +1,230 @@
 ---
 title: "The facade and features"
-description: "The `navree` crate, its prelude and one Cargo feature per module."
+description: "The `navree` crate: one dependency that re-exports every module, a prelude, one Cargo feature per module (`full` by default), and using a single crate on its own."
 ---
 
-This page explains the `navree` facade crate: how it re-exports every module crate, what the prelude brings into scope, and how to trim an application to the modules it needs with Cargo features, including the `postgres` feature.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree` is the reference: run `cargo doc -p navree --open` in the repository.
+Navree is split into [small crates](/docs/architecture/crate-hierarchy/), but an app doesn't have to know that. The `navree` crate, the facade, is the one dependency an app needs: it re-exports every module crate, the attribute macros and a prelude of everyday names. Each module crate sits behind a Cargo feature of the same name, and all of them are on by default, so you can start with everything and trim later.
+
+## Depending on Navree
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree" }
+serde = { version = "1", features = ["derive"] }
+```
+
+The crates aren't on crates.io yet, so the dependency comes from Git: `cargo add --git https://github.com/NavreeHQ/navree navree` adds it for you. An app created with `navree new` depends on a local checkout of Navree instead (a `path` dependency); see [where new apps get Navree from](/docs/getting-started/installation/#where-new-apps-get-navree-from).
+
+`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde`, `sea-orm`, `garde` or `utoipa` directly when you use their derives, because derive macros name their own crate.
+
+Then one import brings the usual names into scope:
+
+```rust title="src/main.rs"
+use navree::prelude::*;
+
+#[injectable]
+pub struct GreetingController;
+
+#[controller("/greeting", version = "1")]
+impl GreetingController {
+    #[get("/{name}")]
+    #[public]
+    async fn show(&self, Path(name): Path<String>) -> Json<String> {
+        Json(format!("Hello, {name}!"))
+    }
+}
+
+#[module(controllers = [GreetingController])]
+pub struct GreetingModule;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(HttpModule::from_config()) // GET /api/v1/greeting/{name}
+        .module(GreetingModule)
+        .run()
+}
+```
+
+## What the facade contains
+
+Every module crate is re-exported whole, as a module of the facade. `navree::db::Uow` is `navree_db::Uow`, the very same type.
+
+| Path | Crate | Feature | What it brings |
+|---|---|---|---|
+| `navree::kernel` | navree-kernel | always | Module graph, DI container, lifecycle, commands |
+| `navree::contracts` | navree-contracts | always | Cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
+| `navree::config` | navree-config | always | `ConfigModule`, `.env`, TOML and `APP_*` sources |
+| `navree::http` | navree-http | `http` | `HttpModule`, controllers, `AppError` |
+| `navree::log` | navree-log | `log` | `LoggerModule` |
+| `navree::crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, the app key |
+| `navree::events` | navree-events | `events` | `EventsModule`: events and queued listeners |
+| `navree::view` | navree-view | `view` | `ViewModule`: MiniJinja templates |
+| `navree::cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
+| `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
+| `navree::db` | navree-db | `db` | `DatabaseModule`: SeaORM, unit of work, migrations, pagination |
+| `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
+| `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
+| `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
+| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
+| `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
+| `navree::storage` | navree-storage | `storage` | `StorageModule`: disks and uploads |
+| `navree::session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
+| `navree::validation` | navree-validation | `validation` | `Valid` extractors on garde |
+| `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
+| `navree::audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
+| `navree::access` | navree-access | `access` | `AccessModule`: roles, permissions, CASL abilities |
+| `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule`: cron-style tasks |
+| `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
+| `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
+
+The facade's root also has:
+
+- **The macros:** `navree::module`, `navree::injectable` and `navree::controller`, with the route attributes `get`, `post`, `put`, `patch` and `delete` (which `#[controller]` consumes, so you don't import them).
+- **The kernel types** apps use most: `Navree`, `App`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `ModuleId`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `ProviderKey`, `Scope`, `KernelError`, `BoxError` and `BoxFuture`.
+- **`navree::Result<T, E = AppError>`**, a handler's result type (with `http`).
+- **`navree::axum`**, Axum itself (with `http`), for the extractors and types navree-http doesn't re-export: `navree::axum::extract::Request`, `navree::axum::http::HeaderMap`, `navree::axum::middleware::from_fn` and so on.
+
+## The prelude
+
+`use navree::prelude::*` brings the names almost every file uses. Each is there only when the feature of its crate is on:
+
+| Group | Names |
+|---|---|
+| Std | `Arc` |
+| Macros | `module`, `injectable`, `controller` |
+| Kernel | `Navree`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `BoxError` |
+| Config | `ConfigModule`, `ConfigSources` |
+| HTTP | `Result`, `AppError`, `Json`, `Created`, `NoContent`, `Scoped`, `Path`, `Query`, `HttpModule` |
+| Database | `DatabaseModule`, `Uow`, `Repo`, `Page`, `PageQuery`, `MigrationSet`, `ModelFactory` |
+| Validation | `Valid`, `ValidAsync`, `ValidationModule` |
+| Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
+| Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
+| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule` |
+
+It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
+
+Three details to know:
+
+- **`Result` is Navree's.** With `http`, the prelude's `Result<T>` is `navree::Result<T>`, whose error type defaults to `AppError`, and it shadows the standard prelude's `Result`. Name the error type when it isn't an `AppError`: `fn main() -> Result<(), BoxError>`.
+- **Two factories.** `Factory` is the kernel's provider factory. navree-db's model factory trait (for test data) is renamed `ModelFactory` in the prelude.
+- **Test helpers aren't in the prelude.** Import them from `navree::testing`.
+
+## Cargo features
+
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them. To build only what you use, turn the defaults off and list the modules:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["http", "log"] }
+```
+
+`navree-kernel`, `navree-contracts`, `navree-config` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+
+| Feature | Also turns on |
+|---|---|
+| `http`, `log`, `crypto`, `events`, `view`, `cache`, `http-client` | Nothing else (and `http` adds `navree::axum`) |
+| `db`, `testing`, `observe`, `api` | `http` |
+| `mail` | `view` |
+| `realtime`, `storage` | `http`, `crypto` |
+| `session` | `http`, `crypto`, `db` |
+| `validation`, `audit`, `access` | `http`, `db` |
+| `queue`, `schedule` | `db` |
+| `notify` | `http`, `db`, `mail` |
+| `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
+| `postgres` | `db`, and navree-db's PostgreSQL driver |
+
+SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. The [benchmark](/benchmarks/) runs Navree on PostgreSQL 17, but the test suite runs on SQLite only, so some PostgreSQL-only code paths haven't been run yet. The [database](/docs/database/getting-started/) pages list which.
+
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module.
+
+<Callout type="note">
+
+Turning a feature off removes the module's crate from the build, along with its re-export, its prelude names and its third-party dependencies. Features only decide what is compiled: a module that is compiled in does nothing until the app adds it with `.module(..)` or a module imports it.
+
 </Callout>
+
+## How the macros find the crates
+
+`#[module]`, `#[injectable]` and `#[controller]` expand into code that calls the runtime crates. They look in your `Cargo.toml` to decide how to name them:
+
+1. If the crate depends on `navree`, the code names `::navree::kernel`, `::navree::http` and `::navree::access`. A renamed dependency is honoured: with `framework = { package = "navree", git = "https://github.com/NavreeHQ/navree" }`, the code names `::framework::kernel`.
+2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
+3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
+
+`#[controller]` needs navree-http, and `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access; with the facade, that means the `http` and `access` features.
+
+## Using a crate on its own
+
+Every module crate is a normal library you can depend on directly, without the facade. The kernel alone gives you modules, dependency injection, lifecycle hooks and commands:
+
+```rust
+use navree_kernel::{Module, ModuleBuilder, Navree};
+
+struct GreetingModule;
+
+impl Module for GreetingModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(String::from("hello")).exports::<String>();
+    }
+}
+
+fn main() -> Result<(), navree_kernel::BoxError> {
+    Navree::app().module(GreetingModule).run()
+}
+```
+
+The macros work with the individual crates too. This is the greeting app without the facade:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree-kernel = { git = "https://github.com/NavreeHQ/navree" }
+navree-config = { git = "https://github.com/NavreeHQ/navree" }
+navree-http = { git = "https://github.com/NavreeHQ/navree" }
+navree-macros = { git = "https://github.com/NavreeHQ/navree" }
+axum = "0.8"
+```
+
+```rust title="src/main.rs"
+use axum::extract::Path;
+use navree_config::{ConfigModule, ConfigSources};
+use navree_http::{HttpModule, Json};
+use navree_kernel::{BoxError, Navree};
+use navree_macros::{controller, injectable, module};
+
+#[injectable]
+pub struct GreetingController;
+
+#[controller("/greeting", version = "1")]
+impl GreetingController {
+    #[get("/{name}")]
+    #[public]
+    async fn show(&self, Path(name): Path<String>) -> Json<String> {
+        Json(format!("Hello, {name}!"))
+    }
+}
+
+#[module(controllers = [GreetingController])]
+pub struct GreetingModule;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(HttpModule::from_config())
+        .module(GreetingModule)
+        .run()
+}
+```
+
+You give up the prelude and the single version to keep in step, so the facade with `default-features = false` is usually the better way to build a small app. Depending on one crate directly makes sense for a library that extends one module, such as a new cache store or authentication strategy: it then depends only on the crates it extends.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/crate-hierarchy/" title="The crate hierarchy">
+    The layers and the rules between them.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/installation/" title="Installation">
+    Install the CLI and create an app.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,267 @@
 ---
 title: "Pagination"
-description: "Paginated queries and the `Page` response shape."
+description: "Offset pages in Laravel's `{data, meta}` shape with `PageQuery`, `paginate` and `Page`, your own page parameters, and cursor pagination over UUID v7 keys."
 ---
 
-This page explains pagination: the `PageQuery` extractor, `paginate` on a query, and the `Page<T>` response with its `data` and `meta` fields.
+Lists should come back a page at a time. `navree-db` gives you two kinds of pagination:
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-db` is the reference: run `cargo doc -p navree-db --open` in the repository.
-</Callout>
+- **Offset pagination**, `?page=2&per_page=15`, with the total and the number of pages, in the response shape Laravel uses. Use it for tables a user pages through.
+- **Cursor pagination**, `?cursor=...&limit=15`, which only knows "the next page". Use it for feeds and infinite scrolling, where rows arrive while people read.
+
+## Paginating a query
+
+Take a `PageQuery` in the handler, build an ordered SeaORM query, and pass both to `paginate` with a connection:
+
+```rust title="src/modules/deals/service.rs"
+use navree::db::paginate;
+use navree::prelude::*;
+use sea_orm::{EntityTrait, QueryOrder};
+
+impl DealService {
+    /// One page of deals, newest first.
+    pub async fn list(&self, uow: &Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+        let select = deal::Entity::find()
+            .order_by_desc(deal::Column::CreatedAt)
+            .order_by_desc(deal::Column::Id);
+        let tx = uow.tx().await?;
+        Ok(paginate(select, &*tx, page).await?)
+    }
+}
+```
+
+```rust title="src/modules/deals/controller.rs"
+#[get("/")]
+#[authenticated]
+async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+    self.deals.list(&uow, page).await
+}
+```
+
+`Page<T>` is a response, so the handler returns it as it is. `PageQuery` and `Page` are in the prelude; `paginate` is `navree::db::paginate`.
+
+`paginate` runs two queries: a `COUNT(*)` for the total and the page itself with `LIMIT` and `OFFSET`. Run it on the unit of work's transaction, as above. On SQLite that keeps the total and the page consistent, because no other writer can commit while the unit of work holds the write lock. PostgreSQL transactions run at its default `READ COMMITTED` level, where each query sees the latest commits, so a write committed between the two queries can still make them disagree.
+
+**Always order the query**, and end the order with a unique column such as the id. Without a stable order, the database may return rows in a different order for each page, and a row can appear twice or not at all while someone pages through.
+
+## The response
+
+`GET /api/v1/deals?page=2&per_page=2` answers:
+
+```json
+{
+  "data": [
+    { "id": "01a17759-52cc-74b3-a249-4997d27378d6", "title": "Deal 2", "amount_cents": 30000 },
+    { "id": "01a17759-52cc-74b3-a249-4996ea3f6f11", "title": "Deal 1", "amount_cents": 20000 }
+  ],
+  "meta": {
+    "current_page": 2,
+    "per_page": 2,
+    "total": 5,
+    "last_page": 3
+  }
+}
+```
+
+| Field | What it holds |
+|---|---|
+| `data` | The records of this page. |
+| `meta.current_page` | The page number, from 1. |
+| `meta.per_page` | The page size actually used. |
+| `meta.total` | How many records match, across all pages. |
+| `meta.last_page` | The number of the last page. At least 1, so an empty list has one empty page. |
+
+A page past the end isn't an error: it has an empty `data` and the true `total` and `last_page`, and `paginate` doesn't query for its rows. This holds for any page number a client can send, however large.
+
+## Page parameters
+
+As an extractor, `PageQuery` reads `page` and `per_page` from the query string:
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `page` | `1` | A positive integer. |
+| `per_page` | `15` (`DEFAULT_PER_PAGE`) | A positive integer. Values above `100` (`MAX_PER_PAGE`) are lowered to 100. |
+
+A value that isn't a positive integer is a 400, with a message per field:
+
+```json
+{
+  "statusCode": 400,
+  "message": ["page must be a positive integer", "per_page must be a positive integer"],
+  "error": "Bad Request",
+  "errors": {
+    "page": ["page must be a positive integer"],
+    "per_page": ["per_page must be a positive integer"]
+  }
+}
+```
+
+`PageQuery` ignores every other query parameter, so a handler can take your filters as well:
+
+```rust
+async fn index(
+    &self,
+    uow: Uow,
+    scope: Accessible<Company, Read>,
+    Valid(Query(filters)): Valid<Query<CompanyFilters>>,
+    page: PageQuery,
+) -> Result<Json<CompanyPage>> {
+    Ok(Json(self.companies.list(&uow, scope, filters, page).await?))
+}
+```
+
+In code, `PageQuery::new(page, per_page)` builds one with the same limits (a page below 1 becomes 1, a size outside `1..=100` is clamped), `PageQuery::default()` is page 1 of 15, and `offset()` is the number of rows before the page.
+
+### Your own page parameters
+
+`PageQuery` lowers a `per_page` above 100 rather than rejecting it, and defaults to 15. When your API needs different rules, validate the parameters yourself and build the `PageQuery` from them. The [benchmark app](/benchmarks/) does this because its specification asks for a 400 above 100 and a default of 20:
+
+```rust title="src/modules/deals/dto.rs"
+use garde::Validate;
+use serde::Deserialize;
+
+/// `page` ≥ 1 (default 1), `per_page` 1..=100 (default 20); anything else is a 400.
+#[derive(Debug, Deserialize, Validate)]
+pub struct DealsQuery {
+    #[serde(default = "first_page")]
+    #[garde(range(min = 1))]
+    pub page: u64,
+    #[serde(default = "default_per_page")]
+    #[garde(range(min = 1, max = 100))]
+    pub per_page: u64,
+}
+
+fn first_page() -> u64 {
+    1
+}
+
+fn default_per_page() -> u64 {
+    20
+}
+```
+
+```rust title="src/modules/deals/controller.rs"
+#[get("/")]
+#[authenticated]
+async fn index(
+    &self,
+    uow: Uow,
+    Valid(Query(query)): Valid<Query<DealsQuery>>,
+) -> Result<Page<DealResource>> {
+    let select = deal::Entity::find()
+        .order_by_desc(deal::Column::CreatedAt)
+        .order_by_desc(deal::Column::Id);
+    let page = PageQuery::new(query.page, query.per_page);
+    let tx = uow.tx().await?;
+    Ok(paginate(select, &*tx, page).await?.map(DealResource::from))
+}
+```
+
+A failed rule is a 400 in the same format, from [validation](/docs/basics/validation/). `PageQuery::new` still caps `per_page` at 100, so raising the limit above 100 isn't possible with `paginate`.
+
+## Shaping the items
+
+`page.map(f)` converts every item and keeps `meta`, which is how you turn models into the resources your API returns (above, `DealResource::from`). When the conversion needs the database, for example to embed each deal's company, take the page apart and put it back together:
+
+```rust
+let page = paginate(select, &*tx, page).await?;
+Ok(Page {
+    data: DealResource::load_many(&*tx, page.data).await?,
+    meta: page.meta,
+})
+```
+
+`load_many` here is the CRM's: it loads every embed for the page in one query per kind of embed, as described in [eager loading](/docs/database/entities-and-repositories/#eager-loading).
+
+When the rows don't come from a SeaORM `Select` (raw SQL, another service), build the page yourself with `Page::new(data, query, total)`, which computes `meta` from the query and the total.
+
+## Cursor pagination
+
+Offset pages shift when rows are added: a new deal at the top pushes the last deal of page 1 onto page 2, and a user paging through sees it twice. A cursor page continues after the last row the client saw instead. Navree's cursor pagination pages by a UUID v7 column, usually the primary key, whose order is creation order:
+
+```rust title="src/modules/deals/controller.rs"
+use navree::db::{CursorPage, CursorQuery, cursor_paginate_desc};
+
+/// The feed: newest deals first, by cursor.
+#[get("/feed")]
+#[authenticated]
+async fn feed(&self, uow: Uow, cursor: CursorQuery) -> Result<CursorPage<DealResource>> {
+    let tx = uow.tx().await?;
+    let page = cursor_paginate_desc(deal::Entity::find(), deal::Column::Id, &*tx, cursor).await?;
+    Ok(page.map(DealResource::from))
+}
+```
+
+```json
+{
+  "data": [
+    { "id": "01a17759-52ce-7558-9a7d-19b9a79d6002", "title": "Deal 4", "amount_cents": 50000 },
+    { "id": "01a17759-52cd-72b4-b105-f1165805b354", "title": "Deal 3", "amount_cents": 40000 }
+  ],
+  "next_cursor": "AaF3WVLNcrSxBfEWWAWzVA"
+}
+```
+
+The client asks for the next page with `?cursor=AaF3WVLNcrSxBfEWWAWzVA`. On the last page, `next_cursor` is `null`.
+
+- `CursorQuery` reads `cursor` (absent for the first page) and `limit` (default 15, at most 100). A malformed cursor or a `limit` that isn't a positive integer is a 400.
+- `cursor_paginate` returns the oldest rows first, `cursor_paginate_desc` the newest first.
+- The query may filter but must not be ordered: the function orders it by the column.
+- The column must hold UUIDs; any other type fails with a `DbErr`.
+- There is no total and no previous page. The cursor is the last row's id, encoded; treat it as opaque.
+
+## Documenting pages in OpenAPI
+
+`Page<T>` doesn't implement utoipa's `ToSchema`, so the [OpenAPI document](/docs/digging-deeper/openapi/) can't describe it by itself. The CRM declares a response type per list, with a `From<Page<..>>` conversion:
+
+```rust title="src/modules/companies/resource.rs"
+/// A page of companies: `{data: Company[], meta}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct CompanyPage {
+    /// The companies on this page.
+    pub data: Vec<CompanyResource>,
+    #[schema(inline)]
+    pub meta: PageInfo,
+}
+
+impl From<Page<CompanyResource>> for CompanyPage {
+    fn from(page: Page<CompanyResource>) -> Self {
+        CompanyPage {
+            data: page.data,
+            meta: page.meta.into(),
+        }
+    }
+}
+```
+
+`PageInfo` is the CRM's copy of `PageMeta` with a `ToSchema` derive (see `apps/crm-api/crates/crm-companies/src/common.rs`).
+
+## Testing
+
+Assert on `meta` and on the items in one chain:
+
+```rust
+rep.get("/api/v1/deals")
+    .query(&[("per_page", "10")])
+    .send()
+    .await
+    .assert_status(200)
+    .assert_json_path(
+        "meta",
+        json!({ "current_page": 1, "per_page": 10, "total": 1, "last_page": 1 }),
+    )
+    .assert_json_path("data.0.title", json!("Acme renewal"));
+```
+
+See [HTTP tests](/docs/testing/http-tests/) for the assertions.
+
+<LinkCards>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    Queries, relations and loading embeds for a page.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    `Valid<Query<T>>` for your own query parameters.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses and API resources">
+    Turning models into the shapes your API returns.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,280 @@
 ---
 title: "Getting started"
-description: "Connect to SQLite or PostgreSQL and run your first queries."
+description: "Connect to SQLite or PostgreSQL, configure the pool and run your first queries with SeaORM."
 ---
 
-This page shows how to configure the database module for SQLite (the default) or PostgreSQL, how the connection pool works, and how to run queries with SeaORM from your services.
+Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), which runs on SQLx. The `navree-db` crate (the `db` feature of the `navree` facade, on by default) adds what an application needs around it:
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-db` is the reference: run `cargo doc -p navree-db --open` in the repository.
+- a connection pool configured from the `database` section of your configuration;
+- a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds;
+- [migrations](/docs/database/migrations/) owned by modules, with `migrate`, `migrate:rollback` and `migrate:fresh` commands;
+- [seeders and factories](/docs/database/seeding-and-factories/);
+- [pagination](/docs/database/pagination/) in Laravel's response shape;
+- [repository helpers](/docs/database/entities-and-repositories/) that record every change for the [audit log](/docs/security/audit-log/).
+
+Navree supports two databases:
+
+- **SQLite** is the default. It is compiled into your app (bundled), so there is nothing to install. Development and every test in the Navree repository run on it.
+- **PostgreSQL** is behind the `postgres` Cargo feature.
+
+MySQL is not supported.
+
+## Configuration
+
+`DatabaseModule` reads the `database` section of your configuration. Every key is optional:
+
+```toml title="config/app.toml"
+[database]
+url = "sqlite://storage/app.db?mode=rwc"
+max_connections = 10
+min_connections = 0
+connect_timeout_secs = 8
+log_queries = false
+slow_query_ms = 200
+migrate_on_boot = false
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `sqlite://...` or `postgres://...`. |
+| `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
+| `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
+| `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
+| `log_queries` | `false` | Logs every statement at debug level. |
+| `slow_query_ms` | `200` | Logs statements slower than this at warn level. `0` turns it off. When you leave it out, the logger's `log.slow_query_ms` applies. |
+| `migrate_on_boot` | `false` | Runs pending migrations when the app boots. Handy in development and tests; run `migrate` in deployments instead. |
+
+Like every section, these keys can come from environment variables with the `APP_` prefix and `__` between levels: `APP_DATABASE__URL` sets `database.url`. Keep a production URL, and its password, in the environment rather than in `config/app.toml`. A `.env` entry only fills keys that `config/app.toml` leaves out, and a new app's `config/app.toml` sets `database.url`, so `APP_DATABASE__URL` in `.env` has no effect there. See [configuration](/docs/getting-started/configuration/) for the order in which sources apply.
+
+An invalid section stops the boot with a message naming `database` and the problem (an empty `url`, `max_connections = 0`, or `min_connections` above `max_connections`). Navree never prints the password of the URL: `DbOptions`'s `Debug` output and connection errors show it as `***`.
+
+## Registering the module
+
+Add `DatabaseModule` to your app's root, after `ConfigModule`:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(CompaniesModule)
+        .module(DealsModule)
+}
+```
+
+`DatabaseModule::from_config()` and a plain `.module(DatabaseModule)` both read the `database` section when the app boots. To configure the module in code instead, pass the options to `for_root`:
+
+```rust
+use navree::db::DbOptions;
+
+Navree::app().module(DatabaseModule::for_root(DbOptions {
+    url: "sqlite://storage/app.db?mode=rwc".into(),
+    max_connections: 5,
+    ..DbOptions::default()
+}))
+```
+
+The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` without importing it. It also brings:
+
+- the unit-of-work layer of the request pipeline and the `Uow` extractor;
+- the mapping of database errors to error responses ([below](#database-errors));
+- the `database` health check, which pings the pool (served by `GET /health/ready` when the app has `ObserveModule`, see [health and metrics](/docs/digging-deeper/health-and-metrics/));
+- the commands `migrate`, `migrate:status`, `migrate:rollback`, `migrate:fresh` and `db:seed`;
+- closing the pool when the app shuts down, so SQLite checkpoints its write-ahead log.
+
+## SQLite
+
+A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
+
+Navree opens every SQLite connection with:
+
+- the write-ahead log (`journal_mode = WAL`), so readers don't block the writer;
+- `busy_timeout = 5000`: a statement waits up to 5 seconds for a lock before failing;
+- `foreign_keys = ON`, so foreign keys are enforced (SQLite's default is off).
+
+Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite's write lock at once. Concurrent requests that write therefore queue for up to 5 seconds instead of failing halfway through. SQLite allows one writer at a time, so this is also its limit: a busy app that writes on most requests outgrows it.
+
+<Callout type="warning" title="Don't use in-memory SQLite">
+
+An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/).
+
 </Callout>
+
+## PostgreSQL
+
+<Badge feature="postgres" /> Turn on the `postgres` feature of the facade. It adds SQLx's PostgreSQL driver to `navree-db` (and turns on `db`):
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
+```
+
+The crates aren't on crates.io yet, so the dependency comes from git. An app made by `navree new` depends on the checkout the CLI was built from instead (`navree = { path = "..." }`); add `features = ["postgres"]` to that line.
+
+Then point `database.url` at the server with an environment variable, which overrides `config/app.toml`:
+
+```sh
+export APP_DATABASE__URL=postgres://crm:secret@db.internal:5432/crm
+```
+
+Without the feature, the app fails to boot with "cannot connect to postgres://crm:***@db.internal:5432/crm: ... (enable the `postgres` feature of navree-db)".
+
+On PostgreSQL, Navree behaves differently in a few places:
+
+- Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`.
+- `Uow::lock_for_update()` is true, so `Repo::update`, `Repo::find_for_update` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
+- `migrate:fresh` drops every table of the current schema with `CASCADE`.
+- The case-insensitive search helpers use `LOWER(..) LIKE` ([below](#searching-text)).
+
+<Callout type="warning" title="What has been run on PostgreSQL">
+
+The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the benchmark app (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
+
+These PostgreSQL paths are written but have not yet run against a real server: migrations (the benchmark's schema comes from an SQL script), `migrate:fresh` and `migrate:rollback`, `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
+
+</Callout>
+
+Apart from its size and timeouts, the pool keeps SQLx's defaults. One of them is `test_before_acquire`: every checkout pings the connection, which costs one round trip per checkout. `navree-db` has no setting to turn it off.
+
+## Running queries
+
+Queries are plain SeaORM: `Entity::find()`, filters, `.one(conn)`, `.all(conn)` and so on. What Navree decides is which connection you pass:
+
+| Where the code runs | Connection |
+|---|---|
+| A handler, or a service that takes `&Uow` | The unit of work's transaction: `&*uow.tx().await?` |
+| A service with no `&Uow` | `&db.reader().await` |
+| A command, seeder or test outside any unit of work | The pool, `db.conn()`, or a transaction from `db.transaction(..)` |
+
+### In a request
+
+Take the request's unit of work as an extractor and read through its transaction. The transaction begins with the first `uow.tx()` call and commits when the response status is below 400:
+
+```rust title="src/modules/companies/controller.rs"
+#[controller("/companies", version = "1")]
+impl CompaniesController {
+    #[get("/{id}")]
+    #[authenticated]
+    async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<company::Model>> {
+        let tx = uow.tx().await?;
+        let company = company::Entity::find_by_id(id)
+            .one(&*tx)
+            .await?
+            .ok_or_else(AppError::not_found)?;
+        Ok(Json(company))
+    }
+}
+```
+
+Services take the unit of work as a `&Uow` parameter rather than having it injected. [The unit of work](/docs/database/unit-of-work/) covers it in detail.
+
+### In services without a unit of work
+
+Some code can't take a `&Uow`: a service called from many places, or a trait whose signature you don't control. Inject `Arc<Db>` and read with `db.reader()`:
+
+```rust title="src/modules/companies/directory.rs"
+use navree::db::Db;
+use navree::prelude::*;
+use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+use uuid::Uuid;
+
+#[injectable]
+pub struct CompanyDirectory {
+    db: Arc<Db>,
+}
+
+impl CompanyDirectory {
+    /// The company with `id`, unless it is soft-deleted.
+    pub async fn find(&self, id: Uuid) -> Result<Option<company::Model>, DbErr> {
+        company::Entity::find_by_id(id)
+            .filter(company::Column::DeletedAt.is_null())
+            .one(&self.db.reader().await)
+            .await
+    }
+}
+```
+
+`db.reader()` returns the open transaction of the current task's unit of work (the request's, while a handler runs) when there is one, and the pool otherwise. That matters on SQLite: an open unit of work holds the write lock on its connection, and a request that then waits for a second pool connection can starve the pool once about `max_connections` requests run together. Reading through the transaction also sees the request's own uncommitted writes. Use the reader as a temporary, as above, so it's dropped before the unit of work commits.
+
+`db.conn()` always returns the pool. Use it where no unit of work is running: commands, seeders and test assertions.
+
+### Raw SQL
+
+SeaORM's query builder writes portable SQL. When you need raw SQL, build a `Statement` for the app's backend and bind values rather than formatting them into the string:
+
+```rust
+use sea_orm::{ConnectionTrait, DbBackend, Statement};
+
+let sql = match db.backend() {
+    DbBackend::Postgres => "SELECT count(*) AS n FROM companies WHERE owner_id = $1",
+    _ => "SELECT count(*) AS n FROM companies WHERE owner_id = ?",
+};
+let row = db
+    .conn()
+    .query_one_raw(Statement::from_sql_and_values(db.backend(), sql, [owner_id.into()]))
+    .await?;
+```
+
+Placeholders differ: `?` on SQLite, `$1`, `$2` on PostgreSQL.
+
+### Searching text
+
+SQLite's `LOWER`, `UPPER` and `LIKE` only fold ASCII letters, so `LOWER(name) LIKE '%équipe%'` misses "Équipe". Navree has two helpers that ignore case for every letter:
+
+- `contains_ignore_case(backend, expr, term)`: `expr` contains `term`;
+- `eq_ignore_case(backend, expr, value)`: `expr` equals `value`.
+
+```rust
+use navree::db::contains_ignore_case;
+use sea_orm::sea_query::Expr;
+
+let companies = company::Entity::find()
+    .filter(contains_ignore_case(
+        db.backend(),
+        Expr::col(company::Column::Name),
+        "équipe",
+    ))
+    .all(&db.reader().await)
+    .await?;
+```
+
+On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`); on PostgreSQL they use `LOWER(..) LIKE`. Wildcards in the term (`%`, `_`, `*`, `?`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table.
+
+## Database errors
+
+A handler can return a `DbErr` with `?`. `DatabaseModule` turns it into an error response, and no SQL reaches the client:
+
+| Error | Response |
+|---|---|
+| `RecordNotFound`, `RecordNotUpdated` | 404, "Not Found" |
+| A unique constraint violation | 409, "A record with the same unique value already exists." |
+| A foreign key violation | 409, "The change conflicts with a related record." |
+| Anything else | 500, logged with its details |
+
+The same mapping applies to an error raised while the unit of work commits, after the handler returned: a constraint that is only checked at commit, or a constraint violation from a [change observer](/docs/database/unit-of-work/#change-events-and-observers), is a 409, and any other commit failure is a 500.
+
+## Logging queries
+
+Set `database.log_queries = true` to log every statement at debug level, and `database.slow_query_ms` to log slow ones at warn level. Both use the tracing target `navree_db::query`, so the [logger's](/docs/basics/logging/) level decides what you see. Only the SQL text is logged, never the bound values. SeaORM doesn't time statements run with `execute_unprepared`, so those never appear.
+
+## Testing
+
+Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it.
+
+<LinkCards>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    SeaORM entities, relations, soft deletes and the `Repo` helpers.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    One lazy transaction per request, committed when it succeeds.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Module-owned migrations and the `migrate` commands.
+  </LinkCard>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    A fresh database per test, factories and assertions.
+  </LinkCard>
+</LinkCards>

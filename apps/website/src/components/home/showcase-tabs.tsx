@@ -87,7 +87,10 @@ export function ShowcaseTabs({ panels }: { panels: ShowcasePanel[] }) {
           {panel.extra ? (
             <figure className="code-panel" data-copy-root>
               <figcaption className="code-block-bar">
-                <span className="code-block-lang">{panel.extra.file}</span>
+                {/* A file name (`src/main.rs`) looks like the first block's; a label such as "400 Bad Request" doesn't. */}
+                <span className={/\.\w+$/.test(panel.extra.file) ? "code-block-title" : "code-block-lang"}>
+                  {panel.extra.file}
+                </span>
                 <CopyButton />
               </figcaption>
               <pre className="shiki navree-night" tabIndex={0} dangerouslySetInnerHTML={{ __html: panel.extra.html }} />

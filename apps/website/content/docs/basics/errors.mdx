@@ -1,10 +1,337 @@
 ---
 title: "Errors"
-description: "NestJS-style JSON errors, and mapping your own errors to responses."
+description: "The NestJS error format, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
 ---
 
-This page describes how Navree handles errors: the error type handlers return, the NestJS-style JSON body (`statusCode`, `message`, `error`), validation failures with their `errors` map, panics, and how to turn your own error types into HTTP responses.
+Every error a Navree app sends has the same JSON body, the one NestJS uses: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Internal details never reach the client: they go to the log.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` is the reference: run `cargo doc -p navree-http --open` in the repository.
+Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` are in the prelude.
+
+## The error format
+
+```json title="404 Not Found"
+{
+  "statusCode": 404,
+  "message": "Invoice not found",
+  "error": "Not Found"
+}
+```
+
+- `statusCode` is the HTTP status.
+- `message` is the error's detail when it has one, else its title (the reason phrase by default). For validation errors it is a list of every field message.
+- `error` is the status's reason phrase.
+- `errors` appears on validation errors only and maps field paths to their messages:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["email must be a valid email address"],
+  "error": "Bad Request",
+  "errors": { "email": ["email must be a valid email address"] }
+}
+```
+
+Error responses are `application/json` with `X-Content-Type-Options: nosniff`. The request id is in the `X-Request-Id` header, never in the body. Members come in the NestJS order: `statusCode`, `message`, `error`, `errors`.
+
+### Statuses Navree sends itself
+
+| Status | When | `message` |
+|---|---|---|
+| 400 | invalid input ([validation](/docs/basics/validation/)), malformed JSON, a path or query value of the wrong type | field messages, or the parser's explanation |
+| 401 | the route needs a user and there is none, or the credentials are invalid | `Unauthorized`, or the auth module's message such as `Invalid credentials` |
+| 403 | [access control](/docs/basics/access-control/) refuses, or the CSRF check fails | `Forbidden`, `Invalid CSRF token` |
+| 404 | no route matches, or a record isn't found | `Not Found` |
+| 405 | the path exists for other methods (with an `Allow` header) | `Method Not Allowed` |
+| 409 | a unique or foreign-key constraint fails | see [database errors](#database-errors) |
+| 413 | the body is over `http.body_limit_bytes` (2 MiB by default) or the route's own limit | `The request body must not exceed 2097152 bytes.` when `Content-Length` declares it, else the extractor's explanation |
+| 415 | a JSON or form extractor gets another content type | the expected content type |
+| 429 | a [rate limit](/docs/basics/rate-limiting/) is exceeded (with `Retry-After`) | `Too Many Requests`, or the login throttle's `Too many login attempts. Please try again in N seconds.` |
+| 500 | an unexpected error or a panic | `Internal server error` |
+| 503 | [maintenance mode](/docs/digging-deeper/maintenance-mode/), or the request ran out of time | the maintenance message, or `The server did not finish the request in time.` |
+
+Navree itself never answers 422 or 419: input errors are 400s and CSRF failures are 403s, as in NestJS.
+
+## Returning errors
+
+Handlers return `Result<T>`, which is `Result<T, AppError>`. Build the error with one of its constructors:
+
+```rust title="src/invoices/controller.rs"
+use navree::prelude::*;
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+#[injectable]
+pub struct InvoicesController;
+
+#[controller("/invoices", version = "1")]
+#[authenticated]
+impl InvoicesController {
+    #[post("/{id}/send")]
+    async fn send(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
+        if id.is_nil() {
+            return Err(AppError::not_found().with_detail("Invoice not found"));
+        }
+        if id.get_version_num() != 7 {
+            return Err(AppError::conflict("The invoice has already been sent."));
+        }
+        Ok(Json(json!({ "sent": true })))
+    }
+}
+```
+
+```json title="409 Conflict"
+{
+  "statusCode": 409,
+  "message": "The invoice has already been sent.",
+  "error": "Conflict"
+}
+```
+
+| Constructor | Status | `message` |
+|---|---|---|
+| `AppError::bad_request("The export is empty.")` | 400 | the text |
+| `AppError::unauthenticated()` | 401 | `Unauthorized` |
+| `AppError::forbidden()` | 403 | `Forbidden` |
+| `AppError::not_found()` | 404 | `Not Found` |
+| `AppError::conflict("...")` | 409 | the text |
+| `AppError::validation(map)` | 400 | every field message, plus `errors` |
+| `AppError::payload_too_large(limit)` | 413 | `The request body must not exceed {limit} bytes.` |
+| `AppError::too_many_requests(duration)` | 429 | `Too Many Requests`, with `Retry-After` in whole seconds |
+| `AppError::service_unavailable("...")` | 503 | the text |
+| `AppError::internal(error)` | 500 | `Internal server error`; `error` is logged |
+| `AppError::from_status(StatusCode::PAYMENT_REQUIRED)` | any | the reason phrase (`Payment Required`) |
+| `AppError::new(status, code, title)` | any | `title` |
+
+And the builder methods:
+
+- `.with_detail("Only the owner can archive a project.")` sets the `message`.
+- `.with_header(name, value)` adds a response header, such as `WWW-Authenticate`.
+- `.with_source(error)` records the cause. It's logged for 5xx responses and never sent.
+
+`AppError` also has public fields (`status`, `code`, `title`, `detail`, `errors`, `headers`, `source`). `code` is a short machine-readable name (`not_found`, `validation_failed`) for logs, tests and error mappers; it isn't part of the response body.
+
+```rust
+use navree::axum::http::header::WWW_AUTHENTICATE;
+use navree::axum::http::{HeaderValue, StatusCode};
+
+let error = AppError::new(StatusCode::UNAUTHORIZED, "invalid_signature", "Invalid signature.")
+    .with_header(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+// {"statusCode": 401, "message": "Invalid signature.", "error": "Unauthorized"}
+```
+
+## The question mark operator
+
+Any error type that converts into `BoxError` (every `std::error::Error + Send + Sync`, and strings) converts into an `AppError` with `?`. It becomes a 500, like `anyhow`:
+
+```rust
+#[get("/{id}/total")]
+async fn total(&self, Path(raw): Path<String>) -> Result<String> {
+    let cents: i64 = raw.parse()?; // a ParseIntError: 500, logged, never sent
+    Ok(format!("{:.2}", cents as f64 / 100.0))
+}
+```
+
+```json title="500 Internal Server Error"
+{
+  "statusCode": 500,
+  "message": "Internal server error",
+  "error": "Internal Server Error"
+}
+```
+
+The error's message and its whole source chain go to the log (see [logging server errors](#logging-server-errors)); the client sees only `Internal server error`. A database password in a driver message can't leak this way.
+
+## Mapping your own errors
+
+To give your own error type a status, register a mapper in its module with `map_error`. When a 500 carries a source, Navree walks the source chain and, for each error in it, tries the mappers registered for that error's type. The first one that returns `Some` replaces the 500. A mapper that returns `None` passes the error on to the next mapper or the next error in the chain; when nothing matches, the response stays a 500.
+
+```rust title="src/billing/mod.rs"
+use std::fmt;
+
+use navree::axum::http::StatusCode;
+use navree::prelude::*;
+
+#[derive(Debug)]
+pub enum BillingError {
+    CardDeclined { reason: String },
+    InvoicePaid,
+    Gateway(std::io::Error),
+}
+
+impl fmt::Display for BillingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BillingError::CardDeclined { reason } => write!(f, "the card was declined: {reason}"),
+            BillingError::InvoicePaid => f.write_str("the invoice is already paid"),
+            BillingError::Gateway(error) => write!(f, "the payment gateway failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for BillingError {}
+
+fn billing_error(error: &BillingError) -> Option<AppError> {
+    match error {
+        BillingError::CardDeclined { reason } => Some(
+            AppError::from_status(StatusCode::PAYMENT_REQUIRED)
+                .with_detail(format!("The card was declined: {reason}.")),
+        ),
+        BillingError::InvoicePaid => Some(AppError::conflict("The invoice is already paid.")),
+        BillingError::Gateway(_) => None, // stays a 500
+    }
+}
+
+#[module(controllers = [InvoicesController], register = Self::errors)]
+pub struct BillingModule;
+
+impl BillingModule {
+    fn errors(&self, m: &mut ModuleBuilder) {
+        m.map_error::<BillingError>(billing_error);
+    }
+}
+```
+
+Now a handler propagates the error with `?` and the client gets the right status:
+
+```rust
+#[post("/{id}/charge")]
+async fn charge(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
+    let receipt = charge_card(id).await?; // a BillingError
+    Ok(Json(json!({ "receipt": receipt })))
+}
+```
+
+```json title="402 Payment Required"
+{
+  "statusCode": 402,
+  "message": "The card was declined: insufficient funds.",
+  "error": "Payment Required"
+}
+```
+
+Mappers apply to the whole app, whichever module registers them. They only see 500s that carry a source: an `AppError` you build with a status yourself is sent as it is.
+
+<Callout type="note" title="Why not implement From for AppError?">
+
+`AppError` already converts from every error type (that's what makes `?` work), so `impl From<BillingError> for AppError` doesn't compile: it conflicts with that blanket conversion. Use `map_error`, or convert at the call site with `.map_err(|error| ...)`.
+
 </Callout>
+
+Navree's own modules register mappers the same way: navree-auth turns its errors into 401s, 403s and 429s (`Invalid credentials`, `Token expired`), navree-access turns an unknown role into a 404, and navree-storage turns a missing file into a 404 and an invalid path into a 400.
+
+## Database errors
+
+`DatabaseModule` maps SeaORM's `DbErr`, so `?` on a query does the right thing:
+
+| `DbErr` | Response |
+|---|---|
+| `RecordNotFound`, `RecordNotUpdated` | 404 `Not Found` |
+| a unique constraint violation | 409 `A record with the same unique value already exists.` |
+| a foreign key constraint violation | 409 `The change conflicts with a related record.` |
+| anything else | 500 |
+
+No SQL text or driver message reaches the client. The mapping function is public as `navree::db::map_db_error`, so your own mapper can reuse it for an error type that wraps `DbErr`.
+
+The [unit of work](/docs/database/unit-of-work/) rolls back whenever the response status is 400 or above, so a request that fails halfway leaves no partial writes.
+
+An error raised while the unit of work commits, after your handler returned, goes through the same mapping: a foreign key that SQLite only checks at commit (`DEFERRABLE INITIALLY DEFERRED`), or a constraint violation from a [change observer](/docs/database/unit-of-work/#change-events-and-observers), is a 409 too. Any other commit failure is a 500. The handler's own response is discarded in both cases.
+
+## Framework errors
+
+Errors from Axum and from Navree's own layers use the same format:
+
+- A path that matches no route is a 404, and a path that exists for other methods is a 405 with an `Allow` header.
+- Axum's extractor rejections become NestJS errors. Axum's 422 for well-formed JSON of the wrong shape becomes a 400, like every other input error; the message is Axum's explanation (it names the missing field).
+- Any other error response with an empty or `text/plain` body (up to 16 KiB) is rewritten into the format, so layers you add keep the shape. A JSON body you build yourself with an error status is left as it is.
+
+## Logging server errors
+
+Every 5xx response is logged at `ERROR` level on the target `navree::error`, with the request's id, method and path, and the error chain: the status, the title, the detail and every source. This is the `Gateway` case of the billing example in the JSON log format (one line in the log, formatted here; the `spans` member is left out):
+
+```json title="A navree::error log line"
+{
+  "timestamp": "2026-10-26T08:27:42.989809Z",
+  "level": "ERROR",
+  "target": "navree::error",
+  "fields": {
+    "error": "500 Internal server error: the payment gateway failed: connection reset",
+    "message": "request failed",
+    "method": "POST",
+    "path": "/api/v1/invoices/01a17752-940c-765c-aec9-0b1f817f6791/charge",
+    "request_id": "01a17752940c765caec90b2077e0253f"
+  },
+  "span": {
+    "method": "POST",
+    "name": "request",
+    "path": "/api/v1/invoices/01a17752-940c-765c-aec9-0b1f817f6791/charge",
+    "request_id": "01a17752940c765caec90b2077e0253f",
+    "user_id": "01a17752-940c-765c-aec9-0b1e6da4bf68"
+  }
+}
+```
+
+4xx responses aren't logged as errors: they're the client's mistakes. They show up in the [request log line](/docs/basics/logging/#the-request-log-line) with their status.
+
+Every 503 counts as a server error, so while the app is in [maintenance mode](/docs/digging-deeper/maintenance-mode/) each refused request also writes a `request failed` line.
+
+### Panics
+
+A panicking handler doesn't take the server down. Navree catches the panic, answers the standard 500 body (the panic message is not sent), and logs it on `navree::error` with the message `request handler panicked` and the panic text in a `panic` field. Rust's default panic hook also prints the panic to stderr.
+
+Catching needs unwinding, which is Rust's default. With `panic = "abort"` in your Cargo profile, a panic ends the process.
+
+### Timeouts
+
+A request that runs longer than `http.timeout_secs` (30 seconds by default), or than its route's `#[timeout("5s")]` (see [routing](/docs/basics/routing/)), is answered with a 503. The app-wide timeout logs `request timed out` at `WARN` on `navree::request`; a route's own timeout is logged like any other 5xx, on `navree::error`.
+
+```json title="503 Service Unavailable"
+{
+  "statusCode": 503,
+  "message": "The server did not finish the request in time.",
+  "error": "Service Unavailable"
+}
+```
+
+Error responses from panics, timeouts and the rate limiter still carry `X-Request-Id` and, for allowed origins, the CORS headers, so browser clients can read them.
+
+## Rendering an error yourself
+
+`AppError` implements `IntoResponse`, so middleware, guards and handlers can return it as a response. `error.body()` gives the JSON body as a `serde_json::Value`, which is handy in tests and in messages to other systems:
+
+```rust
+let body = AppError::not_found().with_detail("Deal not found").body();
+// {"statusCode": 404, "message": "Deal not found", "error": "Not Found"}
+```
+
+Middleware you add with `http_layer` should answer errors with `AppError`, so they keep the format.
+
+## Testing
+
+`assert_error(status, message)` checks the status, the content type, the `statusCode`, `error` and `message` members and the `X-Request-Id` header. Pass `None` to skip the message check:
+
+```rust title="tests/invoices.rs"
+client
+    .post(&format!("/api/v1/invoices/{}/send", Uuid::nil()))
+    .send()
+    .await
+    .assert_error(404, "Invoice not found");
+
+client.get("/api/v1/nope").send().await.assert_error(404, None);
+```
+
+See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    Field errors and the `errors` map.
+  </LinkCard>
+  <LinkCard href="/docs/basics/logging/" title="Logging">
+    Where error logs go and what they contain.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses">
+    Status codes and response types for the happy path.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    Rollback on error responses.
+  </LinkCard>
+</LinkCards>

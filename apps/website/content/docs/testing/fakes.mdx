@@ -1,10 +1,395 @@
 ---
 title: "Fakes"
-description: "Faking the queue, mail, events, the clock and outgoing HTTP."
+description: "Replace the edges of your app in tests: the queue, mail, the clock, outgoing HTTP, authentication and file storage, and how to observe events and broadcasts."
 ---
 
-This page covers the fakes Navree provides for tests: the queue fake for asserting dispatched jobs, the array mail transport, event fakes, a fixed clock and the HTTP client fake.
+A fake stands in for one edge of your app, the part that would reach outside the test: sending mail, queueing jobs, reading the time, calling another API. With the edge faked, the test runs offline and gives the same result every time, and it can assert on what would have gone out.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-testing` is the reference: run `cargo doc -p navree-testing --open` in the repository.
-</Callout>
+Navree's fakes are ordinary providers. You swap one in with `override_value` when you build the test app, keep a handle to it, and assert on it after the request.
+
+| Fake | Replaces | How to install it |
+|---|---|---|
+| `QueueFake` | the job queue | `.override_value(Arc::new(fake.queue()))` |
+| `ArrayTransport` | mail delivery | `.config("mail.transport", "array")` |
+| `FixedClock` | the app's `dyn Clock` | `.override_value::<dyn Clock>(clock.clone())` |
+| `HttpClient::fake()` | outgoing HTTP | `.override_value(Arc::new(client))` |
+| `TestAuthenticator` | authentication | installed by `TestApp`; see [acting as a user](/docs/testing/http-tests/#acting-as-a-user) |
+| the `memory` disk driver | file storage | `.config("storage.disks.local", json!({ "driver": "memory" }))` |
+
+Navree has no fakes for events, broadcasting or notifications; [later sections](#events) show how to test them.
+
+## Swapping providers
+
+`override_value::<T>(value)` replaces the provider of `T` wherever a module registers it, or registers it for the whole app when none does. It exists on `TestApp::builder()` and on `AppBuilder`, for apps you boot with `TestApp::from_builder`:
+
+```rust
+let app = TestApp::from_builder(my_app::app(sources).override_value::<dyn Clock>(clock.clone())).await;
+```
+
+Keep your own `Arc` (or a clone of the fake) to make assertions with: the app holds the other one.
+
+## The queue
+
+`QueueFake` records the jobs your code dispatches instead of queueing them, like Laravel's `Queue::fake()`:
+
+```rust
+use std::sync::Arc;
+
+use navree::db::DatabaseModule;
+use navree::queue::{QueueFake, QueueModule};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn signing_up_queues_the_welcome_mail() {
+    let fake = QueueFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(QueueModule::from_config())
+        .module(SignupsModule)
+        .override_value(Arc::new(fake.queue()))
+        .build()
+        .await;
+
+    app.client()
+        .post("/api/v1/signups")
+        .json(&json!({ "email": "ada@example.com" }))
+        .send()
+        .await
+        .assert_status(204);
+
+    fake.assert_dispatched::<SendWelcome>(|job| job.email == "ada@example.com");
+    fake.assert_dispatched_times::<SendWelcome>(1);
+}
+```
+
+Overriding the app's `Queue` with `fake.queue()` also fakes `QueueModule`'s `dyn Dispatcher`, so jobs that other modules dispatch (queued mail, queued notifications, queued event listeners) are recorded too. In an app without `QueueModule`, install the fake as the dispatcher instead: `.override_value(fake.dispatcher())`.
+
+| Method | What it does |
+|---|---|
+| `assert_dispatched::<J>(predicate)` | Asserts a job of type `J` for which `predicate(&job)` is true was dispatched. |
+| `assert_dispatched_times::<J>(n)` | Asserts exactly `n` jobs of type `J` were dispatched. |
+| `assert_not_dispatched::<J>()` | Asserts no job of type `J` was dispatched. |
+| `assert_nothing_dispatched()` | Asserts no job at all was dispatched. |
+| `dispatched::<J>()` | The recorded jobs of type `J`, deserialized, in order. |
+| `envelopes()` | Every recorded job with its options (queue, delay). |
+| `clear()` | Forgets what was recorded. |
+
+The fake never runs a job: workers and `run_pending` find nothing to do.
+
+Two differences from the real queue matter when you rely on the fake:
+
+- **Rolled-back requests.** A plain `queue.dispatch(job)` inside a request is recorded at once. The real queue would join the request's unit of work and drop the job if the request fails, so a test of a failing request can see a job that production would never queue. Jobs dispatched with `dispatch_in(&uow, job)` are recorded only when the unit of work commits, as in production.
+- **Unregistered jobs.** The fake accepts any job type. The real queue refuses one that no module registered with `m.job::<J>()`, so a forgotten registration passes with the fake and fails in production.
+
+To cover both, run some tests with the real queue. The `memory` driver keeps jobs in the process, and `run_pending()` runs the ones that are due, as a worker would:
+
+```rust
+let app = TestApp::builder()
+    .config("mail.transport", "array")
+    .config("queue.driver", "memory")
+    .module(ViewModule::from_config())
+    .module(MailModule::from_config())
+    .module(QueueModule::from_config())
+    .module(WelcomeModule)
+    .module(SignupsModule)
+    .build()
+    .await;
+
+app.client()
+    .post("/api/v1/signups")
+    .json(&json!({ "email": "ada@example.com" }))
+    .send()
+    .await
+    .assert_status(204);
+let stats = app.get::<Queue>().await.run_pending().await.unwrap();
+assert_eq!((stats.succeeded, stats.failed), (1, 0));
+```
+
+The CRM's test kit does the same on the database driver: `crm.run_queue()` runs the queued notification and mail jobs, and the test then checks the mail that was sent.
+
+## Mail
+
+With `mail.transport = "array"`, `MailModule` keeps every message in memory instead of sending it. `Mailer::array_transport()` returns the transport to assert on:
+
+```rust
+use navree::mail::{MailModule, Mailer};
+use navree::testing::TestApp;
+use navree::view::ViewModule;
+
+#[tokio::test]
+async fn the_welcome_mail_is_sent() {
+    let app = TestApp::builder()
+        .config("mail.transport", "array")
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(WelcomeModule)
+        .build()
+        .await;
+
+    app.get::<Welcomer>().await.welcome("ada@example.com").await.unwrap();
+
+    let mailer = app.get::<Mailer>().await;
+    let sent = mailer.array_transport().expect("the array transport");
+    sent.assert_sent(|m| m.to == ["ada@example.com"] && m.subject == "Welcome aboard");
+    assert_eq!(sent.sent().len(), 1);
+}
+```
+
+| Method | What it does |
+|---|---|
+| `sent()` | Every message sent so far, oldest first. |
+| `assert_sent(predicate)` | Asserts a sent message matches the predicate; the failure lists recipients and subjects. |
+| `assert_nothing_sent()` | Asserts no message was sent. |
+| `clear()` | Forgets the sent messages. |
+
+A `Message` has public fields to check: `from`, `to`, `cc`, `bcc`, `reply_to`, `subject`, and the rendered `html` and `text` bodies.
+
+`Mailer::queue` dispatches a `mail.send` job when the app has a queue (a `dyn Dispatcher`), so run the queue before you look at the transport (as above), or assert on a `QueueFake`. In an app without one, `Mailer::queue` sends at once. To hold the transport yourself rather than going through the mailer, create an `ArrayTransport`, keep a clone, and install it with `.override_value::<dyn MailTransport>(Arc::new(transport.clone()))`.
+
+## The clock
+
+Code that reads the time with `Utc::now()` can't be tested at a chosen moment. Read it from the app's clock instead: inject `Arc<dyn Clock>` and call `clock.now()`. Navree registers no clock by default, so register the system clock once, in a global module (the CRM does this in its platform module):
+
+```rust title="src/platform.rs"
+use navree::contracts::{Clock, SystemClock};
+use navree::prelude::*;
+
+/// Registers the system clock as the app's `dyn Clock`, for every module.
+pub struct PlatformModule;
+
+impl Module for PlatformModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.global()
+            .value_arc::<dyn Clock>(Arc::new(SystemClock))
+            .exports::<dyn Clock>();
+    }
+}
+```
+
+```rust title="src/modules/billing/trials.rs"
+use chrono::{DateTime, Utc};
+use navree::contracts::Clock;
+use navree::prelude::*;
+
+/// Free trials last 14 days.
+#[injectable]
+pub struct Trials {
+    clock: Arc<dyn Clock>,
+}
+
+impl Trials {
+    /// Whether a trial started at `started` is over.
+    pub fn is_over(&self, started: DateTime<Utc>) -> bool {
+        self.clock.now() >= started + chrono::Duration::days(14)
+    }
+}
+```
+
+In a test, replace it with a `FixedClock` (`navree::testing::FixedClock`), which shows the time you give it until you move it:
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+
+use chrono::{TimeZone, Utc};
+use navree::contracts::Clock;
+use navree::testing::{FixedClock, TestApp};
+
+#[tokio::test]
+async fn trials_end_after_fourteen_days() {
+    let start = Utc.with_ymd_and_hms(2026, 10, 26, 10, 0, 0).unwrap();
+    let clock = Arc::new(FixedClock::new(start));
+    let app = TestApp::builder()
+        .module(PlatformModule)
+        .module(TrialsModule)
+        .override_value::<dyn Clock>(clock.clone())
+        .build()
+        .await;
+    let trials = app.get::<Trials>().await;
+
+    assert!(!trials.is_over(start));
+    clock.advance(Duration::from_secs(14 * 24 * 60 * 60));
+    assert!(trials.is_over(start));
+}
+```
+
+`clock.set(time)` moves it to a given time and `clock.advance(duration)` moves it forward.
+
+Navree's own modules use the app's `dyn Clock` when there is one, so a fixed clock also controls them: navree-auth (token expiry, login throttle windows, two-factor codes), the audit log's timestamps, the queue's delays and due times, the scheduler, notifications, sessions, signed URLs and storage's temporary URLs. It doesn't affect `Utc::now()` in your own code, Tokio's timers or cache expiry. The login throttle keeps its counters in the cache, so moving the clock alone doesn't end a lockout.
+
+## Outgoing HTTP
+
+`HttpClient::fake()` returns a client that never touches the network, and a `FakeServer` that answers its requests and records them. Install the client in place of the app's:
+
+```rust
+use std::sync::Arc;
+
+use navree::axum::http::Method;
+use navree::http_client::{FakeResponse, HttpClient, HttpClientModule};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn rates_come_from_the_rates_api() {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        "https://rates.example.com/latest?*",
+        FakeResponse::new(200).json(&json!({ "rates": { "EUR": 0.92 } })),
+    );
+    let app = TestApp::builder()
+        .module(HttpClientModule::from_config())
+        .module(RatesModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let rate = app.get::<ExchangeRates>().await.rate("USD", "EUR").await.unwrap();
+
+    assert_eq!(rate, Some(0.92));
+    server.assert_sent(|request| request.url().query() == Some("base=USD&symbols=EUR"));
+    server.assert_sent_count(1);
+}
+```
+
+`server.on(method, url_glob, response)` answers requests whose method matches and whose full URL, query string included, matches the glob (`*` is any characters, `?` one character). Stubs are tried in the order you add them. `server.on_sequence(method, url_glob, responses)` answers with each response in turn, then repeats the last, which is how you test retries. A request no stub matches fails with `HttpClientError::NoFakeResponse`.
+
+`FakeResponse::new(status)` builds the response: `.json(&value)`, `.text(..)`, `.body(..)` and `.header(name, value)` fill it, `.delay(duration)` makes it slow (to test timeouts), and `FakeResponse::connection_failed()` fails as if the server were down.
+
+| Assertion | Checks |
+|---|---|
+| `assert_sent(predicate)` | Some recorded request matches the predicate. |
+| `assert_not_sent(predicate)` | No recorded request matches the predicate. |
+| `assert_sent_count(n)` | Exactly `n` requests were sent, retries included. |
+| `assert_nothing_sent()` | No request was sent. |
+
+`server.recorded()` returns the requests themselves; each has `method()`, `url()`, `header(name)`, `headers()`, `body()`, `text()` and `json::<T>()`.
+
+`HttpClient::fake_with(options)` builds the fake with your client options, so retries, timeouts and the response size limit apply as they would for real. The SSRF policy applies to URLs with literal IP addresses; the fake resolves no host names.
+
+## Authentication
+
+`TestAuthenticator` replaces your app's authentication so a client can act as any user. [HTTP tests](/docs/testing/http-tests/#acting-as-a-user) covers it, including apps with navree-auth.
+
+## File storage
+
+The `memory` disk driver keeps files in the process, so a test writes no files to your working directory. Point a disk at it:
+
+```rust
+use navree::storage::{Disk, StorageModule};
+use serde_json::json;
+
+let app = TestApp::builder()
+    .config("app.key", navree::crypto::generate_key())
+    .config("storage.disks.local", json!({ "driver": "memory" }))
+    .module(StorageModule::from_config())
+    .build()
+    .await;
+
+let disk = app.get::<Disk>().await;
+disk.put("avatars/ada.png", "png").await.unwrap();
+assert!(disk.exists("avatars/ada.png").await.unwrap());
+```
+
+Setting `storage.disks` replaces the default disk list, so name every disk your code uses. See [file storage](/docs/digging-deeper/storage/).
+
+## Events
+
+There is no event fake: emitting an event in a test runs its listeners, as in production. To check that an event was emitted, subscribe to its JSON form before the request with `EventBus::subscribe_json`:
+
+```rust
+use navree::events::{Event, EventBus, EventsModule};
+
+#[tokio::test]
+async fn winning_a_deal_emits_deal_won() {
+    let app = TestApp::builder()
+        .module(EventsModule::for_root())
+        .module(WinsModule)
+        .build()
+        .await;
+    let mut won = app.get::<EventBus>().await.subscribe_json(DealWon::NAME);
+    let id = Uuid::now_v7();
+
+    app.client()
+        .post(&format!("/api/v1/wins/{id}"))
+        .send()
+        .await
+        .assert_status(204);
+
+    assert_eq!(won.try_recv().unwrap(), json!({ "deal_id": id }));
+}
+```
+
+`emit` delivers before it returns, so the event is waiting when the request has finished. A subscriber buffers up to 256 events. Queued listeners dispatch a job per event; with a `QueueFake` installed, those jobs are recorded and don't run. See [events](/docs/digging-deeper/events/).
+
+## Broadcasting
+
+There is no broadcaster fake either. Implement `Broadcaster` with a recorder and install it as the app's `dyn Broadcaster`:
+
+```rust
+use std::sync::{Arc, Mutex};
+
+use navree::BoxFuture;
+use navree::contracts::Broadcaster;
+use navree::prelude::*;
+use serde_json::Value;
+
+/// Records broadcasts instead of sending them.
+#[derive(Default)]
+pub struct RecordingBroadcaster {
+    sent: Mutex<Vec<(Vec<String>, String, Value)>>,
+}
+
+impl RecordingBroadcaster {
+    /// The events broadcast so far: `(channels, event, data)`.
+    pub fn sent(&self) -> Vec<(Vec<String>, String, Value)> {
+        self.sent.lock().unwrap().clone()
+    }
+}
+
+impl Broadcaster for RecordingBroadcaster {
+    fn broadcast(
+        &self,
+        channels: Vec<String>,
+        event: String,
+        data: Value,
+    ) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.sent.lock().unwrap().push((channels, event, data));
+        Box::pin(async { Ok(()) })
+    }
+}
+```
+
+```rust
+let broadcasts = Arc::new(RecordingBroadcaster::default());
+let app = TestApp::builder()
+    // ...
+    .override_value::<dyn Broadcaster>(broadcasts.clone())
+    .build()
+    .await;
+// ... make a request ...
+assert_eq!(broadcasts.sent()[0].1, "deal.updated");
+```
+
+Broadcasts sent from [after-commit hooks](/docs/database/unit-of-work/#after-commit-hooks) appear only once the request's unit of work has committed, which also makes this a good way to check that a failed request broadcasts nothing.
+
+## Notifications
+
+There is no notification fake. Notifications are rows and messages, so assert on those: database notifications through `GET /api/notifications` (or the table), and mail notifications through the array transport. The CRM runs its queue with `crm.run_queue()`, then checks both. See [notifications](/docs/digging-deeper/notifications/).
+
+<LinkCards>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    Requests and assertions, and acting as a user.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Jobs, workers and the queue drivers.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Mailables, templates and transports.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/http-client/" title="HTTP client">
+    Outgoing requests with retries and an SSRF policy.
+  </LinkCard>
+</LinkCards>

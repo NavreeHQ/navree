@@ -187,6 +187,14 @@
 .table-wrap tbody tr:first-child > * {
   border-top: 0;
 }
+/* On a phone a wide table scrolls sideways; without a minimum, its columns
+   shrink to their longest word and every cell becomes a narrow column. */
+@media (max-width: 40rem) {
+  .table-wrap td,
+  .table-wrap tbody th {
+    min-width: 8.5rem;
+  }
+}
 
 /* ------------------------------------------------------------ code blocks */
 
@@ -249,6 +257,19 @@
   min-height: 1lh;
   padding: 0 1.25rem;
   border-left: 2px solid transparent;
+}
+
+/* ```text wrap: long lines wrap, with a hanging indent, instead of scrolling. */
+.code-block pre[data-wrap] {
+  white-space: pre-wrap;
+}
+.code-block pre[data-wrap] code {
+  min-width: 0;
+}
+.code-block pre[data-wrap] .line {
+  overflow-wrap: anywhere;
+  padding-left: calc(1.25rem + 2ch);
+  text-indent: -2ch;
 }
 
 .code-block .line.highlighted,
@@ -441,6 +462,8 @@
   font-family: var(--font-mono);
   font-size: 0.84rem;
   line-height: 1.85;
+  /* A long file name scrolls inside the box instead of widening the page. */
+  overflow-x: auto;
 }
 .file-tree-caption {
   margin: -0.15rem 0 0.5rem;
@@ -464,8 +487,10 @@
 }
 .file-tree-entry {
   display: inline-flex;
+  /* On a phone, a comment that does not fit moves under its name. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  column-gap: 0.5rem;
   border-radius: 4px;
   padding: 0 0.3rem;
   margin-left: -0.3rem;

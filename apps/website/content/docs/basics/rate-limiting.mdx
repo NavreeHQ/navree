@@ -1,10 +1,217 @@
 ---
 title: "Rate limiting"
-description: "The per-IP limit, per-route throttles and trusted proxies."
+description: "The per-IP limit every app gets, throttles on single routes, the login throttle, and how client addresses work behind proxies."
 ---
 
-This page explains rate limiting: the default per-IP limit, throttles on individual routes, what clients receive when they are limited, and how to configure trusted proxies so limits apply to the real client address.
+Navree limits how fast clients can call your API at two levels. Every app has a **per-IP limit**, 600 requests a minute by default, that runs before routing. On top of it, any route can declare its own **throttle**, counted per user. Both answer `429 Too Many Requests` with a `Retry-After` header. The auth module adds a **login throttle** for failed sign-ins.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` is the reference: run `cargo doc -p navree-http --open` in the repository.
+## The per-IP limit
+
+The per-IP limit is part of `HttpModule` and on by default. It counts every request a client address sends, whatever the route, including 404s; CORS preflight requests aren't counted.
+
+```toml title="config/app.toml"
+[http]
+per_ip_rate_limit = 600   # requests per minute per client IP
+```
+
+```env title=".env"
+APP_HTTP__PER_IP_RATE_LIMIT=1200
+```
+
+The limit allows a burst: a client can send its whole minute's allowance at once, then gets one more request every `60 / limit` seconds (every 100 ms at 600). Technically it's the generic cell rate algorithm with one timestamp per address. A refused request doesn't use up any allowance.
+
+When a client goes over, it gets:
+
+```http
+HTTP/1.1 429 Too Many Requests
+content-type: application/json
+retry-after: 20
+x-request-id: 01a17749fe5e759d9cbb64d266802d8b
+```
+
+```json
+{
+  "statusCode": 429,
+  "message": "Too Many Requests",
+  "error": "Too Many Requests"
+}
+```
+
+`Retry-After` is the number of whole seconds, at least 1, until the next request is allowed (20 here, with a limit of 3 a minute). Each refusal is logged at `WARN` on `navree::security` (`per-IP rate limit exceeded`). With the [audit module](/docs/security/audit-log/), the first refusal per address and minute is also written to the audit trail as `http.rate_limited`.
+
+### Turning it off
+
+`per_ip_rate_limit` is an `Option<u32>`, and only `None` turns the limit off. `0` fails the boot, and TOML has no way to write `None`, so turn it off in code:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(
+        ConfigSources::defaults().set("http.per_ip_rate_limit", serde_json::Value::Null),
+    ))
+    .module(HttpModule::from_config())
+```
+
+or with `HttpModule::for_root(HttpOptions { per_ip_rate_limit: None, ..HttpOptions::default() })` (`navree::http::HttpOptions`). Tests that send many requests do the same through the test app builder: `.config("http.per_ip_rate_limit", serde_json::Value::Null)`.
+
+You'll rarely want it off in production. A reverse proxy or API gateway in front of the app can enforce its own limits on top.
+
+## Route throttles
+
+Give a route a tighter limit with `#[throttle]`. The limit is counted **per user**, and per client IP for guests:
+
+```rust title="src/reports/controller.rs"
+use navree::prelude::*;
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct ReportsController;
+
+#[controller("/reports", version = "1")]
+#[authenticated]
+impl ReportsController {
+    #[post("/")]
+    #[throttle(limit = 10, per = "1m")]
+    async fn generate(&self) -> Json<Value> {
+        Json(json!({ "queued": true }))
+    }
+}
+```
+
+The eleventh report within a minute gets a 429 with `Retry-After`. `per` is a whole number followed by `ms`, `s`, `m` or `h`: `"500ms"`, `"30s"`, `"1m"`, `"1h"`. Both `limit` and `per` must be greater than zero, which the macro checks at compile time.
+
+`#[throttle]` on the `impl` block applies to every route of the controller, and a route's own `#[throttle]` replaces it:
+
+```rust
+#[controller("/search", version = "1")]
+#[public]
+#[throttle(limit = 30, per = "1m")]
+impl SearchController {
+    #[get("/")]
+    async fn search(&self) -> Json<Value> {
+        Json(json!([]))
+    }
+
+    #[get("/suggest")]
+    #[throttle(limit = 120, per = "1m")]
+    async fn suggest(&self) -> Json<Value> {
+        Json(json!([]))
+    }
+}
+```
+
+Hand-written routes use the builder method:
+
+```rust
+use std::time::Duration;
+
+use navree::axum::http::Method;
+use navree::http::RouteDef;
+
+RouteDef::on(Method::POST, "/exports", || async { "queued" })
+    .authenticated()
+    .throttle(5, Duration::from_secs(60))
+```
+
+How route throttles work:
+
+- Each route has its own counter. A throttle on the `impl` block gives each route of the controller its own limit; they don't share one budget.
+- The throttle runs after authentication and before guards and authorization, so it counts every authenticated call, even ones that will be refused with a 403.
+- Refusals are logged on `navree::security` (`route throttle exceeded`) and, with the audit module, audited as `http.rate_limited` with `"limit": "route"`.
+
+<Callout type="note" title="No named limiters">
+
+Navree has no equivalent of Laravel's `RateLimiter::for('api', ...)`: limits are declared per route, with a fixed number per period, and can't depend on the user's plan or on the request. For limits like those, write a [guard](/docs/basics/access-control/) that counts requests itself.
+
 </Callout>
+
+## The login throttle
+
+`POST /api/auth/login` has its own protection against password guessing, separate from the limits above: after `auth.login_throttle_per_minute` failed attempts (5 by default) for the same email from the same client IP, further attempts get a 429 for the rest of the minute:
+
+```json title="429 Too Many Requests"
+{
+  "statusCode": 429,
+  "message": "Too many login attempts. Please try again in 42 seconds.",
+  "error": "Too Many Requests"
+}
+```
+
+A successful sign-in clears the counter. Wrong two-factor codes have their own limit, `auth.two_factor.max_attempts_per_minute`, and password reset mails are limited to one per address per `auth.password_reset.throttle_secs`. These counters live in the [cache](/docs/digging-deeper/cache/). The [authentication page](/docs/security/authentication/) has the details.
+
+## Headers
+
+Every 429 carries `Retry-After` with whole seconds, rounded up. That's the only rate-limit header Navree sends: there are no `X-RateLimit-Limit` or `X-RateLimit-Remaining` headers. Browser front ends on another origin can read `Retry-After`, because the [CORS configuration](/docs/basics/cors-and-security-headers/) exposes it.
+
+## Running behind a proxy
+
+Limits are counted per **client IP**. When your app runs behind a reverse proxy, a load balancer or a backend-for-frontend, every request arrives from the proxy's address, and without configuration every user shares one budget.
+
+List the proxies whose `X-Forwarded-For` header you trust:
+
+```toml title="config/app.toml"
+[http]
+trusted_proxies = ["127.0.0.1", "::1", "10.0.0.0/8"]
+```
+
+```env title=".env"
+APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1,10.0.0.0/8
+```
+
+Entries are IP addresses or CIDR blocks; anything else fails the boot. For a request from a listed proxy, Navree walks `X-Forwarded-For` from the right and takes the first address that isn't itself a listed proxy; without that header it uses `X-Real-IP`. Requests from any other peer are identified by their own address, so a client reaching the app directly can't pick its address by sending the header itself.
+
+The CRM trusts the loopback addresses by default, so that its Next.js server, which calls the API from the same machine, can name the browser in `X-Forwarded-For`. The Next.js server only sends that header when `NAVREE_TRUSTED_PROXY_HOPS` says how many reverse proxies sit in front of it. That setting is 0 by default, because without a proxy Next.js can't tell the browser's address from a header the browser made up. So out of the box, every browser shares the Next.js server's per-IP limit and login throttle; put a proxy in front of Next.js and set `NAVREE_TRUSTED_PROXY_HOPS` to make them per browser.
+
+`http.trust_proxy = true` believes the headers from **any** peer, taking the right-most `X-Forwarded-For` entry. Use it only when every request is guaranteed to come through a proxy that sets the header; prefer `trusted_proxies`. When `trusted_proxies` is set, `trust_proxy` is ignored.
+
+### Reading the client IP
+
+The address Navree computed is available to handlers through the `ClientIp` extractor, and it's the `ip` field of the [request log line](/docs/basics/logging/#the-request-log-line):
+
+```rust
+use navree::http::ClientIp;
+
+#[get("/whoami")]
+async fn whoami(&self, ClientIp(ip): ClientIp) -> String {
+    ip.to_string()
+}
+```
+
+## Limits of the built-in limiter
+
+- Counters are kept in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. There's no shared (Redis) store yet; see the [roadmap](/docs/prologue/roadmap/).
+- Counters are lost when the process restarts.
+- The login throttle keeps its counters in the cache module instead; with the memory cache store, the only one so far, that's per process too.
+
+## Testing
+
+Each test app has the default per-IP limit, and the test client sends every request from `127.0.0.1`. Tests that send hundreds of requests turn it off:
+
+```rust title="tests/reports.rs"
+let app = TestApp::builder()
+    .config("http.per_ip_rate_limit", serde_json::Value::Null)
+    .module(ReportsModule)
+    .build()
+    .await;
+let client = app.acting_as(principal(user_id));
+
+for _ in 0..10 {
+    client.post("/api/v1/reports").send().await.assert_status(200);
+}
+let response = client.post("/api/v1/reports").send().await.assert_error(429, None);
+assert!(response.header("retry-after").is_some());
+```
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    The login and two-factor throttles.
+  </LinkCard>
+  <LinkCard href="/docs/basics/middleware/" title="Middleware">
+    Where the limits sit in the request pipeline.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running behind a reverse proxy.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    Rate-limit events in the audit trail.
+  </LinkCard>
+</LinkCards>

@@ -357,8 +357,12 @@ function nodeText(node: MdNode): string {
   if (node.type === "text" || node.type === "inlineCode") return node.value ?? "";
   if (node.type === "code") return node.value ?? "";
   if (node.type === "mdxjsEsm" || node.type === "mdxFlowExpression" || node.type === "mdxTextExpression") return "";
-  return (node.children ?? []).map(nodeText).join(node.type === "list" || node.type === "table" ? " " : "");
+  // Block children (list items, table rows and cells) are separate words;
+  // inline children (text next to `code`) are not.
+  return (node.children ?? []).map(nodeText).join(BLOCK_PARENTS.has(node.type) ? " " : "");
 }
+
+const BLOCK_PARENTS = new Set(["list", "listItem", "table", "tableRow", "blockquote", "mdxJsxFlowElement"]);
 
 function attribute(node: MdNode, name: string): string | null {
   const attr = node.attributes?.find((a) => a.type === "mdxJsxAttribute" && a.name === name);

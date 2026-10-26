@@ -1,10 +1,354 @@
 ---
 title: "Routing and controllers"
-description: "Controllers, route attributes, prefixes, API versions and route parameters."
+description: "Controllers and route attributes, the API prefix and versions, absolute `!` paths, path and query parameters, route names and the route table."
 ---
 
-This page shows how to define routes with `#[controller]` and the method attributes (`#[get]`, `#[post]`, `#[put]`, `#[patch]` and `#[delete]`), how prefixes, API versions and absolute paths work, how route parameters reach your handler, and how to list the route table.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` and `navree-macros` is the reference: run `cargo doc -p navree-http --open` in the repository.
-</Callout>
+Routes live in controllers. A controller is a struct whose `impl` block is marked `#[controller("/prefix")]`; each method with a route attribute such as `#[get("/{id}")]` becomes a route. Controllers are providers, so their fields are injected, and a module registers them with `controllers = [..]`.
+
+Every route must also say who may call it, with an access attribute such as `#[public]` or `#[authenticated]`. A route without one doesn't compile. This page uses `#[authenticated]` and `#[public]`; [access control](/docs/basics/access-control/) covers them all.
+
+## Defining routes
+
+```rust title="src/modules/deals/controller.rs"
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealsController {
+    deals: Arc<DealService>,
+}
+
+#[controller("/deals", version = "1")]
+impl DealsController {
+    /// `GET /api/v1/deals`
+    #[get("/")]
+    #[authenticated]
+    async fn index(&self) -> Json<Vec<DealView>> {
+        Json(self.deals.list().await)
+    }
+
+    /// `GET /api/v1/deals/{id}`
+    #[get("/{id}")]
+    #[authenticated]
+    async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<DealView>> {
+        Ok(Json(self.deals.find(id).await?))
+    }
+
+    /// `POST /api/v1/deals`
+    #[post("/")]
+    #[authenticated]
+    async fn store(&self, Json(input): Json<CreateDeal>) -> Result<Created<DealView>> {
+        let deal = self.deals.create(input).await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    }
+}
+```
+
+Register the controller in its module:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(providers = [DealService], controllers = [DealsController])]
+pub struct DealsModule;
+```
+
+The routes mount when the app boots, at the API prefix (`/api`), then the version (`/v1`), then the controller prefix (`/deals`), then the route's path. The controller is built once, as a singleton, and every handler runs on that one instance: `self.deals` is the injected service.
+
+### The route attributes
+
+There's one attribute per HTTP method: `#[get]`, `#[post]`, `#[put]`, `#[patch]` and `#[delete]`. Each takes the path relative to the controller; without one (`#[get]`) the path is `/`. A method is one route, so a second route attribute on the same method is a compile error.
+
+`#[controller]` consumes the route attributes, so you don't import them. Used anywhere other than a method of a `#[controller]` block, they're a compile error.
+
+### Handlers
+
+A route method must be a non-generic `async fn` that takes `&self`. Its other arguments are extractors (`Path`, `Query`, `Json`, the current user, the unit of work...), with the one that reads the body last, and its return type implements Axum's `IntoResponse`: `Json<T>`, `String`, `NoContent`, `Created<T>`, a status code, or `Result<T>` of any of these. [Requests](/docs/basics/requests/) and [responses](/docs/basics/responses/) cover both sides.
+
+The macro checks the signature: a handler that isn't `async`, takes `&mut self` or `self`, has no receiver, or is generic gets a compile error that names it. Methods without a route attribute stay ordinary methods, so a controller can keep helpers next to its handlers.
+
+## Paths
+
+### The API prefix
+
+Every controller route starts with `http.api_prefix`, `/api` by default. Change it in the configuration; an empty prefix mounts routes at the root:
+
+```toml title="config/app.toml"
+[http]
+api_prefix = "/api"
+```
+
+### Versions
+
+`#[controller("/deals", version = "1")]` mounts the controller under `/v1`, so its routes start with `/api/v1/deals`. A leading `v` is optional (`version = "v1"` mounts under `/v1` too), and a version may use letters, digits, `.`, `-` and `_`. Without a version, the routes start with `/api/deals`. To serve two versions, write two controllers.
+
+### Absolute paths
+
+A path that starts with `!` ignores the API prefix, the version and the controller prefix. Use it for routes that must live at a fixed URL, such as health probes or webhooks:
+
+```rust
+#[injectable]
+pub struct UpController;
+
+#[controller]
+impl UpController {
+    /// `GET /up`
+    #[get("!/up")]
+    #[public]
+    async fn up(&self) -> &'static str {
+        "ok"
+    }
+}
+```
+
+A `!` on the controller prefix makes the whole controller absolute; the routes still add their own paths:
+
+```rust
+#[controller("!/webhooks")]
+#[public]
+impl WebhooksController {
+    /// `POST /webhooks/stripe`
+    #[post("/stripe")]
+    async fn stripe(&self, body: String) -> NoContent {
+        // ...
+        NoContent
+    }
+}
+```
+
+`#[controller]` with no arguments has an empty prefix.
+
+### How paths are joined
+
+The parts are joined with single slashes, and the result never ends with a slash: `#[get("/")]` on the `/deals` controller is `/api/v1/deals`, and `#[get("")]` is the same route. Requests must match exactly, so `GET /api/v1/deals/` (with a trailing slash) is a 404.
+
+## Route parameters
+
+### Path parameters
+
+Paths use Axum 0.8's syntax: `{name}` captures one segment and `{*name}` captures the rest of the path. Read them with the `Path` extractor, which deserializes into any type serde can parse into:
+
+```rust
+#[get("/{id}")]
+async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<DealView>> {
+    Ok(Json(self.deals.find(id).await?))
+}
+
+#[get("/{deal_id}/notes/{note_id}")]
+async fn note(&self, Path((deal_id, note_id)): Path<(Uuid, u32)>) -> String {
+    format!("note {note_id} of deal {deal_id}")
+}
+
+/// `GET /deal-files/contracts/2026/acme.pdf` gives `contracts/2026/acme.pdf`.
+#[get("!/deal-files/{*path}")]
+async fn file(&self, Path(path): Path<String>) -> String {
+    path
+}
+```
+
+Several parameters come as a tuple, in path order, or as a struct whose fields have the parameters' names:
+
+```rust
+#[derive(Deserialize)]
+pub struct NoteKey {
+    pub deal_id: Uuid,
+    pub note_id: u32,
+}
+
+#[controller("/deals/{deal_id}/notes")]
+#[authenticated]
+impl NotesController {
+    /// `GET /api/deals/{deal_id}/notes/{note_id}`
+    #[get("/{note_id}")]
+    async fn show(&self, Path(key): Path<NoteKey>) -> String {
+        format!("note {} of deal {}", key.note_id, key.deal_id)
+    }
+}
+```
+
+As the example shows, the controller prefix may hold parameters too. A value that doesn't parse is a 400 in the [error format](/docs/basics/errors/), with Axum's explanation as the message:
+
+```json wrap
+{
+  "statusCode": 400,
+  "message": "Invalid URL: Cannot parse `id` with value `not-a-uuid`: UUID parsing failed: invalid character: found `n` at 0",
+  "error": "Bad Request"
+}
+```
+
+The old capture syntax (`/:id`, `/*rest`) and unbalanced braces are compile errors, with a hint at the new syntax.
+
+### Query strings
+
+Read the query string into a struct with `Query`:
+
+```rust
+#[derive(Deserialize)]
+pub struct DealFilter {
+    pub stage: Option<String>,
+    #[serde(default = "first_page")]
+    pub page: u64,
+}
+
+/// `GET /api/v1/deals?stage=won&page=2`
+#[get("/")]
+async fn index(&self, Query(filter): Query<DealFilter>) -> Json<Vec<DealView>> {
+    // ...
+}
+```
+
+Make fields `Option` or give them a serde default when they may be left out. A query string that doesn't deserialize is a 400 (`"Failed to deserialize query string: page: invalid digit found in string"`). To check values as well as types, wrap it in `Valid`: `Valid(Query(filter)): Valid<Query<DealFilter>>`; see [validation](/docs/basics/validation/).
+
+## Naming routes
+
+`#[name("deals.show")]` gives a route a name. Names show in the route table, and [`ApiModule`](/docs/digging-deeper/openapi/) uses them as OpenAPI `operationId`s. Navree doesn't generate URLs from route names yet, so build paths yourself (as `store` does above).
+
+## Other route attributes
+
+More attributes sit next to the route attribute. Those marked "impl" may also go on the `impl` block, below `#[controller]`, and then apply to every route:
+
+| Attribute | Where | What it does | Covered in |
+|---|---|---|---|
+| `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]`, `#[can(..)]` | route, impl | Who may call the route | [Access control](/docs/basics/access-control/) |
+| `#[guard(expr)]` | route, impl | A custom check before the handler | [Middleware](/docs/basics/middleware/#guards) |
+| `#[throttle(limit = 10, per = "1m")]` | route, impl | At most `limit` requests per window, per user | [Rate limiting](/docs/basics/rate-limiting/) |
+| `#[timeout("5s")]` | route | A shorter or longer timeout than `http.timeout_secs` | [Middleware](/docs/basics/middleware/#per-route-settings) |
+| `#[audit(action = "contacts.exported")]` | route | An audit entry after a successful response | [The audit log](/docs/security/audit-log/) |
+| `#[api(summary = "..", tag = "..", ..)]` | route | OpenAPI documentation | [OpenAPI](/docs/digging-deeper/openapi/) |
+| `#[transactional]` | route | Marks the route as transactional in `routes --json`; informational only, since every request already runs in a unit of work | [Unit of work](/docs/database/unit-of-work/) |
+| `#[name("..")]` | route | The route name | Above |
+
+Durations are a whole number followed by `ms`, `s`, `m` or `h`: `"500ms"`, `"5s"`, `"1m"`, `"1h"`. A route's `#[throttle]` replaces the impl block's.
+
+A `#[cfg(..)]` on a route method gates the route as well as the method.
+
+## Listing routes
+
+The `routes` command prints every route with its name, its access declaration and the module that registered it, sorted by path:
+
+```sh
+cargo run -- routes
+```
+
+```text
+METHOD  PATH                                     NAME           ACCESS  MODULE
+GET     /api/deals/{deal_id}/notes/{note_id}                    auth    DealsModule
+GET     /api/v1/deals                            deals.index    auth    DealsModule
+POST    /api/v1/deals                            deals.store    auth    DealsModule
+GET     /api/v1/deals/{deal_id}/notes/{note_id}                 auth    DealsModule
+DELETE  /api/v1/deals/{id}                                      auth    DealsModule
+GET     /api/v1/deals/{id}                       deals.show     auth    DealsModule
+PATCH   /api/v1/deals/{id}                                      auth    DealsModule
+PUT     /api/v1/deals/{id}                                      auth    DealsModule
+GET     /api/v1/imports                          imports.index  auth    ImportsModule
+POST    /api/v1/imports                          imports.store  auth    ImportsModule
+GET     /deal-files/{*path}                                     auth    DealsModule
+GET     /up                                                     public  DealsModule
+POST    /webhooks/stripe                                        public  DealsModule
+
+13 routes
+```
+
+`routes --json` prints the same routes as JSON, with each route's throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx)` returns the same information as a list of `RouteMeta`.
+
+## Writing controllers by hand
+
+`#[controller]` implements the `Controller` trait, and you can implement it yourself. Each route is a `RouteDef`: a method, a path, an Axum handler and a builder for everything the attributes declare. Hand-written routes can do two things the attributes can't: set a per-route body limit with `body_limit(bytes)`, and wrap the handler in [Tower layers](/docs/basics/middleware/#a-layer-on-one-route).
+
+```rust title="src/modules/imports/controller.rs"
+use navree::axum::http::Method;
+use navree::http::{Controller, RouteDef};
+use navree::prelude::*;
+
+#[injectable]
+pub struct ImportController;
+
+impl Controller for ImportController {
+    fn prefix(&self) -> &'static str {
+        "/imports"
+    }
+
+    fn version(&self) -> Option<&'static str> {
+        Some("1")
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(Method::GET, "/", || async { Json(Vec::<String>::new()) })
+                .authenticated()
+                .name("imports.index"),
+            RouteDef::on(Method::POST, "/", |body: String| async move {
+                body.lines().count().to_string()
+            })
+            .authenticated()
+            .body_limit(20 * 1024 * 1024)
+            .name("imports.store"),
+        ]
+    }
+}
+```
+
+`RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
+
+## Route checks at boot
+
+Mistakes in routes stop the app before it serves anything. The `#[controller]` macro rejects many of them at compile time:
+
+- a route with no access declaration, or `#[public]` combined with another one;
+- two `#[can]` on one route (one on the route, one on the impl block);
+- `from = "id"` naming a parameter the route's path doesn't have;
+- the old `:id` / `*rest` capture syntax and unbalanced braces;
+- two routes with the same method and path in one controller (capture names aside);
+- helper attributes on a method without a route attribute, and route-only attributes such as `#[timeout]` on the impl block;
+- an unknown `#[controller]` key or an invalid version.
+
+When the app boots, `HttpModule` checks every route of every module again, including hand-written ones, and fails with a list of every problem when a route has no access declaration, two modules mount the same method and path, a path is malformed, a non-public route exists but the app has no `dyn Authenticator`, or a route declares roles, permissions or an ability but the app has no `dyn RouteAuthorizer`:
+
+```text wrap
+route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) declares roles:admin|manager but no `dyn RouteAuthorizer` is registered (import the access module)
+```
+
+## What clients see when nothing matches
+
+A path that no route matches is a 404, and a known path with another method is a 405 with an `Allow` header, both in the error format. Axum answers `HEAD` requests for `GET` routes. CORS preflight (`OPTIONS`) requests are handled by the CORS layer when `http.cors.allowed_origins` is set; otherwise an `OPTIONS` request is a 405 like any other unrouted method. See [CORS](/docs/basics/cors-and-security-headers/).
+
+## Testing routes
+
+`TestApp` boots your modules and sends requests through the real router in-process:
+
+```rust
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn lists_deals_for_signed_in_users() {
+    let app = TestApp::builder().module(DealsModule).build().await;
+
+    app.acting_as(principal(Uuid::now_v7()))
+        .get("/api/v1/deals")
+        .send()
+        .await
+        .assert_status(200);
+
+    app.client()
+        .get("/api/v1/deals")
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
+
+    app.shutdown().await.unwrap();
+}
+```
+
+When the app has no authenticator of its own, `TestApp` installs a test one, so `acting_as` signs a request in as any user. See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/access-control/" title="Access control on routes">
+    `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]`.
+  </LinkCard>
+  <LinkCard href="/docs/basics/requests/" title="Requests and extractors">
+    Paths, query strings, bodies, headers and the current user.
+  </LinkCard>
+  <LinkCard href="/docs/basics/middleware/" title="The request pipeline and middleware">
+    Guards, timeouts and Tower layers.
+  </LinkCard>
+</LinkCards>

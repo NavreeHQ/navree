@@ -5,7 +5,7 @@
  *
  *   pnpm build && pnpm serve           # in one terminal
  *   pnpm screenshots                   # in another
- *   BASE_URL=http://127.0.0.1:3210 pnpm screenshots home docs-stub
+ *   BASE_URL=http://127.0.0.1:3210 pnpm screenshots home docs-validation
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -19,7 +19,8 @@ const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "sc
 const pages: [string, string][] = [
   ["home", "/"],
   ["docs-index", "/docs/"],
-  ["docs-stub", "/docs/basics/validation/"],
+  ["docs-validation", "/docs/basics/validation/"],
+  ["docs-authentication", "/docs/security/authentication/"],
   ["styleguide", "/styleguide/"],
   ["benchmarks", "/benchmarks/"],
 ];

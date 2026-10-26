@@ -1,10 +1,359 @@
 ---
 title: "Providers and dependency injection"
-description: "The type-keyed container: registering providers and injecting them."
+description: "The type-keyed container: `#[injectable]` services, singleton, request and transient scopes, lazy handles, multi-bindings and overrides for tests."
 ---
 
-This page covers the dependency-injection container: `#[injectable]` services, how providers are registered and resolved by type, injecting trait objects, values and factories, and how a module's exports decide what other modules can see.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-kernel` and `navree-macros` is the reference: run `cargo doc -p navree-kernel --open` in the repository.
+A provider is anything the container can hand out: a service, a repository, a configuration section, a client for another API. Modules register providers, and other providers ask for them by type. Navree builds each provider when it's needed (singletons when the app boots) and passes it its dependencies: this is constructor injection, as in NestJS or Laravel's service container.
+
+The container is keyed by type. Asking for `Arc<DealService>` gives you the `DealService` provider; asking for `Arc<dyn Clock>` gives you whatever the app registered as its `dyn Clock`. A key can also carry a name, so two providers of the same type can coexist. There are no global statics: each booted app has its own container.
+
+## Defining providers
+
+Put `#[injectable]` on a struct, and every field is filled from the container:
+
+```rust title="src/modules/deals/service.rs"
+use std::sync::atomic::AtomicU64;
+
+use navree::contracts::Clock;
+use navree::prelude::*;
+
+#[injectable]
+pub struct DealService {
+    repo: Arc<DealRepository>,
+    clock: Arc<dyn Clock>,
+    #[inject(name = "billing")]
+    billing: Arc<ApiClient>,
+    notifier: Lazy<dyn Notifier>,
+    #[inject(default)]
+    moves: AtomicU64,
+}
+```
+
+Each field type says how it's filled:
+
+| Field | Filled with | A dependency of the provider? |
+|---|---|---|
+| `Arc<T>` (also `Arc<dyn Trait>`) | The provider of `T` | Yes |
+| `#[inject(name = "x")] Arc<T>` | The provider of `T` named `x` | Yes |
+| `Lazy<T>` | A handle that resolves `T` on its first `get` | No (see [lazy handles](#lazy-handles-and-cycles)) |
+| `#[inject(default)] T` | `Default::default()` | No |
+
+`#[injectable]` implements the `Injectable` trait. It lists the dependencies in field order, so the boot-time graph check knows them. Unit structs (`pub struct DealRepository;`) and generic structs work too. Anything else is a compile error that points at the field: a plain field without `#[inject(default)]`, a tuple struct, an enum, an unknown `#[inject]` argument, or `name` combined with `default` or used on a `Lazy` field.
+
+Then register the type in a module, with `providers = [DealService]` in `#[module]` or `m.provider::<DealService>()`.
+
+### Scopes
+
+A provider is a singleton unless you choose another scope:
+
+```rust
+#[injectable(scope = "request")]
+pub struct UserCache {
+    #[inject(default)]
+    names: Mutex<HashMap<Uuid, String>>,
+}
+
+#[injectable(scope = "transient")]
+pub struct CsvWriter {
+    #[inject(default)]
+    rows: Vec<String>,
+}
+```
+
+| Scope | Built | Shared |
+|---|---|---|
+| `"singleton"` (default) | Once per app, eagerly at boot, in module dependency order | By everyone, as the same `Arc<T>` |
+| `"request"` | On first use within a request scope: one per HTTP request, or one you create for a job or a command | Within that scope |
+| `"transient"` | On every resolution | Never |
+
+[Request-scoped providers](#request-scoped-providers) have rules of their own, below.
+
+### Implementing `Injectable` by hand
+
+`#[injectable]` covers structs whose fields all come from the container. When construction needs logic, implement `Injectable` yourself, or register a [factory](#factories):
+
+```rust
+use navree::prelude::*;
+use navree::{BoxFuture, KernelError, ProviderKey, Scope};
+
+pub struct DealService {
+    repo: Arc<DealRepository>,
+}
+
+impl Injectable for DealService {
+    fn scope() -> Scope {
+        Scope::Singleton
+    }
+
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<DealRepository>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(Self {
+                repo: r.get::<DealRepository>().await?,
+            })
+        })
+    }
+}
+```
+
+`scope` and `dependencies` have defaults (a singleton with no declared dependencies). Declare what `construct` resolves: the graph check, the cycle detection and the scope rules only know about declared dependencies.
+
+## Registering providers
+
+Besides `Injectable` types, a module can register ready values and factories. These go in the module's `register` function (see [modules](/docs/architecture/modules/#registering-everything-else)):
+
+```rust
+impl Module for DealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.provider::<DealRepository>()
+            .provider::<DealService>()
+            .value_arc::<dyn Clock>(Arc::new(SystemClock))
+            .factory(Factory::<dyn Notifier>::new(|_r: Resolver| async {
+                Ok(Arc::new(LogNotifier) as Arc<dyn Notifier>)
+            }))
+            .factory(
+                Factory::<ApiClient>::new(|_r: Resolver| async {
+                    Ok(Arc::new(ApiClient {
+                        base_url: "https://billing.example.com".to_owned(),
+                    }))
+                })
+                .named("billing"),
+            )
+            .exports::<DealService>()
+            .exports::<dyn Notifier>();
+    }
+}
+```
+
+| Method | Registers |
+|---|---|
+| `m.provider::<T>()` | `T: Injectable`, under its type |
+| `m.provider_named::<T>("x")` | `T: Injectable`, under the name `x` |
+| `m.value(v)` | A singleton that already exists |
+| `m.value_arc(arc)` | The same, from an `Arc`, which is how you register a trait object: `m.value_arc::<dyn Clock>(Arc::new(SystemClock))` |
+| `m.factory(Factory::<T>::new(..))` | A provider built by an async closure |
+| `m.multi(Factory::<T>::new(..))` | One more [multi-binding](#multi-bindings) of `T` |
+
+Registering the same key twice in one module fails the boot. Two modules may register the same key; a module that sees both (through two imports) gets an "ambiguous provider" error and has to pick one.
+
+### Factories
+
+A `Factory<T>` builds an `Arc<T>` with an async closure that receives a `Resolver`. Use it for trait objects, for values that need async setup, and for named providers:
+
+```rust
+pub fn report_cache() -> Factory<ReportCache> {
+    Factory::<ReportCache>::new(|r: Resolver| async move {
+        let repo = r.get::<DealRepository>().await?;
+        Ok(Arc::new(ReportCache { repo }))
+    })
+    .deps(vec![ProviderKey::of::<DealRepository>()])
+    .scope(Scope::Request)
+}
+```
+
+The closure returns `Result<Arc<T>, BoxError>`, so `?` works on any error; a failure becomes a `failed to construct ..` error that names the provider. `.deps(..)` declares what the closure resolves, `.scope(..)` sets the scope (singleton by default) and `.named(..)` registers it under a name. The names are `Cow<'static, str>`, so they can come from configuration.
+
+### Trait objects
+
+Depend on traits where you want to swap implementations, for tests or per environment. Register the implementation as `dyn Trait` with `value_arc` or a `Factory`, export `dyn Trait`, and inject `Arc<dyn Trait>`. The framework does this for its cross-module contracts: navree-audit registers a `dyn AuditSink`, navree-auth a `dyn Authenticator`, navree-access a `dyn RouteAuthorizer`. The CRM registers the app's `dyn Clock`, which every CRM service injects for "now", so tests can fix the time.
+
+### Named providers
+
+A name lets two providers of one type coexist: `Arc<ApiClient>` and `Arc<ApiClient>` named `"billing"` are different keys. Inject a named provider with `#[inject(name = "billing")]`, or resolve it with `get_named::<ApiClient>("billing")`.
+
+## Resolving providers
+
+Prefer constructor injection: declare what a provider needs as fields, and let the container fill them. Controllers are providers too, so a controller's fields are injected the same way and its handlers use them through `self`.
+
+Inside a factory or a hand-written `construct`, the `Resolver` resolves with the visibility of the module that owns the provider:
+
+| `Resolver` method | Returns |
+|---|---|
+| `get::<T>()` | The provider of `T` |
+| `get_named::<T>("x")` | The provider of `T` named `x` |
+| `get_all::<T>()` | Every multi-binding of `T` |
+| `lazy::<T>()` | A `Lazy<T>` handle |
+| `app()` | The `AppContext` |
+
+### The service locator
+
+Outside providers (lifecycle hooks, console commands, layers, extractors, tests), resolve through the `AppContext`:
+
+```rust
+pub async fn in_a_command(ctx: AppContext) -> Result<(), BoxError> {
+    let deals = ctx.get::<DealService>().await?;
+    if let Some(notifier) = ctx.try_get::<dyn Notifier>().await {
+        notifier.notify(Uuid::now_v7(), "hello");
+    }
+    let billing = ctx.get_named::<ApiClient>("billing").await?;
+    // ...
+    Ok(())
+}
+```
+
+`get`, `get_named`, `try_get` and `get_all` on `AppContext` ignore module visibility: they find the provider wherever it's registered (preferring an exported one when several modules register it). `try_get` returns `None` when no provider exists, and logs and returns `None` when one exists but fails to build. The framework uses `try_get` for optional collaborators, such as the audit sink.
+
+<Callout type="note" title="Keep the locator out of hot paths">
+
+`AppContext::get` searches every provider on each call. That's fine in a hook or a command; in code that runs per request, resolve once and keep the `Arc`, or inject the provider.
+
 </Callout>
+
+## Request-scoped providers
+
+A request-scoped provider lives for one request scope. In an HTTP handler, ask for it with the `Scoped<T>` extractor:
+
+```rust
+#[controller("/owners", version = "1")]
+impl OwnersController {
+    #[get("/{id}")]
+    #[authenticated]
+    async fn show(&self, Path(id): Path<Uuid>, cache: Scoped<UserCache>) -> NoContent {
+        cache.remember(id, "Ada");
+        NoContent
+    }
+}
+```
+
+The request pipeline keeps one `RequestScope` per request. Every `Scoped<UserCache>` in that request, and every request-scoped provider that depends on `UserCache`, gets the same instance; the next request gets a new one. `Scoped<T>` resolves with the visibility of the module that registered the route. A provider that module can't see, or one that fails to build, is a 500 error. `Scoped<T>` works for singletons and transient providers too.
+
+Outside HTTP (a queue job, a console command), make the scope yourself:
+
+```rust
+use navree::ModuleId;
+use navree::kernel::RequestScope;
+
+let resolver = ctx.request_resolver(ModuleId::of::<UsersModule>(), RequestScope::new());
+let cache = resolver.get::<UserCache>().await?;
+```
+
+Two rules keep request state from leaking:
+
+- **A singleton can't depend on a request-scoped provider**, directly or through transient providers. The boot fails:
+
+  ```text wrap
+  scope inversion in module `LeakyModule`: singleton `app::Leaky` depends on request-scoped `app::UserCache`; take request values as parameters or extractors instead
+  ```
+
+  The check also runs while resolving, so an undeclared dependency hidden in a factory is caught too.
+- **A request-scoped provider needs a scope.** Resolving one through `AppContext::get` fails with `request-scoped provider ... was resolved outside a request scope; resolve it through AppContext::request_resolver`.
+
+Request-scoped and transient providers are never built at boot.
+
+## Lazy handles and cycles
+
+A `Lazy<T>` field holds a handle instead of the provider. Its first `get().await` resolves the provider (with the visibility of the module that created the handle) and caches it:
+
+```rust
+impl DealService {
+    pub async fn won(&self, owner: Uuid) -> Result<(), BoxError> {
+        self.notifier.get().await?.notify(owner, "A deal was won");
+        Ok(())
+    }
+}
+```
+
+A lazy handle isn't a dependency edge, which makes it the way out of a provider cycle: when `A` needs `B` and `B` needs `A`, make one of the two fields a `Lazy`. Without it the boot fails with `provider dependency cycle: app::A -> app::B -> app::A`. Resolve lazy handles after boot, in methods, never inside a constructor. A handle holds the app weakly, so it doesn't keep a dropped app alive. Lazy handles resolve unnamed providers only; there is no named lazy handle.
+
+## Multi-bindings
+
+Most keys have exactly one provider. A multi-binding is a key that collects one provider from every module that adds one, like a plugin list. Register with `m.multi(..)`:
+
+```rust
+impl Module for PaymentsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(PaymentsClient).multi(
+            Factory::<dyn HealthCheck>::new(|r: Resolver| async move {
+                let client = r.get::<PaymentsClient>().await?;
+                Ok(Arc::new(PaymentsHealth(client)) as Arc<dyn HealthCheck>)
+            })
+            .deps(vec![ProviderKey::of::<PaymentsClient>()]),
+        );
+    }
+}
+```
+
+and collect with `get_all`:
+
+```rust
+for check in ctx.get_all::<dyn HealthCheck>().await? {
+    if let HealthStatus::Down(reason) = check.check().await {
+        // ...
+    }
+}
+```
+
+Multi-bindings are app-wide: `get_all` returns every one, in module dependency order, whatever the visibility. `get::<T>()` never sees them. The framework collects readiness checks (`dyn HealthCheck`), seeders, authentication strategies and change observers this way.
+
+## Contributions
+
+A contribution is a plain value a module hands to the app, not a provider: routes, migrations, job registrations, global layers and error mappers are all contributions. A module contributes with `m.contribute(value)`, and anyone holding the `AppContext` collects every value of a type:
+
+```rust
+/// A link the admin menu shows.
+pub struct MenuItem {
+    pub label: &'static str,
+    pub path: &'static str,
+}
+
+#[module(register = |_, m| {
+    m.contribute(MenuItem { label: "Deals", path: "/deals" });
+})]
+pub struct DealsMenuModule;
+
+pub fn menu(ctx: &AppContext) -> Vec<String> {
+    ctx.contributions::<MenuItem>()
+        .iter()
+        .map(|item| format!("{} ({}): {}", item.value.label, item.module.name, item.value.path))
+        .collect()
+}
+```
+
+Each `Contributed<C>` carries the `value` (an `Arc<C>`) and the contributing `module` (`id`, `name`, `global`), in module dependency order. Unlike multi-bindings, nothing is constructed: the values exist as soon as the graph does.
+
+## Overriding providers in tests
+
+`override_value` replaces the provider of a type wherever it's registered; the original factory never runs. If no module registers the type, the value is provided globally. Fix the time in a test:
+
+```rust
+use chrono::TimeZone;
+use navree::contracts::{Clock, FixedClock};
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn deals_use_the_fixed_clock() {
+    let now = chrono::Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap();
+    let app = TestApp::builder()
+        .override_value::<dyn Clock>(Arc::new(FixedClock::new(now)))
+        .module(DealsModule)
+        .build()
+        .await;
+
+    assert_eq!(app.get::<dyn Clock>().await.now(), now);
+    app.shutdown().await.unwrap();
+}
+```
+
+`Navree::app().override_value(..)` does the same without the test kit. Overrides replace unnamed providers only: there is no override for a named provider or a multi-binding. Several modules ship fakes meant for this, such as `HttpClient::fake()` and the queue fake; see [fakes](/docs/testing/fakes/).
+
+## Known limits
+
+- A singleton that stores an `AppContext` (from `r.app()`) creates a reference cycle, so the app is never freed. That's harmless in a long-running server, but it leaks in tests that boot many apps. Store `ctx.downgrade()` (a `WeakAppContext`) or a `Lazy<T>` instead.
+- The graph check sees declared dependencies only. A factory that resolves something it didn't declare in `.deps(..)` is checked when it runs, not before.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/modules/" title="Modules">
+    Imports, exports, global modules and configurable modules.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/lifecycle-hooks/" title="Lifecycle hooks">
+    Code that runs at boot and at shutdown.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    Replacing mail, queues, HTTP and time in tests.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,361 @@
 ---
 title: "The unit of work and transactions"
-description: "One lazy transaction per request, committed when the request succeeds."
+description: "One lazy transaction per request, committed when the response succeeds; units of work in jobs and commands, after-commit hooks, row locks and change observers."
 ---
 
-This page explains the unit of work: a lazy transaction per request that commits when the response succeeds and rolls back when it fails. It covers using it in handlers and services, how queued jobs and events wait for it to commit, and running transactions of your own.
+Every HTTP request in a Navree app gets a **unit of work**. It carries the signed-in user and the request id, opens a database transaction the first time you use the database, collects the changes you make and the work that must wait for them, and then commits or rolls back exactly once, when the response is ready.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-db` is the reference: run `cargo doc -p navree-db --open` in the repository.
-</Callout>
+So a handler that fails halfway leaves nothing behind, and side effects that must only happen after a successful commit (queued jobs, mail, broadcasts) wait for it. Jobs, commands and seeders create units of work of their own.
+
+## A request's unit of work
+
+`DatabaseModule` adds a layer to the request pipeline, after authentication and before routing. For each request it:
+
+1. creates a lazy `Uow` holding the actor (the user id of the authenticated principal, if any) and the request id;
+2. runs the rest of the request (routing, access checks and your handler) with that unit of work as the [current one](#the-current-unit-of-work), in a task on the app's task tracker, so the request runs to completion even if the client disconnects;
+3. when the response status is **below 400**, commits: [change observers](#change-events-and-observers) run inside the transaction, the transaction commits, then the [after-commit hooks](#after-commit-hooks) run;
+4. otherwise (a 4xx, a 5xx, or a panic, which becomes a 500), rolls back and drops the recorded changes and hooks.
+
+If the commit itself fails, the handler's response is replaced by an error response from the [database error mapping](/docs/database/getting-started/#database-errors): a 409 for a unique or foreign-key violation that is only detected at commit, a 500 for anything else.
+
+The status decides, not where an error came from: if a handler writes a row and then returns a 400, the row is rolled back with everything else.
+
+The unit of work is lazy: it opens no transaction until something asks for one. A request that never touches the database, or only reads through the pool, never opens a transaction.
+
+## Using it in handlers
+
+Take the unit of work as an extractor and pass it to your services as `&Uow`. Services take it as a parameter rather than having it injected, because it belongs to one request while services are shared:
+
+```rust title="src/modules/deals/controller.rs"
+#[controller("/deals", version = "1")]
+impl DealsController {
+    #[patch("/{id}")]
+    #[authenticated]
+    async fn update(
+        &self,
+        uow: Uow,
+        Path(id): Path<Uuid>,
+        Valid(Json(input)): Valid<Json<UpdateDeal>>,
+    ) -> Result<Json<deal::Model>> {
+        Ok(Json(self.deals.update(&uow, id, input).await?))
+    }
+
+    #[delete("/{id}")]
+    #[authenticated]
+    async fn destroy(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<NoContent> {
+        self.deals.delete(&uow, id).await?;
+        Ok(NoContent)
+    }
+}
+```
+
+`Uow` is cheap to clone: clones are handles to the same unit of work. Without `DatabaseModule` in the app, the extractor answers 500.
+
+### The transaction
+
+`uow.tx()` returns the transaction as an `Arc<DatabaseTransaction>`. The first call begins it; later calls return the same one. Pass `&*tx` wherever SeaORM takes a connection:
+
+```rust
+pub async fn list(&self, uow: &Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+    let select = deal::Entity::find()
+        .order_by_desc(deal::Column::CreatedAt)
+        .order_by_desc(deal::Column::Id);
+    let tx = uow.tx().await?;
+    Ok(paginate(select, &*tx, page).await?)
+}
+```
+
+Keep the `Arc` only while you use it: a local variable, or a temporary such as `.all(&*uow.tx().await?)`. The unit of work can't commit while a clone is still alive somewhere, for example in a struct or a spawned task: the commit fails with "its transaction is still in use", and the transaction rolls back when the last clone is dropped.
+
+How the transaction begins depends on the database:
+
+- **SQLite**: `BEGIN IMMEDIATE`, which takes the write lock at once ([SQLite and concurrency](#sqlite-and-concurrency)).
+- **PostgreSQL**: `BEGIN`, then `set_config` makes the actor and request id available to SQL as `current_setting('navree.actor', true)` and `current_setting('navree.request_id', true)` for the rest of the transaction.
+
+Besides your own calls, `Repo` functions and the record checks of `#[can(.., from = "id")]` routes begin the transaction too.
+
+### The actor and the request id
+
+`uow.actor()` is the signed-in user's id (`Option<Uuid>`), and `uow.request_id()` the request's `X-Request-Id`. The audit log records both. A service can use the actor directly:
+
+```rust
+let author = uow.actor().ok_or_else(AppError::unauthenticated)?;
+```
+
+## After-commit hooks
+
+Some work must only happen once the data is safely stored: telling other users about a change, or calling another system. Register it with `uow.after_commit`:
+
+```rust title="src/modules/deals/service.rs"
+use navree::contracts::Broadcaster;
+use serde_json::json;
+
+/// Broadcasts `deal` once the unit of work commits (never for a rollback).
+pub fn broadcast_after_commit(uow: &Uow, broadcaster: Arc<dyn Broadcaster>, deal: &deal::Model) {
+    let data = json!({ "deal": deal });
+    uow.after_commit(move || {
+        Box::pin(async move {
+            let channels = vec!["private-deals".to_owned()];
+            if let Err(error) = broadcaster
+                .broadcast(channels, "deal.updated".to_owned(), data)
+                .await
+            {
+                tracing::warn!(%error, "the deal.updated broadcast failed");
+            }
+        })
+    });
+}
+```
+
+Hooks run after a successful commit, in the order you registered them. A rollback drops them. A hook returns nothing, so it handles its own errors: the change has already been committed and the response can no longer fail because of it.
+
+Several Navree services join the current unit of work for you, so you rarely need a hook for them:
+
+- `Queue::dispatch` (and `later`, `push` and the `dyn Dispatcher`) called while a unit of work is running queues the job only if it commits; `dispatch_in(&uow, job)` names the unit of work explicitly. With the database queue driver the job row is written in the same transaction. See [queues](/docs/digging-deeper/queues/).
+- `Mailer::queue` hands the mail to the queue, so in an app with `QueueModule` queued mail waits for the commit too. (Without a queue it sends at once.)
+- `Notifier::send` called while a unit of work is running writes the database notification in its transaction and sends the other channels only once it commits. See [notifications](/docs/digging-deeper/notifications/).
+
+## The current unit of work
+
+`Uow::current()` returns the unit of work of the running task: the request's while its handler runs, or the one `Db::transaction` or `uow.scope(future)` runs code with. It returns `None` anywhere else, including inside tasks you start with `tokio::spawn`, which don't inherit it.
+
+Code that can't take a `&Uow` parameter uses it to join the request's transaction: that is how `Queue::dispatch` and `Db::reader()` work. The current unit of work may already be finished (a handler can commit early), so check `uow.is_finished().await` before writing through it. `uow.same_as(&other)` tells whether two handles are the same unit of work.
+
+## Outside HTTP: jobs, commands and seeders
+
+Outside a request, nothing creates a unit of work for you. Create one from `Db`.
+
+### `Db::transaction`
+
+`db.transaction(|uow| async move { .. })` runs the closure in a new unit of work. It commits (running change observers and after-commit hooks) when the closure returns `Ok`, and rolls back when it returns `Err`. The closure's error type is `DbErr`, and the unit of work is the current one while it runs. Here is a command that closes stale deals:
+
+```rust title="src/modules/deals/commands.rs"
+use chrono::Utc;
+use navree::db::Db;
+use navree::kernel::CommandSpec;
+use navree::prelude::*;
+use sea_orm::ActiveValue::Set;
+use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter};
+
+pub fn close_stale_command() -> CommandSpec {
+    CommandSpec::new(
+        "deals:close-stale",
+        "Mark leads untouched for 90 days as lost",
+        close_stale,
+    )
+}
+
+async fn close_stale(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let db = ctx.get::<Db>().await?;
+    let closed = db
+        .transaction(|uow| async move {
+            let cutoff = Utc::now() - chrono::Duration::days(90);
+            let stale = deal::Entity::find()
+                .filter(deal::Column::Stage.eq(Stage::Lead))
+                .filter(deal::Column::UpdatedAt.lt(cutoff))
+                .all(&*uow.tx().await?)
+                .await?;
+            let count = stale.len();
+            for deal in stale {
+                let mut active = deal.into_active_model();
+                active.stage = Set(Stage::Lost);
+                active.updated_at = Set(Utc::now());
+                Repo::<deal::Entity>::update(&uow, active).await?;
+            }
+            Ok(count)
+        })
+        .await?;
+    println!("Closed {closed} stale deals.");
+    Ok(())
+}
+```
+
+Register it in the module with `m.command(close_stale_command())` and run it with `navree deals:close-stale`. See [console commands](/docs/digging-deeper/cli/).
+
+### `Db::uow`, with an actor
+
+A unit of work from `Db::transaction` has no actor. When the work is done for someone (a job a user started, say), create the unit of work with `db.uow(actor, request_id)`, run your code in its scope, and commit or roll back yourself:
+
+```rust title="src/modules/deals/jobs.rs"
+use navree::contracts::{Job, JobContext};
+use navree::db::Db;
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// Deletes a deal on behalf of `requested_by`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteDeal {
+    pub deal_id: Uuid,
+    pub requested_by: Uuid,
+}
+
+impl Job for DeleteDeal {
+    const NAME: &'static str = "deals.delete";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let db = ctx.app.get::<Db>().await?;
+        let uow = db.uow(Some(self.requested_by), None).await;
+        let result = uow
+            .scope(async {
+                let deal = Repo::<deal::Entity>::find_or_fail(&uow, self.deal_id).await?;
+                Repo::<deal::Entity>::delete(&uow, deal).await
+            })
+            .await;
+        match result {
+            Ok(()) => Ok(uow.commit().await?),
+            Err(error) => {
+                uow.rollback().await?;
+                Err(error.into())
+            }
+        }
+    }
+}
+```
+
+The audit log then records the deletion as `requested_by`'s. Jobs get no unit of work automatically: `JobContext` gives you the app, and you open one as above.
+
+Committing or rolling back a finished unit of work does nothing. Committing one that never opened a transaction only runs its after-commit hooks, unless changes were recorded by hand, in which case it first opens a transaction for the change observers.
+
+## Locking rows
+
+Two requests that read a row and then write it can overwrite each other's work. The databases prevent it differently:
+
+- **SQLite** serialises writers: every unit of work starts with `BEGIN IMMEDIATE`, so a second writer waits until the first commits. There is nothing to lock.
+- **PostgreSQL** runs units of work side by side, so read the rows you're about to change with `SELECT ... FOR UPDATE`.
+
+`uow.lock_for_update()` tells you which case you're in (true on PostgreSQL, false on SQLite). Add SeaORM's `lock_exclusive()` to a query only when it's true:
+
+```rust
+use sea_orm::QuerySelect;
+
+/// The deals of `stage`, locked for the rest of the unit of work where the
+/// database supports it.
+pub async fn column(uow: &Uow, stage: Stage) -> Result<Vec<deal::Model>, DbErr> {
+    let mut select = deal::Entity::find().filter(deal::Column::Stage.eq(stage));
+    if uow.lock_for_update() {
+        select = select.lock_exclusive();
+    }
+    let tx = uow.tx().await?;
+    select.all(&*tx).await
+}
+```
+
+The CRM locks a pipeline column this way before it renumbers the deals in it. `Repo::find_for_update(&uow, id)` loads one record the same way, and `Repo::update` locks the row it reads before updating. The PostgreSQL side of these paths hasn't run against a real server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql).
+
+## Change events and observers
+
+`Repo` records a [change event](/docs/database/entities-and-repositories/#change-events) for each write, and `uow.record_change` records one by hand. When the unit of work commits, every **change observer** receives all of them, in order, inside the transaction, right before it commits. `AuditModule` is an observer: it writes the audit rows, so they commit or roll back with the data they describe.
+
+To write your own, implement `ChangeObserver` and register it with `m.change_observer::<O>()`. This one keeps a history of deal stages:
+
+```rust title="src/modules/deals/stage_history.rs"
+use navree::BoxFuture;
+use navree::db::{ChangeEvent, ChangeObserver, ChangeOp};
+use navree::prelude::*;
+use sea_orm::sea_query::Query;
+use sea_orm::{ConnectionTrait, DatabaseTransaction, DbErr};
+
+/// Writes a `deal_stage_changes` row whenever a deal's stage changes, in the
+/// same transaction as the change.
+#[injectable]
+pub struct StageHistory;
+
+impl ChangeObserver for StageHistory {
+    fn observe<'a>(
+        &'a self,
+        tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
+        changes: &'a [ChangeEvent],
+    ) -> BoxFuture<'a, Result<(), DbErr>> {
+        Box::pin(async move {
+            for change in changes {
+                if change.entity != "deals" || change.op != ChangeOp::Updated {
+                    continue;
+                }
+                let (Some(old), Some(new)) = (&change.old, &change.new) else {
+                    continue;
+                };
+                let Some(to) = new.get("stage").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let from = old.get("stage").and_then(|v| v.as_str());
+                tx.execute(
+                    Query::insert()
+                        .into_table("deal_stage_changes")
+                        .columns(["deal_id", "from_stage", "to_stage", "changed_by"])
+                        .values_panic([
+                            change.id.clone().into(),
+                            from.map(str::to_owned).into(),
+                            to.to_owned().into(),
+                            uow.actor().map(|id| id.to_string()).into(),
+                        ]),
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+```rust title="src/modules/deals/mod.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        m.change_observer::<StageHistory>();
+    }
+}
+```
+
+An observer:
+
+- runs once per commit, and only when changes were recorded;
+- must write through the `tx` it is given. The unit of work counts as finished once the commit starts, so `uow.tx()` fails inside an observer with "the unit of work is already committed or rolled back";
+- can veto the commit: an error rolls the whole unit of work back, and the request answers 500 (409 when the error is a unique or foreign-key violation).
+
+Don't dispatch queued jobs from an observer on SQLite. Because the unit of work is already finished, the queue writes through the pool, and that write waits for the very transaction that is committing.
+
+## SQLite and concurrency
+
+A unit of work holds one pool connection from its first query until it commits, and on SQLite it holds the database's write lock for that whole time. Two rules follow:
+
+- **Don't wait for a second connection while you hold one.** Read through `uow.tx()`, or through `db.reader()` in code that has no `&Uow`, never through `db.conn()` in a request. Otherwise, once about `max_connections` requests run together, each holds a connection while waiting for another, and they fail with "database is locked".
+- **Keep units of work short.** Other writers queue behind yours for up to the 5-second busy timeout.
+
+The CRM has a regression test for the first rule: it boots the whole API with `database.max_connections = 1` and drives every route that combines a record check, `CurrentUser` and an embedded user. Any request that needed a second connection would time out. It's a cheap test to copy into your own app ([database tests](/docs/testing/database-tests/#catching-pool-starvation)).
+
+## Testing
+
+In a test, create a unit of work, write through it and look at what it recorded before you roll it back:
+
+```rust
+let db = app.get::<Db>().await;
+let uow = db.uow(Some(owner), None).await;
+let mut active = deal.clone().into_active_model();
+active.stage = Set(Stage::Won);
+Repo::<deal::Entity>::update(&uow, active).await.unwrap();
+
+let changes = uow.changes();
+assert_eq!(changes[0].op, ChangeOp::Updated);
+assert_eq!(changes[0].old, Some(json!({ "stage": "lead" })));
+assert_eq!(changes[0].new, Some(json!({ "stage": "won" })));
+uow.rollback().await.unwrap();
+```
+
+Over HTTP, query the database after the request to see whether the work was committed. [Database tests](/docs/testing/database-tests/) has more.
+
+<LinkCards>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    `Repo`, change events and when to use plain SeaORM.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    The change observer that writes audit rows.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Jobs that are queued only when the unit of work commits.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/request-lifecycle/" title="Request lifecycle">
+    Where the unit-of-work layer sits in the pipeline.
+  </LinkCard>
+</LinkCards>

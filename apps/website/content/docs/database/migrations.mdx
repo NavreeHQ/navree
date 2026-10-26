@@ -1,10 +1,331 @@
 ---
 title: "Migrations"
-description: "Writing, running and rolling back schema migrations."
+description: "Module-owned SeaORM migrations: writing them, ordering them across modules, and the `migrate`, `migrate:status`, `migrate:rollback` and `migrate:fresh` commands."
 ---
 
-This page shows how to write migrations, generate them with `navree make:migration`, run them with `migrate`, roll them back, and rebuild the database with `migrate:fresh`.
+Migrations are version control for your schema: each one changes the database a step, and records that it ran. In Navree a migration is an ordinary [SeaORM migration](https://www.sea-ql.org/SeaORM/docs/migration/writing-migration/), a type implementing `MigrationTrait`. What Navree adds is ownership: each module contributes its migrations as a `MigrationSet`, says which modules' tables it needs first, and one migrator runs every set of the app in the right order. Framework modules ship their tables the same way, so adding `AuthModule` to an app brings the `users` table with it.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-db` is the reference: run `cargo doc -p navree-db --open` in the repository.
+## Generating migrations
+
+The CLI writes the file and registers it:
+
+```sh
+navree make:migration deals create_deals_table
+navree make:migration deals add_currency_to_deals
+```
+
+Each command creates `src/modules/deals/migrations/m<date>_<time>_<name>.rs`, for example `m20261026_093000_create_deals_table.rs`, and adds it to the module's set in `migrations/mod.rs`. If the module had no migrations yet, it also creates that file and registers the set in the module. A name of the form `create_<table>_table` gives you a `CREATE TABLE` with an `id` and the two timestamps to start from; any other name gives you an empty `up` and `down`.
+
+## Writing migrations
+
+A migration has an `up` method that applies the change and a `down` method that reverses it. Both receive SeaORM's `SchemaManager`:
+
+```rust title="src/modules/deals/migrations/m20261026_093000_create_deals_table.rs"
+//! Creates the `deals` table.
+
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(Deals::Table)
+                    .col(ColumnDef::new(Deals::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Deals::Title).string().not_null())
+                    .col(ColumnDef::new(Deals::AmountCents).big_integer().not_null())
+                    .col(
+                        ColumnDef::new(Deals::Stage)
+                            .string_len(16)
+                            .not_null()
+                            .default("lead"),
+                    )
+                    .col(ColumnDef::new(Deals::CompanyId).uuid().not_null())
+                    .col(ColumnDef::new(Deals::OwnerId).uuid().not_null())
+                    .col(
+                        ColumnDef::new(Deals::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Deals::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_deals_company_id")
+                            .from(Deals::Table, Deals::CompanyId)
+                            .to(Companies::Table, Companies::Id)
+                            .on_delete(ForeignKeyAction::Restrict),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(Deals::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum Deals {
+    Table,
+    Id,
+    Title,
+    AmountCents,
+    Stage,
+    CompanyId,
+    OwnerId,
+    CreatedAt,
+    UpdatedAt,
+}
+
+/// The `companies` table, owned by the companies module.
+#[derive(DeriveIden)]
+enum Companies {
+    Table,
+    Id,
+}
+```
+
+`DeriveIden` turns `Deals::Table` into `deals` and `Deals::AmountCents` into `amount_cents`. `DeriveMigrationName` names the migration after its file (`m20261026_093000_create_deals_table`), which is the name `navree_migrations` records. Your app depends on `sea-orm-migration` directly for these derives; an app made by `navree new` already does.
+
+Changing a table later is another migration:
+
+```rust title="src/modules/deals/migrations/m20261027_120000_add_currency_to_deals.rs"
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Deals::Table)
+                    .add_column(
+                        ColumnDef::new(Deals::Currency)
+                            .string_len(3)
+                            .not_null()
+                            .default("USD"),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Deals::Table)
+                    .drop_column(Deals::Currency)
+                    .to_owned(),
+            )
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum Deals {
+    Table,
+    Currency,
+}
+```
+
+Write migrations with SeaORM's schema builder rather than raw SQL, so the same migration produces the right SQL for SQLite and for PostgreSQL. (Navree's own migrations haven't been run against a PostgreSQL server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql).) Two habits keep them portable:
+
+- Store timestamps with `timestamp_with_time_zone()` and UUIDs with `uuid()`, matching `DateTimeUtc` and `Uuid` on the entity.
+- Index the columns you filter and join on (foreign keys, `deleted_at`, status columns) with `manager.create_index(..)` in the same migration.
+
+SQLite can't change some things in place (most column type changes, for example). The usual workaround, rebuilding the table, needs foreign key checks off, so such a migration opts out of its transaction ([below](#transactions)).
+
+## Migration sets
+
+A module's migrations form one `MigrationSet`: a name, the sets it must run after, and the migrations. Return it from the module's `migrations/mod.rs`:
+
+```rust title="src/modules/deals/migrations/mod.rs"
+use navree::db::MigrationSet;
+
+mod m20261026_093000_create_deals_table;
+mod m20261027_120000_add_currency_to_deals;
+
+/// The deals module's set, recorded under `deals` in `navree_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("deals")
+        .after(["companies"])
+        .migration(m20261026_093000_create_deals_table::Migration)
+        .migration(m20261027_120000_add_currency_to_deals::Migration)
+}
+```
+
+and contribute it when the module registers:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(
+    providers = [DealService],
+    controllers = [DealsController],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    /// What `#[module]` has no key for: the module's migrations.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+    }
+}
+```
+
+The set's name is recorded with every migration it runs, so keep it stable once it has run anywhere, and unique in the app.
+
+### Ordering
+
+The migrator decides the order like this:
+
+1. **Sets** run in dependency order: a set runs after every set its `after` list names. Sets that don't depend on each other run in alphabetical order of their names.
+2. **Inside a set**, migrations run in name order, which is why their names start with a date and time.
+
+`.after(["companies"])` above makes sure `companies` exists before the deals table's foreign key points at it. An `after` entry naming a set that isn't in the app is ignored, so a module can name an optional dependency. A cycle of `after` lists, two sets with the same name, or two migrations with the same name in one set stop the run with an error before anything runs.
+
+Navree's own modules contribute these sets:
+
+| Set | Module | Runs after |
+|---|---|---|
+| `auth` | `AuthModule` (`users` and the token tables) | |
+| `access` | `AccessModule` (roles and permissions) | `auth` |
+| `audit` | `AuditModule` | |
+| `queue` | `QueueModule` (the database driver's tables, created whatever the driver) | |
+| `notify` | `NotifyModule` | |
+| `schedule` | `ScheduleModule` | |
+| `session` | `SessionModule` (the database store's table, created whatever the store) | |
+
+A table with a foreign key to `users` runs after `auth`. The CRM's single set is `MigrationSet::new("crm").after(["auth", "access"])`.
+
+### Transactions
+
+Each migration runs in its own transaction, together with the `navree_migrations` row that records it. SQLite and PostgreSQL both roll back schema changes, so a migration that fails part way leaves nothing behind and isn't recorded; you fix it and run `migrate` again. Migrations that ran before it in the same run stay applied.
+
+Some statements can't run in a transaction: PostgreSQL's `CREATE INDEX CONCURRENTLY`, or SQLite's `PRAGMA foreign_keys`, which a table rebuild needs and which has no effect inside one. Opt such a migration out:
+
+```rust
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    fn use_transaction(&self) -> Option<bool> {
+        Some(false)
+    }
+
+    // up and down as usual
+}
+```
+
+Without a transaction, a migration that fails part way leaves its completed statements in place, and you clean up by hand before running it again.
+
+## Running migrations
+
+Migrations run through commands that `DatabaseModule` registers on your app. The `navree` CLI forwards them to your app's binary (`navree migrate` runs `cargo run --quiet -- migrate` in the project); in a deployment, run the built binary directly (`./crm-api migrate`).
+
+| Command | What it does |
+|---|---|
+| `migrate` | Runs every pending migration, as one new batch. |
+| `migrate:status` | Lists every migration in run order, with its batch, and whether it ran. |
+| `migrate:rollback` | Reverts the last batch, newest migration first. |
+| `migrate:fresh` | Drops every table, then runs every migration as batch 1. |
+| `migrate:fresh --seed` | The same, then runs the [seeders](/docs/database/seeding-and-factories/). |
+
+```sh
+navree migrate
+```
+
+```text
+Migrated: companies/m20261026_090000_create_companies_table
+Migrated: deals/m20261026_093000_create_deals_table
+Migrated: deals/m20261027_120000_add_currency_to_deals
+```
+
+`migrate` prints "Nothing to migrate." when everything has run. `migrate:status` shows a table:
+
+```text
+Batch   Status   Migration
+1       Ran      companies/m20261026_090000_create_companies_table
+1       Ran      deals/m20261026_093000_create_deals_table
+        Pending  deals/m20261027_120000_add_currency_to_deals
+```
+
+### Rolling back
+
+Each `migrate` run that applies something is one **batch**. `migrate:rollback` calls `down` on every migration of the last batch, newest first, and deletes their rows; run it again to go back another batch. If the last batch contains a migration that no module registers any more (you deleted the file), the rollback reverts the others, then fails with an error naming it.
+
+There is no `--step` option, and no `migrate:reset` or `migrate:refresh`. To roll everything back, repeat `migrate:rollback` until it prints "Nothing to roll back."
+
+### Starting over
+
+`migrate:fresh` drops **every table in the database**, including tables no migration created, then runs every migration again as batch 1. On SQLite it drops them on one connection with foreign key checks off; on PostgreSQL it drops every table of the current schema with `CASCADE`.
+
+<Callout type="warning" title="Never run migrate:fresh against production">
+
+It deletes all your data, and Navree doesn't ask for confirmation in any environment. Keep it for development and tests.
+
 </Callout>
+
+### Migrating on boot
+
+With `database.migrate_on_boot = true`, pending migrations run while the app boots, before any provider that uses the database is built. Test apps turn it on for their temporary databases. A new app's `config/app.toml` turns it on too, as the CRM's does, for development; that file applies in every environment. In production, turn it off with `APP_DATABASE__MIGRATE_ON_BOOT=false` in the environment (an entry in `.env` doesn't override `config/app.toml`) and run `migrate` as a release step, so a failing migration stops the deploy rather than the app.
+
+Every command boots the app first, so with `migrate_on_boot` on, `migrate:rollback` first applies anything pending, and the next boot (your next `serve`) applies the rolled-back migrations again. Turn it off for the rollback:
+
+```sh
+APP_DATABASE__MIGRATE_ON_BOOT=false navree migrate:rollback
+```
+
+## The migrations table
+
+Navree records applied migrations in `navree_migrations` (the `MIGRATIONS_TABLE` constant), created on first use:
+
+| Column | Holds |
+|---|---|
+| `module` | The set's name, e.g. `deals`. |
+| `name` | The migration's name. |
+| `batch` | The batch it ran in. |
+| `applied_at` | When it ran. |
+
+The primary key is `(module, name)`, so two modules may use the same migration name. Navree runs migrations with its own migrator, not with `sea-orm-cli`, and doesn't use SeaORM's `seaql_migrations` table.
+
+## Running migrations from code
+
+`Migrator` exposes the same operations to Rust code: `Migrator::up(&ctx)`, `rollback(&ctx)` and `fresh(&ctx)` return the `module/name` of each migration they ran, and `Migrator::status(&ctx)` returns a `MigrationStatus` (`module`, `name`, `applied`, `batch`, `applied_at`) per migration. In tests, `TestApp::run_command` runs the commands themselves:
+
+```rust
+app.run_command("migrate:rollback", &[]).await?;
+let status = Migrator::status(app.ctx()).await?;
+assert!(status.iter().all(|migration| !migration.applied));
+```
+
+## Testing migrations
+
+`TestApp::builder().temp_database()` turns `migrate_on_boot` on, so every test app runs your migrations on an empty database, and a broken `up` fails every test that uses it. A test that runs `migrate:rollback` and then `migrate` again checks your `down` methods too. See [database tests](/docs/testing/database-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding and factories">
+    Filling the tables your migrations create.
+  </LinkCard>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    The SeaORM entities that map to your tables.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running `migrate` as part of a release.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="Console commands and the CLI">
+    The `navree` binary and how it forwards commands.
+  </LinkCard>
+</LinkCards>

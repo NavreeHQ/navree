@@ -1,10 +1,337 @@
 ---
 title: "Access control on routes"
-description: "Deny by default: `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]`."
+description: "Deny by default: every route declares who may call it with `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`, and refusals map to 401, 403 or 404."
 ---
 
-Every Navree route is denied unless it says who may call it. This page covers the access attributes `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]`, including loading the record a route acts on with `from = "id"`, and the errors callers see when access is refused.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` and `navree-access` is the reference: run `cargo doc -p navree-http --open` in the repository.
-</Callout>
+In Navree, a route that doesn't say who may call it doesn't exist. Every route declares its access with one or more attributes, and a route without any is a compile error; nothing is public by accident. The declaration is enforced by the request pipeline before your handler runs, so a handler never has to start with "is this user allowed?".
+
+```rust title="src/modules/reports/controller.rs"
+use navree::http::CurrentPrincipal;
+use navree::prelude::*;
+
+#[injectable]
+pub struct ReportsController;
+
+#[controller("/reports", version = "1")]
+impl ReportsController {
+    /// Anyone, signed in or not.
+    #[get("/summary")]
+    #[public]
+    async fn summary(&self) -> &'static str {
+        "public numbers"
+    }
+
+    /// Any signed-in user.
+    #[get("/mine")]
+    #[authenticated]
+    async fn mine(&self, CurrentPrincipal(me): CurrentPrincipal) -> String {
+        format!("reports of {}", me.user_id)
+    }
+
+    /// Users with the `admin` or the `manager` role.
+    #[get("/team")]
+    #[roles("admin", "manager")]
+    async fn team(&self) -> &'static str {
+        "team numbers"
+    }
+
+    /// Users granted both permissions.
+    #[post("/exports")]
+    #[permissions("reports.export", "reports.read")]
+    async fn export(&self) -> NoContent {
+        NoContent
+    }
+
+    /// Users whose abilities allow `read` on `Report`.
+    #[get("/")]
+    #[can(Read, Report)]
+    async fn index(&self) -> Json<Vec<&'static str>> {
+        Json(vec!["pipeline"])
+    }
+}
+```
+
+## The access attributes
+
+| Attribute | Who may call the route | Checked by |
+|---|---|---|
+| `#[public]` | Anyone, signed in or not | Nothing: no authentication, no authorization |
+| `#[authenticated]` | Any signed-in user | The pipeline (needs a `dyn Authenticator`) |
+| `#[roles("admin", "manager")]` | A signed-in user with **any** of the roles | The route authorizer |
+| `#[permissions("deals.export")]` | A signed-in user granted **every** listed permission | The route authorizer |
+| `#[can(Update, Deal)]` | A signed-in user whose abilities allow the action on the subject | The route authorizer |
+| `#[can(Update, Deal, from = "id")]` | The same, on the record whose id is the `{id}` path parameter | The route authorizer |
+
+Every attribute except `#[public]` implies authentication: a guest is refused before any role or ability is looked at. The route authorizer is navree-access's `dyn RouteAuthorizer`, which `AccessModule` registers; [authorization](/docs/security/authorization/) covers how roles, permissions and abilities are defined.
+
+### Public routes
+
+`#[public]` turns authentication and authorization off for the route. Use it for sign-in and sign-up, health probes, webhooks with their own signature check, and public content. `#[public]` can't be combined with any other access attribute, on the route or on its impl block: that's a compile error, because a public route that also asks for a role is a contradiction.
+
+A public route still sees the user when there is one: `AuthState` is set for every request, so a public handler can personalise its answer for signed-in users.
+
+### Authenticated routes
+
+`#[authenticated]` lets any signed-in user through. "Signed in" means the app's authenticator found a principal for the request: with `AuthModule`, a valid JWT in `Authorization: Bearer`. The handler can read the principal with `CurrentPrincipal`, or load the user with `CurrentUser`; see [requests](/docs/basics/requests/#the-current-user).
+
+### Roles
+
+`#[roles("admin", "manager")]` lets a user through when they have at least one of the roles. Roles are assigned to users in the database by navree-access. The super-admin role (`AccessOptions::super_admin_role`, `admin` in the CRM) passes every roles check, and, because it's granted `manage all`, every permission and ability check too.
+
+### Permissions
+
+`#[permissions("reports.export", "reports.read")]` needs every listed permission. A permission is `<prefix>.<action>`, and navree-access maps the prefix to its subject: with `Report` registered under the prefix `reports` (see [below](#abilities-with-can)), `reports.export` means "`export` on `Report`", and `reports.*` means `manage`. A prefix nobody registered stands for itself: `audit.read` means "`read` on `audit`". The check passes only when the user's abilities allow the action on **every** record of the subject, with no conditions: a rule like "update your own deals" doesn't satisfy `#[permissions("deals.update")]`. Use `#[can(.., from = "id")]` for record-level rules.
+
+### Abilities with `#[can]`
+
+`#[can(Action, Subject)]` checks the user's abilities, CASL-style. Without `from`, it's a type-level check: it passes when the user may perform the action on at least some records of the subject, so a conditional rule ("update deals you own") counts. Use it on list and create routes:
+
+```rust title="crates/crm-deals/src/controller.rs"
+#[get("/")]
+#[can(Read, Deal)]
+async fn index(
+    &self,
+    uow: Uow,
+    scope: Accessible<Deal, Read>,
+    Valid(Query(filter)): Valid<Query<DealFilter>>,
+    page: PageQuery,
+) -> Result<Page<DealResource>> {
+    self.deals.list(&uow, scope, filter, page).await
+}
+```
+
+The `Accessible<Deal, Read>` extractor turns the same rules into a SQL filter, so the list holds exactly the deals this user may read.
+
+With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; a record the user may not touch is a 403. The handler receives the loaded record with the `Authorized<E, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
+
+```rust title="crates/crm-deals/src/controller.rs"
+#[patch("/{id}")]
+#[can(Update, Deal, from = "id")]
+async fn update(
+    &self,
+    uow: Uow,
+    CurrentUser(user): CurrentUser,
+    deal: Authorized<Deal, Update>,
+    Valid(Json(input)): Valid<Json<UpdateDeal>>,
+) -> Result<Json<DealResource>> {
+    Ok(Json(self.deals.update(&uow, user.id, deal, input).await?))
+}
+```
+
+`from` must name a parameter of the route's path (the controller prefix counts); otherwise it's a compile error. For the record to load, the entity's module imports `AccessModule::for_feature::<Deal>()`; see [modules](/docs/architecture/modules/#feature-registrations-with-for_feature).
+
+The action and the subject can be marker types or strings:
+
+- **Actions:** the markers `Read`, `Create`, `Update`, `Delete` and `Manage` from the prelude, your own types implementing `ActionMarker`, or a string such as `"archive"`.
+- **Subjects:** a type implementing `Subject` (a SeaORM entity or any other type), or a string.
+
+```rust
+/// A subject that isn't a database entity.
+pub struct Report;
+
+impl Subject for Report {
+    const SUBJECT: &'static str = "Report";
+    const PERMISSION_PREFIX: &'static str = "reports";
+}
+
+/// A custom action.
+pub struct Publish;
+
+impl ActionMarker for Publish {
+    const NAME: &'static str = "publish";
+}
+
+#[post("/{id}/publish")]
+#[can(Publish, Report)]
+async fn publish(&self, Path(id): Path<u32>) -> String {
+    format!("published {id}")
+}
+
+#[post("/{id}/archive")]
+#[can("archive", Report)]
+async fn archive(&self, Path(id): Path<u32>) -> String {
+    format!("archived {id}")
+}
+```
+
+Register a subject that isn't an entity by importing `AccessModule::for_subject::<Report>()` in its module, so its permission prefix maps to it:
+
+```rust
+#[module(
+    imports = [AccessModule::for_subject::<Report>()],
+    controllers = [ReportsController, AdminController],
+)]
+pub struct ReportsModule;
+```
+
+The CRM defines its own actions `Move`, `Export` and `Complete` this way (`#[can(Move, Deal, from = "id")]`). A route checks one ability: a second `#[can]`, including one inherited from the impl block, is a compile error.
+
+## Access for a whole controller
+
+Access attributes may also sit on the `impl` block, below `#[controller]`, and then apply to every route in it. A route's own declarations add to the impl block's:
+
+```rust
+#[controller("/admin", version = "1")]
+#[roles("admin")]
+impl AdminController {
+    /// `admin`.
+    #[get("/stats")]
+    async fn stats(&self) -> &'static str {
+        "stats"
+    }
+
+    /// `admin` or `auditor`: the roles add up.
+    #[get("/audit")]
+    #[roles("auditor")]
+    async fn audit(&self) -> &'static str {
+        "audit"
+    }
+
+    /// `admin`, and the `settings.update` permission.
+    #[patch("/settings")]
+    #[permissions("settings.update")]
+    async fn settings(&self) -> NoContent {
+        NoContent
+    }
+}
+```
+
+The rules for combining:
+
+- **Roles** from the impl block and the route form one list; the user needs any one of them.
+- **Permissions** from both form one list; the user needs all of them.
+- **Different kinds add up as "and":** a route with roles, permissions and `#[can]` passes only when all three checks pass. `#[authenticated]` next to any of them changes nothing, since they all need a user.
+- **`#[can]`** may sit on the impl block or on a route, not both.
+- **`#[public]`** on the impl block makes every route public, and no route may then declare anything else.
+
+## Routes without a declaration
+
+A route that declares none of the five attributes, on itself or its impl block, doesn't compile:
+
+```text wrap
+error: route `show` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+  --> src/modules/deals/controller.rs:15:14
+   |
+15 |     async fn show(&self) -> &'static str {
+   |              ^^^^
+```
+
+A `#[guard]` doesn't count as a declaration: a route with only a guard gets the same error, with a note saying so. Guards add checks to a route; they don't say who the route is for. See [guards](/docs/basics/middleware/#guards).
+
+Routes written by hand with `RouteDef` declare access with builder methods instead: `.public()`, `.authenticated()`, `.roles(&["admin"])`, `.permissions(&["reports.export"])` and `.can("update", "Deal", Some("id"))`. They can't be checked at compile time, so `HttpModule` checks every route at boot. A route without a declaration stops the app, and the error lists every undeclared route at once:
+
+```text wrap
+route `POST /api/v1/imports` (ImportController in module `ImportsModule`) has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)
+```
+
+## What the app needs
+
+The declarations need someone to enforce them. `HttpModule` checks at boot that they have one:
+
+- A route that isn't public needs a `dyn Authenticator`. `AuthModule` registers one, and `TestApp` installs a test one when the app has none.
+- A route with roles, permissions or `#[can]` needs a `dyn RouteAuthorizer`. `AccessModule` registers one.
+
+Without them, the boot fails before the server listens, naming each route:
+
+```text wrap
+route `GET /api/v1/imports` (ImportController in module `ImportsModule`) requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the route public)
+route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) declares roles:admin|manager but no `dyn RouteAuthorizer` is registered (import the access module)
+```
+
+## Refusals: 401, 403 and 404
+
+The [route pipeline](/docs/architecture/request-lifecycle/#the-route-pipeline) checks access in this order, and the first refusal ends the request with an error in the [NestJS format](/docs/basics/errors/):
+
+| Situation | Status | Body `message` |
+|---|---|---|
+| Credentials present but invalid (an expired or forged token), on any route | 401 | The authenticator's message, such as `"Token expired"` |
+| A non-public route and no signed-in user | 401 | `"Unauthorized"` |
+| A route `#[throttle]` exceeded | 429 | `"Too Many Requests"`, with `Retry-After` |
+| A guard refused | The guard's error | The guard's message |
+| The user lacks the roles, the permissions or the ability | 403 | `"Forbidden"` |
+| `#[can(.., from = "id")]` and no record has that id | 404 | `"Not Found"` |
+
+A guest calling `GET /api/v1/reports/team` gets a 401, and a signed-in user without the role gets a 403:
+
+```json
+{ "statusCode": 403, "message": "Forbidden", "error": "Forbidden" }
+```
+
+The first row matters for clients: an invalid token is refused before routing, so even a `#[public]` route answers 401 to a request that carries an expired token. Don't send stale tokens to public routes such as sign-in or refresh.
+
+Refusals are recorded. Each 403 from the authorizer is logged on target `navree::security`, and when the app has an audit trail (`AuditModule`), it's written as an `access.denied` security entry, as are 403s returned by guards and by handlers. See [the audit log](/docs/security/audit-log/).
+
+## Seeing who may call what
+
+The `routes` command prints each route's declaration in its `ACCESS` column:
+
+```text
+METHOD  PATH                          NAME  ACCESS                                   MODULE
+GET     /api/v1/admin/audit                 roles:admin|auditor                      ReportsModule
+PATCH   /api/v1/admin/settings              roles:admin permissions:settings.update  ReportsModule
+GET     /api/v1/admin/stats                 roles:admin                              ReportsModule
+GET     /api/v1/reports                     can:read Report                          ReportsModule
+POST    /api/v1/reports/exports             permissions:reports.export,reports.read  ReportsModule
+GET     /api/v1/reports/mine                auth                                     ReportsModule
+GET     /api/v1/reports/summary             public                                   ReportsModule
+GET     /api/v1/reports/team                roles:admin|manager                      ReportsModule
+POST    /api/v1/reports/{id}/archive        can:archive Report                       ReportsModule
+POST    /api/v1/reports/{id}/publish        can:publish Report                       ReportsModule
+
+10 routes
+```
+
+`public`, `auth`, `roles:a|b` (any of), `permissions:a,b` (all of) and `can:<action> <Subject>` (with ` from id` for record checks) are the same strings `meta.access.describe()` returns for a route's `RouteMeta` (`AccessSpec::describe`), which makes them easy to assert on in a test that guards your API's surface.
+
+## Testing access
+
+Test each route as a guest and as a user without and with the right grants:
+
+```rust
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn reports_are_for_signed_in_users() {
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(AccessOptions {
+            abilities,
+            super_admin_role: None,
+        }))
+        .module(ReportsModule)
+        .build()
+        .await;
+
+    app.client()
+        .get("/api/v1/reports")
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
+
+    let user = app.acting_as(principal(Uuid::now_v7()));
+    user.get("/api/v1/reports").send().await.assert_status(200);
+    user.get("/api/v1/reports/team")
+        .send()
+        .await
+        .assert_error(403, "Forbidden");
+
+    app.shutdown().await.unwrap();
+}
+```
+
+`abilities` is the app's ability function (here it lets every signed-in user read reports). `principal(id)` is a plain test user with no roles or permissions, which makes it the right client for the refused side. For the allowed side of a roles or permissions check, the user needs real grants: the CRM's feature tests sign in as its seeded admin, manager and rep accounts with `crm-testkit`. See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions, abilities, record checks and list filters.
+  </LinkCard>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Tokens, strategies and the current user.
+  </LinkCard>
+  <LinkCard href="/docs/basics/middleware/" title="The request pipeline and middleware">
+    Guards, throttles and timeouts.
+  </LinkCard>
+</LinkCards>

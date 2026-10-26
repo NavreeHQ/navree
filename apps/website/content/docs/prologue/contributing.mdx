@@ -1,10 +1,149 @@
 ---
 title: "Contributing"
-description: "How to build Navree, run its tests and propose a change."
+description: "How the Navree repository is laid out, the crate-layer rule and the test that enforces it, running the tests, code style, and contributing to these docs."
 ---
 
-This page explains how to work on Navree itself: the workspace layout, the toolchain you need, how to run the tests, clippy and rustfmt, the crate-hierarchy rules that a test enforces, and how to propose a change.
+Navree is developed in the open at [github.com/NavreeHQ/navree](https://github.com/NavreeHQ/navree). Bug reports, fixes, documentation and new drivers are all welcome. This page explains how the repository is organised, the one architectural rule every change must respect, how to run the checks a change must pass, and how to work on these docs.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover.
-</Callout>
+## The repository
+
+Everything lives in one repository: the framework, the CLI, a reference application, the benchmark and this website.
+
+| Path | What |
+|---|---|
+| `crates/navree` | The facade: re-exports every module crate and the macros, and holds the full-stack and dependency-graph tests |
+| `crates/navree-*` | One crate per module, plus the kernel, the contracts, the macros and the CLI |
+| `apps/crm-api` | The reference CRM API, a Navree application: `src/`, its feature crates in `crates/` and system tests in `tests/` |
+| `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
+| `apps/website` | navree.com and these docs |
+| `bench/` | The benchmark: the spec, every framework's implementation, the conformance checks and the results |
+| `docs/` | The product requirements, the build design, the implementation plan and notes |
+
+The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm-api/crates/*`. The benchmark apps are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
+
+## Setting up
+
+You need:
+
+- Rust 1.95 or newer (edition 2024). On Windows, the MSVC build tools, because SQLite is compiled from source.
+- [sccache](https://github.com/mozilla/sccache). The repository's `.cargo/config.toml` sets `rustc-wrapper = "sccache"`; remove that line if you don't want it.
+- For `apps/crm-web` and `apps/website`: Node.js 20.9 or newer and pnpm 11.
+
+You don't need OpenSSL, CMake, NASM or a database server. TLS is rustls with the `ring` provider, and tests use SQLite.
+
+```sh
+git clone https://github.com/NavreeHQ/navree
+cd navree
+cargo test --workspace
+```
+
+## The crate hierarchy
+
+Navree's crates form eight layers, from the kernel (L0) to the facade and the CLI (L6), with applications on top (L7). **A crate may depend only on crates in lower layers, and only along the edges the build design allows.** The rule covers dev-dependencies too.
+
+Modules often need something from a module beside them: the auth module wants to write to the audit log, a queue worker wants to broadcast. Those needs go through traits in `navree-contracts` (L1), such as `AuditSink`, `Broadcaster`, `Principal` and the job traits. The module that provides the feature registers an implementation, and the module that needs it resolves the trait from the container. No module depends sideways on another.
+
+`crates/navree/tests/dependency_graph.rs` enforces this on every `cargo test`:
+
+- `workspace_dependency_edges_follow_the_hierarchy` reads `cargo metadata` and checks every `navree*` dependency edge (normal, dev and build) against the `HIERARCHY` table.
+- `hierarchy_table_lists_exactly_the_workspace_crates` fails when a crate is missing from the table, or the table names a crate that doesn't exist.
+- `hierarchy_table_never_points_up_and_has_no_cycles` checks the table itself.
+- `lockfile_has_no_aws_lc_openssl_native_tls_or_cmake` keeps native TLS libraries and CMake out of `Cargo.lock`.
+
+There are two exceptions, both for dev-dependencies: a crate's tests may use any crate in a lower layer (so a crate in L4 can boot modules from L2 and L3 with `navree-testing`), and `navree-macros` may dev-depend on the runtime crates, to expand its macros against them.
+
+**Adding a crate?** Give it a row in `HIERARCHY` first, with its layer and allowed dependencies. [The crate hierarchy](/docs/architecture/crate-hierarchy/) shows every layer and edge.
+
+Framework crates implement `Module`, `Injectable` and `Controller` by hand instead of using `navree-macros`. The hierarchy table doesn't let them depend on the macros crate, which also let every crate be built before the macros existed. Apps and the facade's tests use the macros.
+
+## Running the tests
+
+From the repository root:
+
+```sh
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+`cargo test --workspace` runs every crate's unit and integration tests, the CRM API's feature tests and the dependency-graph test. Every test that touches a database gets its own temporary SQLite file.
+
+While you work on one crate, test only that crate:
+
+```sh
+cargo test -p navree-validation
+```
+
+When several builds run at once (you, an editor, a second checkout), give each its own target directory and let sccache share the compiled dependencies. Cargo locks a target directory, so builds sharing one wait for each other:
+
+```sh
+CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http
+```
+
+Keep `CARGO_BUILD_JOBS` moderate when memory is tight.
+
+### Tests that need extra steps
+
+- **Generated apps.** `navree-cli`'s `generated_app` test creates an app with `navree new`, runs every generator in it, then builds, tests and lints the result against the workspace's `navree`. It builds the whole framework in a fresh project, so it is ignored by default. Run it after changing the CLI's templates:
+
+  ```sh
+  CARGO_TARGET_DIR=target/agents/cli cargo test -p navree-cli --test generated_app -- --ignored
+  ```
+
+- **Snapshots.** `navree-cli` and `navree-access` use [insta](https://insta.rs) snapshots, and `navree-macros` checks its compile errors with [trybuild](https://docs.rs/trybuild). Don't edit `.snap` or `.stderr` files by hand: re-run the tests with `INSTA_UPDATE=always` or `TRYBUILD=overwrite`, then review the diff.
+
+- **The CRM front end and end-to-end tests.** In `apps/crm-web`:
+
+  ```sh
+  pnpm install
+  pnpm lint
+  pnpm typecheck
+  pnpm test
+  pnpm build
+  E2E_REAL_API=1 pnpm e2e   # needs cargo, and ports 8080 and 3000 free
+  ```
+
+  The end-to-end run builds and starts the CRM API on a fresh, seeded database, starts the production build of the web app, and runs every Playwright spec in Chromium against them. The repository's README has the details.
+
+## Code style
+
+- **rustfmt.** Format with `cargo fmt --all`. `rustfmt.toml` sets edition 2024 and nothing else.
+- **clippy with warnings as errors.** `cargo clippy --workspace --all-targets -- -D warnings` must pass. That includes the workspace lints: `unsafe_code` is forbidden, and `missing_docs` warns, so every public item needs a doc comment.
+- **One place for versions.** External dependency versions live only in the root `[workspace.dependencies]`; crates use `dep = { workspace = true }`.
+- **No native TLS.** Use rustls with the `ring` provider. The dependency-graph test fails if aws-lc, OpenSSL, native-tls or CMake reach `Cargo.lock`.
+- **No secrets in messages.** Configuration and validation errors name the key that is wrong, never its value, and logs redact secret-looking fields. Keep it that way.
+- **Tests with the change.** Crates keep their integration tests under `tests/`. A fix comes with a test that fails without it.
+
+Commit messages in the history describe the change in the imperative, prefixed with the area when there is one, such as `website: point repository links at NavreeHQ/navree`.
+
+## Proposing a change
+
+Open an issue first for anything large, such as a new module or a change to a public API, so the design can be discussed before you write it. For a fix, open a pull request against `main` with the tests, clippy and rustfmt passing. Say in the description what changed and why, and link the issue if there is one.
+
+If you find a limitation that isn't listed in the [release notes](/docs/prologue/release-notes/#known-limitations), an issue describing it is a contribution too.
+
+## Contributing to the docs
+
+These docs are MDX files in the same repository, under `apps/website/content/docs/<section>/<page>.mdx`. `apps/website/content/docs/manifest.ts` sets the order of sections and pages. Every page has an "Edit this page" link that opens its file on GitHub.
+
+Read `apps/website/AUTHORING.md` before you write. It covers the front-matter, the components (callouts, tabs, code groups, steps, file trees, badges and link cards), how to write code blocks, and the voice. The rules that matter most:
+
+- **Write from the code.** Every type, function, attribute, config key and command a page mentions must exist. Check it in the crate's source and tests, and in how the CRM uses it.
+- **Show real code.** A non-trivial Rust snippet must compile. Check it in a scratch crate that depends on `crates/navree` by path, or quote it from a test or the CRM.
+- **Be honest about limits.** If something isn't supported yet, say so and link to the [roadmap](/docs/prologue/roadmap/).
+
+To preview the site while you write:
+
+```sh
+cd apps/website
+pnpm install
+pnpm dev   # http://localhost:3210, reloads when you save
+```
+
+Check the pages you changed without building the whole site:
+
+```sh
+node scripts/check-docs.ts content/docs/basics/validation.mdx
+```
+
+It checks each page's front-matter, that its MDX compiles, that it uses only the site's components and known code languages, that its `/docs/...` links point at real pages, and that no stub callout is left. It must print `OK`. Before you open the pull request, run `pnpm build`, which also builds the search index and fails on any page in the manifest that is missing or invalid.

@@ -1,10 +1,479 @@
 ---
 title: "Modules"
-description: "How an app is composed from modules that declare imports, providers, controllers and exports."
+description: "How an app is composed from modules that declare imports, providers, controllers and exports, and how the module graph is checked at boot."
 ---
 
-This page explains modules, the unit of composition in Navree. You will see how `#[module]` declares imports, providers, controllers and exports, how the module graph is resolved at boot, how global and configurable modules work, and how to split an application into feature modules.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-kernel` and `navree-macros` is the reference: run `cargo doc -p navree-kernel --open` in the repository.
+A Navree application is a composition of modules. A module groups the code of one feature or one piece of infrastructure: its services (providers), its HTTP controllers, and anything else it contributes, such as migrations, jobs or console commands. It also says which of its providers other modules may use (its exports) and which modules it needs (its imports).
+
+Everything above the small kernel is a module, the framework included: `HttpModule`, `DatabaseModule` and `AuthModule` are modules like the ones you write. If you know NestJS, the model is the same: `@Module({ imports, providers, controllers, exports })` becomes `#[module(imports = [..], providers = [..], controllers = [..], exports = [..])]`.
+
+The kernel turns the modules into a graph when the app boots. It checks the graph before it builds anything, so a missing or private provider, a cycle or a module configured twice stops the boot with an error that names the module and the type.
+
+## Defining a module
+
+Put `#[module]` on a struct. This is a deals module in the style of the reference CRM:
+
+```rust title="src/modules/deals/mod.rs"
+use navree::prelude::*;
+
+use crate::modules::companies::{CompaniesModule, CompanyService};
+
+#[injectable]
+pub struct DealService {
+    companies: Arc<CompanyService>,
+}
+
+#[injectable]
+pub struct DealsController {
+    deals: Arc<DealService>,
+}
+
+#[controller("/deals", version = "1")]
+impl DealsController {
+    #[get("/")]
+    #[authenticated]
+    async fn index(&self) -> Json<Vec<String>> {
+        Json(self.deals.titles().await)
+    }
+}
+
+#[module(
+    imports = [CompaniesModule],
+    providers = [DealService],
+    controllers = [DealsController],
+    exports = [DealService],
+)]
+pub struct DealsModule;
+```
+
+`DealsModule` imports `CompaniesModule`, so `DealService` can inject the `CompanyService` that `CompaniesModule` exports. It registers its own service and controller, and exports `DealService` so that modules importing `DealsModule` can use it. The controller stays private: controllers are reached over HTTP, not injected.
+
+### The `#[module]` keys
+
+Every key is optional, and their order inside the attribute doesn't matter.
+
+| Key | Takes | What it registers |
+|---|---|---|
+| `imports` | A list of expressions that build modules: `[CompaniesModule, AccessModule::for_feature::<Deal>()]` | The modules whose exports this module may use |
+| `providers` | A list of types that implement `Injectable` (usually `#[injectable]` structs) | One provider per type, in the type's scope |
+| `controllers` | A list of types that implement `Controller` and `Injectable` | The controller as a singleton provider, and its routes |
+| `exports` | A list of types, trait objects included (`dyn Notifier`) | Makes those providers visible to importing modules |
+| `global` | A flag, written `global` with no value | Makes the exports visible to every module |
+| `register` | A function or closure taking `(&Self, &mut ModuleBuilder)` | Anything the keys above can't express |
+
+The macro generates an `impl Module` whose `register` method calls, in this order: `import` for each import, `provider` for each provider, `controller` for each controller, `exports` for each export, `global` when the flag is set, and finally your `register` function. A module with no keys at all (`#[module] pub struct AdminModule;`) is valid: use it to group other modules.
+
+`controllers` needs the `http` feature of `navree` (or the `navree-http` crate). A module that declares no controllers doesn't.
+
+### Registering everything else
+
+Values, factories, named providers, configuration sections, migrations, jobs, event listeners, console commands and lifecycle hooks have no key of their own. Register them in a `register` function, which runs last and receives the same `ModuleBuilder`:
+
+```rust title="src/modules/deals/mod.rs" {6,11-21}
+#[module(
+    imports = [CompaniesModule],
+    providers = [DealService],
+    controllers = [DealsController],
+    exports = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.config::<PipelineOptions>()
+            .value(DefaultCurrency("EUR"))
+            .command(CommandSpec::new(
+                "deals:recalculate",
+                "Recalculate every deal's position",
+                |ctx, _args| async move {
+                    ctx.get::<DealService>().await?.recalculate().await
+                },
+            ));
+    }
+}
+```
+
+The CRM's modules do the same: `DealsModule` subscribes its notification listener and adds its mail templates in `wire`, and `CrmCoreModule` adds the CRM's migrations and its roles seeder. The extension methods such as `m.config`, `m.controller`, `m.migrations`, `m.job` and `m.listen` come into scope with `use navree::prelude::*`. `CommandSpec` lives at `navree::kernel::CommandSpec`; the [console commands](/docs/digging-deeper/cli/) page covers commands in depth.
+
+For a line or two, a closure works too:
+
+```rust
+#[module(register = |_, m| { m.value(Counter(7)).exports::<Counter>(); })]
+pub struct CounterModule;
+```
+
+Because `register` receives `&self`, a module struct can carry settings. `#[module(register = Self::wire)] pub struct UsersModule { greeting: &'static str }` can read `self.greeting` in `wire`.
+
+### Writing `impl Module` by hand
+
+`#[module]` only writes Rust you could write yourself. The framework's own crates implement `Module` by hand, so this is a fully supported way to define a module:
+
+```rust
+use navree::prelude::*;
+
+pub struct DealsModule;
+
+impl Module for DealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(CompaniesModule)
+            .provider::<DealService>()
+            .controller::<DealsController>()
+            .exports::<DealService>();
+    }
+}
+```
+
+The `Module` trait has three more methods with defaults: `id` (the module's identity, its type by default), `name` (used in errors and reports, the short type name by default) and `is_configured` (see [configurable modules](#configurable-modules)).
+
+## Adding modules to the app
+
+An app is built from root modules. This is the CRM's root, `apps/crm-api/src/app.rs`:
+
+```rust title="src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    platform(Navree::app(), sources)
+        .module(CrmCoreModule)
+        .module(UsersModule)
+        .module(CompaniesModule)
+        .module(ContactsModule)
+        .module(DealsModule)
+        .module(ActivitiesModule)
+        .module(DashboardModule)
+        .module(DemoModule)
+    // navree:modules
+}
+```
+
+`platform` adds the framework modules the CRM uses (`ConfigModule::for_root(sources)`, `LoggerModule::from_config()`, `HttpModule::from_config()`, `DatabaseModule::from_config()` and so on) to the same builder. Every `.module(..)` call adds a root module. The kernel wraps them in an implicit root module named `App`, which imports them all. `navree make:module` adds new modules at the `// navree:modules` marker.
+
+Import a module where you use its exports, even if it's also a root module. Importing the same module from several places is fine: the kernel registers each module once.
+
+## Imports, exports and visibility
+
+A module can resolve exactly three kinds of providers:
+
+1. its own providers;
+2. the exports of the modules it imports directly;
+3. the exports of global modules.
+
+Visibility isn't transitive. If `DealsModule` imports `CompaniesModule`, and `CompaniesModule` imports `AddressesModule`, `DealsModule` doesn't see the exports of `AddressesModule`. Either import `AddressesModule` too, or let `CompaniesModule` re-export what it imports: a module may list an imported provider in its own `exports`, and importers then get the same instance.
+
+When a provider isn't visible, the boot fails with one of these errors, which name the module, the type and what to change:
+
+```text wrap
+module `SignupModule` cannot use `app::users::PasswordHasher`: it is private to module `UsersModule`; add it to the exports of `UsersModule`
+
+module `ReportsModule` cannot use `app::deals::DealService`: it is exported by module `DealsModule`, which `ReportsModule` does not import
+
+module `DealsModule` cannot resolve `app::companies::CompanyService` (required by `app::deals::DealService`): no provider is registered in `DealsModule`, exported by a module it imports, or exported by a global module
+
+module `DealsModule` sees `app::Mailer` from several modules (MailModule, SmtpModule); export it from one module only, or use named providers
+```
+
+### Global modules
+
+A global module's exports are visible to every module without an import. Add the `global` flag, or call `m.global()` in a hand-written module:
+
+```rust
+#[module(providers = [Currencies], exports = [Currencies], global)]
+pub struct CurrencyModule;
+```
+
+Most framework modules are global: `ConfigModule`, `HttpModule`, `DatabaseModule`, `CacheModule`, `AuthModule`, `AccessModule` and the others. So your modules inject `Arc<Db>` or `Arc<AuthService>` without importing anything, as long as the app includes the module. Keep your own modules non-global unless they really are app-wide infrastructure, like the CRM's `CrmPlatformModule`, which exports the app's `dyn Clock`. Explicit imports keep a feature's dependencies readable.
+
+A global module still has to be part of the app: add it as a root module, or import it somewhere.
+
+## The module graph
+
+When the app boots (or when you run `check`), the kernel walks the modules from the implicit root and calls each module's `register` once.
+
+- **Modules are identified by type.** Two `CompaniesModule` values are the same module, so importing it from five places registers it once, and every importer sees the same providers.
+- **Dependency order.** The kernel orders the modules so that a module comes after the modules it imports and after the modules whose providers it uses. The root `App` comes last. Singletons are built in this order, lifecycle hooks run in this order, and contributions such as routes and migrations are collected in this order.
+- **Errors are collected, not thrown one at a time.** A boot that fails reports every wiring problem it found.
+
+`check --graph` prints the graph as a tree without building anything. For an app with `ConfigModule`, `HttpModule`, `CompaniesModule` and the `DealsModule` above:
+
+```sh
+cargo run -- check --graph
+```
+
+```text
+App
+├── ConfigModule [global]
+│   ├── provides navree_config::config::Config (singleton)
+│   └── exports navree_config::config::Config
+├── HttpModule [global]
+│   ├── provides navree_http::options::HttpOptions (singleton) <- navree_config::config::Config
+│   ├── provides navree_http::module::HttpServer (singleton) <- navree_http::options::HttpOptions
+│   ├── provides navree_http::signed::UrlSigner (singleton) <- navree_http::options::HttpOptions
+│   ├── exports navree_http::options::HttpOptions
+│   ├── exports navree_http::module::HttpServer
+│   ├── exports navree_http::signed::UrlSigner
+│   ├── command serve: Start the HTTP server ([--addr HOST:PORT])
+│   ├── command routes: List every route with its access declaration ([--json])
+│   ├── command down: Put the app into maintenance mode ([--retry SECS] [--message TEXT])
+│   └── command up: Bring the app out of maintenance mode
+├── CompaniesModule
+│   ├── provides app::companies::CompanyService (singleton)
+│   └── exports app::companies::CompanyService
+└── DealsModule
+    ├── provides app::deals::DealService (singleton) <- app::companies::CompanyService
+    ├── provides app::deals::DealsController (singleton) <- app::deals::DealService
+    ├── provides app::deals::PipelineOptions (singleton) <- navree_config::config::Config
+    ├── provides app::deals::DefaultCurrency (singleton)
+    ├── exports app::deals::DealService
+    ├── command deals:recalculate: Recalculate every deal's position
+    └── CompaniesModule (see above)
+```
+
+Each provider shows its scope and, after `<-`, the dependencies it declares. Without `--graph`, `check` prints a one-line summary such as `module graph OK: 4 modules, 9 providers`, or the errors.
+
+## Configurable modules
+
+Many modules need settings. Navree follows the NestJS convention of *dynamic modules*: a module type offers constructors that return a configured instance of itself.
+
+### `for_root` and `from_config`
+
+The framework's configurable modules come in up to three forms:
+
+| Form | Example | Settings come from |
+|---|---|---|
+| `X::for_root(options)` | `HttpModule::for_root(HttpOptions::default())` | The options you pass; no configuration file needed |
+| `X::from_config()` | `HttpModule::from_config()` | The module's configuration section (`http`), so the app needs `ConfigModule` |
+| plain `X` | `.module(HttpModule)` or `imports = [HttpModule]` | The app's configured instance when there is one; otherwise the module's defaults, which for most modules (`HttpModule` included) means reading its configuration section like `from_config()` |
+
+A configured instance (`for_root` or `from_config`) has the same identity as the plain module type, and it wins: if the root adds `HttpModule::from_config()` and a feature module imports plain `HttpModule`, the feature module gets the configured one. That's why you configure a module **once**, usually in the app root, and import it by type everywhere else. Configuring the same module twice fails the boot:
+
+```text wrap
+module `BillingModule` is configured more than once; call `for_root` once (usually in the app root) and import the module by type elsewhere
+```
+
+Some modules only have some forms. `ConfigModule::for_root(sources)` takes configuration sources, `EventsModule::for_root()` and `ScheduleModule::for_root()` take no arguments, and `AccessModule::for_root(options)` takes the app's ability rules. The [configuration](/docs/getting-started/configuration/) page lists every section.
+
+### Writing a configurable module
+
+A configured instance is a second module type whose `id` returns the id of the plain type and whose `is_configured` returns `true`. This is how the framework writes its own:
+
+```rust title="src/modules/billing/mod.rs"
+use navree::ModuleId;
+use navree::config::ConfigSection;
+use navree::prelude::*;
+use serde::Deserialize;
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct BillingOptions {
+    pub currency: String,
+    pub trial_days: u32,
+}
+
+impl Default for BillingOptions {
+    fn default() -> Self {
+        Self { currency: "EUR".to_owned(), trial_days: 14 }
+    }
+}
+
+impl ConfigSection for BillingOptions {
+    const KEY: &'static str = "billing";
+}
+
+/// Invoices. Plain `BillingModule` reads the `billing` section;
+/// `BillingModule::for_root(..)` takes the options.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BillingModule;
+
+impl BillingModule {
+    /// The module with explicit options (configure it once, in the app root).
+    pub fn for_root(options: BillingOptions) -> impl Module {
+        ConfiguredBillingModule { options }
+    }
+}
+
+impl Module for BillingModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.config::<BillingOptions>();
+        register(m);
+    }
+}
+
+/// `BillingModule::for_root(..)`: the same module id, configured.
+struct ConfiguredBillingModule {
+    options: BillingOptions,
+}
+
+impl Module for ConfiguredBillingModule {
+    fn id(&self) -> ModuleId {
+        ModuleId::of::<BillingModule>()
+    }
+
+    fn is_configured(&self) -> bool {
+        true
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(self.options.clone());
+        register(m);
+    }
+}
+
+fn register(m: &mut ModuleBuilder) {
+    m.global()
+        .exports::<BillingOptions>()
+        .provider::<InvoiceService>()
+        .exports::<InvoiceService>();
+}
+```
+
+Both forms register the same providers; only the source of `BillingOptions` differs. `m.config::<BillingOptions>()` builds the options from the `billing` section at boot, applies the serde defaults when the section is missing, and fails the boot naming the section when it doesn't deserialize.
+
+### Feature registrations with `for_feature`
+
+`for_feature` is the other half of the convention: a feature module imports `X::for_feature::<T>()` to register something of its own with module `X`. The CRM's `CrmCoreModule` registers its entities as access subjects this way, so `#[can(.., from = "id")]` routes can load their records:
+
+```rust title="crates/crm-core/src/module.rs"
+#[module(
+    imports = [
+        AccessModule::for_feature::<Company>(),
+        AccessModule::for_feature::<Contact>(),
+        AccessModule::for_feature::<Deal>(),
+        AccessModule::for_feature::<Activity>(),
+        AccessModule::for_feature::<User>(),
+    ],
+    register = Self::wire,
+)]
+pub struct CrmCoreModule;
+```
+
+The kernel has no special support for `for_feature`; it's a pattern. `for_feature::<T>()` returns a small generic module, one distinct type (so one distinct module) per `T`, that contributes a value. The main module collects the contributions:
+
+```rust
+use std::marker::PhantomData;
+
+/// What `for_feature` contributes.
+pub struct ReportRegistration {
+    pub name: &'static str,
+}
+
+pub struct ReportsModule;
+
+impl ReportsModule {
+    /// Registers report `R` (import it in the feature module that owns `R`).
+    pub fn for_feature<R: Report>() -> impl Module {
+        ReportFeature::<R>(PhantomData)
+    }
+}
+
+/// `ReportFeature<A>` and `ReportFeature<B>` are different modules.
+struct ReportFeature<R>(PhantomData<fn() -> R>);
+
+impl<R: Report> Module for ReportFeature<R> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(ReportRegistration { name: R::NAME });
+    }
+}
+
+/// Wherever the registrations are needed (a factory, a hook, a command):
+pub fn report_names(ctx: &AppContext) -> Vec<&'static str> {
+    ctx.contributions::<ReportRegistration>()
+        .iter()
+        .map(|c| c.value.name)
+        .collect()
+}
+```
+
+[Contributions](/docs/architecture/providers/#contributions) are covered on the providers page.
+
+## Boot-time checks
+
+The kernel validates the whole graph before it constructs a single provider. These problems fail the boot (and `check`), each reported with the module and the type involved:
+
+- a dependency that isn't visible: missing, private to another module, exported by a module that isn't imported, or exported by two imported modules;
+- an `exports` entry for a provider the module neither registers nor imports;
+- the same provider registered twice in one module;
+- a module import cycle (`module import cycle: AModule -> BModule -> AModule`);
+- a provider dependency cycle (`provider dependency cycle: A -> B -> A`);
+- a singleton that depends on a request-scoped provider, directly or through transient providers;
+- a lifecycle registration for a type that isn't a provider of the same module;
+- two modules registering a command with the same name;
+- a module configured twice.
+
+The dependency checks use the dependencies providers declare. `#[injectable]` declares every `Arc<T>` field, and a `Factory` declares what you pass to `.deps(..)`. Then, still during boot, `HttpModule` checks every route (access declarations, duplicate paths, a missing authenticator or authorizer) before `serve` binds a port; see [routing](/docs/basics/routing/#route-checks-at-boot).
+
+Some mistakes don't wait for the boot. `#[module]` rejects unknown keys at compile time and suggests the right one:
+
+```text wrap
+error: unknown #[module] key `import`: did you mean `imports`? (expected `imports`, `providers`, `controllers`, `exports`, `global` or `register`)
+ --> src/modules/users.rs:9:10
+  |
+9 | #[module(import = [DataModule], providers = [Repo])]
+  |          ^^^^^^
+```
+
+It also rejects a key given twice, a list without square brackets, `global = true` (`global` is a flag), and `#[module]` on anything but a struct.
+
+<Callout type="tip" title="Check the graph in CI">
+
+`cargo run -- check` validates the graph without connecting to a database or constructing anything, so it's a cheap CI step that catches wiring mistakes.
+
 </Callout>
+
+## Organising an application
+
+Give each feature its own module, and keep shared things in a module the features import. The CRM is split this way, one crate per feature:
+
+<FileTree title="apps/crm-api">{`
+src/
+  app.rs              # the root: platform modules + every CRM module
+  main.rs
+crates/
+  crm-core/           # CrmCoreModule: entities, migrations, abilities, platform()
+  crm-users/          # UsersModule
+  crm-companies/      # CompaniesModule, ContactsModule
+  crm-deals/          # DealsModule
+  crm-activities/     # ActivitiesModule, DashboardModule
+  crm-testkit/        # a booted CRM for feature tests
+`}</FileTree>
+
+Every feature module imports `CrmCoreModule`, so the shared tables and roles are set up before the features that use them. A feature that needs another feature's service imports that feature's module, as `DealsModule` would import `CompaniesModule`.
+
+You don't need separate crates. `navree make:module deals` writes a module (controller, service, entity, DTOs, a migration and tests) into `src/modules/deals/` and adds it to the app; with `--crud`, its controller serves the five JSON resource routes, guarded by abilities on its entity. See the [CLI](/docs/digging-deeper/cli/) page.
+
+## Testing modules
+
+`AppBuilder::validate` checks the graph without booting and returns a `GraphReport` you can assert on:
+
+```rust
+#[test]
+fn deals_module_imports_companies() {
+    let report = Navree::app()
+        .module(DealsModule)
+        .validate()
+        .expect("the module graph is valid");
+    let deals = report
+        .modules
+        .iter()
+        .find(|m| m.name == "DealsModule")
+        .expect("DealsModule is in the report");
+    assert_eq!(deals.imports, ["CompaniesModule"]);
+}
+```
+
+To exercise the module for real, boot it with `TestApp::builder().module(DealsModule).build().await` from `navree::testing`. It adds `ConfigModule` and `HttpModule` for you; see [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/providers/" title="Providers and dependency injection">
+    Registering providers, scopes, lazy handles and overrides for tests.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/lifecycle-hooks/" title="Lifecycle hooks">
+    Running code at boot and during a graceful shutdown.
+  </LinkCard>
+  <LinkCard href="/docs/basics/routing/" title="Routing and controllers">
+    Controllers, route attributes and the route table.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/request-lifecycle/" title="Request lifecycle">
+    From boot to the response, step by step.
+  </LinkCard>
+</LinkCards>

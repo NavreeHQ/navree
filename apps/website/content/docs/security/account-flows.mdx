@@ -1,10 +1,576 @@
 ---
 title: "Account flows"
-description: "Registration, password reset, email verification and two-factor authentication."
+description: "Registration, password reset, email verification, profile and password changes, and TOTP two-factor authentication with recovery codes."
 ---
 
-This page covers the account flows Navree provides: registration, sign-in throttling, password reset, email verification and two-factor authentication with recovery codes, and how to switch each flow on or off.
+Besides signing in, an app needs the flows around an account: creating one, resetting a forgotten password, verifying an email address, changing the address or the password, and protecting the account with a second factor. `navree-auth` ships all of them as routes under `/api/auth` and as methods on `AuthService`, and records each step in the [audit log](/docs/security/audit-log/). This page assumes `AuthModule` is set up as described in [Authentication](/docs/security/authentication/).
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-auth` is the reference: run `cargo doc -p navree-auth --open` in the repository.
+## Before you start
+
+Two of the flows send mail, and two of the mails carry links:
+
+- **Mail.** Password reset and verification mails go through the app's `Mailer` when `MailModule` is in the app (see [Mail](/docs/digging-deeper/mail/)). They are sent once the request's unit of work commits, so a failed request sends nothing. Without `MailModule` nothing is sent and a warning is logged.
+- **Queue.** With a job queue in the app (`QueueModule`), the mails are queued instead of sent during the request. Do this in production: `POST /api/auth/forgot-password` then answers as fast for a registered address as for an unknown one, so response times don't reveal who has an account.
+- **Links.** Set `auth.password_reset.url` to the page of your front end that resets a password, and `app.url` (or `auth.verification.base_url`) to the address users open verification links at.
+
+```toml title="config/app.toml"
+[app]
+url = "https://app.example.com"
+
+[auth.password_reset]
+url = "https://app.example.com/reset-password"
+```
+
+## Registration
+
+`POST /api/auth/register` creates an account and signs it in:
+
+```http
+POST /api/auth/register HTTP/1.1
+Content-Type: application/json
+
+{"name": "Ada Lovelace", "email": "ada@example.com", "password": "correct horse battery"}
+```
+
+```http
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 900,
+  "refresh_token": "01a17748-e212-70fb-ac25-60104e263312.THWKdps4upOnINDZb8lc23vO35ZtAqWxmhmc6h2LkCCswPkz",
+  "token_type": "Bearer",
+  "user": {
+    "__type": "User",
+    "created_at": "2026-10-26T08:17:07.568377800Z",
+    "email": "ada@example.com",
+    "email_verified_at": null,
+    "id": "01a17748-e211-72fc-abb3-836e604457d0",
+    "name": "Ada Lovelace"
+  }
+}
+```
+
+| Field | Rules |
+|---|---|
+| `name` | 1 to 255 characters; trimmed, and must not be empty |
+| `email` | A valid address of at most 255 characters; stored trimmed and in lower case, and unique regardless of case |
+| `password` | At least `auth.password_min_length` characters (8 by default), at most 1024; stored as an Argon2id hash |
+
+A taken address and a short password are 400 validation errors:
+
+```json wrap
+{"statusCode": 400, "message": ["email has already been taken"], "error": "Bad Request", "errors": {"email": ["email has already been taken"]}}
+```
+
+```json wrap
+{"statusCode": 400, "message": ["password must be longer than or equal to 8 characters"], "error": "Bad Request", "errors": {"password": ["password must be longer than or equal to 8 characters"]}}
+```
+
+The new account's email address is unverified, and registering doesn't send a verification mail: the client asks for one with [`POST /api/auth/email/verification`](#sending-the-link). The password rule is a minimum length only; there are no rules about character classes or breached passwords.
+
+### Turning registration off
+
+Most business apps don't let anyone sign up. Set `auth.registration` to `false` and the route isn't mounted at all, so it answers `404 Not Found`. Signing in and every other flow keep working. The CRM does this, because admins create the accounts:
+
+```toml title="apps/crm-api/config/app.toml"
+[auth]
+# Accounts are created by admins (POST /api/v1/users); no public sign-up.
+registration = false
+```
+
+Create accounts from your own code instead. `AuthService::register` applies the password policy and the unique-email check and writes in your unit of work (the route's length limits and email format check come from its input validation, which `register` doesn't repeat); `create_user` skips the password policy, for seeders and commands:
+
+```rust
+use navree::auth::NewUser;
+
+let user = auth
+    .register(&uow, NewUser { name, email, password })
+    .await?;
+```
+
+## Password reset
+
+A password reset takes two requests, as in Laravel: one asks for a token by mail, the other sets the new password with it.
+
+### Requesting a reset link
+
+```http
+POST /api/auth/forgot-password HTTP/1.1
+Content-Type: application/json
+
+{"email": "ada@example.com"}
+```
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"message": "If the email address is registered, a password reset link has been sent."}
+```
+
+The answer is the same whether or not the address has an account. For a registered address, Navree:
+
+1. creates a random 64-character token and stores only its SHA-256 digest in `password_reset_tokens` (one per address, replacing an earlier one);
+2. mails the token once the request commits.
+
+A second request for the same address within `auth.password_reset.throttle_secs` (60 seconds) still gets the 202 but sends no mail. For an unknown address nothing happens.
+
+With `auth.password_reset.url` set, the built-in mail links to that page:
+
+```text wrap
+Hello Ada Lovelace,
+
+You are receiving this email because we received a password reset request for your account.
+
+Reset your password: https://app.example.com/reset-password?token=G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F&email=ada%40example.com
+
+This password reset token expires in 60 minutes.
+
+If you did not request a password reset, no further action is required.
+```
+
+### The reset URL
+
+`auth.password_reset.url` must be an absolute `http://` or `https://` URL; anything else fails the boot. The mail links to it with `token` and `email` added to the query string (URL-encoded, and after an `&` when the URL already has a query). Your page reads both, asks for a new password and posts all three to the API.
+
+Without a URL, the mail carries the token itself ("Your password reset token: ..."), which suits mobile and API clients that type or paste it.
+
+### Setting the new password
+
+```http wrap
+POST /api/auth/reset-password HTTP/1.1
+Content-Type: application/json
+
+{"email": "ada@example.com", "token": "G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F", "password": "a new password"}
+```
+
+The answer is `204 No Content`. The token works once and for `auth.password_reset.ttl_secs` (an hour). The new password must meet the password policy. Resetting a password **signs out every session** of the account: all its refresh tokens are revoked. Access tokens already issued keep working until they expire.
+
+A wrong, used or expired token, or one for another address, gets:
+
+```json
+{"statusCode": 400, "message": "Invalid or expired password reset token", "error": "Bad Request"}
+```
+
+A pending reset is also cancelled when the user changes their password or their email address, so a token mailed to an old address can't reset whoever owns that address next.
+
+## Email verification
+
+Verification proves that the user receives mail at their address. Navree records it in `users.email_verified_at`.
+
+### Sending the link
+
+A signed-in user asks for a link:
+
+```http
+POST /api/auth/email/verification HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+```
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"message": "A verification link has been sent."}
+```
+
+An address that is already verified gets `204 No Content` and no mail. Without `MailModule`, an unverified address still gets the 202, although nothing is sent: only a warning is logged. The mail links to the verification route:
+
+```text wrap
+Hello Ada Lovelace,
+
+Please confirm your email address: https://app.example.com/api/auth/email/verify/01a17749-d2c5-70b9-99c8-0c19e9c995f8/b5fc85e55755f9e0d030a10ab4429b6b2944855f9a0d60077fe832becbc41d72?expires=1793006289&signature=70734ebb467d216d4dc0c3e6cfdab80dcc069d372677c26689d2678b2995f2af
+
+This link expires in 60 minutes.
+
+If you did not create an account, no further action is required.
+```
+
+The link is `{base}{http.api_prefix}{auth.routes_prefix}/email/verify/{user id}/{SHA-256 of the address}`, signed with navree-http's `UrlSigner` and valid for `auth.verification.ttl_secs` (an hour). `{base}` is `auth.verification.base_url`, else the `app.url` setting, else empty, which makes the link relative.
+
+The link points at the API route. When `{base}` is your front end, the front end must pass `/api/*` on to the API. The CRM works this way: `app.url` is crm-web, whose BFF forwards every `/api/*` request.
+
+### Following the link
+
+`GET /api/auth/email/verify/{id}/{hash}?expires=..&signature=..` is public: the signature is the credential.
+
+| Link | Response |
+|---|---|
+| Valid | `200 {"message": "The email address has been verified."}` |
+| Changed or expired signature | `401 Invalid signature.` |
+| For an address the user no longer has | `403 Invalid verification link` |
+
+Following a link twice is harmless. The signing key is `http.signing_key`, else a key derived from the application key, else a random key per process (links then stop working at a restart).
+
+<Callout type="note" title="Unverified users aren't blocked">
+
+Navree records verification but enforces nothing with it: unverified users sign in and use the API like everyone else. If a feature needs a verified address, check `user.email_verified_at` in that service or in a route [guard](/docs/basics/access-control/).
+
 </Callout>
+
+## Changing the profile
+
+`PATCH /api/auth/me` changes the user's name, email address, or both. Only the fields present change, and the answer is the updated user resource:
+
+```http
+PATCH /api/auth/me HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"email": "ada@lovelace.dev", "current_password": "correct horse battery"}
+```
+
+```json
+{
+  "__type": "User",
+  "created_at": "2026-10-26T08:18:09.191850400Z",
+  "email": "ada@lovelace.dev",
+  "email_verified_at": null,
+  "id": "01a17749-d2c5-70b9-99c8-0c19e9c995f8",
+  "name": "Ada Lovelace"
+}
+```
+
+A new name is trimmed and must not be empty. A new **email address** needs more care, because whoever controls the address can reset the password:
+
+- It needs the user's `current_password`, so a stolen access token alone can't move the account to an attacker's address. Without it:
+
+  ```json wrap
+  {"statusCode": 400, "message": ["current_password should not be empty"], "error": "Bad Request", "errors": {"current_password": ["current_password should not be empty"]}}
+  ```
+
+  A wrong password is `current_password is incorrect`, and wrong passwords count towards the [login throttle](/docs/security/authentication/#the-login-throttle) of that account and address (429 once it is used up).
+- The address must be free: `400 email has already been taken` otherwise.
+- The new address is unverified until the user follows the verification link mailed to it.
+- The old address gets a notice ("Your email address was changed"), so a takeover doesn't go unnoticed.
+- A pending password reset for the old address is cancelled.
+
+The audit entry `auth.profile_updated` records the old and new values of the fields that changed. A request that changes nothing returns the user and records nothing.
+
+## Changing the password
+
+```http
+PATCH /api/auth/me/password HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"current_password": "a new password", "password": "another password"}
+```
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 900,
+  "refresh_token": "01a17749-d34b-7580-ac3e-73a1972c0379.NycZAJC0SikyvUAw5DFox5GakXgjH8MMq9ISNItAgJcSGD4D",
+  "token_type": "Bearer"
+}
+```
+
+Changing the password revokes every refresh token of the account and returns a **new token pair** for the caller, so this device stays signed in and every other session ends. Store the new tokens; the CRM's BFF swaps its cookies for them. The access tokens of other devices keep working until they expire.
+
+`current_password` is checked like a login: a wrong one is a 400 (`current_password is incorrect`) and counts towards the login throttle. The new password must meet the password policy, and a pending password reset is cancelled.
+
+## Two-factor authentication
+
+Two-factor authentication adds a time-based one-time password (TOTP, RFC 6238) to the sign-in: a six-digit code from an authenticator app such as Google Authenticator, 1Password or Authy. Codes use SHA-1 and 30-second steps, and the code of the step before or after the current one is accepted too.
+
+The secret is 160 random bits, stored encrypted with the app's `Encrypter` in `users.two_factor_secret`. The recovery codes are stored as SHA-256 digests, also encrypted. Both depend on the application key: when you rotate `APP_KEY`, keep the old key in `app.previous_keys`, or two-factor sign-ins stop working (see [Key rotation](/docs/security/encryption-and-hashing/#rotating-keys)).
+
+### Turning it on
+
+Setup takes two requests, so that the user proves their app works before it is required.
+
+<Steps>
+<Step title="Start the setup">
+
+```http
+POST /api/auth/2fa/enable HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+```
+
+```json wrap
+{
+  "otpauth_url": "otpauth://totp/Navree:ada%40lovelace.dev?secret=6D2S4D3BDQICIEEOTKHIHU7IJQG4G7IO&issuer=Navree",
+  "qr_svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"...",
+  "secret": "6D2S4D3BDQICIEEOTKHIHU7IJQG4G7IO"
+}
+```
+
+Show `qr_svg` (an SVG document of the `otpauth://` URL) for the user to scan, and `secret` for typing in by hand. The issuer is `auth.two_factor.issuer`. Nothing is active yet: logins don't ask for a code until the setup is confirmed. Calling it again replaces an unconfirmed secret; once two-factor authentication is on, it answers `409 Conflict`.
+
+</Step>
+<Step title="Confirm with a code">
+
+```http
+POST /api/auth/2fa/confirm HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"code": "492817"}
+```
+
+```json
+{
+  "recovery_codes": [
+    "ja78ps4ahj-zvyylcuies",
+    "rbfs20zip7-nbqf4o7lmp",
+    "u6ff7cmrvh-gleyokprdc",
+    "rpbbk0bqka-wxhkjxjw2l",
+    "ueuoi4l7gc-4tgagaxz2v",
+    "4hed32ilol-cnnnxyidlm",
+    "elsbmyltpk-z7hakpqeco",
+    "kcgc46hsos-u0x1dzabnt"
+  ]
+}
+```
+
+Two-factor authentication is on from now. This is the only time the recovery codes are shown: ask the user to keep them somewhere safe. A wrong code is a field error (`{"errors": {"code": ["code is invalid"]}}`) and counts towards the two-factor throttle below.
+
+</Step>
+</Steps>
+
+### Signing in with a second factor
+
+When the account has two-factor authentication, a correct password at `POST /api/auth/login` doesn't return tokens. It returns a challenge:
+
+```json
+{
+  "challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...",
+  "expires_in": 300,
+  "two_factor_required": true
+}
+```
+
+The client asks for a code and sends it with the challenge token:
+
+```http wrap
+POST /api/auth/2fa/verify HTTP/1.1
+Content-Type: application/json
+
+{"challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...", "code": "492817"}
+```
+
+A correct code gets the same answer as a login: the user and a token pair. To use a recovery code, send `recovery_code` instead of `code`; send exactly one of them, or the answer is a 400 field error on `code` (`code should not be empty when recovery_code is missing`, or `code must be empty when recovery_code is given`).
+
+| Problem | Response |
+|---|---|
+| A wrong or already used code | `401 Invalid two-factor code` |
+| A challenge used before, or not a challenge token | `401 Invalid token` |
+| A challenge older than `auth.two_factor.challenge_ttl_secs` (5 minutes) | `401 Token expired`; sign in again |
+| Any attempt after `auth.two_factor.max_attempts_per_minute` (5) wrong codes for the user within a minute | `429 Too Many Requests` |
+
+- The challenge token is a JWT of type `two_factor_challenge`. It is accepted once and never works as an access token.
+- A TOTP code is accepted once: after a code is used, codes of the same or an earlier 30-second step are refused.
+- Wrong codes are counted per user, before the code is checked, so parallel guesses can't get past the limit. A correct code clears the count.
+
+The CRM's BFF keeps the challenge token in an httpOnly cookie scoped to `/api/auth/2fa`, so the browser only ever sends the code (see [the BFF pattern](/docs/security/authentication/#browser-apps-the-bff-pattern)).
+
+### Recovery codes
+
+A recovery code replaces a code from the app when the user has lost their phone. There are `auth.two_factor.recovery_codes` of them (8), each two groups of ten lower-case letters and digits. Each works once; case and surrounding spaces don't matter. Using one is recorded as `auth.two_factor_recovery_code_used`.
+
+`POST /api/auth/2fa/recovery-codes` replaces the codes with a new set and returns it; the old codes stop working. It answers `400 Two-factor authentication is not enabled` when two-factor authentication is off.
+
+### Turning it off
+
+```http
+POST /api/auth/2fa/disable HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"password": "another password"}
+```
+
+The answer is `204 No Content`. The secret and the recovery codes are deleted, including those of a setup that was never confirmed. A wrong password is a field error on `password` and counts towards the login throttle.
+
+<Callout type="warning" title="What needs the password again">
+
+Changing the email address, changing the password and turning two-factor authentication off all ask for the password. Starting a setup (`2fa/enable`), confirming it and replacing the recovery codes (`2fa/recovery-codes`) need only a valid access token. Someone holding a stolen access token could therefore turn two-factor authentication on with their own app, or take a fresh set of recovery codes. Keep access tokens short-lived and out of the browser.
+
+</Callout>
+
+There are no SMS or email codes, and no passkeys: TOTP is the only second factor. There is also no route for an admin to turn off another user's two-factor authentication.
+
+## Using the flows from code
+
+Every route calls a method of `AuthService`, which you can call from your own controllers, jobs and commands:
+
+| Method | Route |
+|---|---|
+| `send_password_reset_link(email, &meta)` | `POST /auth/forgot-password` |
+| `reset_password(email, token, password, &meta)` | `POST /auth/reset-password` |
+| `send_verification_email(&user)` | `POST /auth/email/verification`; `false` when already verified |
+| `verification_url(&user)` | The signed link itself |
+| `verify_email(user_id, hash, &meta)` | `GET /auth/email/verify/{id}/{hash}` (the signature is checked by the route) |
+| `update_profile(user_id, ProfileUpdate { name, email, current_password }, &meta)` | `PATCH /auth/me` |
+| `change_password(user_id, current, new, meta)` | `PATCH /auth/me/password`; returns a `TokenPair` |
+| `enable_two_factor(user_id, &meta)` | `POST /auth/2fa/enable`; returns a `TwoFactorSetup` |
+| `confirm_two_factor(user_id, code, &meta)` | `POST /auth/2fa/confirm`; returns the recovery codes |
+| `disable_two_factor(user_id, password, &meta)` | `POST /auth/2fa/disable` |
+| `regenerate_recovery_codes(user_id, &meta)` | `POST /auth/2fa/recovery-codes` |
+| `attempt_login(email, password, &meta)` | `POST /auth/login`; returns a `LoginOutcome` |
+| `verify_two_factor(challenge, proof, &meta)` | `POST /auth/2fa/verify`; `proof` is `TwoFactorProof::Code(..)` or `TwoFactorProof::RecoveryCode(..)` |
+
+`meta` is the `ClientMeta` of the request (an extractor), or `ClientMeta::default()` outside one. `navree::auth::two_factor_enabled(&user)` tells whether an account has confirmed two-factor authentication.
+
+For example, an admin screen that creates accounts can mail the new user a verification link. Inside a request, the mail goes out once the request's unit of work commits:
+
+```rust
+let user = auth
+    .register(&uow, NewUser { name, email, password })
+    .await?;
+auth.send_verification_email(&user).await?;
+```
+
+## Mail templates
+
+The reset and verification mails have built-in text and HTML bodies. To use your own, name a [view](/docs/digging-deeper/views/) template pair: `{name}.html` and `{name}.txt` (at least one of them):
+
+```toml title="config/app.toml"
+[auth.password_reset]
+url = "https://app.example.com/reset-password"
+mail_template = "mail/reset-password"
+
+[auth.verification]
+mail_template = "mail/verify-email"
+```
+
+Templates can be files in `resources/views` or embedded by a module:
+
+```rust title="src/modules/account/mod.rs"
+pub struct AccountMailModule;
+
+impl Module for AccountMailModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[
+            (
+                "mail/reset-password.html",
+                r#"<p>Hi {{ name }},</p>
+<p><a href="{{ url }}">Choose a new password</a> within {{ expires_in_minutes }} minutes.</p>"#,
+            ),
+            (
+                "mail/reset-password.txt",
+                "Hi {{ name }}, choose a new password within {{ expires_in_minutes }} minutes: {{ url }}",
+            ),
+        ]);
+    }
+}
+```
+
+| Mail | Variables |
+|---|---|
+| Password reset | `name`, `email`, `token`, `url` (empty without `auth.password_reset.url`), `expires_in_minutes` |
+| Email verification | `name`, `email`, `url`, `expires_in_minutes` |
+
+The subjects ("Reset your password", "Verify your email address") are fixed, and the notice an old address gets after an email change always uses the built-in text.
+
+## Events and audit entries
+
+`navree-auth` doesn't publish events on the [event bus](/docs/digging-deeper/events/). Every step is recorded in the [audit log](/docs/security/audit-log/) instead, when the app has one:
+
+| Action | Kind | When |
+|---|---|---|
+| `auth.register` | `auth` | An account was registered |
+| `auth.password_reset_requested` | `auth` | A reset token was created, and mailed when the app has `MailModule` (not for unknown addresses or throttled requests) |
+| `auth.password_reset` | `auth` | A password was reset with a token |
+| `auth.password_changed` | `auth` | The user changed their password |
+| `auth.password_confirmation_failed` | `security` | A wrong `current_password` or `password`; `metadata.field` |
+| `auth.profile_updated` | `auth` | Name or email changed; `old_values` and `new_values` hold the changed fields |
+| `auth.email_verification_sent` | `auth` | A verification link was mailed |
+| `auth.email_verified` | `auth` | A verification link was followed |
+| `auth.two_factor_enabled` | `auth` | A setup was started |
+| `auth.two_factor_confirmed` | `auth` | Two-factor authentication was turned on |
+| `auth.two_factor_disabled` | `auth` | It was turned off |
+| `auth.two_factor_recovery_codes_regenerated` | `auth` | New recovery codes were issued |
+| `auth.two_factor_challenge` | `auth` | A correct password started a two-factor sign-in |
+| `auth.two_factor_failed` | `security` | A wrong code; `metadata.method` is `totp` or `recovery_code` |
+| `auth.two_factor_recovery_code_used` | `security` | A recovery code was used to sign in |
+| `auth.login` | `auth` | A sign-in finished; `metadata.two_factor` says how, after a second factor |
+| `auth.throttled` | `security` | A throttle refused an attempt; `metadata.flow` is `login`, `password_confirmation`, `two_factor` or `two_factor_confirmation` |
+
+Entries for changes are written once the unit of work commits, so a rolled-back change leaves no entry. Failures are written straight away. Changes to the `users` row also appear as `data` entries (`user.created`, `user.updated`). The password hash and the two-factor columns are never serialized, so those entries never contain them: a change to the password alone records only the new `updated_at`.
+
+To react to an account event (say, mail the user when a new device signs in), call your code next to the `AuthService` method in a route of your own; there are no hooks to register.
+
+## Configuration
+
+```toml title="config/app.toml"
+[auth]
+registration = true             # POST /auth/register (404 when false)
+password_min_length = 8
+
+[auth.password_reset]
+ttl_secs = 3600                 # reset tokens expire after an hour
+throttle_secs = 60              # at most one reset mail per address per minute
+# url = "https://app.example.com/reset-password"  # mail link: {url}?token=..&email=..
+# mail_template = "mail/reset-password"           # navree-view template pair
+
+[auth.verification]
+ttl_secs = 3600                 # verification links expire after an hour
+# base_url = "https://app.example.com"            # default: app.url
+# mail_template = "mail/verify-email"
+
+[auth.two_factor]
+issuer = "Navree"               # shown in authenticator apps
+challenge_ttl_secs = 300        # the login challenge token lives 5 minutes
+recovery_codes = 8
+max_attempts_per_minute = 5     # wrong codes per user, then 429; 0 = off
+```
+
+| Key | Default | |
+|---|---|---|
+| `auth.registration` | `true` | Mounts `POST /auth/register` |
+| `auth.password_min_length` | `8` | For registration, resets and password changes |
+| `auth.password_reset.ttl_secs` | `3600` | How long a reset token works; at least 1 |
+| `auth.password_reset.throttle_secs` | `60` | Shortest time between two reset mails to one address; `0` sends one per request |
+| `auth.password_reset.url` | unset | Absolute `http(s)` URL of your reset page; without it the mail carries the token |
+| `auth.password_reset.mail_template` | unset | A view template pair for the mail |
+| `auth.verification.ttl_secs` | `3600` | How long a verification link works; at least 1 |
+| `auth.verification.base_url` | unset | Absolute `http(s)` URL the link starts with; defaults to `app.url` |
+| `auth.verification.mail_template` | unset | A view template pair for the mail |
+| `auth.two_factor.issuer` | `"Navree"` | Shown in authenticator apps; not empty, no `:` |
+| `auth.two_factor.challenge_ttl_secs` | `300` | Lifetime of the login challenge; at least 1 |
+| `auth.two_factor.recovery_codes` | `8` | How many recovery codes are issued, 1 to 32 |
+| `auth.two_factor.max_attempts_per_minute` | `5` | Wrong codes per user per minute before a 429; `0` turns it off |
+
+The rest of the `auth` section is on [Authentication](/docs/security/authentication/#configuration).
+
+## Testing
+
+Use the array mail transport to read the mails your tests trigger:
+
+```rust
+use navree::mail::{MailModule, MailOptions, Mailer, TransportConfig};
+use navree::testing::TestApp;
+use navree::view::{ViewModule, ViewOptions};
+
+let app = TestApp::builder()
+    // ... the database, crypto and auth modules
+    .module(ViewModule::for_root(ViewOptions { dirs: vec![], reload: false }))
+    .module(MailModule::for_root(MailOptions {
+        transport: TransportConfig::Array,
+        ..MailOptions::default()
+    }))
+    .build()
+    .await;
+
+// After `POST /api/auth/forgot-password`:
+let sent = app.get::<Mailer>().await.array_transport().expect("the array transport").sent();
+let text = sent[0].text.clone().unwrap(); // holds the reset link
+```
+
+`MailModule` needs `ViewModule` in the app. For two-factor tests, compute codes from the `secret` that `2fa/enable` returns with the `totp-rs` crate, as `navree-auth`'s own tests do, and move a `FixedClock` to the next 30-second step between codes. See [Fakes](/docs/testing/fakes/).
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Access tokens, refresh tokens, strategies and the login throttle.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    Where every account event is recorded.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Transports, queued mail and templates.
+  </LinkCard>
+</LinkCards>

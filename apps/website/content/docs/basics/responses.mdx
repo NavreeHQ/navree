@@ -1,10 +1,355 @@
 ---
 title: "Responses and API resources"
-description: "Returning JSON, status codes, created resources and API resources."
+description: "Return JSON, status codes and headers from handlers, shape entities into API resources, and send pages, downloads and streams."
 ---
 
-This page explains what handlers can return: `Json`, `Created` with its location, `NoContent`, pages of results and streamed bodies. It also covers API resources, which shape your entities into stable response formats.
+A handler returns anything that implements Axum's `IntoResponse`. Navree adds a few response types of its own (`Created`, `NoContent`, `Page<T>`) and a pattern for API resources: structs that give your entities a stable, documented JSON shape. This page covers all of them, plus headers, file downloads and streamed bodies.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` and `navree-api` is the reference: run `cargo doc -p navree-http --open` in the repository.
+## Returning JSON
+
+Wrap any `Serialize` value in `Json`. Most handlers return `Result<Json<T>>`, where `Result` is the prelude's `navree::Result`, whose error type is [`AppError`](/docs/basics/errors/):
+
+```rust title="src/companies/controller.rs"
+use navree::prelude::*;
+use sea_orm::EntityTrait;
+use uuid::Uuid;
+
+#[injectable]
+pub struct CompaniesController;
+
+#[controller("/companies", version = "1")]
+#[authenticated]
+impl CompaniesController {
+    #[get("/{id}")]
+    async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<CompanyResource>> {
+        let company = company::Entity::find_by_id(id)
+            .one(&*uow.tx().await?)
+            .await?
+            .ok_or_else(AppError::not_found)?;
+        Ok(Json(company.into()))
+    }
+}
+```
+
+The response is `200 OK` with `Content-Type: application/json`. `Json` is Axum's, re-exported by `navree::http` and the prelude.
+
+For a one-off shape, `serde_json::json!` is enough:
+
+```rust
+#[get("/stats")]
+async fn stats(&self) -> Json<Value> {
+    Json(json!({ "companies": 42, "open_deals": 7 }))
+}
+```
+
+Other types work too: a `String` or `&'static str` is a `200` with `text/plain; charset=utf-8`, and a bare `StatusCode` is an empty response with that status (an error status gets the [error format](/docs/basics/errors/) body).
+
+Responses are compressed with gzip or brotli when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images, gRPC and bodies under 32 bytes (tower-http's defaults). Turn compression off with `http.compression = false`.
+
+## Status codes
+
+### Created and no content
+
+`Created(location, body)` answers `201 Created` with a `Location` header and a JSON body. `NoContent` answers `204 No Content`. The CRM's deals controller uses both:
+
+```rust title="crm-deals/src/controller.rs"
+#[post("/")]
+#[can(Create, Deal)]
+async fn store(
+    &self,
+    uow: Uow,
+    CurrentUser(user): CurrentUser,
+    Abilities(ability): Abilities,
+    Valid(Json(input)): Valid<Json<CreateDeal>>,
+) -> Result<Created<DealResource>> {
+    let deal = self.deals.create(&uow, &ability, user.id, input).await?;
+    Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+}
+
+#[delete("/{id}")]
+#[can(Delete, Deal, from = "id")]
+async fn destroy(&self, uow: Uow, deal: Authorized<Deal, Delete>) -> Result<NoContent> {
+    self.deals.delete(&uow, deal.into_inner()).await?;
+    Ok(NoContent)
+}
+```
+
+A `Location` that isn't a valid header value turns the response into a 500.
+
+### Any other status
+
+Return a tuple of a `StatusCode` and the body:
+
+```rust
+use navree::axum::http::StatusCode;
+
+#[post("/import")]
+async fn import(&self) -> (StatusCode, Json<Value>) {
+    (StatusCode::ACCEPTED, Json(json!({ "queued": true })))
+}
+```
+
+Error statuses come from `AppError`, so they share the NestJS error format; see [errors](/docs/basics/errors/). To document a route's status in the OpenAPI document, add `status = 201` to its `#[api(...)]` attribute ([OpenAPI](/docs/digging-deeper/openapi/)).
+
+## Headers
+
+Put an array of header pairs before the body:
+
+```rust
+use navree::axum::http::header::{CACHE_CONTROL, ETAG};
+use navree::axum::response::{IntoResponse, Response};
+
+#[get("/{id}/summary")]
+async fn summary(&self, Path(id): Path<Uuid>) -> Response {
+    (
+        [(CACHE_CONTROL, "private, max-age=60"), (ETAG, "\"v1\"")],
+        Json(json!({ "id": id })),
+    )
+        .into_response()
+}
+```
+
+A `HeaderMap` works in the same place when the headers are built at run time.
+
+<Callout type="note" title="impl IntoResponse in controllers">
+
+Controller methods take `&self`, and in Rust 2024 a returned `impl Trait` captures that borrow, which the generated handler can't allow. Return a concrete type, `Response` (with `.into_response()`), or write `impl IntoResponse + use<>`.
+
 </Callout>
+
+Navree adds its own headers to every response: `X-Request-Id`, the [security headers](/docs/basics/cors-and-security-headers/) and, for allowed origins, the CORS headers. A security header you set yourself replaces the default one. The full response of the example above looks like this:
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+cache-control: private, max-age=60
+etag: "v1"
+vary: accept-encoding
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: no-referrer
+strict-transport-security: max-age=31536000; includeSubDomains
+content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'
+x-request-id: 01a17749fe6c725e935830d1c31aba93
+```
+
+## API resources
+
+Returning a database model as JSON ties your API to your table: a renamed column or a new private field changes what clients see. An API resource is a separate struct that decides the shape. Laravel calls these resources; NestJS calls them response DTOs.
+
+### The resource pattern
+
+The CRM gives every entity a `*Resource` struct, builds it from the model, and returns it from every route of that entity:
+
+```rust title="src/companies/resource.rs"
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+/// A company as the API returns it.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+#[schema(as = Company)]
+pub struct CompanyResource {
+    /// Always `"Company"`: the subject type front ends check permissions with.
+    #[serde(rename = "__type")]
+    pub resource_type: &'static str,
+    pub id: Uuid,
+    pub name: String,
+    pub domain: Option<String>,
+    pub owner_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<company::Model> for CompanyResource {
+    fn from(company: company::Model) -> Self {
+        CompanyResource {
+            resource_type: "Company",
+            id: company.id,
+            name: company.name,
+            domain: company.domain,
+            owner_id: company.owner_id,
+            created_at: company.created_at,
+        }
+    }
+}
+```
+
+```json title="GET /api/v1/companies/0192f0c1-..."
+{
+  "__type": "Company",
+  "id": "0192f0c1-7b3a-7c51-9a4e-5d2f8e1b6a90",
+  "name": "Acme",
+  "domain": "acme.com",
+  "owner_id": "0192f0c1-0000-7000-8000-00000000000a",
+  "created_at": "2026-10-25T09:12:44Z"
+}
+```
+
+The pieces of the pattern:
+
+- **`__type`** carries the subject type, so a front end using CASL can check permissions on plain JSON objects (`detectSubjectType: (o) => o.__type`). The name matches the subject your [access rules](/docs/security/authorization/) use.
+- **`ToSchema`** with `#[schema(as = Company)]` puts the resource in the [OpenAPI document](/docs/digging-deeper/openapi/) under a clean name; reference it with `#[api(response = CompanyResource)]`.
+- **Embeds.** The CRM's `DealResource` embeds `company`, `contact` and `owner` objects. Its `load_many` reads them with one query per kind of embed for a whole page of deals, never one per row.
+- **Derived fields.** `DealResource` adds `probability`, computed from the stage, which the table doesn't store.
+
+### Resource helpers
+
+`navree::api` has three helpers for resources built at run time:
+
+```rust
+use navree::api::{ApiResource, mask_fields, resource_json};
+
+#[derive(Serialize)]
+pub struct ProjectResource {
+    pub id: Uuid,
+    pub name: String,
+    pub budget_cents: i64,
+}
+
+impl ApiResource for ProjectResource {
+    const TYPE: &'static str = "Project";
+}
+
+pub fn project_json(project: &ProjectResource, readable: Option<&[String]>) -> Value {
+    mask_fields(resource_json(project), readable)
+}
+```
+
+- `resource_json(&resource)` serializes the resource and adds `"__type": TYPE`.
+- `mask_fields(value, Some(&fields))` keeps only the listed top-level fields, plus `id` and `__type`, in an object or in every object of an array. `None` keeps everything. Pass the fields the user may read, for example from the ability's `permitted_fields`.
+
+With `readable` set to `["name"]`, `project_json` returns `{"__type": "Project", "id": "...", "name": "Apollo"}`.
+
+The CRM uses typed resource structs rather than these helpers, because typed structs also give it OpenAPI schemas.
+
+## Paginated responses
+
+`Page<T>` is a page of results. Return it directly; it serializes as `data` plus `meta`:
+
+```rust
+use navree::db::paginate;
+use sea_orm::{EntityTrait, QueryOrder};
+
+#[get("/")]
+async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>> {
+    let select = company::Entity::find().order_by_asc(company::Column::Name);
+    let page = paginate(select, &*uow.tx().await?, page).await?;
+    Ok(page.map(CompanyResource::from))
+}
+```
+
+```json title="GET /api/v1/companies?page=2&per_page=15"
+{
+  "data": [
+    { "__type": "Company", "id": "0192f0c1-...", "name": "Globex" }
+  ],
+  "meta": { "current_page": 2, "per_page": 15, "total": 16, "last_page": 2 }
+}
+```
+
+`PageQuery` reads `?page=` and `?per_page=` (defaults 1 and 15; `per_page` is capped at 100) and `Page::map` turns models into resources without touching `meta`. Cursor pagination returns a `CursorPage<T>` instead: `{"data": [...], "next_cursor": "..."}`. Both are covered on the [pagination page](/docs/database/pagination/).
+
+<Callout type="note" title="Pages in the OpenAPI document">
+
+`Page<T>` doesn't implement utoipa's `ToSchema`, so `#[api(response = ...)]` can't name it. To document a page, the CRM declares a struct per page (`CompanyPage { data: Vec<CompanyResource>, meta: ... }`) and names that instead.
+
+</Callout>
+
+## File downloads
+
+A download is a body with a `Content-Disposition` header. The CRM's contact export builds a CSV in memory:
+
+```rust title="crm-companies/src/contacts/export.rs"
+use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::axum::response::{IntoResponse, Response};
+
+pub fn csv_response(contacts: &[ContactResource]) -> Result<Response> {
+    let body = contacts_csv(contacts).map_err(AppError::internal)?;
+    Ok((
+        [
+            (CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (CONTENT_DISPOSITION, "attachment; filename=\"contacts.csv\""),
+        ],
+        body,
+    )
+        .into_response())
+}
+```
+
+The CORS configuration exposes `Content-Disposition`, so a browser front end on another origin can read the file name.
+
+### Streaming a file
+
+For large files, stream the body instead of loading it. A storage disk hands you a stream that `Body::from_stream` sends chunk by chunk:
+
+```rust title="src/invoices/controller.rs"
+use navree::axum::body::Body;
+use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::axum::response::{IntoResponse, Response};
+use navree::storage::Disk;
+
+#[injectable]
+pub struct InvoicesController {
+    disk: Arc<Disk>,
+}
+
+#[controller("/invoices", version = "1")]
+#[authenticated]
+impl InvoicesController {
+    #[get("/{id}/pdf")]
+    async fn download(&self, Path(id): Path<Uuid>) -> Result<Response> {
+        let stream = self.disk.get_stream(&format!("invoices/{id}.pdf")).await?;
+        Ok((
+            [
+                (CONTENT_TYPE, "application/pdf".to_owned()),
+                (CONTENT_DISPOSITION, format!("attachment; filename=\"invoice-{id}.pdf\"")),
+            ],
+            Body::from_stream(stream),
+        )
+            .into_response())
+    }
+}
+```
+
+With `StorageModule` in the app, a missing file is a 404 and an invalid path a 400. To let a browser download a file without your API in between, give it a signed temporary URL instead; see [file storage](/docs/digging-deeper/storage/).
+
+## Streaming responses
+
+`Body::from_stream` takes any stream of `Result<Bytes, E>`, so you can stream generated data the same way. Things to know:
+
+- The request timeout (`http.timeout_secs`, 30 seconds by default) covers the time until your handler returns the response, not the time spent sending a streamed body.
+- Server-sent events work with Axum's `Sse` type (`navree::axum::response::sse`). Navree doesn't compress `text/event-stream` responses, so events reach the client as they're sent. Navree has no SSE helpers of its own.
+- For pushing events to browsers, Navree's main tool is [broadcasting](/docs/digging-deeper/broadcasting/) over WebSockets.
+
+## Testing
+
+The test client reads statuses, headers and JSON paths:
+
+```rust title="tests/companies.rs"
+let response = client
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "Renewal", "company_id": acme, "amount_cents": 120000 }))
+    .send()
+    .await
+    .assert_status(201)
+    .assert_json_path("__type", json!("Deal"));
+let location = response.header("location").unwrap();
+```
+
+See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    Error responses in the NestJS format.
+  </LinkCard>
+  <LinkCard href="/docs/database/pagination/" title="Pagination">
+    Offset and cursor pagination with `Page<T>` and `CursorPage<T>`.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/openapi/" title="OpenAPI">
+    Document resources and statuses in the generated API document.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Subjects, abilities and the `__type` field.
+  </LinkCard>
+</LinkCards>

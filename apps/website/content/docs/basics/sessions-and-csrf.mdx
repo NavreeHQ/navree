@@ -1,10 +1,357 @@
 ---
 title: "Sessions and CSRF"
-description: "Optional encrypted session cookies, session stores and CSRF protection."
+description: "The optional session module: encrypted session cookies, memory and database stores, CSRF protection for cookie clients, and when to use it instead of bearer tokens."
 ---
 
-This page shows how to use the optional session module: encrypted cookie sessions, memory and database stores, and CSRF protection compatible with Laravel Sanctum's SPA protocol. Token-based APIs, like the reference CRM, don't need it.
+`SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. It speaks the same protocol as Laravel Sanctum's single-page-app mode: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-session` is the reference: run `cargo doc -p navree-session --open` in the repository.
+The module is **optional**. Navree's built-in authentication (`AuthModule`) uses bearer tokens and doesn't need sessions, and the reference CRM doesn't import this module. Read [when to use sessions](#sessions-or-bearer-tokens) first.
+
+## Sessions or bearer tokens
+
+| | Sessions (`SessionModule`) | Bearer tokens (`AuthModule`) |
+|---|---|---|
+| The browser holds | an `HttpOnly` session cookie | an access token your code stores and sends in `Authorization` |
+| State | on the server, in the session store | in the signed JWT; refresh tokens in the database |
+| CSRF protection | needed, and built in | not needed: browsers don't attach `Authorization` by themselves |
+| Clients | browsers on your site | anything: mobile apps, other servers, CLIs, browsers |
+| Sign-in | your own login route and authenticator ([below](#signing-in-with-a-session)) | built in: `/api/auth/login`, refresh, logout, 2FA |
+
+Use sessions when a browser talks to the API directly and you want the credential in an `HttpOnly` cookie: server-rendered pages, or a single-page app on the same site as the API. Use bearer tokens for everything else.
+
+The CRM takes a third route, a backend-for-frontend: its Next.js server keeps the bearer tokens in `HttpOnly` cookies on its own domain and calls the API with `Authorization: Bearer`. The browser never holds a token and the API needs no sessions or CSRF checks. See [authentication](/docs/security/authentication/).
+
+## Setting up
+
+Add `SessionModule` after `CryptoModule`, which encrypts the cookie with the app key, and `HttpModule`:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app() -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(SessionModule::from_config())
+}
+```
+
+`DatabaseModule` is only needed for the database store. The app needs an application key (`APP_KEY`, from `navree key:generate`). Without one the app boots with a warning, but every request that writes a session fails with a 500.
+
+## Configuration
+
+```toml title="config/app.toml"
+[session]
+store = "database"          # memory (default) or database
+cookie = "navree_session"
+lifetime_minutes = 120      # idle lifetime; activity extends it
+secure = true               # send the cookies over HTTPS only
+same_site = "lax"           # strict, lax or none
+domain = ".example.com"     # share the cookies with sibling hosts
+csrf_except = ["/webhooks/*"]
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `session.store` | `memory` | where session data lives; see [stores](#stores) |
+| `session.cookie` | `navree_session` | the session cookie's name (letters, digits, `-`, `_`, `.`; not `XSRF-TOKEN`) |
+| `session.lifetime_minutes` | `120` | how long an idle session lives (1 minute to about a year) |
+| `session.secure` | `true` | the cookies' `Secure` attribute; browsers accept `Secure` cookies from `http://localhost` |
+| `session.same_site` | `lax` | the cookies' `SameSite` attribute; `none` needs `secure = true` |
+| `session.domain` | none (the API host only) | the cookies' `Domain`, to share them with sibling hosts such as `app.example.com` and `api.example.com` |
+| `session.csrf_except` | `[]` | path globs exempt from CSRF checks (`*` matches any characters, `?` one) |
+
+From the environment: `APP_SESSION__STORE=database`, `APP_SESSION__SECURE=false`, and `APP_SESSION__CSRF_EXCEPT=/webhooks/*,/stripe/*` as a comma-separated list. Invalid options stop the boot.
+
+In code, use `SessionModule::for_root`:
+
+```rust
+use navree::session::{SameSite, SessionOptions, SessionStoreKind};
+
+.module(SessionModule::for_root(SessionOptions {
+    store: SessionStoreKind::Database,
+    lifetime_minutes: 60,
+    same_site: SameSite::Strict,
+    csrf_except: vec!["/webhooks/*".to_owned()],
+    ..SessionOptions::default()
+}))
+```
+
+## Using the session
+
+Take `Session` as an extractor. Values are stored as JSON, so anything `Serialize` and `Deserialize` fits:
+
+```rust title="src/cart/controller.rs"
+use navree::prelude::*;
+use navree::session::Session;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Cart {
+    pub items: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct AddItem {
+    pub sku: String,
+}
+
+#[injectable]
+pub struct CartController;
+
+#[controller("/cart")]
+#[public]
+impl CartController {
+    #[get("/")]
+    async fn show(&self, session: Session) -> Json<Cart> {
+        Json(session.get::<Cart>("cart").unwrap_or_default())
+    }
+
+    #[post("/items")]
+    async fn add(&self, session: Session, Json(input): Json<AddItem>) -> Result<Json<Cart>> {
+        let mut cart: Cart = session.get("cart").unwrap_or_default();
+        cart.items.push(input.sku);
+        session.insert("cart", &cart)?;
+        Ok(Json(cart))
+    }
+
+    #[delete("/")]
+    async fn clear(&self, session: Session) -> NoContent {
+        session.remove("cart");
+        NoContent
+    }
+}
+```
+
+| Method | What it does |
+|---|---|
+| `get::<T>(key)` | the value, or `None` when it's missing or not a `T` |
+| `insert(key, &value)` | stores a value; fails for values that aren't JSON and for the reserved key `_token` |
+| `remove(key)` | removes a value and returns it |
+| `contains(key)` | whether a value is stored |
+| `regenerate()` | a new session id and CSRF token, keeping the values: call it when a user signs in |
+| `invalidate()` | a new id and CSRF token, and no values: call it when a user signs out |
+| `flush()` | removes every value, keeping the id and the CSRF token |
+| `csrf_token()` | the session's CSRF token, created on first use |
+| `id()` | the session id; it's a credential, so never log it |
+
+The session is saved after the response, only when it changed. `Option<Session>` gives `None` instead of a 500 in apps without the module. `Session::detached()` makes a session no request carries, for unit tests of code that takes a `&Session`.
+
+### How the cookie works
+
+The session cookie holds only the session **id**, encrypted with the app key (AES-256-GCM); the data stays on the server, in the store. The cookie is `HttpOnly`, with `Path=/`, the configured `SameSite`, `Secure` and `Domain`, and `Max-Age` equal to the lifetime:
+
+```http wrap
+set-cookie: navree_session=v1.pZTn5I8q.20o7YKPD-xXLxsE8.2mhcHownkjVq3bdWk9g5KKe5vI3...; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=7200
+set-cookie: XSRF-TOKEN=PONeR2ziCPrjirwcliGhp5dkEkcwsWp5ZW2MhsOG; SameSite=Lax; Secure; Path=/; Max-Age=7200
+```
+
+- A cookie that doesn't decrypt, or names an expired or unknown session, starts a new session with a new id. Navree never adopts an id the client chose.
+- Sessions expire after `lifetime_minutes` without requests. Each request extends the session, with at most one store write a minute when nothing else changed.
+- Changing the app key signs everyone out, unless you move the old key to `app.previous_keys` (see [encryption](/docs/security/encryption-and-hashing/)).
+
+## Stores
+
+| Store | `session.store` | Notes |
+|---|---|---|
+| `MemoryStore` | `memory` | in the process: fast, but lost on restart and not shared between instances |
+| `DatabaseStore` | `database` | the `sessions` table (`id`, `data` as JSON text, `expires_at`), created by the module's `session` migration set; survives restarts and is shared by every instance |
+
+Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). Both stores delete expired sessions on every hundredth save; `prune_expired()` on either store does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
+
+To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`. There's no Redis store yet; see the [roadmap](/docs/prologue/roadmap/).
+
+## CSRF protection
+
+A browser attaches cookies to requests that other sites trigger: a form on `evil.example` can post to your API, and the browser sends the session cookie along. CSRF protection makes sure state-changing requests come from your own front end.
+
+### The rule
+
+A request with a state-changing method (anything but `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie must send the session's CSRF token in one of two headers:
+
+- `X-XSRF-TOKEN`: the value of the `XSRF-TOKEN` cookie (URL-decoded by the server), as Axios sends it;
+- `X-CSRF-TOKEN`: the token as is, for example from `session.csrf_token()` rendered into a page.
+
+Otherwise it gets a 403 before any handler runs:
+
+```json title="403 Forbidden"
+{
+  "statusCode": 403,
+  "message": "Invalid CSRF token",
+  "error": "Forbidden"
+}
+```
+
+- Requests with an `Authorization: Bearer` token skip the check: they can't be forged by another site.
+- A state-changing request **without** a session cookie has no token to send and passes, unless the browser marks it `Sec-Fetch-Site: cross-site` and its `Origin` isn't in `http.cors.allowed_origins`. That stops a forged form from signing a victim in to the attacker's account (login CSRF).
+- Paths matching `session.csrf_except` skip both checks. Use it for webhooks, which authenticate with signatures instead.
+- Tokens are compared in constant time and never logged. Each failure is logged at `WARN` on `navree::security` (`CSRF token mismatch`, with the reason `missing`, `mismatch` or `cross_site`) and, with the audit module, written to the audit trail as `csrf.mismatch`.
+
+### The CSRF cookie
+
+`GET /sanctum/csrf-cookie` (no API prefix) answers `204 No Content` with the `XSRF-TOKEN` cookie, starting a session if there is none. The cookie isn't `HttpOnly`, so your JavaScript can read it. A single-page app calls it once before its first state-changing request:
+
+```ts title="app/api.ts"
+function xsrfToken(): string {
+  const cookie = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="));
+  return cookie ? decodeURIComponent(cookie.slice("XSRF-TOKEN=".length)) : "";
+}
+
+await fetch("/sanctum/csrf-cookie", { credentials: "include" });
+await fetch("/api/cart/items", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json", "X-XSRF-TOKEN": xsrfToken() },
+  body: JSON.stringify({ sku: "A-1" }),
+});
+```
+
+Axios does the header part for you on same-origin requests, and on cross-origin ones with `withXSRFToken: true`. The response to any request that saves the session also refreshes the `XSRF-TOKEN` cookie.
+
+<Callout type="note" title="Front end on another host">
+
+With `SameSite=Lax` (the default), browsers only send the cookies to the API when the page is on the same **site**, such as `app.example.com` and `api.example.com`. Set `session.domain = ".example.com"` so the page can read `XSRF-TOKEN`, and list the page's origin in [`http.cors.allowed_origins`](/docs/basics/cors-and-security-headers/). A front end on a different site needs `same_site = "none"`, which many browsers restrict for third-party cookies; a backend-for-frontend is the sturdier choice there.
+
 </Callout>
+
+## Signing in with a session
+
+`AuthModule` authenticates bearer tokens only; it doesn't read the session. To sign users in with a session, register your own `Authenticator`. The session layer runs before authentication, so the authenticator finds the `Session` in the request:
+
+```rust title="src/session_auth/mod.rs"
+use navree::BoxFuture;
+use navree::axum::http::request::Parts;
+use navree::contracts::{AuthVia, Principal};
+use navree::http::{Authenticator, CurrentPrincipal};
+use navree::prelude::*;
+use navree::session::Session;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+pub struct SessionAuthenticator;
+
+impl Authenticator for SessionAuthenticator {
+    fn authenticate<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+    ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
+        let principal = parts.extensions.get::<Session>().and_then(|session| {
+            let user_id = session.get::<Uuid>("user_id")?;
+            Some(Principal {
+                user_id,
+                via: AuthVia::Session,
+                token_abilities: None,
+                session_id: Some(session.id()),
+            })
+        });
+        Box::pin(async move { Ok(principal) })
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Login {
+    pub email: String,
+    pub password: String,
+}
+
+#[injectable]
+pub struct SessionAuthController;
+
+#[controller("/session")]
+impl SessionAuthController {
+    #[post("/login")]
+    #[public]
+    async fn login(&self, session: Session, Json(input): Json<Login>) -> Result<Json<Value>> {
+        let user_id = check_password(&input.email, &input.password)
+            .await
+            .ok_or_else(|| AppError::unauthenticated().with_detail("Invalid credentials"))?;
+        session.regenerate(); // a new id against session fixation
+        session.insert("user_id", &user_id)?;
+        Ok(Json(json!({ "user_id": user_id })))
+    }
+
+    #[get("/me")]
+    #[authenticated]
+    async fn me(&self, CurrentPrincipal(me): CurrentPrincipal) -> Json<Value> {
+        Json(json!({ "user_id": me.user_id }))
+    }
+
+    #[post("/logout")]
+    #[authenticated]
+    async fn logout(&self, session: Session) -> NoContent {
+        session.invalidate();
+        NoContent
+    }
+}
+
+#[module(controllers = [SessionAuthController], register = Self::authenticator)]
+pub struct SessionAuthModule;
+
+impl SessionAuthModule {
+    fn authenticator(&self, m: &mut ModuleBuilder) {
+        m.value_arc::<dyn Authenticator>(Arc::new(SessionAuthenticator));
+    }
+}
+```
+
+`check_password` is yours to write: look the user up and verify the password with the [hasher](/docs/security/encryption-and-hashing/). Every route still needs its access declaration, and `#[authenticated]` routes now accept the session. The login itself needs a CSRF token too, so the front end calls `/sanctum/csrf-cookie` first.
+
+An app has exactly one `dyn Authenticator`, and `AuthModule` registers its JWT one: with both modules in the app, the boot fails. So a session-based app uses a module like this one **instead of** `AuthModule`. To accept both cookies and bearer tokens, write one authenticator that handles both.
+
+## Testing
+
+The test client keeps cookies between requests and has two helpers: `csrf_cookie()` calls `GET /sanctum/csrf-cookie`, and `.xsrf()` on a request sends the `XSRF-TOKEN` cookie back as `X-XSRF-TOKEN`:
+
+```rust title="tests/cart.rs"
+use navree::crypto::generate_key;
+use navree::testing::TestApp;
+
+let app = TestApp::builder()
+    .config("app.key", generate_key())
+    .module(CryptoModule)
+    .module(SessionModule::for_root(SessionOptions::default()))
+    .module(ShopModule)
+    .build()
+    .await;
+let client = app.client();
+
+client.csrf_cookie().await;
+client
+    .post("/api/cart/items")
+    .json(&json!({ "sku": "A-1" }))
+    .send()
+    .await
+    .assert_error(403, "Invalid CSRF token");
+client
+    .post("/api/cart/items")
+    .xsrf()
+    .json(&json!({ "sku": "A-1" }))
+    .send()
+    .await
+    .assert_status(200);
+client
+    .get("/api/cart")
+    .send()
+    .await
+    .assert_json_path("items", json!(["A-1"]));
+```
+
+Test apps have no app key unless you set one, which is why the example sets `app.key`.
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    JWT access and refresh tokens, the default for Navree APIs.
+  </LinkCard>
+  <LinkCard href="/docs/basics/cors-and-security-headers/" title="CORS and security headers">
+    Allowing a front end on another origin.
+  </LinkCard>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    The app key that encrypts the session cookie.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    The test client and its cookie jar.
+  </LinkCard>
+</LinkCards>

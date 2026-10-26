@@ -1,10 +1,271 @@
 ---
 title: "Views and templates"
-description: "MiniJinja templates for mail and other text."
+description: "MiniJinja templates for mail and other text: where they live, how modules embed them, escaping, filters and reloading."
 ---
 
-This page covers templates: MiniJinja syntax, where templates live, embedding templates in a module, overriding them from the app, and rendering them for mail and other text.
+<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them with [MiniJinja](https://docs.rs/minijinja), a Rust implementation of the Jinja2 template language. If you know Jinja, Twig or Nunjucks, you already know the syntax.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-view` is the reference: run `cargo doc -p navree-view --open` in the repository.
-</Callout>
+```jinja title="resources/views/mail/invoice.html"
+<p>Hello {{ name }},</p>
+<p>Invoice {{ number }} for {{ total_cents|money(currency) }} is due on {{ due_on|date("%-d %B %Y") }}.</p>
+```
+
+## Configuration
+
+Add `ViewModule` to your app. It is global: every module can inject `Arc<Views>`.
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(ViewModule::from_config()) // section `view`
+}
+```
+
+```toml title="config/app.toml"
+[view]
+dirs = ["resources/views", "vendor/views"]
+reload = false
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `view.dirs` | `["resources/views"]` | Template directories, searched in order. A directory that doesn't exist is skipped. Relative paths start from the working directory. |
+| `view.reload` | on in debug builds, off in release builds | Pick up changed, new and deleted template files without a restart. |
+
+From the environment: `APP_VIEW__DIRS=resources/views,vendor/views` (comma-separated) and `APP_VIEW__RELOAD=false`.
+
+In code, pass `ViewOptions` or a single directory:
+
+```rust
+use navree::view::ViewOptions;
+
+Navree::app().module(ViewModule::for_root(ViewOptions {
+    dirs: vec!["resources/views".into(), "vendor/views".into()],
+    reload: false,
+}));
+
+Navree::app().module(ViewModule::for_root("resources/mail")); // one directory, default `reload`
+```
+
+[`MailModule`](/docs/digging-deeper/mail/) needs `ViewModule` in the app, since every mail is rendered from templates.
+
+## Where templates live
+
+A template's **name** is its path relative to a template directory, with `/` separators: `resources/views/mail/invoice.html` is `mail/invoice.html`. Files count as templates when their extension is `html`, `htm`, `xml`, `txt`, `md`, `j2` or `jinja`; hidden files and directories are ignored.
+
+Templates can also be **embedded** in a module's code, so the module works without template files. Register them in the module with `m.templates(..)`, usually with `include_str!`. The CRM's activities module ships its reminder mail this way:
+
+```rust title="crates/crm-activities/src/reminders.rs"
+/// The embedded mail templates.
+pub(crate) const TEMPLATES: [(&str, &str); 2] = [
+    (
+        "mail/crm/tasks-due-today.html",
+        include_str!("../templates/tasks-due-today.html"),
+    ),
+    (
+        "mail/crm/tasks-due-today.txt",
+        include_str!("../templates/tasks-due-today.txt"),
+    ),
+];
+```
+
+```rust title="crates/crm-activities/src/lib.rs"
+impl ActivitiesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.templates(&reminders::TEMPLATES);
+        // ...
+    }
+}
+```
+
+Name embedded templates with their extension (`mail/welcome.html`): the extension decides the [escaping](#escaping) and lets lookups without an extension find them.
+
+When the same name is defined more than once:
+
+1. the first directory in `view.dirs` holding the name wins;
+2. any file wins over an embedded template, so an app overrides a module's mail by dropping a file with the same name into `resources/views`;
+3. among embedded templates, a module's template replaces one with the same name from a module it imports.
+
+Every template is read and compiled when the app boots, off the async workers. A syntax error fails the boot and names the template.
+
+## Rendering templates
+
+Inject `Arc<Views>` and call `render(name, context)`. The context is any `Serialize` value: a struct, a map or `serde_json::json!`. Its fields are the template's variables.
+
+```rust title="src/modules/billing/invoice_text.rs"
+use navree::prelude::*;
+use navree::view::{ViewError, Views};
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct InvoiceView<'a> {
+    pub name: &'a str,
+    pub number: &'a str,
+    pub total_cents: i64,
+    pub currency: &'a str,
+    pub due_on: &'a str,
+}
+
+#[injectable]
+pub struct InvoiceText {
+    views: Arc<Views>,
+}
+
+impl InvoiceText {
+    pub fn html(&self, invoice: &InvoiceView<'_>) -> Result<String, ViewError> {
+        self.views.render("mail/invoice", invoice)
+    }
+}
+```
+
+A name without a template extension tries `.html`, `.txt` and `.j2`, in that order, then the bare name: `render("mail/invoice", ..)` finds `mail/invoice.html`. Use the full name to pick one (`mail/invoice.txt`). `views.exists(name)` tells you whether a name resolves, for example to send a plain-text part only when one exists.
+
+`{% extends %}`, `{% include %}` and `{% import %}` take full names:
+
+```jinja title="resources/views/mail/invoice.html"
+{% extends "layouts/mail.html" %}
+{% block body %}
+  <p>Invoice {{ number }} is due on {{ due_on|date("%-d %B %Y") }}.</p>
+{% endblock %}
+```
+
+A name can't leave its directory: `..`, absolute paths and backslashes find nothing.
+
+### Escaping
+
+Templates whose name ends in `.html`, `.htm` or `.xml` (also followed by `.j2`) escape HTML in every printed value, so `Ada & Co` prints as `Ada &amp; Co`. Mark HTML you trust with `|safe`. Other templates, `.txt` included, print values as they are.
+
+### Undefined variables
+
+Printing, iterating or filtering a variable the context doesn't define is an **error**, not an empty string, so a typo can't send a blank email. Testing one is fine and is false:
+
+```jinja
+{% if title %}<h1>{{ title }}</h1>{% endif %}
+```
+
+Define every printed field in the context, using `null` for "no value" (`none` in the template).
+
+### Errors
+
+`render` returns a `ViewError`:
+
+- `NotFound` lists every name it tried;
+- `Template` names the template that failed to compile or render, with MiniJinja's message;
+- `Io` names a template directory or file that can't be read.
+
+Messages never contain context values, since a context may hold tokens or other secrets.
+
+## Filters
+
+Every [MiniJinja built-in filter](https://docs.rs/minijinja/latest/minijinja/filters/index.html) is available (`upper`, `default`, `join`, `tojson`, `urlencode`, ...), as are `{% break %}` and `{% continue %}` in loops. Navree adds two filters.
+
+### money
+
+`{{ cents|money("USD") }}` formats an integer amount in minor units (cents) with the currency's symbol, thousands separators and its number of decimals:
+
+```jinja
+{{ 123456|money("USD") }}   {# $1,234.56 #}
+{{ 123456|money("EUR") }}   {# €1,234.56 #}
+{{ 150000|money("JPY") }}   {# ¥150,000 #}
+{{ 1999|money("CHF") }}     {# CHF 19.99 #}
+{{ 1234567|money("KWD") }}  {# KWD 1,234.567 #}
+```
+
+`USD`, `EUR`, `GBP`, `JPY` and `INR` get their symbol; other currencies get their ISO code. The number of decimals follows ISO 4217 (0 for `JPY` or `KRW`, 3 for `KWD` or `BHD`, 2 otherwise). `none` prints nothing. A non-integer amount or a currency that isn't three letters is a render error. There is no locale-aware formatting.
+
+### date
+
+`{{ value|date("%d %b %Y") }}` formats a date with a [chrono `strftime`](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format, `%Y-%m-%d` by default. The value can be an RFC 3339 date-time (kept in its own offset), a date-time without an offset (`2026-10-25T14:30:00`), a date (`2026-10-25`) or a Unix timestamp in seconds (UTC). `none` prints nothing.
+
+```jinja
+{{ "2026-11-01"|date("%-d %B") }}                  {# 1 November #}
+{{ "2026-10-25T14:30:00Z"|date("%d %b %Y, %H:%M") }}  {# 25 Oct 2026, 14:30 #}
+```
+
+## How mail uses templates
+
+[Mail](/docs/digging-deeper/mail/) renders through the same `Views`. The quickest mail is a `TemplateMail`: give it a template name without an extension, and it renders `{name}.html` and `{name}.txt`, whichever exist, with your context.
+
+```rust
+use navree::mail::{Mailer, TemplateMail};
+use serde_json::json;
+
+mailer
+    .send(
+        &TemplateMail::new("ada@example.com", "Your invoice", "mail/invoice").context(json!({
+            "name": "Ada",
+            "number": "INV-0042",
+            "total_cents": 129900,
+            "currency": "EUR",
+            "due_on": "2026-11-30",
+        })),
+    )
+    .await?;
+```
+
+For more control, implement `Mailable` yourself: its `build(&self, views: &Views)` method renders whatever it needs. `navree make:mail <module> <name>` generates one, with its `.html` and `.txt` templates next to it, embedded under `<module>/mail/<name>.html` and registered in the module (see [Console commands and the CLI](/docs/digging-deeper/cli/#generators)).
+
+The CRM's daily reminder is a `TemplateMail` on `mail/crm/tasks-due-today`, whose text version is:
+
+```jinja title="crates/crm-activities/templates/tasks-due-today.txt"
+Hello {{ name }},
+
+{{ summary }}
+{%- for task in tasks %}
+- {{ task.subject }}, due {{ task.due }} UTC
+{%- endfor %}
+
+Open your tasks: {{ url }}
+```
+
+## Reloading during development
+
+With `view.reload` on (the default in debug builds), each lookup checks the template file's modification time and size and picks up changed, new and deleted files, so you can edit a mail's wording without restarting. Templates are still compiled at boot, so syntax errors surface early. This costs a file-system check per lookup, which is why release builds turn it off: there, every template is read once at boot and rendering never touches the disk.
+
+`navree dev` doesn't rebuild when files under `resources/` change, because reloading covers them; embedded templates live in `src/`, so changing one triggers a rebuild.
+
+## Testing
+
+`Views::from_templates` builds views from (name, source) pairs, with no directories and no app, which keeps template tests fast:
+
+```rust title="src/modules/billing/tests/mod.rs"
+use navree::view::Views;
+use serde_json::json;
+
+#[test]
+fn the_invoice_mail_shows_the_total() {
+    let views = Views::from_templates([(
+        "mail/invoice.html",
+        "<p>{{ name }} owes {{ total_cents|money(currency) }} by {{ due_on|date('%-d %B') }}.</p>",
+    )])
+    .unwrap();
+
+    let html = views
+        .render(
+            "mail/invoice",
+            json!({ "name": "Ada & Co", "total_cents": 123456, "currency": "EUR", "due_on": "2026-11-01" }),
+        )
+        .unwrap();
+
+    assert_eq!(html, "<p>Ada &amp; Co owes €1,234.56 by 1 November.</p>");
+}
+```
+
+To test a module's real templates, pass its `TEMPLATES` constant: `Views::from_templates(TEMPLATES.iter().copied())`. To check the mails your code sends, use the mail module's array transport; see [Mail](/docs/digging-deeper/mail/).
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Mailables, transports and queued sending.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Notifications that send templated mail.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="Console commands and the CLI">
+    `navree make:mail` and the other generators.
+  </LinkCard>
+</LinkCards>
