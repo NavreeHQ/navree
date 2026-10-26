@@ -2,7 +2,7 @@
 //! through the app's full router (`TestClient`).
 
 use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http::Method;
 use navree_grpc::GrpcModule;
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::support::pb::deals::{Deal, DealEvent, GetDealRequest};
-use crate::support::{GuardedPingModule, deals_app, insert_deal};
+use crate::support::{GuardedPingModule, deals_app, insert_deal, ping_app};
 
 const GET_DEAL: &str = "/crm.deals.v1.Deals/GetDeal";
 
@@ -381,4 +381,99 @@ async fn connect_json_needs_the_descriptors_and_respects_the_size_limit() {
         .await
         .assert_status(429);
     assert_eq!(response.json_value()["code"], "resource_exhausted");
+}
+
+/// Decodes a gRPC-Web text body: base64 chunks, each padded on its own.
+fn decode_text(body: &[u8]) -> Bytes {
+    let text = std::str::from_utf8(body).expect("a text body");
+    let mut out = BytesMut::new();
+    let mut chunk = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        chunk.push(c);
+        let ends = c == '=' && chars.peek() != Some(&'=');
+        if ends || chars.peek().is_none() {
+            out.put_slice(&STANDARD.decode(&chunk).expect("base64"));
+            chunk.clear();
+        }
+    }
+    out.freeze()
+}
+
+#[tokio::test]
+async fn grpc_web_text_calls_are_base64() {
+    let app = deals_app().build().await;
+    let rep = Uuid::now_v7();
+    let deal = insert_deal(&app, "Acme renewal", rep).await;
+    let message = GetDealRequest {
+        id: deal.id.to_string(),
+    }
+    .encode_to_vec();
+
+    let response = app
+        .acting_as(principal(rep))
+        .post(GET_DEAL)
+        .header("content-type", "application/grpc-web-text")
+        .header("accept", "application/grpc-web-text")
+        .header("x-grpc-web", "1")
+        .body(STANDARD.encode(frame(0, &message)))
+        .send()
+        .await
+        .assert_status(200);
+    assert!(
+        response
+            .header("content-type")
+            .is_some_and(|value| value.starts_with("application/grpc-web-text")),
+        "{:?}",
+        response.header("content-type")
+    );
+    let frames = frames(decode_text(response.bytes()));
+    assert_eq!(frames.len(), 2, "the message, then the trailers");
+    assert_eq!(
+        Deal::decode(frames[0].1.clone()).unwrap().title,
+        "Acme renewal"
+    );
+    assert_eq!(frames[1].0, 0x80);
+    let trailers = String::from_utf8(frames[1].1.to_vec()).unwrap();
+    assert!(trailers.contains("grpc-status:0"), "{trailers}");
+}
+
+#[tokio::test]
+async fn connect_timeout_ms_is_the_calls_deadline() {
+    let app = ping_app().build().await;
+    let started = std::time::Instant::now();
+    let response = app
+        .client()
+        .post("/navree.test.v1.Ping/Ping")
+        .header("connect-timeout-ms", "100")
+        .json(&json!({ "message": "slow", "sleepMs": "5000" }))
+        .send()
+        .await
+        .assert_status(504);
+    assert_eq!(response.json_value()["code"], "deadline_exceeded");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+
+    let response = app
+        .client()
+        .post("/navree.test.v1.Ping/Ping")
+        .header("connect-timeout-ms", "soon")
+        .json(&json!({ "message": "hi" }))
+        .send()
+        .await
+        .assert_status(400);
+    assert_eq!(response.json_value()["code"], "invalid_argument");
+
+    let response = app
+        .client()
+        .post("/navree.test.v1.Ping/Ping")
+        .header("connect-timeout-ms", "5000")
+        .json(&json!({ "message": "hi" }))
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(response.json_value()["message"], "hi");
 }
