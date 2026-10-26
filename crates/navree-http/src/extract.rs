@@ -26,6 +26,19 @@ use crate::{AppError, RouteMeta};
 pub struct ClientIp(pub IpAddr);
 
 impl ClientIp {
+    /// The client IP of a request the way the pipeline computes it, with the
+    /// proxy settings of `options` (`http.trusted_proxies`,
+    /// `http.trust_proxy`): for protocols that bypass the HTTP pipeline on
+    /// the same port (navree-grpc).
+    pub fn of(
+        headers: &HeaderMap,
+        extensions: &http::Extensions,
+        options: &crate::HttpOptions,
+    ) -> Self {
+        let trust = ProxyTrust::new(options.trust_proxy, &options.trusted_proxies);
+        Self::resolve(headers, extensions, &trust)
+    }
+
     /// The client IP of a request: the proxy headers when `trust` trusts
     /// the peer, else the peer address, else `0.0.0.0`.
     pub(crate) fn resolve(

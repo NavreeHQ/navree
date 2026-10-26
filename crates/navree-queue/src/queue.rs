@@ -8,6 +8,7 @@ use std::time::Duration;
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
 use navree_kernel::{AppContext, WeakAppContext};
+use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -37,6 +38,10 @@ pub(crate) struct Inner {
     pub(crate) registry: HashMap<&'static str, JobRegistration>,
     /// The app, for job contexts and the shutdown token.
     app: Option<WeakAppContext>,
+    /// Where job attempts are reported (`JobProcessed`, `JobFailed`).
+    pub(crate) telemetry: Telemetry,
+    /// How each attempt's trace starts (`observe.tracing`).
+    pub(crate) policy: TracePolicy,
 }
 
 impl Queue {
@@ -58,8 +63,20 @@ impl Queue {
                 clock,
                 registry,
                 app,
+                telemetry: Telemetry::disabled(),
+                policy: TracePolicy::default(),
             }),
         }
+    }
+
+    /// Reports job attempts to `telemetry` and traces them by `policy`
+    /// (on a queue no clone was made of yet).
+    pub(crate) fn instrumented(mut self, telemetry: Telemetry, policy: TracePolicy) -> Queue {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.telemetry = telemetry;
+            inner.policy = policy;
+        }
+        self
     }
 
     /// The options the queue runs with.
@@ -228,8 +245,16 @@ impl Queue {
             created_at: now,
             unique_key,
             unique_for_ms,
+            trace_parent: current_traceparent(),
         })
     }
+}
+
+/// The `traceparent` of the current request's or job's span, when it has a
+/// trace: a dispatched job continues it.
+fn current_traceparent() -> Option<String> {
+    TelemetryContext::with_current(|context| context.trace().map(TraceContext::traceparent))
+        .flatten()
 }
 
 /// The envelope's `delay_secs`.

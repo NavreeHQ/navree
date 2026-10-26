@@ -134,3 +134,43 @@ async fn app_rules_use_the_message_table_or_their_own_text() {
         json!(["3 is not even."])
     );
 }
+
+/// A value that arrives some other way than a JSON body (a gRPC message):
+/// the same rules and messages through `navree_validation::validate`.
+#[derive(garde::Validate)]
+struct MoveDeal {
+    #[garde(length(min = 1))]
+    stage: String,
+    #[garde(range(min = 0))]
+    position: Option<i64>,
+    #[garde(skip)]
+    id: String,
+}
+
+#[tokio::test]
+async fn validate_in_checks_any_value_with_the_default_messages() {
+    let valid = MoveDeal {
+        stage: "won".into(),
+        position: Some(2),
+        id: "x".into(),
+    };
+    assert!(navree_validation::validate_in(&valid, None).await.is_ok());
+    assert!(!valid.id.is_empty());
+
+    let invalid = MoveDeal {
+        stage: String::new(),
+        position: Some(-1),
+        id: String::new(),
+    };
+    let errors = navree_validation::validate_in(&invalid, None)
+        .await
+        .expect_err("two rules fail");
+    assert_eq!(
+        errors.get("position"),
+        Some(&["position must not be less than 0".to_owned()][..])
+    );
+    assert_eq!(
+        errors.get("stage"),
+        Some(&["stage must be longer than or equal to 1 characters".to_owned()][..])
+    );
+}

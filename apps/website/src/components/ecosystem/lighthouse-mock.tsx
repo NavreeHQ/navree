@@ -2,21 +2,24 @@
 
 import {
   ActivityIcon,
+  BellIcon,
   BugIcon,
   DatabaseIcon,
   GlobeIcon,
   LayoutDashboardIcon,
-  ListChecksIcon,
   LighthouseIcon,
-  type LucideIcon,
+  ListChecksIcon,
+  SettingsIcon,
+  TagIcon,
 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 
 import { AnimatedListItem } from "@/components/magicui/animated-list";
 import { cn } from "@/lib/utils";
 
+import { AppShell, Card, Segmented, StatusDot, TopBar, type SidebarSpec } from "./app-shell";
 import { Sparkline } from "./charts";
-import { Figure, LiveLight, MockFrame } from "./frame";
+import { MockFrame } from "./frame";
 import { issueKinds, lighthouseFeed, lighthouseFigures, lighthouseIssues, lighthouseTimeline, type IssueKind } from "./mock-data";
 import { useSteps } from "./use-steps";
 
@@ -26,8 +29,8 @@ const toneBg = { danger: "bg-danger", amber: "bg-amber" } as const;
 export function KindLabel({ kind, className }: { kind: IssueKind; className?: string }) {
   const { label, tone } = issueKinds[kind];
   return (
-    <span className={cn("inline-flex items-center gap-1.5 font-mono text-xs leading-4 whitespace-nowrap", toneText[tone], className)}>
-      <span className={cn("size-1.5 rounded-[2px]", toneBg[tone])} />
+    <span className={cn("inline-flex items-center gap-1.5 text-xs leading-4 font-medium whitespace-nowrap", toneText[tone], className)}>
+      <span className={cn("size-2 rounded-[2px]", toneBg[tone])} />
       {label}
     </span>
   );
@@ -51,14 +54,14 @@ export function LiveFeed({ rows = 5, interval = 2400, className, dense = false }
           <AnimatedListItem key={item.id}>
             <div
               className={cn(
-                "rounded-xl border bg-ink-1 transition-colors duration-700",
-                dense ? "px-3 py-2.5" : "px-3.5 py-3",
-                i === 0 ? "border-line-2 bg-ink-2/80" : "border-line",
+                "rounded-md border transition-colors duration-700",
+                dense ? "px-3 py-2.5" : "px-3 py-2.5",
+                i === 0 ? "border-line-2 bg-ink-2" : "border-line bg-ink-1",
               )}
             >
               <div className="flex items-center justify-between gap-3">
                 <KindLabel kind={item.kind} />
-                <span className="font-mono text-xs text-fg-3 tabular-nums">{ages[i]}</span>
+                <span className="text-xs text-fg-3 tabular-nums">{ages[i]}</span>
               </div>
               <div className="mt-1.5 truncate font-mono text-[0.8125rem] leading-5 text-fg-1">{item.title}</div>
               {dense ? null : <div className="truncate font-mono text-xs leading-5 text-fg-3">{item.culprit}</div>}
@@ -70,154 +73,167 @@ export function LiveFeed({ rows = 5, interval = 2400, className, dense = false }
   );
 }
 
-function SideItem({ icon: Icon, label, count, active }: { icon: LucideIcon; label: string; count?: string; active?: boolean }) {
-  return (
-    <div className={cn("flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[0.8125rem]", active ? "bg-ink-3 text-fg" : "text-fg-2")}>
-      <Icon className={cn("size-4", active ? "text-accent" : "text-fg-3")} strokeWidth={1.5} />
-      <span className="flex-1">{label}</span>
-      {count ? <span className="font-mono text-xs text-fg-3">{count}</span> : null}
-    </div>
-  );
-}
-
 function Timeline() {
   const { requests, exceptions } = lighthouseTimeline;
   const maxR = Math.max(...requests);
   const maxE = Math.max(...exceptions);
   const bw = 480 / requests.length;
   return (
-    <svg viewBox="0 0 480 100" preserveAspectRatio="none" className="block h-24 w-full" aria-hidden>
+    <svg viewBox="0 0 480 100" preserveAspectRatio="none" className="block h-28 w-full" aria-hidden>
+      {[6, 28, 50].map((y) => (
+        <line key={y} x1="0" x2="480" y1={y + 0.5} y2={y + 0.5} className="stroke-line" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+      ))}
       <line x1="0" x2="480" y1="70.5" y2="70.5" className="stroke-line-2" strokeWidth="1" vectorEffect="non-scaling-stroke" />
       {requests.map((v, i) => {
         const h = (v / maxR) * 64;
-        return <rect key={`r${i}`} x={i * bw + 1.6} y={69 - h} width={bw - 3.2} height={h} rx="1" className="fill-accent/25" />;
+        return <rect key={`r${i}`} x={i * bw + 1.8} y={69 - h} width={bw - 3.6} height={h} rx="0.6" className="fill-fg-3/25" />;
       })}
       {exceptions.map((v, i) =>
-        v ? <rect key={`e${i}`} x={i * bw + 1.6} y={72} width={bw - 3.2} height={(v / maxE) * 26} rx="1" className="fill-danger/80" /> : null,
+        v ? <rect key={`e${i}`} x={i * bw + 1.4} y={72} width={bw - 2.8} height={(v / maxE) * 26} rx="0.6" className="fill-danger/80" /> : null,
       )}
     </svg>
   );
 }
+
+const sidebar: SidebarSpec = {
+  app: { logo: <LighthouseIcon strokeWidth={2} />, name: "Lighthouse", context: "crm-api · production" },
+  groups: [
+    {
+      label: "Monitor",
+      items: [
+        { icon: LayoutDashboardIcon, label: "Overview", active: true },
+        { icon: BugIcon, label: "Issues", badge: "7" },
+        { icon: ActivityIcon, label: "Requests" },
+        { icon: DatabaseIcon, label: "Queries" },
+        { icon: ListChecksIcon, label: "Jobs" },
+        { icon: GlobeIcon, label: "Outgoing" },
+      ],
+    },
+    {
+      label: "Configure",
+      items: [
+        { icon: BellIcon, label: "Alerts", badge: "2" },
+        { icon: TagIcon, label: "Releases" },
+        { icon: SettingsIcon, label: "Settings" },
+      ],
+    },
+  ],
+  user: { initials: "PS", name: "Priya Shah", email: "priya@acme.test" },
+};
 
 /** The Lighthouse dashboard at /_lighthouse: figures, a timeline, issues and the live feed. */
 export function LighthouseMock({ className }: { className?: string }) {
   return (
     <MockFrame
       url="crm.example.com/_lighthouse"
-      status={<LiveLight />}
       className={className}
       bodyClassName="@container"
       label="The Lighthouse dashboard of the example CRM: requests per minute, error rate, p95 latency, failed jobs and open issues; a 24-hour timeline of requests and exceptions; issues such as a slow contacts query on the deal board and a declined card when charging an invoice; and a live feed of new occurrences."
     >
-      <div className="grid min-h-full @5xl:grid-cols-[11.5rem_minmax(0,1fr)_18.5rem]">
-        <aside className="hidden flex-col gap-0.5 border-r border-line bg-ink-0/40 p-3 @5xl:flex">
-          <div className="mb-3 flex items-center gap-2 px-2.5 pt-1 text-[0.8125rem] font-semibold text-fg">
-            <LighthouseIcon className="size-4 text-accent" strokeWidth={1.5} />
-            Lighthouse
-          </div>
-          <SideItem icon={LayoutDashboardIcon} label="Overview" active />
-          <SideItem icon={BugIcon} label="Issues" count="7" />
-          <SideItem icon={ActivityIcon} label="Requests" />
-          <SideItem icon={DatabaseIcon} label="Queries" />
-          <SideItem icon={ListChecksIcon} label="Jobs" />
-          <SideItem icon={GlobeIcon} label="Outgoing" />
-          <div className="mt-auto border-t border-line px-2.5 pt-3 font-mono text-xs leading-5 text-fg-3">
-            <div className="text-fg-2">crm-api</div>
-            <div className="truncate">production · 3f2a9c1</div>
-          </div>
-        </aside>
+      <AppShell sidebar={sidebar}>
+        <TopBar crumbs={["crm-api", "Overview"]}>
+          <span className="hidden items-center gap-2 pr-2 text-[0.8125rem] text-fg-2 @md:flex">
+            <StatusDot pulse />
+            Live
+          </span>
+          <Segmented items={["1h", "24h", "7d"]} active={1} />
+        </TopBar>
 
-        <div className="min-w-0 p-4 @xl:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="text-[0.9375rem] font-semibold text-fg">Overview</span>
-              <span className="hidden rounded-md border border-line px-1.5 font-mono text-xs leading-5 text-fg-3 @md:inline">production</span>
-            </div>
-            <div className="flex rounded-lg border border-line p-0.5 font-mono text-xs">
-              <span className="rounded-md px-2 py-0.5 text-fg-3">1h</span>
-              <span className="rounded-md bg-ink-3 px-2 py-0.5 text-fg">24h</span>
-              <span className="rounded-md px-2 py-0.5 text-fg-3">7d</span>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line @2xl:grid-cols-5">
-            {lighthouseFigures.map((f, i) => (
-              <div key={f.label} className={cn("relative bg-ink-1 p-3", i === 4 && "col-span-2 @2xl:col-span-1")}>
-                <Figure label={f.label} value={f.value} sub={f.sub} />
-                {"spark" in f ? <Sparkline data={[...f.spark]} className="absolute right-3 bottom-3 h-6 w-14 text-accent/70" /> : null}
+        <div className="grid flex-1 @5xl:grid-cols-[minmax(0,1fr)_18.5rem]">
+          <div className="min-w-0 p-4 @xl:p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="text-xl font-semibold tracking-[-0.01em] text-fg">Overview</div>
+              <div className="text-[0.8125rem] text-fg-3">
+                Release <span className="font-mono text-xs text-fg-2">3f2a9c1</span> · deployed 18 min ago
               </div>
-            ))}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line @2xl:grid-cols-5">
+              {lighthouseFigures.map((f, i) => (
+                <div key={f.label} className={cn("bg-ink-1 p-4", i === 4 && "col-span-2 @2xl:col-span-1")}>
+                  <div className="truncate text-[0.8125rem] text-fg-2">{f.label}</div>
+                  <div className="mt-1.5 flex items-end justify-between gap-2">
+                    <span className="text-2xl leading-tight font-semibold tracking-[-0.02em] whitespace-nowrap text-fg tabular-nums">{f.value}</span>
+                    {"spark" in f ? <Sparkline data={[...f.spark]} className="mb-1.5 h-5 w-10 shrink text-fg-3" /> : null}
+                  </div>
+                  <div className="mt-1 truncate text-[0.8125rem] text-fg-3">{f.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <Card className="mt-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                <span className="text-sm font-medium text-fg">Requests and exceptions</span>
+                <span className="flex items-center gap-4 text-[0.8125rem] text-fg-3">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-2 rounded-[2px] bg-fg-3/50" />
+                    Requests
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-2 rounded-[2px] bg-danger/80" />
+                    Exceptions
+                  </span>
+                </span>
+              </div>
+              <div className="mt-4">
+                <Timeline />
+              </div>
+              <div className="mt-1.5 flex justify-between text-xs text-fg-3 tabular-nums">
+                <span>09:00</span>
+                <span className="hidden @md:inline">15:00</span>
+                <span>21:00</span>
+                <span className="hidden @md:inline">03:00</span>
+                <span>Now</span>
+              </div>
+            </Card>
+
+            <div className="mt-3 overflow-hidden rounded-md border border-line">
+              <div className="grid h-10 grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-4 border-b border-line bg-ink-1 px-3 text-[0.8125rem] font-medium text-fg-2 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_4rem]">
+                <span>Issue</span>
+                <span className="hidden @2xl:block">24 hours</span>
+                <span className="text-right">Events</span>
+                <span className="hidden text-right @2xl:block">Users</span>
+                <span className="hidden text-right @2xl:block">Last seen</span>
+              </div>
+              {lighthouseIssues.map((issue, i) => (
+                <div
+                  key={issue.title}
+                  className={cn(i > 2 && "hidden @xl:grid", "grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-4 border-b border-line px-3 py-2.5 last:border-b-0 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_4rem]")}
+                >
+                  <div className="min-w-0">
+                    <KindLabel kind={issue.kind} />
+                    <div className="mt-1 truncate font-mono text-[0.8125rem] leading-5 text-fg">{issue.title}</div>
+                    <div className="truncate font-mono text-xs leading-5 text-fg-3">{issue.culprit}</div>
+                  </div>
+                  <Sparkline
+                    data={issue.spark}
+                    area
+                    className={cn("hidden h-7 w-full @2xl:block", issueKinds[issue.kind].tone === "danger" ? "text-danger/80" : "text-amber/80")}
+                  />
+                  <span className="text-right text-sm text-fg-1 tabular-nums">{issue.events}</span>
+                  <span className="hidden text-right text-sm text-fg-2 tabular-nums @2xl:block">{issue.users}</span>
+                  <span className="hidden text-right text-[0.8125rem] text-fg-3 @2xl:block">{issue.seen}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-line bg-ink-1 p-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-fg-3">
-              <span className="text-fg-2">Requests and exceptions, last 24 hours</span>
-              <span className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-[2px] bg-accent/50" />
-                  Requests
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-[2px] bg-danger/80" />
-                  Exceptions
-                </span>
+          <div className="relative min-w-0 border-t border-line p-4 @xl:px-6 @5xl:border-t-0 @5xl:border-l @5xl:px-4 @5xl:pt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-fg">New occurrences</span>
+              <span className="inline-flex items-center gap-2 text-xs text-fg-3">
+                <StatusDot />
+                Streaming
               </span>
             </div>
-            <div className="mt-3">
-              <Timeline />
-            </div>
-            <div className="mt-1 flex justify-between font-mono text-xs text-fg-3">
-              <span>09:00</span>
-              <span className="hidden @md:inline">15:00</span>
-              <span>21:00</span>
-              <span className="hidden @md:inline">03:00</span>
-              <span>now</span>
-            </div>
-          </div>
-
-          <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink-1">
-            <div className="grid grid-cols-[minmax(0,1fr)_3.5rem] gap-4 border-b border-line px-3.5 py-2 text-xs text-fg-3 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_3.75rem]">
-              <span>Issue</span>
-              <span className="hidden @2xl:block">24 hours</span>
-              <span className="text-right">Events</span>
-              <span className="hidden text-right @2xl:block">Users</span>
-              <span className="hidden text-right @2xl:block">Last seen</span>
-            </div>
-            {lighthouseIssues.map((issue) => (
-              <div
-                key={issue.title}
-                className="grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-4 border-b border-line px-3.5 py-2.5 last:border-b-0 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_3.75rem]"
-              >
-                <div className="min-w-0">
-                  <KindLabel kind={issue.kind} />
-                  <div className="mt-1 truncate font-mono text-[0.8125rem] leading-5 text-fg-1">{issue.title}</div>
-                  <div className="truncate font-mono text-xs leading-5 text-fg-3">{issue.culprit}</div>
-                </div>
-                <Sparkline
-                  data={issue.spark}
-                  area
-                  className={cn("hidden h-7 w-full @2xl:block", issueKinds[issue.kind].tone === "danger" ? "text-danger/80" : "text-amber/80")}
-                />
-                <span className="text-right font-mono text-[0.8125rem] text-fg-1 tabular-nums">{issue.events}</span>
-                <span className="hidden text-right font-mono text-[0.8125rem] text-fg-2 tabular-nums @2xl:block">{issue.users}</span>
-                <span className="hidden text-right font-mono text-xs text-fg-3 @2xl:block">{issue.seen}</span>
-              </div>
-            ))}
+            {/* Absolutely placed on wide screens so the feed never sets the row's height. */}
+            <LiveFeed
+              rows={8}
+              className="h-[22rem] [mask-image:linear-gradient(to_bottom,black_80%,transparent)] @5xl:absolute @5xl:inset-x-4 @5xl:top-[3.75rem] @5xl:bottom-0 @5xl:h-auto"
+            />
           </div>
         </div>
-
-        <div className="relative min-w-0 border-t border-line bg-ink-0/30 p-4 @5xl:border-t-0 @5xl:border-l">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-[0.8125rem] font-semibold text-fg">New occurrences</span>
-            <LiveLight label="streaming" />
-          </div>
-          {/* Absolutely placed on wide screens so the feed never sets the row's height. */}
-          <LiveFeed
-            rows={8}
-            className="h-[22rem] [mask-image:linear-gradient(to_bottom,black_80%,transparent)] @5xl:absolute @5xl:inset-x-4 @5xl:top-[3.25rem] @5xl:bottom-0 @5xl:h-auto"
-          />
-        </div>
-      </div>
+      </AppShell>
     </MockFrame>
   );
 }

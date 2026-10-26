@@ -6,3 +6,7 @@ mod support;
 mod health;
 mod logs;
 mod metrics;
+mod options;
+#[cfg(feature = "otel")]
+mod otlp;
+mod spans;

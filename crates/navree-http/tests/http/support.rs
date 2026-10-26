@@ -213,6 +213,18 @@ impl Setup {
         TestApp { app, router }
     }
 
+    /// Boots the app without its boot-time router check failing it, then
+    /// returns the `build_router` error message.
+    pub async fn router_error(self) -> String {
+        match self.app_builder().boot().await {
+            Ok(app) => match build_router(app.ctx()).await {
+                Ok(_) => panic!("build_router must fail"),
+                Err(error) => error.to_string(),
+            },
+            Err(errors) => errors.to_string(),
+        }
+    }
+
     /// Boots and returns the boot error message.
     pub async fn boot_error(self) -> String {
         match self.app_builder().boot().await {

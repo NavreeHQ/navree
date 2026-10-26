@@ -4,12 +4,17 @@ use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use navree_contracts::{Dispatcher, JobEnvelope};
 use navree_kernel::WeakAppContext;
+use navree_telemetry::{EventKind, MailSent, Telemetry, TelemetryEvent};
 use navree_view::Views;
 
-use crate::{ArrayTransport, MailError, MailTransport, Mailable, Message, SendMailJob};
+use crate::{
+    ArrayTransport, FailoverTransport, LogTransport, MailError, MailTransport, Mailable, Message,
+    SendMailJob, SmtpTransport,
+};
 
 /// Sends mail: renders [`Mailable`]s with the app's [`Views`], fills in the
 /// default sender, validates the message and hands it to the
@@ -33,6 +38,8 @@ pub struct Mailer {
     app: Option<WeakAppContext>,
     /// Whether the "no dispatcher, sending now" warning was logged.
     warned_inline: AtomicBool,
+    /// Where sent mail is reported (`MailSent`).
+    telemetry: Telemetry,
 }
 
 impl Mailer {
@@ -51,7 +58,18 @@ impl Mailer {
             queue: None,
             app: None,
             warned_inline: AtomicBool::new(false),
+            telemetry: Telemetry::disabled(),
         }
+    }
+
+    /// This mailer, reporting every mail the transport accepted to
+    /// `telemetry` as a `MailSent` event (recipients, subject, rendered
+    /// bodies, transport and duration). `MailModule` gives its mailer the
+    /// app's registry.
+    #[must_use]
+    pub fn with_telemetry(mut self, telemetry: Telemetry) -> Self {
+        self.telemetry = telemetry;
+        self
     }
 
     /// Queues mail on `queue` and finds the dispatcher in `app`.
@@ -71,7 +89,27 @@ impl Mailer {
     /// validating it (see [`Message::validate`]).
     pub async fn send_message(&self, message: Message) -> Result<(), MailError> {
         let message = self.prepare(message)?;
-        self.transport.send(&message).await
+        self.deliver(&message).await
+    }
+
+    /// Hands `message` to the transport and reports it once accepted.
+    async fn deliver(&self, message: &Message) -> Result<(), MailError> {
+        let started = Instant::now();
+        self.transport.send(message).await?;
+        self.telemetry.emit_with(EventKind::MailSent, || {
+            TelemetryEvent::MailSent(MailSent {
+                to: message.to.clone(),
+                cc: message.cc.clone(),
+                bcc: message.bcc.clone(),
+                from: message.from.clone(),
+                subject: message.subject.clone(),
+                text: message.text.clone(),
+                html: message.html.clone(),
+                transport: transport_name(self.transport.as_ref()).to_owned(),
+                duration: started.elapsed(),
+            })
+        });
+        Ok(())
     }
 
     /// Renders and validates `mailable` now, then dispatches job `mail.send`
@@ -83,7 +121,7 @@ impl Mailer {
         let message = self.prepare(mailable.build(&self.views)?)?;
         let Some(dispatcher) = self.dispatcher().await else {
             self.warn_inline();
-            return self.transport.send(&message).await;
+            return self.deliver(&message).await;
         };
         let mut envelope = JobEnvelope::of(&SendMailJob { message })
             .map_err(|source| MailError::Queue { source })?;
@@ -133,6 +171,22 @@ impl Mailer {
                 "no job dispatcher is registered (add QueueModule): queued mail is sent immediately"
             );
         }
+    }
+}
+
+/// The transport's name in `MailSent` events.
+fn transport_name(transport: &dyn MailTransport) -> &'static str {
+    let any = transport as &dyn Any;
+    if any.is::<ArrayTransport>() {
+        "array"
+    } else if any.is::<LogTransport>() {
+        "log"
+    } else if any.is::<SmtpTransport>() {
+        "smtp"
+    } else if any.is::<FailoverTransport>() {
+        "failover"
+    } else {
+        "custom"
     }
 }
 

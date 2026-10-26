@@ -68,8 +68,8 @@ export function Slot({ name, port, release, state, active }: { name: string; por
   return (
     <div
       className={cn(
-        "min-w-0 rounded-xl border p-3 transition-[border-color,background-color] duration-500",
-        active ? "border-accent/40 bg-accent/[0.06]" : "border-line bg-ink-1",
+        "min-w-0 rounded-md border p-3 transition-[border-color,background-color] duration-500",
+        active ? "border-line-2 bg-ink-2" : "border-line bg-ink-1",
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -87,7 +87,7 @@ export function Slot({ name, port, release, state, active }: { name: string; por
           className={cn(
             "size-1.5 rounded-full",
             state.tone === "live"
-              ? "bg-accent shadow-glow-sm"
+              ? "bg-accent"
               : state.tone === "busy"
                 ? "bg-fg-1 motion-safe:animate-pulse"
                 : state.tone === "off"
@@ -142,19 +142,19 @@ export function HarborMock({ className }: { className?: string }) {
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {["web", "worker", "scheduler", "postgres", "redis"].map((role) => (
-                  <span key={role} className="rounded-md border border-line px-1.5 font-mono text-xs leading-5 text-fg-2">
+                  <span key={role} className="rounded-sm border border-line px-1.5 font-mono text-xs leading-5 text-fg-2">
                     {role}
                   </span>
                 ))}
               </div>
-              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-line bg-ink-1 px-3 py-2 text-xs">
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-line bg-ink-1 px-3 py-2 text-xs">
                 <span className="text-fg-2">worker ×2 · scheduler</span>
                 <span className={restarted ? "text-fg-1" : "text-fg-3"}>{restarted ? "restarted" : "running"}</span>
               </div>
             </div>
 
             <div className="min-w-0">
-              <div className="rounded-xl border border-line-2 bg-ink-2 px-3 py-2 text-center">
+              <div className="rounded-md border border-line-2 bg-ink-2 px-3 py-2 text-center">
                 <div className="font-mono text-[0.8125rem] text-fg">Caddy</div>
                 <div className="font-mono text-xs text-fg-3">crm.example.com · TLS</div>
               </div>
@@ -164,7 +164,7 @@ export function HarborMock({ className }: { className?: string }) {
                     <span
                       className={cn(
                         "h-5 w-px transition-colors duration-500",
-                        (isGreen ? switched : !switched) ? "bg-accent shadow-[0_0_8px_rgb(61_255_143/0.6)]" : "bg-line-2",
+                        (isGreen ? switched : !switched) ? "bg-accent" : "bg-line-2",
                       )}
                     />
                   </div>

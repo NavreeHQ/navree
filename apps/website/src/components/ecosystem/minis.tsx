@@ -22,8 +22,8 @@ export function FleetMini() {
 /** The moment of a deploy: Caddy switched to the healthy new release, the old one drained. */
 export function HarborMini() {
   return (
-    <div className="rounded-xl border border-line bg-ink-0/60 p-3.5">
-      <div className="rounded-lg border border-line-2 bg-ink-2 px-3 py-1.5 text-center font-mono text-xs leading-5">
+    <div className="rounded-md border border-line bg-ink-0 p-3.5">
+      <div className="rounded-md border border-line-2 bg-ink-2 px-3 py-1.5 text-center font-mono text-xs leading-5">
         <span className="text-fg">Caddy</span> <span className="text-fg-3">· crm.example.com</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -31,7 +31,7 @@ export function HarborMini() {
           <span className="h-4 w-px bg-line-2" />
         </div>
         <div className="flex justify-center">
-          <span className="h-4 w-px bg-accent shadow-[0_0_8px_rgb(61_255_143/0.6)]" />
+          <span className="h-4 w-px bg-accent" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -49,15 +49,19 @@ export function HarborMini() {
 export function HelmMini() {
   const rows = helmDeals.slice(0, 4);
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-ink-0/60">
-      <div className="flex h-9 items-center gap-2 border-b border-line px-3 text-xs">
-        <span className="font-medium text-fg">3 selected</span>
-        <span className="ml-auto rounded-md border border-line-2 bg-ink-2 px-2 leading-6 text-fg-1">Mark as won</span>
+    <div className="overflow-hidden rounded-md border border-line bg-ink-0">
+      <div className="flex h-10 items-center gap-2 border-b border-line bg-ink-1 px-3 text-[0.8125rem]">
+        <span className="font-medium text-fg tabular-nums">3 selected</span>
+        <span className="ml-auto inline-flex h-7 items-center rounded-sm border border-line-2 bg-ink-1 px-2.5 text-fg-1">Mark as won</span>
+        <span className="inline-flex h-7 items-center rounded-sm bg-ink-3 px-2.5 text-fg">Run</span>
       </div>
       {rows.map((deal) => (
-        <div key={deal.title} className="grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-line px-3 py-2 last:border-b-0">
+        <div
+          key={deal.title}
+          className={`grid h-10 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-line px-3 last:border-b-0 ${deal.pick ? "bg-ink-2" : ""}`}
+        >
           <Checkbox checked={!!deal.pick} />
-          <span className="truncate text-[0.8125rem] text-fg-1">{deal.title}</span>
+          <span className="truncate text-[0.8125rem] text-fg">{deal.title}</span>
           <StageBadge stage={deal.stage} />
         </div>
       ))}
@@ -68,7 +72,7 @@ export function HelmMini() {
 export function LogbookMini() {
   const rows = logbookTimeline.filter((r) => ["query", "event", "job", "mail", "response"].includes(r.kind)).slice(2, 9);
   return (
-    <div className="rounded-xl border border-line bg-ink-0/60 px-3 py-2">
+    <div className="rounded-md border border-line bg-ink-0 px-3 py-2">
       <div className="flex items-center justify-between border-b border-line pb-2 font-mono text-xs">
         <span className="text-fg">POST /api/v1/deals</span>
         <span className="text-fg-3">201 · 24 ms</span>
@@ -80,7 +84,7 @@ export function LogbookMini() {
 
 export function NavigatorMini() {
   return (
-    <div className="rounded-xl border border-line bg-ink-0/60 p-3.5">
+    <div className="rounded-md border border-line bg-ink-0 p-3.5">
       <AgentSession step={99} compact />
     </div>
   );

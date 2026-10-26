@@ -1,18 +1,17 @@
 ---
 title: "gRPC"
 description: "Serve gRPC, gRPC-Web and Connect from your modules with `#[grpc_service]` on tonic services, sharing dependency injection, guards, access rules and the unit of work with your routes."
-status: "planned"
 ---
 
 ## Introduction
 
 <Badge feature="grpc" /> gRPC gives a service a typed contract in a `.proto` file that any language can call. `navree-grpc` serves [tonic](https://docs.rs/tonic) services from your modules: you write the `.proto`, tonic generates the Rust types and the service trait, and you implement the trait on an `#[injectable]` struct marked `#[grpc_service]`.
 
-Navree runs its own pipeline around every call: the request id, tracing, authentication, guards, the access check, the deadline and a unit of work. A gRPC method declares who may call it with the same attributes as a route, takes the same extractors and returns the same `AppError`, which Navree turns into the matching gRPC status. The services run on your HTTP port by default, and answer gRPC, gRPC-Web and Connect clients.
+Navree runs its own pipeline around every call: the request id, authentication, guards, the access check, the deadline and a unit of work. A gRPC method declares who may call it with the same attributes as a route, takes the same extractors and returns the same `AppError`, which Navree turns into the matching gRPC status. The services run on your HTTP port by default, and answer gRPC, gRPC-Web and Connect clients.
 
 ## Installation
 
-`navree-grpc` is the `grpc` feature of the facade. The code tonic generates names `tonic` and `prost` directly, so your crate depends on them too, at the versions navree-grpc uses (`cargo tree -p navree-grpc` shows them):
+`navree-grpc` is the `grpc` feature of the facade. The code tonic generates names `tonic` and `prost` directly, so your crate depends on them too, at the versions navree-grpc uses (`cargo tree -p navree-grpc` shows them). Code generation runs in `build.rs` with [protox](https://docs.rs/protox), which compiles `.proto` files in Rust, so you don't install `protoc`:
 
 ```toml title="services/deals/Cargo.toml"
 [dependencies]
@@ -20,16 +19,16 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["grpc"] }
 tonic = "0.14"
 tonic-prost = "0.14"
 prost = "0.14"
-pbjson = "0.8"            # JSON for Connect clients
-pbjson-types = "0.8"
-serde = { version = "1", features = ["derive"] }
+garde = { version = "0.23", features = ["derive"] } # rules on request messages
+tokio-stream = { version = "0.1", features = ["sync"] } # streaming methods
 
 [build-dependencies]
+protox = "0.10"
 tonic-prost-build = "0.14"
-pbjson-build = "0.8"
+prost = "0.14"
 ```
 
-The `grpc` feature isn't in the default `full` set.
+The `grpc` feature isn't in the default `full` set, and it needs no system library.
 
 ## Defining the service
 
@@ -85,36 +84,36 @@ message DealEvent {
 }
 ```
 
-Generate the Rust code in `build.rs`. The descriptor set feeds server reflection and Connect's JSON encoding; the attributes add garde rules to the request messages you want validated:
+Generate the Rust code in `build.rs`. protox compiles the `.proto` files into a descriptor set, which you write to `OUT_DIR` for server reflection and Connect's JSON encoding, and tonic-prost-build generates the messages, the server trait and the client from it. The attributes add garde rules to the request messages you want validated:
 
 ```rust title="services/deals/build.rs"
 use std::{env, fs, path::PathBuf};
 
+use prost::Message;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let descriptor = PathBuf::from(env::var("OUT_DIR")?).join("deals_descriptor.bin");
+    println!("cargo:rerun-if-changed=proto");
+    let descriptors = protox::compile(["crm/deals/v1/deals.proto"], ["proto"])?;
+    let out = PathBuf::from(env::var("OUT_DIR")?);
+    fs::write(out.join("deals_descriptor.bin"), descriptors.encode_to_vec())?;
 
     tonic_prost_build::configure()
-        .file_descriptor_set_path(&descriptor)
         .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(garde::Validate)]")
         .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
         .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[garde(length(min = 1))]")
         .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[garde(range(min = 0))]")
         .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[garde(length(chars, max = 1000))]")
-        .compile_protos(&["proto/crm/deals/v1/deals.proto"], &["proto"])?;
-
-    let descriptors = fs::read(&descriptor)?;
-    pbjson_build::Builder::new()
-        .register_descriptors(&descriptors)?
-        .build(&[".crm.deals.v1"])?;
+        .compile_fds(descriptors)?;
     Ok(())
 }
 ```
+
+A garde derive needs a rule (or `#[garde(skip)]`) on every field of the message, so name each one.
 
 Include the generated code in a module:
 
 ```rust title="services/deals/src/grpc/pb.rs"
 tonic::include_proto!("crm.deals.v1");
-include!(concat!(env!("OUT_DIR"), "/crm.deals.v1.serde.rs"));
 
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("deals_descriptor");
 ```
@@ -185,20 +184,24 @@ impl Deals for DealsGrpc {
 The methods are tonic's, with three additions that `#[grpc_service]` handles:
 
 - **The first parameter is tonic's `Request<T>`**, as the trait declares it, or `Valid<Request<T>>` to validate the message with its garde rules first.
-- **Navree extractors may follow it**: `Uow`, `CurrentPrincipal`, `CurrentUser`, `Abilities`, `Accessible<E, A>`, `Authorized<E, A>`, `Scoped<T>`, `CurrentWorkspace` and your own. The macro generates the method tonic expects and runs the extractors from the call's metadata.
-- **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, `MicroError` and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too.
+- **Navree extractors may follow it**: `Uow`, `CurrentPrincipal`, `CurrentUser`, `Abilities`, `Accessible<E, A>`, `Authorized<E, A>`, `Scoped<T>`, `CurrentWorkspace` and your own (any `FromRequestParts` whose rejection is an `AppError`). The macro generates the method tonic expects and runs the extractors on the call's metadata and extensions.
+- **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, a `Status` from another service and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too. Write the result type out: the macro reads `Response<T>` from it, so a type alias for the whole result is an error.
+
+The macro also adds tonic's `#[async_trait]` to the impl block, so you don't write it.
 
 Conversions between your domain types and the generated messages are plain `From` and `TryFrom` impls, like `impl From<DealView> for pb::Deal`. A `TryFrom` that fails on a bad UUID or an unknown stage should return `AppError::bad_request(..)`, which reaches the client as `INVALID_ARGUMENT`.
 
 ### Registering the service
 
-Register the struct in its module, and add `GrpcModule` to the app root:
+Register the struct in its module, with the descriptor set, and add `GrpcModule` to the app root:
 
 ```rust title="services/deals/src/lib.rs"
+#[module(providers = [DealService], register = Self::wire)]
+pub struct DealsModule;
+
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.message_handlers::<DealsHandlers>()
-            .grpc_service::<DealsGrpc>()
+        m.grpc_service::<DealsGrpc>()
             .grpc_descriptors(grpc::pb::FILE_DESCRIPTOR_SET);
     }
 }
@@ -207,13 +210,16 @@ impl DealsModule {
 ```rust title="services/deals/src/main.rs"
 platform(Navree::app(), ConfigSources::defaults())
     .module(GrpcModule::from_config())
-    .module(MicroModule::from_config())
     .module(CrmCoreModule)
     .module(DealsModule)
     .run()
 ```
 
-The same `DealService` now answers HTTP routes, messages and gRPC calls, with one set of access rules.
+`m.grpc_service::<T>()` registers `T` as a singleton of the module, built with dependency injection, and serves it. `m.grpc_descriptors(..)` hands the encoded descriptor set to reflection and to Connect's JSON encoding; a module may register several. Register `GrpcModule` after `DatabaseModule` (which `platform` adds), so the gRPC calls an HTTP handler makes carry its request's context.
+
+The same `DealService` now answers HTTP routes and gRPC calls, with one set of access rules.
+
+At boot, Navree checks every registered service and fails with the full list of problems when a method declares no access, is `#[public]` and restricted at once, needs an authenticator or a route authorizer the app doesn't have, or when two modules register the same service.
 
 ## Serving
 
@@ -232,40 +238,46 @@ web = true
 connect = true
 ```
 
+The separate listener opens with `serve`, once the HTTP port is listening (other commands, such as `migrate`, never open it), speaks HTTP/1.1 and HTTP/2, and answers `415` to anything that isn't gRPC, gRPC-Web or Connect.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `grpc.addr` | none | A separate listener for gRPC. Without it, gRPC shares `http.addr`. |
 | `grpc.web` | `true` | Accept gRPC-Web (binary and text) over HTTP/1.1 and HTTP/2. |
 | `grpc.connect` | `true` | Accept the Connect protocol, with protobuf or JSON. |
-| `grpc.reflection` | `true` in debug builds | Serve server reflection (needs `m.grpc_descriptors(..)`). |
+| `grpc.reflection` | `true` in debug builds | Serve server reflection (`v1` and `v1alpha`) for the descriptor sets registered with `m.grpc_descriptors(..)`. |
 | `grpc.health` | `true` | Serve `grpc.health.v1.Health`, from the app's readiness checks. |
 | `grpc.timeout_secs` | `http.timeout_secs` | The deadline of a call whose client sets none. |
 | `grpc.max_message_bytes` | `4194304` | The largest message, received or sent. |
-| `grpc.concurrency_per_connection` | `256` | Calls in flight on one HTTP/2 connection. |
+| `grpc.concurrency_per_connection` | `256` | Calls in flight on one HTTP/2 connection of the `grpc.addr` listener. On the shared port, the HTTP server's settings apply. |
 
 As environment variables: `APP_GRPC__ADDR=0.0.0.0:50051`, `APP_GRPC__REFLECTION=false`. In code: `GrpcModule::for_root(GrpcOptions { addr: Some("0.0.0.0:50051".parse()?), ..GrpcOptions::default() })`.
+
+Inject `GrpcServer` to see what runs: `services()` lists the registered service names, and `local_addr()` (or `wait_bound().await`) gives the address of the `grpc.addr` listener, which helps with `addr = "127.0.0.1:0"` in tests.
 
 ## The call pipeline
 
 Every call, unary or streaming, goes through these steps before your method runs:
 
-1. **Request id and tracing.** `x-request-id` from the metadata, or a new one, returned in the response metadata; the call continues the caller's trace from `traceparent`.
-2. **Interceptors** you attached to the service, if any.
-3. **Authentication** of the `authorization` metadata, by the app's `dyn Authenticator`: a bearer token works exactly as on HTTP. Invalid credentials end the call with `UNAUTHENTICATED`.
-4. **Guards** (`#[guard(..)]` on the impl block or the method), which see the metadata as request headers.
-5. **The access check**: `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`.
-6. **The deadline**: the client's `grpc-timeout`, or `grpc.timeout_secs`.
-7. **The unit of work** (unary calls), around the extractors and your method.
+1. **Request id and tracing.** `x-request-id` from the metadata, or a new one, returned in the response metadata; the call runs in a `grpc` span with its path, request id, user and the caller's `traceparent`. Each finished call is logged with its code and latency, and counted in the `grpc_server_handled_total` and `grpc_server_handling_seconds` metrics.
+2. **The deadline**: the client's `grpc-timeout`, or `grpc.timeout_secs`, counted from the call's arrival.
+3. **Interceptors** you attached to the service, if any.
+4. **Authentication** of the `authorization` metadata, by the app's `dyn Authenticator`: a bearer token works exactly as on HTTP. Invalid credentials end the call with `UNAUTHENTICATED`, and so does a missing one on a method that isn't `#[public]`.
+5. **Guards** (`#[guard(..)]` on the impl block or the method), which see the metadata as request headers.
+6. **The access check**: `#[roles]`, `#[permissions]` or `#[can]`.
+7. **The unit of work**, around the extractors and your method.
 
 ### Access and guards
 
-gRPC methods are deny by default: each needs an access attribute, on the method or on the impl block, or the service doesn't compile. `#[can(.., from = "id")]` reads the record's id from the request message's `id` field, loads the record in the call's unit of work and checks it, so `get_deal` above answers `NOT_FOUND` or `PERMISSION_DENIED` before it runs. See [access control](/docs/basics/access-control/) for the attributes.
+gRPC methods are deny by default: each needs an access attribute (`#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`), on the method or on the impl block, or the service doesn't compile. `#[can(.., from = "id")]` reads the record's id from the request message's `id` field (a string or an integer, optional or not), loads the record in the call's unit of work and checks it, so `get_deal` above answers `NOT_FOUND` or `PERMISSION_DENIED` before it runs, and `INVALID_ARGUMENT` when the id is empty. It needs a unary request: a method that receives a stream can't use `from`. See [access control](/docs/basics/access-control/) for the attributes.
 
-Guards are the same `Guard` trait as on routes and message handlers. A guard reading `x-api-version` from a route's headers reads it from the call's metadata here, unchanged. A refused call is recorded as `access.denied` in the audit log, with the gRPC path as the route.
+Guards are the same `Guard` trait as on routes. A guard reading `x-api-version` from a route's headers reads it from the call's metadata here, unchanged. A refused call is recorded as `access.denied` in the audit log, with the gRPC path as the route.
+
+The route attributes that only mean something for HTTP (`#[get]` and the other verbs, `#[throttle]`, `#[timeout]`, `#[audit]`, `#[name]`, `#[api]`, `#[transactional]`) are compile errors on a gRPC method.
 
 ### Validation
 
-`Valid<Request<T>>` runs the garde rules of a message type, which you add in `build.rs` with `type_attribute` and `field_attribute` as above. A message that breaks a rule ends the call with `INVALID_ARGUMENT`, a message listing every broken rule, and a `google.rpc.BadRequest` detail with one field violation per rule, which gRPC clients in every language can read:
+`Valid<Request<T>>` runs the garde rules of a message type, which you add in `build.rs` with `type_attribute` and `field_attribute` as above, with the app's validation messages. A message that breaks a rule ends the call with `INVALID_ARGUMENT`, a message listing every broken rule, and a `google.rpc.BadRequest` detail with one field violation per rule, which gRPC clients in every language can read:
 
 ```text
 code: INVALID_ARGUMENT
@@ -275,11 +287,11 @@ details: google.rpc.BadRequest { field_violations: [ { field: "position", descri
 
 ### The unit of work
 
-A unary call gets a unit of work like an HTTP request: it commits when the method returns `Ok`, then the response is sent; it rolls back on an error. Jobs, notifications and events emitted during the call join it. Streaming calls have no unit of work of their own, since they can last for hours: open a transaction per item with `Db::transaction` when a stream writes.
+A call gets a unit of work like an HTTP request: it commits when the method returns `Ok`, then the response is sent; it rolls back on an error or when the deadline passes. Jobs, notifications and events emitted during the call join it. For a unary or client-streaming call, the unit of work covers the whole method. For a server-streaming or bidirectional call, it covers the part of the method that opens the stream: the items the stream sends later run outside it, since a stream can last for hours. Open a transaction per item with `Db::transaction` when a stream writes.
 
 ### Interceptors
 
-Tonic interceptors work unchanged. Attach one to a service with the `interceptor` option; it runs before authentication, so use it for cheap checks on the raw metadata:
+Tonic interceptors work unchanged. Attach one to a service with the `interceptor` option; it runs before authentication, so use it for cheap checks on the raw metadata. A function like this one or any value that implements tonic's `Interceptor` works:
 
 ```rust
 use navree::grpc::{Request, Status};
@@ -300,7 +312,7 @@ impl Deals for DealsGrpc {
 
 ## Errors
 
-An `AppError` becomes the gRPC status that means the same thing, with the error's message:
+An `AppError` becomes the gRPC status that means the same thing, with the error's message (`navree::grpc::status_from_error`):
 
 | `AppError` status | gRPC code |
 |---|---|
@@ -310,17 +322,19 @@ An `AppError` becomes the gRPC status that means the same thing, with the error'
 | 404 Not Found | `NOT_FOUND` |
 | 409 Conflict | `ALREADY_EXISTS` |
 | 412 Precondition Failed | `FAILED_PRECONDITION` |
-| 429 Too Many Requests | `RESOURCE_EXHAUSTED` |
+| 413 Payload Too Large, 429 Too Many Requests | `RESOURCE_EXHAUSTED` |
 | 501 Not Implemented | `UNIMPLEMENTED` |
 | 503 Service Unavailable | `UNAVAILABLE` |
 | 504 Gateway Timeout, or the deadline passed | `DEADLINE_EXCEEDED` |
 | 500 and anything else | `INTERNAL` |
 
-Server errors keep the message `"Internal server error"` on the wire and are logged with the request id, as on HTTP. A `Status` you return yourself is sent as it is. The opposite mapping applies when your code calls another gRPC service: `?` on a `Status` gives the `AppError` of the same meaning, so a `NOT_FOUND` from the deals service is a 404 in the API that called it.
+Server errors keep the message `"Internal server error"` on the wire and are logged with the request id, as on HTTP, and the app's error mappers (`m.map_error::<E>(..)`) apply to them first. A `Status` you return yourself is sent as it is.
+
+The opposite mapping (`navree::grpc::error_from_status`) applies when your code calls another gRPC service: `?` on a `Status` gives the `AppError` of the same meaning, so a `NOT_FOUND` from the deals service is a 404 in the API that called it, and an `INVALID_ARGUMENT` with field violations is a validation error with the same fields. `UNIMPLEMENTED`, `UNAVAILABLE`, `DEADLINE_EXCEEDED` and the client errors keep the upstream message; `INTERNAL`, `UNKNOWN` and the other server errors become a 500 that keeps it only in the logs.
 
 ## Streaming
 
-Server-streaming, client-streaming and bidirectional methods work as tonic defines them. The access check and the guards run once, when the stream opens. This one streams deal changes from the app's [event bus](/docs/digging-deeper/events/):
+Server-streaming, client-streaming and bidirectional methods work as tonic defines them, and a method that receives a stream takes `Request<Streaming<T>>` (`navree::grpc::Streaming`). The access check and the guards run once, when the stream opens. This one streams deal changes from the app's [event bus](/docs/digging-deeper/events/):
 
 ```rust
 use std::pin::Pin;
@@ -356,11 +370,13 @@ impl Deals for DealsGrpc {
 }
 ```
 
-(`events: Arc<EventBus>` is a field of `DealsGrpc` here, and `tokio-stream` a dependency with its `sync` feature.) With several instances, each instance's bus only sees its own events; `m.receive_event::<DealUpdated>()` from [navree-micro](/docs/microservices/events/#every-instance-broadcast) puts events published anywhere on every instance's bus.
+(`events: Arc<EventBus>` is a field of `DealsGrpc` here, and `tokio-stream` a dependency with its `sync` feature.) With several instances, each instance's bus only sees its own events; to see events published on every instance, [broadcast them between instances](/docs/microservices/events/).
+
+When the app shuts down, open streams end with `UNAVAILABLE`; when the client's `grpc-timeout` passes, with `DEADLINE_EXCEEDED`.
 
 ## Deadlines and metadata
 
-A client's `grpc-timeout` is the call's deadline. When it passes, the method is cut off, its unit of work rolls back, and the client gets `DEADLINE_EXCEEDED`. Calls without one get `grpc.timeout_secs`. Messages your method sends with `ServiceClient` and calls it makes through a [Navree channel](#calling-other-grpc-services) inherit the remaining time.
+A client's `grpc-timeout` is the call's deadline. When it passes, the method is cut off, its unit of work rolls back, and the client gets `DEADLINE_EXCEEDED`. Calls without one get `grpc.timeout_secs`. Calls your method makes through a [Navree channel](#calling-other-grpc-services) inherit the remaining time.
 
 Navree reads and writes these metadata keys:
 
@@ -368,8 +384,8 @@ Navree reads and writes these metadata keys:
 |---|---|---|
 | `authorization` | in | `Bearer` credentials, checked by the app's authenticator. |
 | `x-request-id` | in and out | The request id; generated when missing, always returned. |
-| `traceparent`, `tracestate` | in | The caller's trace context. |
-| `x-workspace` | in | The [workspace](/docs/workspaces/resolution/) of the call, when header resolution is on. |
+| `traceparent`, `tracestate` | in | The caller's trace context, recorded on the call's span and passed on by Navree channels. |
+| `x-workspace` | in | The [workspace](/docs/workspaces/resolution/) of the call, when header resolution is on. `CurrentWorkspace` reads it. |
 | `grpc-timeout` | in | The deadline. |
 
 Read any other metadata from the request: `request.metadata().get("x-client-version")`.
@@ -378,7 +394,7 @@ Read any other metadata from the request: `request.metadata().get("x-client-vers
 
 Browsers can't speak gRPC directly. With `grpc.web` and `grpc.connect` on (the default), the same services answer:
 
-- **gRPC-Web**, for clients generated by `protoc-gen-grpc-web` and Connect's gRPC-Web transport, over HTTP/1.1 or HTTP/2;
+- **gRPC-Web**, binary and text, for clients generated by `protoc-gen-grpc-web` and Connect's gRPC-Web transport, over HTTP/1.1 or HTTP/2;
 - **Connect**, a protocol of plain HTTP POSTs that carries protobuf or JSON, so a unary call is one request you can make with `curl`:
 
 ```sh
@@ -400,7 +416,9 @@ curl -X POST http://localhost:8081/crm.deals.v1.Deals/GetDeal \
 }
 ```
 
-JSON follows protobuf's JSON mapping (camelCase names, 64-bit integers as strings), from the serde code `pbjson-build` generated. Browser calls go through the app's [CORS](/docs/basics/cors-and-security-headers/) settings; Navree adds the gRPC-Web and Connect headers to the allowed and exposed headers itself.
+JSON follows protobuf's JSON mapping (camelCase names, 64-bit integers as strings), transcoded with the descriptor sets registered with `m.grpc_descriptors(..)`; a JSON call to a service without them answers `UNIMPLEMENTED`. Protobuf calls (`application/proto`) need no descriptors. Streaming methods answer Connect's streaming protocol (`application/connect+proto` and `application/connect+json`), and `connect-timeout-ms` sets a call's deadline. Errors use Connect's HTTP statuses and JSON error body. Connect calls are POSTs without compression, the default of Connect's clients.
+
+On the shared port, a Connect request reaches the gRPC services only when its path names a service the app serves, so your JSON routes are never in the way. Browser calls go through the app's [CORS](/docs/basics/cors-and-security-headers/) settings (`http.cors.allowed_origins`); Navree adds the gRPC-Web and Connect headers to the allowed and exposed headers itself.
 
 ## Reflection and health
 
@@ -413,7 +431,7 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
   localhost:8081 crm.deals.v1.Deals/GetDeal
 ```
 
-`grpc.health.v1.Health` answers `SERVING` while the app's [readiness checks](/docs/digging-deeper/health-and-metrics/) pass and `NOT_SERVING` otherwise, for load balancers and orchestrators that probe over gRPC. Both are `#[public]`; turn reflection off in production with `grpc.reflection = false` (the default in release builds) if your contract isn't public.
+`grpc.health.v1.Health` answers `SERVING` while the app's [readiness checks](/docs/digging-deeper/health-and-metrics/) pass and `NOT_SERVING` otherwise, for the server as a whole (the empty service name) and for each registered service, for load balancers and orchestrators that probe over gRPC; `Watch` sends the status again whenever it changes. Both are public; turn reflection off in production with `grpc.reflection = false` (the default in release builds) if your contract isn't public.
 
 ## Calling other gRPC services
 
@@ -445,14 +463,14 @@ impl DealLookup {
 }
 ```
 
-Channels connect lazily, reconnect on their own and are shared by the whole app. A Navree channel adds what `ServiceClient` adds to messages: the request id, the trace context, the forwarded `authorization`, the workspace, and a `grpc-timeout` no later than the current deadline. Here the generated code comes from a `crm-proto` crate that both services depend on, which is the gRPC version of the shared contract crate.
+`channels.get(name)` is a 500 naming the missing key when `grpc.clients.<name>` isn't configured. Channels connect lazily, reconnect on their own and are shared by the whole app. A call on a Navree channel made while the app handles a gRPC call or an HTTP request carries that request's id, its trace context, its `authorization` (unless `forward_auth` is off), its workspace, and a `grpc-timeout` no later than the current deadline. Metadata you set yourself wins. Here the generated code comes from a `crm-proto` crate that both services depend on, which is the gRPC version of the shared contract crate.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `grpc.clients.<name>.url` | required | `http://` (h2c) or `https://` (TLS with the system's roots). |
 | `grpc.clients.<name>.timeout_ms` | `5000` | The deadline of calls on this channel. |
 | `grpc.clients.<name>.forward_auth` | `true` | Forward the current request's `authorization`. |
-| `grpc.clients.<name>.tls.ca`, `.cert`, `.key` | none | A private CA, and a client certificate for mutual TLS. |
+| `grpc.clients.<name>.tls.ca`, `.cert`, `.key` | none | PEM files: a private CA, and a client certificate with its key for mutual TLS (`https://` only). |
 
 ## Testing
 
@@ -471,6 +489,7 @@ async fn get_deal_checks_access() {
     let app = TestApp::builder()
         .temp_database()
         .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(crm_core::abilities::access_options()))
         .module(GrpcModule::from_config())
         .module(DealsModule)
         .build()
@@ -494,7 +513,7 @@ async fn get_deal_checks_access() {
 }
 ```
 
-`TestChannel::new(&app).bearer(token)` sends real credentials instead, and `.metadata(key, value)` adds metadata. To test a service that calls others over gRPC, serve a stub implementation of their trait from the test app, or put `MicroFake` in front of message-based calls.
+`acting_as` signs calls in through the test app's `TestAuthenticator`, like `TestApp::acting_as` for HTTP requests. `TestChannel::new(&app).bearer(token)` sends real credentials instead, and `.metadata(key, value)` adds metadata (`.metadata("x-workspace", "acme")` names a workspace). To test a service that calls others over gRPC, register a stub implementation of their trait in a second test app with `http.addr = "127.0.0.1:0"`, run its `serve` command (`app.run_command("serve", &[])`), and point `grpc.clients.<name>.url` at the address `HttpServer::wait_bound()` returns.
 
 <LinkCards>
   <LinkCard href="/docs/microservices/introduction/" title="Microservices">

@@ -65,11 +65,21 @@
 #![forbid(unsafe_code)]
 
 mod controller;
+mod export;
 mod health;
 mod metrics;
 mod module;
 mod options;
+#[cfg(feature = "otel")]
+mod otlp;
+mod spans;
+pub mod testing;
+mod trace_options;
 
+pub use export::SPANS_DROPPED_METRIC;
 pub use health::{CheckReport, CheckState, DEFAULT_CHECK_TIMEOUT, Health, HealthReport};
 pub use module::ObserveModule;
+pub use navree_telemetry::current_trace_id;
 pub use options::ObserveOptions;
+pub use spans::{RecordedSpan, SpanKind, SpanStatus};
+pub use trace_options::{OtlpProtocol, TracingOptions};

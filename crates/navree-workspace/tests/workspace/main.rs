@@ -9,3 +9,4 @@ mod isolation;
 mod resolution;
 mod routes;
 mod services;
+mod telemetry;

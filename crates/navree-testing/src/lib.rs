@@ -89,7 +89,7 @@ mod response;
 mod temp;
 
 pub use app::{TestApp, TestAppBuilder};
-pub use auth::{TestAuthenticator, principal};
+pub use auth::{ActingAs, TestAuthenticator, principal};
 pub use client::{TestClient, TestRequest};
 pub use response::TestResponse;
 pub use temp::{TempDirGuard, temp_sqlite_url};

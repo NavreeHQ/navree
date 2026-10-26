@@ -7,7 +7,9 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
     ProviderKey, Resolver,
 };
+use navree_telemetry::Telemetry;
 
+use crate::telemetry::{clear_background, set_background};
 use crate::{LogControl, LogOptions, install};
 
 /// The global logging module: installs Navree's tracing subscriber and exports
@@ -104,7 +106,14 @@ fn register(m: &mut ModuleBuilder, options: Option<LogOptions>) {
     )
     .factory(
         Factory::<FlushOnShutdown>::new(|r: Resolver| async move {
-            Ok(Arc::new(FlushOnShutdown(r.get::<LogControl>().await?)))
+            let control = r.get::<LogControl>().await?;
+            // Lines written outside a request or job go to this app's
+            // telemetry sinks while it runs.
+            let telemetry = r.app().try_get::<Telemetry>().await.map(|t| (*t).clone());
+            if let Some(telemetry) = &telemetry {
+                set_background(telemetry.clone());
+            }
+            Ok(Arc::new(FlushOnShutdown { control, telemetry }))
         })
         .deps(vec![ProviderKey::of::<LogControl>()]),
     )
@@ -113,12 +122,19 @@ fn register(m: &mut ModuleBuilder, options: Option<LogOptions>) {
     .exports::<LogOptions>();
 }
 
-/// Flushes the log file when the app shuts down.
-struct FlushOnShutdown(Arc<LogControl>);
+/// Flushes the log file when the app shuts down, and stops sending
+/// background log lines to the app's telemetry.
+struct FlushOnShutdown {
+    control: Arc<LogControl>,
+    telemetry: Option<Telemetry>,
+}
 
 impl Lifecycle for FlushOnShutdown {
     fn on_shutdown(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
-        let control = self.0.clone();
+        if let Some(telemetry) = &self.telemetry {
+            clear_background(telemetry);
+        }
+        let control = self.control.clone();
         Box::pin(async move {
             tokio::task::spawn_blocking(move || control.flush()).await??;
             Ok(())

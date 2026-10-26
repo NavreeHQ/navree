@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use navree_config::Config;
 use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_telemetry::Telemetry;
 
 use crate::{HttpClient, HttpClientOptions};
 
@@ -112,7 +113,10 @@ fn register(m: &mut ModuleBuilder, source: Source) {
         .factory(
             Factory::<HttpClient>::new(move |r| {
                 let source = source.clone();
-                async move { Ok(Arc::new(source.client(&r).await?)) }
+                async move {
+                    let telemetry = Telemetry::from_app(&r.app()).await;
+                    Ok(Arc::new(source.client(&r).await?.with_telemetry(telemetry)))
+                }
             })
             .deps(deps),
         )

@@ -11,4 +11,5 @@ mod module;
 mod overlap;
 mod prune;
 mod single_node;
+mod telemetry;
 mod tick;

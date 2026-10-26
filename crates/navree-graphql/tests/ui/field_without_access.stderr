@@ -1,0 +1,5 @@
+error: field `secret` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+  --> tests/ui/field_without_access.rs:15:14
+   |
+15 |     async fn secret(&self) -> String {
+   |              ^^^^^^
