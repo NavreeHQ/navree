@@ -29,6 +29,17 @@ pub(crate) mod redis;
 pub use memory::MemoryTransport;
 pub use tcp::TcpTransport;
 
+#[cfg(feature = "kafka")]
+pub use kafka::KafkaTransport;
+#[cfg(feature = "mqtt")]
+pub use mqtt::MqttTransport;
+#[cfg(feature = "nats")]
+pub use nats::NatsTransport;
+#[cfg(feature = "rabbitmq")]
+pub use rabbitmq::RabbitmqTransport;
+#[cfg(feature = "redis")]
+pub use redis::RedisTransport;
+
 /// Moves envelopes between services. Navree hands a transport envelopes to
 /// send and publish, and a channel for the deliveries it receives; the
 /// pipeline, the codec, retries, dead letters and the inbox are Navree's.

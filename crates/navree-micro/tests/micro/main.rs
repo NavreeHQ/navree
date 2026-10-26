@@ -6,3 +6,8 @@ mod request_response;
 mod services;
 mod support;
 mod transports;
+
+#[cfg(feature = "nats")]
+mod nats;
+#[cfg(feature = "nats")]
+mod nats_server;
