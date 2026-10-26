@@ -113,6 +113,14 @@ impl Registry {
             }
             registry.by_slug.insert(info.slug.clone(), index);
             registry.by_type.insert(info.type_id, index);
+            if !info.icon.is_empty() && !crate::icons::exists(info.icon) {
+                tracing::warn!(
+                    target: "navree::helm",
+                    resource = info.type_name,
+                    icon = info.icon,
+                    "this icon is not one Helm embeds; the menu shows a generic icon"
+                );
+            }
         }
         registry.resources = resources;
         registry.check_relations()?;

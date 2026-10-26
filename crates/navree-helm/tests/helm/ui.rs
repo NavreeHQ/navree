@@ -526,3 +526,42 @@ async fn the_panel_moves_with_helm_path() {
     assert!(html.contains("href=\"/back-office/resources/deals\""));
     let _ = json!(null);
 }
+
+#[tokio::test]
+async fn the_shell_shows_icons_and_remembers_a_collapsed_sidebar() {
+    let app = app().await;
+    let (_, rep) = user(&app, "rep").await;
+    let html = page(&rep, "/admin/resources/deals")
+        .await
+        .assert_status(200)
+        .text()
+        .replace("&#x2f;", "/");
+    // A Lucide icon per resource (`handshake` for deals), the current one
+    // marked; no letter tiles.
+    assert!(
+        html.contains(
+            "<a class=\"menu-item\" href=\"/admin/resources/deals\" title=\"Deals\" aria-current=\"page\"><svg class=\"icon\""
+        ),
+        "{html}"
+    );
+    assert!(html.contains("<path d=\"m11 17 2 2a1 1 0 1 0 3-3\"/>"));
+    assert!(html.contains("<span class=\"menu-label\">Companies</span>"));
+    // The account menu, the top bar's trigger and the command menu.
+    assert!(html.contains("<span class=\"avatar\" aria-hidden=\"true\">SI</span>"));
+    assert!(html.contains("data-sidebar-trigger"));
+    assert!(html.contains("<dialog class=\"command\""));
+    assert!(
+        html.contains("<div class=\"shell\" data-shell>"),
+        "expanded by default"
+    );
+    // The script remembers a collapsed sidebar in a cookie.
+    let html = rep
+        .get("/admin")
+        .header("accept", "text/html")
+        .header("cookie", "navree_helm_sidebar=collapsed")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(html.contains("<div class=\"shell is-collapsed\" data-shell>"));
+}

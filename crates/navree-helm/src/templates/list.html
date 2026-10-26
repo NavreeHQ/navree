@@ -4,7 +4,7 @@
 <div class="page-head">
   <h1>{{ resource.label }}</h1>
   <div class="page-actions">
-    {% if resource.can_create %}<a class="btn btn-primary" href="{{ resource.new_url }}">New {{ resource.singular|lower }}</a>{% endif %}
+    {% if resource.can_create %}<a class="btn btn-primary" href="{{ resource.new_url }}">{{ panel.icons.plus|safe }}New {{ resource.singular|lower }}</a>{% endif %}
   </div>
 </div>
 
@@ -50,7 +50,7 @@
     </div>
     {% endfor %}
     <div class="filter-buttons">
-      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+      <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
       <a class="btn btn-ghost btn-sm" href="{{ resource.url }}">Reset</a>
     </div>
   </form>
