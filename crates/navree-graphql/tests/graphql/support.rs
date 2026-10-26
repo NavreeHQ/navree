@@ -399,6 +399,13 @@ impl PostResolver {
             std::future::ready(keep)
         }))
     }
+
+    /// The ids of new posts, for admins.
+    #[subscription]
+    #[roles("admin")]
+    async fn moderation_feed(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Uuid>> {
+        Ok(EventStream::<PostCreated>::new(ctx)?.map(|event| event.id))
+    }
 }
 
 /// A second resolver, in another module, with impl-level access.
