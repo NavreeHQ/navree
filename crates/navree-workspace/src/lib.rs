@@ -30,6 +30,12 @@
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), unless
 //!   `workspace.routes` is false.
+//! - **Conformity.** `navree check` runs `workspace.entities` (every entity
+//!   classified with [`ModuleBuilderWorkspaceExt::workspace_entity`] or
+//!   [`global_entity`](ModuleBuilderWorkspaceExt::global_entity)),
+//!   `workspace.repo` (workspace entities reached only through
+//!   [`WorkspaceRepo`]) and `workspace.tables` (an indexed workspace
+//!   column, row-level security on PostgreSQL).
 //!
 //! ```no_run
 //! use navree_access::{AccessModule, AccessOptions};
@@ -60,6 +66,7 @@ pub mod events;
 mod access;
 mod commands;
 mod config;
+mod conformity;
 mod controller;
 mod core;
 mod current;
