@@ -137,6 +137,7 @@ axum = { workspace = true, optional = true }
 [dev-dependencies]
 chrono = { workspace = true }
 garde = { workspace = true }
+metrics = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
