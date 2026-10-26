@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use keel::access::{AccessService, Accessible, Read};
-use keel::auth::{AuthService, NewUser, user};
-use keel::contracts::Clock;
-use keel::db::{contains_ignore_case, paginate};
-use keel::prelude::*;
+use navis::access::{AccessService, Accessible, Read};
+use navis::auth::{AuthService, NewUser, user};
+use navis::contracts::Clock;
+use navis::db::{contains_ignore_case, paginate};
+use navis::prelude::*;
 use sea_orm::ActiveValue::Set;
 use sea_orm::sea_query::Expr;
 use sea_orm::{Condition, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder};

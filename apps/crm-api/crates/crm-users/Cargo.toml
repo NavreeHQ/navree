@@ -1,6 +1,6 @@
 [package]
 name = "crm-users"
-description = "Keel CRM: UsersModule (`/api/v1/me`, `/api/v1/users`, roles on the auth user resource)."
+description = "Navis CRM: UsersModule (`/api/v1/me`, `/api/v1/users`, roles on the auth user resource)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 crm-core = { path = "../crm-core" }
 garde = { workspace = true }
-keel = { workspace = true }
+navis = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

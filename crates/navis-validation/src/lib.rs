@@ -1,0 +1,85 @@
+//! # navis-validation
+//!
+//! `ValidationModule`: validated extractors on [garde](https://docs.rs/garde),
+//! NestJS (class-validator) style messages and database `unique` / `exists`
+//! rules.
+//!
+//! - [`Valid`] wraps `Json<T>`, `Query<T>` or `Form<T>` (`T:
+//!   garde::Validate<Context = ()> + DeserializeOwned`). Every failure is a
+//!   400 error in the NestJS format: `message` lists every message and
+//!   `errors` maps dotted field paths to their messages: malformed JSON
+//!   (`{"body": ["body must be a valid JSON string"]}`), serde errors at
+//!   their path (a missing field is `required`, `"title should not be
+//!   empty"`; a wrong type `string` / `integer` / ...; an unknown enum
+//!   variant `in`) and garde rules (`"email must be a valid email
+//!   address"`, `"items.1.quantity must not be less than 1"`).
+//! - [`ValidAsync`] then runs the DTO's [`AsyncRules`] ([`AsyncRule::unique`],
+//!   [`AsyncRule::exists`]) in the request's unit of work, as parameterised
+//!   `SELECT 1 ... LIMIT 1` queries on validated identifiers.
+//! - [`rules`] adds what garde lacks: [`confirmed`], [`rules::uuid`],
+//!   [`rules::date_ymd`], [`rules::one_of`]; [`rule_error`] gives your own
+//!   rules table-driven messages.
+//! - [`Messages`] holds the templates ([`DEFAULT_MESSAGES`] plus overrides by
+//!   rule, by `field.rule` and attribute names). [`ValidationModule`]
+//!   (global) provides them from [`ValidationOptions`] or the `validation`
+//!   config section; without the module the defaults apply.
+//!
+//! ```
+//! use garde::Validate;
+//! use navis_db::Uow;
+//! use navis_http::{Created, Json};
+//! use navis_validation::{AsyncRule, AsyncRules, ValidAsync, confirmed, rules};
+//! use serde::Deserialize;
+//!
+//! #[derive(Deserialize, Validate)]
+//! struct Register {
+//!     #[garde(length(min = 1, max = 255))]
+//!     name: String,
+//!     #[garde(email)]
+//!     email: String,
+//!     #[garde(length(min = 8), custom(confirmed(&self.password_confirmation)))]
+//!     password: String,
+//!     #[garde(skip)]
+//!     password_confirmation: String,
+//!     #[garde(custom(rules::one_of(&["admin", "manager", "rep"])))]
+//!     role: String,
+//! }
+//!
+//! impl AsyncRules for Register {
+//!     fn async_rules(&self) -> Vec<AsyncRule> {
+//!         vec![AsyncRule::unique("email", "users", "email", self.email.clone(), None)]
+//!     }
+//! }
+//!
+//! async fn register(
+//!     uow: Uow,
+//!     ValidAsync(Json(input)): ValidAsync<Json<Register>>,
+//! ) -> navis_http::Result<Created<String>> {
+//!     // `input` passed garde and the unique rule; `uow` is the same unit of work.
+//!     Ok(Created("/api/users/1".to_owned(), input.name))
+//! }
+//! # let _: axum::routing::MethodRouter = axum::routing::post(register);
+//! ```
+//!
+//! garde's derive refers to `::garde`, so apps add `garde` as a direct
+//! dependency (the re-export below is for paths such as `garde::Report`).
+#![forbid(unsafe_code)]
+
+mod async_rules;
+mod errors;
+mod extract;
+mod failure;
+mod messages;
+mod module;
+pub mod rules;
+
+pub use async_rules::{AsyncRule, AsyncRules, RuleError};
+pub use errors::ValidationErrors;
+pub use extract::{Valid, ValidAsync};
+pub use failure::rule_error;
+pub use messages::{DEFAULT_MESSAGES, Messages};
+pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};
+pub use rules::confirmed;
+
+/// garde, the validation library behind [`Valid`].
+pub use garde;

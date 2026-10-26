@@ -2,13 +2,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ACCESS_COOKIE, CHALLENGE_COOKIE, createBff, REFRESH_COOKIE } from "./bff";
 
-const API = "http://keel.test";
+const API = "http://navis.test";
 const APP = "http://crm.test";
 
 type Call = { url: string; method: string; headers: Headers; body: string };
 
-/** A scripted Keel API: routes by "METHOD /path", records every call. */
-function fakeKeel(routes: Record<string, (call: Call) => Response | Promise<Response>>) {
+/** A scripted Navis API: routes by "METHOD /path", records every call. */
+function fakeNavis(routes: Record<string, (call: Call) => Response | Promise<Response>>) {
   const calls: Call[] = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -78,15 +78,15 @@ const tokens = (n: number) => ({
   expires_in: 900,
 });
 
-const user = { __type: "User", id: "u1", name: "Priya Shah", email: "rep1@keel.test", roles: ["rep"] };
+const user = { __type: "User", id: "u1", name: "Priya Shah", email: "rep1@navis.test", roles: ["rep"] };
 
 describe("BFF proxy", () => {
-  it("forwards to Keel with the access token as a bearer header, never the cookies", async () => {
-    const keel = fakeKeel({
+  it("forwards to Navis with the access token as a bearer header, never the cookies", async () => {
+    const navis = fakeNavis({
       "GET /api/v1/deals": () =>
         Response.json({ data: [], meta: { total: 0 } }, { headers: { "x-request-id": "req-1", etag: '"v1"' } }),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(
       request("/api/v1/deals?owner_id=u1", { cookies: { [ACCESS_COOKIE]: "AT1", [REFRESH_COOKIE]: "RT1" } }),
@@ -95,7 +95,7 @@ describe("BFF proxy", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ data: [], meta: { total: 0 } });
-    const [call] = keel.calls;
+    const [call] = navis.calls;
     expect(call.url).toBe(`${API}/api/v1/deals?owner_id=u1`);
     expect(call.headers.get("authorization")).toBe("Bearer AT1");
     expect(call.headers.get("cookie")).toBeNull();
@@ -105,7 +105,7 @@ describe("BFF proxy", () => {
   });
 
   it("passes JSON bodies through and streams non-JSON responses (CSV export) with their headers", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "POST /api/v1/companies": (call) =>
         Response.json({ __type: "Company", ...JSON.parse(call.body) }, { status: 201 }),
       "GET /api/v1/contacts/export": () =>
@@ -116,7 +116,7 @@ describe("BFF proxy", () => {
           },
         }),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
     const cookies = { [ACCESS_COOKIE]: "AT1" };
 
     const created = await bff.proxy(
@@ -127,21 +127,21 @@ describe("BFF proxy", () => {
 
     expect(created.status).toBe(201);
     expect(await created.json()).toEqual({ __type: "Company", name: "Bluefin" });
-    expect(keel.calls[0].headers.get("content-type")).toBe("application/json");
+    expect(navis.calls[0].headers.get("content-type")).toBe("application/json");
     expect(csv.headers.get("content-type")).toBe("text/csv; charset=utf-8");
     expect(csv.headers.get("content-disposition")).toBe('attachment; filename="contacts.csv"');
     expect(await csv.text()).toBe("id,first_name\r\n1,Elena\r\n");
   });
 
   it("on a 401 refreshes once, retries with the new access token and updates both cookies", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "GET /api/auth/me": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json(user)
           : Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized" }, { status: 401 }),
       "POST /api/auth/refresh": () => Response.json(tokens(2)),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch, secureCookies: true });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch, secureCookies: true });
 
     const response = await bff.proxy(
       request("/api/auth/me", { cookies: { [ACCESS_COOKIE]: "AT1", [REFRESH_COOKIE]: "RT1" } }),
@@ -150,12 +150,12 @@ describe("BFF proxy", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(user);
-    expect(keel.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
+    expect(navis.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
       "GET /api/auth/me",
       "POST /api/auth/refresh",
       "GET /api/auth/me",
     ]);
-    expect(JSON.parse(keel.calls[1].body)).toEqual({ refresh_token: "RT1" });
+    expect(JSON.parse(navis.calls[1].body)).toEqual({ refresh_token: "RT1" });
     const cookies = setCookies(response);
     expect(cookies[ACCESS_COOKIE].value).toBe("AT2");
     expect(cookies[REFRESH_COOKIE].value).toBe("RT2");
@@ -166,7 +166,7 @@ describe("BFF proxy", () => {
 
   it("replays the request body after refreshing", async () => {
     let attempts = 0;
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "POST /api/v1/deals/d1/move": (call) => {
         attempts += 1;
         return attempts === 1
@@ -175,7 +175,7 @@ describe("BFF proxy", () => {
       },
       "POST /api/auth/refresh": () => Response.json(tokens(2)),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(
       request("/api/v1/deals/d1/move", {
@@ -190,13 +190,13 @@ describe("BFF proxy", () => {
   });
 
   it("clears both cookies and returns 401 when the refresh fails", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "GET /api/v1/dashboard": () =>
         Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized" }, { status: 401 }),
       "POST /api/auth/refresh": () =>
         Response.json({ statusCode: 401, message: "Refresh token reused", error: "Unauthorized" }, { status: 401 }),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(
       request("/api/v1/dashboard", { cookies: { [ACCESS_COOKIE]: "AT1", [REFRESH_COOKIE]: "RT1" } }),
@@ -209,15 +209,15 @@ describe("BFF proxy", () => {
     expect(cookies[ACCESS_COOKIE]).toMatchObject({ value: "" });
     expect(cookies[ACCESS_COOKIE].attrs).toContain("Max-Age=0");
     expect(cookies[REFRESH_COOKIE].attrs).toContain("Max-Age=0");
-    expect(keel.calls).toHaveLength(2); // no retry after a failed refresh
+    expect(navis.calls).toHaveLength(2); // no retry after a failed refresh
   });
 
   it("refreshes up front when only the refresh cookie is left", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "GET /api/auth/me": (call) => Response.json({ auth: call.headers.get("authorization") }),
       "POST /api/auth/refresh": () => Response.json(tokens(5)),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(request("/api/auth/me", { cookies: { [REFRESH_COOKIE]: "RT4" } }), "/api/auth/me");
 
@@ -227,7 +227,7 @@ describe("BFF proxy", () => {
 
   it("shares one refresh between concurrent requests (refresh tokens rotate; reuse revokes the family)", async () => {
     let refreshCalls = 0;
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "GET /api/v1/deals/board": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json({ ok: true })
@@ -238,7 +238,7 @@ describe("BFF proxy", () => {
         return Response.json(tokens(2));
       },
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
     const cookies = { [ACCESS_COOKIE]: "AT1", [REFRESH_COOKIE]: "RT1" };
 
     const responses = await Promise.all(
@@ -250,7 +250,7 @@ describe("BFF proxy", () => {
   });
 
   it("does not hang on tee'd response bodies, as Next.js's server fetch returns them", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "GET /api/auth/me": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json(user)
@@ -259,7 +259,7 @@ describe("BFF proxy", () => {
     });
     const kept: ReadableStream[] = [];
     const teeing = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await keel.fetch(input, init);
+      const response = await navis.fetch(input, init);
       if (!response.body) return response;
       const [mine, theirs] = response.body.tee();
       kept.push(theirs); // Next keeps the other branch, so cancel() on ours would never settle.
@@ -280,7 +280,7 @@ describe("BFF proxy", () => {
     expect(kept.length).toBeGreaterThan(0);
   });
 
-  it("returns 502 in the NestJS format when Keel is unreachable", async () => {
+  it("returns 502 in the NestJS format when Navis is unreachable", async () => {
     const bff = createBff({
       apiUrl: API,
       fetch: (async () => {
@@ -296,21 +296,21 @@ describe("BFF proxy", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({
       statusCode: 502,
-      message: "The Keel API is unreachable",
+      message: "The Navis API is unreachable",
       error: "Bad Gateway",
     });
   });
 });
 
 describe("BFF origin check (CSRF defence for the cookie hop)", () => {
-  const keel = () =>
-    fakeKeel({
+  const navis = () =>
+    fakeNavis({
       "POST /api/v1/companies": () => Response.json({}, { status: 201 }),
       "GET /api/v1/companies": () => Response.json({}),
     });
 
-  it("rejects non-GET requests from another origin with 403 and never calls Keel", async () => {
-    const k = keel();
+  it("rejects non-GET requests from another origin with 403 and never calls Navis", async () => {
+    const k = navis();
     const bff = createBff({ apiUrl: API, fetch: k.fetch });
 
     const response = await bff.proxy(
@@ -329,7 +329,7 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
   });
 
   it("rejects non-GET requests without an Origin header", async () => {
-    const k = keel();
+    const k = navis();
     const bff = createBff({ apiUrl: API, fetch: k.fetch });
 
     const response = await bff.proxy(
@@ -341,7 +341,7 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
   });
 
   it("allows same-origin writes, cross-origin reads, and configured public origins", async () => {
-    const k = keel();
+    const k = navis();
     const bff = createBff({ apiUrl: API, fetch: k.fetch, allowedOrigins: ["https://crm.example.com"] });
 
     const sameOrigin = await bff.proxy(request("/api/v1/companies", { method: "POST", body: {} }), "/api/v1/companies");
@@ -364,7 +364,7 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
   });
 
   it("also guards login and logout", async () => {
-    const k = keel();
+    const k = navis();
     const bff = createBff({ apiUrl: API, fetch: k.fetch });
 
     const login = await bff.login(
@@ -379,17 +379,17 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
 
 describe("BFF login and logout", () => {
   it("login stores both tokens in httpOnly cookies and returns only {user}", async () => {
-    const keel = fakeKeel({ "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch, secureCookies: false });
+    const navis = fakeNavis({ "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch, secureCookies: false });
 
     const response = await bff.login(
-      request("/api/auth/login", { method: "POST", body: { email: "rep1@keel.test", password: "password123" } }),
+      request("/api/auth/login", { method: "POST", body: { email: "rep1@navis.test", password: "password123" } }),
     );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ user });
-    expect(JSON.parse(keel.calls[0].body)).toEqual({ email: "rep1@keel.test", password: "password123" });
-    expect(keel.calls[0].headers.get("authorization")).toBeNull();
+    expect(JSON.parse(navis.calls[0].body)).toEqual({ email: "rep1@navis.test", password: "password123" });
+    expect(navis.calls[0].headers.get("authorization")).toBeNull();
     const cookies = setCookies(response);
     expect(cookies[ACCESS_COOKIE].value).toBe("AT1");
     expect(cookies[REFRESH_COOKIE].value).toBe("RT1");
@@ -401,12 +401,12 @@ describe("BFF login and logout", () => {
     expect(cookies[REFRESH_COOKIE].attrs).toContain(`Max-Age=${60 * 60 * 24 * 30}`);
   });
 
-  it("login passes Keel's error through and sets no cookies", async () => {
-    const keel = fakeKeel({
+  it("login passes Navis's error through and sets no cookies", async () => {
+    const navis = fakeNavis({
       "POST /api/auth/login": () =>
         Response.json({ statusCode: 401, message: "Invalid credentials", error: "Unauthorized" }, { status: 401 }),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.login(
       request("/api/auth/login", { method: "POST", body: { email: "x@y.z", password: "no" } }),
@@ -417,9 +417,9 @@ describe("BFF login and logout", () => {
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
-  it("logout revokes the refresh token at Keel with the bearer token and clears both cookies", async () => {
-    const keel = fakeKeel({ "POST /api/auth/logout": () => new Response(null, { status: 204 }) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+  it("logout revokes the refresh token at Navis with the bearer token and clears both cookies", async () => {
+    const navis = fakeNavis({ "POST /api/auth/logout": () => new Response(null, { status: 204 }) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.logout(
       request("/api/auth/logout", {
@@ -430,14 +430,14 @@ describe("BFF login and logout", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(keel.calls[0].headers.get("authorization")).toBe("Bearer AT1");
-    expect(JSON.parse(keel.calls[0].body)).toEqual({ refresh_token: "RT1", all: true });
+    expect(navis.calls[0].headers.get("authorization")).toBe("Bearer AT1");
+    expect(JSON.parse(navis.calls[0].body)).toEqual({ refresh_token: "RT1", all: true });
     const cookies = setCookies(response);
     expect(cookies[ACCESS_COOKIE].attrs).toContain("Max-Age=0");
     expect(cookies[REFRESH_COOKIE].attrs).toContain("Max-Age=0");
   });
 
-  it("logout still clears the cookies when Keel is down", async () => {
+  it("logout still clears the cookies when Navis is down", async () => {
     const bff = createBff({
       apiUrl: API,
       fetch: (async () => {
@@ -458,11 +458,11 @@ describe("BFF two-factor sign-in", () => {
   const challenge = { two_factor_required: true, challenge_token: "CHALLENGE-JWT", expires_in: 300 };
 
   it("login keeps the challenge token in an httpOnly cookie and returns only {two_factor_required, expires_in}", async () => {
-    const keel = fakeKeel({ "POST /api/auth/login": () => Response.json(challenge) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch, secureCookies: true });
+    const navis = fakeNavis({ "POST /api/auth/login": () => Response.json(challenge) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch, secureCookies: true });
 
     const response = await bff.login(
-      request("/api/auth/login", { method: "POST", body: { email: "boss@keel.test", password: "password123" } }),
+      request("/api/auth/login", { method: "POST", body: { email: "boss@navis.test", password: "password123" } }),
     );
 
     expect(response.status).toBe(200);
@@ -476,8 +476,8 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify sends the challenge token from the cookie with the code, stores the tokens and returns only {user}", async () => {
-    const keel = fakeKeel({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(7) }) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch, secureCookies: false });
+    const navis = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(7) }) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch, secureCookies: false });
 
     const response = await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", {
@@ -489,8 +489,8 @@ describe("BFF two-factor sign-in", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ user });
-    expect(JSON.parse(keel.calls[0].body)).toEqual({ challenge_token: "CHALLENGE-JWT", code: "123456" });
-    expect(keel.calls[0].headers.get("authorization")).toBeNull();
+    expect(JSON.parse(navis.calls[0].body)).toEqual({ challenge_token: "CHALLENGE-JWT", code: "123456" });
+    expect(navis.calls[0].headers.get("authorization")).toBeNull();
     const cookies = setCookies(response);
     expect(cookies[ACCESS_COOKIE].value).toBe("AT7");
     expect(cookies[REFRESH_COOKIE].value).toBe("RT7");
@@ -499,8 +499,8 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify forwards a recovery code instead of a code", async () => {
-    const keel = fakeKeel({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(8) }) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const navis = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(8) }) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", {
@@ -511,15 +511,15 @@ describe("BFF two-factor sign-in", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(JSON.parse(keel.calls[0].body)).toEqual({ challenge_token: "CHALLENGE-JWT", recovery_code: "abcd-efgh" });
+    expect(JSON.parse(navis.calls[0].body)).toEqual({ challenge_token: "CHALLENGE-JWT", recovery_code: "abcd-efgh" });
   });
 
   it("verify passes a wrong code's error through and keeps the challenge cookie for another try", async () => {
-    const keel = fakeKeel({
+    const navis = fakeNavis({
       "POST /api/auth/2fa/verify": () =>
         Response.json({ statusCode: 401, message: "Invalid two-factor code", error: "Unauthorized" }, { status: 401 }),
     });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", {
@@ -538,9 +538,9 @@ describe("BFF two-factor sign-in", () => {
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
-  it("verify without a challenge cookie is a 401 that never reaches Keel", async () => {
-    const keel = fakeKeel({});
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+  it("verify without a challenge cookie is a 401 that never reaches Navis", async () => {
+    const navis = fakeNavis({});
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", { method: "POST", body: { code: "123456" } }),
@@ -548,12 +548,12 @@ describe("BFF two-factor sign-in", () => {
 
     expect(response.status).toBe(401);
     expect((await response.json()).message).toBe("Your sign-in attempt expired. Sign in again.");
-    expect(keel.calls).toHaveLength(0);
+    expect(navis.calls).toHaveLength(0);
   });
 
   it("verify is guarded by the origin check", async () => {
-    const keel = fakeKeel({});
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const navis = fakeNavis({});
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", {
@@ -565,14 +565,14 @@ describe("BFF two-factor sign-in", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(keel.calls).toHaveLength(0);
+    expect(navis.calls).toHaveLength(0);
   });
 });
 
 describe("BFF keeps tokens out of proxied responses", () => {
-  it("a token pair returned by Keel (PATCH /api/auth/me/password) replaces the cookies and is not sent to the browser", async () => {
-    const keel = fakeKeel({ "PATCH /api/auth/me/password": () => Response.json(tokens(9)) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+  it("a token pair returned by Navis (PATCH /api/auth/me/password) replaces the cookies and is not sent to the browser", async () => {
+    const navis = fakeNavis({ "PATCH /api/auth/me/password": () => Response.json(tokens(9)) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(
       request("/api/auth/me/password", {
@@ -591,8 +591,8 @@ describe("BFF keeps tokens out of proxied responses", () => {
   });
 
   it("the login body of a proxied 2FA verify is reduced to {user}", async () => {
-    const keel = fakeKeel({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(10) }) });
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+    const navis = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(10) }) });
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     const response = await bff.proxy(
       request("/api/auth/2fa/verify", { method: "POST", body: { challenge_token: "X", code: "123456" } }),
@@ -605,12 +605,12 @@ describe("BFF keeps tokens out of proxied responses", () => {
   });
 });
 
-describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => {
+describe("BFF client address for Navis's per-IP limits (X-Forwarded-For)", () => {
   // What a browser can send. Next.js keeps a client's X-Forwarded-For as is (it only fills the header in when
   // it is missing), so these values reach the route handlers untouched.
   const spoofed = { "x-forwarded-for": "6.6.6.6", "x-real-ip": "6.6.6.6" };
   const everyRoute = () =>
-    fakeKeel({
+    fakeNavis({
       "GET /api/v1/me": () => Response.json({ id: "u1" }),
       "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }),
       "POST /api/auth/refresh": () => Response.json(tokens(2)),
@@ -622,7 +622,7 @@ describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => 
   async function callEverything(bff: ReturnType<typeof createBff>, headers: Record<string, string>) {
     await bff.proxy(request("/api/v1/me", { headers, cookies: { [REFRESH_COOKIE]: "RT1" } }), "/api/v1/me");
     await bff.login(
-      request("/api/auth/login", { method: "POST", headers, body: { email: "rep1@keel.test", password: "x" } }),
+      request("/api/auth/login", { method: "POST", headers, body: { email: "rep1@navis.test", password: "x" } }),
     );
     await bff.verifyTwoFactor(
       request("/api/auth/2fa/verify", {
@@ -635,13 +635,13 @@ describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => 
     await bff.logout(request("/api/auth/logout", { method: "POST", headers, cookies: { [REFRESH_COOKIE]: "RT5" } }));
   }
 
-  it("never passes a browser's X-Forwarded-For or X-Real-IP on to Keel when no trusted proxy is configured", async () => {
-    const keel = everyRoute();
-    const bff = createBff({ apiUrl: API, fetch: keel.fetch });
+  it("never passes a browser's X-Forwarded-For or X-Real-IP on to Navis when no trusted proxy is configured", async () => {
+    const navis = everyRoute();
+    const bff = createBff({ apiUrl: API, fetch: navis.fetch });
 
     await callEverything(bff, spoofed);
 
-    expect(keel.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
+    expect(navis.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
       "POST /api/auth/refresh",
       "GET /api/v1/me",
       "POST /api/auth/login",
@@ -649,13 +649,13 @@ describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => 
       "POST /api/auth/refresh",
       "POST /api/auth/logout",
     ]);
-    for (const call of keel.calls) {
+    for (const call of navis.calls) {
       expect(call.headers.get("x-forwarded-for")).toBeNull();
       expect(call.headers.get("x-real-ip")).toBeNull();
     }
   });
 
-  it("behind trusted proxies, sends Keel only the address the outermost trusted proxy saw", async () => {
+  it("behind trusted proxies, sends Navis only the address the outermost trusted proxy saw", async () => {
     // One proxy in front of Next.js: it appended the real client (203.0.113.7) to what the browser sent.
     const one = everyRoute();
     await callEverything(createBff({ apiUrl: API, fetch: one.fetch, trustedProxyHops: 1 }), {
@@ -669,7 +669,7 @@ describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => 
     }
 
     // A CDN and a load balancer: the CDN saw the client, the load balancer appended the CDN's address.
-    const two = fakeKeel({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+    const two = fakeNavis({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
     await createBff({ apiUrl: API, fetch: two.fetch, trustedProxyHops: 2 }).proxy(
       request("/api/v1/me", { headers: { "x-forwarded-for": "6.6.6.6,2001:db8::7 , 10.0.0.2" } }),
       "/api/v1/me",
@@ -685,13 +685,13 @@ describe("BFF client address for Keel's per-IP limits (X-Forwarded-For)", () => 
       [2, "203.0.113.7"],
     ];
     for (const [trustedProxyHops, forwardedFor] of cases) {
-      const keel = fakeKeel({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+      const navis = fakeNavis({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
       const headers: Record<string, string> = forwardedFor === undefined ? {} : { "x-forwarded-for": forwardedFor };
-      await createBff({ apiUrl: API, fetch: keel.fetch, trustedProxyHops }).proxy(
+      await createBff({ apiUrl: API, fetch: navis.fetch, trustedProxyHops }).proxy(
         request("/api/v1/me", { headers }),
         "/api/v1/me",
       );
-      expect(keel.calls[0].headers.get("x-forwarded-for"), `${trustedProxyHops} hop(s), ${forwardedFor}`).toBeNull();
+      expect(navis.calls[0].headers.get("x-forwarded-for"), `${trustedProxyHops} hop(s), ${forwardedFor}`).toBeNull();
     }
   });
 });

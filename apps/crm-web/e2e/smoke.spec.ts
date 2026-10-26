@@ -20,7 +20,7 @@ test("a rep signs in with the mock API and lands on the dashboard", async ({ pag
   test.skip(process.env.E2E_REAL_API === "1", "Uses the mock API's demo accounts");
   await page.goto("/login");
 
-  await page.getByLabel("Email").fill("rep1@keel.test");
+  await page.getByLabel("Email").fill("rep1@navis.test");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { KeelWordmark } from "@/components/brand";
+import { NavisWordmark } from "@/components/brand";
 import {
   Sidebar,
   SidebarContent,
@@ -65,7 +65,7 @@ export function AppSidebar({ user }: { user: User }) {
           onClick={closeMobile}
           className="flex items-center rounded-md px-1 text-sidebar-accent-foreground"
         >
-          <KeelWordmark className="group-data-[collapsible=icon]:[&>span]:hidden" />
+          <NavisWordmark className="group-data-[collapsible=icon]:[&>span]:hidden" />
         </Link>
       </SidebarHeader>
       <SidebarContent>

@@ -19,7 +19,7 @@ Layout: `world/` (`/db`, `/queries`), `users/` (User entity + `UsersService`), `
 Notes:
 - **Versions.** NestJS 12 is the npm `latest` (11.x is now tagged `legacy`). TypeScript is pinned to 6.0 rather than the npm `latest` 7.0 (the native Go port): the Nest 12 CLI depends on `typescript ~6.0.2`, and the schematics need TypeScript 6 as a peer.
 - **bigint.** `amount_cents` is a `bigint` column, which `pg` returns as a string; a TypeORM column transformer turns it into a number (amounts stay below 2^53).
-- **Users and serialization.** `JwtStrategy.validate()` rejects a non-UUID `sub` before querying (`isUUID(sub, 'loose')`, because the seeded ids are md5 hashes, not RFC 9562 versions), then loads the full user row through `UsersService`. The User entity maps every column of Keel's `users` table; it is `@Exclude()`d at class level, so the API exposes only `id` and `name`.
+- **Users and serialization.** `JwtStrategy.validate()` rejects a non-UUID `sub` before querying (`isUUID(sub, 'loose')`, because the seeded ids are md5 hashes, not RFC 9562 versions), then loads the full user row through `UsersService`. The User entity maps every column of Navis's `users` table; it is `@Exclude()`d at class level, so the API exposes only `id` and `name`.
 - **List.** The deals list uses `repository.findAndCount({ relations: { owner: true }, order, skip, take })`. With a join plus `skip`/`take`, TypeORM paginates in two steps, then counts, so each request runs three queries in sequence on one connection:
   1. `SELECT DISTINCT` of the page's ids over the join;
   2. the page's deals `INNER JOIN users`, `WHERE id IN (...)`;

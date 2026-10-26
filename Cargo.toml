@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*"]
-# The benchmark apps (Keel's and other Rust frameworks') are separate projects.
+# The benchmark apps (Navis's and other Rust frameworks') are separate projects.
 exclude = ["bench"]
 
 [workspace.package]
@@ -17,35 +17,35 @@ missing_docs = "warn"
 
 [workspace.dependencies]
 # ---------------------------------------------------------------------------
-# Keel crates (paths; members use `{ workspace = true }`)
+# Navis crates (paths; members use `{ workspace = true }`)
 # ---------------------------------------------------------------------------
-keel = { path = "crates/keel", version = "0.1.0" }
-keel-kernel = { path = "crates/keel-kernel", version = "0.1.0" }
-keel-contracts = { path = "crates/keel-contracts", version = "0.1.0" }
-keel-macros = { path = "crates/keel-macros", version = "0.1.0" }
-keel-config = { path = "crates/keel-config", version = "0.1.0" }
-keel-log = { path = "crates/keel-log", version = "0.1.0" }
-keel-crypto = { path = "crates/keel-crypto", version = "0.1.0" }
-keel-http = { path = "crates/keel-http", version = "0.1.0" }
-keel-events = { path = "crates/keel-events", version = "0.1.0" }
-keel-view = { path = "crates/keel-view", version = "0.1.0" }
-keel-cache = { path = "crates/keel-cache", version = "0.1.0" }
-keel-http-client = { path = "crates/keel-http-client", version = "0.1.0" }
-keel-db = { path = "crates/keel-db", version = "0.1.0" }
-keel-testing = { path = "crates/keel-testing", version = "0.1.0" }
-keel-observe = { path = "crates/keel-observe", version = "0.1.0" }
-keel-api = { path = "crates/keel-api", version = "0.1.0" }
-keel-mail = { path = "crates/keel-mail", version = "0.1.0" }
-keel-realtime = { path = "crates/keel-realtime", version = "0.1.0" }
-keel-storage = { path = "crates/keel-storage", version = "0.1.0" }
-keel-session = { path = "crates/keel-session", version = "0.1.0" }
-keel-validation = { path = "crates/keel-validation", version = "0.1.0" }
-keel-queue = { path = "crates/keel-queue", version = "0.1.0" }
-keel-audit = { path = "crates/keel-audit", version = "0.1.0" }
-keel-access = { path = "crates/keel-access", version = "0.1.0" }
-keel-schedule = { path = "crates/keel-schedule", version = "0.1.0" }
-keel-notify = { path = "crates/keel-notify", version = "0.1.0" }
-keel-auth = { path = "crates/keel-auth", version = "0.1.0" }
+navis = { path = "crates/navis", version = "0.1.0" }
+navis-kernel = { path = "crates/navis-kernel", version = "0.1.0" }
+navis-contracts = { path = "crates/navis-contracts", version = "0.1.0" }
+navis-macros = { path = "crates/navis-macros", version = "0.1.0" }
+navis-config = { path = "crates/navis-config", version = "0.1.0" }
+navis-log = { path = "crates/navis-log", version = "0.1.0" }
+navis-crypto = { path = "crates/navis-crypto", version = "0.1.0" }
+navis-http = { path = "crates/navis-http", version = "0.1.0" }
+navis-events = { path = "crates/navis-events", version = "0.1.0" }
+navis-view = { path = "crates/navis-view", version = "0.1.0" }
+navis-cache = { path = "crates/navis-cache", version = "0.1.0" }
+navis-http-client = { path = "crates/navis-http-client", version = "0.1.0" }
+navis-db = { path = "crates/navis-db", version = "0.1.0" }
+navis-testing = { path = "crates/navis-testing", version = "0.1.0" }
+navis-observe = { path = "crates/navis-observe", version = "0.1.0" }
+navis-api = { path = "crates/navis-api", version = "0.1.0" }
+navis-mail = { path = "crates/navis-mail", version = "0.1.0" }
+navis-realtime = { path = "crates/navis-realtime", version = "0.1.0" }
+navis-storage = { path = "crates/navis-storage", version = "0.1.0" }
+navis-session = { path = "crates/navis-session", version = "0.1.0" }
+navis-validation = { path = "crates/navis-validation", version = "0.1.0" }
+navis-queue = { path = "crates/navis-queue", version = "0.1.0" }
+navis-audit = { path = "crates/navis-audit", version = "0.1.0" }
+navis-access = { path = "crates/navis-access", version = "0.1.0" }
+navis-schedule = { path = "crates/navis-schedule", version = "0.1.0" }
+navis-notify = { path = "crates/navis-notify", version = "0.1.0" }
+navis-auth = { path = "crates/navis-auth", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -107,7 +107,7 @@ tokio-tungstenite = "0.30.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 serde_urlencoded = "0.7.1"
-# Raw query/form pair parsing, so keel-validation can report serde paths.
+# Raw query/form pair parsing, so navis-validation can report serde paths.
 form_urlencoded = "1.2.2"
 serde_path_to_error = "0.1.20"
 toml = "1.1.8"
@@ -124,7 +124,7 @@ hex = "0.4.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
-# `log` records into tracing (keel-log installs the bridge with its subscriber).
+# `log` records into tracing (navis-log installs the bridge with its subscriber).
 tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
@@ -176,7 +176,7 @@ subtle = "2.6.1"
 rand = "0.10.3"
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
 qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
-# JWT access tokens (keel-auth): RustCrypto backend, no aws-lc, no PEM parsing.
+# JWT access tokens (navis-auth): RustCrypto backend, no aws-lc, no PEM parsing.
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
 
 # ---------------------------------------------------------------------------

@@ -36,8 +36,8 @@ module BenchRails
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
 
-    # Bearer tokens are HS256 JWTs issued by Keel (see app/controllers/concerns/authentication.rb).
+    # Bearer tokens are HS256 JWTs issued by Navis (see app/controllers/concerns/authentication.rb).
     config.x.jwt.secret = ENV["JWT_SECRET"]
-    config.x.jwt.issuer = ENV.fetch("JWT_ISSUER", "keel")
+    config.x.jwt.issuer = ENV.fetch("JWT_ISSUER", "navis")
   end
 end

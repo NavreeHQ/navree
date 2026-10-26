@@ -1,6 +1,6 @@
 import { bff } from "@/lib/bff/server";
 
-/** Signs in at Keel, keeps the tokens in httpOnly cookies, returns `{user}`. */
+/** Signs in at Navis, keeps the tokens in httpOnly cookies, returns `{user}`. */
 export function POST(request: Request): Promise<Response> {
   return bff.login(request);
 }

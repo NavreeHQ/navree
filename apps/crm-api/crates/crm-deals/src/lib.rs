@@ -40,7 +40,7 @@ mod service;
 mod stages;
 
 use crm_core::CrmCoreModule;
-use keel::prelude::*;
+use navis::prelude::*;
 
 pub use controller::DealsController;
 pub use dto::{BoardFilter, CreateDeal, DealFilter, MAX_AMOUNT_CENTS, MoveDeal, UpdateDeal};

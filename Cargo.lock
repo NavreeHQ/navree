@@ -1008,7 +1008,7 @@ dependencies = [
  "crm-core",
  "crm-testkit",
  "garde",
- "keel",
+ "navis",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1029,7 +1029,7 @@ dependencies = [
  "crm-deals",
  "crm-testkit",
  "crm-users",
- "keel",
+ "navis",
  "sea-orm",
  "serde_json",
  "tokio",
@@ -1046,7 +1046,7 @@ dependencies = [
  "crm-testkit",
  "csv",
  "garde",
- "keel",
+ "navis",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1060,7 +1060,7 @@ name = "crm-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "keel",
+ "navis",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -1079,7 +1079,7 @@ dependencies = [
  "crm-testkit",
  "futures-util",
  "garde",
- "keel",
+ "navis",
  "sea-orm",
  "serde",
  "serde_json",
@@ -1096,7 +1096,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "crm-core",
- "keel",
+ "navis",
  "sea-orm",
  "serde_json",
  "tokio",
@@ -1111,7 +1111,7 @@ dependencies = [
  "crm-core",
  "crm-testkit",
  "garde",
- "keel",
+ "navis",
  "sea-orm",
  "serde",
  "serde_json",
@@ -2487,647 +2487,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keel"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "garde",
- "keel-access",
- "keel-api",
- "keel-audit",
- "keel-auth",
- "keel-cache",
- "keel-config",
- "keel-contracts",
- "keel-crypto",
- "keel-db",
- "keel-events",
- "keel-http",
- "keel-http-client",
- "keel-kernel",
- "keel-log",
- "keel-macros",
- "keel-mail",
- "keel-notify",
- "keel-observe",
- "keel-queue",
- "keel-realtime",
- "keel-schedule",
- "keel-session",
- "keel-storage",
- "keel-testing",
- "keel-validation",
- "keel-view",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "keel-access"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "http",
- "insta",
- "keel-contracts",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-testing",
- "moka",
- "proptest",
- "sea-orm",
- "sea-orm-migration",
- "sea-query",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "keel-api"
-version = "0.1.0"
-dependencies = [
- "axum",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-http",
- "keel-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "utoipa",
- "utoipa-scalar",
-]
-
-[[package]]
-name = "keel-audit"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "keel-config",
- "keel-contracts",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "keel-auth"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "form_urlencoded",
- "futures",
- "garde",
- "http",
- "jsonwebtoken",
- "keel-access",
- "keel-api",
- "keel-cache",
- "keel-config",
- "keel-contracts",
- "keel-crypto",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-mail",
- "keel-observe",
- "keel-testing",
- "keel-validation",
- "keel-view",
- "qrcode2",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "totp-rs",
- "tracing",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "keel-cache"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "keel-config",
- "keel-contracts",
- "keel-kernel",
- "moka",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "keel-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "heck 0.5.0",
- "insta",
- "minijinja",
- "notify",
- "notify-debouncer-mini",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "keel-config"
-version = "0.1.0"
-dependencies = [
- "config",
- "keel-contracts",
- "keel-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "keel-contracts"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "keel-kernel",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "keel-crypto"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "base64 0.23.1",
- "hex",
- "hmac 0.13.0",
- "keel-config",
- "keel-contracts",
- "keel-kernel",
- "rand 0.10.3",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "subtle",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "keel-db"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64 0.23.1",
- "chrono",
- "http",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-http",
- "keel-kernel",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "keel-events"
-version = "0.1.0"
-dependencies = [
- "keel-contracts",
- "keel-kernel",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "keel-http"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "futures-util",
- "hex",
- "hmac 0.13.0",
- "http",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-kernel",
- "metrics",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "tower",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "keel-http-client"
-version = "0.1.0"
-dependencies = [
- "backon",
- "bytes",
- "http",
- "ipnet",
- "keel-config",
- "keel-contracts",
- "keel-kernel",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "wildmatch",
-]
-
-[[package]]
-name = "keel-kernel"
-version = "0.1.0"
-dependencies = [
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "keel-log"
-version = "0.1.0"
-dependencies = [
- "keel-config",
- "keel-kernel",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-log",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "keel-macros"
-version = "0.1.0"
-dependencies = [
- "axum",
- "http",
- "http-body-util",
- "keel-access",
- "keel-contracts",
- "keel-http",
- "keel-kernel",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "syn 3.0.9",
- "tokio",
- "tower",
- "trybuild",
- "utoipa",
- "uuid",
-]
-
-[[package]]
-name = "keel-mail"
-version = "0.1.0"
-dependencies = [
- "keel-config",
- "keel-contracts",
- "keel-kernel",
- "keel-view",
- "lettre",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
-name = "keel-notify"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "keel-config",
- "keel-contracts",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-mail",
- "keel-testing",
- "keel-view",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "keel-observe"
-version = "0.1.0"
-dependencies = [
- "axum",
- "futures-util",
- "http",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-http",
- "keel-kernel",
- "metrics",
- "metrics-exporter-prometheus",
- "serde",
- "serde_json",
- "subtle",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "keel-queue"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "futures-util",
- "hex",
- "keel-config",
- "keel-contracts",
- "keel-db",
- "keel-kernel",
- "keel-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "keel-realtime"
-version = "0.1.0"
-dependencies = [
- "axum",
- "dashmap",
- "futures-util",
- "hex",
- "http",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-crypto",
- "keel-http",
- "keel-kernel",
- "rand 0.10.3",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "tokio-tungstenite 0.30.0",
- "tokio-util",
- "tower",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "keel-schedule"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "croner",
- "futures-util",
- "keel-contracts",
- "keel-db",
- "keel-kernel",
- "keel-testing",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "keel-session"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "cookie",
- "keel-config",
- "keel-contracts",
- "keel-crypto",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-testing",
- "percent-encoding",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
- "wildmatch",
-]
-
-[[package]]
-name = "keel-storage"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "futures-util",
- "hex",
- "http-body-util",
- "infer",
- "keel-config",
- "keel-contracts",
- "keel-crypto",
- "keel-http",
- "keel-kernel",
- "mime_guess",
- "object_store",
- "percent-encoding",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
-name = "keel-testing"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "cookie",
- "http",
- "http-body-util",
- "keel-config",
- "keel-contracts",
- "keel-http",
- "keel-kernel",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "tempfile",
- "tokio",
- "tower",
- "uuid",
-]
-
-[[package]]
-name = "keel-validation"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "form_urlencoded",
- "garde",
- "http",
- "keel-config",
- "keel-db",
- "keel-http",
- "keel-kernel",
- "keel-testing",
- "sea-orm",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "keel-view"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "keel-config",
- "keel-kernel",
- "minijinja",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "kqueue"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3499,6 +2858,647 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
+
+[[package]]
+name = "navis"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "garde",
+ "navis-access",
+ "navis-api",
+ "navis-audit",
+ "navis-auth",
+ "navis-cache",
+ "navis-config",
+ "navis-contracts",
+ "navis-crypto",
+ "navis-db",
+ "navis-events",
+ "navis-http",
+ "navis-http-client",
+ "navis-kernel",
+ "navis-log",
+ "navis-macros",
+ "navis-mail",
+ "navis-notify",
+ "navis-observe",
+ "navis-queue",
+ "navis-realtime",
+ "navis-schedule",
+ "navis-session",
+ "navis-storage",
+ "navis-testing",
+ "navis-validation",
+ "navis-view",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navis-access"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "http",
+ "insta",
+ "moka",
+ "navis-contracts",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-testing",
+ "proptest",
+ "sea-orm",
+ "sea-orm-migration",
+ "sea-query",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navis-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "navis-config",
+ "navis-contracts",
+ "navis-http",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "utoipa",
+ "utoipa-scalar",
+]
+
+[[package]]
+name = "navis-audit"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "navis-config",
+ "navis-contracts",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navis-auth"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "form_urlencoded",
+ "futures",
+ "garde",
+ "http",
+ "jsonwebtoken",
+ "navis-access",
+ "navis-api",
+ "navis-cache",
+ "navis-config",
+ "navis-contracts",
+ "navis-crypto",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-mail",
+ "navis-observe",
+ "navis-testing",
+ "navis-validation",
+ "navis-view",
+ "qrcode2",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "totp-rs",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navis-cache"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "moka",
+ "navis-config",
+ "navis-contracts",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navis-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "heck 0.5.0",
+ "insta",
+ "minijinja",
+ "notify",
+ "notify-debouncer-mini",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "navis-config"
+version = "0.1.0"
+dependencies = [
+ "config",
+ "navis-contracts",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+]
+
+[[package]]
+name = "navis-contracts"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "navis-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "base64 0.23.1",
+ "hex",
+ "hmac 0.13.0",
+ "navis-config",
+ "navis-contracts",
+ "navis-kernel",
+ "rand 0.10.3",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "navis-db"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "http",
+ "http-body-util",
+ "navis-config",
+ "navis-contracts",
+ "navis-http",
+ "navis-kernel",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "navis-events"
+version = "0.1.0"
+dependencies = [
+ "navis-contracts",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "navis-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "futures-util",
+ "hex",
+ "hmac 0.13.0",
+ "http",
+ "http-body-util",
+ "metrics",
+ "navis-config",
+ "navis-contracts",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navis-http-client"
+version = "0.1.0"
+dependencies = [
+ "backon",
+ "bytes",
+ "http",
+ "ipnet",
+ "navis-config",
+ "navis-contracts",
+ "navis-kernel",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wildmatch",
+]
+
+[[package]]
+name = "navis-kernel"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "navis-log"
+version = "0.1.0"
+dependencies = [
+ "navis-config",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "navis-macros"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "http",
+ "http-body-util",
+ "navis-access",
+ "navis-contracts",
+ "navis-http",
+ "navis-kernel",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 3.0.9",
+ "tokio",
+ "tower",
+ "trybuild",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navis-mail"
+version = "0.1.0"
+dependencies = [
+ "lettre",
+ "navis-config",
+ "navis-contracts",
+ "navis-kernel",
+ "navis-view",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "navis-notify"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "navis-config",
+ "navis-contracts",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-mail",
+ "navis-testing",
+ "navis-view",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navis-observe"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "navis-config",
+ "navis-contracts",
+ "navis-http",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "navis-queue"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "hex",
+ "navis-config",
+ "navis-contracts",
+ "navis-db",
+ "navis-kernel",
+ "navis-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "navis-realtime"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "dashmap",
+ "futures-util",
+ "hex",
+ "http",
+ "http-body-util",
+ "navis-config",
+ "navis-contracts",
+ "navis-crypto",
+ "navis-http",
+ "navis-kernel",
+ "rand 0.10.3",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tokio-util",
+ "tower",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "navis-schedule"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "croner",
+ "futures-util",
+ "navis-contracts",
+ "navis-db",
+ "navis-kernel",
+ "navis-testing",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "navis-session"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "cookie",
+ "navis-config",
+ "navis-contracts",
+ "navis-crypto",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-testing",
+ "percent-encoding",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
+name = "navis-storage"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "hex",
+ "http-body-util",
+ "infer",
+ "mime_guess",
+ "navis-config",
+ "navis-contracts",
+ "navis-crypto",
+ "navis-http",
+ "navis-kernel",
+ "object_store",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "navis-testing"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "cookie",
+ "http",
+ "http-body-util",
+ "navis-config",
+ "navis-contracts",
+ "navis-http",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tempfile",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
+name = "navis-validation"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "garde",
+ "http",
+ "navis-config",
+ "navis-db",
+ "navis-http",
+ "navis-kernel",
+ "navis-testing",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "navis-view"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "minijinja",
+ "navis-config",
+ "navis-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "nix"

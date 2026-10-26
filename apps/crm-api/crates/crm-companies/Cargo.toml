@@ -1,6 +1,6 @@
 [package]
 name = "crm-companies"
-description = "Keel CRM: CompaniesModule and ContactsModule (`/api/v1/companies`, `/api/v1/contacts`)."
+description = "Navis CRM: CompaniesModule and ContactsModule (`/api/v1/companies`, `/api/v1/contacts`)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,7 +15,7 @@ chrono = { workspace = true }
 crm-core = { path = "../crm-core" }
 csv = { workspace = true }
 garde = { workspace = true }
-keel = { workspace = true }
+navis = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -58,13 +58,13 @@ async fn admin_can_create_user_with_role() {
     let admin = crm.login_as(Role::Admin).await;
     let response = admin
         .post("/api/v1/users")
-        .json(&new_user(" Nina@Keel.test ", "manager"))
+        .json(&new_user(" Nina@Navis.test ", "manager"))
         .send()
         .await
         .assert_status(201)
         .assert_json_path("__type", json!("User"))
         .assert_json_path("name", json!("Nina Novak"))
-        .assert_json_path("email", json!("nina@keel.test"))
+        .assert_json_path("email", json!("nina@navis.test"))
         .assert_json_path("roles", json!(["manager"]))
         .assert_json_path("email_verified_at", Value::Null);
     let body = response.json_value();
@@ -79,7 +79,7 @@ async fn admin_can_create_user_with_role() {
     let login = crm
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "nina@keel.test", "password": "a long password" }))
+        .json(&json!({ "email": "nina@navis.test", "password": "a long password" }))
         .send()
         .await
         .assert_status(200)
@@ -103,14 +103,14 @@ async fn rep_cannot_create_user() {
         crm.login_as(role)
             .await
             .post("/api/v1/users")
-            .json(&new_user("eve@keel.test", "admin"))
+            .json(&new_user("eve@navis.test", "admin"))
             .send()
             .await
             .assert_error(403, "Forbidden");
     }
     crm.client()
         .post("/api/v1/users")
-        .json(&new_user("eve@keel.test", "admin"))
+        .json(&new_user("eve@navis.test", "admin"))
         .send()
         .await
         .assert_status(401);
@@ -136,12 +136,12 @@ async fn auth_me_includes_roles() {
         .await
         .assert_status(200)
         .assert_json_path("__type", json!("User"))
-        .assert_json_path("email", json!("manager@keel.test"))
+        .assert_json_path("email", json!("manager@navis.test"))
         .assert_json_path("roles", json!(["manager"]));
     // The login response's `user` too.
     crm.client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "rep2@keel.test", "password": "password123" }))
+        .json(&json!({ "email": "rep2@navis.test", "password": "password123" }))
         .send()
         .await
         .assert_status(200)
@@ -162,19 +162,19 @@ async fn creating_a_user_validates_the_input() {
         .assert_validation_error("email");
     admin
         .post("/api/v1/users")
-        .json(&new_user("nina@keel.test", "owner"))
+        .json(&new_user("nina@navis.test", "owner"))
         .send()
         .await
         .assert_validation_error("role");
     admin
         .post("/api/v1/users")
-        .json(&new_user("rep1@keel.test", "rep"))
+        .json(&new_user("rep1@navis.test", "rep"))
         .send()
         .await
         .assert_validation_error("email");
     admin
         .post("/api/v1/users")
-        .json(&json!({ "name": "Nina", "email": "nina@keel.test", "password": "short", "role": "rep" }))
+        .json(&json!({ "name": "Nina", "email": "nina@navis.test", "password": "short", "role": "rep" }))
         .send()
         .await
         .assert_validation_error("password");
@@ -216,7 +216,7 @@ async fn any_signed_in_user_lists_and_searches_users() {
             .assert_status(200)
             .json_value();
         assert_eq!(page["meta"]["total"], json!(1), "search {search}: {page}");
-        assert_eq!(page["data"][0]["email"], json!("rep1@keel.test"));
+        assert_eq!(page["data"][0]["email"], json!("rep1@navis.test"));
     }
     let second = rep
         .get("/api/v1/users")
@@ -347,7 +347,7 @@ async fn user_routes_are_documented_with_their_schemas() {
 async fn user_search_ignores_case_beyond_ascii() {
     let crm = crm().await;
     let admin = crm.login_as(Role::Admin).await;
-    let mut input = new_user("ozlem@keel.test", "rep");
+    let mut input = new_user("ozlem@navis.test", "rep");
     input["name"] = json!("Özlem Çelik");
     admin
         .post("/api/v1/users")

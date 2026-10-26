@@ -3,7 +3,7 @@
 //! [`NotifyDealOwner`](crate::NotifyDealOwner) to both; other modules may
 //! subscribe their own listeners with `m.on::<DealWon, L>()`.
 
-use keel::events::Event;
+use navis::events::Event;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

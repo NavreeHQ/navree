@@ -2,7 +2,7 @@
 //! notification (spec §6 background work, §9.7 data shape).
 
 use crm_testkit::{CrmClient, Role, TestCrm};
-use keel::mail::{Mailer, Message};
+use navis::mail::{Mailer, Message};
 use serde_json::{Value, json};
 
 use crate::support::{company, create_deal, crm, id_of, move_deal, new_deal};

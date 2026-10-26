@@ -6,13 +6,13 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crm_core::{NotifiableUser, NotificationData};
-use keel::BoxFuture;
-use keel::auth::AuthService;
-use keel::config::Config;
-use keel::events::Listener;
-use keel::mail::TemplateMail;
-use keel::notify::{Channel, Notifiable, Notification, Notifier};
-use keel::prelude::*;
+use navis::BoxFuture;
+use navis::auth::AuthService;
+use navis::config::Config;
+use navis::events::Listener;
+use navis::mail::TemplateMail;
+use navis::notify::{Channel, Notifiable, Notification, Notifier};
+use navis::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -223,7 +223,7 @@ mod tests {
 
     impl Notifiable for Owner {
         fn notifiable_type(&self) -> &'static str {
-            keel::notify::USER_NOTIFIABLE_TYPE
+            navis::notify::USER_NOTIFIABLE_TYPE
         }
 
         fn notifiable_id(&self) -> String {
@@ -231,7 +231,7 @@ mod tests {
         }
 
         fn route_mail(&self) -> Option<String> {
-            Some("rep1@keel.test".to_owned())
+            Some("rep1@navis.test".to_owned())
         }
     }
 

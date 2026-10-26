@@ -4,7 +4,7 @@
 # background mode), trimmed to what this app uses. Secrets and addresses come
 # from the environment; `get_env` without a default fails at boot when unset.
 #
-# Required: DATABASE_URL, JWT_SECRET. Optional: JWT_ISSUER (default `keel`).
+# Required: DATABASE_URL, JWT_SECRET. Optional: JWT_ISSUER (default `navis`).
 
 # Application logging configuration
 logger:
@@ -63,7 +63,7 @@ database:
 auth:
   # JWT authentication
   jwt:
-    # Secret key for token verification (Keel signs HS256 with it).
+    # Secret key for token verification (Navis signs HS256 with it).
     secret: <%= get_env(name="JWT_SECRET") %>
     # Token expiration time in seconds (for tokens this app would issue; it
     # issues none).
@@ -72,4 +72,4 @@ auth:
 # Application settings (`src/data/settings.rs`).
 settings:
   # The `iss` an access token must carry.
-  jwt_issuer: <%= get_env(name="JWT_ISSUER", default="keel") %>
+  jwt_issuer: <%= get_env(name="JWT_ISSUER", default="navis") %>

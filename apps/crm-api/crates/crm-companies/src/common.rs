@@ -2,7 +2,7 @@
 //! `deserialize_with` functions), the `not_blank` rule, case-insensitive
 //! `LIKE` search and the documented page shape.
 
-use keel::db::{PageMeta, contains_ignore_case};
+use navis::db::{PageMeta, contains_ignore_case};
 use sea_orm::sea_query::Expr;
 use sea_orm::{ActiveValue, ColumnTrait, Condition, DbBackend};
 use serde::de::value::StringDeserializer;
@@ -85,14 +85,14 @@ fn non_blank(value: String) -> Option<String> {
 /// should not be empty", like a missing field.
 pub(crate) fn not_blank<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::Result {
     if value.as_ref().trim().is_empty() {
-        Err(keel::validation::rule_error("required", &[]))
+        Err(navis::validation::rule_error("required", &[]))
     } else {
         Ok(())
     }
 }
 
 /// Any of `columns` contains `term`, ignoring case, non-ASCII letters
-/// included (keel-db's `contains_ignore_case`: SQLite's own `LOWER` and
+/// included (navis-db's `contains_ignore_case`: SQLite's own `LOWER` and
 /// `LIKE` fold ASCII only). Wildcards in `term` match themselves.
 pub(crate) fn any_contains<C: ColumnTrait>(
     backend: DbBackend,

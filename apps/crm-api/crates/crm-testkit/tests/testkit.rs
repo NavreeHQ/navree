@@ -5,15 +5,15 @@ use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
 use crm_testkit::{Role, TestCrm};
-use keel::contracts::Clock;
-use keel::mail::{Mailer, TemplateMail};
-use keel::prelude::*;
+use navis::contracts::Clock;
+use navis::mail::{Mailer, TemplateMail};
+use navis::prelude::*;
 use serde_json::{Value, json};
 
 /// A feature module the way the CRM's are written: a controller with an
 /// access-checked route.
 mod ping {
-    use keel::prelude::*;
+    use navis::prelude::*;
 
     #[injectable]
     pub struct PingController;
@@ -35,10 +35,10 @@ mod ping {
 async fn login_as_signs_in_each_demo_account_over_http() {
     let crm = TestCrm::builder().build().await;
     for (role, email) in [
-        (Role::Admin, "admin@keel.test"),
-        (Role::Manager, "manager@keel.test"),
-        (Role::Rep1, "rep1@keel.test"),
-        (Role::Rep2, "rep2@keel.test"),
+        (Role::Admin, "admin@navis.test"),
+        (Role::Manager, "manager@navis.test"),
+        (Role::Rep1, "rep1@navis.test"),
+        (Role::Rep2, "rep2@navis.test"),
     ] {
         let client = crm.login_as(role).await;
         assert_eq!(client.id(), crm.user_id(role));
@@ -69,7 +69,7 @@ async fn feature_modules_join_the_app() {
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(body, json!("rep2@keel.test"));
+    assert_eq!(body, json!("rep2@navis.test"));
     crm.client()
         .get("/api/v1/ping")
         .send()
@@ -171,7 +171,7 @@ async fn run_queue_runs_queued_jobs() {
     let mailer = crm.get::<Mailer>().await;
     mailer
         .queue(
-            &TemplateMail::new("rep1@keel.test", "Hello", "mail/hello")
+            &TemplateMail::new("rep1@navis.test", "Hello", "mail/hello")
                 .context(json!({ "name": "Priya" })),
         )
         .await

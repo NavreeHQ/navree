@@ -36,7 +36,7 @@ one Docker engine.
 
    If a shared file looks wrong, or the spec is ambiguous, work around it and report it in your final answer.
 7. **No performance runs.** Don't run `run.mjs` without `--smoke`; the real benchmark runs later, alone on the machine. Smoke numbers are noisy because other agents are building, so don't tune against them.
-8. **Process.** Don't use SendMessage to contact other agents. Don't commit to git. Stay inside your own `bench/frameworks/<dir>/` (the Keel implementer has an extra exception, given in its own task).
+8. **Process.** Don't use SendMessage to contact other agents. Don't commit to git. Stay inside your own `bench/frameworks/<dir>/` (the Navis implementer has an extra exception, given in its own task).
 9. **README.** Write `bench/frameworks/<dir>/README.md` like the Express one: versions, server and worker setup, DB library and pool size, JWT and validation libraries, and notes on any judgement calls.
 
 ## Final answer

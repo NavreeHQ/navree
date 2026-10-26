@@ -18,7 +18,7 @@ import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Title and message for a notification. Keel sends `data: {title, message, url, deal_id?}`
+ * Title and message for a notification. Navis sends `data: {title, message, url, deal_id?}`
  * (spec §9.7); fall back to the type for anything else.
  */
 export function notificationParts(n: Pick<AppNotification, "type" | "data">): { title: string; message?: string } {

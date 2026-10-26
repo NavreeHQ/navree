@@ -1,0 +1,51 @@
+# {{ title }}
+
+A Navis app: a Rust API with modules,
+dependency injection, JWT authentication, roles and abilities, migrations,
+queues and OpenAPI docs.
+
+## Getting started
+
+```sh
+cp .env.example .env
+navis key:generate          # paste the key into APP_KEY in .env
+navis dev                   # build, serve on http://127.0.0.1:8080, rebuild on save
+```
+
+Then open http://127.0.0.1:8080/api/docs for the API reference.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `navis dev` | Serves the app and restarts it when the code changes |
+| `navis make:module <name> --crud` | Adds a feature module under `src/modules/` |
+| `navis make:<kind> <module> <name>` | Adds a controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test to a module |
+| `navis migrate`, `navis migrate:fresh --seed` | Runs the migrations of every module |
+| `navis routes` | Lists every route with its access rule |
+| `navis check --graph` | Validates the module graph |
+| `navis queue:work` | Runs queued jobs |
+| `navis help` | Lists every command of the app |
+
+Every command other than `new`, `make:*` and `dev` runs in the app binary
+(`cargo run -- <command>`), so production servers only need that binary.
+
+## Layout
+
+```text
+config/app.toml        settings (overridden by .env and APP_* variables)
+src/app.rs             the root module: every module, configured once
+src/abilities.rs       what each user may do
+src/modules/<name>/    feature modules (mod.rs, controller.rs, service.rs,
+                       entity.rs, dto.rs, migrations/, tests/)
+tests/                 tests that boot the whole app
+{% if ui_next %}
+web/                   the Next.js front end (`cd web && npm install && npm run dev`)
+{% endif %}
+```
+
+## Tests
+
+```sh
+cargo test
+```

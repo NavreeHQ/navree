@@ -16,7 +16,7 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
   return { ...actual, api: actual.createApiClient({ baseUrl: "http://crm.test" }) };
 });
 
-const user = { __type: "User", id: "u9", name: "Dana Boss", email: "boss@keel.test", roles: ["admin"] };
+const user = { __type: "User", id: "u9", name: "Dana Boss", email: "boss@navis.test", roles: ["admin"] };
 
 type Call = { route: string; body: unknown };
 
@@ -65,11 +65,11 @@ describe("Login screen", () => {
     const calls = stubBff({ "POST /api/auth/login": () => Response.json({ user }) });
     const queryClient = renderLogin();
 
-    await signIn("boss@keel.test", "password123");
+    await signIn("boss@navis.test", "password123");
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/deals"));
     expect(calls.find((c) => c.route === "POST /api/auth/login")?.body).toEqual({
-      email: "boss@keel.test",
+      email: "boss@navis.test",
       password: "password123",
     });
     expect(queryClient.getQueryData(["auth", "user"])).toEqual(user);
@@ -82,7 +82,7 @@ describe("Login screen", () => {
     });
     const queryClient = renderLogin();
 
-    await signIn("boss@keel.test", "password123");
+    await signIn("boss@navis.test", "password123");
 
     expect(await screen.findByRole("heading", { name: "Two-step verification" })).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe("Login screen", () => {
     });
     renderLogin();
 
-    await signIn("boss@keel.test", "password123");
+    await signIn("boss@navis.test", "password123");
     fireEvent.click(await screen.findByRole("button", { name: "Use a recovery code instead" }));
     fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "abcd-efgh" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify" }));
@@ -125,7 +125,7 @@ describe("Login screen", () => {
     });
     renderLogin();
 
-    await signIn("boss@keel.test", "password123");
+    await signIn("boss@navis.test", "password123");
     fireEvent.change(await screen.findByLabelText("Authentication code"), { target: { value: "000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify" }));
 
@@ -146,7 +146,7 @@ describe("Login screen", () => {
     });
     renderLogin();
 
-    await signIn("boss@keel.test", "password123");
+    await signIn("boss@navis.test", "password123");
     fireEvent.change(await screen.findByLabelText("Authentication code"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify" }));
 

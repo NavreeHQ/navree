@@ -9,7 +9,7 @@
 //! | `POST /api/v1/users` `{name, email, password, role}` | `create User` (admin) | 201 [`UserView`] |
 //! | `PATCH /api/v1/users/{id}` `{name?, role?}` | `update User` (admin) | [`UserView`] |
 //!
-//! It also adds `roles` to keel-auth's user resource ([`UserRolesExtension`]),
+//! It also adds `roles` to navis-auth's user resource ([`UserRolesExtension`]),
 //! so `GET /api/auth/me` and the login response's `user` carry them.
 #![forbid(unsafe_code)]
 
@@ -19,7 +19,7 @@ mod resource;
 mod service;
 
 use crm_core::{CrmCoreModule, User};
-use keel::prelude::*;
+use navis::prelude::*;
 
 pub use controller::{MeController, UsersController};
 pub use dto::{CreateUser, UpdateUser, UserFilter};

@@ -8,7 +8,7 @@ target/
 node_modules/
 .next/
 
-# Runtime data written by Keel apps (storage/framework/down, storage/*.db, uploads)
+# Runtime data written by Navis apps (storage/framework/down, storage/*.db, uploads)
 /storage/
 /apps/*/storage/
 

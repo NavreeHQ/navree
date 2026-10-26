@@ -12,7 +12,7 @@ One Laravel app, deployed two ways. Both entries in `frameworks.json` build from
 | | |
 |---|---|
 | Framework | Laravel 13.38 (skeleton 13.11, trimmed to an API: no frontend, migrations or tests) |
-| ORM | Eloquent: `World`, `User` (Keel's `users` table, password in `password_hash`), `Deal` with `belongsTo` owner |
+| ORM | Eloquent: `World`, `User` (Navis's `users` table, password in `password_hash`), `Deal` with `belongsTo` owner |
 | JWT | `php-open-source-saver/jwt-auth` 2.9.3 (lcobucci/jwt 5.6.1), the `jwt` guard as `auth:api`, user loaded by `sub` through the Eloquent provider |
 | Validation | Form requests (`ListDealsRequest`, `StoreDealRequest`), Laravel's 422 |
 | Serialization | API Resources (`DealResource`, `OwnerResource`) |
@@ -21,8 +21,8 @@ One Laravel app, deployed two ways. Both entries in `frameworks.json` build from
 ## Notes and judgement calls
 
 - **Routes.** Everything is in `routes/api.php` (the stateless `api` middleware group, so no sessions or cookies), with `apiPrefix: ''` because `/json`, `/db` and `/queries` sit next to `/api/deals`. The deals routes are `Route::apiResource('deals', ...)->only(['index', 'store'])` under `prefix('api')->middleware('auth:api')`.
-- **Issuer check.** jwt-auth validates `exp`, `iat` and `nbf`, but has no issuer option. `App\Auth\Claims\Issuer` replaces its `iss` claim class through the claim factory's own `extend()` hook (registered in `AppServiceProvider`) and rejects any issuer other than `config('jwt.issuer')` (`JWT_ISSUER`, default `keel`). Because `iss` is in `required_claims`, a token without `iss` is rejected too.
-- **Other jwt-auth settings** (`config/jwt.php`): HS256 with `JWT_SECRET`; `required_claims` without `nbf` (Keel's tokens have none); `lock_subject = false` (no `prv` claim). The blacklist is off (`JWT_BLACKLIST_ENABLED=false`): the API has no logout, and with the blacklist on, every request looks up the token's `jti` in the cache store.
+- **Issuer check.** jwt-auth validates `exp`, `iat` and `nbf`, but has no issuer option. `App\Auth\Claims\Issuer` replaces its `iss` claim class through the claim factory's own `extend()` hook (registered in `AppServiceProvider`) and rejects any issuer other than `config('jwt.issuer')` (`JWT_ISSUER`, default `navis`). Because `iss` is in `required_claims`, a token without `iss` is rejected too.
+- **Other jwt-auth settings** (`config/jwt.php`): HS256 with `JWT_SECRET`; `required_claims` without `nbf` (Navis's tokens have none); `lock_subject = false` (no `prv` claim). The blacklist is off (`JWT_BLACKLIST_ENABLED=false`): the API has no logout, and with the blacklist on, every request looks up the token's `jti` in the cache store.
 - **401 as JSON.** The conformance client sends no `Accept: application/json`. The skeleton's `shouldRenderJsonWhen(api/* or expectsJson)` makes errors render as JSON. Laravel 13's default `redirectGuestsTo(fn () => route('login'))` is still evaluated by the auth middleware for such requests, and with no `login` route that gives a 500. This is an API-only app, so `bootstrap/app.php` sets `redirectGuestsTo(null)`.
 - **List.** `Deal::with('owner')->orderByDesc('created_at')->orderByDesc('id')->paginate(...)` then `DealResource::collection(...)`: a count query, the page query, and one `whereIn` query for the owners. The response also carries Laravel's `links` and `meta.from/to/path/links` keys next to the four the spec asks for.
 - **Create.** `$user->deals()->create($validated)` with the owner relation set from the authenticated user. `JsonResource::withoutWrapping()` makes the body the bare deal (paginated collections keep `data`). The resource response gives the 201 itself, because the model `wasRecentlyCreated`. New ids come from `HasUuids`, which makes UUIDv7 (Laravel's default since 12). `stage` is a backed enum (`App\Enums\DealStage`, `Rule::enum`). `amount_cents` uses `integer:strict`, so `"5"` and `true` are rejected.

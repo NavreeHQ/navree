@@ -206,7 +206,7 @@ pub struct DealPage {
     pub meta: PageMetaSchema,
 }
 
-/// The pagination metadata (`keel::db::PageMeta`), for the documentation.
+/// The pagination metadata (`navis::db::PageMeta`), for the documentation.
 #[derive(Clone, Copy, Debug, Serialize, ToSchema)]
 pub struct PageMetaSchema {
     /// The page number.

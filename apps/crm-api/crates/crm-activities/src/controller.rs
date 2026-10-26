@@ -1,8 +1,8 @@
 //! `/api/v1/activities`.
 
 use crm_core::{Activity, Complete};
-use keel::access::CurrentAccess;
-use keel::prelude::*;
+use navis::access::CurrentAccess;
+use navis::prelude::*;
 
 use crate::dto::{ActivityFilter, CreateActivity, UpdateActivity};
 use crate::resource::{ActivityPage, ActivityResource};

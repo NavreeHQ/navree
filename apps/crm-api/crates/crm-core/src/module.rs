@@ -1,7 +1,7 @@
 //! [`CrmCoreModule`]: the CRM tables, their access subjects and the roles
 //! seeder.
 
-use keel::prelude::*;
+use navis::prelude::*;
 
 use crate::entities::{Activity, Company, Contact, Deal, User};
 use crate::migrations::migrations;

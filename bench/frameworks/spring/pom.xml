@@ -15,7 +15,7 @@
   <artifactId>spring-bench</artifactId>
   <version>1.0.0</version>
   <name>spring-bench</name>
-  <description>Keel benchmark API on Spring Boot</description>
+  <description>Navis benchmark API on Spring Boot</description>
 
   <properties>
     <java.version>25</java.version>

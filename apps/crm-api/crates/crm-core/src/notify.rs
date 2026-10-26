@@ -2,8 +2,8 @@
 //! `private-users.{id}` broadcast channel) and the `data` every CRM
 //! notification stores and broadcasts, [`NotificationData`] (spec §9.7).
 
-use keel::auth::User;
-use keel::notify::{Notifiable, USER_NOTIFIABLE_TYPE};
+use navis::auth::User;
+use navis::notify::{Notifiable, USER_NOTIFIABLE_TYPE};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -85,17 +85,17 @@ impl NotificationData {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use keel::notify::Notifiable;
+    use navis::notify::Notifiable;
     use serde_json::json;
     use uuid::Uuid;
 
     use super::*;
 
-    fn user() -> keel::auth::User {
-        keel::auth::User {
+    fn user() -> navis::auth::User {
+        navis::auth::User {
             id: Uuid::from_u128(7),
             name: "Priya Shah".into(),
-            email: "rep1@keel.test".into(),
+            email: "rep1@navis.test".into(),
             password_hash: String::new(),
             email_verified_at: None,
             two_factor_secret: None,
@@ -109,9 +109,9 @@ mod tests {
     #[test]
     fn users_are_notified_by_mail_and_on_their_private_channel() {
         let user = NotifiableUser::from(&user());
-        assert_eq!(user.notifiable_type(), keel::notify::USER_NOTIFIABLE_TYPE);
+        assert_eq!(user.notifiable_type(), navis::notify::USER_NOTIFIABLE_TYPE);
         assert_eq!(user.notifiable_id(), Uuid::from_u128(7).to_string());
-        assert_eq!(user.route_mail().as_deref(), Some("rep1@keel.test"));
+        assert_eq!(user.route_mail().as_deref(), Some("rep1@navis.test"));
         assert_eq!(
             user.broadcast_channel(),
             Some(format!("private-users.{}", Uuid::from_u128(7)))

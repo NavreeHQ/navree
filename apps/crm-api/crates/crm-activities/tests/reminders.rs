@@ -7,8 +7,8 @@ mod support;
 
 use crm_core::{ActivityKind, SubjectType};
 use crm_testkit::{Role, TestCrm};
-use keel::mail::Mailer;
-use keel::schedule::{RunStatus, Scheduler, SkipReason};
+use navis::mail::Mailer;
+use navis::schedule::{RunStatus, Scheduler, SkipReason};
 use serde_json::{Value, json};
 
 use support::{NewActivity, activity, at, company};
@@ -84,7 +84,7 @@ async fn notifications(crm: &TestCrm, role: Role) -> Vec<Value> {
     page["data"].as_array().cloned().expect("a page")
 }
 
-fn status_of(outcomes: &[keel::schedule::RunOutcome], task: &str) -> Option<RunStatus> {
+fn status_of(outcomes: &[navis::schedule::RunOutcome], task: &str) -> Option<RunStatus> {
     outcomes
         .iter()
         .find(|outcome| outcome.task == task)
@@ -145,10 +145,10 @@ async fn reminder_tick_notifies_assignees_of_tasks_due_today() {
     let sent = mailer.array_transport().expect("array transport").sent();
     let mut recipients: Vec<String> = sent.iter().flat_map(|mail| mail.to.clone()).collect();
     recipients.sort();
-    assert_eq!(recipients, ["rep1@keel.test", "rep2@keel.test"]);
+    assert_eq!(recipients, ["rep1@navis.test", "rep2@navis.test"]);
     let to_rep1 = sent
         .iter()
-        .find(|mail| mail.to.contains(&"rep1@keel.test".to_owned()))
+        .find(|mail| mail.to.contains(&"rep1@navis.test".to_owned()))
         .expect("rep1's mail");
     assert_eq!(to_rep1.subject, "2 tasks due today");
     let text = to_rep1.text.clone().unwrap_or_default();

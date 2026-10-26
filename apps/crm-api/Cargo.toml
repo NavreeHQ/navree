@@ -1,6 +1,6 @@
 [package]
 name = "crm-api"
-description = "Keel CRM API: the reference application built on the Keel framework."
+description = "Navis CRM API: the reference application built on the Navis framework."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,7 +22,7 @@ crm-companies = { path = "crates/crm-companies" }
 crm-core = { path = "crates/crm-core" }
 crm-deals = { path = "crates/crm-deals" }
 crm-users = { path = "crates/crm-users" }
-keel = { workspace = true }
+navis = { workspace = true }
 sea-orm = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

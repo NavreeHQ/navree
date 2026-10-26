@@ -1,6 +1,6 @@
 [package]
 name = "crm-testkit"
-description = "Keel CRM: TestCrm, a booted CRM with the demo accounts for feature tests."
+description = "Navis CRM: TestCrm, a booted CRM with the demo accounts for feature tests."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,7 +13,7 @@ unsafe_code = "forbid"
 [dependencies]
 chrono = { workspace = true }
 crm-core = { path = "../crm-core" }
-keel = { workspace = true }
+navis = { workspace = true }
 sea-orm = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

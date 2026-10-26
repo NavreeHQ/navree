@@ -2,18 +2,18 @@
 
 use std::collections::HashMap;
 
-use keel::access::{AbilityFactory, READ};
-use keel::config::Config;
-use keel::contracts::{Clock, Principal, SystemClock};
-use keel::realtime::ChannelDecision;
-use keel::{BoxFuture, prelude::*};
+use navis::access::{AbilityFactory, READ};
+use navis::config::Config;
+use navis::contracts::{Clock, Principal, SystemClock};
+use navis::realtime::ChannelDecision;
+use navis::{BoxFuture, prelude::*};
 
 use crate::abilities;
 use crate::subjects::DEAL;
 
-/// The realtime application key: clients connect to `ws://host/app/keel-crm-key`
+/// The realtime application key: clients connect to `ws://host/app/navis-crm-key`
 /// (spec §7). A default; `realtime.key` overrides it.
-pub const REALTIME_KEY: &str = "keel-crm-key";
+pub const REALTIME_KEY: &str = "navis-crm-key";
 
 /// The private channel deal changes are broadcast on (`private-crm.deals`,
 /// event `deal.updated`); any user who can read deals may subscribe.
@@ -36,9 +36,9 @@ pub const TRUSTED_PROXIES: &str = "127.0.0.1,::1";
 /// Defaults the CRM gives settings that the configuration does not set.
 const DEFAULTS: &[(&str, &str)] = &[
     ("realtime.key", REALTIME_KEY),
-    ("realtime.app_id", "keel-crm"),
-    ("api.title", "Keel CRM API"),
-    ("mail.from", "Keel CRM <crm@keel.test>"),
+    ("realtime.app_id", "navis-crm"),
+    ("api.title", "Navis CRM API"),
+    ("mail.from", "Navis CRM <crm@navis.test>"),
     ("http.trusted_proxies", TRUSTED_PROXIES),
 ];
 
@@ -59,10 +59,10 @@ const DEFAULTS: &[(&str, &str)] = &[
 ///
 /// ```no_run
 /// use crm_core::{CrmCoreModule, platform};
-/// use keel::prelude::*;
+/// use navis::prelude::*;
 ///
 /// # fn main() -> Result<(), BoxError> {
-/// platform(Keel::app(), ConfigSources::defaults())
+/// platform(Navis::app(), ConfigSources::defaults())
 ///     .module(CrmCoreModule)
 ///     .run()
 /// # }

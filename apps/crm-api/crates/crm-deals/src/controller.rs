@@ -1,7 +1,7 @@
 //! `/api/v1/deals`.
 
 use crm_core::{Deal, Move};
-use keel::prelude::*;
+use navis::prelude::*;
 
 use crate::dto::{BoardFilter, CreateDeal, DealFilter, MoveDeal, UpdateDeal};
 use crate::resource::{DealBoard, DealPage, DealResource};

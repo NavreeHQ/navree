@@ -9,7 +9,7 @@ import { CommandSearch } from "@/components/app-shell/command-search";
 import { NotificationsBell } from "@/components/app-shell/notifications-bell";
 import { RealtimeBridge } from "@/components/app-shell/realtime-bridge";
 import { UserMenu } from "@/components/app-shell/user-menu";
-import { KeelMark } from "@/components/brand";
+import { NavisMark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -53,9 +53,9 @@ function TopBar({ user }: { user: User }) {
 
 function ShellSkeleton() {
   return (
-    <div className="flex min-h-svh" aria-busy="true" aria-label="Loading Keel CRM">
+    <div className="flex min-h-svh" aria-busy="true" aria-label="Loading Navis CRM">
       <div className="hidden w-64 shrink-0 flex-col gap-3 bg-sidebar p-4 md:flex">
-        <KeelMark className="text-sidebar-primary" />
+        <NavisMark className="text-sidebar-primary" />
         <div className="mt-4 flex flex-col gap-2.5">
           {Array.from({ length: 5 }, (_, i) => (
             <Skeleton key={i} className="h-5 w-3/4 bg-sidebar-accent" />
@@ -82,10 +82,10 @@ function ApiUnavailable({ onRetry, detail }: { onRetry: () => void; detail?: str
           <EmptyMedia variant="icon">
             <UnplugIcon />
           </EmptyMedia>
-          <EmptyTitle>Can&apos;t reach the Keel API</EmptyTitle>
+          <EmptyTitle>Can&apos;t reach the Navis API</EmptyTitle>
           <EmptyDescription>
             {detail ??
-              "Start crm-api on 127.0.0.1:8080 (or set KEEL_API_URL), or run the app with NEXT_PUBLIC_API_MOCKS=1 to use demo data."}
+              "Start crm-api on 127.0.0.1:8080 (or set NAVIS_API_URL), or run the app with NEXT_PUBLIC_API_MOCKS=1 to use demo data."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

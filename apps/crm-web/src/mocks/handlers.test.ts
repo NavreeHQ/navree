@@ -68,7 +68,7 @@ describe("mock API audit log mirrors crm-api's actions", () => {
   it("records a new user's role as access.role_assigned", async () => {
     const response = await call("POST", "/api/v1/users", {
       name: "Riley Novak",
-      email: "riley.novak@keel.test",
+      email: "riley.novak@navis.test",
       password: "password123",
       role: "manager",
     });

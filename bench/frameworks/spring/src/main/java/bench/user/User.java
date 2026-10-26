@@ -7,7 +7,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Keel's existing {@code users} table. */
+/** Navis's existing {@code users} table. */
 @Entity
 @Table(name = "users")
 public class User {

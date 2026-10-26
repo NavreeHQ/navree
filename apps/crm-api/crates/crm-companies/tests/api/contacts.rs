@@ -476,12 +476,12 @@ async fn exports_are_audited() {
         .await
         .assert_status(200);
 
-    let audit = crm.get::<keel::audit::AuditLog>().await;
+    let audit = crm.get::<navis::audit::AuditLog>().await;
     audit.flush().await;
-    let db = crm.get::<keel::db::Db>().await;
-    let entries = <keel::audit::audit_log::Entity as sea_orm::EntityTrait>::find()
+    let db = crm.get::<navis::db::Db>().await;
+    let entries = <navis::audit::audit_log::Entity as sea_orm::EntityTrait>::find()
         .filter(sea_orm::ColumnTrait::eq(
-            &keel::audit::audit_log::Column::Action,
+            &navis::audit::audit_log::Column::Action,
             "contacts.exported",
         ))
         .all(db.conn())

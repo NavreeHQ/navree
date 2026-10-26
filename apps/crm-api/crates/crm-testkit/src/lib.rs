@@ -1,10 +1,10 @@
 //! # crm-testkit
 //!
-//! A booted Keel CRM for tests, in one line:
+//! A booted Navis CRM for tests, in one line:
 //!
 //! ```no_run
 //! # use crm_testkit::{Role, TestCrm};
-//! # use keel::prelude::*;
+//! # use navis::prelude::*;
 //! # #[module] struct DealsModule;
 //! # async fn demo() {
 //! let crm = TestCrm::builder().module(DealsModule).build().await;
@@ -33,12 +33,12 @@ use std::sync::Arc;
 use chrono::{DateTime, TimeZone, Utc};
 use crm_core::seed::{DEMO_ACCOUNTS, DEMO_PASSWORD, DemoAccount, ensure_demo_accounts};
 use crm_core::{CrmCoreModule, UserRole, platform};
-use keel::ModuleId;
-use keel::auth::User;
-use keel::contracts::Clock;
-use keel::prelude::*;
-use keel::queue::{Queue, WorkStats};
-use keel::testing::{FixedClock, TempDirGuard, TestApp, TestClient, TestRequest, temp_sqlite_url};
+use navis::ModuleId;
+use navis::auth::User;
+use navis::contracts::Clock;
+use navis::prelude::*;
+use navis::queue::{Queue, WorkStats};
+use navis::testing::{FixedClock, TempDirGuard, TestApp, TestClient, TestRequest, temp_sqlite_url};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -49,13 +49,13 @@ pub const WEB_ORIGIN: &str = "http://localhost:3000";
 /// One of the four demo accounts (password `password123`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Role {
-    /// `admin@keel.test`, role `admin` (super-admin).
+    /// `admin@navis.test`, role `admin` (super-admin).
     Admin,
-    /// `manager@keel.test`, role `manager`.
+    /// `manager@navis.test`, role `manager`.
     Manager,
-    /// `rep1@keel.test`, role `rep`.
+    /// `rep1@navis.test`, role `rep`.
     Rep1,
-    /// `rep2@keel.test`, role `rep`.
+    /// `rep2@navis.test`, role `rep`.
     Rep2,
 }
 
@@ -226,7 +226,7 @@ impl Default for TestCrmBuilder {
 
 /// The default app: the platform modules alone.
 fn platform_only(sources: ConfigSources) -> AppBuilder {
-    platform(Keel::app(), sources)
+    platform(Navis::app(), sources)
 }
 
 impl TestCrmBuilder {
@@ -266,7 +266,7 @@ impl TestCrmBuilder {
     pub async fn build(self) -> TestCrm {
         let (url, db) = temp_sqlite_url();
         let mut sources = ConfigSources::new()
-            .set("app.key", keel::crypto::generate_key())
+            .set("app.key", navis::crypto::generate_key())
             .set("database.url", url)
             .set("database.migrate_on_boot", true)
             .set("http.per_ip_rate_limit", Value::Null)
@@ -313,7 +313,7 @@ pub struct CrmClient {
 
 impl CrmClient {
     /// A request with `method` to `path`, with the bearer token.
-    pub fn request(&self, method: keel::axum::http::Method, path: &str) -> TestRequest {
+    pub fn request(&self, method: navis::axum::http::Method, path: &str) -> TestRequest {
         self.client.request(method, path).bearer(&self.access_token)
     }
 

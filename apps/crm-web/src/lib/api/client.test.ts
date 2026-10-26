@@ -31,7 +31,7 @@ describe("API client (browser → BFF)", () => {
   it("calls the BFF same-origin with Accept: application/json and no token or CSRF headers", async () => {
     const { client, requests } = recordingClient(() => json({ user: { id: "u1" } }));
 
-    await unwrap(client.POST("/api/auth/login", { body: { email: "rep1@keel.test", password: "password123" } }));
+    await unwrap(client.POST("/api/auth/login", { body: { email: "rep1@navis.test", password: "password123" } }));
 
     const [login] = requests;
     expect(login.url).toBe(`${BASE}/api/auth/login`);
@@ -39,7 +39,7 @@ describe("API client (browser → BFF)", () => {
     expect(login.headers.get("Accept")).toBe("application/json");
     expect(login.headers.get("Authorization")).toBeNull();
     expect(login.headers.get("X-XSRF-TOKEN")).toBeNull();
-    expect(await login.json()).toEqual({ email: "rep1@keel.test", password: "password123" });
+    expect(await login.json()).toEqual({ email: "rep1@navis.test", password: "password123" });
   });
 
   it("returns data for successful requests", async () => {

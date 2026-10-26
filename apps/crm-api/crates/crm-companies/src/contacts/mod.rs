@@ -7,7 +7,7 @@ mod resource;
 mod service;
 
 use crm_core::CrmCoreModule;
-use keel::prelude::*;
+use navis::prelude::*;
 
 pub use controller::ContactsController;
 pub use dto::{ContactFilters, CreateContact, UpdateContact};

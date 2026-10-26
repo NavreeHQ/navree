@@ -77,7 +77,7 @@ export function GeneralSettings() {
       </Panel>
       <Panel title="Appearance">
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">Choose how Keel looks on this device.</p>
+          <p className="text-sm text-muted-foreground">Choose how Navis looks on this device.</p>
           <ToggleGroup
             type="single"
             variant="outline"
@@ -110,7 +110,7 @@ export function GeneralSettings() {
       <Panel title="Connection">
         <dl>
           <DetailRow label="Data source">
-            {env.mocks ? "Mock API (demo data in this browser tab)" : "Keel CRM API, through this app's server"}
+            {env.mocks ? "Mock API (demo data in this browser tab)" : "Navis CRM API, through this app's server"}
           </DetailRow>
           <DetailRow label="Live updates">
             {env.mocks ? "Simulated in this tab" : env.realtime ? `WebSocket ${env.wsHost}:${env.wsPort}` : "Off"}

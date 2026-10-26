@@ -1,0 +1,42 @@
+//! The `{{ table }}` table.
+
+{% if crud %}
+use navis::access::Subject;
+{% endif %}
+use sea_orm::entity::prelude::*;
+use serde::Serialize;
+
+/// {{ a_entity_title }}. Serialized as is in API responses: keep secrets out
+/// of it (or skip them with `#[serde(skip)]`).
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+#[sea_orm(table_name = "{{ table }}")]
+pub struct Model {
+    /// A UUID v7, so ids sort by creation time.
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+{% if crud %}
+    /// The user who created it (abilities can test `owner_id`).
+    pub owner_id: Option<Uuid>,
+{% endif %}
+    pub name: String,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+{% if crud %}
+
+/// The access subject: rules name it `{{ entity_pascal }}`, permissions
+/// `{{ table }}.<action>` (`{{ table }}.update`, `{{ table }}.manage`, ...).
+impl Subject for Entity {
+    const SUBJECT: &'static str = "{{ entity_pascal }}";
+    const PERMISSION_PREFIX: &'static str = "{{ table }}";
+}
+
+/// The subject in route attributes and extractors: `#[can(Read, {{ entity_pascal }})]`,
+/// `Authorized<{{ entity_pascal }}, Update>`.
+pub type {{ entity_pascal }} = Entity;
+{% endif %}

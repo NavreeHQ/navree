@@ -1,22 +1,22 @@
 /**
- * Backend-for-frontend for the Keel API (spec §7, §10).
+ * Backend-for-frontend for the Navis API (spec §7, §10).
  *
  * The browser only ever talks to this Next.js server, same origin, with no
  * tokens. The BFF keeps the JWT access token and the rotating refresh token in
- * httpOnly cookies and forwards requests to Keel with `Authorization: Bearer`.
+ * httpOnly cookies and forwards requests to Navis with `Authorization: Bearer`.
  *
  * - `login` stores both tokens and returns only `{user}`; for an account with
- *   two-factor authentication Keel answers with a challenge instead, which the
+ *   two-factor authentication Navis answers with a challenge instead, which the
  *   BFF keeps in its own httpOnly cookie until `verifyTwoFactor` completes it;
  * - `proxy` forwards any `/api/*` or `/broadcasting/*` request; on a 401 it
  *   refreshes once (single-flight per refresh token), updates the cookies and
  *   retries; if the refresh fails it clears the cookies and returns 401. A token
  *   pair in an `/api/auth/*` response (e.g. `PATCH /api/auth/me/password`)
  *   replaces the cookies and is stripped from the body;
- * - `logout` revokes the refresh token at Keel and clears the cookies;
+ * - `logout` revokes the refresh token at Navis and clears the cookies;
  * - every non-GET request must come from the app's own origin (403 otherwise),
  *   which is the CSRF defence for the cookie hop;
- * - the browser's `X-Forwarded-For` / `X-Real-IP` never reach Keel; the BFF
+ * - the browser's `X-Forwarded-For` / `X-Real-IP` never reach Navis; the BFF
  *   sends its own `X-Forwarded-For` only when it knows the client address
  *   (see `trustedProxyHops`).
  *
@@ -25,14 +25,14 @@
 import { isIP } from "node:net";
 import { errorResponse } from "./http-errors";
 
-export const ACCESS_COOKIE = "keel_at";
-export const REFRESH_COOKIE = "keel_rt";
+export const ACCESS_COOKIE = "navis_at";
+export const REFRESH_COOKIE = "navis_rt";
 /** The two-factor challenge token between the password step and the code step. */
-export const CHALLENGE_COOKIE = "keel_2fa";
+export const CHALLENGE_COOKIE = "navis_2fa";
 /** Only the code step's route handler receives the challenge cookie. */
 const CHALLENGE_PATH = "/api/auth/2fa";
 
-/** Keel's token response (`POST /api/auth/login` and `/api/auth/refresh`). */
+/** Navis's token response (`POST /api/auth/login` and `/api/auth/refresh`). */
 export interface TokenPair {
   access_token: string;
   refresh_token: string;
@@ -42,7 +42,7 @@ export interface TokenPair {
 }
 
 export interface BffOptions {
-  /** Keel API base URL, e.g. `http://127.0.0.1:8080`. */
+  /** Navis API base URL, e.g. `http://127.0.0.1:8080`. */
   apiUrl: string;
   /** Fetch used for upstream calls (tests inject one). */
   fetch?: typeof fetch;
@@ -50,7 +50,7 @@ export interface BffOptions {
   secureCookies?: boolean;
   /** Extra origins allowed to send non-GET requests (e.g. the public URL behind a proxy). */
   allowedOrigins?: string[];
-  /** Refresh-token cookie lifetime in seconds (Keel: 30 days). */
+  /** Refresh-token cookie lifetime in seconds (Navis: 30 days). */
   refreshMaxAge?: number;
   /** How long a completed refresh is remembered for requests still carrying the old cookie. */
   refreshGraceMs?: number;
@@ -58,7 +58,7 @@ export interface BffOptions {
    * How many reverse proxies in front of this Next.js server append the address they saw to
    * `X-Forwarded-For` (default 0). Next.js keeps a browser's own `X-Forwarded-For` as is and
    * gives route handlers no other way to read the connection's address, so without a trusted
-   * proxy the header is the browser's word and the BFF sends Keel no client address (Keel
+   * proxy the header is the browser's word and the BFF sends Navis no client address (Navis
    * then sees the BFF's own). With `n` proxies the client is the `n`-th entry from the right:
    * the one the outermost proxy appended. Next.js must then be reachable only through them.
    */
@@ -67,7 +67,7 @@ export interface BffOptions {
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-/** Request headers worth passing to Keel. Cookies never leave the BFF. */
+/** Request headers worth passing to Navis. Cookies never leave the BFF. */
 const FORWARD_REQUEST_HEADERS = [
   "accept",
   "accept-language",
@@ -93,7 +93,7 @@ const FORWARD_RESPONSE_HEADERS = [
 
 type Tokens = { access?: string; refresh?: string };
 
-/** Keel's login body (`POST /api/auth/login`, `/api/auth/2fa/verify`). */
+/** Navis's login body (`POST /api/auth/login`, `/api/auth/2fa/verify`). */
 type LoginBody = Partial<TokenPair> & {
   user?: unknown;
   two_factor_required?: boolean;
@@ -241,7 +241,7 @@ export function createBff(options: BffOptions) {
   }
 
   /**
-   * `X-Forwarded-For` for Keel, built by the BFF: a single entry, so Keel (which takes the
+   * `X-Forwarded-For` for Navis, built by the BFF: a single entry, so Navis (which takes the
    * right-most entry when `http.trust_proxy` is on) sees the client address the BFF vouches for.
    */
   function forwardedFor(request: Request): Record<string, string> {
@@ -249,7 +249,7 @@ export function createBff(options: BffOptions) {
     return address ? { "x-forwarded-for": address } : {};
   }
 
-  async function callKeelRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
+  async function callNavisRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
     try {
       const response = await upstreamFetch(`${apiUrl}/api/auth/refresh`, {
         method: "POST",
@@ -277,7 +277,7 @@ export function createBff(options: BffOptions) {
     const existing = refreshes.get(refreshToken);
     if (existing) return existing.promise;
     const entry: { promise: Promise<TokenPair | null>; settledAt?: number } = {
-      promise: callKeelRefresh(refreshToken, request).then((pair) => {
+      promise: callNavisRefresh(refreshToken, request).then((pair) => {
         entry.settledAt = Date.now();
         if (!pair) refreshes.delete(refreshToken);
         return pair;
@@ -307,11 +307,11 @@ export function createBff(options: BffOptions) {
   }
 
   function unreachable(): Response {
-    return errorResponse(502, "The Keel API is unreachable");
+    return errorResponse(502, "The Navis API is unreachable");
   }
 
   /**
-   * Forwards a request to Keel at `upstreamPath` (+ the request's query) with
+   * Forwards a request to Navis at `upstreamPath` (+ the request's query) with
    * the bearer token, refreshing once on a 401.
    */
   async function proxy(request: Request, upstreamPath: string): Promise<Response> {
@@ -357,7 +357,7 @@ export function createBff(options: BffOptions) {
       return unreachable();
     }
 
-    // New pair → set both cookies. Refresh failed, or Keel rejected the token with nothing to
+    // New pair → set both cookies. Refresh failed, or Navis rejected the token with nothing to
     // refresh it with → the session is over: clear both so the browser goes back to /login.
     const cookies = new Headers();
     if (refreshed) setTokenCookies(cookies, refreshed);
@@ -438,7 +438,7 @@ export function createBff(options: BffOptions) {
     try {
       input = ((await request.json()) as Record<string, unknown> | null) ?? {};
     } catch {
-      // no body: Keel answers 400
+      // no body: Navis answers 400
     }
     const proof: Record<string, string> = {};
     if (typeof input.code === "string") proof.code = input.code;
@@ -462,7 +462,7 @@ export function createBff(options: BffOptions) {
     return signedIn(upstream, data, clearChallengeCookie);
   }
 
-  /** `POST /api/auth/logout` (`{all?: boolean}`): revokes the refresh token at Keel, clears the cookies. */
+  /** `POST /api/auth/logout` (`{all?: boolean}`): revokes the refresh token at Navis, clears the cookies. */
   async function logout(request: Request): Promise<Response> {
     if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
     let all = false;
@@ -496,7 +496,7 @@ export function createBff(options: BffOptions) {
         await discard(response);
       }
     } catch {
-      // Keel unreachable: still sign the browser out.
+      // Navis unreachable: still sign the browser out.
     }
     const headers = new Headers();
     clearTokenCookies(headers);

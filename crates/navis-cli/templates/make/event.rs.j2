@@ -1,0 +1,17 @@
+//! The `{{ module }}.{{ name }}` event.
+
+use navis::events::Event;
+use serde::{Deserialize, Serialize};
+
+/// {{ title }}. Emit it with `EventBus::emit`; subscribe a listener with
+/// `navis make:listener {{ module }} <name> --event {{ name }}`. Queued
+/// listeners receive it as JSON: keep it small and free of secrets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{ pascal }} {
+    /// What the event is about.
+    pub id: uuid::Uuid,
+}
+
+impl Event for {{ pascal }} {
+    const NAME: &'static str = "{{ module }}.{{ name }}";
+}

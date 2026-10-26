@@ -1,4 +1,4 @@
-# Axum (baseline for Rust: Keel's foundation with no framework on top)
+# Axum (baseline for Rust: Navis's foundation with no framework on top)
 
 | | |
 |---|---|
@@ -6,7 +6,7 @@
 | Framework | Axum 0.8.9 (hyper 1.12, Tokio 1.54.1) |
 | Workers | One process on Tokio's default multi-thread runtime (`#[tokio::main]`): one worker thread per CPU, 8 under the benchmark's cpuset |
 | Database | sqlx 0.9.0 (Postgres, runtime query functions, not the compile-time macros), one `PgPool` of 64 connections |
-| JWT | jsonwebtoken 11.1.0 with the `aws_lc_rs` backend (HS256; `exp`, `iss` and `sub` required, `iss` must be `keel`), then the user row is loaded |
+| JWT | jsonwebtoken 11.1.0 with the `aws_lc_rs` backend (HS256; `exp`, `iss` and `sub` required, `iss` must be `navis`), then the user row is loaded |
 | Validation | validator 0.21.0 (derive) on serde-deserialized input |
 
 Notes:
@@ -17,5 +17,5 @@ Notes:
 - `/queries` runs its N queries one after another in a plain loop, and the deals list runs the count, then the page query (one join for the owners). Both are sequential, as straightforward handler code is; Express runs them concurrently.
 - sqlx prepares statements and caches them per connection.
 - New deal ids are UUID v4. `created_at`/`updated_at` come from the database's `now()`, returned by `RETURNING`.
-- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Keel's workspace uses `rust_crypto`).
+- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Navis's workspace uses `rust_crypto`).
 - sqlx has no TLS feature enabled, since the benchmark database is plain TCP.

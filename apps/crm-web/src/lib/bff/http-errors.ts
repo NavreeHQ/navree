@@ -1,4 +1,4 @@
-/** NestJS-style error bodies (`{statusCode, message, error}`), as the Keel API returns them. */
+/** NestJS-style error bodies (`{statusCode, message, error}`), as the Navis API returns them. */
 
 const REASONS: Record<number, string> = {
   400: "Bad Request",

@@ -4,11 +4,11 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use keel::BoxFuture;
-use keel::access::AccessService;
-use keel::auth::{AuthService, User};
-use keel::db::{Db, Seeder, Uow};
-use keel::prelude::*;
+use navis::BoxFuture;
+use navis::access::AccessService;
+use navis::auth::{AuthService, User};
+use navis::db::{Db, Seeder, Uow};
+use navis::prelude::*;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, IntoActiveModel};
 
@@ -36,22 +36,22 @@ pub struct DemoAccount {
 pub const DEMO_ACCOUNTS: [DemoAccount; 4] = [
     DemoAccount {
         name: "Dana Whitfield",
-        email: "admin@keel.test",
+        email: "admin@navis.test",
         role: UserRole::Admin,
     },
     DemoAccount {
         name: "Marcus Reyes",
-        email: "manager@keel.test",
+        email: "manager@navis.test",
         role: UserRole::Manager,
     },
     DemoAccount {
         name: "Priya Shah",
-        email: "rep1@keel.test",
+        email: "rep1@navis.test",
         role: UserRole::Rep,
     },
     DemoAccount {
         name: "Tom Becker",
-        email: "rep2@keel.test",
+        email: "rep2@navis.test",
         role: UserRole::Rep,
     },
 ];

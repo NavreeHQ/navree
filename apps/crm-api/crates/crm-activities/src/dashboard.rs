@@ -19,9 +19,9 @@ use std::sync::Arc;
 use chrono::{DateTime, Datelike, Months, NaiveTime, Utc};
 use crm_core::entities::{activity, deal};
 use crm_core::{Activity, Deal, Stage};
-use keel::access::{Accessible, CurrentAccess, Read};
-use keel::contracts::Clock;
-use keel::prelude::*;
+use navis::access::{Accessible, CurrentAccess, Read};
+use navis::contracts::Clock;
+use navis::prelude::*;
 use sea_orm::sea_query::{Expr, ExprTrait, Func};
 use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,

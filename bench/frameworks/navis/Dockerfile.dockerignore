@@ -1,0 +1,25 @@
+# The build context is the repository root. BuildKit reads this file (named
+# after the Dockerfile) instead of a root .dockerignore.
+#
+# Allow-list: the workspace manifest, Navis's crates and this app. Everything
+# else stays out: target/, apps/ (crm-api, crm-web with node_modules and
+# .next), docs/, bench/results, the other frameworks, .git, .playwright-mcp,
+# storage and SQLite files.
+*
+!Cargo.toml
+!crates
+!bench/frameworks/navis
+
+# Never needed inside the allowed directories either.
+**/target
+**/node_modules
+**/.next
+**/storage
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/.env
+crates/*/tests
+crates/*/benches
+crates/*/examples
+bench/frameworks/navis/README.md

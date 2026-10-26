@@ -6,7 +6,7 @@ mod resource;
 mod service;
 
 use crm_core::CrmCoreModule;
-use keel::prelude::*;
+use navis::prelude::*;
 
 pub use controller::CompaniesController;
 pub use dto::{CompanyFilters, CompanySort, CreateCompany, UpdateCompany};

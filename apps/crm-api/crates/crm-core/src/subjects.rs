@@ -9,5 +9,5 @@ pub const CONTACT: &str = "Contact";
 pub const DEAL: &str = "Deal";
 /// Activities (notes, calls, emails, meetings, tasks).
 pub const ACTIVITY: &str = "Activity";
-/// Users (keel-auth's `users`).
+/// Users (navis-auth's `users`).
 pub const USER: &str = "User";

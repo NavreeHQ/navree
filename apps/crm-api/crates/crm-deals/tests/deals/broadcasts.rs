@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crm_deals::DealsModule;
 use crm_testkit::{Role, TestCrm};
-use keel::config::Config;
+use navis::config::Config;
 use serde_json::json;
 
 use crate::support::{
@@ -73,7 +73,7 @@ async fn deal_update_broadcasts() {
 /// app on the same database, as `serve` and `queue:work` share one).
 #[tokio::test]
 async fn notifications_from_a_worker_process_reach_the_socket() {
-    let key = keel::crypto::generate_key();
+    let key = navis::crypto::generate_key();
     let server = TestCrm::builder()
         .module(DealsModule)
         .config("app.key", key.clone())

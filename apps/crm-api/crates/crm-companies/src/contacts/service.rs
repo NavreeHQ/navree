@@ -6,11 +6,11 @@ use std::sync::Arc;
 use crm_core::entities::{company, contact};
 use crm_core::subjects::CONTACT;
 use crm_core::{CompanyRef, OwnerRef, owner_for};
-use keel::access::{Ability, Accessible, Read};
-use keel::contracts::Clock;
-use keel::db::paginate;
-use keel::prelude::*;
-use keel::validation::{Messages, ValidationErrors};
+use navis::access::{Ability, Accessible, Read};
+use navis::contracts::Clock;
+use navis::db::paginate;
+use navis::prelude::*;
+use navis::validation::{Messages, ValidationErrors};
 use sea_orm::ActiveValue::Set;
 use sea_orm::sea_query::{Expr, Func};
 use sea_orm::{

@@ -1,4 +1,4 @@
-//! `crm-api`: runs the Keel CRM API. Run it from `apps/crm-api` (it reads
+//! `crm-api`: runs the Navis CRM API. Run it from `apps/crm-api` (it reads
 //! `.env` and `config/app.toml` from the working directory):
 //!
 //! ```text
@@ -10,7 +10,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
-use keel::prelude::*;
+use navis::prelude::*;
 
 fn main() -> Result<(), BoxError> {
     crm_api::app(ConfigSources::defaults()).run()

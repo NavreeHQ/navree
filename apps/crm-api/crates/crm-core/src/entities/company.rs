@@ -50,9 +50,9 @@ pub enum Relation {
     Deals,
     /// The owner (`owner_id` → `users.id`).
     #[sea_orm(
-        belongs_to = "keel::auth::user::Entity",
+        belongs_to = "navis::auth::user::Entity",
         from = "Column::OwnerId",
-        to = "keel::auth::user::Column::Id"
+        to = "navis::auth::user::Column::Id"
     )]
     Owner,
 }

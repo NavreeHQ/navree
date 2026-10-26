@@ -1,8 +1,8 @@
 // The benchmark's shared secret, tokens and seed formulas (SPEC.md §2, §3.4).
 import { createHash, createHmac } from "node:crypto";
 
-export const JWT_SECRET = "keel-bench-jwt-secret-0123456789abcdef0123456789";
-export const JWT_ISSUER = "keel";
+export const JWT_SECRET = "navis-bench-jwt-secret-0123456789abcdef0123456789";
+export const JWT_ISSUER = "navis";
 
 export const STAGES = ["lead", "qualified", "proposal", "negotiation", "won", "lost"];
 const SEED_EPOCH = Date.UTC(2026, 0, 1);
@@ -33,7 +33,7 @@ export function deal(i) {
 
 const b64url = (value) => Buffer.from(value).toString("base64url");
 
-/** An HS256 JWT with Keel's access-token claims. */
+/** An HS256 JWT with Navis's access-token claims. */
 export function sign(claims, secret = JWT_SECRET) {
   const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const body = b64url(JSON.stringify(claims));

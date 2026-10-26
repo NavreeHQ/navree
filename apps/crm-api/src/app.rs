@@ -5,14 +5,14 @@ use crm_companies::{CompaniesModule, ContactsModule};
 use crm_core::{CrmCoreModule, platform};
 use crm_deals::DealsModule;
 use crm_users::UsersModule;
-use keel::prelude::*;
+use navis::prelude::*;
 
 use crate::seed::DemoModule;
 
-/// The Keel CRM API: the platform modules ([`crm_core::platform`]) and
+/// The Navis CRM API: the platform modules ([`crm_core::platform`]) and
 /// every CRM module, configured from `sources`.
 pub fn app(sources: ConfigSources) -> AppBuilder {
-    platform(Keel::app(), sources)
+    platform(Navis::app(), sources)
         .module(CrmCoreModule)
         .module(UsersModule)
         .module(CompaniesModule)
@@ -21,5 +21,5 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(ActivitiesModule)
         .module(DashboardModule)
         .module(DemoModule)
-    // keel:modules
+    // navis:modules
 }

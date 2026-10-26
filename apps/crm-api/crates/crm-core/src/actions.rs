@@ -1,9 +1,9 @@
-//! The CRM's custom actions, besides keel-access's `Read`, `Create`,
+//! The CRM's custom actions, besides navis-access's `Read`, `Create`,
 //! `Update`, `Delete` and `Manage`: use the markers in route attributes
 //! (`#[can(Move, Deal, from = "id")]`) and extractors
 //! (`Authorized<Deal, Move>`), and the names in rules.
 
-use keel::access::ActionMarker;
+use navis::access::ActionMarker;
 
 /// `move`: change a deal's stage or position on the board.
 pub const MOVE: &str = "move";

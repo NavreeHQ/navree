@@ -1,4 +1,4 @@
-//! Actix Web + sqlx implementation of the Keel benchmark API (bench/SPEC.md).
+//! Actix Web + sqlx implementation of the Navis benchmark API (bench/SPEC.md).
 
 mod auth;
 mod deals;
@@ -25,7 +25,7 @@ pub struct AppState {
 async fn main() -> std::io::Result<()> {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
-    let jwt_issuer = env::var("JWT_ISSUER").unwrap_or_else(|_| "keel".to_owned());
+    let jwt_issuer = env::var("JWT_ISSUER").unwrap_or_else(|_| "navis".to_owned());
 
     let db = PgPoolOptions::new()
         .max_connections(MAX_DB_CONNECTIONS)

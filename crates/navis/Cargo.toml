@@ -1,0 +1,123 @@
+[package]
+name = "navis"
+description = "Navis: a Laravel-class, NestJS-structured application framework on Rust and Tokio (facade crate)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["full"]
+## Every module crate.
+full = [
+    "access",
+    "api",
+    "audit",
+    "auth",
+    "cache",
+    "crypto",
+    "db",
+    "events",
+    "http",
+    "http-client",
+    "log",
+    "mail",
+    "notify",
+    "observe",
+    "queue",
+    "realtime",
+    "schedule",
+    "session",
+    "storage",
+    "testing",
+    "validation",
+    "view",
+]
+# Each module feature turns on the features of the navis crates it builds
+# on (spec §3), so `navis::<dependency>` is always there to name their types.
+## L2
+http = ["dep:navis-http", "dep:axum"]
+log = ["dep:navis-log"]
+crypto = ["dep:navis-crypto"]
+events = ["dep:navis-events"]
+view = ["dep:navis-view"]
+cache = ["dep:navis-cache"]
+http-client = ["dep:navis-http-client"]
+## L3
+db = ["dep:navis-db", "http"]
+testing = ["dep:navis-testing", "http"]
+observe = ["dep:navis-observe", "http"]
+api = ["dep:navis-api", "http"]
+mail = ["dep:navis-mail", "view"]
+realtime = ["dep:navis-realtime", "http", "crypto"]
+storage = ["dep:navis-storage", "http", "crypto"]
+## L4
+session = ["dep:navis-session", "http", "crypto", "db"]
+validation = ["dep:navis-validation", "http", "db"]
+audit = ["dep:navis-audit", "http", "db"]
+queue = ["dep:navis-queue", "db"]
+schedule = ["dep:navis-schedule", "db"]
+access = ["dep:navis-access", "http", "db"]
+notify = ["dep:navis-notify", "http", "db", "mail"]
+## L5
+auth = [
+    "dep:navis-auth",
+    "http",
+    "db",
+    "crypto",
+    "validation",
+    "cache",
+    "mail",
+    "access",
+]
+## PostgreSQL driver for navis-db.
+postgres = ["db", "navis-db/postgres"]
+
+[dependencies]
+navis-config = { workspace = true }
+navis-contracts = { workspace = true }
+navis-kernel = { workspace = true }
+navis-macros = { workspace = true }
+
+navis-access = { workspace = true, optional = true }
+navis-api = { workspace = true, optional = true }
+navis-audit = { workspace = true, optional = true }
+navis-auth = { workspace = true, optional = true }
+navis-cache = { workspace = true, optional = true }
+navis-crypto = { workspace = true, optional = true }
+navis-db = { workspace = true, optional = true }
+navis-events = { workspace = true, optional = true }
+navis-http = { workspace = true, optional = true }
+navis-http-client = { workspace = true, optional = true }
+navis-log = { workspace = true, optional = true }
+navis-mail = { workspace = true, optional = true }
+navis-notify = { workspace = true, optional = true }
+navis-observe = { workspace = true, optional = true }
+navis-queue = { workspace = true, optional = true }
+navis-realtime = { workspace = true, optional = true }
+navis-schedule = { workspace = true, optional = true }
+navis-session = { workspace = true, optional = true }
+navis-storage = { workspace = true, optional = true }
+navis-testing = { workspace = true, optional = true }
+navis-validation = { workspace = true, optional = true }
+navis-view = { workspace = true, optional = true }
+
+# Re-exported as `navis::axum` (extractors such as `Path` and `Query`), with
+# the `http` feature.
+axum = { workspace = true, optional = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+garde = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }

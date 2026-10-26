@@ -1,0 +1,51 @@
+//! The root module: every module the app uses, each configured once.
+
+use navis::access::{AccessModule, AccessOptions};
+use navis::api::ApiModule;
+use navis::auth::AuthModule;
+use navis::cache::CacheModule;
+use navis::config::{ConfigModule, ConfigSources};
+use navis::crypto::CryptoModule;
+use navis::db::DatabaseModule;
+use navis::events::EventsModule;
+use navis::http::HttpModule;
+use navis::kernel::{AppBuilder, Navis};
+use navis::log::LoggerModule;
+use navis::mail::MailModule;
+use navis::observe::ObserveModule;
+use navis::queue::QueueModule;
+use navis::validation::ValidationModule;
+use navis::view::ViewModule;
+
+use crate::{abilities, modules};
+
+/// The app, configured from `sources`. Each `from_config()` module reads its
+/// section (`http`, `database`, `mail`, ...) at boot.
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navis::app()
+        // Platform
+        .module(ConfigModule::for_root(sources))
+        .module(LoggerModule::from_config())
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(CacheModule::from_config())
+        .module(EventsModule::for_root())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(QueueModule::from_config())
+        .module(ValidationModule::from_config())
+        // Identity and access: JWT bearer tokens (`/api/auth/*`), roles,
+        // permissions and abilities (`GET /api/me/abilities`).
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions {
+            abilities: abilities::define,
+            super_admin_role: Some("admin".to_owned()),
+        }))
+        // OpenAPI (`/api/openapi.json`, `/api/docs`), health and metrics.
+        .module(ApiModule::from_config())
+        .module(ObserveModule::from_config())
+        // Feature modules (`navis make:module` adds new ones above the marker).
+        .module(modules::users::UsersModule)
+    // navis:modules
+}

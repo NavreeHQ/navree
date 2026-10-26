@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { KeelMark } from "@/components/brand";
+import { NavisMark } from "@/components/brand";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -18,7 +18,7 @@ import { DEAL_STAGES } from "@/lib/api/types";
 import { env } from "@/lib/env";
 
 const schema = z.object({
-  email: z.email("Enter the email address you use for Keel."),
+  email: z.email("Enter the email address you use for Navis."),
   password: z.string().min(1, "Enter your password."),
 });
 type Values = z.infer<typeof schema>;
@@ -29,10 +29,10 @@ const codeSchema = z.object({
 type CodeValues = z.infer<typeof codeSchema>;
 
 const DEMO_ACCOUNTS = [
-  { email: "rep1@keel.test", role: "Sales rep" },
-  { email: "rep2@keel.test", role: "Sales rep" },
-  { email: "manager@keel.test", role: "Manager" },
-  { email: "admin@keel.test", role: "Admin" },
+  { email: "rep1@navis.test", role: "Sales rep" },
+  { email: "rep2@navis.test", role: "Sales rep" },
+  { email: "manager@navis.test", role: "Manager" },
+  { email: "admin@navis.test", role: "Admin" },
 ];
 
 /** Only same-site paths are allowed as a post-login destination. */
@@ -103,7 +103,7 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
   return (
     <div className="flex w-full max-w-sm flex-col gap-8">
       <div className="flex flex-col gap-2">
-        <KeelMark className="size-7 text-primary lg:hidden" />
+        <NavisMark className="size-7 text-primary lg:hidden" />
         <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em] font-condensed">
           Two-step verification
         </h1>
@@ -217,8 +217,8 @@ export function LoginScreen() {
     <div className="grid min-h-svh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-sidebar p-10 text-sidebar-foreground lg:flex">
         <div className="flex items-center gap-2.5 text-sidebar-accent-foreground">
-          <KeelMark className="size-6 text-sidebar-primary" />
-          <span className="text-xl font-semibold tracking-tight font-condensed">Keel CRM</span>
+          <NavisMark className="size-6 text-sidebar-primary" />
+          <span className="text-xl font-semibold tracking-tight font-condensed">Navis CRM</span>
         </div>
         <div className="flex flex-col gap-8">
           <p className="max-w-sm text-[28px] leading-[1.15] font-medium tracking-[-0.01em] text-sidebar-accent-foreground font-condensed">
@@ -226,7 +226,7 @@ export function LoginScreen() {
           </p>
           <Soundings />
         </div>
-        <p className="text-xs text-sidebar-foreground/60">Built on the Keel framework.</p>
+        <p className="text-xs text-sidebar-foreground/60">Built on the Navis framework.</p>
       </aside>
 
       <main className="flex items-center justify-center px-6 py-12">
@@ -235,7 +235,7 @@ export function LoginScreen() {
         ) : (
           <div className="flex w-full max-w-sm flex-col gap-8">
             <div className="flex flex-col gap-2">
-              <KeelMark className="size-7 text-primary lg:hidden" />
+              <NavisMark className="size-7 text-primary lg:hidden" />
               <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em] font-condensed">Sign in</h1>
               <p className="text-sm text-muted-foreground">Use your work email and password.</p>
             </div>
@@ -308,7 +308,7 @@ export function LoginScreen() {
                       className="h-auto flex-col items-start gap-0 px-3 py-2 text-left"
                       onClick={() => fillDemo(a.email)}
                     >
-                      <span className="text-[13px] font-medium">{a.email.replace("@keel.test", "")}</span>
+                      <span className="text-[13px] font-medium">{a.email.replace("@navis.test", "")}</span>
                       <span className="text-xs font-normal text-muted-foreground">{a.role}</span>
                     </Button>
                   ))}

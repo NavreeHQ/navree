@@ -1,0 +1,69 @@
+//! The {{ module_words }} module: the `{{ table }}` table, its service and its JSON
+//! API under `/api/v1/{{ route }}`.
+//!
+//! ```text
+//! {{ module }}/
+//! ├── mod.rs           # {{ module_pascal }}Module: what the module provides and imports
+//! ├── controller.rs    # {{ entity_pascal }}Controller: the HTTP routes
+//! ├── service.rs       # {{ entity_pascal }}Service: the business logic
+//! ├── entity.rs        # the `{{ table }}` table (SeaORM entity)
+//! ├── dto.rs           # request bodies and their validation rules
+//! ├── migrations/      # migrations owned by this module
+//! └── tests/           # tests on a fresh database
+//! ```
+
+mod controller;
+pub mod dto;
+pub mod entity;
+mod migrations;
+mod service;
+#[cfg(test)]
+mod tests;
+
+{% if crud %}
+use navis::access::AccessModule;
+{% endif %}
+use navis::db::ModuleBuilderDbExt;
+use navis::kernel::ModuleBuilder;
+use navis::module;
+
+pub use controller::{{ entity_pascal }}Controller;
+{% if crud %}
+pub use entity::{{ entity_pascal }};
+{% endif %}
+pub use service::{{ entity_pascal }}Service;
+
+{% if crud %}
+/// {{ module_title }}: CRUD under `/api/v1/{{ route }}`.
+///
+/// Every route checks the caller's abilities on `{{ entity_pascal }}`. Grant them
+/// with permissions (`{{ table }}.read`, `.create`, `.update`, `.delete`, or
+/// `{{ table }}.manage` for all) or with rules in the app's abilities function.
+#[module(
+    imports = [AccessModule::for_feature::<entity::Entity>()],
+    providers = [{{ entity_pascal }}Service],
+    controllers = [{{ entity_pascal }}Controller],
+    exports = [{{ entity_pascal }}Service],
+    register = Self::wire,
+)]
+{% else %}
+/// {{ module_title }}: the `{{ table }}` table, and `/api/v1/{{ route }}` for
+/// signed-in users.
+#[module(
+    providers = [{{ entity_pascal }}Service],
+    controllers = [{{ entity_pascal }}Controller],
+    exports = [{{ entity_pascal }}Service],
+    register = Self::wire,
+)]
+{% endif %}
+pub struct {{ module_pascal }}Module;
+
+impl {{ module_pascal }}Module {
+    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// listeners, commands, templates). `navis make:*` adds its lines above
+    /// the `navis:wire` marker.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        // navis:wire
+    }
+}

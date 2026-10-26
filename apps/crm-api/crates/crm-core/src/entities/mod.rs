@@ -7,7 +7,7 @@
 //! | [`deal`] | `deals` | `Deal` | `deals` |
 //! | [`activity`] | `activities` | `Activity` | `activities` |
 //!
-//! Ids are UUID v7 (`Uuid::now_v7()`), `owner_id` points at keel-auth's
+//! Ids are UUID v7 (`Uuid::now_v7()`), `owner_id` points at navis-auth's
 //! `users`, timestamps are UTC. Rule conditions name these columns
 //! (`owner_id`, `assignee_id`, `stage`). The type aliases ([`Company`],
 //! [`Contact`], [`Deal`], [`Activity`], [`User`]) are the subjects in route
@@ -19,7 +19,7 @@ pub mod company;
 pub mod contact;
 pub mod deal;
 
-use keel::access::Subject;
+use navis::access::Subject;
 
 use crate::subjects;
 
@@ -31,8 +31,8 @@ pub type Contact = contact::Entity;
 pub type Deal = deal::Entity;
 /// The `Activity` subject (`activities`).
 pub type Activity = activity::Entity;
-/// The `User` subject: keel-auth's `users` (permission prefix `users`).
-pub type User = keel::auth::user::Entity;
+/// The `User` subject: navis-auth's `users` (permission prefix `users`).
+pub type User = navis::auth::user::Entity;
 
 impl Subject for company::Entity {
     const SUBJECT: &'static str = subjects::COMPANY;

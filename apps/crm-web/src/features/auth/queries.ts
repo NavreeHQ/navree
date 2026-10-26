@@ -79,7 +79,7 @@ export function useVerifyTwoFactor() {
   });
 }
 
-/** Revokes the refresh token at Keel and clears the cookies (`all` signs out every device). */
+/** Revokes the refresh token at Navis and clears the cookies (`all` signs out every device). */
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({

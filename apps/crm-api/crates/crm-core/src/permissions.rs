@@ -1,4 +1,4 @@
-//! Permission strings (`<prefix>.<action>`, keel-access) the CRM grants
+//! Permission strings (`<prefix>.<action>`, navis-access) the CRM grants
 //! through roles. A permission maps to a rule on its prefix's subject:
 //! `deals.manage` → `can manage Deal`.
 

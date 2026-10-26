@@ -23,11 +23,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | Not a jwt-auth option: App\Auth\Claims\Issuer rejects tokens whose
-    | `iss` claim differs from this value (Keel issues them as "keel").
+    | `iss` claim differs from this value (Navis issues them as "navis").
     |
     */
 
-    'issuer' => env('JWT_ISSUER', 'keel'),
+    'issuer' => env('JWT_ISSUER', 'navis'),
 
     /*
     |--------------------------------------------------------------------------
@@ -157,7 +157,7 @@ return [
     |
     */
 
-    // Keel's access tokens carry no `nbf` claim.
+    // Navis's access tokens carry no `nbf` claim.
     'required_claims' => [
         'iss',
         'iat',
@@ -201,7 +201,7 @@ return [
     |
     */
 
-    // Keel's tokens carry no `prv` claim, and there is one user model.
+    // Navis's tokens carry no `prv` claim, and there is one user model.
     'lock_subject' => false,
 
     /*

@@ -72,7 +72,7 @@ function MockApiGate({ children }: { children: ReactNode }) {
       .then(({ startMockApi }) => startMockApi())
       .then(() => !cancelled && setReady(true))
       .catch((error: unknown) => {
-        console.error("[keel] Could not start the mock API", error);
+        console.error("[navis] Could not start the mock API", error);
         if (!cancelled) setReady(true);
       });
     return () => {

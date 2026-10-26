@@ -1,0 +1,6 @@
+use navis_macros::injectable;
+
+#[injectable(scope = "session")]
+struct Service;
+
+fn main() {}

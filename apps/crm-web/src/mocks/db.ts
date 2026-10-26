@@ -1,13 +1,13 @@
 /**
  * In-memory database for the mock API. State survives page reloads within the
  * tab (sessionStorage) so the demo behaves like a real backend while you click
- * around; a new tab or `window.__keelMock.reset()` starts from the seed again.
+ * around; a new tab or `window.__navisMock.reset()` starts from the seed again.
  */
 import { createSeed, type MockDatabase } from "./seed";
 
-const DB_KEY = "keel-mock:db:v1";
-const SESSION_KEY = "keel-mock:session";
-const THROTTLE_KEY = "keel-mock:throttle";
+const DB_KEY = "navis-mock:db:v1";
+const SESSION_KEY = "navis-mock:session";
+const THROTTLE_KEY = "navis-mock:throttle";
 
 function storage(): Storage | null {
   try {

@@ -6,8 +6,8 @@
 
 use crm_core::Stage;
 use garde::Validate;
-use keel::validation::rule_error;
-use keel::validation::rules::{self, RuleInput};
+use navis::validation::rule_error;
+use navis::validation::rules::{self, RuleInput};
 use serde::{Deserialize, Deserializer};
 use utoipa::ToSchema;
 use uuid::Uuid;

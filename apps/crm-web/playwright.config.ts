@@ -50,12 +50,12 @@ const realServers: PlaywrightTestConfig["webServer"] = [
     command: `pnpm run build && pnpm start --port ${port}`,
     url: `${baseURL}/login`,
     env: {
-      KEEL_API_URL: apiUrl,
+      NAVIS_API_URL: apiUrl,
       // `next start` is a production server: allow the token cookies over plain http.
-      KEEL_COOKIE_SECURE: "0",
+      NAVIS_COOKIE_SECURE: "0",
       NEXT_PUBLIC_API_MOCKS: "0",
       NEXT_PUBLIC_REALTIME: "1",
-      NEXT_PUBLIC_PUSHER_KEY: "keel-crm-key",
+      NEXT_PUBLIC_PUSHER_KEY: "navis-crm-key",
       NEXT_PUBLIC_WS_HOST: "127.0.0.1",
       NEXT_PUBLIC_WS_PORT: "8080",
     },

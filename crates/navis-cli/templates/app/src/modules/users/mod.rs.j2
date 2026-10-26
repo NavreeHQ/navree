@@ -1,0 +1,50 @@
+//! The users module: each signed-in user's profile at `/api/v1/profile`.
+//!
+//! Accounts themselves (registration, login, tokens, the `users` table) come
+//! from navis's `AuthModule` (`/api/auth/*`); this module shows how a feature
+//! module builds on them.
+//!
+//! ```text
+//! users/
+//! ├── mod.rs           # UsersModule: what the module provides
+//! ├── controller.rs    # ProfileController: GET and PUT /api/v1/profile
+//! ├── service.rs       # ProfileService: reads and writes profiles
+//! ├── entity.rs        # the `user_profiles` table
+//! ├── dto.rs           # request and response bodies
+//! ├── migrations/      # migrations owned by this module
+//! └── tests/           # tests on a fresh database
+//! ```
+
+mod controller;
+pub mod dto;
+pub mod entity;
+mod migrations;
+mod service;
+#[cfg(test)]
+mod tests;
+
+use navis::db::ModuleBuilderDbExt;
+use navis::kernel::ModuleBuilder;
+use navis::module;
+
+pub use controller::ProfileController;
+pub use service::ProfileService;
+
+/// User profiles.
+#[module(
+    providers = [ProfileService],
+    controllers = [ProfileController],
+    exports = [ProfileService],
+    register = Self::wire,
+)]
+pub struct UsersModule;
+
+impl UsersModule {
+    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// listeners, commands, templates). `navis make:*` adds its lines above
+    /// the `navis:wire` marker.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        // navis:wire
+    }
+}

@@ -20,14 +20,16 @@ export function startMockApi(): Promise<void> {
     })
     .then(() => {
       Object.assign(window, {
-        __keelMock: {
+        __navisMock: {
           reset() {
             resetDatabase();
             window.location.reload();
           },
         },
       });
-      console.info("[keel] Mock API enabled. Sign in as rep1@keel.test / password123. Reset with __keelMock.reset().");
+      console.info(
+        "[navis] Mock API enabled. Sign in as rep1@navis.test / password123. Reset with __navisMock.reset().",
+      );
     });
   return started;
 }

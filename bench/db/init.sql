@@ -1,4 +1,4 @@
--- Keel benchmark database: schema and deterministic seed data (SPEC.md §2).
+-- Navis benchmark database: schema and deterministic seed data (SPEC.md §2).
 -- Runs once in the template database `bench_template`; every app gets a
 -- fresh copy (`CREATE DATABASE bench TEMPLATE bench_template`).
 
@@ -11,7 +11,7 @@ INSERT INTO world (id, randomnumber)
 SELECT i, ((i * 7919) % 10000) + 1
 FROM generate_series(1, 10000) AS i;
 
--- Keel's users table (keel-auth's migration), so Keel's own auth reads it.
+-- Navis's users table (navis-auth's migration), so Navis's own auth reads it.
 CREATE TABLE users (
     id uuid PRIMARY KEY,
     name varchar NOT NULL,

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     db_user: str = "bench"
     db_password: str = "bench"
     jwt_secret: str
-    jwt_issuer: str = "keel"
+    jwt_issuer: str = "navis"
     web_concurrency: int = os.process_cpu_count() or 1
 
     @property

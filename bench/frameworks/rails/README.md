@@ -6,7 +6,7 @@
 | Framework | Rails 8.1.4, `rails new --api` (Action Controller API, Active Record, Active Model only) |
 | Server | Puma 8.0.2 in cluster mode: 8 workers (`WEB_CONCURRENCY=8`, one per CPU), 5 threads each (`RAILS_MAX_THREADS=5`), app preloaded and forked |
 | Database | Active Record 8.1 + pg 1.7.0 (precompiled gem with its own libpq 18), prepared statements on; pool = threads = 5 per worker, 40 connections in total |
-| JWT | jwt 3.3.0 (HS256, `exp` checked, `iss: "keel"` with `verify_iss: true`) in an `Authentication` controller concern; token parsed with Rails' `authenticate_with_http_token`, user loaded into `Current.user` |
+| JWT | jwt 3.3.0 (HS256, `exp` checked, `iss: "navis"` with `verify_iss: true`) in an `Authentication` controller concern; token parsed with Rails' `authenticate_with_http_token`, user loaded into `Current.user` |
 | Validation | Active Record validations on `Deal` plus strong params (`params.expect`); an Active Model form object (`Pagination`) for `page`/`per_page` |
 | Serialization | `render json:` with Active Model's `serializable_hash` (`only:` / `include: :owner`) |
 

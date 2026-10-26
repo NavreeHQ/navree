@@ -13,9 +13,9 @@ use crm_core::{ContactStatus, DEAL_UPDATED, DEALS_CHANNEL, REALTIME_KEY};
 use crm_deals::DealsModule;
 use crm_testkit::{CrmClient, TestCrm, WEB_ORIGIN};
 use futures_util::{SinkExt, StreamExt};
-use keel::contracts::Clock;
-use keel::db::Db;
-use keel::http::build_router;
+use navis::contracts::Clock;
+use navis::db::Db;
+use navis::http::build_router;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde_json::{Value, json};
 use tokio::net::{TcpListener, TcpStream};
@@ -194,7 +194,7 @@ pub async fn serve(crm: &TestCrm) -> SocketAddr {
     let addr = listener.local_addr().expect("the bound address");
     let shutdown = crm.ctx().shutdown_token();
     tokio::spawn(
-        keel::axum::serve(
+        navis::axum::serve(
             listener,
             router.into_make_service_with_connect_info::<SocketAddr>(),
         )

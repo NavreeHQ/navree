@@ -1,6 +1,6 @@
 //! # crm-core
 //!
-//! What every Keel CRM crate shares, so the feature crates (companies and
+//! What every Navis CRM crate shares, so the feature crates (companies and
 //! contacts, deals, activities and the dashboard) build in parallel without
 //! depending on each other:
 //!

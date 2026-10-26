@@ -2,8 +2,8 @@
 // Runs the benchmark one framework at a time (SPEC.md §6).
 //
 //   node bench/run.mjs                       every framework in frameworks.json
-//   node bench/run.mjs --only keel,axum      just these
-//   node bench/run.mjs --smoke --only keel   build + conformance + 5 s per test (for implementers)
+//   node bench/run.mjs --only navis,axum      just these
+//   node bench/run.mjs --smoke --only navis   build + conformance + 5 s per test (for implementers)
 //   node bench/run.mjs --skip-build          reuse built images
 //   node bench/run.mjs --skip-done           skip frameworks that already have results
 //   node bench/run.mjs --report              only rewrite results/summary.md

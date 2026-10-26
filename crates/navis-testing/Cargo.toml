@@ -1,0 +1,32 @@
+[package]
+name = "navis-testing"
+description = "Navis testing kit: TestApp, in-process TestClient with cookies and XSRF helpers, fakes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+cookie = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+navis-config = { workspace = true }
+navis-contracts = { workspace = true }
+navis-http = { workspace = true }
+navis-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+tempfile = { workspace = true }
+tower = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+tokio = { workspace = true }

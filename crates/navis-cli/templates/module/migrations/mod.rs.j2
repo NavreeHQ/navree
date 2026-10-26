@@ -1,0 +1,13 @@
+//! The migrations of the {{ module_words }} module. `navis migrate` runs every
+//! module's set in dependency order and each set in name order;
+//! `navis make:migration {{ module }} <name>` adds one here.
+
+use navis::db::MigrationSet;
+
+mod {{ migration }};
+
+/// The module's migration set, recorded under `{{ module }}` in `navis_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("{{ module }}")
+        .migration({{ migration }}::Migration)
+}
