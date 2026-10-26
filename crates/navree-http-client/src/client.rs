@@ -15,7 +15,11 @@ use crate::error::display_url;
 use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
 use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
-use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response};
+use crate::streaming::BodyStream;
+use crate::{
+    HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse,
+};
+use futures_util::StreamExt;
 
 /// The outgoing HTTP client: cheap to clone, shared as a singleton.
 #[derive(Clone)]
@@ -261,6 +265,61 @@ impl HttpClient {
         outcome
     }
 
+    /// Sends `request` once and returns at its response headers; `timeout`
+    /// (default: the options' attempt timeout) covers the wait for them.
+    pub(crate) async fn send_streaming(
+        &self,
+        request: PreparedRequest,
+        timeout: Option<Duration>,
+    ) -> Result<StreamingResponse, HttpClientError> {
+        self.inner.guard.check_url(&request.url)?;
+        let options = &self.inner.options;
+        let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
+        let url = display_url(&request.url);
+        let limit = options.max_response_bytes;
+        let started = Instant::now();
+        let method = request.method.clone();
+        let outcome = match &self.inner.transport {
+            Transport::Real(client) => {
+                tokio::time::timeout(timeout, open_real(client, request, limit))
+                    .await
+                    .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+            }
+            Transport::Fake(state) => tokio::time::timeout(timeout, state.execute(&request))
+                .await
+                .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+                .map(|response| {
+                    let body = response.bytes();
+                    let stream: BodyStream = Box::pin(futures_util::stream::iter([Ok(body)]));
+                    StreamingResponse::new(
+                        response.status(),
+                        response.headers().clone(),
+                        response.url().clone(),
+                        stream,
+                        limit,
+                    )
+                }),
+        };
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        match &outcome {
+            Ok(response) => tracing::debug!(
+                method = %method,
+                url = %url,
+                status = response.status().as_u16(),
+                elapsed_ms,
+                "outgoing streaming request"
+            ),
+            Err(error) => tracing::debug!(
+                method = %method,
+                url = %url,
+                %error,
+                elapsed_ms,
+                "outgoing streaming request failed"
+            ),
+        }
+        outcome
+    }
+
     /// Sends `request` once.
     async fn execute(&self, request: PreparedRequest) -> Result<Response, HttpClientError> {
         let limit = self.inner.options.max_response_bytes;
@@ -323,6 +382,35 @@ async fn execute_real(
     let headers = response.headers().clone();
     let url = response.url().clone();
     Ok(Response::new(status, headers, body.freeze(), url))
+}
+
+/// Sends `request` with reqwest and returns at the response headers, the
+/// body as a stream.
+async fn open_real(
+    client: &reqwest::Client,
+    request: PreparedRequest,
+    limit: u64,
+) -> Result<StreamingResponse, HttpClientError> {
+    let mut builder = client
+        .request(request.method, request.url.clone())
+        .headers(request.headers);
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+    let response = builder
+        .send()
+        .await
+        .map_err(|error| transport_error(error, &request.url))?;
+    let status = response.status();
+    let headers = response.headers().clone();
+    let url = response.url().clone();
+    let request_url = request.url;
+    let body: BodyStream = Box::pin(
+        response
+            .bytes_stream()
+            .map(move |chunk| chunk.map_err(|error| transport_error(error, &request_url))),
+    );
+    Ok(StreamingResponse::new(status, headers, url, body, limit))
 }
 
 /// Maps a reqwest error: an SSRF refusal anywhere in the chain is

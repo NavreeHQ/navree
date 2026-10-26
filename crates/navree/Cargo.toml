@@ -135,6 +135,21 @@ flags = [
     "workspace",
     "auth",
 ]
+## L6 (ecosystem libraries; opt-in, not in `full`)
+## AI SDK: text, structured output and streaming from Anthropic, OpenAI,
+## Gemini, Mistral, Ollama and Bedrock; agents with tools; embeddings,
+## vector stores and AiFake.
+ai = [
+    "dep:navree-ai",
+    "http",
+    "http-client",
+    "cache",
+    "db",
+    "storage",
+    "validation",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -148,6 +163,7 @@ navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
 
 navree-access = { workspace = true, optional = true }
+navree-ai = { workspace = true, optional = true }
 navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
