@@ -1,0 +1,179 @@
+---
+name: navree-openapi
+description: "Documents a Navree API with the OpenAPI 3.1 document generated at boot: `ApiModule`, `#[api(..)]` on routes, utoipa `ToSchema` resources, page schemas, `m.api_schema`, the schema boot errors, `openapi:export` and typed clients. Use when adding API documentation, describing request or response bodies, fixing a schema-conflict or missing-schema boot error, exporting the document, or generating a typed TypeScript client."
+---
+
+# OpenAPI
+
+`ApiModule` (in a new app) builds an OpenAPI 3.1 document from every route
+when the app boots: paths with prefix and version, path parameters,
+security (bearer) and the access-related error responses come for free.
+`#[api(..)]` adds summaries, tags and bodies. It is served at
+`GET /api/openapi.json` with a Scalar UI at `GET /api/docs`.
+
+## Steps
+
+1. Add utoipa to the app: `utoipa = { version = "6", features = ["chrono", "uuid"] }`
+   (a new app doesn't have it).
+2. Derive `ToSchema` on request DTOs and response resources; name
+   components with `#[schema(as = Note)]`.
+3. Put `#[api(..)]` (and `#[name("notes.store")]` for an `operationId`) on
+   each route.
+4. Check `/api/docs`, then export: `navree openapi:export web/openapi.json`.
+5. Add a test that fetches the document and checks the route's schema.
+
+## Template
+
+```rust
+use chrono::{DateTime, Utc};
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+/// A note as the API returns it.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+#[schema(as = Note)]
+pub struct NoteResource {
+    /// Always `"Note"` (the subject type front ends check permissions with).
+    #[serde(rename = "__type")]
+    pub resource_type: &'static str,
+    pub id: Uuid,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// What `POST /api/v1/notes` takes.
+#[derive(Debug, Deserialize, garde::Validate, ToSchema)]
+pub struct CreateNote {
+    /// 1 to 2000 characters.
+    #[garde(length(chars, min = 1, max = 2000))]
+    pub body: String,
+}
+
+#[injectable]
+pub struct NotesController;
+
+#[controller("/notes", version = "1")]
+#[authenticated]
+impl NotesController {
+    #[post("/")]
+    #[name("notes.store")]
+    #[api(
+        summary = "Create a note",
+        tag = "Notes",
+        request = CreateNote,
+        response = NoteResource,
+        status = 201,
+        responses(400, 401)
+    )]
+    async fn store(&self, Valid(Json(input)): Valid<Json<CreateNote>>) -> Result<Created<NoteResource>> {
+        let note = NoteResource {
+            resource_type: "Note",
+            id: Uuid::now_v7(),
+            body: input.body,
+            created_at: Utc::now(),
+        };
+        Ok(Created(format!("/api/v1/notes/{}", note.id), note))
+    }
+}
+```
+
+| `#[api]` key | Documents |
+|---|---|
+| `summary = ".."`, `description = ".."` | one-line summary, Markdown description |
+| `tag = ".."` or `tags("A", "B")` | groups in the UI |
+| `request = T` | the JSON request body |
+| `response = T`, `status = 201` | the success body and status (default 200) |
+| `responses(400, 404)` | extra error statuses, with the error schema `HttpError` |
+
+Hand-written routes use `RouteDef::api(ApiMeta { .. })` with
+`request`/`response` as `Some(schema_fn::<T>)` (`navree::http`).
+
+## Pages
+
+`Page<T>` has no `ToSchema`. Keep returning `Page<T>` from the handler, and
+document a named page type:
+
+```rust
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct PageInfo {
+    pub current_page: u64,
+    pub per_page: u64,
+    pub total: u64,
+    pub last_page: u64,
+}
+
+/// A page of notes: `{data, meta}`.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct NotePage {
+    pub data: Vec<NoteResource>,
+    #[schema(inline)]
+    pub meta: PageInfo,
+}
+// #[api(response = NotePage, ..)] on the list route
+```
+
+## Boot errors
+
+- `ApiError::SchemaConflict`: two different schemas with one name. Rename
+  one with `#[schema(as = OtherName)]`.
+- `ApiError::MissingSchemas`: a schema refers to a component nothing
+  registered (typical with generic wrappers). Register it in the module's
+  `wire`: `m.api_schema::<NoteResource>()`. Also use `m.api_schema::<T>()`
+  for query DTOs so their fields appear among the schemas.
+
+## Configuration
+
+```toml
+[api]
+title = "My App API"
+version = "1.0.0"                     # your API's version
+servers = ["https://api.example.com"]
+docs_ui = true                        # false removes /api/docs (it loads Scalar from a CDN)
+```
+
+## Export and typed clients
+
+```sh
+navree openapi:export web/openapi.json       # exactly what /api/openapi.json serves
+npx openapi-typescript web/openapi.json -o web/lib/api/schema.d.ts
+```
+
+Re-export after changing routes or types; commit the file if the front end
+builds from it.
+
+## Limits to know
+
+- Query parameters aren't documented (describe them in `description`;
+  register the filter DTO with `m.api_schema`).
+- Bodies are JSON only (no multipart, no CSV schemas); path parameters are
+  always strings.
+- `/api/me/abilities`, `/api/access/*`, `/broadcasting/auth`, `/health/*`
+  and `/metrics` have no schemas; `UserResource` extension fields aren't shown.
+
+## Test
+
+```rust
+#[tokio::test]
+async fn notes_are_documented() {
+    let app = TestApp::builder()
+        .module(ApiModule::from_config())
+        .module(NotesModule)
+        .build()
+        .await;
+    let document = app.client().get("/api/openapi.json").send().await.assert_status(200).json_value();
+    let store = &document["paths"]["/api/v1/notes"]["post"];
+    assert_eq!(store["operationId"], "notes.store");
+    assert_eq!(
+        store["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        json!("#/components/schemas/Note")
+    );
+    app.shutdown().await.unwrap();
+}
+```
+
+## Docs
+
+- https://navree.com/docs/digging-deeper/openapi/
+- https://navree.com/docs/basics/responses/
