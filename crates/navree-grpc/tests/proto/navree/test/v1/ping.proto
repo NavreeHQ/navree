@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package navree.test.v1;
+
+// A small service for the pipeline tests: interceptors, guards, deadlines,
+// errors and the context outgoing calls carry.
+service Ping {
+  rpc Ping(PingRequest) returns (PingReply);
+}
+
+message PingRequest {
+  string message = 1;
+  uint64 sleep_ms = 2;
+}
+
+message PingReply {
+  string message = 1;
+  string request_id = 2;
+  string user_id = 3;
+  string workspace = 4;
+  string authorization = 5;
+}

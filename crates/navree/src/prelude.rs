@@ -92,6 +92,9 @@ pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 #[cfg(feature = "graphql")]
 pub use navree_graphql::{GraphqlModule, ModuleBuilderGraphqlExt as _};
 
+#[cfg(feature = "grpc")]
+pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};
+
 #[cfg(feature = "billing")]
 pub use navree_billing::BillingModule;
 

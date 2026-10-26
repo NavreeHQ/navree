@@ -359,6 +359,24 @@ pub fn validate<T: Validate<Context = ()>>(
     check(value).map_err(|failures| failure::render(&failures, messages, input, root))
 }
 
+/// [`validate`] with the app's [`Messages`] (`ctx`'s, or the defaults
+/// without `ValidationModule`): what [`Valid`] does after deserializing a
+/// body, for values that arrive another way (navree-grpc validates gRPC
+/// messages with it). Fields are keyed by dotted path; rules on the value
+/// as a whole are keyed `input`.
+pub async fn validate_in<T: Validate<Context = ()>>(
+    value: &T,
+    ctx: Option<&AppContext>,
+) -> Result<(), crate::ValidationErrors> {
+    match check(value) {
+        Ok(()) => Ok(()),
+        Err(failures) => {
+            let messages = messages(ctx).await;
+            Err(failure::render(&failures, &messages, None, "input"))
+        }
+    }
+}
+
 /// Runs the garde rules of `value`.
 pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Failure>> {
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)

@@ -132,6 +132,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
         "navree-db", "navree-validation", "navree-access", "navree-auth", "navree-workspace",
     ]),
+    // gRPC: `#[grpc_service]` (navree-macros) expands into its call pipeline;
+    // navree-testing backs `navree_grpc::testing::TestChannel`.
+    rule("navree-grpc", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-testing", "navree-db", "navree-validation",
+    ]),
     // L7: packages built on other packages.
     // Billing: Stripe and Paddle over navree-http-client, billables from
     // navree-auth (users) and navree-workspace (workspaces).
@@ -206,6 +212,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-oauth",
     "navree-flags",
     "navree-graphql",
+    "navree-grpc",
     "navree-billing",
 ];
 

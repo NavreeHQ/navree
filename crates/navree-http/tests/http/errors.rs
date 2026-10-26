@@ -326,3 +326,25 @@ async fn rejections_propagated_with_question_mark_keep_their_status() {
     let body = app.get("/api/things/not-a-number").await.assert_error(400);
     assert!(body["message"].is_string(), "{body}");
 }
+
+#[derive(Debug)]
+struct Missing;
+
+impl std::fmt::Display for Missing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("missing record")
+    }
+}
+
+impl std::error::Error for Missing {}
+
+#[test]
+fn error_mappers_apply_to_the_source_chain_outside_the_pipeline() {
+    use navree_http::ErrorMapper;
+
+    let mappers = [ErrorMapper::new::<Missing>(|_| Some(AppError::not_found()))];
+    let mapped = ErrorMapper::apply(&mappers, &AppError::from(Missing)).expect("mapped");
+    assert_eq!(mapped.status, http::StatusCode::NOT_FOUND);
+    let unrelated = AppError::internal("something else");
+    assert!(ErrorMapper::apply(&mappers, &unrelated).is_none());
+}

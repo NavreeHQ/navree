@@ -381,7 +381,9 @@ impl ErrorMapper {
     }
 
     /// Applies the first matching mapper to `error`'s source chain (what the
-    /// pipeline does with a 500 that has a source).
+    /// pipeline does to every 500 before rendering it; other protocols, such
+    /// as navree-grpc, map their errors the same way). `None` when no mapper
+    /// matches.
     pub fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
         error
             .source
