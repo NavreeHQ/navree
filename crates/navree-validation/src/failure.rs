@@ -15,7 +15,7 @@ use std::fmt::Display;
 use garde::i18n::{I18n, InvalidCreditCard, InvalidEmail, InvalidPhoneNumber, InvalidUrl, IpKind};
 use serde_json::Value;
 
-use crate::{Messages, ValidationErrors};
+use crate::{MessageTranslator, Messages, ValidationErrors};
 
 /// Starts an encoded rule message: `MARK key (SEP name=value)*`.
 const MARK: &str = "\u{1f}navree\u{1f}";
@@ -427,11 +427,13 @@ fn lookup<'a>(input: &'a Value, path: &str) -> Option<&'a Value> {
         })
 }
 
-/// Renders `failures` with `messages`. `input` is the JSON body, when
-/// there is one; `root` names errors about the input as a whole.
+/// Renders `failures` with `messages`, through `translator` when the app
+/// has one. `input` is the JSON body, when there is one; `root` names
+/// errors about the input as a whole.
 pub(crate) fn render(
     failures: &[Failure],
     messages: &Messages,
+    translator: Option<&dyn MessageTranslator>,
     input: Option<&Value>,
     root: &str,
 ) -> ValidationErrors {
@@ -444,7 +446,10 @@ pub(crate) fn render(
         };
         let message = match &failure.rule {
             Rule::Text(text) => {
-                let attribute = messages.attribute(field);
+                let attribute = match translator {
+                    Some(translator) => translator.attribute(messages, field),
+                    None => messages.attribute(field),
+                };
                 text.replace(":attribute", &attribute)
             }
             Rule::Keyed { key, params } => {
@@ -453,7 +458,11 @@ pub(crate) fn render(
                     .iter()
                     .map(|(name, value)| (name.as_str(), value.clone()))
                     .collect();
-                messages.render(field, resolve_key(key, at), &params)
+                let rule = resolve_key(key, at);
+                match translator {
+                    Some(translator) => translator.message(messages, field, rule, &params),
+                    None => messages.render(field, rule, &params),
+                }
             }
         };
         errors.add(field, message);
