@@ -1,0 +1,29 @@
+{% extends "helm/layout.html" %}
+{% import "helm/macros.html" as m %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ resource.label }}</p>
+    <h1>{{ heading }}</h1>
+  </div>
+</div>
+<section class="card form-card">
+  {% if errors_summary %}
+  <div class="flash flash-error" role="alert">
+    <p>Please fix the highlighted fields.</p>
+    {% if general_error %}<p>{{ general_error }}</p>{% endif %}
+  </div>
+  {% elif general_error %}
+  <div class="flash flash-error" role="alert">{{ general_error }}</div>
+  {% endif %}
+  <form method="post" action="{{ action }}{% if multipart %}?_csrf={{ panel.csrf|urlencode }}{% endif %}"{% if multipart %} enctype="multipart/form-data"{% endif %} class="stack" novalidate>
+    <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+    <input type="hidden" name="_tz_offset" value="" data-tz-offset>
+    {% for f in fields %}{{ m.input(f) }}{% endfor %}
+    <div class="form-buttons">
+      <button type="submit" class="btn btn-primary">{{ submit }}</button>
+      <a class="btn btn-ghost" href="{{ cancel_url }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
