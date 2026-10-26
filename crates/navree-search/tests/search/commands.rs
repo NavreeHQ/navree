@@ -261,7 +261,7 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
 
     // Searches keep answering from the live index...
     let found = search.query::<Contact>("lovelace").ids(10).await.unwrap();
-    assert_eq!(found, [ada.clone()]);
+    assert_eq!(found, std::slice::from_ref(&ada));
     // ...and writes keep syncing into it.
     let mut renamed = rows[0].clone().into_active_model();
     renamed.last_name = Set("Byron".into());
@@ -271,7 +271,7 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
     .await;
     support::settle(&app).await;
     let found = search.query::<Contact>("byron").ids(10).await.unwrap();
-    assert_eq!(found, [ada.clone()]);
+    assert_eq!(found, std::slice::from_ref(&ada));
 
     // The staged index holds the rows as they were read; records synced
     // meanwhile are synced again after the swap.
