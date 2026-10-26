@@ -7,6 +7,7 @@ mod access;
 mod conformity;
 mod invitations;
 mod isolation;
+mod isolation_suite;
 mod resolution;
 mod routes;
 mod services;
