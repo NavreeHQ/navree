@@ -2793,6 +2793,7 @@ dependencies = [
  "navree-log",
  "navree-macros",
  "navree-mail",
+ "navree-micro",
  "navree-notify",
  "navree-oauth",
  "navree-observe",
