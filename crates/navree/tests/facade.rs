@@ -55,6 +55,8 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L7
+    assert!(same::<navree::helm::HelmModule, HelmModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.

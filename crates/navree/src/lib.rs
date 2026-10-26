@@ -33,6 +33,7 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //!
 //! A feature also turns on the features of the crates its crate builds on
 //! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
@@ -158,6 +159,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L7
+#[cfg(feature = "helm")]
+pub use navree_helm as helm;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

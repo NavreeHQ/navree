@@ -1,0 +1,28 @@
+{% extends "helm/layout.html" %}
+{% import "helm/macros.html" as m %}
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+</div>
+{% if not resources %}
+<section class="card empty">
+  <h2>No resources yet</h2>
+  <p>Describe an entity once and it appears here with a list, filters, a detail page and forms:</p>
+  <pre class="mono"><code>navree make:resource deals Deal</code></pre>
+  <p class="muted">Then grant <span class="mono">helm.view</span> to the roles that should see the panel.</p>
+</section>
+{% elif not sections %}
+<section class="card empty">
+  <h2>Welcome</h2>
+  <p>Pick a resource from the menu. Metrics marked <span class="mono">on_dashboard()</span> appear here.</p>
+</section>
+{% endif %}
+{% for section in sections %}
+<section class="section" aria-labelledby="s-{{ loop.index }}">
+  <h2 class="section-title" id="s-{{ loop.index }}"><a href="{{ section.url }}">{{ section.label }}</a></h2>
+  <div class="metrics">
+    {% for metric in section.metrics %}{{ m.metric_card(metric, none) }}{% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

@@ -150,7 +150,7 @@ impl MakeReport {
 
     /// Edits the file at `path` with `f` when it exists; adds `hint` otherwise
     /// (or when `f` cannot apply).
-    fn edit_file(
+    pub(crate) fn edit_file(
         &mut self,
         path: &Path,
         f: impl FnOnce(&str) -> Option<Edit>,

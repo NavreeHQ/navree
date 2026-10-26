@@ -14,6 +14,7 @@ use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
 use crate::new_app::{NavreeSource, NewApp, create_app};
 use crate::project::project_root;
+use crate::resource::make_resource;
 
 /// Runs `cli` with `cwd` as the working directory.
 pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
@@ -33,6 +34,13 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let name = Name::parse("module", &args.name)?;
             let root = app_root(cwd)?;
             let report = make_module(&root, &args.path, &name, args.crud, Timestamp::now())?;
+            finish(&root, &report);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::MakeResource(args) => {
+            let module = Name::parse("module", &args.module)?;
+            let root = app_root(cwd)?;
+            let report = make_resource(&root, &args.path, &module, &args.entity)?;
             finish(&root, &report);
             Ok(ExitCode::SUCCESS)
         }
