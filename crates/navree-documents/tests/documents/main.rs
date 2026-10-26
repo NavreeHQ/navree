@@ -3,3 +3,4 @@
 mod support;
 #[cfg(feature = "typst")]
 mod typst;
+mod pdf;
