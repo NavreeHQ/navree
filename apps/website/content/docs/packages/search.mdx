@@ -202,7 +202,9 @@ pub struct Model {
 }
 ```
 
-The derive implements `Searchable` for the module's `Entity`, so you search with the same type your [access rules](/docs/security/authorization/) use (`Contact`). The primary key is always stored; fields without `#[searchable]` stay out of the index. Field values go into the document as serde serializes them, and the entity needs a single-column primary key.
+The derive implements `Searchable` for the module's `Entity`, so you search with the same type your [access rules](/docs/security/authorization/) use (`Contact`). The primary key is always stored; fields without `#[searchable]` stay out of the index, and the entity needs a single-column primary key.
+
+Full-text and embedded fields go into the document as serde serializes them. Filter and sort fields hold the column's database value, the form access rules compare: an enum's stored string (`"closed_won"`, whatever its serde name), a UUID hyphenated, a timestamp in UTC. Filter with those values: `filter("stage", "closed_won")`. A field's column is the field's name, or its `#[sea_orm(column_name = "..")]`.
 
 | Field attribute | Effect |
 |---|---|
@@ -284,7 +286,7 @@ impl Searchable for deal::Entity {
 }
 ```
 
-Return `Ok(None)` to keep a record out of the index (an archived deal, a draft). A record that returns `None` after it was indexed is removed. Only the fields `settings()` declares reach the index. A hand-written `settings()` names its soft-delete and workspace columns itself: `.soft_delete("deleted_at")`, `.workspace("workspace_id")`.
+Return `Ok(None)` to keep a record out of the index (an archived deal, a draft). A record that returns `None` after it was indexed is removed. Only the fields `settings()` declares reach the index. A hand-written `settings()` names its soft-delete and workspace columns itself: `.soft_delete("deleted_at")`, `.workspace("workspace_id")`. Give a filter field the column's database value, as `deal.stage.as_str()` does here, so that [access rules](#access-control) on that column filter in the engine exactly.
 
 When a company is renamed, its deals' documents are stale. Queue them for a re-sync from an [event listener](/docs/digging-deeper/events/), or wherever you rename the company:
 
@@ -343,7 +345,7 @@ Imported 12,480 documents (37 skipped by the document filter).
 | Command | What it does |
 |---|---|
 | `search:import <Name>` | Upserts every row's document. Existing documents are replaced; rows the document filter skips are removed. |
-| `search:import <Name> --fresh` | Builds a new index, imports into it and swaps it in. Searches keep working on the old index until the swap. |
+| `search:import <Name> --fresh` | Builds a new index, imports into it and swaps it in. Searches keep working on the old index until the swap, and records synced while the import runs are synced again after it, so no change is lost. |
 | `search:import --all` | Every registered index (with `--fresh` too). |
 | `search:flush <Name>` | Removes every document from the index. |
 | `search:settings [<Name>]` | Pushes index settings (fields, synonyms, stop words) to the engine; every index without a name. |
@@ -437,7 +439,7 @@ An empty query text matches every document, so a filtered empty query is a fast 
 
 ### Access control
 
-`accessible(scope)` takes the `Accessible<E, Read>` extractor from [authorization](/docs/security/authorization/). Navree turns the user's ability conditions into engine filters when they only use filterable fields (the usual `owner_id = me` rule becomes `filter("owner_id", me)`), with the same rule order as SQL lists, so pages stay full and totals stay exact. Conditions on fields the index doesn't hold are applied when the rows are loaded, with the same SQL filter as `Accessible` lists: records the user can't read are dropped from the page, and its total can still count them. Mark the columns your rules use as `filter` to keep totals exact.
+`accessible(scope)` takes the `Accessible<E, Read>` extractor from [authorization](/docs/security/authorization/). Navree turns the user's ability conditions into engine filters when they only use filterable fields on boolean, number, string, UUID or enum columns (the usual `owner_id = me` rule becomes `filter("owner_id", me)`), with the same rule order and the same comparisons as SQL lists, so pages stay full and totals stay exact. Other conditions are applied when the rows are loaded, with the same SQL filter as `Accessible` lists: conditions on fields the index doesn't hold, and on date and time columns, which the index keeps in milliseconds while the database compares finer. Records the user can't read are then dropped from the page, and its total can still count them. Mark the columns your rules use as `filter` to keep totals exact.
 
 ### Hits and highlights
 
