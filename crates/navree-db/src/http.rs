@@ -69,13 +69,11 @@ async fn unit_of_work(
     request.extensions_mut().insert(uow.clone());
 
     // The task keeps the request's telemetry context (request id, trace).
-    let task = ctx
-        .tracker()
-        .spawn(TelemetryContext::propagate(async move {
-            // After-commit hooks run outside the scope: by then it is finished.
-            let response = uow.scope(next.run(request)).await;
-            finish(&uow, response).await
-        }));
+    let task = ctx.tracker().spawn(TelemetryContext::propagate(async move {
+        // After-commit hooks run outside the scope: by then it is finished.
+        let response = uow.scope(next.run(request)).await;
+        finish(&uow, response).await
+    }));
     match task.await {
         Ok(response) => response,
         Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),

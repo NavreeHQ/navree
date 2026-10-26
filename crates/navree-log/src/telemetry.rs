@@ -46,9 +46,7 @@ pub(crate) fn clear_background(telemetry: &Telemetry) {
 fn target() -> Option<Telemetry> {
     let current = TelemetryContext::with_current(|context| {
         let telemetry = context.telemetry();
-        telemetry
-            .enabled(EventKind::Log)
-            .then(|| telemetry.clone())
+        telemetry.enabled(EventKind::Log).then(|| telemetry.clone())
     })
     .flatten();
     current.or_else(|| {
@@ -132,8 +130,8 @@ mod tests {
     fn background_lines_go_to_the_background_registry_until_cleared() {
         let recorder = TelemetryRecorder::new();
         let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
-        let subscriber = tracing_subscriber::registry()
-            .with(TelemetryLayer::new(Redactor::new(&["token"])));
+        let subscriber =
+            tracing_subscriber::registry().with(TelemetryLayer::new(Redactor::new(&["token"])));
         tracing::subscriber::with_default(subscriber, || {
             set_background(telemetry.clone());
             tracing::info!(token = "abc", "in the background");
@@ -154,6 +152,9 @@ mod tests {
             ["in the background", "still the background registry"],
             "{logs:?}"
         );
-        assert_eq!(logs[0].fields.get("token"), Some(&Value::from("[redacted]")));
+        assert_eq!(
+            logs[0].fields.get("token"),
+            Some(&Value::from("[redacted]"))
+        );
     }
 }

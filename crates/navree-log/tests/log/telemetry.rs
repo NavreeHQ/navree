@@ -69,7 +69,9 @@ fn lines_outside_a_context_go_nowhere_without_a_background_registry() {
 fn a_sink_that_does_not_want_logs_gets_none() {
     let recorder = TelemetryRecorder::only([EventKind::RequestHandled]);
     let context = TelemetryContext::new(Telemetry::with_sinks(vec![Arc::new(recorder.clone())]));
-    capture(&pretty(), |_| context.sync_scope(|| tracing::info!("ignored")));
+    capture(&pretty(), |_| {
+        context.sync_scope(|| tracing::info!("ignored"))
+    });
     assert!(recorder.is_empty());
 }
 

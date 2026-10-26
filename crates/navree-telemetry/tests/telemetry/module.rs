@@ -53,7 +53,10 @@ async fn without_a_sink_the_registry_is_disabled_and_absent() {
     assert!(!emitter.telemetry.is_active());
     assert!(app.ctx().try_get::<Telemetry>().await.is_none());
     assert!(
-        !app.ctx().modules().iter().any(|m| m.name.contains("TelemetryModule")),
+        !app.ctx()
+            .modules()
+            .iter()
+            .any(|m| m.name.contains("TelemetryModule")),
         "no sink, no module"
     );
     app.shutdown().await.unwrap();
@@ -84,7 +87,10 @@ struct StoringSink {
 
 impl Injectable for StoringSink {
     fn dependencies() -> Vec<ProviderKey> {
-        vec![ProviderKey::of::<Emitter>(), ProviderKey::of::<Arc<AtomicUsize>>()]
+        vec![
+            ProviderKey::of::<Emitter>(),
+            ProviderKey::of::<Arc<AtomicUsize>>(),
+        ]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
@@ -163,7 +169,12 @@ async fn several_modules_share_one_registry() {
         .unwrap();
     let telemetry = app.ctx().get::<Telemetry>().await.unwrap();
     assert!(telemetry.enabled(EventKind::QueryExecuted));
-    app.ctx().get::<Emitter>().await.unwrap().telemetry.emit(query());
+    app.ctx()
+        .get::<Emitter>()
+        .await
+        .unwrap()
+        .telemetry
+        .emit(query());
     assert_eq!(first.len(), 1);
     assert_eq!(second.len(), 1);
     let modules = app.ctx().modules();

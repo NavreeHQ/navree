@@ -64,6 +64,4 @@ pub use module::{ModuleBuilderTelemetryExt, TelemetryModule};
 pub use recorder::TelemetryRecorder;
 pub use registry::Telemetry;
 pub use sink::{Interest, TelemetrySink};
-pub use trace::{
-    InvalidId, SpanId, SpanLink, TraceContext, TraceId, TracePolicy, sample_trace,
-};
+pub use trace::{InvalidId, SpanId, SpanLink, TraceContext, TraceId, TracePolicy, sample_trace};

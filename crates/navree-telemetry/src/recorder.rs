@@ -8,10 +8,9 @@ use navree_kernel::{Module, ModuleBuilder};
 use tokio::sync::Notify;
 
 use crate::{
-    CacheEvent, EventKind, ExceptionReported, HttpClientRequest, Interest, JobFailed,
-    JobProcessed, LogRecord, MailSent, ModuleBuilderTelemetryExt, NotificationSent,
-    QueryExecuted, RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
-    TelemetrySink,
+    CacheEvent, EventKind, ExceptionReported, HttpClientRequest, Interest, JobFailed, JobProcessed,
+    LogRecord, MailSent, ModuleBuilderTelemetryExt, NotificationSent, QueryExecuted,
+    RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetryRecord, TelemetrySink,
 };
 
 /// A sink that keeps every record in memory, for assertions in tests.

@@ -35,7 +35,11 @@ impl Received {
 }
 
 /// OTLP/HTTP: `POST /v1/traces` with a protobuf body.
-async fn http_export(State(received): State<Received>, headers: HeaderMap, body: Bytes) -> impl axum::response::IntoResponse {
+async fn http_export(
+    State(received): State<Received>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl axum::response::IntoResponse {
     let request = ExportTraceServiceRequest::decode(body).expect("an OTLP trace request");
     received.0.lock().unwrap().push((headers, request));
     (
@@ -46,7 +50,11 @@ async fn http_export(State(received): State<Received>, headers: HeaderMap, body:
 
 /// OTLP/gRPC: the `TraceService/Export` call over HTTP/2, with gRPC's
 /// length-prefixed messages and a `grpc-status` trailer.
-async fn grpc_export(State(received): State<Received>, headers: HeaderMap, body: Bytes) -> http::Response<Body> {
+async fn grpc_export(
+    State(received): State<Received>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> http::Response<Body> {
     assert!(body.len() >= 5, "a gRPC frame");
     let request = ExportTraceServiceRequest::decode(&body[5..]).expect("an OTLP trace request");
     received.0.lock().unwrap().push((headers, request));
@@ -155,7 +163,10 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn string_attribute(attributes: &[opentelemetry_proto::tonic::common::v1::KeyValue], key: &str) -> Option<String> {
+fn string_attribute(
+    attributes: &[opentelemetry_proto::tonic::common::v1::KeyValue],
+    key: &str,
+) -> Option<String> {
     attributes.iter().find(|kv| kv.key == key).and_then(|kv| {
         match kv.value.as_ref()?.value.as_ref()? {
             AnyValue::StringValue(text) => Some(text.clone()),

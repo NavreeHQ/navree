@@ -235,17 +235,15 @@ fn install_query_log(
     let slow = (slow_query_ms > 0).then(|| Duration::from_millis(slow_query_ms));
     conn.set_metric_callback(move |info| {
         let sql = info.statement.sql.as_str();
-        report
-            .telemetry
-            .emit_with(EventKind::QueryExecuted, || {
-                TelemetryEvent::QueryExecuted(QueryExecuted {
-                    sql: sql.to_owned(),
-                    duration: info.elapsed,
-                    rows: None,
-                    connection: report.connection.clone(),
-                    failed: info.failed,
-                })
-            });
+        report.telemetry.emit_with(EventKind::QueryExecuted, || {
+            TelemetryEvent::QueryExecuted(QueryExecuted {
+                sql: sql.to_owned(),
+                duration: info.elapsed,
+                rows: None,
+                connection: report.connection.clone(),
+                failed: info.failed,
+            })
+        });
         let elapsed_ms = info.elapsed.as_secs_f64() * 1000.0;
         if slow.is_some_and(|slow| info.elapsed >= slow) {
             tracing::warn!(

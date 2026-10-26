@@ -9,8 +9,7 @@ use bytes::BytesMut;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use navree_config::ConfigSection;
 use navree_telemetry::{
-    EventKind, HttpClientRequest, SpanId, Telemetry, TelemetryContext, TelemetryEvent,
-    TraceContext,
+    EventKind, HttpClientRequest, SpanId, Telemetry, TelemetryContext, TelemetryEvent, TraceContext,
 };
 use tokio::time::Instant;
 use url::Url;

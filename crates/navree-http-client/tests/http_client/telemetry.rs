@@ -5,9 +5,7 @@ use std::sync::Arc;
 use http::Method;
 use navree_http_client::{FakeResponse, HttpClient, HttpClientModule, HttpClientOptions};
 use navree_kernel::Navree;
-use navree_telemetry::{
-    EventKind, Telemetry, TelemetryContext, TelemetryRecorder, TraceContext,
-};
+use navree_telemetry::{EventKind, Telemetry, TelemetryContext, TelemetryRecorder, TraceContext};
 
 fn recording() -> (Telemetry, TelemetryRecorder) {
     let recorder = TelemetryRecorder::new();
@@ -27,7 +25,11 @@ async fn requests_inside_a_trace_carry_its_traceparent() {
 
     context
         .scope(async {
-            client.get("https://api.example.com/ping").send().await.unwrap();
+            client
+                .get("https://api.example.com/ping")
+                .send()
+                .await
+                .unwrap();
         })
         .await;
 
@@ -45,13 +47,21 @@ async fn requests_inside_a_trace_carry_its_traceparent() {
 async fn an_unsampled_trace_is_propagated_unsampled() {
     let (client, server) = HttpClient::fake();
     server.on(Method::GET, "*", FakeResponse::new(200));
-    let context = TelemetryContext::new(Telemetry::disabled()).with_trace(TraceContext::root(false));
+    let context =
+        TelemetryContext::new(Telemetry::disabled()).with_trace(TraceContext::root(false));
     context
         .scope(async {
-            client.get("https://api.example.com/ping").send().await.unwrap();
+            client
+                .get("https://api.example.com/ping")
+                .send()
+                .await
+                .unwrap();
         })
         .await;
-    let traceparent = server.recorded()[0].header("traceparent").unwrap().to_owned();
+    let traceparent = server.recorded()[0]
+        .header("traceparent")
+        .unwrap()
+        .to_owned();
     assert!(traceparent.ends_with("-00"), "{traceparent}");
 }
 
@@ -59,7 +69,11 @@ async fn an_unsampled_trace_is_propagated_unsampled() {
 async fn without_a_trace_no_header_is_sent() {
     let (client, server) = HttpClient::fake();
     server.on(Method::GET, "*", FakeResponse::new(200));
-    client.get("https://api.example.com/ping").send().await.unwrap();
+    client
+        .get("https://api.example.com/ping")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(server.recorded()[0].header("traceparent"), None);
 }
 
@@ -109,7 +123,10 @@ async fn finished_requests_are_reported_without_their_query_string() {
     assert_eq!(request.status, Some(200));
     assert_eq!(request.attempts, 1);
     assert_eq!(request.error, None);
-    let sent = server.recorded()[0].header("traceparent").unwrap().to_owned();
+    let sent = server.recorded()[0]
+        .header("traceparent")
+        .unwrap()
+        .to_owned();
     assert_eq!(
         request.span_id.map(|id| id.to_string()).as_deref(),
         sent.split('-').nth(2),
@@ -146,7 +163,11 @@ async fn a_client_without_telemetry_reports_to_the_current_context() {
     server.on(Method::GET, "*", FakeResponse::new(204));
     TelemetryContext::new(telemetry)
         .scope(async {
-            client.get("https://api.example.com/ping").send().await.unwrap();
+            client
+                .get("https://api.example.com/ping")
+                .send()
+                .await
+                .unwrap();
         })
         .await;
     assert_eq!(recorder.http_client_requests()[0].status, Some(204));

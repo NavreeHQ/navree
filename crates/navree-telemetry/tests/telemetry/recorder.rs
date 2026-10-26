@@ -109,7 +109,10 @@ fn typed_accessors_return_each_kind() {
         telemetry.emit(event);
     }
     assert_eq!(recorder.len(), 11);
-    assert_eq!(recorder.requests()[0].route.as_deref(), Some("/api/v1/deals/{id}"));
+    assert_eq!(
+        recorder.requests()[0].route.as_deref(),
+        Some("/api/v1/deals/{id}")
+    );
     assert_eq!(recorder.queries()[0].sql, "SELECT 1");
     assert_eq!(recorder.jobs_processed()[0].job_type, "mail.send");
     assert_eq!(recorder.jobs_failed()[0].error, "smtp down");

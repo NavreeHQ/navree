@@ -154,9 +154,9 @@ pub(crate) fn span_data(span: RecordedSpan, scope: &InstrumentationScope) -> Spa
         .collect();
     SpanData {
         span_context: context(span.trace_id, span.span_id, false),
-        parent_span_id: span
-            .parent_span_id
-            .map_or(OtelSpanId::INVALID, |id| OtelSpanId::from_bytes(id.to_bytes())),
+        parent_span_id: span.parent_span_id.map_or(OtelSpanId::INVALID, |id| {
+            OtelSpanId::from_bytes(id.to_bytes())
+        }),
         parent_span_is_remote: span.kind == SpanKind::Server && span.parent_span_id.is_some(),
         span_kind: match span.kind {
             SpanKind::Server => OtelSpanKind::Server,

@@ -60,7 +60,10 @@ async fn notifications_in_a_unit_of_work_are_reported_after_commit() {
         .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
         .await
         .unwrap();
-    assert!(recorder.notifications().is_empty(), "nothing before the commit");
+    assert!(
+        recorder.notifications().is_empty(),
+        "nothing before the commit"
+    );
     uow.commit().await.unwrap();
     assert_eq!(channels(&recorder), ["broadcast", "database", "mail"]);
 }

@@ -85,7 +85,11 @@ impl RecordedSpan {
     /// sampled trace, or its kind is not a span (logs, exceptions,
     /// notifications).
     pub fn from_record(record: &TelemetryRecord) -> Option<RecordedSpan> {
-        let trace = record.context.trace.as_ref().filter(|trace| trace.sampled)?;
+        let trace = record
+            .context
+            .trace
+            .as_ref()
+            .filter(|trace| trace.sampled)?;
         let mut attributes = BTreeMap::new();
         let span = match &record.event {
             TelemetryEvent::RequestHandled(request) => {
@@ -139,7 +143,13 @@ impl RecordedSpan {
                     },
                     _ => SpanStatus::Unset,
                 };
-                let mut span = child_span(trace, call.method.clone(), SpanKind::Client, call.duration, status);
+                let mut span = child_span(
+                    trace,
+                    call.method.clone(),
+                    SpanKind::Client,
+                    call.duration,
+                    status,
+                );
                 if let Some(id) = call.span_id {
                     span.span_id = id;
                 }
@@ -240,7 +250,8 @@ impl RecordedSpan {
         };
         let end = record.at;
         let start = end
-            - chrono::Duration::from_std(span.duration).unwrap_or_else(|_| chrono::Duration::zero());
+            - chrono::Duration::from_std(span.duration)
+                .unwrap_or_else(|_| chrono::Duration::zero());
         Some(RecordedSpan {
             name: span.name,
             kind: span.kind,
@@ -315,7 +326,9 @@ fn job_attributes(attributes: &mut BTreeMap<String, Value>, queue: &str, id: &st
 fn host_of(url: &str) -> Option<&str> {
     let rest = url.split_once("://")?.1;
     let authority = rest.split(['/', '?', '#']).next()?;
-    let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
     let host = match host.strip_prefix('[') {
         Some(v6) => v6.split(']').next()?,
         None => host.split(':').next()?,
@@ -370,7 +383,10 @@ mod tests {
 
     #[test]
     fn hosts_are_read_from_urls() {
-        assert_eq!(host_of("https://api.example.com/v1"), Some("api.example.com"));
+        assert_eq!(
+            host_of("https://api.example.com/v1"),
+            Some("api.example.com")
+        );
         assert_eq!(host_of("http://127.0.0.1:8080/x"), Some("127.0.0.1"));
         assert_eq!(host_of("http://[::1]:80/"), Some("::1"));
         assert_eq!(host_of("not a url"), None);

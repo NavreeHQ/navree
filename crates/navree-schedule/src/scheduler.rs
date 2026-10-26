@@ -302,7 +302,9 @@ impl Scheduler {
         if let Some(trace) = self.policy.start(None, None) {
             context = context.with_trace(trace);
         }
-        let run = context.clone().scope(execute(task.clone(), app.clone(), tick));
+        let run = context
+            .clone()
+            .scope(execute(task.clone(), app.clone(), tick));
         let handle = app.tracker().spawn(async move {
             // Released when the run ends, even if this tick is dropped meanwhile.
             let _overlap_guard = overlap_guard;

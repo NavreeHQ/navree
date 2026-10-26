@@ -205,9 +205,12 @@ pub(crate) async fn request_context(
 pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
     let request_id = request_id_of(&request);
     let telemetry = Telemetry::current();
-    let request_info = telemetry
-        .enabled(EventKind::ExceptionReported)
-        .then(|| (request.method().to_string(), request.uri().path().to_owned()));
+    let request_info = telemetry.enabled(EventKind::ExceptionReported).then(|| {
+        (
+            request.method().to_string(),
+            request.uri().path().to_owned(),
+        )
+    });
     match AssertUnwindSafe(next.run(request)).catch_unwind().await {
         Ok(response) => response,
         Err(payload) => {
