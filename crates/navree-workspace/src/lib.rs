@@ -70,12 +70,16 @@ mod isolation;
 mod members;
 mod migration;
 mod module;
+mod org_role;
 mod resolve;
 mod role;
 mod tenant;
 mod workspaces;
 
-pub use config::{InvitationOptions, Isolation, ResolverKind, RoleOptions, WorkspaceConfig};
+pub use config::{
+    InvitationOptions, Isolation, OrgRoleOptions, OrganizationOptions, PartitionOptions,
+    ResolverKind, RoleOptions, WorkspaceConfig,
+};
 pub use controller::{
     AcceptInvitationInput, AcceptedInvitationResource, AddMemberInput, ChangeRoleInput,
     CreateWorkspaceInput, InvitationController, InvitationResource, InviteInput, MemberResource,
@@ -92,6 +96,7 @@ pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};
 pub use migration::WORKSPACE_MIGRATIONS;
 pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
+pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use tenant::WorkspaceDatabases;
 pub use workspaces::{MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify};
