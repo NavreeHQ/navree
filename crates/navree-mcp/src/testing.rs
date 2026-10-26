@@ -11,7 +11,7 @@ use bytes::{Buf, Bytes};
 use http::header::{ACCEPT, ORIGIN};
 use http_body_util::BodyExt;
 use navree_testing::{TestClient, TestRequest, TestResponse};
-use rmcp::model::{Prompt, Resource, ResourceTemplate, Tool};
+use rmcp::model::{Prompt, ProtocolVersion, Resource, ResourceTemplate, Tool};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
@@ -42,6 +42,12 @@ const PROTOCOL_VERSION: &str = "2025-11-25";
 /// accept JSON and SSE answers; notifications that arrive on a request's
 /// SSE stream (progress, list changes) are kept for
 /// [`notifications`](McpTestClient::notifications).
+///
+/// It speaks protocol `2025-11-25` (sessions) by default. With
+/// [`protocol_version("2026-07-28")`](McpTestClient::protocol_version) it
+/// speaks the stateless protocol instead: `server/discover` in place of the
+/// handshake, no session, and the `_meta` fields and `Mcp-Method` /
+/// `Mcp-Name` headers on every request.
 pub struct McpTestClient {
     client: TestClient,
     path: String,
@@ -51,6 +57,7 @@ pub struct McpTestClient {
     server: Value,
     next_id: AtomicI64,
     notifications: Arc<Mutex<Vec<Value>>>,
+    subscriptions: Mutex<Vec<String>>,
 }
 
 /// A JSON-RPC answer: a result or an error.
@@ -96,6 +103,7 @@ impl McpTestClient {
             server: Value::Null,
             next_id: AtomicI64::new(1),
             notifications: Arc::default(),
+            subscriptions: Mutex::default(),
         }
     }
 
@@ -113,21 +121,33 @@ impl McpTestClient {
         self
     }
 
-    /// Asks for another protocol version in [`initialize`](McpTestClient::initialize)
-    /// (default `2025-11-25`).
+    /// Speaks another protocol version (default `2025-11-25`): an older one
+    /// is asked for in [`initialize`](McpTestClient::initialize); `2026-07-28`
+    /// or later is the stateless protocol.
     pub fn protocol_version(mut self, version: impl Into<String>) -> Self {
         self.protocol_version = version.into();
         self
     }
 
+    /// Whether the client speaks the stateless protocol (2026-07-28 and
+    /// later: no handshake, no session).
+    pub fn is_stateless(&self) -> bool {
+        self.protocol_version.as_str() >= ProtocolVersion::NO_INITIALIZE.as_str()
+    }
+
     /// Performs the handshake (`initialize`, then
-    /// `notifications/initialized`) and keeps the session id.
+    /// `notifications/initialized`) and keeps the session id. On the
+    /// stateless protocol, asks `server/discover` instead.
     ///
     /// # Panics
     ///
     /// When the server refuses the handshake (a 401 for a guest, for
     /// example).
     pub async fn initialize(mut self) -> Self {
+        if self.is_stateless() {
+            self.server = self.request("server/discover", json!({})).await.result();
+            return self;
+        }
         let message = json!({
             "jsonrpc": "2.0",
             "id": 0,
@@ -165,12 +185,16 @@ impl McpTestClient {
     }
 
     /// The `initialize` result: `serverInfo`, `capabilities`,
-    /// `instructions`, `protocolVersion`.
+    /// `instructions`, `protocolVersion`. On the stateless protocol, the
+    /// `server/discover` result: `supportedVersions`, `capabilities`,
+    /// `instructions` and `_meta["io.modelcontextprotocol/serverInfo"]`.
     pub fn server_info(&self) -> &Value {
         &self.server
     }
 
-    /// Sends a request and returns its answer.
+    /// Sends a request and returns its answer. On the stateless protocol,
+    /// the request's `_meta` gets the protocol version, client info and
+    /// capabilities.
     ///
     /// # Panics
     ///
@@ -178,6 +202,7 @@ impl McpTestClient {
     pub async fn request(&self, method: &str, params: Value) -> McpResponse {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut message = json!({ "jsonrpc": "2.0", "id": id, "method": method });
+        let params = self.with_meta(params);
         if !params.is_null() {
             message["params"] = params;
         }
@@ -258,8 +283,18 @@ impl McpTestClient {
         ResourceResult::new(self.request("resources/read", json!({ "uri": uri })).await)
     }
 
-    /// Subscribes to the resource at `uri`.
+    /// Subscribes to the resource at `uri` (`resources/subscribe`). On the
+    /// stateless protocol, which has no such request, the URI joins the
+    /// resources the next [`listen`](McpTestClient::listen) stream asks for,
+    /// and the answer is an empty result.
     pub async fn subscribe(&self, uri: &str) -> McpResponse {
+        if self.is_stateless() {
+            self.subscriptions
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(uri.to_owned());
+            return McpResponse::Result(json!({}));
+        }
         self.request("resources/subscribe", json!({ "uri": uri }))
             .await
     }
@@ -286,23 +321,48 @@ impl McpTestClient {
     }
 
     /// Opens the session's notification stream (`GET`), for messages the
-    /// server starts (resource updates, list changes).
+    /// server starts (resource updates, list changes). On the stateless
+    /// protocol, opens a `subscriptions/listen` stream for every list change
+    /// and the resources passed to [`subscribe`](McpTestClient::subscribe).
     ///
     /// # Panics
     ///
-    /// Without a session, or when the server refuses the stream.
+    /// Without a session (call `initialize` first), or when the server
+    /// refuses the stream.
     pub async fn listen(&self) -> NotificationStream {
-        let session = self
-            .session_id
-            .clone()
-            .expect("listen needs a session: call initialize first");
-        let response = self
-            .prepare(self.client.get(&self.path))
-            .header(ACCEPT, "text/event-stream")
-            .header("mcp-session-id", session)
-            .header("mcp-protocol-version", self.protocol_version.clone())
-            .send_stream()
-            .await;
+        let response = if self.is_stateless() {
+            let resources = self
+                .subscriptions
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+            let message = json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": "subscriptions/listen",
+                "params": self.with_meta(json!({
+                    "notifications": {
+                        "toolsListChanged": true,
+                        "promptsListChanged": true,
+                        "resourcesListChanged": true,
+                        "resourceSubscriptions": resources,
+                    },
+                })),
+            });
+            self.post_request(&message).send_stream().await
+        } else {
+            let session = self
+                .session_id
+                .clone()
+                .expect("listen needs a session: call initialize first");
+            self.prepare(self.client.get(&self.path))
+                .header(ACCEPT, "text/event-stream")
+                .header("mcp-session-id", session)
+                .header("mcp-protocol-version", self.protocol_version.clone())
+                .send_stream()
+                .await
+        };
         assert_eq!(
             response.status(),
             200,
@@ -314,7 +374,8 @@ impl McpTestClient {
         }
     }
 
-    /// Ends the session (`DELETE`); returns the HTTP status.
+    /// Ends the session (`DELETE`); returns the HTTP status. The stateless
+    /// protocol has no session to end.
     pub async fn close(&self) -> u16 {
         let mut request = self.prepare(self.client.delete(&self.path));
         if let Some(session) = &self.session_id {
@@ -334,6 +395,13 @@ impl McpTestClient {
     }
 
     async fn post(&self, message: &Value) -> TestResponse {
+        self.post_request(message).send().await
+    }
+
+    /// `POST` of `message` with the session's headers, or on the stateless
+    /// protocol the standard ones (`MCP-Protocol-Version`, `Mcp-Method` and,
+    /// for named requests, `Mcp-Name`).
+    fn post_request(&self, message: &Value) -> TestRequest {
         let mut request = self
             .prepare(self.client.post(&self.path))
             .header(ACCEPT, "application/json, text/event-stream")
@@ -342,8 +410,52 @@ impl McpTestClient {
             request = request
                 .header("mcp-session-id", session.clone())
                 .header("mcp-protocol-version", self.protocol_version.clone());
+        } else if self.is_stateless() {
+            request = request.header("mcp-protocol-version", self.protocol_version.clone());
+            if let Some(method) = message["method"].as_str() {
+                request = request.header("mcp-method", method.to_owned());
+                let key = match method {
+                    "tools/call" | "prompts/get" => Some("name"),
+                    "resources/read" | "resources/subscribe" | "resources/unsubscribe" => {
+                        Some("uri")
+                    }
+                    _ => None,
+                };
+                if let Some(name) = key.and_then(|key| message["params"][key].as_str()) {
+                    request = request.header("mcp-name", header_value(name));
+                }
+            }
         }
-        request.send().await
+        request
+    }
+
+    /// `params` with the stateless protocol's `_meta` fields (protocol
+    /// version, client info and capabilities) merged in; unchanged on a
+    /// session.
+    fn with_meta(&self, params: Value) -> Value {
+        if !self.is_stateless() {
+            return params;
+        }
+        let mut params = match params {
+            Value::Null => json!({}),
+            params => params,
+        };
+        if let Some(object) = params.as_object_mut() {
+            let meta = object.entry("_meta").or_insert_with(|| json!({}));
+            if let Some(meta) = meta.as_object_mut() {
+                meta.insert(
+                    "io.modelcontextprotocol/protocolVersion".to_owned(),
+                    json!(self.protocol_version),
+                );
+                meta.insert(
+                    "io.modelcontextprotocol/clientInfo".to_owned(),
+                    json!({ "name": "navree-test", "version": env!("CARGO_PKG_VERSION") }),
+                );
+                meta.entry("io.modelcontextprotocol/clientCapabilities")
+                    .or_insert_with(|| json!({}));
+            }
+        }
+        params
     }
 
     /// The answer to request `id` in `response` (JSON or SSE), keeping the
@@ -374,6 +486,19 @@ impl McpTestClient {
             }
         }
         answer.unwrap_or_else(|| panic!("no answer to request {id} in {}", response.text()))
+    }
+}
+
+/// `value` as a standard MCP header value: as it is when it is printable
+/// ASCII without surrounding whitespace, else `=?base64?…?=`.
+fn header_value(value: &str) -> String {
+    let plain = value.bytes().all(|byte| (0x20..=0x7e).contains(&byte))
+        && !value.starts_with([' ', '\t'])
+        && !value.ends_with([' ', '\t']);
+    if plain {
+        value.to_owned()
+    } else {
+        format!("=?base64?{}?=", STANDARD.encode(value))
     }
 }
 
@@ -755,5 +880,13 @@ mod tests {
         assert_eq!(at_path(&value, "data.0.title"), Some(&json!("Acme")));
         assert_eq!(at_path(&value, "data.1.title"), None);
         assert_eq!(at_path(&value, ""), Some(&value));
+    }
+
+    #[test]
+    fn header_values_fall_back_to_base64() {
+        assert_eq!(header_value("list_deals"), "list_deals");
+        assert_eq!(header_value("crm://deals/1"), "crm://deals/1");
+        assert_eq!(header_value("café"), "=?base64?Y2Fmw6k=?=");
+        assert_eq!(header_value(" padded"), "=?base64?IHBhZGRlZA==?=");
     }
 }

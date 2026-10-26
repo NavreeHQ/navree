@@ -10,5 +10,6 @@ mod notifications;
 mod observability;
 mod prompts;
 mod resources;
+mod stateless;
 mod stdio;
 mod tools;
