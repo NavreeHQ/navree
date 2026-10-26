@@ -1,11 +1,20 @@
 //! Tools: lists filtered by access, typed and validated arguments, results,
 //! errors, record checks and the call's unit of work.
 
+use std::sync::Arc;
+
+use navree_contracts::AuditSink;
+use navree_http::{AppError, ModuleBuilderHttpExt};
+use navree_kernel::{Module, ModuleBuilder};
+use navree_macros::{injectable, mcp_server};
+use navree_mcp::ModuleBuilderMcpExt;
 use navree_mcp::testing::McpTestClient;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{DealResource, all_deals, app, give_role, insert_deal, names, user};
+use crate::support::{
+    DealResource, RecordingAudit, all_deals, app, builder, give_role, insert_deal, names, user,
+};
 
 #[tokio::test]
 async fn initialize_describes_the_server() {
@@ -271,4 +280,74 @@ async fn token_abilities_limit_what_a_client_sees() {
     assert!(tools.contains(&"list_deals".to_owned()), "{tools:?}");
     assert!(!tools.contains(&"move_deal".to_owned()), "{tools:?}");
     assert!(!tools.contains(&"rename_deal".to_owned()), "{tools:?}");
+}
+
+/// The error a [`LockedMcp`] tool fails with, mapped by its module.
+#[derive(Debug)]
+pub struct PipelineLocked;
+
+impl std::fmt::Display for PipelineLocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the pipeline is locked until the quarter closes")
+    }
+}
+
+impl std::error::Error for PipelineLocked {}
+
+/// A server whose tool fails with an error the app maps.
+#[injectable]
+pub struct LockedMcp;
+
+#[mcp_server]
+#[authenticated]
+impl LockedMcp {
+    /// Fails with `PipelineLocked`, which the module maps to a 409.
+    #[mcp_tool]
+    async fn close_quarter(&self) -> Result<String, AppError> {
+        Err(AppError::internal(PipelineLocked))
+    }
+}
+
+pub struct LockedModule;
+
+impl Module for LockedModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.mcp_server::<LockedMcp>()
+            .map_error::<PipelineLocked>(|_| Some(AppError::conflict("The pipeline is locked")));
+    }
+}
+
+#[tokio::test]
+async fn the_apps_error_mappers_apply_to_tool_errors() {
+    let app = builder().module(LockedModule).build().await;
+    let mcp = McpTestClient::new(app.acting_as(user())).initialize().await;
+    mcp.call_tool("close_quarter", json!({}))
+        .await
+        .assert_error(409, "The pipeline is locked");
+}
+
+#[tokio::test]
+async fn refusals_are_audited_as_access_denied() {
+    let audit = RecordingAudit::default();
+    let app = builder()
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    let (owner, rep) = (user(), user());
+    let theirs = insert_deal(&app, owner.user_id, "Theirs", "lead").await;
+    let mcp = McpTestClient::new(app.acting_as(rep)).initialize().await;
+
+    mcp.call_tool("move_deal", json!({ "deal_id": theirs.id, "stage": "won" }))
+        .await
+        .assert_error(403, "Forbidden");
+    assert_eq!(audit.actions(), ["access.denied"]);
+
+    // A 404 is not a refusal.
+    mcp.call_tool(
+        "move_deal",
+        json!({ "deal_id": Uuid::now_v7(), "stage": "won" }),
+    )
+    .await
+    .assert_error(404, None);
+    assert_eq!(audit.actions(), ["access.denied"]);
 }
