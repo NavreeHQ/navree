@@ -17,9 +17,10 @@ use navree_contracts::{
     AuditEntry, AuditSink, AuthState, AuthVia, BoxError, BoxFuture, Principal, RequestId,
 };
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow};
+use navree_events::{Event, EventBus, EventsModule};
 use navree_grpc::{
-    GrpcChannels, GrpcModule, ModuleBuilderGrpcExt, Request, Response, Status, Streaming,
-    Valid, grpc_service,
+    GrpcChannels, GrpcModule, ModuleBuilderGrpcExt, Request, Response, Status, Streaming, Valid,
+    grpc_service,
 };
 use navree_http::{AppError, Authenticator, CurrentPrincipal, Guard, Result};
 use navree_kernel::{Module, ModuleBuilder};
@@ -29,7 +30,6 @@ use sea_orm::sea_query::{ColumnDef, Table};
 use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
 use sea_orm_migration::async_trait::async_trait;
 use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
-use navree_events::{Event, EventBus, EventsModule};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_stream::{Stream, StreamExt, wrappers::BroadcastStream};
@@ -127,7 +127,9 @@ pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
         return;
     };
     rules.can(READ, "Deal").when(field("owner_id").eq(user.id));
-    rules.can(UPDATE, "Deal").when(field("owner_id").eq(user.id));
+    rules
+        .can(UPDATE, "Deal")
+        .when(field("owner_id").eq(user.id));
 }
 
 /// The access options of the test apps.
@@ -366,8 +368,7 @@ impl Ping for PingGrpc {
             _ => {}
         }
         if let Some(client) = message.strip_prefix("call:") {
-            let mut upstream =
-                pb::ping::ping_client::PingClient::new(self.channels.get(client)?);
+            let mut upstream = pb::ping::ping_client::PingClient::new(self.channels.get(client)?);
             let reply = upstream
                 .ping(pb::ping::PingRequest {
                     message: "from upstream".to_owned(),
@@ -445,9 +446,7 @@ impl Module for DealsTableModule {
 // ---------------------------------------------------------------------------
 
 /// The docs' interceptor.
-pub fn require_client_version(
-    request: Request<()>,
-) -> std::result::Result<Request<()>, Status> {
+pub fn require_client_version(request: Request<()>) -> std::result::Result<Request<()>, Status> {
     match request.metadata().get("x-client-version") {
         Some(_) => Ok(request),
         None => Err(Status::failed_precondition("x-client-version is required")),
@@ -459,9 +458,16 @@ pub fn require_client_version(
 pub struct ApiVersion;
 
 impl Guard for ApiVersion {
-    fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, std::result::Result<(), AppError>> {
+    fn check<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+    ) -> BoxFuture<'a, std::result::Result<(), AppError>> {
         Box::pin(async move {
-            match parts.headers.get("x-api-version").and_then(|v| v.to_str().ok()) {
+            match parts
+                .headers
+                .get("x-api-version")
+                .and_then(|v| v.to_str().ok())
+            {
                 Some("2") => Ok(()),
                 _ => Err(AppError::forbidden()),
             }

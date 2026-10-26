@@ -230,7 +230,9 @@ impl CallLog {
 
 /// `NOT_FOUND`, the upper-snake name of a code.
 fn code_label(code: Code) -> String {
-    connect::code_name(code).to_ascii_uppercase().replace("CANCELED", "CANCELLED")
+    connect::code_name(code)
+        .to_ascii_uppercase()
+        .replace("CANCELED", "CANCELLED")
 }
 
 /// The trailers carrying `status`.
@@ -429,9 +431,8 @@ impl Edge {
         if !self.shares_http_port {
             return false;
         }
-        let known = || {
-            service_of(request.uri().path()).is_some_and(|service| self.known.contains(service))
-        };
+        let known =
+            || service_of(request.uri().path()).is_some_and(|service| self.known.contains(service));
         match classify(request) {
             Kind::Grpc => true,
             Kind::GrpcWeb => self.web,
@@ -445,8 +446,7 @@ impl Edge {
     /// scope and tracing span, then CORS and the protocol.
     pub(crate) async fn handle(&self, mut request: Request<Body>) -> Response<Body> {
         let Some(ctx) = self.runtime.ctx.upgrade() else {
-            return Status::unavailable("the server is shutting down")
-                .into_http::<Body>();
+            return Status::unavailable("the server is shutting down").into_http::<Body>();
         };
         let incoming = request
             .headers()
@@ -486,7 +486,11 @@ impl Edge {
     }
 
     /// Serves one connection's request from `peer` (the separate listener).
-    pub(crate) async fn handle_from(&self, mut request: Request<Body>, peer: SocketAddr) -> Response<Body> {
+    pub(crate) async fn handle_from(
+        &self,
+        mut request: Request<Body>,
+        peer: SocketAddr,
+    ) -> Response<Body> {
         request.extensions_mut().insert(ConnectInfo(peer));
         if classify(&request) == Kind::Other {
             return plain(
@@ -570,11 +574,15 @@ struct SharedPort {
 /// Cheap first look: could this be a gRPC, gRPC-Web or Connect request?
 fn might_be_grpc<B>(request: &Request<B>) -> bool {
     let content_type = content_type(request.headers());
-    if content_type.starts_with("application/grpc") || content_type.starts_with("application/connect+") {
+    if content_type.starts_with("application/grpc")
+        || content_type.starts_with("application/connect+")
+    {
         return true;
     }
-    let rpc_like = matches!(content_type.as_str(), "application/json" | "application/proto")
-        || request.method() == Method::OPTIONS;
+    let rpc_like = matches!(
+        content_type.as_str(),
+        "application/json" | "application/proto"
+    ) || request.method() == Method::OPTIONS;
     rpc_like && service_of(request.uri().path()).is_some_and(|service| service.contains('.'))
 }
 
@@ -617,24 +625,44 @@ mod tests {
         assert_eq!(kind("application/grpc+proto"), Kind::Grpc);
         assert_eq!(kind("application/grpc-web+proto"), Kind::GrpcWeb);
         assert_eq!(kind("application/grpc-web-text"), Kind::GrpcWeb);
-        assert_eq!(kind("application/json; charset=utf-8"), Kind::ConnectUnary(Codec::Json));
+        assert_eq!(
+            kind("application/json; charset=utf-8"),
+            Kind::ConnectUnary(Codec::Json)
+        );
         assert_eq!(kind("application/proto"), Kind::ConnectUnary(Codec::Proto));
-        assert_eq!(kind("application/connect+json"), Kind::ConnectStream(Codec::Json));
+        assert_eq!(
+            kind("application/connect+json"),
+            Kind::ConnectStream(Codec::Json)
+        );
         assert_eq!(kind("text/html"), Kind::Other);
-        assert_eq!(classify(&request(Method::OPTIONS, path, "")), Kind::Preflight);
+        assert_eq!(
+            classify(&request(Method::OPTIONS, path, "")),
+            Kind::Preflight
+        );
     }
 
     #[test]
     fn only_rpc_shaped_requests_are_looked_at() {
-        assert!(might_be_grpc(&request(Method::POST, "/x", "application/grpc")));
+        assert!(might_be_grpc(&request(
+            Method::POST,
+            "/x",
+            "application/grpc"
+        )));
         assert!(might_be_grpc(&request(
             Method::POST,
             "/crm.deals.v1.Deals/GetDeal",
             "application/json"
         )));
-        assert!(!might_be_grpc(&request(Method::POST, "/api/deals", "application/json")));
+        assert!(!might_be_grpc(&request(
+            Method::POST,
+            "/api/deals",
+            "application/json"
+        )));
         assert!(!might_be_grpc(&request(Method::GET, "/api/v1/deals", "")));
-        assert_eq!(service_of("/crm.deals.v1.Deals/GetDeal"), Some("crm.deals.v1.Deals"));
+        assert_eq!(
+            service_of("/crm.deals.v1.Deals/GetDeal"),
+            Some("crm.deals.v1.Deals")
+        );
         assert_eq!(service_of("/api/v1/deals"), None);
         assert_eq!(service_of("/x/"), None);
     }

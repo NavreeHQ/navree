@@ -66,12 +66,18 @@ fn the_module_and_its_options() {
     assert!(options.check().is_ok());
 
     // `grpc.timeout_secs` falls back to `http.timeout_secs`.
-    assert_eq!(GrpcOptions::default().default_timeout(30), Duration::from_secs(30));
+    assert_eq!(
+        GrpcOptions::default().default_timeout(30),
+        Duration::from_secs(30)
+    );
 
     // The environment variables of the page.
     let options = Config::load(&ConfigSources::new().env_vars(
         "APP_",
-        [("APP_GRPC__ADDR", "0.0.0.0:50051"), ("APP_GRPC__REFLECTION", "false")],
+        [
+            ("APP_GRPC__ADDR", "0.0.0.0:50051"),
+            ("APP_GRPC__REFLECTION", "false"),
+        ],
     ))
     .unwrap()
     .typed::<GrpcOptions>()
@@ -95,8 +101,14 @@ fn the_registration_api() {
 
 #[test]
 fn the_error_mappings() {
-    assert_eq!(status_from_error(&AppError::not_found()).code(), Code::NotFound);
-    assert_eq!(error_from_status(&Status::not_found("x")).status.as_u16(), 404);
+    assert_eq!(
+        status_from_error(&AppError::not_found()).code(),
+        Code::NotFound
+    );
+    assert_eq!(
+        error_from_status(&Status::not_found("x")).status.as_u16(),
+        404
+    );
 }
 
 #[tokio::test]

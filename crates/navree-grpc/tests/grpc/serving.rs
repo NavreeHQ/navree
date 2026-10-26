@@ -8,8 +8,8 @@ use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{HealthCheck, HealthStatus};
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{
-    Code, GrpcMethod, GrpcModule, GrpcServer, GrpcService, ModuleBuilderGrpcExt, Request,
-    Response, ServiceLimits, Status,
+    Code, GrpcMethod, GrpcModule, GrpcServer, GrpcService, ModuleBuilderGrpcExt, Request, Response,
+    ServiceLimits, Status,
 };
 use navree_http::{HttpModule, HttpServer};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder, Navree};
@@ -19,10 +19,10 @@ use tonic::service::Routes;
 use tonic_health::pb::HealthCheckRequest;
 use tonic_health::pb::health_check_response::ServingStatus;
 use tonic_health::pb::health_client::HealthClient;
+use tonic_reflection::pb::v1::ServerReflectionRequest;
 use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
 use tonic_reflection::pb::v1::server_reflection_request::MessageRequest;
 use tonic_reflection::pb::v1::server_reflection_response::MessageResponse;
-use tonic_reflection::pb::v1::ServerReflectionRequest;
 
 use crate::support::pb::ping::ping_client::PingClient;
 use crate::support::pb::ping::ping_server::{Ping, PingServer};
@@ -72,18 +72,30 @@ async fn health_of(app: &TestApp, service: &str) -> Result<i32, Status> {
 #[tokio::test]
 async fn health_answers_from_the_readiness_checks() {
     let app = deals_app().build().await;
-    assert_eq!(health_of(&app, "").await.unwrap(), ServingStatus::Serving as i32);
+    assert_eq!(
+        health_of(&app, "").await.unwrap(),
+        ServingStatus::Serving as i32
+    );
     assert_eq!(
         health_of(&app, "crm.deals.v1.Deals").await.unwrap(),
         ServingStatus::Serving as i32
     );
-    assert_eq!(health_of(&app, "nope.Service").await.unwrap_err().code(), Code::NotFound);
+    assert_eq!(
+        health_of(&app, "nope.Service").await.unwrap_err().code(),
+        Code::NotFound
+    );
 
     let down = deals_app().module(DownModule).build().await;
-    assert_eq!(health_of(&down, "").await.unwrap(), ServingStatus::NotServing as i32);
+    assert_eq!(
+        health_of(&down, "").await.unwrap(),
+        ServingStatus::NotServing as i32
+    );
 
     let off = deals_app().config("grpc.health", false).build().await;
-    assert_eq!(health_of(&off, "").await.unwrap_err().code(), Code::Unimplemented);
+    assert_eq!(
+        health_of(&off, "").await.unwrap_err().code(),
+        Code::Unimplemented
+    );
 }
 
 async fn reflected_services(app: &TestApp) -> Result<Vec<String>, Status> {
@@ -124,13 +136,19 @@ async fn reflection_lists_the_registered_descriptors() {
         .build()
         .await;
     assert!(!off.get::<GrpcServer>().await.options().reflection);
-    assert_eq!(reflected_services(&off).await.unwrap_err().code(), Code::Unimplemented);
+    assert_eq!(
+        reflected_services(&off).await.unwrap_err().code(),
+        Code::Unimplemented
+    );
 }
 
 #[tokio::test]
 async fn the_server_lists_its_services() {
     let app = deals_app().build().await;
-    assert_eq!(app.get::<GrpcServer>().await.services(), ["crm.deals.v1.Deals"]);
+    assert_eq!(
+        app.get::<GrpcServer>().await.services(),
+        ["crm.deals.v1.Deals"]
+    );
 }
 
 /// A service written without the macro: the escape hatch, whose methods
@@ -200,8 +218,8 @@ async fn mistakes_fail_the_boot() {
         .module(GuardedPingModule)
         .try_build()
         .await
-        .err()
-        .expect("two services with one name")
+        .map(drop)
+        .expect_err("two services with one name")
         .to_string();
     assert!(error.contains("is registered twice"), "{error}");
 
@@ -210,8 +228,8 @@ async fn mistakes_fail_the_boot() {
         .module(GrpcModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("a bad option")
+        .map(drop)
+        .expect_err("a bad option")
         .to_string();
     assert!(error.contains("grpc.max_message_bytes"), "{error}");
 
@@ -281,7 +299,10 @@ async fn grpc_addr_gives_grpc_a_listener_of_its_own() {
             .connect()
             .await
             .unwrap();
-        let reply = PingClient::new(channel).ping(ping("own port")).await.unwrap();
+        let reply = PingClient::new(channel)
+            .ping(ping("own port"))
+            .await
+            .unwrap();
         assert_eq!(reply.into_inner().message, "own port");
 
         // The HTTP port no longer answers gRPC.
@@ -291,10 +312,17 @@ async fn grpc_addr_gives_grpc_a_listener_of_its_own() {
             .await
             .unwrap();
         let status = PingClient::new(channel).ping(ping("x")).await.unwrap_err();
-        assert!(status.message().contains("404 Not Found"), "the routes answered: {status:?}");
+        assert!(
+            status.message().contains("404 Not Found"),
+            "the routes answered: {status:?}"
+        );
     })
     .await;
-    assert_eq!(app.get::<GrpcServer>().await.local_addr(), None, "the listener stopped");
+    assert_eq!(
+        app.get::<GrpcServer>().await.local_addr(),
+        None,
+        "the listener stopped"
+    );
 }
 
 #[tokio::test]

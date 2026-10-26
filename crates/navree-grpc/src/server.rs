@@ -82,10 +82,15 @@ impl GrpcServer {
     }
 
     /// Serves one request in-process (what `TestChannel` sends).
-    pub(crate) async fn serve_in_process(&self, request: http::Request<Body>) -> http::Response<Body> {
+    pub(crate) async fn serve_in_process(
+        &self,
+        request: http::Request<Body>,
+    ) -> http::Response<Body> {
         match self.edge() {
             Some(edge) => edge.handle(request).await,
-            None => tonic::Status::unavailable("the gRPC server has not booted").into_http::<Body>(),
+            None => {
+                tonic::Status::unavailable("the gRPC server has not booted").into_http::<Body>()
+            }
         }
     }
 }
@@ -176,7 +181,10 @@ impl Lifecycle for GrpcServer {
 }
 
 /// Resolves and checks every service and builds the edge.
-async fn build(ctx: &AppContext, options: &GrpcOptions) -> Result<(Edge, Vec<&'static str>), BoxError> {
+async fn build(
+    ctx: &AppContext,
+    options: &GrpcOptions,
+) -> Result<(Edge, Vec<&'static str>), BoxError> {
     let http = ctx
         .get::<HttpOptions>()
         .await
@@ -274,8 +282,9 @@ async fn build(ctx: &AppContext, options: &GrpcOptions) -> Result<(Edge, Vec<&'s
         described.push(tonic_health::pb::FILE_DESCRIPTOR_SET);
     }
     for set in &described {
-        pool.decode_file_descriptor_set(*set)
-            .map_err(|error| format!("a descriptor set registered with grpc_descriptors is invalid: {error}"))?;
+        pool.decode_file_descriptor_set(*set).map_err(|error| {
+            format!("a descriptor set registered with grpc_descriptors is invalid: {error}")
+        })?;
     }
     if options.reflection {
         let mut v1 = tonic_reflection::server::Builder::configure();
@@ -285,7 +294,10 @@ async fn build(ctx: &AppContext, options: &GrpcOptions) -> Result<(Edge, Vec<&'s
             v1alpha = v1alpha.register_encoded_file_descriptor_set(set);
         }
         routes = routes
-            .add_service(v1.build_v1().map_err(|error| format!("server reflection: {error}"))?)
+            .add_service(
+                v1.build_v1()
+                    .map_err(|error| format!("server reflection: {error}"))?,
+            )
             .add_service(
                 v1alpha
                     .build_v1alpha()

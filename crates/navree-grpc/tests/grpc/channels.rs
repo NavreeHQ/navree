@@ -111,7 +111,11 @@ async fn grpc_calls_forward_the_calls_context() {
             .unwrap()
             .into_inner();
         assert_eq!(reply.message, "from upstream");
-        assert_eq!(reply.user_id, user.to_string(), "the authorization was forwarded");
+        assert_eq!(
+            reply.user_id,
+            user.to_string(),
+            "the authorization was forwarded"
+        );
         assert_eq!(reply.request_id, "req-forwarded");
         assert_eq!(reply.workspace, "acme");
 
@@ -122,7 +126,11 @@ async fn grpc_calls_forward_the_calls_context() {
             })
             .await
             .unwrap_err();
-        assert_eq!(missing.code(), Code::Internal, "no such client is a server error");
+        assert_eq!(
+            missing.code(),
+            Code::Internal,
+            "no such client is a server error"
+        );
     })
     .await;
 }
@@ -175,7 +183,11 @@ async fn forward_auth_can_be_turned_off() {
             .send()
             .await
             .assert_status(200);
-        assert_eq!(response.json_value()["user_id"], "", "the upstream saw a guest");
+        assert_eq!(
+            response.json_value()["user_id"],
+            "",
+            "the upstream saw a guest"
+        );
     })
     .await;
 }

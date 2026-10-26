@@ -56,7 +56,10 @@ async fn grpc_web_calls_are_answered_on_the_http_port() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(response.header("content-type"), Some("application/grpc-web+proto"));
+    assert_eq!(
+        response.header("content-type"),
+        Some("application/grpc-web+proto")
+    );
     assert!(response.header("x-request-id").is_some());
     let frames = frames(response.bytes().clone());
     assert_eq!(frames.len(), 2, "the message, then the trailers");
@@ -109,12 +112,20 @@ async fn connect_unary_calls_carry_json_or_protobuf() {
         .post(GET_DEAL)
         .header("content-type", "application/proto")
         .header("connect-protocol-version", "1")
-        .body(GetDealRequest { id: deal.id.to_string() }.encode_to_vec())
+        .body(
+            GetDealRequest {
+                id: deal.id.to_string(),
+            }
+            .encode_to_vec(),
+        )
         .send()
         .await
         .assert_status(200);
     assert_eq!(response.header("content-type"), Some("application/proto"));
-    assert_eq!(Deal::decode(response.bytes().clone()).unwrap().title, "Acme renewal");
+    assert_eq!(
+        Deal::decode(response.bytes().clone()).unwrap().title,
+        "Acme renewal"
+    );
 }
 
 #[tokio::test]
@@ -185,14 +196,20 @@ async fn connect_streams_use_envelopes_and_an_end_message() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(response.header("content-type"), Some("application/connect+json"));
+    assert_eq!(
+        response.header("content-type"),
+        Some("application/connect+json")
+    );
     let frames = frames(response.bytes().clone());
     assert_eq!(frames.len(), 2);
     assert_eq!(frames[0].0, 0);
     let reply: Value = serde_json::from_slice(&frames[0].1).unwrap();
     assert_eq!(reply, json!({ "imported": 2 }));
     assert_eq!(frames[1].0, 0x02, "the end-of-stream message");
-    assert_eq!(serde_json::from_slice::<Value>(&frames[1].1).unwrap(), json!({}));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&frames[1].1).unwrap(),
+        json!({})
+    );
 
     // An error ends the stream inside the body, with HTTP 200.
     let response = user
@@ -209,8 +226,14 @@ async fn connect_streams_use_envelopes_and_an_end_message() {
 
     // Protobuf envelopes pass through unchanged (a bidirectional echo).
     let events = [
-        DealEvent { deal_id: "1".into(), stage: "won".into() },
-        DealEvent { deal_id: "2".into(), stage: "lost".into() },
+        DealEvent {
+            deal_id: "1".into(),
+            stage: "won".into(),
+        },
+        DealEvent {
+            deal_id: "2".into(),
+            stage: "lost".into(),
+        },
     ];
     let mut body = BytesMut::new();
     for event in &events {
@@ -230,7 +253,6 @@ async fn connect_streams_use_envelopes_and_an_end_message() {
         .collect();
     assert_eq!(echoed, events);
     assert_eq!(frames[2].0, 0x02);
-
 }
 
 #[tokio::test]
@@ -252,8 +274,15 @@ async fn browsers_get_the_grpc_web_and_connect_headers_in_cors() {
         response.header("access-control-allow-origin"),
         Some("http://localhost:3000")
     );
-    let allowed = response.header("access-control-allow-headers").unwrap_or_default();
-    for header in ["x-grpc-web", "x-user-agent", "connect-protocol-version", "grpc-timeout"] {
+    let allowed = response
+        .header("access-control-allow-headers")
+        .unwrap_or_default();
+    for header in [
+        "x-grpc-web",
+        "x-user-agent",
+        "connect-protocol-version",
+        "grpc-timeout",
+    ] {
         assert!(allowed.contains(header), "{header} in {allowed}");
     }
 
@@ -266,8 +295,13 @@ async fn browsers_get_the_grpc_web_and_connect_headers_in_cors() {
         .send()
         .await
         .assert_status(200);
-    let exposed = response.header("access-control-expose-headers").unwrap_or_default();
-    assert!(exposed.contains("grpc-status") && exposed.contains("x-request-id"), "{exposed}");
+    let exposed = response
+        .header("access-control-expose-headers")
+        .unwrap_or_default();
+    assert!(
+        exposed.contains("grpc-status") && exposed.contains("x-request-id"),
+        "{exposed}"
+    );
 }
 
 #[tokio::test]

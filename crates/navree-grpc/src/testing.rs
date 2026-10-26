@@ -8,8 +8,8 @@ use std::task::{Context, Poll};
 
 use axum::body::Body;
 use futures_util::future::BoxFuture;
-use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use http::HeaderMap;
+use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use navree_contracts::Principal;
 use navree_kernel::WeakAppContext;
 use navree_testing::{ActingAs, TestApp};
