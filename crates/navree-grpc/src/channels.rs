@@ -258,9 +258,10 @@ mod tests {
 
         // Metadata set on the request wins over the forwarded values.
         let mut request = http::Request::new(tonic::body::Body::empty());
-        request
-            .headers_mut()
-            .insert(AUTHORIZATION, HeaderValue::from_static("Bearer service-token"));
+        request.headers_mut().insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Bearer service-token"),
+        );
         request
             .headers_mut()
             .insert(&X_WORKSPACE, HeaderValue::from_static("globex"));
