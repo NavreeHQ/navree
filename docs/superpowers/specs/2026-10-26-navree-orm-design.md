@@ -142,6 +142,78 @@ Integration
 - OpenAPI: models used as response schemas (respecting hidden/appends).
 - CLI: `navree make:model <module> <Name> [--migration --factory --seeder --controller --policy]`.
 
+## 3a. Databases, migrations and TimescaleDB (user direction, 2026-10-26 evening)
+
+- **TimescaleDB is the first and default database.** `navree new` and the
+  starter kits generate a PostgreSQL URL for a TimescaleDB server, Dock's
+  default database service runs a TimescaleDB image, and the docs lead with
+  it. Plain PostgreSQL, **MySQL/MariaDB** and SQLite (tests, quick starts)
+  are fully supported. **MongoDB** is supported as a document driver under
+  the same model API.
+- **One driver abstraction.** The ORM core defines it: SQL dialects
+  (PostgreSQL/TimescaleDB, MySQL, SQLite) through sea-query grammars, and a
+  document-driver interface that MongoDB implements (filters, sort,
+  projection, aggregation pipelines, `$lookup` or batched `$in` loads for
+  relations, embedded documents through casts, sessions for transactions).
+- **Migrations and the schema builder** (crate `navree-schema`, L3 or L4 as
+  the layer rules allow), as expressive as the best migration systems:
+  `Schema::create("deals", |t| { t.id(); t.foreign_id("company_id").constrained().cascade_on_delete(); t.string("title"); t.decimal("amount", 12, 2); t.timestamps(); t.soft_deletes(); })`,
+  `Schema::table` (alter: add, change, rename, drop columns; indexes;
+  foreign keys), `rename`, `drop`, `drop_if_exists`, `has_table`,
+  `has_column`, every column type (big/small/tiny ints, unsigned, decimal,
+  float, string/char/text sizes, boolean, date/time/datetime/timestamp(tz),
+  json/jsonb, uuid, ulid, enum, binary, ip/mac, geometry where the database
+  has it, generated/virtual columns), modifiers (nullable, default,
+  use_current, unique, index, comment, after/first on MySQL, collation),
+  `id()`, `uuid_primary()`, `ulid_primary()`, `foreign_id` /
+  `foreign_uuid` / `constrained` / `cascade_on_*`, `morphs`,
+  `nullable_morphs`, `timestamps`, `timestamps_tz`, `soft_deletes`,
+  `remember_token`-style helpers where they fit Navree's auth. Migration
+  files are Rust (`up` and `down`), discovered per module, recorded in a
+  migrations table with batches; commands `navree make:migration`,
+  `migrate`, `migrate:rollback [--step N]`, `migrate:reset`,
+  `migrate:refresh`, `migrate:fresh [--seed]`, `migrate:status`,
+  `--pretend` (print SQL), `schema:dump` (squash). It must keep running the
+  existing `MigrationSet`s of the framework crates (adapt them, don't break
+  them).
+- **TimescaleDB helpers in migrations**, so developers decide in code which
+  tables become hypertables and how:
+  - `Schema::create_hypertable("events", "occurred_at", |t| {...})` or
+    `t.hypertable("occurred_at")` inside `create`, and
+    `Schema::convert_to_hypertable("audit_log", Hypertable::on("created_at").chunk_interval("1 day").partition_by("workspace_id", 4).migrate_data())`
+    for existing tables.
+  - **Primary keys and unique indexes:** a hypertable's unique constraints
+    must include the time column. The helper checks the table and either
+    rebuilds the primary key as `(id, time_column)` or explains the fix;
+    the docs recommend time-ordered ids (UUIDv7 / ULID) for time-series
+    tables and show both strategies.
+  - Chunk interval (`chunk_interval`), space partitioning
+    (`partition_by(column, partitions)`), compression
+    (`compress().segment_by(...).order_by(...).after("7 days")`),
+    retention (`retain_for("90 days")`), reorder policies, continuous
+    aggregates (`Schema::create_continuous_aggregate(name, query, refresh policy)`)
+    and the query builder's `time_bucket`, `first`/`last` helpers.
+  - **Engines per table**: a table declares its storage engine and the
+    helper picks the right DDL per database: a hypertable on TimescaleDB,
+    a regular table with the right indexes on plain PostgreSQL/SQLite
+    (with a clear notice), `ENGINE=InnoDB`-style options on MySQL, a native
+    time-series collection on MongoDB. One migration runs everywhere.
+  - A guide (docs) on which tables to convert: append-mostly, time-keyed,
+    large tables (logs, events, audit, analytics, metrics, notification and
+    delivery history, job runs) versus regular tables (users, workspaces,
+    business records); chunk sizing; ids. Navree's own time-series tables
+    (audit log, telemetry and Lighthouse events, webhook deliveries, job
+    history) use these helpers and become hypertables on TimescaleDB.
+- **MySQL in navree-db:** connections, the unit of work (session variables
+  where PostgreSQL uses `set_config`; workspace isolation by query scoping
+  since MySQL has no row-level security), pagination, repositories,
+  migrations, all behind a `mysql` feature.
+- Without database servers on this machine (Docker doesn't respond), SQL is
+  verified by generation snapshots per dialect, and integration tests for
+  PostgreSQL/TimescaleDB, MySQL and MongoDB are gated behind env vars
+  (`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`,
+  `NAVREE_TEST_MONGODB_URL`) so CI with services runs them.
+
 ## 4. Phases and workers
 
 1. **Core** (one worker, the critical path): the crate, `DESIGN.md` inside
