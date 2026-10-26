@@ -200,11 +200,12 @@ impl ActivitiesMcp {
 
 ## Tools
 
-A tool method takes `&self`, optionally the `&McpContext`, and at most one arguments value, and returns a `Result` of anything that serializes.
+A tool method takes `&self`, optionally the `&McpContext`, at most one arguments value and, with a `from` check, the record it loaded, and returns a `Result` of anything that serializes.
 
 - **Description.** The method's doc comment is the tool's description, which is how the model decides to call it. Say what it does, what it returns and its limits.
 - **Name.** The method name (`list_deals`). Set another with `#[mcp_tool(name = "deals_list")]`, and a display name with `title = "List deals"`. A name is 1 to 128 letters, digits, `_`, `-` or `.`; anything else doesn't compile.
 - **Arguments** are one struct deriving `Deserialize`, `ToSchema` and `garde::Validate`, like a [validated request body](/docs/basics/validation/). The tool's input schema comes from `ToSchema`, with field doc comments as descriptions; a tool without arguments has an empty object schema. Invalid arguments never reach your method: the client gets a tool error with the field messages (a 400 body).
+- **Records.** `#[can(Update, Deal, from = "deal_id")]` loads the record whose id is the `deal_id` argument and checks the action on it before the method runs, as `from = "id"` does on a route; the method takes it as an `Authorized<Deal, Update>` parameter. A missing id is a 400, a record that doesn't exist a 404 and a refusal a 403, all in the tool result. Inside a method, `cx.authorize::<E, A>(id)` does the same for any id, as `move_deal` does above.
 - **Results.** A value that serializes to a JSON object is sent as structured content and as its JSON text. A `String` is sent as plain text. Any other value (a list, a number) is sent as JSON text, with structured content `{"result": <value>}`, since MCP's structured content is always an object.
 
 ```rust title="crates/crm-deals/src/mcp.rs"
