@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Money } from "@/components/money";
-import { DetailRow, Panel } from "@/components/page-header";
+import { DetailRow, Figure, FigureGrid, Panel } from "@/components/page-header";
 import { MetaItem, RecordHeader, RecordMissing, RecordSkeleton } from "@/components/record-header";
 import { StageBadge } from "@/components/stage";
 import { Button } from "@/components/ui/button";
@@ -29,22 +29,13 @@ const BACK = { href: "/companies", label: "Companies" };
 
 function Figures({ company }: { company: CompanyDetailT }) {
   return (
-    <dl className="grid grid-cols-3 divide-x rounded-lg border bg-card">
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Open pipeline</dt>
-        <dd className="text-xl font-semibold font-condensed">
-          <Money cents={company.open_deals_amount_cents} compact />
-        </dd>
-      </div>
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Open deals</dt>
-        <dd className="text-xl font-semibold font-condensed figures">{formatNumber(company.open_deals_count)}</dd>
-      </div>
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Contacts</dt>
-        <dd className="text-xl font-semibold font-condensed figures">{formatNumber(company.contacts_count)}</dd>
-      </div>
-    </dl>
+    <FigureGrid columns={3} label="Company figures">
+      <Figure label="Open pipeline">
+        <Money cents={company.open_deals_amount_cents} compact />
+      </Figure>
+      <Figure label="Open deals">{formatNumber(company.open_deals_count)}</Figure>
+      <Figure label="Contacts">{formatNumber(company.contacts_count)}</Figure>
+    </FigureGrid>
   );
 }
 
@@ -68,8 +59,8 @@ function CompanyDeals({ company }: { company: CompanyDetailT }) {
       {deals.data?.data.length ? (
         <Table className="text-[13px]">
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-8 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
-              <TableHead>Deal</TableHead>
+            <TableRow className="hover:bg-transparent [&>th]:h-8">
+              <TableHead className="pl-0">Deal</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead className="text-right">Value</TableHead>
               <TableHead>Owner</TableHead>
@@ -79,7 +70,7 @@ function CompanyDeals({ company }: { company: CompanyDetailT }) {
           <TableBody>
             {deals.data.data.map((d) => (
               <TableRow key={d.id}>
-                <TableCell className="py-2.5">
+                <TableCell className="py-2.5 pl-0">
                   <Link href={`/deals/${d.id}`} className="font-medium hover:underline">
                     {d.title}
                   </Link>
@@ -127,9 +118,12 @@ function CompanyContacts({ company }: { company: CompanyDetailT }) {
         </Can>
       </div>
       {contacts.data?.data.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y overflow-hidden rounded-xl border">
           {contacts.data.data.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+            <li
+              key={p.id}
+              className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-ink-2/60"
+            >
               <div className="flex min-w-0 flex-col">
                 <Link href={`/contacts/${p.id}`} className="font-medium hover:underline">
                   {p.full_name}
@@ -173,7 +167,7 @@ export function CompanyDetail({ id }: { id: string }) {
                   href={c.website ?? `https://${c.domain}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-foreground hover:underline"
+                  className="transition-colors hover:text-fg hover:underline"
                 >
                   {c.domain}
                 </a>
@@ -224,7 +218,7 @@ export function CompanyDetail({ id }: { id: string }) {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex min-w-0 flex-col gap-6">
           <Figures company={c} />
           <Tabs defaultValue="activity" className="gap-4">
@@ -261,7 +255,7 @@ export function CompanyDetail({ id }: { id: string }) {
             </DetailRow>
             <DetailRow label="Website">
               {c.website ? (
-                <a href={c.website} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                <a href={c.website} target="_blank" rel="noreferrer" className="record-link">
                   {c.website.replace(/^https?:\/\//, "")}
                 </a>
               ) : null}

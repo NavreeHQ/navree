@@ -71,7 +71,7 @@ export function LostReasonDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle className="text-lg font-condensed">Mark “{dealTitle}” as lost</DialogTitle>
+            <DialogTitle className="text-lg font-semibold tracking-[-0.02em]">Mark “{dealTitle}” as lost</DialogTitle>
             <DialogDescription>
               Lost deals leave the open pipeline. Add the reason so it shows up in reports.
             </DialogDescription>

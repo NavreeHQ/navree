@@ -8,7 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Money } from "@/components/money";
-import { DetailRow, Panel } from "@/components/page-header";
+import { DetailRow, Figure, FigureGrid, Panel } from "@/components/page-header";
 import { MetaItem, RecordHeader, RecordMissing, RecordSkeleton } from "@/components/record-header";
 import { StageBadge, stageStyle } from "@/components/stage";
 import { Button } from "@/components/ui/button";
@@ -68,19 +68,21 @@ function StageBar({ deal }: { deal: Deal }) {
                 aria-current={current ? "step" : undefined}
                 onClick={() => (s.stage === "lost" ? setAskLost(true) : moveTo(s.stage))}
                 style={stageStyle(s.stage)}
-                className={cn(
-                  "group flex w-full flex-col gap-1.5 rounded-md px-1 pt-1 pb-1.5 text-left transition-colors enabled:hover:bg-muted disabled:cursor-default",
-                )}
+                className="group flex w-full flex-col gap-2 rounded-lg px-1.5 pt-1.5 pb-2 text-left transition-colors enabled:hover:bg-ink-2 disabled:cursor-default"
                 title={canMove && !current ? `Move to ${s.label}` : undefined}
               >
                 <span
-                  className={cn("h-1.5 w-full rounded-full", filled ? "bg-(--stage)" : "bg-border")}
+                  className={cn(
+                    "h-1.5 w-full rounded-full transition-colors",
+                    filled ? "bg-(--stage)" : "bg-ink-3 group-enabled:group-hover:bg-line-2",
+                    current && s.stage === "won" && "shadow-glow-sm",
+                  )}
                   aria-hidden="true"
                 />
                 <span
                   className={cn(
                     "flex items-center gap-1 text-xs",
-                    current ? "font-semibold text-foreground" : "text-muted-foreground",
+                    current ? "font-semibold text-fg" : "text-fg-3 group-enabled:group-hover:text-fg-1",
                   )}
                 >
                   {current ? <CheckIcon className="size-3" aria-hidden="true" /> : null}
@@ -95,7 +97,7 @@ function StageBar({ deal }: { deal: Deal }) {
         })}
       </ol>
       {!canMove ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="px-1.5 text-xs text-fg-3">
           {moveBlockedReason(ability, deal) ?? `Only ${deal.owner.name} or a manager can move this deal.`}
         </p>
       ) : null}
@@ -118,32 +120,20 @@ function Figures({ deal }: { deal: Deal }) {
   const weighted = Math.round((deal.amount_cents * deal.probability) / 100);
   const closed = deal.stage === "won" || deal.stage === "lost";
   return (
-    <dl className="grid grid-cols-2 divide-x rounded-lg border bg-card sm:grid-cols-4 [&>div:nth-child(3)]:max-sm:border-l-0 [&>div:nth-child(n+3)]:max-sm:border-t">
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Value</dt>
-        <dd className="text-xl font-semibold font-condensed">
-          <Money cents={deal.amount_cents} currency={deal.currency} />
-        </dd>
-      </div>
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Probability</dt>
-        <dd className="text-xl font-semibold font-condensed figures">{formatPercent(deal.probability)}</dd>
-      </div>
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">Weighted</dt>
-        <dd className="text-xl font-semibold font-condensed">
-          <Money cents={weighted} currency={deal.currency} />
-        </dd>
-      </div>
-      <div className="flex flex-col gap-1 px-4 py-3">
-        <dt className="text-xs text-muted-foreground">{closed ? "Closed" : "Expected close"}</dt>
-        <dd className="text-xl font-semibold font-condensed figures">
-          {formatDateLong(closed ? deal.closed_at : deal.expected_close_date) || (
-            <span className="text-muted-foreground">Not set</span>
-          )}
-        </dd>
-      </div>
-    </dl>
+    <FigureGrid columns={4} label="Deal figures">
+      <Figure label="Value" highlight={deal.stage === "won"}>
+        <Money cents={deal.amount_cents} currency={deal.currency} />
+      </Figure>
+      <Figure label="Probability">{formatPercent(deal.probability)}</Figure>
+      <Figure label="Weighted">
+        <Money cents={weighted} currency={deal.currency} />
+      </Figure>
+      <Figure label={closed ? "Closed" : "Expected close"}>
+        {formatDateLong(closed ? deal.closed_at : deal.expected_close_date) || (
+          <span className="text-fg-3">Not set</span>
+        )}
+      </Figure>
+    </FigureGrid>
   );
 }
 
@@ -165,13 +155,13 @@ export function DealDetail({ id }: { id: string }) {
         meta={
           <>
             <MetaItem icon={Building2Icon}>
-              <Link href={`/companies/${d.company.id}`} className="hover:text-foreground hover:underline">
+              <Link href={`/companies/${d.company.id}`} className="transition-colors hover:text-fg hover:underline">
                 {d.company.name}
               </Link>
             </MetaItem>
             {d.contact ? (
               <MetaItem icon={UserIcon}>
-                <Link href={`/contacts/${d.contact.id}`} className="hover:text-foreground hover:underline">
+                <Link href={`/contacts/${d.contact.id}`} className="transition-colors hover:text-fg hover:underline">
                   {d.contact.full_name}
                 </Link>
               </MetaItem>
@@ -223,7 +213,7 @@ export function DealDetail({ id }: { id: string }) {
         <Panel bodyClassName="px-3 py-3">
           <StageBar deal={d} />
         </Panel>
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex min-w-0 flex-col gap-6">
             <Figures deal={d} />
             {d.stage === "lost" && d.lost_reason ? (
@@ -241,13 +231,13 @@ export function DealDetail({ id }: { id: string }) {
                 <OwnerCell owner={d.owner} />
               </DetailRow>
               <DetailRow label="Company">
-                <Link href={`/companies/${d.company.id}`} className="text-primary hover:underline">
+                <Link href={`/companies/${d.company.id}`} className="record-link">
                   {d.company.name}
                 </Link>
               </DetailRow>
               <DetailRow label="Main contact">
                 {d.contact ? (
-                  <Link href={`/contacts/${d.contact.id}`} className="text-primary hover:underline">
+                  <Link href={`/contacts/${d.contact.id}`} className="record-link">
                     {d.contact.full_name}
                   </Link>
                 ) : null}

@@ -2,7 +2,6 @@
 
 import { AbilityProvider } from "@casl/react";
 import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -88,16 +87,14 @@ export function Providers({ children }: { children: ReactNode }) {
   const [ability] = useState(() => createAppAbility());
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <QueryClientProvider client={queryClient}>
-        <AbilityProvider value={ability}>
-          <TooltipProvider delayDuration={300}>
-            <ApiEventBridge queryClient={queryClient} />
-            <MockApiGate>{children}</MockApiGate>
-            <Toaster position="bottom-right" closeButton />
-          </TooltipProvider>
-        </AbilityProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <AbilityProvider value={ability}>
+        <TooltipProvider delayDuration={300}>
+          <ApiEventBridge queryClient={queryClient} />
+          <MockApiGate>{children}</MockApiGate>
+          <Toaster position="bottom-right" closeButton />
+        </TooltipProvider>
+      </AbilityProvider>
+    </QueryClientProvider>
   );
 }

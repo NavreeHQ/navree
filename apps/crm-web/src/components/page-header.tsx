@@ -1,25 +1,29 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/** The title block of a screen: an optional mono eyebrow, the H1 in the display face, a line of context. */
 export function PageHeader({
   title,
   description,
   actions,
   children,
+  eyebrow,
   className,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
+  eyebrow?: ReactNode;
   className?: string;
 }) {
   return (
-    <header className={cn("flex flex-col gap-4 pb-5", className)}>
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] font-condensed">{title}</h1>
-          {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+    <header className={cn("flex flex-col gap-4 pb-6", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 flex-col gap-2">
+          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+          <h1 className="text-title font-semibold text-fg">{title}</h1>
+          {description ? <p className="text-sm text-pretty text-fg-2">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
@@ -43,10 +47,10 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-lg border bg-card text-card-foreground", className)}>
+    <section className={cn("surface min-w-0 text-card-foreground", className)}>
       {title || actions ? (
         <div className="flex min-h-11 items-center justify-between gap-3 border-b px-4 py-2">
-          {title ? <h2 className="text-sm font-semibold">{title}</h2> : <span />}
+          {title ? <h2 className="text-sm font-semibold tracking-[-0.005em] text-fg">{title}</h2> : <span />}
           {actions ? <div className="flex items-center gap-1.5">{actions}</div> : null}
         </div>
       ) : null}
@@ -58,9 +62,59 @@ export function Panel({
 /** Definition list row for record details. */
 export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-3 py-1.5 text-sm">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children ?? <span className="text-muted-foreground">None</span>}</dd>
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3 py-1.5 text-sm">
+      <dt className="text-fg-3">{label}</dt>
+      <dd className="min-w-0 break-words text-fg-1">{children ?? <span className="text-fg-3">None</span>}</dd>
+    </div>
+  );
+}
+
+/** A row of key figures (dashboard, record pages): label above, the number in the display face. */
+export function FigureGrid({
+  children,
+  columns,
+  className,
+  label,
+}: {
+  children: ReactNode;
+  columns: 3 | 4;
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <dl
+      aria-label={label}
+      className={cn(
+        "surface grid overflow-hidden [&>*]:border-line",
+        columns === 3
+          ? "grid-cols-3 [&>*:not(:first-child)]:border-l"
+          : "grid-cols-2 lg:grid-cols-4 lg:[&>*:not(:first-child)]:border-l [&>*:nth-child(2n)]:border-l [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+3)]:border-t-0",
+        className,
+      )}
+    >
+      {children}
+    </dl>
+  );
+}
+
+export function Figure({
+  label,
+  children,
+  sub,
+  highlight,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  sub?: ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 px-4 py-3.5">
+      <dt className="text-xs text-fg-3">{label}</dt>
+      <dd className={cn("font-display text-display-sm font-semibold figures", highlight ? "text-accent" : "text-fg")}>
+        {children}
+      </dd>
+      {sub ? <dd className="text-xs text-fg-3">{sub}</dd> : null}
     </div>
   );
 }

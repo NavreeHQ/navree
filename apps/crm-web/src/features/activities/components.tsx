@@ -49,8 +49,8 @@ export function ActivityKindIcon({ kind, className }: { kind: ActivityKind; clas
   return (
     <span
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground",
-        kind === "task" && "text-primary",
+        "flex size-7 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-ink-2 text-fg-2",
+        kind === "task" && "text-fg-1",
         className,
       )}
       aria-hidden="true"
@@ -168,10 +168,7 @@ function TimelineItem({ activity, showSubject }: { activity: Activity; showSubje
           {activity.kind === "task" && activity.assignee ? <span>Assigned to {activity.assignee.name}</span> : null}
           <DueLabel activity={activity} />
           {showSubject ? (
-            <Link
-              href={subjectHref(activity.subject_type, activity.subject_id)}
-              className="text-primary hover:underline"
-            >
+            <Link href={subjectHref(activity.subject_type, activity.subject_id)} className="record-link">
               {activity.subject_label}
             </Link>
           ) : null}
@@ -208,7 +205,11 @@ export function ActivityTimeline({
     );
   }
   if (!activities || activities.length === 0) {
-    return <p className="py-2 text-sm text-muted-foreground">{emptyText}</p>;
+    return (
+      <p className="rounded-xl border border-dashed border-line-2 px-4 py-6 text-center text-sm text-fg-3">
+        {emptyText}
+      </p>
+    );
   }
   return (
     <ol className="flex flex-col">
@@ -281,7 +282,7 @@ export function ActivityComposer({ subjectType, subjectId }: { subjectType: Acti
     <Can I="create" a="Activity">
       <form
         onSubmit={onSubmit}
-        className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3"
+        className="flex flex-col gap-3 rounded-xl border bg-ink-0/50 p-3"
         aria-label="Add activity"
       >
         <Controller

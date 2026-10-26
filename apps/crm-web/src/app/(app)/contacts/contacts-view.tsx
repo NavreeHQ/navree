@@ -13,7 +13,7 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { OwnerCell } from "@/components/user-avatar";
+import { OwnerCell, UserAvatar } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useCompany } from "@/features/companies/queries";
 import { ContactFormDialog, STATUS_LABEL } from "@/features/contacts/contact-form";
@@ -25,10 +25,11 @@ import type { ContactStatus } from "@/lib/api/types";
 import { CONTACT_STATUSES } from "@/lib/api/types";
 import { formatNumber } from "@/lib/format";
 
-function NewContactButton() {
+function NewContactButton({ openOnCreateIntent }: { openOnCreateIntent?: boolean }) {
   return (
     <Can I="create" a="Contact">
       <ContactFormDialog
+        openOnCreateIntent={openOnCreateIntent}
         trigger={
           <Button>
             <PlusIcon data-icon="inline-start" />
@@ -71,8 +72,8 @@ function ExportButton({ filters }: { filters: ContactListParams }) {
 function CompanyChip({ id, onClear }: { id: string; onClear: () => void }) {
   const company = useCompany(id);
   return (
-    <span className="inline-flex h-8 items-center gap-1 rounded-lg border bg-card pr-1 pl-2.5 text-sm">
-      <span className="text-muted-foreground">Company:</span>
+    <span className="inline-flex h-8 items-center gap-1 rounded-full border border-line-2 bg-ink-2 pr-1 pl-3 text-sm">
+      <span className="text-fg-3">Company:</span>
       <span className="font-medium">{company.data?.name ?? "…"}</span>
       <Button variant="ghost" size="icon-xs" aria-label="Clear company filter" onClick={onClear}>
         <XIcon />
@@ -110,12 +111,12 @@ export function ContactsView() {
         actions={
           <>
             <ExportButton filters={params} />
-            <NewContactButton />
+            <NewContactButton openOnCreateIntent />
           </>
         }
       />
       <TablePanel>
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
+        <div className="flex flex-wrap items-center gap-2 border-b p-3" role="search" aria-label="Filter contacts">
           <SearchFilter
             value={params.search}
             onChange={(search) => url.set({ search })}
@@ -135,18 +136,27 @@ export function ContactsView() {
         </div>
         <Table className="text-[13px]">
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
+            <TableRow className="bg-ink-1 hover:bg-ink-1 [&>th]:h-9">
               <TableHead className="pl-4">Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead className="hidden sm:table-cell">Company</TableHead>
+              <TableHead className="hidden lg:table-cell">Email</TableHead>
               <TableHead className="hidden xl:table-cell">Phone</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="pr-4">Owner</TableHead>
+              <TableHead className="hidden pr-4 md:table-cell">Owner</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contacts.isPending ? (
-              <SkeletonRows columns={6} />
+              <SkeletonRows
+                columns={[
+                  "",
+                  "hidden sm:table-cell",
+                  "hidden lg:table-cell",
+                  "hidden xl:table-cell",
+                  "",
+                  "hidden md:table-cell",
+                ]}
+              />
             ) : contacts.data?.data.length ? (
               contacts.data.data.map((p) => (
                 <TableRow
@@ -157,36 +167,41 @@ export function ContactsView() {
                   }}
                 >
                   <TableCell className="py-2.5 pl-4">
-                    <Link href={`/contacts/${p.id}`} className="font-medium hover:underline">
-                      {p.full_name}
-                    </Link>
-                    {p.title ? <div className="text-xs text-muted-foreground">{p.title}</div> : null}
+                    <span className="flex items-center gap-3">
+                      <UserAvatar name={p.full_name} id={p.id} size="md" />
+                      <span className="flex min-w-0 flex-col">
+                        <Link href={`/contacts/${p.id}`} className="truncate font-medium text-fg hover:underline">
+                          {p.full_name}
+                        </Link>
+                        {p.title ? <span className="truncate text-xs text-fg-3">{p.title}</span> : null}
+                      </span>
+                    </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     {p.company ? (
-                      <Link href={`/companies/${p.company.id}`} className="hover:underline">
+                      <Link href={`/companies/${p.company.id}`} className="text-fg-1 hover:text-fg hover:underline">
                         {p.company.name}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">No company</span>
+                      <span className="text-fg-3">No company</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-56 truncate">
+                  <TableCell className="hidden max-w-56 truncate lg:table-cell">
                     {p.email ? (
-                      <a href={`mailto:${p.email}`} className="hover:underline">
+                      <a href={`mailto:${p.email}`} className="text-fg-1 hover:text-fg hover:underline">
                         {p.email}
                       </a>
                     ) : (
-                      <span className="text-muted-foreground">Not set</span>
+                      <span className="text-fg-3">Not set</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden whitespace-nowrap figures xl:table-cell">
-                    {p.phone ?? <span className="text-muted-foreground">Not set</span>}
+                  <TableCell className="hidden whitespace-nowrap text-fg-1 figures xl:table-cell">
+                    {p.phone ?? <span className="text-fg-3">Not set</span>}
                   </TableCell>
                   <TableCell>
                     <ContactStatusBadge status={p.status} />
                   </TableCell>
-                  <TableCell className="pr-4">
+                  <TableCell className="hidden max-w-44 pr-4 md:table-cell">
                     <OwnerCell owner={p.owner} />
                   </TableCell>
                 </TableRow>
