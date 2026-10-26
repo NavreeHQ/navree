@@ -628,6 +628,26 @@ impl<R: Resource> Handle<R> {
         }
     }
 
+    /// Whether `value` is the path of a file Helm stored for this resource
+    /// (`{slug}/{40 letters and digits}.{extension}`): a file field never
+    /// points at another file of its disk.
+    fn stored_path(&self, value: &Value) -> bool {
+        let Some(name) = value
+            .as_str()
+            .and_then(|path| path.strip_prefix(self.info.slug.as_str()))
+            .and_then(|rest| rest.strip_prefix('/'))
+        else {
+            return false;
+        };
+        let Some((token, extension)) = name.split_once('.') else {
+            return false;
+        };
+        token.len() == 40
+            && token.bytes().all(|b| b.is_ascii_alphanumeric())
+            && !extension.is_empty()
+            && extension.bytes().all(|b| b.is_ascii_alphanumeric())
+    }
+
     /// Checks `input` against `fields` (the editable fields of a form, or
     /// an action's fields): unknown keys, rules, column types and related
     /// records. On create, adds defaults and reports missing required
@@ -660,6 +680,12 @@ impl<R: Resource> Handle<R> {
                 None => None,
             };
             field.validate(&value, messages, pattern.as_ref(), &mut problems);
+            if matches!(field.kind, FieldKind::File { .. })
+                && !is_blank(&value)
+                && !self.stored_path(&value)
+            {
+                problems.push(messages.render(&key, "invalid", &[]));
+            }
             if problems.is_empty() && columns && field.is_column() {
                 match values::to_sql(self.template(&key), &value, None) {
                     Err(Invalid(rule)) => problems.push(messages.render(&key, rule, &[])),

@@ -17,6 +17,16 @@
   }
 
   ready(function () {
+    // On phones the menu starts closed (it is open without this script);
+    // wider screens always show it.
+    var menu = document.querySelector("details.menu");
+    if (menu && window.matchMedia) {
+      var narrow = window.matchMedia("(max-width: 760px)");
+      var fit = function () { menu.open = !narrow.matches; };
+      fit();
+      if (narrow.addEventListener) narrow.addEventListener("change", fit);
+    }
+
     // Ask before actions that say so; the server asks itself when this
     // script is not running.
     document.addEventListener("click", function (event) {
