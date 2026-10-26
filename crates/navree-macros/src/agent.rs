@@ -52,7 +52,6 @@ fn expand_inner(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream
             "#[agent] goes on an `impl Agent for YourAgent` block",
         ));
     }
-    let ai = AI.path(block.impl_token.span)?;
     let mut errors = Errors::default();
     let mut tools = Vec::new();
     let mut kept = Vec::new();
@@ -79,6 +78,8 @@ fn expand_inner(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream
     }
     errors.finish()?;
 
+    // Misuse is reported first; only valid tools need the runtime crate.
+    let ai = AI.path(block.impl_token.span)?;
     let needs_access = tools.iter().any(|tool| {
         tool.access
             .iter()
