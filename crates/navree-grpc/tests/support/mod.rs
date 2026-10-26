@@ -358,6 +358,7 @@ impl Ping for PingGrpc {
         match message.as_str() {
             "conflict" => return Err(AppError::conflict("already pinged")),
             "boom" => return Err(AppError::internal("the secret connection string")),
+            "quota" => return Err(AppError::internal(QuotaExceeded)),
             "upstream" => {
                 // A status from another service, through `?`.
                 Err::<(), _>(Status::failed_precondition("upstream says no"))?;
@@ -380,6 +381,18 @@ impl Ping for PingGrpc {
         Ok(Response::new(reply_to(&request, message)))
     }
 }
+
+/// The error a `quota` ping fails with, for the app's error mappers.
+#[derive(Debug)]
+pub struct QuotaExceeded;
+
+impl std::fmt::Display for QuotaExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the quota is used up")
+    }
+}
+
+impl std::error::Error for QuotaExceeded {}
 
 /// What a ping reply reports about `request`.
 pub fn reply_to<T>(request: &Request<T>, message: String) -> pb::ping::PingReply {

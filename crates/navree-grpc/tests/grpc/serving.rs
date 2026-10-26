@@ -130,6 +130,36 @@ async fn reflection_lists_the_registered_descriptors() {
         assert!(services.iter().any(|s| s == name), "{name} in {services:?}");
     }
 
+    // The older v1alpha protocol, which many tools still speak.
+    use tonic_reflection::pb::v1alpha;
+    let mut alpha =
+        v1alpha::server_reflection_client::ServerReflectionClient::new(TestChannel::new(&app));
+    let request = v1alpha::ServerReflectionRequest {
+        host: String::new(),
+        message_request: Some(
+            v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(
+                "crm.deals.v1.Deals".to_owned(),
+            ),
+        ),
+    };
+    let response = alpha
+        .server_reflection_info(tokio_stream::iter([request]))
+        .await
+        .unwrap()
+        .into_inner()
+        .message()
+        .await
+        .unwrap()
+        .expect("one response");
+    assert!(
+        matches!(
+            response.message_response,
+            Some(v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(ref files))
+                if !files.file_descriptor_proto.is_empty()
+        ),
+        "{response:?}"
+    );
+
     // From the environment, as APP_GRPC__REFLECTION=false.
     let off = deals_app()
         .sources(ConfigSources::new().env_vars("APP_", [("APP_GRPC__REFLECTION", "false")]))

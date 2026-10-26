@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use navree_contracts::{AuditKind, AuditSink};
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{Code, GrpcModule};
+use navree_http::{AppError, ModuleBuilderHttpExt};
+use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestApp, principal};
 use tonic_types::StatusExt;
 use uuid::Uuid;
@@ -16,7 +18,7 @@ use crate::support::pb::deals::{GetDealRequest, ListDealsRequest, MoveDealReques
 use crate::support::pb::ping::PingRequest;
 use crate::support::pb::ping::ping_client::PingClient;
 use crate::support::{
-    GuardedPingModule, RecordingAudit, deals_app, find_deal, insert_deal, ping_app,
+    GuardedPingModule, QuotaExceeded, RecordingAudit, deals_app, find_deal, insert_deal, ping_app,
 };
 
 fn ping(message: &str) -> PingRequest {
@@ -203,6 +205,64 @@ async fn app_errors_become_statuses_of_the_same_meaning() {
 
     let status = client.ping(ping("missing")).await.unwrap_err();
     assert_eq!(status.code(), Code::NotFound, "database errors are mapped");
+}
+
+/// Maps `QuotaExceeded` (in a 500's source chain) to a 503.
+struct QuotaMapping;
+
+impl Module for QuotaMapping {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.map_error::<QuotaExceeded>(|_| {
+            Some(AppError::service_unavailable("the quota is used up, try later"))
+        });
+    }
+}
+
+#[tokio::test]
+async fn the_apps_error_mappers_apply_to_server_errors_first() {
+    let unmapped = ping_app().build().await;
+    let mut client = PingClient::new(TestChannel::new(&unmapped));
+    let status = client.ping(ping("quota")).await.unwrap_err();
+    assert_eq!(
+        (status.code(), status.message()),
+        (Code::Internal, "Internal server error")
+    );
+
+    let app = ping_app().module(QuotaMapping).build().await;
+    let mut client = PingClient::new(TestChannel::new(&app));
+    let status = client.ping(ping("quota")).await.unwrap_err();
+    assert_eq!(
+        (status.code(), status.message()),
+        (Code::Unavailable, "the quota is used up, try later")
+    );
+    let status = client.ping(ping("boom")).await.unwrap_err();
+    assert_eq!(
+        status.code(),
+        Code::Internal,
+        "a mapper only applies to its error type"
+    );
+}
+
+#[tokio::test]
+async fn messages_larger_than_the_limit_are_refused() {
+    let app = ping_app()
+        .config("grpc.max_message_bytes", 256)
+        .build()
+        .await;
+    let mut client = PingClient::new(TestChannel::new(&app));
+
+    assert_eq!(
+        client
+            .ping(ping(&"a".repeat(100)))
+            .await
+            .unwrap()
+            .into_inner()
+            .message
+            .len(),
+        100
+    );
+    let status = client.ping(ping(&"a".repeat(1_000))).await.unwrap_err();
+    assert_eq!(status.code(), Code::OutOfRange, "{status:?}");
 }
 
 #[tokio::test]
