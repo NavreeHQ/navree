@@ -197,6 +197,9 @@ pub(crate) async fn structured<T>(
     wrapped: bool,
     parse: Parser<T>,
 ) -> Result<T, AiError> {
+    // The attachments belong to the question, not to a repair request.
+    spec.messages = spec.messages_with_attachments();
+    spec.attachments.clear();
     let mut last_error = String::new();
     for _ in 0..=ai.options().structured_retries {
         let answer = ai.complete(&spec, extra).await?;
@@ -218,8 +221,6 @@ pub(crate) async fn structured<T>(
                     "Your answer does not match the required JSON schema: {last_error}. \
                      Answer again with only the corrected JSON."
                 )));
-                // The attachments were read already.
-                spec.attachments.clear();
             }
         }
     }

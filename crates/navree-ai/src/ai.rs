@@ -86,6 +86,25 @@ impl Spec {
             ..Self::default()
         }
     }
+
+    /// The messages with the attachments put first in the last user
+    /// message (a new user message when there is none).
+    pub(crate) fn messages_with_attachments(&self) -> Vec<Message> {
+        let mut messages = self.messages.clone();
+        if self.attachments.is_empty() {
+            return messages;
+        }
+        let attachments: Vec<Part> = self.attachments.iter().cloned().map(Part::Attachment).collect();
+        match messages.iter_mut().rev().find(|m| m.role == Role::User) {
+            Some(message) => {
+                let mut parts = attachments;
+                parts.append(&mut message.parts);
+                message.parts = parts;
+            }
+            None => messages.push(Message::new(Role::User, attachments)),
+        }
+        messages
+    }
 }
 
 /// What a request adds for agents and structured output.
@@ -355,23 +374,7 @@ impl Ai {
     /// The provider request for `model`.
     pub(crate) fn chat_request(&self, model: &Resolved, spec: &Spec, extra: &Extra) -> ChatRequest {
         let options = &self.inner.options;
-        let mut messages = spec.messages.clone();
-        if !spec.attachments.is_empty() {
-            let attachments: Vec<Part> = spec
-                .attachments
-                .iter()
-                .cloned()
-                .map(Part::Attachment)
-                .collect();
-            match messages.iter_mut().rev().find(|m| m.role == Role::User) {
-                Some(message) => {
-                    let mut parts = attachments;
-                    parts.append(&mut message.parts);
-                    message.parts = parts;
-                }
-                None => messages.push(Message::new(Role::User, attachments)),
-            }
-        }
+        let messages = spec.messages_with_attachments();
         let native = model.driver.capabilities().native_structured;
         let mut system = spec.system.clone();
         let mut add_system = |text: String| {

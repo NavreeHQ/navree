@@ -14,7 +14,7 @@ use crate::error::{AiError, ProviderError};
 use crate::message::{Message, Part, Role, ToolCall};
 use crate::provider::{
     Capabilities, ChatRequest, ChatResponse, ChunkStream, Driver, EmbedRequest, EmbedResponse,
-    StreamChunk,
+    StreamChunk, ToolChoice,
 };
 use crate::response::{Finish, Usage};
 use crate::{Ai, AiOptions};
@@ -127,7 +127,8 @@ impl FakeRequest {
             .unwrap_or_default()
     }
 
-    /// The names of the tools offered.
+    /// The names of the tools the model may call (none on the last step of
+    /// an agent run).
     pub fn tools(&self) -> &[String] {
         &self.tools
     }
@@ -152,7 +153,11 @@ impl FakeRequest {
             model: request.model_name.clone(),
             system: request.system.clone(),
             messages: request.messages.clone(),
-            tools: request.tools.iter().map(|t| t.name.clone()).collect(),
+            // The last step of an agent run lists its tools but may call none.
+            tools: match request.tool_choice {
+                ToolChoice::Auto => request.tools.iter().map(|t| t.name.clone()).collect(),
+                ToolChoice::None => Vec::new(),
+            },
             max_tokens: request.max_tokens,
             user: request.user,
             structured: request.output.is_some()

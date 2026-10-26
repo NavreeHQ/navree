@@ -211,6 +211,29 @@ async fn answers_that_do_not_deserialize_are_sent_back_for_repair() {
 }
 
 #[tokio::test]
+async fn a_repair_still_carries_the_attachments() {
+    let fake = AiFake::new();
+    fake.respond_with([
+        FakeReply::text("It reads like a contract."),
+        FakeReply::json(json!({ "sentiment": "neutral", "reason": "A plain contract." })),
+    ]);
+
+    fake.ai()
+        .structured::<Triage>("How does this read?")
+        .attach(Attachment::pdf(vec![1u8, 2, 3]))
+        .await
+        .unwrap();
+
+    let requests = fake.requests();
+    for request in &requests {
+        let attachments: usize = request.messages().iter().map(|m| m.attachments().count()).sum();
+        assert_eq!(attachments, 1, "{:?}", request.messages());
+    }
+    assert_eq!(requests[1].messages()[0].text(), "How does this read?");
+    assert_eq!(requests[1].messages()[0].attachments().count(), 1);
+}
+
+#[tokio::test]
 async fn validated_checks_the_garde_rules_and_repairs() {
     let fake = AiFake::new();
     fake.respond_with([

@@ -539,8 +539,13 @@ async fn the_last_step_answers_without_tools() {
     let reply = ai.agent::<NotesAssistant>().acting_as_user(dana).max_steps(2).prompt("Loop").await.unwrap();
 
     assert_eq!(reply.steps.len(), 1, "the second call came on the last step and did not run");
-    let last = &fake.requests()[1];
-    assert!(last.system().unwrap().contains("step limit"), "{:?}", last.system());
+    let requests = fake.requests();
+    assert!(!requests[0].tools().is_empty());
+    assert!(requests[1].tools().is_empty(), "no tool is offered on the last step");
+    // The system prompt and the earlier messages stay as they were, so the
+    // provider's reasoning from earlier steps stays valid.
+    assert_eq!(requests[0].system(), requests[1].system());
+    assert_eq!(requests[1].messages()[..1], requests[0].messages()[..]);
     fake.assert_prompt_count(2);
 }
 
