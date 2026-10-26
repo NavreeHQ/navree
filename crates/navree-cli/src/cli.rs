@@ -70,6 +70,9 @@ pub enum Command {
     /// Generate a CLI command in a module (commands/NAME.rs).
     #[command(name = "make:command")]
     MakeCommand(MakeArgs),
+    /// Generate an AI agent with one tool in a module (agents/NAME.rs).
+    #[command(name = "make:agent")]
+    MakeAgent(MakeArgs),
     /// Generate a test in a module (tests/NAME.rs).
     #[command(name = "make:test")]
     MakeTest(MakeArgs),
@@ -98,6 +101,7 @@ impl Command {
             Command::MakeNotification(a) => (MakeKind::Notification, a),
             Command::MakePolicy(a) => (MakeKind::Policy, a),
             Command::MakeCommand(a) => (MakeKind::Command, a),
+            Command::MakeAgent(a) => (MakeKind::Agent, a),
             Command::MakeTest(a) => (MakeKind::Test, a),
             _ => return None,
         };

@@ -1,0 +1,62 @@
+[package]
+name = "navree-ai"
+description = "Navree AiModule: text, structured output and streaming from Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, with failover, budgets, agents with tools, embeddings, vector stores and AiFake."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL driver for navree-db, for the pgvector store and conversation
+## memory on PostgreSQL.
+postgres = ["navree-db/postgres"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+garde = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+infer = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-storage = { workspace = true }
+navree-validation = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+navree-crypto = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+trybuild = { workspace = true }
+wiremock = { workspace = true }

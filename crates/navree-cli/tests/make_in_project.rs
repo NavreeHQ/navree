@@ -88,6 +88,42 @@ fn make_module_outside_a_navree_app_prints_hints() {
 }
 
 #[test]
+fn make_agent_wires_it_into_the_module() {
+    let (_dir, root) = project();
+    let report = make_item(
+        &root,
+        "src/modules",
+        MakeKind::Agent,
+        &name("users"),
+        &name("assistant"),
+        &MakeOptions::default(),
+        now(),
+    )
+    .unwrap();
+    let agent = read(&root, "src/modules/users/agents/assistant.rs");
+    assert!(agent.contains("#[agent]\nimpl Agent for Assistant {"), "{agent}");
+    assert!(
+        agent.contains("const NAME: &'static str = \"users-assistant\";"),
+        "{agent}"
+    );
+    assert!(agent.contains("#[tool(read_only)]"), "{agent}");
+    assert_eq!(
+        read(&root, "src/modules/users/agents/mod.rs"),
+        "//! AI agents of the users module.\n\npub mod assistant;\n"
+    );
+    let module = read(&root, "src/modules/users/mod.rs");
+    assert!(
+        module.contains("        navree::ai::ModuleBuilderAiExt::agent::<agents::assistant::Assistant>(m);\n        // navree:wire\n"),
+        "{module}"
+    );
+    assert!(
+        report.hints.iter().any(|h| h.contains("`ai` feature")),
+        "{:?}",
+        report.hints
+    );
+}
+
+#[test]
 fn make_job_wires_it_into_the_module() {
     let (_dir, root) = project();
     let options = MakeOptions::default();

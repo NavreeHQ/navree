@@ -32,6 +32,12 @@ pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
     facade_module: "access",
 };
 
+/// navree-ai: `ToolSpec`, `ToolAccess` and the dispatch helpers (`#[agent]`).
+pub(crate) const AI: RuntimeCrate = RuntimeCrate {
+    package: "navree-ai",
+    facade_module: "ai",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 
