@@ -5,6 +5,8 @@ mod support;
 
 mod routes;
 
+mod authorized;
+
 mod commands;
 mod endpoints;
 mod parity;

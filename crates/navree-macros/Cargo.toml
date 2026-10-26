@@ -1,6 +1,6 @@
 [package]
 name = "navree-macros"
-description = "Navree attribute macros: #[module], #[injectable], #[controller] and route attributes."
+description = "Navree attribute macros: #[module], #[injectable], #[controller], route attributes and #[agent]."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
