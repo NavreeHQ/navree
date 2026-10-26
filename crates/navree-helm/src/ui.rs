@@ -29,11 +29,11 @@ use crate::panel::Panel;
 use crate::present::{Item, Screen, encode, present, screen_fields};
 use crate::query::ListQuery;
 use crate::session::{
-    FLASH_COOKIE, LOGIN_COOKIE, PanelSession, SESSION_COOKIE, SessionData, build_cookie,
-    clear_cookie, cookie, redirect, request_host, session_cookie,
+    FLASH_COOKIE, LOGIN_COOKIE, PanelSession, SESSION_COOKIE, SIDEBAR_COOKIE, SessionData,
+    build_cookie, clear_cookie, cookie, redirect, request_host, session_cookie,
 };
 use crate::values::key_text;
-use crate::{ActionResult, money};
+use crate::{ActionResult, icons, money};
 
 // ---------------------------------------------------------------------------
 // Responses
@@ -71,6 +71,8 @@ fn panel_json(core: &Core, csrf: &str) -> Value {
         "base": core.options.base(),
         "version": core.assets.version,
         "csrf": csrf,
+        "collapsed": false,
+        "icons": icons::ui(),
     })
 }
 
@@ -270,7 +272,7 @@ impl<'a> Frame<'a> {
                     "label": info.label,
                     "url": format!("{base}/resources/{}", info.slug),
                     "active": active == format!("resource:{}", info.slug),
-                    "initial": initial(info.label),
+                    "icon": icons::svg(info.icon),
                 }),
             );
         }
@@ -285,7 +287,7 @@ impl<'a> Frame<'a> {
                     "label": page.title,
                     "url": format!("{base}/pages/{}", page.slug),
                     "active": active == format!("page:{}", page.slug),
-                    "initial": initial(&page.title),
+                    "icon": icons::svg(&page.icon),
                 }),
             );
         }
@@ -294,13 +296,18 @@ impl<'a> Frame<'a> {
             .map(|(title, items)| json!({ "title": title, "items": items }))
             .collect();
         let user = user_json(cx).await;
+        let avatar = initials(user["name"].as_str().unwrap_or_default());
+        let mut panel = panel_json(core, self.csrf());
+        panel["collapsed"] =
+            Value::Bool(cookie(self.headers, SIDEBAR_COOKIE).as_deref() == Some("collapsed"));
         let mut ctx = json!({
-            "panel": panel_json(core, self.csrf()),
+            "panel": panel,
             "page_title": title,
             "active": active,
             "menu": menu,
             "crumbs": crumbs,
             "user": user,
+            "avatar": avatar,
             "flash": read_flash(self.headers),
         });
         if let (Value::Object(ctx), Value::Object(extra)) = (&mut ctx, extra) {
@@ -329,13 +336,19 @@ impl<'a> Frame<'a> {
     }
 }
 
-/// The first letter of a label, for the menu.
-fn initial(label: &str) -> String {
-    label
-        .chars()
-        .find(|c| c.is_alphanumeric())
-        .map(|c| c.to_uppercase().collect())
-        .unwrap_or_default()
+/// The initials of a name for the user's avatar: the first letter of its
+/// first and last words (`Maya Manager` → `MM`).
+fn initials(name: &str) -> String {
+    let first = |word: &str| word.chars().find(|c| c.is_alphanumeric());
+    let mut words = name.split_whitespace();
+    let mut out = String::new();
+    if let Some(c) = words.next().and_then(first) {
+        out.extend(c.to_uppercase());
+    }
+    if let Some(c) = words.next_back().and_then(first) {
+        out.extend(c.to_uppercase());
+    }
+    out
 }
 
 /// `{id, name, email}` of the signed-in user.

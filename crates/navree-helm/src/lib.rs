@@ -60,6 +60,7 @@ mod cx;
 mod field;
 mod filter;
 mod handle;
+mod icons;
 mod job;
 mod markdown;
 mod metric;

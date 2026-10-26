@@ -27,7 +27,7 @@
   {% if metric.kind == "value" %}
   <p class="metric-value">{{ metric.display }}</p>
   {% if metric.change is not none %}
-  <p class="metric-change {% if metric.change >= 0 %}up{% else %}down{% endif %}">{% if metric.change >= 0 %}▲{% else %}▼{% endif %} {{ metric.change_text }} <span class="muted">vs previous period</span></p>
+  <p class="metric-change {% if metric.change >= 0 %}up{% else %}down{% endif %}"><span class="delta">{% if metric.change >= 0 %}▲{% else %}▼{% endif %} {{ metric.change_text }}</span> vs the previous period</p>
   {% endif %}
   {% elif metric.kind == "trend" %}
   <p class="metric-value">{{ metric.display }}</p>

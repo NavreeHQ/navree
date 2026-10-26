@@ -1,6 +1,7 @@
 // Helm: small enhancements on top of pages that work without scripts.
-// Confirmations, select-all, local times, time-zone offsets for forms,
-// relationship pickers and Markdown previews.
+// The sidebar (Ctrl/Cmd+B, the sheet on phones), the account menu, the
+// command menu (Ctrl/Cmd+K), confirmations, select-all, local times,
+// time-zone offsets for forms, relationship pickers and Markdown previews.
 (function () {
   "use strict";
 
@@ -10,22 +11,233 @@
   };
   var base = meta("helm-base");
   var csrf = meta("csrf-token");
+  var mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
   function ready(fn) {
     if (document.readyState !== "loading") fn();
     else document.addEventListener("DOMContentLoaded", fn);
   }
 
+  // Ctrl+key, or Cmd+key on a Mac.
+  function shortcut(event, key) {
+    return (mac ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey &&
+      event.key && event.key.toLowerCase() === key;
+  }
+
+  function sidebar() {
+    // Wide screens: the trigger and Ctrl/Cmd+B collapse the sidebar to its
+    // icons, remembered in a cookie so the next page renders the same way.
+    // Phones: the trigger opens it as a sheet.
+    var shell = document.querySelector("[data-shell]");
+    var trigger = document.querySelector("[data-sidebar-trigger]");
+    if (!shell || !trigger) return;
+    var panel = document.getElementById("sidebar");
+    var narrow = window.matchMedia("(max-width: 767px)");
+    trigger.setAttribute("role", "button");
+    trigger.title = "Toggle the sidebar (" + (mac ? "⌘B" : "Ctrl+B") + ")";
+
+    var sync = function () {
+      var expanded = narrow.matches
+        ? shell.classList.contains("is-open")
+        : !shell.classList.contains("is-collapsed");
+      trigger.setAttribute("aria-expanded", String(expanded));
+    };
+    var setCollapsed = function (on) {
+      shell.classList.toggle("is-collapsed", on);
+      var secure = location.protocol === "https:" ? "; secure" : "";
+      document.cookie = "navree_helm_sidebar=" + (on ? "collapsed" : "expanded") +
+        "; path=" + (base || "/") + "; max-age=31536000; samesite=strict" + secure;
+      sync();
+    };
+    var setOpen = function (on) {
+      shell.classList.toggle("is-open", on);
+      if (location.hash === "#sidebar") history.replaceState(null, "", location.pathname + location.search);
+      sync();
+      if (on) {
+        var first = panel.querySelector(".menu-item[aria-current]") || panel.querySelector(".menu-item");
+        if (first) first.focus();
+      }
+    };
+    var toggle = function () {
+      if (narrow.matches) setOpen(!shell.classList.contains("is-open"));
+      else setCollapsed(!shell.classList.contains("is-collapsed"));
+    };
+
+    trigger.addEventListener("click", function (event) {
+      event.preventDefault();
+      toggle();
+    });
+    document.querySelectorAll("[data-sidebar-close]").forEach(function (el) {
+      el.addEventListener("click", function (event) {
+        event.preventDefault();
+        setOpen(false);
+        trigger.focus();
+      });
+    });
+    document.addEventListener("keydown", function (event) {
+      if (shortcut(event, "b")) {
+        event.preventDefault();
+        toggle();
+      } else if (event.key === "Escape" && shell.classList.contains("is-open")) {
+        setOpen(false);
+        trigger.focus();
+      }
+    });
+    var fit = function () {
+      if (!narrow.matches) shell.classList.remove("is-open");
+      sync();
+    };
+    if (narrow.addEventListener) narrow.addEventListener("change", fit);
+    sync();
+  }
+
+  function accountMenu() {
+    // The account menu closes on a click elsewhere and on Escape.
+    var menu = document.querySelector("details.user-menu");
+    if (!menu) return;
+    document.addEventListener("click", function (event) {
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    });
+    menu.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && menu.open) {
+        menu.open = false;
+        menu.querySelector("summary").focus();
+      }
+    });
+  }
+
+  function commandMenu() {
+    // Ctrl/Cmd+K: go to a resource or page of the menu, or search the
+    // current list.
+    var dialog = document.querySelector("dialog[data-command]");
+    var open = document.querySelector("[data-command-open]");
+    if (!dialog || !open || typeof dialog.showModal !== "function") return;
+    var input = dialog.querySelector("[data-command-input]");
+    var list = dialog.querySelector("[data-command-list]");
+    var empty = dialog.querySelector("[data-command-empty]");
+    open.hidden = false;
+    var kbd = open.querySelector("[data-shortcut]");
+    if (kbd) kbd.textContent = mac ? "⌘K" : "Ctrl K";
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-controls", "command-list");
+    input.setAttribute("aria-expanded", "true");
+    list.id = "command-list";
+
+    var entries = [];
+    document.querySelectorAll("#sidebar .menu-item").forEach(function (link) {
+      var group = link.closest(".sidebar-group");
+      var heading = group && group.querySelector(".group-label");
+      var label = link.querySelector(".menu-label");
+      entries.push({
+        label: label ? label.textContent.trim() : link.textContent.trim(),
+        group: heading ? heading.textContent.trim() : "",
+        url: link.getAttribute("href"),
+        icon: link.querySelector("svg")
+      });
+    });
+    var searchForm = document.querySelector("form.filters");
+    var searchInput = searchForm && searchForm.querySelector('input[name="search"]');
+    var heading = document.querySelector("main h1");
+
+    var items = [];
+    var selected = 0;
+    var select = function (index) {
+      items.forEach(function (item, i) {
+        item.li.setAttribute("aria-selected", String(i === index));
+      });
+      selected = index;
+      if (items[index]) {
+        input.setAttribute("aria-activedescendant", items[index].li.id);
+        items[index].li.scrollIntoView({ block: "nearest" });
+      } else {
+        input.removeAttribute("aria-activedescendant");
+      }
+    };
+    var add = function (label, detail, icon, run) {
+      var li = document.createElement("li");
+      li.className = "command-item";
+      li.setAttribute("role", "option");
+      li.id = "command-" + items.length;
+      var a = document.createElement("a");
+      a.href = run.url || "#";
+      a.tabIndex = -1;
+      if (icon) a.appendChild(icon.cloneNode(true));
+      var text = document.createElement("span");
+      text.textContent = label;
+      a.appendChild(text);
+      if (detail) {
+        var small = document.createElement("small");
+        small.textContent = detail;
+        a.appendChild(small);
+      }
+      a.addEventListener("click", function (event) {
+        if (run.action) {
+          event.preventDefault();
+          run.action();
+        }
+      });
+      li.appendChild(a);
+      list.appendChild(li);
+      items.push({ li: li, link: a });
+    };
+    var render = function () {
+      var query = input.value.trim().toLowerCase();
+      list.innerHTML = "";
+      items = [];
+      if (query && searchInput) {
+        add("Search " + (heading ? heading.textContent.trim() : "this list") + " for “" + input.value.trim() + "”",
+          "", null, {
+            action: function () {
+              searchInput.value = input.value.trim();
+              dialog.close();
+              searchForm.submit();
+            }
+          });
+      }
+      entries.forEach(function (entry) {
+        var haystack = (entry.label + " " + entry.group).toLowerCase();
+        if (!query || haystack.indexOf(query) !== -1) add(entry.label, entry.group, entry.icon, { url: entry.url });
+      });
+      empty.hidden = items.length > 0;
+      select(items.length ? 0 : -1);
+    };
+    var show = function () {
+      input.value = "";
+      render();
+      dialog.showModal();
+      input.focus();
+    };
+
+    open.addEventListener("click", show);
+    document.addEventListener("keydown", function (event) {
+      if (shortcut(event, "k")) {
+        event.preventDefault();
+        if (dialog.open) dialog.close();
+        else show();
+      }
+    });
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown" && items.length) {
+        event.preventDefault();
+        select((selected + 1) % items.length);
+      } else if (event.key === "ArrowUp" && items.length) {
+        event.preventDefault();
+        select((selected - 1 + items.length) % items.length);
+      } else if (event.key === "Enter" && items[selected]) {
+        event.preventDefault();
+        items[selected].link.click();
+      }
+    });
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) dialog.close();
+    });
+  }
+
   ready(function () {
-    // On phones the menu starts closed (it is open without this script);
-    // wider screens always show it.
-    var menu = document.querySelector("details.menu");
-    if (menu && window.matchMedia) {
-      var narrow = window.matchMedia("(max-width: 760px)");
-      var fit = function () { menu.open = !narrow.matches; };
-      fit();
-      if (narrow.addEventListener) narrow.addEventListener("change", fit);
-    }
+    sidebar();
+    accountMenu();
+    commandMenu();
 
     // Ask before actions that say so; the server asks itself when this
     // script is not running.

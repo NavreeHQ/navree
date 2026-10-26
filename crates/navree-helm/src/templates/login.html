@@ -12,7 +12,7 @@
 <body class="auth">
 <main class="auth-card card" id="main">
   <div class="auth-brand">
-    {% if panel.logo %}<img src="{{ panel.logo }}" alt="" class="brand-logo">{% else %}<span class="brand-mark" aria-hidden="true"></span>{% endif %}
+    <span class="switcher-tile" aria-hidden="true">{% if panel.logo %}<img src="{{ panel.logo }}" alt="">{% else %}{{ panel.icons.brand|safe }}{% endif %}</span>
     <h1>{{ panel.title }}</h1>
   </div>
   {% if step == "two_factor" %}

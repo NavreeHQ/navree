@@ -13,31 +13,65 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<div class="shell">
-  <aside class="sidebar" aria-label="Admin panel">
-    <a class="brand" href="{{ panel.base }}">
-      {% if panel.logo %}<img src="{{ panel.logo }}" alt="" class="brand-logo">{% else %}<span class="brand-mark" aria-hidden="true"></span>{% endif %}
-      <span class="brand-title">{{ panel.title }}</span>
-    </a>
-    <details class="menu" open>
-      <summary class="menu-toggle">Menu</summary>
-      <nav aria-label="Main">
-        <ul class="nav">
-          <li><a href="{{ panel.base }}"{% if active == "dashboard" %} aria-current="page"{% endif %}>Dashboard</a></li>
+<div class="shell{% if panel.collapsed %} is-collapsed{% endif %}" data-shell>
+  <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+    <div class="sidebar-header">
+      <a class="switcher" href="{{ panel.base }}" title="{{ panel.title }}">
+        <span class="switcher-tile" aria-hidden="true">{% if panel.logo %}<img src="{{ panel.logo }}" alt="">{% else %}{{ panel.icons.brand|safe }}{% endif %}</span>
+        <span class="switcher-text">
+          <span class="switcher-name">{{ panel.title }}</span>
+          <span class="switcher-context">Admin panel</span>
+        </span>
+      </a>
+      <a class="icon-btn sheet-close" href="#" data-sidebar-close aria-label="Close the menu">{{ panel.icons.close|safe }}</a>
+    </div>
+    <nav class="sidebar-content" aria-label="Main">
+      <div class="sidebar-group">
+        <ul class="menu">
+          <li><a class="menu-item" href="{{ panel.base }}" title="Dashboard"{% if active == "dashboard" %} aria-current="page"{% endif %}>{{ panel.icons.dashboard|safe }}<span class="menu-label">Dashboard</span></a></li>
         </ul>
-        {% for group in menu %}
-        <p class="nav-group" id="nav-{{ loop.index }}">{{ group.title }}</p>
-        <ul class="nav" aria-labelledby="nav-{{ loop.index }}">
+      </div>
+      {% for group in menu %}
+      <div class="sidebar-group">
+        <p class="group-label" id="nav-{{ loop.index }}">{{ group.title }}</p>
+        <ul class="menu" aria-labelledby="nav-{{ loop.index }}">
           {% for item in group.items %}
-          <li><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ item.initial }}</span>{{ item.label }}</a></li>
+          <li><a class="menu-item" href="{{ item.url }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.icon|safe }}<span class="menu-label">{{ item.label }}</span></a></li>
           {% endfor %}
         </ul>
-        {% endfor %}
-      </nav>
-    </details>
+      </div>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer">
+      <details class="user-menu">
+        <summary class="user-trigger" title="{{ user.name }}">
+          <span class="avatar" aria-hidden="true">{{ avatar }}</span>
+          <span class="user-text">
+            <span class="user-name">{{ user.name }}</span>
+            {% if user.email %}<span class="user-email">{{ user.email }}</span>{% endif %}
+          </span>
+          {{ panel.icons.chevrons|safe }}
+        </summary>
+        <div class="popover" role="group" aria-label="Account">
+          <div class="popover-head">
+            <span class="user-name">{{ user.name }}</span>
+            {% if user.email %}<span class="user-email">{{ user.email }}</span>{% endif %}
+          </div>
+          {% if panel.csrf %}
+          <form method="post" action="{{ panel.base }}/logout">
+            <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+            <button type="submit" class="popover-item">{{ panel.icons.log_out|safe }}<span>Sign out</span></button>
+          </form>
+          {% endif %}
+        </div>
+      </details>
+    </div>
   </aside>
+  <a class="sheet-overlay" href="#" data-sidebar-close tabindex="-1" aria-hidden="true"></a>
   <div class="main-column">
     <header class="topbar">
+      <a class="icon-btn sidebar-trigger" href="#sidebar" data-sidebar-trigger aria-controls="sidebar" aria-label="Toggle the sidebar" title="Toggle the sidebar (Ctrl+B)">{{ panel.icons.sidebar|safe }}</a>
+      <span class="topbar-sep" aria-hidden="true"></span>
       <nav class="crumbs" aria-label="Breadcrumb">
         <ol>
           <li><a href="{{ panel.base }}">{{ panel.title }}</a></li>
@@ -46,14 +80,8 @@
           {% endfor %}
         </ol>
       </nav>
-      <div class="user">
-        <span class="user-name" title="{{ user.email }}">{{ user.name }}</span>
-        {% if panel.csrf %}
-        <form method="post" action="{{ panel.base }}/logout">
-          <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
-          <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
-        </form>
-        {% endif %}
+      <div class="topbar-end">
+        <button type="button" class="search-trigger" data-command-open hidden>{{ panel.icons.search|safe }}<span class="search-text">Go to…</span><kbd data-shortcut>Ctrl K</kbd></button>
       </div>
     </header>
     <main id="main" tabindex="-1">
@@ -64,5 +92,14 @@
     </main>
   </div>
 </div>
+<dialog class="command" aria-label="Go to" data-command>
+  <div class="command-input">
+    {{ panel.icons.search|safe }}
+    <input type="text" placeholder="Go to a resource or page…" aria-label="Go to a resource or page" autocomplete="off" spellcheck="false" data-command-input>
+    <kbd>Esc</kbd>
+  </div>
+  <ul class="command-list" role="listbox" aria-label="Results" data-command-list></ul>
+  <p class="command-empty muted" data-command-empty hidden>No results.</p>
+</dialog>
 </body>
 </html>

@@ -33,6 +33,11 @@ pub(crate) const LOGIN_COOKIE: &str = "navree_helm_login";
 /// The one-time message shown after a redirect.
 pub(crate) const FLASH_COOKIE: &str = "navree_helm_flash";
 
+/// The sidebar's state on wide screens (`collapsed` or `expanded`), set by
+/// the script when Ctrl/Cmd+B or the trigger toggles it, so the next page
+/// renders the same way.
+pub(crate) const SIDEBAR_COOKIE: &str = "navree_helm_sidebar";
+
 /// The Content Security Policy of every panel response: scripts, styles
 /// and connections from the app's origin only, nothing inline, no framing.
 pub(crate) const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
