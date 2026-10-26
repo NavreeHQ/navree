@@ -14,9 +14,9 @@ use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
+use navree_crypto::jose::JwkSet;
 use tokio::sync::Mutex;
 
-use crate::jose::JwkSet;
 use crate::provider::ProviderEntry;
 use crate::{SocialError, SocialOptions, SocialProvider};
 
@@ -200,7 +200,7 @@ impl JwksCache {
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use crate::jose::Jwk;
+    use navree_crypto::jose::Jwk;
 
     use super::*;
 

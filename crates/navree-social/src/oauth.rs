@@ -6,10 +6,10 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::Secret;
+use navree_crypto::jose::{JwkSet, Jws};
 use navree_http_client::{HttpClientError, Response};
 use serde_json::{Map, Value, json};
 
-use crate::jose::{self, JwkSet};
 use crate::provider::{
     Endpoints, Issuer, Kind, MICROSOFT_CONSUMERS_TENANT, ProfileSource, ProviderEntry,
 };
@@ -136,10 +136,13 @@ fn client_secret(rt: &Runtime, entry: &ProviderEntry) -> Result<Option<String>, 
             "aud": audience,
             "sub": entry.config.client_id,
         });
-        let kid = entry.config.key_id.as_deref().unwrap_or_default();
-        return key.sign(kid, &claims).map(Some).map_err(|error| {
-            SocialError::Config(format!("cannot sign Apple's client secret: {error}"))
-        });
+        // `{"alg":"ES256","kid":"<key_id>"}`, as Apple expects.
+        return key
+            .sign_json(&key.header(), &claims)
+            .map(Some)
+            .map_err(|error| {
+                SocialError::Config(format!("cannot sign Apple's client secret: {error}"))
+            });
     }
     Ok(entry.config.secret().map(str::to_owned))
 }
@@ -415,14 +418,20 @@ pub(crate) async fn verify_id_token(
     id_token: &str,
     nonce: &str,
 ) -> Result<Value, SocialError> {
-    let jws = jose::decode(id_token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    let jws = Jws::parse(id_token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    let claims: Map<String, Value> = jws.claims().map_err(|_| {
+        invalid_id_token(
+            entry,
+            "malformed token: the claims are not a JSON object".to_owned(),
+        )
+    })?;
     let jwks_url = endpoints
         .jwks
         .as_deref()
         .ok_or_else(|| SocialError::Config(format!("{} has no key set", entry.name)))?;
     let keys = rt
         .jwks
-        .get(jwks_url, jws.header.kid.as_deref(), || async {
+        .get(jwks_url, jws.header().kid.as_deref(), || async {
             let response = rt
                 .http
                 .get(jwks_url)
@@ -444,9 +453,11 @@ pub(crate) async fn verify_id_token(
                 })
         })
         .await?;
-    jws.verify(&keys)
+    // RS256/384/512, PS256/384/512, ES256, ES384 or EdDSA: a key set never
+    // verifies `none` or an HMAC token.
+    jws.verify_with(&keys)
         .map_err(|e| invalid_id_token(entry, e.to_string()))?;
-    let claims = jws.claims;
+    let claims = Value::Object(claims);
     check_claims(
         entry,
         &endpoints.issuer,

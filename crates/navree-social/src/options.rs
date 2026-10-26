@@ -7,8 +7,7 @@ use navree_config::ConfigSection;
 use navree_contracts::Secret;
 use serde::{Deserialize, Deserializer};
 
-use crate::jose;
-use crate::provider::Kind;
+use crate::provider::{Kind, apple_key};
 
 /// Whether a provider's email address links to an existing user with the
 /// same address (`social.link_by_email`).
@@ -351,7 +350,7 @@ impl ProviderConfig {
                         "{at}.private_key is required for Sign in with Apple (the .p8 key)"
                     )),
                     Some(pem) => {
-                        if jose::EcSigningKey::from_pem(pem.expose()).is_err() {
+                        if apple_key(pem.expose()).is_none() {
                             errors.push(format!(
                                 "{at}.private_key is not a PKCS#8 P-256 private key (the .p8 file)"
                             ));
