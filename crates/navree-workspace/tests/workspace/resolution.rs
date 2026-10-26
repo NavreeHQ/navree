@@ -8,7 +8,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use navree_workspace::CurrentWorkspace;
+use navree_workspace::{CurrentWorkspace, PinnedWorkspace};
 use serde_json::{Value, json};
 
 use crate::support::{World, builder};
@@ -202,4 +202,87 @@ async fn the_role_comes_from_the_membership() {
         .await
         .assert_json_path("role", json!("owner"))
         .assert_json_path("permissions", json!(["all.*"]));
+}
+
+/// Pins requests that send `x-test-pin: <workspace id>` to that workspace,
+/// as an authentication strategy for workspace-bound credentials does.
+struct PinModule;
+
+impl Module for PinModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(navree_http::GlobalLayer::new(
+            navree_http::LayerSlot::AuthContext,
+            "test-pin",
+            |_ctx, router| Ok(router.layer(axum::middleware::from_fn(pin_from_header))),
+        ));
+    }
+}
+
+async fn pin_from_header(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let pin = request
+        .headers()
+        .get("x-test-pin")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| uuid::Uuid::parse_str(value).ok());
+    if let Some(pin) = pin {
+        request.extensions_mut().insert(PinnedWorkspace(pin));
+    }
+    next.run(request).await
+}
+
+#[tokio::test]
+async fn a_pinned_request_uses_its_workspace_and_no_other() {
+    let world = World::with(
+        builder()
+            .config("workspace.base_domain", "app.test")
+            .module(CurrentModule)
+            .module(PinModule),
+    )
+    .await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let acme = world.workspace(ada, "Acme").await;
+    world.workspace(ada, "Globex").await;
+    let client = world.as_user(ada);
+    let pin = acme.id.to_string();
+
+    // Naming no workspace: the pinned one.
+    client
+        .get("/api/current")
+        .header("x-test-pin", pin.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("slug", json!("acme"));
+    // Naming the pinned one: fine.
+    client
+        .get("/api/current")
+        .header("x-test-pin", pin.as_str())
+        .header("x-workspace", "acme")
+        .send()
+        .await
+        .assert_status(200);
+    // Naming another one, through a resolver or a route parameter: 403.
+    client
+        .get("/api/current")
+        .header("x-test-pin", pin.as_str())
+        .header("x-workspace", "globex")
+        .send()
+        .await
+        .assert_error(403, "This token is limited to another workspace.");
+    client
+        .get("/api/w/globex/current")
+        .header("x-test-pin", pin.as_str())
+        .send()
+        .await
+        .assert_error(403, "This token is limited to another workspace.");
+    // Without a pin, nothing changes.
+    client
+        .get("/api/current")
+        .header("x-workspace", "globex")
+        .send()
+        .await
+        .assert_status(200);
 }

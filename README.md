@@ -105,6 +105,7 @@ each test run.
 ```
 L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
+    navree-oauth (ecosystem)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -142,6 +143,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
