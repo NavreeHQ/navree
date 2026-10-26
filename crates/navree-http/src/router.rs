@@ -112,6 +112,25 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         }),
         pipeline::request_context,
     ));
+    apply_edge(ctx, router)
+}
+
+/// Applies the contributed [`LayerSlot::Edge`] layers around everything
+/// (the first registered is outermost).
+fn apply_edge(ctx: &AppContext, mut router: Router) -> Result<Router, BoxError> {
+    let contributed = ctx.contributions::<GlobalLayer>();
+    for layer in contributed
+        .iter()
+        .rev()
+        .filter(|c| c.value.slot == LayerSlot::Edge)
+    {
+        router = (layer.value.apply)(ctx, router).map_err(|error| {
+            format!(
+                "global layer `{}` of module `{}` failed: {error}",
+                layer.value.name, layer.module.name
+            )
+        })?;
+    }
     Ok(router)
 }
 
@@ -570,6 +589,7 @@ fn apply_slots(
     let mut layers: Vec<SlotEntry<'_>> = contributed
         .iter()
         .enumerate()
+        .filter(|(_, c)| c.value.slot != LayerSlot::Edge)
         .map(|(i, c)| (c.value.slot, i + 1, Some((&*c.value, c.module.name))))
         .collect();
     layers.push((LayerSlot::AuthContext, 0, None));

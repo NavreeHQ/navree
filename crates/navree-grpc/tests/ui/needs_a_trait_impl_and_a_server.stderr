@@ -1,0 +1,11 @@
+error: #[grpc_service] goes on the impl of a generated service trait: `#[grpc_service(server = DealsServer)] impl Deals for DealsGrpc { .. }`
+ --> tests/ui/needs_a_trait_impl_and_a_server.rs:6:6
+  |
+6 | impl PingGrpc {}
+  |      ^^^^^^^^
+
+error: unknown #[grpc_service] key `transport`: expected `server = DealsServer` or `interceptor = fn_name`
+  --> tests/ui/needs_a_trait_impl_and_a_server.rs:10:16
+   |
+10 | #[grpc_service(transport = Http2)]
+   |                ^^^^^^^^^

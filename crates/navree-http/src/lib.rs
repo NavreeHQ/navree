@@ -12,7 +12,9 @@
 //!   [`permissions`](RouteDef::permissions) or [`can`](RouteDef::can) fails
 //!   the boot.
 //! - [`build_router`] assembles the app. Request pipeline, outermost first:
-//!   request id → tracing and request log → CORS → panic catcher → timeout →
+//!   [`LayerSlot::Edge`] (protocols that share the port but not the
+//!   pipeline, such as gRPC) → request id → tracing and request log → CORS
+//!   → panic catcher → timeout →
 //!   security headers → compression (not for `text/event-stream`) →
 //!   error rendering → maintenance mode → per-IP rate limit → body limit →
 //!   [`LayerSlot::Session`] → [`LayerSlot::AuthContext`] (the registered
