@@ -1,7 +1,9 @@
 //! The database driver: tables `jobs` and `failed_jobs`.
 
 use navree_db::{Db, Uow};
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, QueryResult, Statement, Value};
+use sea_orm::{
+    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement, Value,
+};
 
 use crate::migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 use crate::record::{
@@ -34,6 +36,16 @@ impl DatabaseStore {
     pub(crate) async fn insert_in(&self, uow: &Uow, job: &NewJob) -> Result<String, QueueError> {
         let tx = uow.tx().await?;
         insert_on(&*tx, uow.db().backend(), job).await
+    }
+
+    /// [`insert`](DatabaseStore::insert) through `tx`, the transaction a
+    /// change observer is given while its unit of work commits.
+    pub(crate) async fn insert_on_tx(
+        &self,
+        tx: &DatabaseTransaction,
+        job: &NewJob,
+    ) -> Result<String, QueueError> {
+        insert_on(tx, self.db.backend(), job).await
     }
 
     /// Atomically reserves the next job of `queue` for `worker`: an

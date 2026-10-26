@@ -39,8 +39,9 @@ const fn rule(krate: &'static str, layer: u8, allowed: &'static [&'static str]) 
     }
 }
 
-/// Spec §3, "Allowed runtime dependency edges", plus the app layer (L7) whose
-/// crates may use anything below them. Kept one row per crate, like the spec.
+/// Spec §3, "Allowed runtime dependency edges", the ecosystem layers (L6 and
+/// L7, build plan §3), the entry points (L8) and the app layers (L9 and up)
+/// whose crates may use anything below them. Kept one row per crate.
 #[rustfmt::skip]
 const HIERARCHY: &[Rule] = &[
     // L0
@@ -85,21 +86,30 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access",
     ]),
-    // L6
-    rule("navree", 6, RUNTIME_CRATES),
-    rule("navree-cli", 6, &[]),
-    // L7 (apps): anything below, except the CLI binary.
+    // L6: ecosystem libraries (none yet in this crate set).
+    // L7: packages built on other packages.
+    // Search: full-text and vector search over entities. The server engines
+    // talk HTTP through navree-http-client; the `Searchable` derive lives in
+    // navree-macros and is re-exported next to the trait.
+    rule("navree-search", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-http-client", "navree-db", "navree-queue", "navree-access", "navree-workspace",
+    ]),
+    // L8
+    rule("navree", 8, RUNTIME_CRATES),
+    rule("navree-cli", 8, &[]),
+    // L9+ (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
     // of the crates above it); the feature crates build on crm-core; the
     // crm-api binary assembles them.
-    rule("crm-core", 7, &["navree"]),
-    rule("crm-testkit", 8, &["navree", "crm-core"]),
-    rule("crm-users", 9, &["navree", "crm-core"]),
-    rule("crm-companies", 9, &["navree", "crm-core"]),
-    rule("crm-deals", 9, &["navree", "crm-core"]),
-    rule("crm-activities", 9, &["navree", "crm-core"]),
-    rule("crm-api", 10, CRM_API_DEPENDENCIES),
+    rule("crm-core", 9, &["navree"]),
+    rule("crm-testkit", 10, &["navree", "crm-core"]),
+    rule("crm-users", 11, &["navree", "crm-core"]),
+    rule("crm-companies", 11, &["navree", "crm-core"]),
+    rule("crm-deals", 11, &["navree", "crm-core"]),
+    rule("crm-activities", 11, &["navree", "crm-core"]),
+    rule("crm-api", 12, CRM_API_DEPENDENCIES),
 ];
 
 /// What the crm-api binary may depend on: the facade and the CRM crates.
@@ -112,7 +122,7 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
+/// Every runtime crate (layers 0 to 7) plus navree-macros: what the facade may
 /// re-export and what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
@@ -142,6 +152,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-auth",
     "navree-workspace",
+    "navree-search",
 ];
 
 /// Cargo dependency kind of an edge.
