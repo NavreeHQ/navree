@@ -84,6 +84,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
 | `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
+| `navree::grpc` | navree-grpc, plus `#[grpc_service]` | `grpc` (opt-in) | `GrpcModule`: [gRPC](/docs/microservices/grpc/) services with gRPC-Web, Connect, health and reflection |
 
 The facade's root also has:
 
@@ -110,6 +111,7 @@ The facade's root also has:
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
 | Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
+| gRPC (`grpc`) | `GrpcModule` |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
 
@@ -121,7 +123,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries (`social`, `oauth`, `flags`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries (`social`, `oauth`, `flags`, `grpc`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
