@@ -33,6 +33,7 @@ compiled in).
 | `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule::for_root()` | | `m.schedule`, `schedule:work`, `schedule:run` |
 | `navree::notify` | navree-notify | `notify` | `NotifyModule::from_config()` | `notify` | `Notifier`, `Notification`, `/api/notifications` |
 | `navree::auth` | navree-auth | `auth` | `AuthModule::from_config()` | `auth` | `/api/auth/*`, `AuthService`, `CurrentUser`, strategies, two-factor |
+| `navree::dock` | navree-dock | `dock` (opt-in, not in `full`) | (a tool, not a module) | `dock.toml` | `DockFile`, `Dock`, `app_env`: the library behind `navree dock` |
 
 Also re-exported: `navree::axum` (for `navree::axum::http::StatusCode`,
 `navree::axum::extract::Multipart`, ...), the macros (`module`,

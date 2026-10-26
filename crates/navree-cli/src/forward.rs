@@ -13,6 +13,8 @@ pub struct Invocation {
     pub program: String,
     /// Its arguments.
     pub args: Vec<String>,
+    /// Environment variables set for it (the app's Dock settings).
+    pub env: Vec<(String, String)>,
 }
 
 impl Invocation {
@@ -24,13 +26,23 @@ impl Invocation {
         Self {
             program: program.into(),
             args: args.into_iter().map(Into::into).collect(),
+            env: Vec::new(),
         }
+    }
+
+    /// The same invocation with `env` set in its environment.
+    pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
+        self.env = env;
+        self
     }
 
     /// The process to spawn, in `dir`, with inherited standard streams.
     pub fn command(&self, dir: &Path) -> Command {
         let mut command = Command::new(&self.program);
-        command.args(&self.args).current_dir(dir);
+        command
+            .args(&self.args)
+            .envs(self.env.iter().map(|(k, v)| (k, v)))
+            .current_dir(dir);
         command
     }
 
@@ -79,6 +91,26 @@ mod tests {
             invocation.args,
             ["run", "--quiet", "--", "migrate:fresh", "--seed"]
         );
+    }
+
+    #[test]
+    fn dock_settings_reach_the_process_environment() {
+        let invocation = forward("migrate", &[]).with_env(vec![(
+            "APP_DATABASE__URL".to_owned(),
+            "postgres://navree:navree@127.0.0.1:5432/blog".to_owned(),
+        )]);
+        let command = invocation.command(Path::new("."));
+        let envs: Vec<_> = command.get_envs().collect();
+        assert_eq!(
+            envs,
+            [(
+                std::ffi::OsStr::new("APP_DATABASE__URL"),
+                Some(std::ffi::OsStr::new(
+                    "postgres://navree:navree@127.0.0.1:5432/blog"
+                ))
+            )]
+        );
+        assert!(forward("migrate", &[]).env.is_empty());
     }
 
     #[test]

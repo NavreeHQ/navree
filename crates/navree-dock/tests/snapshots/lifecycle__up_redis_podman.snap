@@ -1,0 +1,12 @@
+---
+source: crates/navree-dock/tests/lifecycle.rs
+expression: "transcript(&dock, &out)"
+---
+$ podman ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ podman image inspect --format '{{.Id}}' redis:7
+$ podman compose --project-name crm-api --file .navree/dock/compose.yaml up --detach redis
+$ podman exec crm-api-redis redis-cli ping
+--- printed ---
+Starting crm-api services with podman
+  redis  redis:7  127.0.0.1:6379  ready in 0.0 s
+Wrote 1 setting to .env: REDIS_URL.

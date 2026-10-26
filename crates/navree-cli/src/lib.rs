@@ -1,8 +1,9 @@
 //! # navree-cli
 //!
 //! The library behind the `navree` command-line tool: it creates apps,
-//! generates code and runs the dev loop. It depends on no navree crate:
-//! everything it knows about the framework is in the code it generates.
+//! generates code, runs the dev loop and the app's local services. Its only
+//! navree dependency is navree-dock (a tool crate): everything it knows
+//! about the framework's runtime is in the code it generates.
 //!
 //! | Command | What it does |
 //! |---|---|
@@ -10,7 +11,12 @@
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test in a module ([`make::make_item`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
+//! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
+//! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
+//!
+//! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
+//! its services' settings to the app as environment variables.
 //!
 //! Generators render MiniJinja templates embedded in the binary
 //! ([`templates`]) into a [`scaffold::FileSet`] that is written without
@@ -23,6 +29,7 @@ pub mod cli;
 pub mod clock;
 pub mod commands;
 pub mod dev;
+pub mod dock;
 pub mod edit;
 pub mod forward;
 pub mod make;
