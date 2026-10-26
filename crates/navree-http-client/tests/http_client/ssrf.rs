@@ -116,3 +116,68 @@ async fn non_http_schemes_are_refused() {
 
     assert!(matches!(error, HttpClientError::Build(_)), "{error:?}");
 }
+
+#[tokio::test]
+async fn check_destination_refuses_blocked_literal_ips_and_bad_urls() {
+    let client = client_allowing(&[]);
+
+    for url in [
+        "http://169.254.169.254/latest/meta-data/",
+        "https://10.0.0.1/hooks",
+        "http://[::1]:8080/",
+    ] {
+        let error = client.check_destination(url).await.unwrap_err();
+        assert!(
+            matches!(error, HttpClientError::Blocked { .. }),
+            "{url}: {error:?}"
+        );
+    }
+    for url in ["ftp://example.com/", "not a url"] {
+        let error = client.check_destination(url).await.unwrap_err();
+        assert!(
+            matches!(error, HttpClientError::Build(_)),
+            "{url}: {error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn check_destination_resolves_host_names_on_real_clients() {
+    let error = client_allowing(&[])
+        .check_destination("http://localhost:9/hooks")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, HttpClientError::Blocked { .. }),
+        "{error:?}"
+    );
+
+    client_allowing(&["localhost"])
+        .check_destination("http://localhost:9/hooks")
+        .await
+        .unwrap();
+    client_allowing(&["127.0.0.0/8"])
+        .check_destination("http://127.0.0.1:9/hooks")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn check_destination_on_a_fake_client_checks_literal_ips_only() {
+    let (client, server) = HttpClient::fake();
+
+    client
+        .check_destination("https://hooks.example.com/navree")
+        .await
+        .unwrap();
+    let error = client
+        .check_destination("http://127.0.0.1/")
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(error, HttpClientError::Blocked { .. }),
+        "{error:?}"
+    );
+    server.assert_nothing_sent();
+}

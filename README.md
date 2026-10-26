@@ -94,17 +94,21 @@ Documents:
 
 ## Crate hierarchy
 
-The crates form eight layers (spec §3). A crate may depend only on crates in
-lower layers, dev-dependencies included, and its runtime dependencies must
-also match the spec's table of allowed edges. Cross-cutting needs (audit,
+The crates form layers (spec §3): the framework from L0 to L5, ecosystem
+libraries at L6, packages built on them at L7, and the facade and CLI at L8.
+A crate may depend only on crates in lower layers, dev-dependencies included,
+and its runtime dependencies must also match the spec's table of allowed
+edges. Cross-cutting needs (audit,
 events, broadcasting, sessions, health checks, jobs, the current principal)
 go through traits in `navree-contracts`, so modules don't depend on each
 other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
 each test run.
 
 ```
-L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
+L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
+L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
+L7  packages built on other packages
+L6  navree-webhooks
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -142,8 +146,9 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
-| L6 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
+| L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
+| L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
