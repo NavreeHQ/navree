@@ -34,3 +34,7 @@ __pycache__/
 # Browser-automation scratch files
 .playwright-mcp/
 /bench/results/logs/*.build.log
+
+# Local deploy credentials: never commit
+cf.token
+*.token

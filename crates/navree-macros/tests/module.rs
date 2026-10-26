@@ -70,7 +70,11 @@ async fn module_registers_imports_providers_exports() {
         vec!["Repo"]
     );
 
-    let app = Navree::app().module(UsersModule).boot().await.expect("boot");
+    let app = Navree::app()
+        .module(UsersModule)
+        .boot()
+        .await
+        .expect("boot");
     let service = app.ctx().get::<UserService>().await.expect("UserService");
     let repo = app.ctx().get::<Repo>().await.expect("Repo");
     assert!(Arc::ptr_eq(&service.repo, &repo));

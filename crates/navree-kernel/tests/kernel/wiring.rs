@@ -33,7 +33,11 @@ mod visibility {
 
     #[tokio::test]
     async fn resolves_exported_provider_from_imported_module() {
-        let app = Navree::app().module(UsersModule).boot().await.expect("boot");
+        let app = Navree::app()
+            .module(UsersModule)
+            .boot()
+            .await
+            .expect("boot");
         let service = app.ctx().get::<UserService>().await.expect("UserService");
         let repo = app.ctx().get::<Repo>().await.expect("Repo");
         assert!(std::sync::Arc::ptr_eq(&service.repo, &repo));

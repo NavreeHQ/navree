@@ -166,7 +166,10 @@ impl Controller for PostController {
     }
 }
 
-async fn index(uow: Uow, posts: Accessible<post::Entity, Read>) -> navree_http::Result<Json<Value>> {
+async fn index(
+    uow: Uow,
+    posts: Accessible<post::Entity, Read>,
+) -> navree_http::Result<Json<Value>> {
     let select = posts.apply(post::Entity::find().order_by_asc(post::Column::Title));
     let rows = select.all(&*uow.tx().await?).await?;
     let titles: Vec<String> = rows.into_iter().map(|p| p.title).collect();

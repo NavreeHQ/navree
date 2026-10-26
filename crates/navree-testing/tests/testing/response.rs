@@ -247,6 +247,9 @@ async fn set_cookie_exposes_the_attributes_the_server_sent() {
         .set_cookie("XSRF-TOKEN")
         .expect("XSRF-TOKEN is set");
     assert_eq!(xsrf.http_only(), None, "readable by JavaScript");
-    assert_eq!(xsrf.same_site(), Some(navree_testing::cookie::SameSite::Lax));
+    assert_eq!(
+        xsrf.same_site(),
+        Some(navree_testing::cookie::SameSite::Lax)
+    );
     assert!(response.set_cookie("visits").is_none());
 }

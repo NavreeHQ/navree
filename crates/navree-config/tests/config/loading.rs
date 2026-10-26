@@ -159,7 +159,10 @@ fn dotenv_entries_use_the_app_mapping_and_leave_the_process_env_alone() {
         config.get_string("mail.host").as_deref(),
         Some("smtp.example.com")
     );
-    assert_eq!(config.get_string("navree_config_test_unprefixed_7f3a"), None);
+    assert_eq!(
+        config.get_string("navree_config_test_unprefixed_7f3a"),
+        None
+    );
     assert!(std::env::var_os("APP_MAIL__HOST").is_none());
     assert!(std::env::var_os("NAVREE_CONFIG_TEST_UNPREFIXED_7F3A").is_none());
 }

@@ -15,7 +15,7 @@ dependency-injection container, deny-by-default routing with CASL-compatible
 abilities, a unit of work per request, NestJS-format errors, logging and an
 audit trail that are on by default.
 
-Navree was developed under the working name Navree.
+Navree was developed under the working name Navree and briefly called Navree.
 
 The repository is a Cargo workspace of small module crates, plus a reference
 CRM built on top of them:

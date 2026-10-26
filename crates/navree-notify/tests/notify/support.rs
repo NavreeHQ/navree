@@ -11,7 +11,9 @@ use navree_contracts::{
 use navree_db::{DatabaseModule, Db};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, Message, TemplateMail, TransportConfig};
-use navree_notify::{Channel, Notifiable, Notification, NotifyModule, NotifyOptions, notifications};
+use navree_notify::{
+    Channel, Notifiable, Notification, NotifyModule, NotifyOptions, notifications,
+};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
 use sea_orm::{EntityTrait, QueryOrder};

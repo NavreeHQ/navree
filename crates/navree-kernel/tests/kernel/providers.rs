@@ -202,7 +202,11 @@ mod multi {
 
     #[tokio::test]
     async fn multi_binding_get_all_returns_every_registration() {
-        let app = Navree::app().module(CacheChecks).boot().await.expect("boot");
+        let app = Navree::app()
+            .module(CacheChecks)
+            .boot()
+            .await
+            .expect("boot");
         let names =
             |checks: Vec<Arc<dyn Check>>| checks.iter().map(|c| c.name()).collect::<Vec<_>>();
 

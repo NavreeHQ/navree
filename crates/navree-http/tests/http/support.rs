@@ -16,8 +16,8 @@ use navree_http::{
     build_router,
 };
 use navree_kernel::{
-    App, AppBuilder, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey,
-    Resolver,
+    App, AppBuilder, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
+    ProviderKey, Resolver,
 };
 use tower::ServiceExt;
 use uuid::Uuid;

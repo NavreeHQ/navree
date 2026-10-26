@@ -9,8 +9,9 @@ export const site = {
   tagline: "Laravel's completeness, NestJS's structure, Rust's speed and footprint.",
   description:
     "Navree is a web application framework for Rust. Routing, validation, an ORM, auth, queues, mail, real time and testing come in the box, organised into modules like NestJS, running on Tokio and Axum.",
-  // TODO(user): set the real repository URL
-  repoUrl: "https://github.com/navree-sh/navree",
+  // TODO(user): set the real repository URL. The GitHub organisation isn't created yet
+  // (`navree` itself is taken on GitHub; `navree-rs` and `navreehq` were free).
+  repoUrl: "https://github.com/navree-rs/navree",
   /** The branch that "Edit this page" links point at. */
   repoBranch: "main",
   /** Where this site lives inside the repository. */

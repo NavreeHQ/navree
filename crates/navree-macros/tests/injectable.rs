@@ -145,7 +145,11 @@ async fn injectable_default_fields_use_default() {
     use defaults::{Stats, StatsModule};
     use std::sync::atomic::Ordering;
 
-    let app = Navree::app().module(StatsModule).boot().await.expect("boot");
+    let app = Navree::app()
+        .module(StatsModule)
+        .boot()
+        .await
+        .expect("boot");
     let stats = app.ctx().get::<Stats>().await.expect("Stats");
     let repo = app.ctx().get::<Repo>().await.expect("Repo");
     assert!(Arc::ptr_eq(&stats.repo, &repo));

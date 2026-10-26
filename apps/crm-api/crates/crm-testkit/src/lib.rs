@@ -38,7 +38,9 @@ use navree::auth::User;
 use navree::contracts::Clock;
 use navree::prelude::*;
 use navree::queue::{Queue, WorkStats};
-use navree::testing::{FixedClock, TempDirGuard, TestApp, TestClient, TestRequest, temp_sqlite_url};
+use navree::testing::{
+    FixedClock, TempDirGuard, TestApp, TestClient, TestRequest, temp_sqlite_url,
+};
 use serde_json::{Value, json};
 use uuid::Uuid;
 

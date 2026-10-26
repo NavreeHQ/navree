@@ -288,7 +288,8 @@ fn violation(edge: &Edge) -> Option<String> {
             return None;
         }
         // Proc-macro tests expand against the runtime crates they target.
-        if from == "navree-macros" && RUNTIME_CRATES.contains(&to.as_str()) && to != "navree-macros" {
+        if from == "navree-macros" && RUNTIME_CRATES.contains(&to.as_str()) && to != "navree-macros"
+        {
             return None;
         }
     }
@@ -543,5 +544,8 @@ fn unknown_navree_crates_are_reported() {
         edge("navree-http", "navree-redis", Kind::Normal),
     ]);
     assert_eq!(found.len(), 2, "{found:?}");
-    assert!(found.iter().all(|m| m.contains("navree-redis")), "{found:?}");
+    assert!(
+        found.iter().all(|m| m.contains("navree-redis")),
+        "{found:?}"
+    );
 }

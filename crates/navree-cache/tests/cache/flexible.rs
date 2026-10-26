@@ -30,7 +30,8 @@ where
 fn counted(
     calls: &Arc<AtomicUsize>,
     value: u32,
-) -> impl FnOnce() -> std::pin::Pin<Box<dyn Future<Output = Result<u32, navree_kernel::BoxError>> + Send>>
+) -> impl FnOnce()
+    -> std::pin::Pin<Box<dyn Future<Output = Result<u32, navree_kernel::BoxError>> + Send>>
 + Send
 + 'static {
     let calls = calls.clone();

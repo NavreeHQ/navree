@@ -8,7 +8,7 @@ const APP = "http://crm.test";
 type Call = { url: string; method: string; headers: Headers; body: string };
 
 /** A scripted Navree API: routes by "METHOD /path", records every call. */
-function fakeNavis(routes: Record<string, (call: Call) => Response | Promise<Response>>) {
+function fakeNavree(routes: Record<string, (call: Call) => Response | Promise<Response>>) {
   const calls: Call[] = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -82,7 +82,7 @@ const user = { __type: "User", id: "u1", name: "Priya Shah", email: "rep1@navree
 
 describe("BFF proxy", () => {
   it("forwards to Navree with the access token as a bearer header, never the cookies", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/v1/deals": () =>
         Response.json({ data: [], meta: { total: 0 } }, { headers: { "x-request-id": "req-1", etag: '"v1"' } }),
     });
@@ -105,7 +105,7 @@ describe("BFF proxy", () => {
   });
 
   it("passes JSON bodies through and streams non-JSON responses (CSV export) with their headers", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "POST /api/v1/companies": (call) =>
         Response.json({ __type: "Company", ...JSON.parse(call.body) }, { status: 201 }),
       "GET /api/v1/contacts/export": () =>
@@ -134,7 +134,7 @@ describe("BFF proxy", () => {
   });
 
   it("on a 401 refreshes once, retries with the new access token and updates both cookies", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/auth/me": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json(user)
@@ -166,7 +166,7 @@ describe("BFF proxy", () => {
 
   it("replays the request body after refreshing", async () => {
     let attempts = 0;
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "POST /api/v1/deals/d1/move": (call) => {
         attempts += 1;
         return attempts === 1
@@ -190,7 +190,7 @@ describe("BFF proxy", () => {
   });
 
   it("clears both cookies and returns 401 when the refresh fails", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/v1/dashboard": () =>
         Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized" }, { status: 401 }),
       "POST /api/auth/refresh": () =>
@@ -213,7 +213,7 @@ describe("BFF proxy", () => {
   });
 
   it("refreshes up front when only the refresh cookie is left", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/auth/me": (call) => Response.json({ auth: call.headers.get("authorization") }),
       "POST /api/auth/refresh": () => Response.json(tokens(5)),
     });
@@ -227,7 +227,7 @@ describe("BFF proxy", () => {
 
   it("shares one refresh between concurrent requests (refresh tokens rotate; reuse revokes the family)", async () => {
     let refreshCalls = 0;
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/v1/deals/board": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json({ ok: true })
@@ -250,7 +250,7 @@ describe("BFF proxy", () => {
   });
 
   it("does not hang on tee'd response bodies, as Next.js's server fetch returns them", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "GET /api/auth/me": (call) =>
         call.headers.get("authorization") === "Bearer AT2"
           ? Response.json(user)
@@ -304,7 +304,7 @@ describe("BFF proxy", () => {
 
 describe("BFF origin check (CSRF defence for the cookie hop)", () => {
   const navree = () =>
-    fakeNavis({
+    fakeNavree({
       "POST /api/v1/companies": () => Response.json({}, { status: 201 }),
       "GET /api/v1/companies": () => Response.json({}),
     });
@@ -379,7 +379,7 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
 
 describe("BFF login and logout", () => {
   it("login stores both tokens in httpOnly cookies and returns only {user}", async () => {
-    const navree = fakeNavis({ "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }) });
+    const navree = fakeNavree({ "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch, secureCookies: false });
 
     const response = await bff.login(
@@ -402,7 +402,7 @@ describe("BFF login and logout", () => {
   });
 
   it("login passes Navree's error through and sets no cookies", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "POST /api/auth/login": () =>
         Response.json({ statusCode: 401, message: "Invalid credentials", error: "Unauthorized" }, { status: 401 }),
     });
@@ -418,7 +418,7 @@ describe("BFF login and logout", () => {
   });
 
   it("logout revokes the refresh token at Navree with the bearer token and clears both cookies", async () => {
-    const navree = fakeNavis({ "POST /api/auth/logout": () => new Response(null, { status: 204 }) });
+    const navree = fakeNavree({ "POST /api/auth/logout": () => new Response(null, { status: 204 }) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.logout(
@@ -458,7 +458,7 @@ describe("BFF two-factor sign-in", () => {
   const challenge = { two_factor_required: true, challenge_token: "CHALLENGE-JWT", expires_in: 300 };
 
   it("login keeps the challenge token in an httpOnly cookie and returns only {two_factor_required, expires_in}", async () => {
-    const navree = fakeNavis({ "POST /api/auth/login": () => Response.json(challenge) });
+    const navree = fakeNavree({ "POST /api/auth/login": () => Response.json(challenge) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch, secureCookies: true });
 
     const response = await bff.login(
@@ -476,7 +476,7 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify sends the challenge token from the cookie with the code, stores the tokens and returns only {user}", async () => {
-    const navree = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(7) }) });
+    const navree = fakeNavree({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(7) }) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch, secureCookies: false });
 
     const response = await bff.verifyTwoFactor(
@@ -499,7 +499,7 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify forwards a recovery code instead of a code", async () => {
-    const navree = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(8) }) });
+    const navree = fakeNavree({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(8) }) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.verifyTwoFactor(
@@ -515,7 +515,7 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify passes a wrong code's error through and keeps the challenge cookie for another try", async () => {
-    const navree = fakeNavis({
+    const navree = fakeNavree({
       "POST /api/auth/2fa/verify": () =>
         Response.json({ statusCode: 401, message: "Invalid two-factor code", error: "Unauthorized" }, { status: 401 }),
     });
@@ -539,7 +539,7 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify without a challenge cookie is a 401 that never reaches Navree", async () => {
-    const navree = fakeNavis({});
+    const navree = fakeNavree({});
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.verifyTwoFactor(
@@ -552,7 +552,7 @@ describe("BFF two-factor sign-in", () => {
   });
 
   it("verify is guarded by the origin check", async () => {
-    const navree = fakeNavis({});
+    const navree = fakeNavree({});
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.verifyTwoFactor(
@@ -571,7 +571,7 @@ describe("BFF two-factor sign-in", () => {
 
 describe("BFF keeps tokens out of proxied responses", () => {
   it("a token pair returned by Navree (PATCH /api/auth/me/password) replaces the cookies and is not sent to the browser", async () => {
-    const navree = fakeNavis({ "PATCH /api/auth/me/password": () => Response.json(tokens(9)) });
+    const navree = fakeNavree({ "PATCH /api/auth/me/password": () => Response.json(tokens(9)) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.proxy(
@@ -591,7 +591,7 @@ describe("BFF keeps tokens out of proxied responses", () => {
   });
 
   it("the login body of a proxied 2FA verify is reduced to {user}", async () => {
-    const navree = fakeNavis({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(10) }) });
+    const navree = fakeNavree({ "POST /api/auth/2fa/verify": () => Response.json({ user, ...tokens(10) }) });
     const bff = createBff({ apiUrl: API, fetch: navree.fetch });
 
     const response = await bff.proxy(
@@ -610,7 +610,7 @@ describe("BFF client address for Navree's per-IP limits (X-Forwarded-For)", () =
   // it is missing), so these values reach the route handlers untouched.
   const spoofed = { "x-forwarded-for": "6.6.6.6", "x-real-ip": "6.6.6.6" };
   const everyRoute = () =>
-    fakeNavis({
+    fakeNavree({
       "GET /api/v1/me": () => Response.json({ id: "u1" }),
       "POST /api/auth/login": () => Response.json({ user, ...tokens(1) }),
       "POST /api/auth/refresh": () => Response.json(tokens(2)),
@@ -669,7 +669,7 @@ describe("BFF client address for Navree's per-IP limits (X-Forwarded-For)", () =
     }
 
     // A CDN and a load balancer: the CDN saw the client, the load balancer appended the CDN's address.
-    const two = fakeNavis({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+    const two = fakeNavree({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
     await createBff({ apiUrl: API, fetch: two.fetch, trustedProxyHops: 2 }).proxy(
       request("/api/v1/me", { headers: { "x-forwarded-for": "6.6.6.6,2001:db8::7 , 10.0.0.2" } }),
       "/api/v1/me",
@@ -685,7 +685,7 @@ describe("BFF client address for Navree's per-IP limits (X-Forwarded-For)", () =
       [2, "203.0.113.7"],
     ];
     for (const [trustedProxyHops, forwardedFor] of cases) {
-      const navree = fakeNavis({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+      const navree = fakeNavree({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
       const headers: Record<string, string> = forwardedFor === undefined ? {} : { "x-forwarded-for": forwardedFor };
       await createBff({ apiUrl: API, fetch: navree.fetch, trustedProxyHops }).proxy(
         request("/api/v1/me", { headers }),

@@ -32,7 +32,10 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::events::EventsModule, EventsModule>());
     assert!(same::<navree::view::ViewModule, ViewModule>());
     assert!(same::<navree::cache::CacheModule, CacheModule>());
-    assert!(same::<navree::http_client::HttpClientModule, HttpClientModule>());
+    assert!(same::<
+        navree::http_client::HttpClientModule,
+        HttpClientModule,
+    >());
     // L3
     assert!(same::<navree::db::DatabaseModule, DatabaseModule>());
     assert!(same::<navree::testing::TestApp, navree::testing::TestApp>());
