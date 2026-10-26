@@ -201,6 +201,7 @@ pub(crate) fn scheme(url: &str) -> Option<Cow<'_, str>> {
 }
 
 /// Whether `url` names a MySQL or MariaDB server.
+#[cfg(any(feature = "mysql", test))]
 pub(crate) fn is_mysql_url(url: &str) -> bool {
     matches!(scheme(url).as_deref(), Some("mysql" | "mariadb"))
 }

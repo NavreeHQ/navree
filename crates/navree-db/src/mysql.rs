@@ -7,6 +7,7 @@
 
 /// Adds strict mode to the session's SQL mode (`database.mysql.strict =
 /// true`). `NULLIF` keeps an empty server mode from leaving a leading comma.
+#[cfg(any(feature = "mysql", test))]
 pub(crate) const STRICT_SESSION: &str = "SET SESSION sql_mode = CONCAT_WS(',', \
      NULLIF(@@SESSION.sql_mode, ''), 'STRICT_TRANS_TABLES', 'NO_ZERO_IN_DATE', \
      'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')";
@@ -14,11 +15,13 @@ pub(crate) const STRICT_SESSION: &str = "SET SESSION sql_mode = CONCAT_WS(',', \
 /// Removes strict mode from the session's SQL mode (`database.mysql.strict
 /// = false`). The server lists every mode once, so wrapping the list in
 /// commas and replacing `,MODE,` with `,` removes exactly that mode.
+#[cfg(any(feature = "mysql", test))]
 pub(crate) const LENIENT_SESSION: &str = "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
      REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
      ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))";
 
 /// The statement a new connection runs for `database.mysql.strict`.
+#[cfg(any(feature = "mysql", test))]
 pub(crate) fn session_statement(strict: bool) -> &'static str {
     if strict {
         STRICT_SESSION
