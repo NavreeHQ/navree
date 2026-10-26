@@ -1,0 +1,28 @@
+{% extends "helm/layout.html" %}
+{% import "helm/macros.html" as m %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ resource.label }}</p>
+    <h1>{{ action.label }}</h1>
+  </div>
+</div>
+<section class="card form-card{% if action.destructive %} danger-zone{% endif %}">
+  <p class="lead">{% if action.question %}{{ action.question }}{% else %}Run “{{ action.label }}” on {{ count }} {% if count == 1 %}record{% else %}records{% endif %}.{% endif %}</p>
+  {% if general_error %}<div class="flash flash-error" role="alert">{{ general_error }}</div>{% endif %}
+  <form method="post" action="{{ resource.actions_url }}" class="stack" novalidate>
+    <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+    <input type="hidden" name="_return" value="{{ return_url }}">
+    <input type="hidden" name="_confirmed" value="1">
+    <input type="hidden" name="_step" value="run">
+    <input type="hidden" name="_tz_offset" value="" data-tz-offset>
+    <input type="hidden" name="action" value="{{ action.name }}">
+    {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
+    {% for f in fields %}{{ m.input(f) }}{% endfor %}
+    <div class="form-buttons">
+      <button type="submit" class="btn {% if action.destructive %}btn-danger{% else %}btn-primary{% endif %}">{{ action.label }}</button>
+      <a class="btn btn-ghost" href="{{ return_url }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

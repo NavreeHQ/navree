@@ -116,7 +116,13 @@ const HIERARCHY: &[Rule] = &[
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
     ]),
-    // L7: packages built on other packages (none yet).
+    // L7: packages built on other packages.
+    // Helm: the admin panel. navree-crypto seals its session cookie.
+    rule("navree-helm", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
+        "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`.
@@ -180,6 +186,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-social",
     "navree-webhooks",
     "navree-oauth",
+    "navree-helm",
 ];
 
 /// Cargo dependency kind of an edge.

@@ -36,6 +36,7 @@
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
+//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
@@ -175,6 +176,10 @@ pub use navree_webhooks as webhooks;
 pub use navree_oauth as oauth;
 #[cfg(feature = "social")]
 pub use navree_social as social;
+
+// L7: packages built on other packages.
+#[cfg(feature = "helm")]
+pub use navree_helm as helm;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

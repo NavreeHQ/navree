@@ -57,6 +57,8 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    // L7
+    assert!(same::<navree::helm::HelmModule, HelmModule>());
 }
 
 /// Opt-in ecosystem crates are re-exported whole behind their feature
