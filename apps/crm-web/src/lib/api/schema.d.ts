@@ -3107,7 +3107,7 @@ export interface components {
             /** @description The email address of the account. */
             email: string;
         };
-        /** @description The NestJS error format, as every error response carries it (`application/json`). */
+        /** @description The JSON error shape every error response carries (`application/json`). */
         HttpError: {
             /** @description The reason phrase of the status (`Not Found`, `Bad Request`). */
             error: string;

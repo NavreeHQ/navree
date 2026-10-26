@@ -1,6 +1,6 @@
 //! # navree-schedule
 //!
-//! `ScheduleModule`: cron-style schedules with overlap prevention and
+//! `ScheduleModule`: cron schedules with overlap prevention and
 //! single-node runs.
 //!
 //! - Modules declare tasks with

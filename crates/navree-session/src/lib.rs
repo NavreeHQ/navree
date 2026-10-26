@@ -1,7 +1,7 @@
 //! # navree-session
 //!
 //! `SessionModule`: encrypted session cookies, memory and database stores,
-//! and CSRF protection, compatible with Laravel Sanctum's SPA protocol.
+//! and CSRF protection for single-page apps (a CSRF cookie echoed in a header).
 //!
 //! - [`SessionModule`] is global. Configure it with
 //!   [`SessionModule::for_root`] or [`SessionModule::from_config`] (section
@@ -25,8 +25,8 @@
 //! **CSRF rule.** A request with a state-changing method (anything but
 //! `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie and
 //! no `Authorization: Bearer` token must send the session's CSRF token in
-//! `X-XSRF-TOKEN` (the URL-decoded `XSRF-TOKEN` cookie, as Axios and
-//! Laravel Echo send it) or `X-CSRF-TOKEN`; otherwise it fails with a 403
+//! `X-XSRF-TOKEN` (the URL-decoded `XSRF-TOKEN` cookie, as Axios sends
+//! it) or `X-CSRF-TOKEN`; otherwise it fails with a 403
 //! `"Invalid CSRF token"` error before the handler runs, is logged on
 //! target `navree::security` and, when the app has a `dyn AuditSink`, written
 //! to the audit trail (`csrf.mismatch`). Such a request *without* the

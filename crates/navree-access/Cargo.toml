@@ -1,6 +1,6 @@
 [package]
 name = "navree-access"
-description = "Navree AccessModule: roles, permissions and CASL-compatible abilities with record checks and SQL list filters."
+description = "Navree AccessModule: roles, permissions and abilities with record checks and SQL list filters, shared with front ends as CASL JSON."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,4 +1,4 @@
-//! Passport-style [`Strategy`]s, the built-in [`JwtStrategy`] and the
+//! Pluggable [`Strategy`]s, the built-in [`JwtStrategy`] and the
 //! [`StrategyAuthenticator`] that runs them for navree-http.
 
 use std::fmt;
@@ -11,7 +11,7 @@ use navree_http::{AppError, Authenticator};
 
 use crate::{AuthError, JwtService, TokenType};
 
-/// One way of authenticating a request (a Passport strategy). Register
+/// One way of authenticating a request (a strategy). Register
 /// strategies as `dyn Strategy` multi-bindings (`m.multi(Factory::<dyn
 /// Strategy>::new(..))` or
 /// [`ModuleBuilderAuthExt::strategy`](crate::ModuleBuilderAuthExt::strategy));

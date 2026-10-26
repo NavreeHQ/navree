@@ -99,7 +99,7 @@ pub type ApplyLayer = Arc<dyn Fn(&AppContext, Router) -> Result<Router, BoxError
 /// `AppContext`, the `navree_contracts::RequestId` and the [`ClientIp`](crate::ClientIp);
 /// from the `AuthContext` slot inward they also hold the
 /// `navree_contracts::AuthState`. Error responses should be [`AppError`]s, so
-/// they render in the NestJS error format.
+/// they render in Navree's JSON error shape.
 ///
 /// ```
 /// use axum::extract::Request;

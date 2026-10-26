@@ -283,7 +283,7 @@ impl TestResponse {
         self.headers.get(name).and_then(|v| v.to_str().ok())
     }
 
-    /// Asserts a NestJS-format error response (`{"statusCode", "message",
+    /// Asserts a JSON error response (`{"statusCode", "message",
     /// "error"}`, `application/json`) with `status` and an `X-Request-Id`
     /// header, and returns the body.
     pub fn assert_error(&self, status: u16) -> serde_json::Value {

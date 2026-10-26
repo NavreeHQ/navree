@@ -104,7 +104,7 @@ async fn cors_headers_on_error_responses() {
 }
 
 #[tokio::test]
-async fn panics_and_timeouts_are_nest_errors() {
+async fn panics_and_timeouts_are_json_errors() {
     let app = Setup::new(error_routes()).boot().await;
 
     let body = app.get("/api/panic").await.assert_error(500);

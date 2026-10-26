@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn defaults_follow_the_nestjs_recipe() {
+    fn defaults_are_the_documented_ones() {
         let options = load(ConfigSources::new()).unwrap();
         assert!(options.registration);
         assert_eq!(options.login_throttle_per_minute, 5);

@@ -2,7 +2,7 @@
  * MSW handlers implementing the Navree CRM API contract (spec §7, §9, §10) as the
  * browser sees it through the BFF: same-origin `/api/*`, the session held
  * "server side" (here: sessionStorage stands in for the httpOnly token
- * cookies), `POST /api/auth/login` returning only `{user}`, NestJS error bodies
+ * cookies), `POST /api/auth/login` returning only `{user}`, Navree error bodies
  * (`{statusCode, message, error}`; validation = 400 with `message[]` and
  * `errors`), CASL authorization + 403 (the same rules the UI receives), login
  * throttling + 429, pagination, and `deal.updated` / `notification.created`
@@ -69,7 +69,7 @@ function requestId(): string {
   return makeId(Date.now());
 }
 
-/** NestJS error body: `{statusCode, message, error}` (+ `errors` for validation). */
+/** Navree error body: `{statusCode, message, error}` (+ `errors` for validation). */
 function errorResponse(
   status: number,
   message?: string | string[],

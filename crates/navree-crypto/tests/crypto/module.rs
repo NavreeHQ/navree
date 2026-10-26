@@ -188,7 +188,7 @@ async fn from_config_reads_environment_variables() {
     );
     assert_eq!(encrypter.decrypt(&payload_k0).expect("k0 payload"), b"zero");
 
-    // Laravel-style `APP_KEY` / `APP_PREVIOUS_KEYS` (top-level `key`) work too.
+    // Top-level `APP_KEY` / `APP_PREVIOUS_KEYS` (top-level `key`) work too.
     let app = boot_with_config(ConfigSources::new().env_vars(
         "APP_",
         [("APP_KEY", k1.as_str()), ("APP_PREVIOUS_KEYS", k0.as_str())],

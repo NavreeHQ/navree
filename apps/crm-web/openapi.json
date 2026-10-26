@@ -1849,7 +1849,7 @@
         "type": "object"
       },
       "HttpError": {
-        "description": "The NestJS error format, as every error response carries it (`application/json`).",
+        "description": "The JSON error shape every error response carries (`application/json`).",
         "properties": {
           "error": {
             "description": "The reason phrase of the status (`Not Found`, `Bad Request`).",

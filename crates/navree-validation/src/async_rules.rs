@@ -55,7 +55,7 @@ impl Kind {
 ///
 /// Table and column names must match `[a-z_][a-z0-9_]*`; anything else
 /// fails with [`RuleError::InvalidIdentifier`] before any SQL runs. A null
-/// value (`None`) passes, like Laravel's rules on a nullable field. Bind
+/// value (`None`) passes, so optional fields stay optional. Bind
 /// values with their column's type (`Uuid` for UUID columns).
 #[derive(Clone, Debug)]
 pub struct AsyncRule {

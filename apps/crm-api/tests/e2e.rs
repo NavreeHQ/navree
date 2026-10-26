@@ -450,7 +450,7 @@ async fn deleting_a_deal_deletes_its_activities() {
 }
 
 #[tokio::test]
-async fn errors_follow_the_nestjs_format_across_modules() {
+async fn errors_share_one_json_shape_across_modules() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
 

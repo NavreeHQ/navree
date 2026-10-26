@@ -1,4 +1,4 @@
-//! Passport-style strategies: a custom API-key strategy registered by
+//! Pluggable strategies: a custom API-key strategy registered by
 //! another module as a `dyn Strategy` multi-binding.
 
 use std::sync::Arc;

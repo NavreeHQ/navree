@@ -1,6 +1,6 @@
 //! # navree-access
 //!
-//! `AccessModule`: roles, permissions and CASL-compatible abilities, with
+//! `AccessModule`: roles, permissions and abilities (CASL JSON), with
 //! record checks and SQL list filters.
 //!
 //! The [`engine`] is pure and usable on its own: build [`Rules`], check them

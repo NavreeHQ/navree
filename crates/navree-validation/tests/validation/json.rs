@@ -1,12 +1,12 @@
 //! `Valid<Json<T>>`: malformed bodies, serde errors and garde failures all
-//! become 400 errors with NestJS (class-validator) style field messages.
+//! become 400 errors with field-level messages.
 
 use serde_json::json;
 
 use crate::support::{app, errors};
 
 #[tokio::test]
-async fn field_errors_use_nest_messages() {
+async fn field_errors_use_field_messages() {
     let app = app().await;
 
     let response = app

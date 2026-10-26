@@ -4,25 +4,85 @@
 
 Created in [T3 Code](https://t3.codes).
 
-Navree is an application framework for Rust on Tokio. It aims to be as complete as
-Laravel (routing, validation, ORM, auth, queues, scheduler, cache, mail,
-notifications, storage, real-time, testing, CLI generators) and structured
-like NestJS: everything above a small kernel is a module that declares its
-imports, providers, controllers and exports, and an app is a composition of
-modules. Navree builds on maintained crates (Axum, Tower, SeaORM, garde,
-argon2, minijinja, lettre, object_store, utoipa, ...) and adds the glue: a
-dependency-injection container, deny-by-default routing with CASL-compatible
-abilities, a unit of work per request, NestJS-format errors, logging and an
-audit trail that are on by default.
+**The complete backend framework for Rust.** Modular, API-first and
+AI-native. Everything your backend needs, checked by the compiler.
+
+Navree is a framework for building efficient, secure and scalable
+server-side applications in Rust. It gives you an application architecture
+out of the box: features live in modules, modules declare what they import
+and export, and a dependency-injection container wires them together when
+the app boots, refusing to start if anything is missing. Around that
+structure sits a complete standard library for backends, from routing and
+validation to workspaces, queues, monitoring and AI, designed together,
+documented together and released together. The result is code that stays
+easy to test, easy to change and easy to hand to a new teammate, or to an
+AI agent.
+
+- **Modular by design.** Every feature is a module that declares what it
+  imports, provides and exports.
+- **Dependency injection.** A type-keyed container wires services at boot
+  and refuses to start with a missing or private dependency, naming the
+  module and the type.
+- **API-first.** Versioned routes, validated input, one JSON error shape
+  (`{ "statusCode", "message", "error" }`) and an OpenAPI 3.1 document
+  generated from your code.
+- **Secure by default.** Routes deny until you allow them. Rotating refresh
+  tokens, two-factor, Argon2id, encrypted cookies, CSRF, rate limits,
+  security headers, an audit log and an SSRF guard ship on.
+- **Workspaces built in.** Multi-tenancy at the workspace level: members,
+  roles, invitations, and isolation by row, schema or database.
+- **AI-native.** Agent skills, an MCP server for your coding agent, docs
+  written for models as well as people, and an AI SDK for the product
+  itself.
+- **One binary**, built on Tokio, Axum, Hyper, Tower, SeaORM, sqlx,
+  garde, rustls and Argon2.
+
+```sh
+cargo install --git https://github.com/NavreeHQ/navree navree-cli
+navree new blog
+cd blog
+navree key:generate     # then set APP_KEY in .env
+navree dev              # http://127.0.0.1:8080/api/docs
+```
+
+**Documentation:** [navree.com/docs](https://navree.com/docs/prologue/introduction/).
+The docs are also published for AI agents as
+[`llms.txt`](https://navree.com/llms.txt) and as Markdown, page by page.
 
 Navree was developed under the working name Navree and briefly called Navree.
 
+## The ecosystem
+
+Everything a production backend needs beyond the framework is first-party,
+open source and free, documented on the
+[ecosystem page](https://navree.com/ecosystem/):
+
+- **Tools:** Lighthouse (application monitoring), Logbook (a local
+  debugging timeline), Fleet (queue dashboard and worker supervisor), Helm
+  (an admin panel generated from your entities), Harbor (servers and
+  zero-downtime deployments), Dock (local services for development) and
+  Navigator (the MCP server for your coding agent).
+- **Packages:** search, the AI SDK, MCP servers, microservices, gRPC,
+  GraphQL, an OAuth 2.1 server, social sign-in, billing, feature flags,
+  webhooks, localization and browser testing.
+- **Starter kits:** `navree new <name> --kit saas|api|micro`.
+- **Agent skills** for every common task, in [`skills/`](skills/).
+
+The ecosystem build plan in
+[`docs/design`](docs/design) tracks how each
+package lands in this repository.
+
+## This repository
+
 The repository is a Cargo workspace of small module crates, plus a reference
-CRM built on top of them:
+CRM built on top of them and the website:
 
 - `apps/crm-api`: the Navree CRM API, a Navree application.
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
+- `apps/website`: navree.com and the documentation (Next.js, MDX).
+  [`apps/website/AUTHORING.md`](apps/website/AUTHORING.md) is the guide for
+  writing docs pages.
 
 Documents:
 
@@ -47,7 +107,7 @@ each test run.
 ```
 L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
-L5  navree-auth
+L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
@@ -61,7 +121,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
-| L2 | `navree-http` | Axum integration, default Tower layers, NestJS-format errors, controllers, rate limits, trusted proxies |
+| L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
@@ -76,13 +136,14 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
-| L4 | `navree-validation` | `Valid<T>` extractors on garde, class-validator style messages, async unique/exists rules |
+| L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules |
 | L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
-| L4 | `navree-access` | Roles, permissions and CASL-compatible abilities, record checks, SQL list filters |
-| L4 | `navree-schedule` | Cron-style schedules, overlap prevention, single-node runs |
+| L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
+| L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
-| L5 | `navree-auth` | NestJS-style JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
+| L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
+| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
 | L6 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
@@ -210,55 +271,35 @@ The seed also creates about 20 companies, 50 contacts, 30 deals across the
 pipeline stages and 60 activities. Open the deals board as two users in two
 browsers to see moves arrive over the WebSocket.
 
-## Deliberate deviations from the PRD
+## Design decisions
 
-The PRD is a 60 engineer-month plan. This build covers its Phase 0 and
-Phase 1 plus the Phase 2 modules the CRM needs (spec §2), and the user
-changed the auth and error direction during the build (spec §10).
+The build covers the PRD's foundation and the modules the CRM needs (spec
+§2); spec §10 records the decisions taken during the build.
 
-**Auth and errors follow NestJS, not Laravel Sanctum (spec §10).**
-
-- Authentication is stateless JWT access tokens (HS256, 15 minutes) plus
-  opaque rotating refresh tokens (30 days, SHA-256 at rest; reusing one
-  revokes its whole family), a Passport-style `Strategy` trait, a global
-  guard with a `#[public]` opt-out and a `CurrentUser` extractor. The PRD's
-  Sanctum SPA cookie auth, CSRF-cookie endpoint, personal access tokens and
-  session login are not built. `navree-session` exists but is optional, and
-  the CRM doesn't use it.
-- The browser never holds tokens: the Next.js server is a BFF that keeps
+- **Token authentication.** Stateless JWT access tokens (HS256, 15 minutes)
+  plus opaque rotating refresh tokens (30 days, SHA-256 at rest; reusing
+  one revokes its whole family), a pluggable `Strategy` trait, a global
+  guard with a `#[public]` opt-out and a `CurrentUser` extractor.
+  `navree-session` (cookie sessions and CSRF) is a separate, optional
+  module, and the CRM doesn't use it.
+- **The browser never holds tokens.** The Next.js server is a BFF that keeps
   them in httpOnly cookies and forwards `Authorization: Bearer`.
-- Errors use the NestJS format `{statusCode, message, error}`, with
-  validation failures as 400 plus `errors: {field: [..]}`, instead of the
-  PRD's RFC 9457 `application/problem+json`. Statuses 422 and 419 are not
-  used. The PRD text still mentions problem+json, 422 and 419 in places;
-  spec §10 overrides it.
-
-**Deferred modules and drivers (spec §2).**
-
-| Deferred | Why |
-|---|---|
-| `navree-redis` and every Redis driver (cache, queue, session, locks, real-time scaling) | No Redis server on the build machine, so nothing could be tested. Each module has a driver trait, so Redis drivers can be added without API changes |
-| apalis as the queue driver | The native database driver and a memory driver cover the PRD's fallback; apalis can come later as another driver |
-| Passkeys (webauthn-rs), social login, an OAuth2 server | webauthn-rs needs OpenSSL on Windows; the other two are PRD Phase 3-4 |
-| navree-i18n, navree-flags, navree-billing, navree-ai, navree-grpc, navree-transport, navree-export, navree-search, navree-admin, navree-graphql | Phase 2-4 modules with external services; the CRM doesn't need them |
-| Nuxt kit, teams, multi-tenancy, OpenTelemetry and Sentry, the request inspector | Phase 2-3 |
-
-**Other differences.**
-
-- PostgreSQL is the PRD's primary database, but there was none on the build
-  machine. PostgreSQL-only paths (`FOR UPDATE`, `SKIP LOCKED`, advisory
-  locks) are written behind `DbBackend` checks and the `postgres` feature
-  compiles, but every test runs on SQLite, the PRD's development and test
-  database.
-- Real-time: the PRD plans Sockudo first and an in-process server later.
-  Navree ships the in-process Pusher-protocol server now (Laravel Echo and
-  pusher-js work unchanged). Processes that don't serve the sockets, such
-  as queue workers, send their broadcasts to the serving process over a
-  signed HTTP relay.
-- Framework crates implement `Module`, `Injectable` and `Controller` by hand
-  (the PRD's escape hatch) instead of using `navree-macros`, so every crate
-  could be built before the macros existed. Apps and the facade's tests use
-  the macros.
+- **One error shape.** Every error is `{statusCode, message, error}`, with
+  validation failures as 400 plus `errors: {field: [..]}`. Statuses 422 and
+  419 are not used. The PRD text still mentions problem+json, 422 and 419
+  in places; spec §10 overrides it.
+- **PostgreSQL.** The PostgreSQL-only paths (`FOR UPDATE`, `SKIP LOCKED`,
+  advisory locks) are written behind `DbBackend` checks and the `postgres`
+  feature, and the performance harness in `bench/` runs on PostgreSQL;
+  every test runs on SQLite, the PRD's development and test database.
+- **Real time is in-process.** Navree ships a Pusher-protocol WebSocket
+  server, so pusher-js and any Pusher client connects. Processes that don't
+  serve the sockets, such as queue workers, send their broadcasts to the
+  serving process over a signed HTTP relay.
+- **Framework crates implement `Module`, `Injectable` and `Controller` by
+  hand** (the PRD's escape hatch) instead of using `navree-macros`, so
+  every crate could be built before the macros existed. Apps and the
+  facade's tests use the macros.
 
 ## Layout
 
@@ -268,6 +309,9 @@ changed the auth and error direction during the build (spec §10).
 | `crates/navree-*` | One crate per module (see [Crate hierarchy](#crate-hierarchy)) |
 | `apps/crm-api` | The CRM API, a Navree application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
+| `apps/website` | navree.com and the documentation |
+| `skills/` | The agent skills, one `SKILL.md` per directory |
+| `bench/` | The performance harness behind navree.com/performance |
 | `docs/` | PRD, build design, implementation plan, notes |
 
 ### Features and drivers

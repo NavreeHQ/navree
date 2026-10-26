@@ -11,12 +11,12 @@ use crate::{AppContext, BoxError, BoxFuture, KernelError, ProviderKey, Resolver}
 /// registered provider in module dependency order, then `on_bootstrap` in the
 /// same order. At shutdown, `on_shutdown` runs in reverse order.
 pub trait Lifecycle: Send + Sync + 'static {
-    /// Runs once all singletons exist (NestJS `onModuleInit`).
+    /// Runs once all singletons exist.
     fn on_init(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async { Ok(()) })
     }
 
-    /// Runs after every `on_init` succeeded (NestJS `onApplicationBootstrap`).
+    /// Runs after every `on_init` succeeded.
     fn on_bootstrap(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async { Ok(()) })
     }

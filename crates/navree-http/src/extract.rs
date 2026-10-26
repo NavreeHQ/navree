@@ -173,7 +173,7 @@ impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
 }
 
 /// A provider resolved for the current request, with the visibility of the
-/// module that registered the route (NestJS-style request injection).
+/// module that registered the route (request-scoped injection).
 ///
 /// Request-scoped providers (`Scope::Request`,
 /// `#[injectable(scope = "request")]`) are built on first use within a

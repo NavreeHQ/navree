@@ -21,7 +21,7 @@ use crate::options::AccessOptions;
 use crate::service::AccessService;
 use crate::subject::{SubjectRegistration, Subjects};
 
-/// Roles, permissions and CASL-compatible abilities.
+/// Roles, permissions and abilities.
 ///
 /// Global; provides and exports [`AccessService`] and [`AbilityFactory`],
 /// registers the app's `dyn RouteAuthorizer` ([`AccessAuthorizer`](crate::AccessAuthorizer)),

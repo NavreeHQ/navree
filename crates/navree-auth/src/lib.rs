@@ -1,8 +1,7 @@
 //! # navree-auth
 //!
-//! `AuthModule`: NestJS-style authentication with stateless JWT access
-//! tokens, rotating refresh tokens, Passport-style strategies and user
-//! accounts.
+//! `AuthModule`: authentication with stateless JWT access tokens,
+//! rotating refresh tokens, pluggable strategies and user accounts.
 //!
 //! - [`AuthModule`] (global; `for_root(AuthOptions)` or `from_config()`,
 //!   section `auth`) provides [`AuthService`] and [`JwtService`], registers
@@ -43,10 +42,10 @@
 //!   other strategies and route guards). A present but invalid credential
 //!   is a 401 on every route, public ones included (never a silent guest),
 //!   so clients must not send stale tokens to `login` and `refresh`; routes
-//!   stay deny-by-default and opt out with `.public()` (`#[public]`), like
-//!   NestJS's global guard with `@Public()`.
-//! - [`CurrentUser`] loads the signed-in [`User`] in handlers (NestJS
-//!   `@CurrentUser()`); [`ClientMeta`] gives the client's IP, user agent and
+//!   stay deny-by-default and opt out with `.public()` (`#[public]`): a
+//!   global guard with a public opt-out.
+//! - [`CurrentUser`] loads the signed-in [`User`] in handlers;
+//!   [`ClientMeta`] gives the client's IP, user agent and
 //!   request id.
 //! - [`user::Entity`] is navree-access's subject `User` (permission prefix
 //!   `users`): import `AccessModule::for_feature::<navree_auth::user::Entity>()`

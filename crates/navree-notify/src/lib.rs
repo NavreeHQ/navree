@@ -1,7 +1,7 @@
 //! # navree-notify
 //!
 //! `NotifyModule`: notifications delivered over mail, database and broadcast
-//! channels, with read state (Laravel's notifications).
+//! channels, with read state.
 //!
 //! - A [`Notification`] lists its [`Channel`]s per recipient
 //!   ([`via`](Notification::via)) and renders itself for each one:

@@ -13,7 +13,7 @@ use crate::AuthError;
 const WINDOW: Duration = Duration::from_secs(60);
 
 /// Counts attempts per key (failed logins per email and client IP, wrong
-/// two-factor codes per user) in the cache, Laravel `RateLimiter` style:
+/// two-factor codes per user) in the cache, in fixed windows:
 /// the first attempt opens a one-minute window; once `limit` attempts are
 /// counted, further ones are refused until the window ends.
 ///

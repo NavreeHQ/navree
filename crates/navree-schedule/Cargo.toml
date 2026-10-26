@@ -1,6 +1,6 @@
 [package]
 name = "navree-schedule"
-description = "Navree ScheduleModule: cron-style schedules, overlap prevention and single-node runs."
+description = "Navree ScheduleModule: cron schedules, overlap prevention and single-node runs."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

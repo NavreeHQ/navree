@@ -20,7 +20,7 @@ use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Laravel's `min`/`max`/`email` family.
+/// The `min`/`max`/`email` family.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateUser {
     #[garde(length(min = 2, max = 50))]

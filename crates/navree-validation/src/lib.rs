@@ -1,12 +1,11 @@
 //! # navree-validation
 //!
 //! `ValidationModule`: validated extractors on [garde](https://docs.rs/garde),
-//! NestJS (class-validator) style messages and database `unique` / `exists`
-//! rules.
+//! field-level messages and database `unique` / `exists` rules.
 //!
 //! - [`Valid`] wraps `Json<T>`, `Query<T>` or `Form<T>` (`T:
 //!   garde::Validate<Context = ()> + DeserializeOwned`). Every failure is a
-//!   400 error in the NestJS format: `message` lists every message and
+//!   400 error in the JSON error shape: `message` lists every message and
 //!   `errors` maps dotted field paths to their messages: malformed JSON
 //!   (`{"body": ["body must be a valid JSON string"]}`), serde errors at
 //!   their path (a missing field is `required`, `"title should not be

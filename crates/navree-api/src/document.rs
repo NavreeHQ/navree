@@ -72,7 +72,7 @@ fn missing_message(missing: &[(String, String)]) -> String {
 ///   gives tags, summary, description, the JSON request body, the success
 ///   status (default 200) with its JSON response body, and the documented
 ///   error statuses, rendered as `application/json` responses with the
-///   [`HttpError`] schema (the NestJS error format).
+///   [`HttpError`] schema (Navree's JSON error shape).
 /// - Non-public routes require the `cookie` or the `bearer` security
 ///   scheme and document 401; routes checked by the route authorizer
 ///   (roles, permissions, abilities) also document 403.
@@ -214,7 +214,7 @@ fn security_schemes(session_cookie: &str) -> Value {
     })
 }
 
-/// The body of every Navree error response, in the NestJS error format
+/// The body of every Navree error response, in Navree's JSON error shape
 /// (content type `application/json`). Documented as the `HttpError`
 /// component schema.
 ///
@@ -227,9 +227,7 @@ fn security_schemes(session_cookie: &str) -> Value {
 /// The request id is in the `X-Request-Id` response header.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[schema(
-    description = "The NestJS error format, as every error response carries it (`application/json`)."
-)]
+#[schema(description = "The JSON error shape every error response carries (`application/json`).")]
 pub struct HttpError {
     /// The HTTP status code.
     pub status_code: u16,

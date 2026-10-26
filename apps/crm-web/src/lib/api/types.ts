@@ -7,7 +7,7 @@ import type { components, paths as GeneratedPaths } from "./schema";
 
 type Schemas = components["schemas"];
 
-/** NestJS error body: `{statusCode, message, error, errors?}`. */
+/** Navree error body: `{statusCode, message, error, errors?}`. */
 export type ApiErrorBody = Schemas["HttpError"];
 /** Every list page inlines the same `meta` object. */
 export type PageMeta = Schemas["CompanyPage"]["meta"];

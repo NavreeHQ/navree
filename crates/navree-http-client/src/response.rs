@@ -71,7 +71,7 @@ impl Response {
     }
 
     /// `Ok(self)` for statuses below 400, otherwise
-    /// [`HttpClientError::Status`] (like Laravel's `throw()`).
+    /// [`HttpClientError::Status`].
     pub fn error_for_status(self) -> Result<Self, HttpClientError> {
         if self.status.is_client_error() || self.status.is_server_error() {
             Err(HttpClientError::Status {

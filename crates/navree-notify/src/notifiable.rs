@@ -1,6 +1,6 @@
 //! [`Notifiable`]: who receives notifications.
 
-/// Something that receives notifications (Laravel's `Notifiable`), usually a
+/// Something that receives notifications, usually a
 /// user: it names the stored notifications' owner and routes the mail and
 /// broadcast channels.
 ///

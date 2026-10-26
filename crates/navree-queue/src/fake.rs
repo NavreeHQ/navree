@@ -8,8 +8,7 @@ use navree_contracts::{BoxError, BoxFuture, Dispatcher, Job, JobEnvelope};
 use crate::store::Store;
 use crate::{Queue, QueueOptions};
 
-/// A queue that records jobs instead of running them (Laravel's
-/// `Queue::fake()`).
+/// A queue that records jobs instead of running them, for tests.
 ///
 /// Swap it in for the app's queue with
 /// `override_value(Arc::new(fake.queue()))` (the module's `dyn Dispatcher`
