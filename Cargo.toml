@@ -108,6 +108,12 @@ backon = { version = "1.6.0", default-features = false, features = ["std", "toki
 # and the public roots it trusts when no CA is configured.
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["logging", "ring", "tls12"] }
 webpki-roots = "1.0.11"
+# navree-micro's brokers, each behind a feature of its own: pure-Rust
+# clients, TLS through rustls on ring.
+async-nats = { version = "0.50.0", default-features = false, features = ["ring", "jetstream", "nkeys", "server_2_10", "server_2_11"] }
+redis = { version = "1.8.0", default-features = false, features = ["streams", "tokio-comp"] }
+lapin = { version = "4.12.3", default-features = false, features = ["rustls--ring", "default-runtime"] }
+rumqttc = { version = "0.25.1", default-features = false, features = ["use-rustls-no-provider"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
 

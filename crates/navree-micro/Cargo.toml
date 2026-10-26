@@ -13,22 +13,24 @@ workspace = true
 [features]
 default = []
 ## NATS (core request-reply, JetStream for durable events).
-nats = []
+nats = ["dep:async-nats"]
 ## Kafka.
 kafka = []
 ## RabbitMQ (AMQP 0-9-1).
-rabbitmq = []
+rabbitmq = ["dep:lapin"]
 ## Redis Streams.
-redis = []
+redis = ["dep:redis"]
 ## MQTT 5.
-mqtt = []
+mqtt = ["dep:rumqttc"]
 
 [dependencies]
+async-nats = { workspace = true, optional = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
+lapin = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
@@ -38,7 +40,9 @@ navree-kernel = { workspace = true }
 navree-testing = { workspace = true }
 navree-validation = { workspace = true }
 percent-encoding = { workspace = true }
+redis = { workspace = true, optional = true }
 rmp-serde = { workspace = true }
+rumqttc = { workspace = true, optional = true }
 rustls = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
