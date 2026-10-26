@@ -74,7 +74,7 @@ pub mod rules;
 
 pub use async_rules::{AsyncRule, AsyncRules, RuleError};
 pub use errors::ValidationErrors;
-pub use extract::{Valid, ValidAsync, validate};
+pub use extract::{Valid, ValidAsync, validate, validate_in};
 pub use failure::rule_error;
 pub use messages::{DEFAULT_MESSAGES, Messages};
 pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};

@@ -1,0 +1,74 @@
+[package]
+name = "navree-grpc"
+description = "Navree GrpcModule: tonic services in modules with dependency injection, guards, access rules and the unit of work; gRPC-Web, Connect, health and reflection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["testing"]
+## `navree_grpc::testing::TestChannel`: tonic clients on a `TestApp`, in-process.
+testing = ["dep:navree-testing"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+dashmap = { workspace = true }
+futures-util = { workspace = true }
+garde = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+metrics = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+percent-encoding = { workspace = true }
+pin-project-lite = { workspace = true }
+prost = { workspace = true }
+prost-reflect = { workspace = true }
+prost-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+tonic-prost = { workspace = true }
+tonic-reflection = { workspace = true }
+tonic-types = { workspace = true }
+tonic-web = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-events = { workspace = true }
+navree-mail = { workspace = true }
+navree-observe = { workspace = true }
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+navree-workspace = { workspace = true }
+protox = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tonic-prost-build = { workspace = true }
+trybuild = { workspace = true }

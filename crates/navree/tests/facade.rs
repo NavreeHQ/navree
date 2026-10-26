@@ -236,8 +236,11 @@ struct Features {
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries and packages an app
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
-/// `features = ["flags"]`, `features = ["graphql"]`, `features = ["billing"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "graphql", "billing"];
+/// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
+/// `features = ["billing"]`).
+const OPT_IN: &[&str] = &[
+    "dock", "social", "oauth", "flags", "graphql", "grpc", "billing",
+];
 
 /// Always compiled into the facade (not behind a feature).
 const ALWAYS: [&str; 4] = [
@@ -388,7 +391,7 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 }
 
 #[test]
-fn full_is_the_default_and_turns_on_every_module() {
+fn full_is_the_default_and_turns_on_every_module_but_the_opt_in_ones() {
     let features = Features::read();
     assert_eq!(features.table["default"], ["full"]);
     let full = features.closure("full");
