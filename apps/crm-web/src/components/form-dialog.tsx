@@ -45,10 +45,12 @@ export function FormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className={cn("max-h-[90svh] gap-0 overflow-y-auto p-0", wide ? "sm:max-w-2xl" : "sm:max-w-lg")}>
+      <DialogContent
+        className={cn("max-h-[90svh] scroll-thin gap-0 overflow-y-auto p-0", wide ? "sm:max-w-2xl" : "sm:max-w-lg")}
+      >
         <form onSubmit={onSubmit} noValidate>
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle className="text-lg font-condensed">{title}</DialogTitle>
+          <DialogHeader className="gap-1.5 border-b px-6 py-5">
+            <DialogTitle className="text-lg font-semibold tracking-[-0.02em]">{title}</DialogTitle>
             {description ? <DialogDescription>{description}</DialogDescription> : null}
           </DialogHeader>
           <div className="flex flex-col gap-5 px-6 py-5">
@@ -59,7 +61,7 @@ export function FormDialog({
             ) : null}
             {children}
           </div>
-          <DialogFooter className="border-t px-6 py-3">
+          <DialogFooter className="sticky bottom-0 mx-0 mb-0 rounded-b-2xl border-t bg-ink-1/95 px-6 py-3 backdrop-blur-md">
             <DialogClose asChild>
               <Button type="button" variant="ghost">
                 Cancel

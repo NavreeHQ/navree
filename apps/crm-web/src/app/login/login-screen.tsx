@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { NavreeMark } from "@/components/brand";
+import { NavreeWordmark } from "@/components/brand";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -16,6 +16,7 @@ import { errorMessage, isApiError } from "@/lib/api/errors";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import { DEAL_STAGES } from "@/lib/api/types";
 import { env } from "@/lib/env";
+import { cn } from "@/lib/utils";
 
 const schema = z.object({
   email: z.email("Enter the email address you use for Navree."),
@@ -40,25 +41,31 @@ function safeNext(next: string | null): string {
   return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/login") ? next : "/";
 }
 
-/** The stage ramp drawn as depth soundings: the brand motif, shown once, here. */
+/** The pipeline drawn as soundings, shallow to deep, ending in a win: the brand motif, shown once, here. */
 function Soundings() {
   return (
-    <ol className="flex flex-col" aria-label="Deal stages">
+    <ol className="flex flex-col gap-2" aria-label="Deal stages">
       {DEAL_STAGES.filter((s) => s.stage !== "lost").map((s, i) => (
         <li key={s.stage} className="flex items-center gap-4">
-          <span
-            className="h-7 rounded-r-sm"
-            style={{ width: `${34 + i * 13}%`, backgroundColor: `var(--stage-${s.stage})` }}
-            aria-hidden="true"
-          />
+          <span className="relative h-2 w-[58%] overflow-hidden rounded-full bg-ink-2" aria-hidden="true">
+            <span
+              className={cn("absolute inset-y-0 left-0 rounded-full", s.stage === "won" && "shadow-glow-sm")}
+              style={{ width: `${28 + i * 18}%`, backgroundColor: `var(--stage-${s.stage})` }}
+            />
+          </span>
           <span className="flex items-baseline gap-2 text-sm">
-            <span className="text-sidebar-accent-foreground">{s.label}</span>
-            <span className="text-xs text-sidebar-foreground/60 figures">{s.probability}%</span>
+            <span className={s.stage === "won" ? "text-accent" : "text-fg-1"}>{s.label}</span>
+            {s.stage !== "won" ? <span className="text-xs text-fg-3 figures">{s.probability}%</span> : null}
           </span>
         </li>
       ))}
     </ol>
   );
+}
+
+/** The brand mark and name, above the form on phones and in the brand panel. */
+function LoginBrand() {
+  return <NavreeWordmark />;
 }
 
 /**
@@ -102,12 +109,10 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
 
   return (
     <div className="flex w-full max-w-sm flex-col gap-8">
-      <div className="flex flex-col gap-2">
-        <NavreeMark className="size-7 text-primary lg:hidden" />
-        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em] font-condensed">
-          Two-step verification
-        </h1>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3">
+        <p className="eyebrow">Security check</p>
+        <h1 className="font-display text-display-md font-semibold text-fg">Two-step verification</h1>
+        <p className="text-sm text-fg-2">
           {recovery
             ? "Enter one of the recovery codes you saved when you turned on two-step verification."
             : "Enter the 6-digit code from your authenticator app."}
@@ -140,14 +145,14 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
           )}
         />
         <div className="flex flex-col gap-2">
-          <Button type="submit" size="lg" className="h-10" disabled={verify.isPending}>
+          <Button type="submit" size="lg" disabled={verify.isPending}>
             {verify.isPending ? <Spinner data-icon="inline-start" /> : null}
             Verify
           </Button>
           <Button
             type="button"
             variant="ghost"
-            className="text-muted-foreground"
+            className="text-fg-2"
             onClick={() => {
               setRecovery((r) => !r);
               form.reset({ code: "" });
@@ -215,29 +220,41 @@ export function LoginScreen() {
 
   return (
     <div className="grid min-h-svh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-sidebar p-10 text-sidebar-foreground lg:flex">
-        <div className="flex items-center gap-2.5 text-sidebar-accent-foreground">
-          <NavreeMark className="size-6 text-sidebar-primary" />
-          <span className="text-xl font-semibold tracking-tight font-condensed">Navree CRM</span>
-        </div>
-        <div className="flex flex-col gap-8">
-          <p className="max-w-sm text-[28px] leading-[1.15] font-medium tracking-[-0.01em] text-sidebar-accent-foreground font-condensed">
-            Every account, deal and follow-up your team is working, in one place.
-          </p>
+      <aside className="relative isolate hidden flex-col justify-between overflow-hidden border-r bg-ink-1 p-10 lg:flex xl:p-12">
+        {/* A hairline dot field fading out from one green light. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-[radial-gradient(rgb(233_239_235/0.07)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_80%_70%_at_20%_30%,black,transparent_75%)] [background-size:22px_22px]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -top-40 -left-32 -z-10 size-[34rem] rounded-full bg-[radial-gradient(closest-side,rgb(61_255_143/0.13),transparent)]"
+        />
+        <LoginBrand />
+        <div className="flex flex-col gap-10">
+          <div className="flex flex-col gap-5">
+            <p className="eyebrow">Navree CRM</p>
+            <p className="max-w-md font-display text-display-md font-semibold text-balance text-fg">
+              Every account, deal and follow-up your team is working, in one place.
+            </p>
+          </div>
           <Soundings />
         </div>
-        <p className="text-xs text-sidebar-foreground/60">Built on the Navree framework.</p>
+        <p className="font-mono text-xs tracking-[0.08em] text-fg-3 uppercase">Built on the Navree framework</p>
       </aside>
 
-      <main className="flex items-center justify-center px-6 py-12">
+      <main id="content" className="flex flex-col items-center justify-center gap-10 px-4 py-12 sm:px-6">
+        <div className="w-full max-w-sm lg:hidden">
+          <LoginBrand />
+        </div>
         {twoFactor ? (
           <TwoFactorStep onSignedIn={() => router.replace(next)} onBack={() => setTwoFactor(false)} />
         ) : (
           <div className="flex w-full max-w-sm flex-col gap-8">
-            <div className="flex flex-col gap-2">
-              <NavreeMark className="size-7 text-primary lg:hidden" />
-              <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em] font-condensed">Sign in</h1>
-              <p className="text-sm text-muted-foreground">Use your work email and password.</p>
+            <div className="flex flex-col gap-3">
+              <p className="eyebrow">Welcome back</p>
+              <h1 className="font-display text-display-md font-semibold text-fg">Sign in</h1>
+              <p className="text-sm text-fg-2">Use your work email and password.</p>
             </div>
 
             <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
@@ -259,6 +276,7 @@ export function LoginScreen() {
                         type="email"
                         autoComplete="username"
                         autoFocus
+                        placeholder="you@company.com"
                         aria-invalid={fieldState.invalid || undefined}
                         className="h-10"
                       />
@@ -285,7 +303,7 @@ export function LoginScreen() {
                   )}
                 />
               </FieldGroup>
-              <Button type="submit" size="lg" className="h-10" disabled={login.isPending}>
+              <Button type="submit" size="lg" className="w-full" disabled={login.isPending}>
                 {login.isPending ? <Spinner data-icon="inline-start" /> : null}
                 Sign in
               </Button>
@@ -293,24 +311,21 @@ export function LoginScreen() {
 
             {env.mocks ? (
               <section className="flex flex-col gap-3 border-t pt-6" aria-labelledby="demo-accounts">
-                <h2 id="demo-accounts" className="text-sm font-medium">
+                <h2 id="demo-accounts" className="text-sm font-medium text-fg">
                   Demo accounts
                 </h2>
-                <p className="text-xs text-muted-foreground">
-                  The mock API is on. Every account uses the password password123.
-                </p>
+                <p className="text-xs text-fg-3">The mock API is on. Every account uses the password password123.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {DEMO_ACCOUNTS.map((a) => (
-                    <Button
+                    <button
                       key={a.email}
                       type="button"
-                      variant="outline"
-                      className="h-auto flex-col items-start gap-0 px-3 py-2 text-left"
+                      className="flex flex-col items-start gap-0.5 rounded-xl border border-line-2 bg-ink-1 px-3 py-2.5 text-left transition-colors hover:border-fg-3/50 hover:bg-ink-2"
                       onClick={() => fillDemo(a.email)}
                     >
-                      <span className="text-[13px] font-medium">{a.email.replace("@navree.test", "")}</span>
-                      <span className="text-xs font-normal text-muted-foreground">{a.role}</span>
-                    </Button>
+                      <span className="font-mono text-[0.8125rem] text-fg">{a.email.replace("@navree.test", "")}</span>
+                      <span className="text-xs text-fg-3">{a.role}</span>
+                    </button>
                   ))}
                 </div>
               </section>

@@ -42,9 +42,9 @@ function TabCount({ tab, assignee, active }: { tab: Tab; assignee: string | unde
   return (
     <span
       className={cn(
-        "rounded-full px-1.5 text-[11px] leading-4 figures",
-        tab === "overdue" && total > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
-        active && tab !== "overdue" && "bg-background",
+        "rounded-full px-1.5 text-xs leading-4 figures",
+        tab === "overdue" && total > 0 ? "bg-destructive/15 text-destructive" : "bg-ink-2 text-fg-3",
+        active && tab !== "overdue" && "bg-ink-1 text-fg-1",
       )}
     >
       {total}
@@ -55,28 +55,28 @@ function TabCount({ tab, assignee, active }: { tab: Tab; assignee: string | unde
 function TaskRow({ task, showAssignee }: { task: Activity; showAssignee: boolean }) {
   const done = Boolean(task.completed_at);
   return (
-    <li className="flex items-start gap-3 px-4 py-3" data-testid="task-row">
+    <li className="flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-ink-2/50" data-testid="task-row">
       <span className="pt-0.5">
         <TaskCheckbox activity={task} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={cn("text-sm leading-snug font-medium", done && "text-muted-foreground line-through")}>
+        <span className={cn("text-sm leading-snug font-medium text-fg", done && "text-fg-3 line-through")}>
           {task.subject}
         </span>
-        {task.body ? <span className="line-clamp-1 text-[13px] text-muted-foreground">{task.body}</span> : null}
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {task.body ? <span className="line-clamp-1 text-[0.8125rem] text-fg-2">{task.body}</span> : null}
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-3">
           {done ? (
             <span className="figures">Completed {formatDateTime(task.completed_at)}</span>
           ) : (
             <DueLabel activity={task} />
           )}
-          <Link href={subjectHref(task.subject_type, task.subject_id)} className="text-primary hover:underline">
+          <Link href={subjectHref(task.subject_type, task.subject_id)} className="record-link">
             {task.subject_label}
           </Link>
         </span>
       </div>
       {showAssignee && task.assignee ? (
-        <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+        <span className="hidden items-center gap-2 text-xs text-fg-2 sm:flex">
           <UserAvatar name={task.assignee.name} id={task.assignee.id} size="xs" />
           {task.assignee.name}
         </span>
@@ -103,6 +103,7 @@ export function TasksView() {
         actions={
           <Can I="create" a="Activity">
             <TaskFormDialog
+              openOnCreateIntent
               trigger={
                 <Button>
                   <PlusIcon data-icon="inline-start" />
@@ -113,8 +114,12 @@ export function TasksView() {
           </Can>
         }
       />
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={tab} onValueChange={(v) => url.set({ tab: v })}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => url.set({ tab: v })}
+          className="-mx-4 max-w-[calc(100%+2rem)] scroll-thin overflow-x-auto px-4 pb-1 sm:mx-0 sm:max-w-full sm:px-0 sm:pb-0"
+        >
           <TabsList>
             {TABS.map((t) => (
               <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
@@ -131,7 +136,7 @@ export function TasksView() {
           value={everyone ? "everyone" : "mine"}
           onValueChange={(v) => v && url.set({ scope: v === "everyone" ? "everyone" : undefined })}
           aria-label="Whose tasks"
-          className="bg-card"
+          className="rounded-full bg-ink-1 *:data-[slot=toggle-group-item]:rounded-full"
         >
           <ToggleGroupItem value="mine" className="px-3">
             Assigned to me
@@ -141,11 +146,17 @@ export function TasksView() {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <section aria-label={`${current.label} tasks`} className="overflow-hidden rounded-lg border bg-card">
+      <section aria-label={`${current.label} tasks`} className="surface overflow-hidden">
         {list.isPending ? (
-          <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col divide-y">
             {Array.from({ length: 5 }, (_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+              <div key={i} className="flex items-start gap-3 px-4 py-3.5" style={{ opacity: 1 - i * 0.15 }}>
+                <Skeleton className="size-4.5 rounded-[5px]" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-3.5 w-1/2" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              </div>
             ))}
           </div>
         ) : list.data?.data.length ? (

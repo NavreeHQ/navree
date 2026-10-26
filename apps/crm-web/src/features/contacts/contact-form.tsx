@@ -11,6 +11,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { nullable, SelectField, TextField } from "@/components/form-fields";
 import { RecordCombobox, UserSelect, type PickedRecord } from "@/components/record-pickers";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { CompanyRef, Contact, ContactInput, ContactStatus, ContactUpdateInput } from "@/lib/api/types";
 import { CONTACT_STATUSES } from "@/lib/api/types";
@@ -56,11 +57,14 @@ export function ContactFormDialog({
   contact,
   company,
   trigger,
+  openOnCreateIntent,
 }: {
   contact?: Contact;
   /** Pre-selects the company when adding from a company page. */
   company?: CompanyRef;
   trigger: ReactNode;
+  /** Open when the command menu asks for a new contact (set on one dialog per screen). */
+  openOnCreateIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -74,6 +78,7 @@ export function ContactFormDialog({
     if (next) form.reset(toValues(contact, company));
     setOpen(next);
   };
+  useCreateIntent(openOnCreateIntent && !contact ? "contact" : undefined, () => onOpenChange(true));
 
   const onSubmit = form.handleSubmit((values) => {
     // Valid for both POST and PATCH (PATCH takes no null owner_id).

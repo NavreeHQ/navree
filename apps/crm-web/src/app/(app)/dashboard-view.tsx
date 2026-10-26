@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRightIcon } from "lucide-react";
+import { ArrowUpRightIcon, CheckCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { ActivityTimeline, DueLabel, TaskCheckbox } from "@/features/activities/components";
 import { useActivities } from "@/features/activities/queries";
@@ -19,27 +19,44 @@ import { cn } from "@/lib/utils";
 
 const longDate = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" });
 
-function Figure({
+function Tile({
   label,
   children,
   sub,
   href,
+  highlight,
 }: {
   label: string;
   children: React.ReactNode;
   sub?: React.ReactNode;
   href?: string;
+  highlight?: boolean;
 }) {
   const body = (
     <>
-      <span className="text-[13px] text-muted-foreground">{label}</span>
-      <span className="text-[28px] leading-none font-semibold tracking-[-0.01em] font-condensed">{children}</span>
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
+      <span className="flex items-center justify-between gap-2 text-[0.8125rem] text-fg-2">
+        {label}
+        {href ? (
+          <ArrowUpRightIcon
+            aria-hidden="true"
+            className="size-3.5 text-fg-3 transition-[color,transform] duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-fg"
+          />
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "font-display text-[1.5rem] leading-none font-semibold tracking-[-0.03em] figures sm:text-figure",
+          highlight ? "text-accent [text-shadow:0_0_24px_rgb(61_255_143/0.35)]" : "text-fg",
+        )}
+      >
+        {children}
+      </span>
+      {sub ? <span className="text-xs text-fg-3">{sub}</span> : null}
     </>
   );
-  const className = "flex min-w-0 flex-col gap-2 px-5 py-4";
+  const className = "group flex min-w-0 flex-col gap-2 px-4 py-3.5 sm:gap-2.5 sm:px-5 sm:py-4";
   return href ? (
-    <Link href={href} className={cn(className, "transition-colors hover:bg-muted/40 focus-visible:bg-muted/40")}>
+    <Link href={href} className={cn(className, "transition-colors hover:bg-ink-2/60 focus-visible:bg-ink-2/60")}>
       {body}
     </Link>
   ) : (
@@ -52,12 +69,12 @@ function KeyFigures({ data }: { data: Dashboard }) {
   return (
     <section
       aria-label="Key figures"
-      className="grid grid-cols-1 divide-y rounded-lg border bg-card sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x [&>*:nth-child(2)]:sm:border-l [&>*:nth-child(n+3)]:sm:border-t lg:[&>*:nth-child(n+3)]:border-t-0"
+      className="surface grid grid-cols-2 overflow-hidden xl:grid-cols-4 [&>*]:border-line xl:[&>*:not(:first-child)]:border-l [&>*:nth-child(2n)]:border-l [&>*:nth-child(n+3)]:border-t xl:[&>*:nth-child(n+3)]:border-t-0"
     >
-      <Figure label="Open pipeline" sub={`${formatNumber(open.count)} open deals`} href="/deals">
+      <Tile label="Open pipeline" sub={`${formatNumber(open.count)} open deals`} href="/deals">
         <Money cents={open.amount_cents} compact />
-      </Figure>
-      <Figure
+      </Tile>
+      <Tile
         label="Weighted forecast"
         sub={
           open.amount_cents > 0
@@ -66,23 +83,27 @@ function KeyFigures({ data }: { data: Dashboard }) {
         }
       >
         <Money cents={open.weighted_amount_cents} compact />
-      </Figure>
-      <Figure label="Won this month" sub={`${formatNumber(won.count)} ${won.count === 1 ? "deal" : "deals"} closed`}>
+      </Tile>
+      <Tile
+        label="Won this month"
+        highlight={won.amount_cents > 0}
+        sub={`${formatNumber(won.count)} ${won.count === 1 ? "deal" : "deals"} closed`}
+      >
         <Money cents={won.amount_cents} compact />
-      </Figure>
-      <Figure
+      </Tile>
+      <Tile
         label="My open tasks"
         href="/tasks"
         sub={
           <span className="flex flex-wrap gap-x-2.5 whitespace-nowrap">
             <span className={cn(tasks.overdue > 0 && "font-medium text-destructive")}>{tasks.overdue} overdue</span>
-            <span>{tasks.due_today} today</span>
+            <span className={cn(tasks.due_today > 0 && "text-amber")}>{tasks.due_today} today</span>
             <span>{tasks.upcoming} later</span>
           </span>
         }
       >
         <span className="figures">{formatNumber(tasks.overdue + tasks.due_today + tasks.upcoming)}</span>
-      </Figure>
+      </Tile>
     </section>
   );
 }
@@ -107,7 +128,7 @@ function PipelineChart({ data }: { data: Dashboard }) {
         aria-label="Pipeline by stage"
         className="grid grid-cols-[minmax(6.5rem,auto)_1fr_auto] items-center gap-x-4 text-sm"
       >
-        <div role="row" className="contents text-xs text-muted-foreground">
+        <div role="row" className="th-label contents">
           <span role="columnheader" className="pb-2">
             Stage
           </span>
@@ -128,28 +149,35 @@ function PipelineChart({ data }: { data: Dashboard }) {
                   href="/deals"
                   role="row"
                   className={cn(
-                    "group col-span-3 grid grid-cols-subgrid items-center rounded-md py-2 outline-none hover:bg-muted/50 focus-visible:bg-muted/50",
-                    i === 4 && "mt-2 border-t pt-3",
+                    "group col-span-3 grid grid-cols-subgrid items-center rounded-lg py-2 transition-colors outline-none hover:bg-ink-2/70 focus-visible:bg-ink-2/70",
+                    i === 4 && "mt-2 rounded-t-none border-t pt-3",
                   )}
                 >
-                  <span role="rowheader" className="flex items-center gap-2 pl-1">
+                  <span role="rowheader" className="flex items-center gap-2 pl-2">
                     <StageDot stage={r.stage} />
                     <span>{stageLabel(r.stage)}</span>
-                    {!closed ? <span className="text-xs text-muted-foreground figures">{r.probability}%</span> : null}
+                    {!closed ? <span className="text-xs text-fg-3 figures">{r.probability}%</span> : null}
                   </span>
                   <span role="cell" className="flex min-w-0 items-center gap-3">
-                    <span className="relative h-3 flex-1">
+                    <span className="relative h-2 flex-1 overflow-hidden rounded-full bg-ink-2">
                       <span
-                        className="absolute inset-y-0 left-0 rounded-r-[4px]"
+                        className={cn("absolute inset-y-0 left-0 rounded-full", r.stage === "won" && "shadow-glow-sm")}
                         style={{
                           width: `${r.amount === 0 ? 0 : Math.max(1.5, (r.amount / max) * 100)}%`,
                           backgroundColor: `var(--stage-${r.stage})`,
                         }}
                       />
                     </span>
-                    <Money cents={r.amount} compact className="w-16 text-right text-[13px] font-medium" />
+                    <Money
+                      cents={r.amount}
+                      compact
+                      className={cn(
+                        "w-16 text-right text-[13px] font-medium",
+                        r.stage === "won" ? "text-accent" : "text-fg",
+                      )}
+                    />
                   </span>
-                  <span role="cell" className="pr-1 text-right text-muted-foreground figures">
+                  <span role="cell" className="pr-2 text-right text-fg-2 figures">
                     {r.count}
                   </span>
                 </Link>
@@ -165,7 +193,7 @@ function PipelineChart({ data }: { data: Dashboard }) {
           );
         })}
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">Won and lost include every closed deal, not just this month.</p>
+      <p className="mt-4 text-xs text-fg-3">Won and lost include every closed deal, not just this month.</p>
     </div>
   );
 }
@@ -185,7 +213,17 @@ function MyTasks({ userId }: { userId: string }) {
     );
   }
   if (tasks.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nothing due today. Upcoming tasks are on the Tasks page.</p>;
+    return (
+      <div className="flex flex-col items-start gap-3 py-2">
+        <span className="flex size-9 items-center justify-center rounded-xl border border-line-2 bg-ink-2 text-accent">
+          <CheckCheckIcon className="size-4" aria-hidden="true" />
+        </span>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-fg">You&apos;re clear for today.</p>
+          <p className="text-sm text-fg-3">Nothing is overdue or due today. Upcoming tasks are on the Tasks page.</p>
+        </div>
+      </div>
+    );
   }
   return (
     <ul className="-my-1 flex flex-col divide-y">
@@ -196,7 +234,7 @@ function MyTasks({ userId }: { userId: string }) {
           </span>
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-sm leading-snug font-medium">{t.subject}</span>
-            <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+            <span className="flex flex-wrap gap-x-3 text-xs text-fg-3">
               <DueLabel activity={t} />
               <span className="truncate">{t.subject_label}</span>
             </span>
@@ -207,13 +245,42 @@ function MyTasks({ userId }: { userId: string }) {
   );
 }
 
+function PanelSkeleton({ rows, className }: { rows: number; className?: string }) {
+  return (
+    <div className={cn("surface overflow-hidden", className)}>
+      <div className="flex h-11 items-center justify-between border-b px-4">
+        <Skeleton className="h-3.5 w-32" />
+        <Skeleton className="h-3 w-16" />
+      </div>
+      <div className="flex flex-col gap-4 p-4">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center gap-4" style={{ opacity: 1 - i * 0.11 }}>
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-2 flex-1 rounded-full" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The dashboard's shape in placeholders, so nothing jumps when the figures arrive. */
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6" aria-busy="true">
-      <Skeleton className="h-28 w-full" />
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading the dashboard">
+      <div className="surface grid grid-cols-2 overflow-hidden xl:grid-cols-4 [&>*]:border-line xl:[&>*:not(:first-child)]:border-l [&>*:nth-child(2n)]:border-l [&>*:nth-child(n+3)]:border-t xl:[&>*:nth-child(n+3)]:border-t-0">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-28" />
+            <Skeleton className="h-3 w-32 max-w-full" />
+          </div>
+        ))}
+      </div>
       <div className="grid gap-6 lg:grid-cols-5">
-        <Skeleton className="h-80 lg:col-span-3" />
-        <Skeleton className="h-80 lg:col-span-2" />
+        <PanelSkeleton rows={6} className="lg:col-span-3" />
+        <PanelSkeleton rows={3} className="lg:col-span-2" />
       </div>
     </div>
   );
@@ -225,7 +292,7 @@ export function DashboardView() {
 
   return (
     <div className="flex flex-col">
-      <PageHeader title="Dashboard" description={longDate.format(new Date())} />
+      <PageHeader eyebrow={longDate.format(new Date())} title="Dashboard" />
       {dashboard.isPending ? (
         <DashboardSkeleton />
       ) : dashboard.isError ? (

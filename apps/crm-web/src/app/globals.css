@@ -2,199 +2,394 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* The CRM is dark only, like navree.com: `dark:` utilities (used by shadcn/ui) always apply. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Navree CRM design tokens.
+ * Navree design tokens, the same values as navree.com (apps/website/src/app/globals.css,
+ * apps/website/DESIGN.md).
  *
- * Harbor ink + mist neutrals. The only saturated colour family is the stage
- * "depth" ramp: open stages get progressively deeper sea tints (lead = shoal,
- * negotiation = deep water); won (kelp green) and lost (buoy coral) are status
- * colours chosen for colour-blind separation (validated: deutan/protan dE > 11).
- * The same ramp drives badges, board columns, the pipeline strip and charts.
+ * Ink: near-black surfaces with a faint sea-green cast, stepping up for raised
+ * elements. One accent, "starboard" green, used sparingly: the primary action,
+ * focus, the current place in the navigation and the one figure that matters.
+ * Text tokens meet WCAG AA on every ink step (fg-3 is 5.4:1 on ink-3 at worst).
+ */
+@theme {
+  --color-ink-0: #040605;
+  --color-ink-1: #0a0e0c;
+  --color-ink-2: #111714;
+  --color-ink-3: #16201b;
+  --color-line: #1c2420;
+  --color-line-2: #2a3530;
+  --color-fg: #e9efeb;
+  --color-fg-1: #cfd8d3;
+  --color-fg-2: #a9b5ae;
+  --color-fg-3: #8a968f;
+  --color-accent: #3dff8f;
+  --color-accent-ink: #03130a;
+  --color-amber: #ffbf5e;
+  --color-danger: #ff6b6b;
+  --color-bar: #5b6862;
+
+  /* Display type: page titles and big figures (Mona Sans, semi-expanded). */
+  --text-display-lg: clamp(2rem, 1.6rem + 1.7vw, 3rem);
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-md: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.024em;
+  --text-display-sm: 1.25rem;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--letter-spacing: -0.016em;
+  /* The CRM's page title: one size on every screen. */
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.022em;
+  /* A key figure (KPI tiles, record figures). */
+  --text-figure: 1.75rem;
+  --text-figure--line-height: 1;
+  --text-figure--letter-spacing: -0.03em;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.14em;
+
+  /* Glows: green light, never a dark drop shadow. */
+  --shadow-glow-sm: 0 0 10px rgb(61 255 143 / 0.3);
+  --shadow-glow: 0 0 18px rgb(61 255 143 / 0.35);
+  --shadow-glow-lg: 0 0 60px -12px rgb(61 255 143 / 0.45);
+  --shadow-bezel: inset 0 1px 0 0 rgb(233 239 235 / 0.05);
+  --shadow-float: 0 30px 80px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(61 255 143 / 0.04);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Loading placeholders: a faint light sweeping across ink (stopped under reduced motion). */
+  --animate-shimmer: shimmer 1.8s var(--ease-out-quint) infinite;
+
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
+/*
+ * Fonts (src/app/fonts.ts) and the shadcn/ui semantic colors, mapped onto the
+ * Navree tokens. `accent` stays Navree green: the primitives in
+ * src/components/ui use `ink-2`/`ink-3` for hover and highlighted surfaces,
+ * never `bg-accent`.
  */
 @theme inline {
+  --font-sans:
+    var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display--font-variation-settings: "wdth" 112;
+  --font-heading: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-heading--font-variation-settings: "wdth" 112;
+  --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-heading: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-canvas: var(--canvas);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--color-accent-ink);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-canvas: var(--background);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --color-stage-lead: var(--stage-lead);
   --color-stage-qualified: var(--stage-qualified);
   --color-stage-proposal: var(--stage-proposal);
   --color-stage-negotiation: var(--stage-negotiation);
   --color-stage-won: var(--stage-won);
   --color-stage-lost: var(--stage-lost);
-  --color-warning: var(--warning);
-  --color-success: var(--success);
-  --radius-sm: calc(var(--radius) * 0.5);
-  --radius-md: calc(var(--radius) * 0.75);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-2xl: calc(var(--radius) * 1.6);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-  --radius: 0.5rem;
-  /* Surfaces */
-  --canvas: #f3f5f6;
-  --background: #f3f5f6;
-  --foreground: #13232b;
-  --card: #ffffff;
-  --card-foreground: #13232b;
-  --popover: #ffffff;
-  --popover-foreground: #13232b;
-  /* Harbor teal: links, primary actions, focus */
-  --primary: #0b6577;
-  --primary-foreground: #f2fafb;
-  --secondary: #e7edef;
-  --secondary-foreground: #13232b;
-  --muted: #eaeff1;
-  --muted-foreground: #586870;
-  --accent: #e4ecef;
-  --accent-foreground: #13232b;
-  --destructive: #b0402e;
-  --warning: #9a6a12;
-  --success: #1d6843;
-  --border: #dbe2e5;
-  --input: #ccd6da;
-  --ring: #0b6577;
-  /* Stage depth ramp */
-  --stage-lead: #8fc2d1;
-  --stage-qualified: #4c9bb4;
-  --stage-proposal: #2a7795;
-  --stage-negotiation: #1b4b6a;
-  --stage-won: #1d6843;
-  --stage-lost: #d0706a;
+  color-scheme: dark;
+  --radius: 0.625rem;
+  --header-h: 3.5rem;
+
+  --background: var(--color-ink-0);
+  --foreground: var(--color-fg);
+  --card: var(--color-ink-1);
+  --card-foreground: var(--color-fg);
+  --popover: var(--color-ink-1);
+  --popover-foreground: var(--color-fg);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-ink);
+  --secondary: var(--color-ink-2);
+  --secondary-foreground: var(--color-fg);
+  --muted: var(--color-ink-2);
+  --muted-foreground: var(--color-fg-2);
+  --destructive: var(--color-danger);
+  --warning: var(--color-amber);
+  --success: var(--color-accent);
+  --border: var(--color-line);
+  --input: var(--color-line-2);
+  --ring: var(--color-accent);
+
+  /* The sidebar is a raised ink-1 surface; the current page carries the green light. */
+  --sidebar: var(--color-ink-1);
+  --sidebar-foreground: var(--color-fg-2);
+  --sidebar-primary: var(--color-accent);
+  --sidebar-primary-foreground: var(--color-accent-ink);
+  --sidebar-accent: var(--color-ink-2);
+  --sidebar-accent-foreground: var(--color-fg);
+  --sidebar-border: var(--color-line);
+  --sidebar-ring: var(--color-accent);
+
+  /*
+   * The pipeline, from shallow to deep: open stages brighten step by step from
+   * slate to pale mint, a won deal lights up in Navree green, a lost one in
+   * danger red. Stage names are always shown next to the color.
+   */
+  --stage-lead: #5b6862;
+  --stage-qualified: #6f8f7f;
+  --stage-proposal: #8db8a0;
+  --stage-negotiation: #b9e3c9;
+  --stage-won: var(--color-accent);
+  --stage-lost: var(--color-danger);
   --chart-1: var(--stage-lead);
   --chart-2: var(--stage-qualified);
   --chart-3: var(--stage-proposal);
   --chart-4: var(--stage-negotiation);
   --chart-5: var(--stage-won);
-  /* The hull: the sidebar is deep harbor ink in both modes */
-  --sidebar: #10252d;
-  --sidebar-foreground: #bfcfd5;
-  --sidebar-primary: #8fc2d1;
-  --sidebar-primary-foreground: #10252d;
-  --sidebar-accent: #19353f;
-  --sidebar-accent-foreground: #f1f6f8;
-  --sidebar-border: #1d3842;
-  --sidebar-ring: #8fc2d1;
-}
-
-.dark {
-  --canvas: #0c181d;
-  --background: #0c181d;
-  --foreground: #dbe5e9;
-  --card: #11222a;
-  --card-foreground: #dbe5e9;
-  --popover: #142830;
-  --popover-foreground: #dbe5e9;
-  --primary: #5db3c6;
-  --primary-foreground: #071519;
-  --secondary: #1a2e37;
-  --secondary-foreground: #dbe5e9;
-  --muted: #162a32;
-  --muted-foreground: #8ea2aa;
-  --accent: #1a3039;
-  --accent-foreground: #e9f0f3;
-  --destructive: #e0786a;
-  --warning: #d9a54a;
-  --success: #4fae7b;
-  --border: #20363f;
-  --input: #2a434d;
-  --ring: #5db3c6;
-  --stage-lead: #7cb6c7;
-  --stage-qualified: #56a5be;
-  --stage-proposal: #3f8db0;
-  --stage-negotiation: #4a7aa6;
-  --stage-won: #2f8458;
-  --stage-lost: #f2a597;
-  --sidebar: #08141a;
-  --sidebar-foreground: #a8bbc2;
-  --sidebar-primary: #7cb6c7;
-  --sidebar-primary-foreground: #08141a;
-  --sidebar-accent: #12252d;
-  --sidebar-accent-foreground: #eef4f6;
-  --sidebar-border: #142a32;
-  --sidebar-ring: #7cb6c7;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
   }
+
   html {
-    @apply font-sans;
-    font-feature-settings: "cv11", "ss01";
-  }
-  body {
-    @apply bg-background text-foreground;
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--color-line-2) var(--color-ink-0);
   }
+
+  body {
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 112;
+  }
+
   h1,
   h2,
   h3 {
     text-wrap: balance;
   }
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-ring;
+
+  ::selection {
+    background: rgb(61 255 143 / 0.28);
+    color: var(--color-fg);
   }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings:
+      "calt" 1,
+      "liga" 0;
+  }
+
+  /* Date and time pickers draw their own icons: keep them visible on ink. */
+  input::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }
 
-@utility font-condensed {
-  font-stretch: 86%;
-}
-
-@utility font-semi-condensed {
-  font-stretch: 93%;
-}
-
+/* Tabular, lining figures for amounts, counts and dates. */
 @utility figures {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Soft tinted wash for a stage colour: bg-stage-wash + style --stage */
+@utility font-display-wide {
+  font-variation-settings: "wdth" 125;
+}
+
+/* Soft tinted wash for a stage colour: stage-wash + style --stage */
 @utility stage-wash {
   background-color: color-mix(in oklab, var(--stage) 14%, transparent);
+}
+
+/* A thin scrollbar for sidebars, boards and lists. */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-2) transparent;
+}
+
+@layer components {
+  /*
+   * The small mono label above a heading, with a green running light, as on
+   * navree.com: `<p className="eyebrow">Pipeline</p>`.
+   */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-eyebrow);
+    line-height: var(--text-eyebrow--line-height);
+    letter-spacing: var(--text-eyebrow--letter-spacing);
+    text-transform: uppercase;
+    color: var(--color-fg-2);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 8px rgb(61 255 143 / 0.7);
+  }
+
+  /* A raised surface: ink-1, a 1px line and a faint top highlight. */
+  .surface {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-xl);
+    background: var(--color-ink-1);
+    box-shadow: var(--shadow-bezel);
+  }
+
+  /*
+   * The double-bezel frame used for hero panels on navree.com: an outer tray
+   * and a nested core with concentric radii.
+   */
+  .bezel {
+    padding: 0.375rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    background: rgb(17 23 20 / 0.55);
+  }
+  .bezel-core {
+    overflow: hidden;
+    border: 1px solid var(--color-line-2);
+    border-radius: calc(1.25rem - 0.375rem);
+    background: var(--color-ink-1);
+    box-shadow: var(--shadow-bezel);
+  }
+
+  /* Small mono column headings for tables, like the site's eyebrows. */
+  .th-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-fg-3);
+  }
+
+  /*
+   * A link to another record inside a table, timeline or detail list: quiet
+   * text with a hairline underline, so the page's one green element stays the
+   * primary action.
+   */
+  .record-link {
+    color: var(--color-fg-1);
+    text-decoration-line: underline;
+    text-decoration-color: var(--color-line-2);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition:
+      color 150ms,
+      text-decoration-color 150ms;
+  }
+  .record-link:hover {
+    color: var(--color-fg);
+    text-decoration-color: var(--color-fg-3);
+  }
+
+  /* The skip link: the first focusable thing on every screen. */
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -4rem;
+    z-index: 100;
+    padding: 0.5rem 0.875rem;
+    border-radius: 8px;
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    top: 0.75rem;
+  }
+}
+
+/*
+ * Big numbers in the display face keep proportional figures: Mona Sans' tabular
+ * set draws a slashed zero, which reads as code. (Unlayered, so it wins over
+ * the `figures` utility on nested amounts.)
+ */
+.font-display .figures,
+.font-display.figures {
+  font-variant-numeric: lining-nums proportional-nums;
 }

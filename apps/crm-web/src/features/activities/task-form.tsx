@@ -11,6 +11,7 @@ import { RecordCombobox, UserSelect, type PickedRecord } from "@/components/reco
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCurrentUser } from "@/features/auth/queries";
+import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { ActivitySubjectType } from "@/lib/api/types";
 import { todayIso } from "@/lib/format";
@@ -44,12 +45,24 @@ function defaults(userId?: string): Values {
 }
 
 /** New task from the Tasks page: a task always hangs off a deal, company or contact. */
-export function TaskFormDialog({ trigger }: { trigger: ReactNode }) {
+export function TaskFormDialog({
+  trigger,
+  openOnCreateIntent,
+}: {
+  trigger: ReactNode;
+  /** Open when the command menu asks for a new task (set on one dialog per screen). */
+  openOnCreateIntent?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const me = useCurrentUser();
   const create = useCreateActivity();
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: defaults(me.data?.id) });
   const recordType = useWatch({ control: form.control, name: "record_type" });
+  const onOpenChange = (next: boolean) => {
+    if (next) form.reset(defaults(me.data?.id));
+    setOpen(next);
+  };
+  useCreateIntent(openOnCreateIntent ? "task" : undefined, () => onOpenChange(true));
 
   const onSubmit = form.handleSubmit((values) => {
     create.mutate(
@@ -81,10 +94,7 @@ export function TaskFormDialog({ trigger }: { trigger: ReactNode }) {
   return (
     <FormDialog
       open={open}
-      onOpenChange={(next) => {
-        if (next) form.reset(defaults(me.data?.id));
-        setOpen(next);
-      }}
+      onOpenChange={onOpenChange}
       trigger={trigger}
       title="New task"
       description="Tasks show up for their assignee under Today, Upcoming or Overdue."

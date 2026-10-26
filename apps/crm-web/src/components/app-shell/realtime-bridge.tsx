@@ -50,7 +50,7 @@ export function RealtimeBridge({ userId }: { userId: string }) {
       try {
         const conn = env.mocks
           ? (await import("@/lib/realtime/mock-bus")).connectMockBus()
-          : (await import("@/lib/realtime/echo")).connectEcho();
+          : (await import("@/lib/realtime/pusher")).connectPusher();
         if (cancelled) {
           conn.disconnect();
           return;

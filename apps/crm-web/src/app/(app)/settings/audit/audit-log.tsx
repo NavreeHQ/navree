@@ -46,7 +46,7 @@ function Changes({ entry }: { entry: AuditEntry }) {
         const after = entry.new_values?.[key];
         return (
           <li key={key} className="max-w-md truncate" title={`${key}: ${show(before)} → ${show(after)}`}>
-            <span className="text-muted-foreground">{key}: </span>
+            <span className="font-mono text-xs text-fg-3">{key}: </span>
             {entry.old_values && key in entry.old_values ? (
               <>
                 <span className="text-muted-foreground line-through decoration-muted-foreground/50">
@@ -103,10 +103,10 @@ export function AuditLog() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Audit log</h2>
+        <h2 className="font-display text-display-sm font-semibold text-fg">Audit log</h2>
         <p className="text-sm text-muted-foreground">Every sign-in and record change, newest first.</p>
       </div>
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="surface overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b p-3">
           <OwnerFilter label="Person" value={params.actor_id} onChange={(actor) => url.set({ actor })} />
           <OptionFilter
@@ -126,7 +126,7 @@ export function AuditLog() {
         </div>
         <Table className="text-[13px]">
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
+            <TableRow className="bg-ink-1 hover:bg-ink-1 [&>th]:h-9">
               <TableHead className="pl-4">When</TableHead>
               <TableHead>Who</TableHead>
               <TableHead>Action</TableHead>
@@ -143,7 +143,7 @@ export function AuditLog() {
                 const href = recordHref(entry.subject_type, entry.subject_id);
                 return (
                   <TableRow key={entry.id} className="align-top" data-testid="audit-row">
-                    <TableCell className="py-2.5 pl-4 whitespace-nowrap text-muted-foreground figures">
+                    <TableCell className="py-2.5 pl-4 whitespace-nowrap text-fg-2 figures">
                       {formatDateTime(entry.created_at)}
                     </TableCell>
                     <TableCell className="py-2.5 whitespace-nowrap">
@@ -157,7 +157,7 @@ export function AuditLog() {
                       <span className="font-medium" title={entry.action}>
                         {entryLabel(entry)}
                       </span>
-                      <span className="block text-xs text-muted-foreground">{entry.kind}</span>
+                      <span className="block font-mono text-xs text-fg-3">{entry.kind}</span>
                     </TableCell>
                     <TableCell className="py-2.5 whitespace-nowrap">
                       {entry.subject_type ? (
@@ -167,13 +167,13 @@ export function AuditLog() {
                             href ? (
                               <Link
                                 href={href}
-                                className="block text-xs text-primary hover:underline"
+                                className="record-link block font-mono text-xs"
                                 title={entry.subject_id}
                               >
                                 {entry.subject_id.slice(0, 8)}
                               </Link>
                             ) : (
-                              <span className="block text-xs text-muted-foreground" title={entry.subject_id}>
+                              <span className="block font-mono text-xs text-fg-3" title={entry.subject_id}>
                                 {entry.subject_id.slice(0, 8)}
                               </span>
                             )
@@ -187,7 +187,7 @@ export function AuditLog() {
                       <Changes entry={entry} />
                     </TableCell>
                     <TableCell
-                      className="py-2.5 pr-4 text-xs text-muted-foreground"
+                      className="py-2.5 pr-4 font-mono text-xs text-fg-3"
                       title={entry.request_id ?? undefined}
                     >
                       {entry.request_id ? entry.request_id.slice(-8) : "None"}

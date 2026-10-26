@@ -158,7 +158,7 @@ export function UsersSettings() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold">Users and roles</h2>
+          <h2 className="font-display text-display-sm font-semibold text-fg">Users and roles</h2>
           <p className="text-sm text-muted-foreground">
             {users.data ? `${users.data.meta.total} people on the team. ` : ""}A role decides what each person can see
             and change.
@@ -168,20 +168,23 @@ export function UsersSettings() {
           <CreateUserDialog />
         </Can>
       </div>
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="surface overflow-hidden">
         <Table className="text-[13px]">
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
+            <TableRow className="bg-ink-1 hover:bg-ink-1 [&>th]:h-9">
               <TableHead className="pl-4">Name</TableHead>
               <TableHead>Role</TableHead>
               <TableHead className="hidden md:table-cell">Can</TableHead>
-              <TableHead>Email verified</TableHead>
-              <TableHead className="pr-4">Joined</TableHead>
+              <TableHead className="hidden sm:table-cell">Email verified</TableHead>
+              <TableHead className="hidden pr-4 lg:table-cell">Joined</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.isPending ? (
-              <SkeletonRows columns={5} rows={4} />
+              <SkeletonRows
+                columns={["", "", "hidden md:table-cell", "hidden sm:table-cell", "hidden lg:table-cell"]}
+                rows={4}
+              />
             ) : (
               users.data?.data.map((u) => {
                 const role = (ROLES.find((r) => u.roles.includes(r)) ?? "rep") as Role;
@@ -189,7 +192,7 @@ export function UsersSettings() {
                   <TableRow key={u.id} data-testid="user-row">
                     <TableCell className="py-2.5 pl-4">
                       <span className="flex items-center gap-2.5">
-                        <UserAvatar name={u.name} id={u.id} size="sm" />
+                        <UserAvatar name={u.name} id={u.id} size="md" />
                         <span className="flex flex-col">
                           <span className="font-medium">
                             {u.name}
@@ -197,7 +200,7 @@ export function UsersSettings() {
                               <span className="font-normal text-muted-foreground"> (you)</span>
                             ) : null}
                           </span>
-                          <span className="text-xs text-muted-foreground">{u.email}</span>
+                          <span className="text-xs text-fg-3">{u.email}</span>
                         </span>
                       </span>
                     </TableCell>
@@ -207,10 +210,12 @@ export function UsersSettings() {
                     <TableCell className="hidden max-w-72 text-muted-foreground md:table-cell">
                       {ROLE_HELP[role]}
                     </TableCell>
-                    <TableCell className="text-muted-foreground figures">
+                    <TableCell className="hidden text-fg-3 figures sm:table-cell">
                       {u.email_verified_at ? formatDate(u.email_verified_at) : "Not yet"}
                     </TableCell>
-                    <TableCell className="pr-4 text-muted-foreground figures">{formatDate(u.created_at)}</TableCell>
+                    <TableCell className="hidden pr-4 text-fg-3 figures lg:table-cell">
+                      {formatDate(u.created_at)}
+                    </TableCell>
                   </TableRow>
                 );
               })

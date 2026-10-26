@@ -28,3 +28,28 @@ test("a rep signs in with the mock API and lands on the dashboard", async ({ pag
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pipeline by stage" })).toBeVisible();
 });
+
+test("the command menu opens with Ctrl+K, jumps to a screen and starts a new deal", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("rep1@navree.test");
+  await page.getByLabel("Password").fill("password123");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+
+  // Jump to a screen.
+  await page.keyboard.press("Control+k");
+  const menu = page.getByRole("dialog", { name: "Command menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("combobox").fill("comp");
+  await menu.getByRole("option", { name: "Companies" }).click();
+  await expect(page).toHaveURL("/companies");
+  await expect(page.getByRole("heading", { level: 1, name: "Companies" })).toBeVisible();
+
+  // Create: goes to the board and opens its "New deal" dialog.
+  await page.keyboard.press("Control+k");
+  await menu.getByRole("combobox").fill("new deal");
+  await expect(menu.getByRole("option", { name: "New deal" })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("/deals");
+  await expect(page.getByRole("dialog", { name: "New deal" })).toBeVisible();
+});

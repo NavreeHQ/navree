@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { OwnerCell } from "@/components/user-avatar";
+import { CompanyMonogram, OwnerCell } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import { CompanyFormDialog, INDUSTRIES } from "@/features/companies/company-form";
 import { useCompanies, type CompanyListParams } from "@/features/companies/queries";
@@ -20,10 +20,11 @@ import { formatDate, formatNumber } from "@/lib/format";
 
 const SORTS: CompanySort[] = ["name", "-name", "created_at", "-created_at"];
 
-function NewCompanyButton() {
+function NewCompanyButton({ openOnCreateIntent }: { openOnCreateIntent?: boolean }) {
   return (
     <Can I="create" a="Company">
       <CompanyFormDialog
+        openOnCreateIntent={openOnCreateIntent}
         trigger={
           <Button>
             <PlusIcon data-icon="inline-start" />
@@ -61,10 +62,10 @@ export function CompaniesView() {
             ? "Accounts your team sells to"
             : `${formatNumber(total)} ${total === 1 ? "company" : "companies"}${filtered ? " match" : ""}`
         }
-        actions={<NewCompanyButton />}
+        actions={<NewCompanyButton openOnCreateIntent />}
       />
       <TablePanel>
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
+        <div className="flex flex-wrap items-center gap-2 border-b p-3" role="search" aria-label="Filter companies">
           <SearchFilter
             value={params.search}
             onChange={(search) => url.set({ search })}
@@ -81,7 +82,7 @@ export function CompaniesView() {
         </div>
         <Table className="text-[13px]">
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
+            <TableRow className="bg-ink-1 hover:bg-ink-1 [&>th]:h-9">
               <SortableHead
                 label="Company"
                 field="name"
@@ -89,22 +90,31 @@ export function CompaniesView() {
                 onSort={(sort) => url.set({ sort })}
                 className="pl-4"
               />
-              <TableHead>Industry</TableHead>
+              <TableHead className="hidden md:table-cell">Industry</TableHead>
               <TableHead className="hidden xl:table-cell">Employees</TableHead>
-              <TableHead>Location</TableHead>
+              <TableHead className="hidden lg:table-cell">Location</TableHead>
               <TableHead>Owner</TableHead>
               <SortableHead
                 label="Added"
                 field="created_at"
                 sort={params.sort}
                 onSort={(sort) => url.set({ sort })}
-                className="pr-4"
+                className="hidden pr-4 sm:table-cell"
               />
             </TableRow>
           </TableHeader>
           <TableBody>
             {companies.isPending ? (
-              <SkeletonRows columns={5} />
+              <SkeletonRows
+                columns={[
+                  "",
+                  "hidden md:table-cell",
+                  "hidden xl:table-cell",
+                  "hidden lg:table-cell",
+                  "",
+                  "hidden sm:table-cell",
+                ]}
+              />
             ) : companies.data?.data.length ? (
               companies.data.data.map((c) => (
                 <TableRow
@@ -115,24 +125,31 @@ export function CompaniesView() {
                   }}
                 >
                   <TableCell className="py-2.5 pl-4">
-                    <Link href={`/companies/${c.id}`} className="font-medium hover:underline">
-                      {c.name}
-                    </Link>
-                    {c.domain ? <div className="text-xs text-muted-foreground">{c.domain}</div> : null}
+                    <span className="flex items-center gap-3">
+                      <CompanyMonogram name={c.name} />
+                      <span className="flex min-w-0 flex-col">
+                        <Link href={`/companies/${c.id}`} className="truncate font-medium text-fg hover:underline">
+                          {c.name}
+                        </Link>
+                        {c.domain ? <span className="truncate text-xs text-fg-3">{c.domain}</span> : null}
+                      </span>
+                    </span>
                   </TableCell>
-                  <TableCell>{c.industry ?? <span className="text-muted-foreground">Not set</span>}</TableCell>
-                  <TableCell className="hidden figures xl:table-cell">
-                    {c.size ?? <span className="text-muted-foreground">Unknown</span>}
+                  <TableCell className="hidden text-fg-1 md:table-cell">
+                    {c.industry ?? <span className="text-fg-3">Not set</span>}
                   </TableCell>
-                  <TableCell className="max-w-48 truncate">
-                    {[c.city, c.country].filter(Boolean).join(", ") || (
-                      <span className="text-muted-foreground">Not set</span>
-                    )}
+                  <TableCell className="hidden text-fg-1 figures xl:table-cell">
+                    {c.size ?? <span className="text-fg-3">Unknown</span>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden max-w-48 truncate text-fg-1 lg:table-cell">
+                    {[c.city, c.country].filter(Boolean).join(", ") || <span className="text-fg-3">Not set</span>}
+                  </TableCell>
+                  <TableCell className="max-w-44">
                     <OwnerCell owner={c.owner} />
                   </TableCell>
-                  <TableCell className="pr-4 text-muted-foreground figures">{formatDate(c.created_at)}</TableCell>
+                  <TableCell className="hidden pr-4 text-fg-3 figures sm:table-cell">
+                    {formatDate(c.created_at)}
+                  </TableCell>
                 </TableRow>
               ))
             ) : (

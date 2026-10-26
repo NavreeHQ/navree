@@ -62,23 +62,23 @@ export function NotificationsBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className="relative text-fg-2 hover:text-fg"
           aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
         >
           <BellIcon />
           {count > 0 ? (
             <span
               data-testid="unread-count"
-              className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground figures ring-2 ring-background"
+              className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground figures shadow-glow-sm ring-2 ring-ink-0"
             >
               {count > 99 ? "99+" : count}
             </span>
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 gap-0 p-0">
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1.5rem))] gap-0 overflow-hidden p-0">
         <div className="flex items-center justify-between border-b px-4 py-2.5">
-          <h2 className="text-sm font-semibold">Notifications</h2>
+          <h2 className="text-sm font-semibold text-fg">Notifications</h2>
           <Button
             variant="ghost"
             size="xs"
@@ -103,13 +103,13 @@ export function NotificationsBell() {
                   <button
                     type="button"
                     onClick={() => openNotification(n)}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-ink-2 focus-visible:bg-ink-2 focus-visible:outline-none"
                   >
                     <span
                       aria-hidden="true"
                       className={cn(
                         "mt-1.5 size-1.5 shrink-0 rounded-full",
-                        n.read_at ? "bg-transparent" : "bg-primary",
+                        n.read_at ? "bg-transparent" : "bg-primary shadow-[0_0_6px_rgb(61_255_143/0.7)]",
                       )}
                     />
                     <span className="flex min-w-0 flex-col gap-0.5">
@@ -131,9 +131,12 @@ export function NotificationsBell() {
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Nothing new. Deal assignments, wins and task reminders show up here.
-            </p>
+            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+              <span className="flex size-10 items-center justify-center rounded-xl border border-line-2 bg-ink-2 text-fg-2">
+                <BellIcon className="size-4" aria-hidden="true" />
+              </span>
+              <p className="text-sm text-fg-2">Nothing new. Deal assignments, wins and task reminders show up here.</p>
+            </div>
           )}
         </ScrollArea>
       </PopoverContent>
