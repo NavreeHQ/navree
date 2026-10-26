@@ -57,6 +57,9 @@ struct FakeInner {
     sent: Mutex<Vec<Envelope>>,
     emitted: Mutex<Vec<Envelope>>,
     dead: Mutex<Vec<DeadLetter>>,
+    /// The message id last emitted per pattern by a fake client, for
+    /// `redelivered`.
+    last_ids: Mutex<HashMap<String, String>>,
 }
 
 impl Default for MicroFake {
@@ -77,6 +80,7 @@ impl MicroFake {
                 sent: Mutex::default(),
                 emitted: Mutex::default(),
                 dead: Mutex::default(),
+                last_ids: Mutex::default(),
             }),
         }
     }
@@ -95,7 +99,6 @@ impl MicroFake {
         FakeClient {
             fake: self.clone(),
             principal: None,
-            last_ids: Arc::default(),
         }
     }
 
@@ -475,8 +478,6 @@ impl MicroTransport for FakeTransport {
 pub struct FakeClient {
     fake: MicroFake,
     principal: Option<Principal>,
-    /// The message id last emitted per pattern, for `redelivered`.
-    last_ids: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl FakeClient {
@@ -602,8 +603,8 @@ impl FakeEmit {
         self
     }
 
-    /// Sends it with the message id of the previous event this client
-    /// emitted under the same pattern, as a broker does after a crash.
+    /// Sends it with the message id of the previous event a client of this
+    /// fake emitted under the same pattern, as a broker does after a crash.
     pub fn redelivered(mut self) -> Self {
         self.redelivered = true;
         self
@@ -627,12 +628,14 @@ impl IntoFuture for FakeEmit {
         Box::pin(async move {
             let mut builder = self.builder;
             if self.redelivered {
-                let previous = lock(&self.client.last_ids).get(&self.pattern).cloned();
+                let previous = lock(&self.client.fake.inner.last_ids)
+                    .get(&self.pattern)
+                    .cloned();
                 match previous {
                     Some(id) => builder = builder.message_id(id),
                     None => {
                         return Err(MicroError::transport(format!(
-                            "redelivered: this client has not emitted `{}` before",
+                            "redelivered: no client of this fake has emitted `{}` before",
                             self.pattern
                         )));
                     }
@@ -640,7 +643,7 @@ impl IntoFuture for FakeEmit {
             }
             let (envelope, _, _) = builder.into_envelope()?;
             if let Some(id) = envelope.message_id() {
-                lock(&self.client.last_ids).insert(self.pattern.clone(), id.to_owned());
+                lock(&self.client.fake.inner.last_ids).insert(self.pattern.clone(), id.to_owned());
             }
             self.client.fake.inner.broker.publish_and_wait(envelope).await
         })
