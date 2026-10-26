@@ -456,7 +456,7 @@ impl Job for Unregistered {
 
 /// Reports progress every 10 ms until its batch or operation is cancelled
 /// (then stops with `JobCancelled`); gives up with an error after 10 s.
-/// Notifies the journal's `started` once it runs.
+/// Notifies the journal's `started` after its first report.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Cooperative {
     pub label: String,
@@ -475,9 +475,11 @@ impl Job for Cooperative {
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let journal = journal(&ctx).await?;
-        journal.started.notify_one();
         for step in 1..=1000 {
             ctx.progress(step, 1000, format!("step {step}")).await?;
+            if step == 1 {
+                journal.started.notify_one();
+            }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         journal.record(Self::NAME, &self.label, ctx.attempt);
