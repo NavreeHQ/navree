@@ -8,7 +8,9 @@
 //!   `http_client` with [`HttpClientModule::from_config`].
 //! - [`HttpClient::get`] (and `post`, `put`, `patch`, `delete`, `request`)
 //!   start a [`RequestBuilder`]; [`RequestBuilder::send`] returns a fully
-//!   read [`Response`].
+//!   read [`Response`], and [`RequestBuilder::send_streaming`] a
+//!   [`StreamingResponse`] whose body is read as it arrives (server-sent
+//!   events), sent once (never retried) under the same SSRF policy.
 //! - **Retries**: idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`,
 //!   `PUT`, `DELETE`) are retried on connection errors, 5xx and 429, with
 //!   jittered exponential backoff (backon). `POST` and `PATCH` never are.
@@ -65,6 +67,7 @@ mod options;
 mod request;
 mod response;
 mod ssrf;
+mod streaming;
 
 pub use client::HttpClient;
 pub use error::HttpClientError;
@@ -73,3 +76,4 @@ pub use module::HttpClientModule;
 pub use options::{HttpClientOptions, SsrfPolicy};
 pub use request::RequestBuilder;
 pub use response::Response;
+pub use streaming::{BodyStream, StreamingResponse};

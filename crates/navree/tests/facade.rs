@@ -55,6 +55,9 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L6 (opt-in features)
+    #[cfg(feature = "ai")]
+    assert!(same::<navree::ai::AiModule, AiModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -361,6 +364,10 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Module features left out of `full`: ecosystem libraries an app turns
+/// on by name (their docs say so).
+const OPT_IN: [&str; 1] = ["ai"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +376,10 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    for feature in OPT_IN {
+        assert!(!full.contains(feature), "`{feature}` is opt-in, not in `full`");
+    }
 }

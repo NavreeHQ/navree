@@ -1,7 +1,7 @@
 //! # navree-macros
 //!
 //! Attribute macros for Navree applications: `#[module]`, `#[injectable]`,
-//! `#[controller]` and the route attributes.
+//! `#[controller]` and the route attributes, and `#[agent]` for navree-ai.
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -19,6 +19,7 @@
 
 use proc_macro::TokenStream;
 
+mod agent;
 mod attr;
 mod controller;
 mod duration;
@@ -305,4 +306,39 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::outside_controller("delete", item.into()).into()
+}
+
+/// Implements an agent's tools: on an `impl Agent for X` block (navree-ai),
+/// collects the methods marked `#[tool]` into `Agent::tool_specs` and
+/// `Agent::dispatch`, and moves them to an inherent `impl X`.
+///
+/// ```text
+/// #[agent]
+/// impl Agent for DealsAssistant {
+///     const NAME: &'static str = "deals-assistant";
+///     fn instructions(&self, run: &AgentRun) -> String { .. }
+///
+///     /// Finds the deals the user can see.        <- the tool's description
+///     #[tool(read_only)]                          // or #[tool], #[tool(needs_approval)]
+///     async fn search_deals(&self, run: &AgentRun, args: SearchDeals) -> Result<Vec<DealResource>> { .. }
+///
+///     /// Gives a deal to another member of the team.
+///     #[tool(needs_approval)]
+///     #[can(Manage, Deal)]                        // or #[permissions(..)], #[roles(..)]
+///     async fn reassign_deal(&self, run: &AgentRun, args: ReassignDeal) -> Result<DealResource> { .. }
+/// }
+/// ```
+///
+/// A tool is an `async fn` taking `&self`, the run (`&AgentRun`) and at
+/// most one arguments value, whose type derives `Deserialize`, utoipa's
+/// `ToSchema` (its JSON Schema, field doc comments included) and
+/// `garde::Validate`; it returns a `Result` of anything that serializes,
+/// with an error that converts into `AppError`. The method name is the tool
+/// name; its doc comment, required, is the description. `#[can]` with
+/// marker types needs `navree` (or `navree-access`) among the dependencies;
+/// everything else needs `navree` (or `navree-ai`). Methods without
+/// `#[tool]` stay trait items.
+#[proc_macro_attribute]
+pub fn agent(args: TokenStream, item: TokenStream) -> TokenStream {
+    agent::expand(args.into(), item.into()).into()
 }
