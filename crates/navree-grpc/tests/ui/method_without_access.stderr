@@ -1,0 +1,5 @@
+error: gRPC method `ping` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can], on the method or the impl block (deny by default; a #[guard] alone is not an access declaration)
+  --> tests/ui/method_without_access.rs:15:14
+   |
+15 |     async fn ping(&self, request: Request<pb::PingRequest>) -> Result<Response<pb::PingReply>, Status> {
+   |              ^^^^

@@ -447,7 +447,7 @@ fn route_def(route: &RouteFn, paths: &Paths) -> TokenStream {
         .iter()
         .zip(&route.args)
         .map(|(arg, ty)| quote_spanned!(ty.span()=> #arg: #ty));
-    let access = access(&route.attrs, paths.access.as_ref());
+    let access = access_calls(&route.attrs, paths.access.as_ref());
     let guards = route.attrs.guards.iter().map(|guard| {
         quote_spanned! {guard.span()=>
             .guard({
@@ -558,9 +558,10 @@ fn api_call(api: &Api, http: &TokenStream) -> TokenStream {
     }
 }
 
-/// The access builder calls of a route. `access` is the navree-access path,
+/// The access builder calls of a route (or a gRPC method, whose builder
+/// has the same methods). `access_crate` is the navree-access path,
 /// resolved whenever a `#[can]` names marker types.
-fn access(attrs: &RouteAttrs, access_crate: Option<&TokenStream>) -> TokenStream {
+pub(crate) fn access_calls(attrs: &RouteAttrs, access_crate: Option<&TokenStream>) -> TokenStream {
     let access = &attrs.access;
     let mut out = TokenStream::new();
     if access.public.is_some() {
