@@ -55,27 +55,3 @@ export function MockFrame({
     </figure>
   );
 }
-
-/** A small "live" light for a title bar. */
-export function LiveLight({ label = "Live" }: { label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-fg-2">
-      <span className="relative flex size-2">
-        <span className="absolute inset-0 rounded-full bg-accent/60 motion-safe:animate-ping" />
-        <span className="relative size-2 rounded-full bg-accent" />
-      </span>
-      {label}
-    </span>
-  );
-}
-
-/** A label/value figure for a dashboard row. */
-export function Figure({ label, value, sub, className }: { label: string; value: ReactNode; sub?: ReactNode; className?: string }) {
-  return (
-    <div className={cn("min-w-0", className)}>
-      <div className="truncate text-xs text-fg-3">{label}</div>
-      <div className="mt-1 font-display text-[1.375rem] leading-tight font-semibold tracking-[-0.02em] text-fg tabular-nums">{value}</div>
-      {sub ? <div className="mt-0.5 truncate text-xs text-fg-3">{sub}</div> : null}
-    </div>
-  );
-}

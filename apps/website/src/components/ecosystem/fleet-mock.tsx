@@ -1,17 +1,19 @@
 "use client";
 
+import { ChartLineIcon, GaugeIcon, LayersIcon, ListChecksIcon, OctagonXIcon, PauseIcon, ServerIcon, SettingsIcon, ShipIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { AppShell, Badge, Button, Card, Stat, StatusDot, TopBar, type SidebarSpec } from "./app-shell";
 import { Bars } from "./charts";
-import { Figure, LiveLight, MockFrame } from "./frame";
+import { MockFrame } from "./frame";
 import { fleetFailedJobs, fleetMailPerMinute, fleetSteps } from "./mock-data";
 import { useSteps } from "./use-steps";
 
 const SLOTS = 8;
 
-/** A queue's processes as lit slots: green while running, outlined while free. */
+/** A queue's processes as slots: filled in fg while running, outlined while free. */
 export function ProcessSlots({ count, capacity = SLOTS, className }: { count: number; capacity?: number; className?: string }) {
   return (
     <div className={cn("grid grid-cols-8 gap-1", className)}>
@@ -19,12 +21,8 @@ export function ProcessSlots({ count, capacity = SLOTS, className }: { count: nu
         <span
           key={i}
           className={cn(
-            "h-3.5 rounded-[3px] border transition-[background-color,border-color,box-shadow] duration-500 ease-(--ease-out-quint)",
-            i >= capacity
-              ? "border-transparent"
-              : i < count
-                ? "border-accent/60 bg-accent/85 shadow-[0_0_10px_rgb(61_255_143/0.35)]"
-                : "border-line-2 bg-ink-0/40",
+            "h-3.5 rounded-[2px] border transition-[background-color,border-color] duration-500 ease-(--ease-out-quint)",
+            i >= capacity ? "border-transparent" : i < count ? "border-fg-2 bg-fg-2" : "border-line-2 bg-ink-0",
           )}
         />
       ))}
@@ -39,19 +37,19 @@ function WorkloadRows({ rows, compact }: { rows: Row[]; compact?: boolean }) {
     <div
       key={q.name}
       className={cn(
-        "grid items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0",
+        "grid h-10 items-center gap-3 border-b border-line px-3 last:border-b-0",
         compact
-          ? "grid-cols-[7rem_minmax(0,11rem)_minmax(3.25rem,1fr)]"
-          : "grid-cols-[7rem_minmax(0,1fr)_3.5rem] @lg:grid-cols-[7.5rem_minmax(0,9rem)_4rem_3rem_3.5rem] @lg:justify-between",
+          ? "grid-cols-[7.5rem_minmax(0,11rem)_minmax(3.25rem,1fr)]"
+          : "grid-cols-[7.25rem_minmax(0,1fr)_3.5rem] @lg:grid-cols-[7.5rem_minmax(0,9rem)_4rem_3rem_3.5rem] @lg:justify-between",
       )}
     >
-      <span className="truncate font-mono text-[0.8125rem] text-fg-1">{q.name}</span>
+      <span className="truncate font-mono text-[0.8125rem] text-fg">{q.name}</span>
       <ProcessSlots count={q.processes} capacity={q.capacity} />
-      <span className="text-right font-mono text-[0.8125rem] text-fg-1 tabular-nums">{q.pending}</span>
+      <span className="text-right text-sm text-fg-1 tabular-nums">{q.pending}</span>
       {compact ? null : (
         <>
-          <span className="hidden text-right font-mono text-xs text-fg-2 tabular-nums @lg:block">{q.wait}</span>
-          <span className="hidden text-right font-mono text-xs text-fg-3 @lg:block">{q.clears}</span>
+          <span className="hidden text-right text-[0.8125rem] text-fg-2 tabular-nums @lg:block">{q.wait}</span>
+          <span className="hidden text-right text-[0.8125rem] text-fg-3 @lg:block">{q.clears}</span>
         </>
       )}
     </div>
@@ -59,7 +57,7 @@ function WorkloadRows({ rows, compact }: { rows: Row[]; compact?: boolean }) {
 }
 
 function GroupLabel({ children }: { children: ReactNode }) {
-  return <div className="border-b border-line bg-ink-0/40 px-3.5 py-1.5 font-mono text-xs text-fg-3">{children}</div>;
+  return <div className="flex h-8 items-center border-b border-line bg-ink-1 px-3 font-mono text-xs text-fg-3">{children}</div>;
 }
 
 /** The balancing example, step by step: shared by the full mock and the homepage tile. */
@@ -76,12 +74,36 @@ export function FleetWorkloadCompact({ step }: { step: number }) {
   const state = fleetSteps[step]!;
   const rows: Row[] = (["default", "mail", "notifications"] as const).map((name) => ({ name, ...state.queues[name] }));
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-ink-1">
+    <div className="overflow-hidden rounded-md border border-line bg-ink-0">
       <GroupLabel>default · auto · 1–8 processes</GroupLabel>
       <WorkloadRows rows={rows} compact />
     </div>
   );
 }
+
+const sidebar: SidebarSpec = {
+  app: { logo: <ShipIcon strokeWidth={2} />, name: "Fleet", context: "crm-api · 2 supervisors" },
+  groups: [
+    {
+      label: "Queues",
+      items: [
+        { icon: GaugeIcon, label: "Overview", active: true },
+        { icon: LayersIcon, label: "Workload" },
+        { icon: ServerIcon, label: "Supervisors", badge: "2" },
+      ],
+    },
+    {
+      label: "Jobs",
+      items: [
+        { icon: ListChecksIcon, label: "Recent" },
+        { icon: OctagonXIcon, label: "Failed", badge: "3" },
+        { icon: ChartLineIcon, label: "Metrics" },
+      ],
+    },
+    { items: [{ icon: SettingsIcon, label: "Settings" }] },
+  ],
+  user: { initials: "MR", name: "Marcus Reyes", email: "marcus@acme.test" },
+};
 
 /** The Fleet dashboard at /_fleet: figures, the workload table, mail throughput and failed jobs. */
 export function FleetMock({ className }: { className?: string }) {
@@ -93,83 +115,104 @@ export function FleetMock({ className }: { className?: string }) {
   return (
     <MockFrame
       url="crm.example.com/_fleet"
-      status={<LiveLight label="Running" />}
       className={className}
       bodyClassName="@container"
       label="The Fleet dashboard of the example CRM: two supervisors running queue workers. When a newsletter puts 3,000 mails on the mail queue, Fleet moves processes to it, from one up to six, while the default and notifications queues keep what they need; below, mail jobs per minute spike at 09:00, and a list of failed jobs offers Retry and Forget."
     >
-      <div ref={ref} className="p-4 @xl:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="text-[0.9375rem] font-semibold text-fg">Overview</span>
-            <span className="hidden truncate font-mono text-xs text-fg-3 @md:inline">2 masters · worker-1, worker-2</span>
-          </div>
-          <span className="rounded-md border border-line px-1.5 font-mono text-xs leading-5 text-fg-2 tabular-nums">{state.time}</span>
-        </div>
+      <div ref={ref} className="h-full">
+        <AppShell sidebar={sidebar}>
+          <TopBar crumbs={["Fleet", "Overview"]}>
+            <span className="hidden items-center gap-2 text-[0.8125rem] text-fg-2 @md:flex">
+              <StatusDot />
+              Running
+            </span>
+            <Badge className="font-mono font-normal tabular-nums">{state.time}</Badge>
+            <Button icon={PauseIcon} size="sm" className="hidden @xl:inline-flex">
+              Pause
+            </Button>
+          </TopBar>
 
-        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line @2xl:grid-cols-4">
-          <div className="bg-ink-1 p-3">
-            <Figure label="Jobs / min" value={state.jobsPerMin} sub="all queues" />
-          </div>
-          <div className="bg-ink-1 p-3">
-            <Figure label="Jobs past hour" value="28,410" sub="2 supervisors" />
-          </div>
-          <div className="bg-ink-1 p-3">
-            <Figure label="Failed, 7 days" value="3" sub="retry or forget" />
-          </div>
-          <div className="bg-ink-1 p-3">
-            <Figure label="Longest wait" value={state.maxWait} sub={`queue ${state.maxWaitQueue}`} />
-          </div>
-        </div>
-
-        <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink-1">
-          <div className="grid grid-cols-[7rem_minmax(0,1fr)_3.5rem] gap-3 border-b border-line px-3.5 py-2 text-xs text-fg-3 @lg:grid-cols-[7.5rem_minmax(0,9rem)_4rem_3rem_3.5rem] @lg:justify-between">
-            <span>Queue</span>
-            <span>Processes</span>
-            <span className="text-right">Pending</span>
-            <span className="hidden text-right @lg:block">Wait</span>
-            <span className="hidden text-right @lg:block">Clears in</span>
-          </div>
-          <GroupLabel>default · auto · 1–8 processes</GroupLabel>
-          <WorkloadRows rows={defaultRows} />
-          <div className="border-t border-line">
-            <GroupLabel>exports · off · 2 processes</GroupLabel>
-            <WorkloadRows rows={[exportsRow]} />
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-3 @3xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="flex flex-col rounded-xl border border-line bg-ink-1 p-3.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-fg-2">mail · jobs per minute</span>
-              <span className="font-mono text-fg-3">30 min</span>
-            </div>
-            <Bars data={fleetMailPerMinute} accentFrom={25} className="mt-3 h-20 w-full flex-1" />
-            <div className="mt-1.5 flex justify-between font-mono text-xs text-fg-3">
-              <span>08:35</span>
-              <span className="text-fg-2">09:00 newsletter</span>
-            </div>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-line bg-ink-1">
-            <div className="flex items-center justify-between border-b border-line px-3.5 py-2 text-xs">
-              <span className="text-fg-2">Failed jobs</span>
-              <span className="rounded-md border border-line-2 px-2 py-0.5 text-fg-1">Retry all</span>
-            </div>
-            {fleetFailedJobs.map((job) => (
-              <div key={job.type} className="flex items-center gap-3 border-b border-line px-3.5 py-2 last:border-b-0">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="truncate font-mono text-[0.8125rem] text-fg-1">{job.type}</span>
-                    <span className="shrink-0 font-mono text-xs text-fg-3">{job.attempts}</span>
-                  </div>
-                  <div className="truncate font-mono text-xs leading-5 text-danger/90">{job.error}</div>
-                </div>
-                <span className="hidden shrink-0 rounded-md bg-ink-3 px-2 py-0.5 text-xs text-fg @sm:inline">Retry</span>
-                <span className="hidden shrink-0 px-1 text-xs text-fg-3 @sm:inline">Forget</span>
+          <div className="p-4 @xl:p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="text-xl font-semibold tracking-[-0.01em] text-fg">Overview</div>
+              <div className="hidden truncate text-[0.8125rem] text-fg-3 @md:block">
+                2 masters · <span className="font-mono text-xs text-fg-2">worker-1</span>, <span className="font-mono text-xs text-fg-2">worker-2</span>
               </div>
-            ))}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line @2xl:grid-cols-4">
+              <div className="bg-ink-1 p-4">
+                <Stat label="Jobs / min" value={state.jobsPerMin} note="All queues" />
+              </div>
+              <div className="bg-ink-1 p-4">
+                <Stat label="Jobs past hour" value="28,410" note="2 supervisors" />
+              </div>
+              <div className="bg-ink-1 p-4">
+                <Stat label="Failed, 7 days" value="3" note="Retry or forget" />
+              </div>
+              <div className="bg-ink-1 p-4">
+                <Stat label="Longest wait" value={state.maxWait} note={`Queue ${state.maxWaitQueue}`} />
+              </div>
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-md border border-line">
+              <div className="grid h-10 grid-cols-[7.25rem_minmax(0,1fr)_3.5rem] items-center gap-3 border-b border-line bg-ink-1 px-3 text-[0.8125rem] font-medium text-fg-2 @lg:grid-cols-[7.5rem_minmax(0,9rem)_4rem_3rem_3.5rem] @lg:justify-between">
+                <span>Queue</span>
+                <span>Processes</span>
+                <span className="text-right">Pending</span>
+                <span className="hidden text-right @lg:block">Wait</span>
+                <span className="hidden text-right @lg:block">Clears in</span>
+              </div>
+              <GroupLabel>default · auto · 1–8 processes</GroupLabel>
+              <WorkloadRows rows={defaultRows} />
+              <div className="border-t border-line">
+                <GroupLabel>exports · off · 2 processes</GroupLabel>
+                <WorkloadRows rows={[exportsRow]} />
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 @3xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <Card className="flex flex-col p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-fg">
+                    <span className="font-mono text-[0.8125rem]">mail</span> jobs per minute
+                  </span>
+                  <span className="text-xs text-fg-3">30 min</span>
+                </div>
+                <Bars data={fleetMailPerMinute} accentFrom={25} accentClassName="fill-fg-2" className="mt-4 h-20 w-full @3xl:h-auto @3xl:flex-1" />
+                <div className="mt-1.5 flex justify-between text-xs text-fg-3 tabular-nums">
+                  <span>08:35</span>
+                  <span className="text-fg-2">09:00 newsletter</span>
+                </div>
+              </Card>
+              <div className="overflow-hidden rounded-md border border-line bg-ink-1">
+                <div className="flex h-11 items-center justify-between border-b border-line px-3">
+                  <span className="text-sm font-medium text-fg">Failed jobs</span>
+                  <Button size="sm">Retry all</Button>
+                </div>
+                {fleetFailedJobs.map((job) => (
+                  <div key={job.type} className="flex items-center gap-3 border-b border-line bg-ink-0 px-3 py-2 last:border-b-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate font-mono text-[0.8125rem] text-fg">{job.type}</span>
+                        <span className="shrink-0 text-xs text-fg-3 tabular-nums">{job.attempts}</span>
+                      </div>
+                      <div className="truncate font-mono text-xs leading-5 text-danger/90">{job.error}</div>
+                    </div>
+                    <span className="hidden gap-1 @sm:flex">
+                      <Button size="sm" tone="secondary">
+                        Retry
+                      </Button>
+                      <Button size="sm" tone="ghost">
+                        Forget
+                      </Button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        </AppShell>
       </div>
     </MockFrame>
   );
