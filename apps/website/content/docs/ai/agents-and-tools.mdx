@@ -250,7 +250,7 @@ The JSON Schema the model sees comes from `ToSchema`, with the field doc comment
 
 The model is not a security boundary. A user can ask it to do anything, and text it reads (an email body, a note) can tell it to do something else. So Navree enforces access in code, at three levels.
 
-**Which tools the model sees.** The access attributes of routes work on tools: `#[can(Action, Subject)]` (the user may do the action on some records of the subject), `#[permissions("...")]` (every permission, without conditions) and `#[roles("...")]` (any of the roles; a super admin passes). Several attributes must all pass. A tool the user fails is left out of the tool list sent to the model, so the model can't call it or mention it, and a call to it anyway is refused with a 403. Tools without an attribute are available to every user the agent runs for. `#[can]` on a tool takes no `from = "..."`: load the record with `run.authorize` instead.
+**Which tools the model sees.** The access attributes of routes work on tools: `#[can(Action, Subject)]` (the user may do the action on some records of the subject), `#[permissions("...")]` (every permission, without conditions) and `#[roles("...")]` (any of the roles; a super admin passes). Several attributes must all pass. A tool the user fails is left out of the tool list sent to the model, so the model can't call it or mention it, and a call to it anyway is answered as an unknown tool (a 404). Tools without an attribute are available to every user the agent runs for. `#[can]` on a tool takes no `from = "..."`: load the record with `run.authorize` instead.
 
 ```rust
 /// Gives a deal to another member of the team.
