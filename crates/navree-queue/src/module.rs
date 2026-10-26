@@ -152,16 +152,17 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
             .deps(vec![ProviderKey::of::<Queue>()]),
         )
         .exports::<dyn JobMonitor>()
-        // Operations need the database: resolved lazily, so apps without
-        // `DatabaseModule` boot and simply have none.
+        // Operations live in the app database; an app without
+        // `DatabaseModule` still boots, and using them is
+        // `QueueError::NoDatabase`.
         .factory(
             Factory::<Operations>::new(|r: Resolver| async move {
                 let queue = (*r.get::<Queue>().await?).clone();
                 let options = r.get::<QueueOptions>().await?;
                 let app = r.app();
-                let db = app.get::<Db>().await?;
+                let db = app.try_get::<Db>().await.map(|db| (*db).clone());
                 Ok(Arc::new(Operations::new(
-                    (*db).clone(),
+                    db,
                     queue,
                     options.operations.clone(),
                     Some(app.downgrade()),
