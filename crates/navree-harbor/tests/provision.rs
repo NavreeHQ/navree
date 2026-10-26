@@ -290,7 +290,11 @@ fn redis_binds_loopback_in_a_form_every_ubuntu_redis_reads() {
     let steps = steps(SINGLE, "app-1", &plain(), 1987);
     let redis = step(&steps, "redis");
     assert_eq!(redis.summary, "Redis on 127.0.0.1, 256 MB");
-    assert!(redis.script.contains("\nbind 127.0.0.1\n"), "{}", redis.script);
+    assert!(
+        redis.script.contains("\nbind 127.0.0.1\n"),
+        "{}",
+        redis.script
+    );
     assert!(!redis.script.contains("-::1"));
 }
 
