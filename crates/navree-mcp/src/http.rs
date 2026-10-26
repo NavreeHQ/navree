@@ -14,7 +14,9 @@ use http::header::{HOST, ORIGIN, WWW_AUTHENTICATE};
 use http::{HeaderValue, Method, StatusCode};
 use navree_cache::Cache;
 use navree_contracts::AuthState;
-use navree_http::{AppError, Controller, GlobalLayer, Json, LayerSlot, RouteDef, RouteMeta};
+use navree_http::{
+    ApiMeta, AppError, Controller, GlobalLayer, Json, LayerSlot, RouteDef, RouteMeta,
+};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, Resolver};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -178,9 +180,23 @@ impl Controller for McpController {
         // The body limit leaves room for the request line's overhead; rmcp
         // enforces `max_request_bytes` on the JSON-RPC message itself.
         let body_limit = settings.max_request_bytes;
-        let mut routes: Vec<RouteDef> = [Method::POST, Method::GET, Method::DELETE]
+        // One name per route: navree-api turns names into operation ids.
+        let transport_routes = [
+            (
+                Method::POST,
+                "mcp.message",
+                "Send an MCP JSON-RPC message (JSON or SSE answer)",
+            ),
+            (
+                Method::GET,
+                "mcp.stream",
+                "Open the SSE stream of server-sent MCP messages",
+            ),
+            (Method::DELETE, "mcp.close", "End the MCP session"),
+        ];
+        let mut routes: Vec<RouteDef> = transport_routes
             .into_iter()
-            .map(|method| {
+            .map(|(method, name, summary)| {
                 let transport = self.transport.clone();
                 RouteDef::on(method, path.clone(), move |request: Request| {
                     let transport = transport.clone();
@@ -188,16 +204,23 @@ impl Controller for McpController {
                 })
                 .authenticated()
                 .body_limit(body_limit)
-                .name("mcp")
+                .name(name)
+                .api(api_meta(summary))
             })
             .collect();
         if let Some(oauth) = &settings.oauth {
             let document = oauth.metadata(&settings.title);
-            let paths = [
-                "!/.well-known/oauth-protected-resource".to_owned(),
-                format!("!/.well-known/oauth-protected-resource{}", settings.path),
+            let metadata_routes = [
+                (
+                    "!/.well-known/oauth-protected-resource".to_owned(),
+                    "mcp.metadata",
+                ),
+                (
+                    format!("!/.well-known/oauth-protected-resource{}", settings.path),
+                    "mcp.metadata.endpoint",
+                ),
             ];
-            for path in paths {
+            for (path, name) in metadata_routes {
                 let document = document.clone();
                 routes.push(
                     RouteDef::on(Method::GET, path, move || {
@@ -205,11 +228,23 @@ impl Controller for McpController {
                         async move { Json(document) }
                     })
                     .public()
-                    .name("mcp.oauth-protected-resource"),
+                    .name(name)
+                    .api(api_meta(
+                        "The MCP endpoint's OAuth protected resource metadata (RFC 9728)",
+                    )),
                 );
             }
         }
         routes
+    }
+}
+
+/// The OpenAPI metadata of an MCP route: tag `MCP` and `summary`.
+fn api_meta(summary: &str) -> ApiMeta {
+    ApiMeta {
+        summary: Some(summary.to_owned()),
+        tags: vec!["MCP".to_owned()],
+        ..ApiMeta::default()
     }
 }
 

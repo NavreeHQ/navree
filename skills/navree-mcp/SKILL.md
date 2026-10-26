@@ -238,8 +238,10 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
 - `cargo test` covers each item with one user who may and one who may not,
   and the list each of them sees.
 - `navree routes` lists `POST`, `GET` and `DELETE /mcp`, authenticated,
-  named `mcp` (and the two `/.well-known/oauth-protected-resource` routes
-  with `auth = "oauth"`).
+  named `mcp.message`, `mcp.stream` and `mcp.close` (and, with
+  `auth = "oauth"`, the public `/.well-known/oauth-protected-resource`
+  routes `mcp.metadata` and `mcp.metadata.endpoint`). The OpenAPI document
+  shows them under the tag `MCP`.
 - Inspect by hand: `npx @modelcontextprotocol/inspector`, URL
   `http://127.0.0.1:8080/mcp`, header `Authorization: Bearer <token>`.
 - stdio: `cargo run -- mcp:serve --user ada@example.com` (logs on stderr).

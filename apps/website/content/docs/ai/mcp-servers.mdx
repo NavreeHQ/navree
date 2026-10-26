@@ -365,13 +365,15 @@ What runs inside a tool is your service code, so the rest of your security model
 
 ### Streamable HTTP
 
-The HTTP transport is mounted at `mcp.path` on your app's own server, as three authenticated routes named `mcp`:
+The HTTP transport is mounted at `mcp.path` on your app's own server, as three authenticated routes:
 
-| Request | Does |
-|---|---|
-| `POST /mcp` | Sends a JSON-RPC message. The answer is JSON, or an SSE stream when the server has progress or notifications to send first. |
-| `GET /mcp` | Opens an SSE stream for messages the server starts, such as resource updates and list changes. |
-| `DELETE /mcp` | Ends the session. |
+| Request | Route name | Does |
+|---|---|---|
+| `POST /mcp` | `mcp.message` | Sends a JSON-RPC message. The answer is JSON, or an SSE stream when the server has progress or notifications to send first. |
+| `GET /mcp` | `mcp.stream` | Opens an SSE stream for messages the server starts, such as resource updates and list changes. |
+| `DELETE /mcp` | `mcp.close` | Ends the session. |
+
+With `mcp.auth = "oauth"`, the metadata routes are `mcp.metadata` and `mcp.metadata.endpoint`. All of them appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the tag `MCP`, with their names as operation ids.
 
 The first `initialize` call creates a session; its id comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. A session belongs to the user who opened it: another user sending its id gets a 404. With `CacheModule`, sessions live in the app's cache, so any process behind your load balancer can serve the next request; without it, in the process. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, the app's CORS settings, logs and metrics, plus the `Origin` check against `mcp.allowed_origins`.
 
