@@ -191,6 +191,21 @@ pub mod __private {
 
     pub use super::primary_key_string;
 
+    /// The record's columns in the form access rules compare
+    /// ([`navree_access::record_json`]): the derive stores filter and sort
+    /// fields this way, so engine filters agree with SQL.
+    pub fn columns<M: sea_orm::ModelTrait>(record: &M) -> serde_json::Value {
+        navree_access::record_json(record)
+    }
+
+    /// Column `name` of [`columns`]' result (`null` when absent).
+    pub fn column(columns: &serde_json::Value, name: &str) -> serde_json::Value {
+        columns
+            .get(name)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    }
+
     /// The table name of `E`.
     pub fn table_name<E: sea_orm::EntityTrait>() -> String {
         sea_orm::EntityName::table_name(&E::default()).to_owned()

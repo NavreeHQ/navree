@@ -103,10 +103,20 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
         Some(column) => quote!(::core::option::Option::Some(#column)),
         None => quote!((&&#search::__private::WorkspaceProbe::<Entity>::new()).workspace_column()),
     };
+    // Filter and sort fields hold the column's value in the form access
+    // rules compare (the database value: an enum's stored string, a
+    // timestamp in UTC); text-only fields hold the serde form.
+    let typed = fields.iter().any(|field| field.filter || field.sort);
+    let columns = typed.then(|| quote!(let columns = #search::__private::columns(record);));
     let document_fields = fields.iter().map(|field| {
         let field_name = lit(&field.name);
         let ident = &field.ident;
-        quote!(.field(#field_name, &record.#ident))
+        if field.filter || field.sort {
+            let column = lit(&field.column);
+            quote!(.field(#field_name, #search::__private::column(&columns, #column)))
+        } else {
+            quote!(.field(#field_name, &record.#ident))
+        }
     });
 
     Ok(quote! {
@@ -132,6 +142,7 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
                 >,
             > {
                 ::std::boxed::Box::pin(async move {
+                    #columns
                     ::core::result::Result::Ok(::core::option::Option::Some(
                         #search::Document::new(#search::__private::primary_key_string(record))
                             #(#document_fields)*,
@@ -241,8 +252,13 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
     if boost.is_none() && !filter && !sort && !embed {
         boost = Some(1);
     }
-    let column = ident.to_string();
-    let column = column.strip_prefix("r#").unwrap_or(&column).to_owned();
+    let rust_name = ident.to_string();
+    let rust_name = rust_name
+        .strip_prefix("r#")
+        .unwrap_or(&rust_name)
+        .to_owned();
+    // The database column: `#[sea_orm(column_name = "..")]`, or the field.
+    let column = sea_orm_column_name(field).unwrap_or_else(|| rust_name.clone());
     let name = match &rename {
         Some(rename) => {
             let value = rename.value();
@@ -259,7 +275,7 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
             }
             value
         }
-        None => column.clone(),
+        None => rust_name,
     };
     Ok(Some(FieldArgs {
         ident,
@@ -270,6 +286,33 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
         sort,
         embed,
     }))
+}
+
+/// The `column_name = ".."` of a field's `#[sea_orm(..)]` attributes. The
+/// tokens are scanned rather than parsed, so other SeaORM arguments of any
+/// shape pass through.
+fn sea_orm_column_name(field: &syn::Field) -> Option<String> {
+    use proc_macro2::TokenTree;
+    field
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("sea_orm"))
+        .filter_map(|attr| attr.meta.require_list().ok())
+        .find_map(|list| {
+            let tokens: Vec<TokenTree> = list.tokens.clone().into_iter().collect();
+            tokens.windows(3).find_map(|window| match window {
+                [
+                    TokenTree::Ident(key),
+                    TokenTree::Punct(eq),
+                    TokenTree::Literal(value),
+                ] if key == "column_name" && eq.as_char() == '=' => {
+                    syn::parse_str::<LitStr>(&value.to_string())
+                        .ok()
+                        .map(|lit| lit.value())
+                }
+                _ => None,
+            })
+        })
 }
 
 #[cfg(test)]
@@ -313,6 +356,29 @@ mod tests {
             (args.name.as_str(), args.column.as_str(), args.boost),
             ("email_address", "email", Some(1))
         );
+    }
+
+    #[test]
+    fn the_column_comes_from_sea_orm_column_name() {
+        let args = field(quote!(
+            #[sea_orm(column_type = "Text", column_name = "mail", nullable)]
+            #[searchable(filter)]
+            pub email: Option<String>
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            (args.name.as_str(), args.column.as_str()),
+            ("email", "mail")
+        );
+        let args = field(quote!(
+            #[sea_orm(primary_key, auto_increment = false)]
+            #[searchable(filter)]
+            pub r#type: String
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!((args.name.as_str(), args.column.as_str()), ("type", "type"));
     }
 
     #[test]
