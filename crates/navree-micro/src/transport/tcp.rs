@@ -23,6 +23,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::options::{TcpOptions, TlsOptions};
 use crate::pattern::{route_for, route_matches};
+use crate::transport::LocalRetry;
 use crate::{
     Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind, Subscription,
     pattern_matches,
@@ -484,17 +485,9 @@ async fn serve(
                 for (index, _) in subscriptions.iter().enumerate().filter(|(_, s)| {
                     s.kind == PatternKind::Event && pattern_matches(&s.pattern, envelope.pattern())
                 }) {
-                    let actions = EventActions {
-                        deliveries: deliveries.clone(),
-                        envelope: envelope.clone(),
-                        index,
-                        attempt: 1,
-                    };
-                    if deliveries
-                        .send(Delivery::new(envelope.clone(), index, 1, actions))
-                        .await
-                        .is_err()
-                    {
+                    // At most once: a failed handler is retried in this process.
+                    let delivery = LocalRetry::delivery(deliveries.clone(), envelope.clone(), index);
+                    if deliveries.send(delivery).await.is_err() {
                         break;
                     }
                 }
@@ -530,43 +523,6 @@ impl DeliveryActions for ReplyActions {
                 .await
                 .map_err(|_| MicroError::transport("the requester's connection closed"))
         })
-    }
-}
-
-/// An event received over TCP: retried inside this process, at most once
-/// overall.
-struct EventActions {
-    deliveries: mpsc::Sender<Delivery>,
-    envelope: Envelope,
-    index: usize,
-    attempt: u32,
-}
-
-impl DeliveryActions for EventActions {
-    fn ack(self: Box<Self>) -> BoxFuture<'static, Result<(), MicroError>> {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn retry_in(self: Box<Self>, delay: Duration) -> BoxFuture<'static, Result<(), MicroError>> {
-        let this = *self;
-        tokio::spawn(async move {
-            tokio::time::sleep(delay).await;
-            let attempt = this.attempt + 1;
-            let actions = EventActions {
-                deliveries: this.deliveries.clone(),
-                envelope: this.envelope.clone(),
-                index: this.index,
-                attempt,
-            };
-            let delivery = Delivery::new(this.envelope, this.index, attempt, actions);
-            // A stopped listener drops it: TCP events are at most once.
-            let _ = this.deliveries.send(delivery).await;
-        });
-        Box::pin(async { Ok(()) })
-    }
-
-    fn reply(self: Box<Self>, _reply: Envelope) -> BoxFuture<'static, Result<(), MicroError>> {
-        Box::pin(async { Ok(()) })
     }
 }
 

@@ -304,6 +304,57 @@ impl fmt::Debug for Delivery {
     }
 }
 
+/// The callbacks of an event delivered at most once (TCP, core NATS,
+/// broadcast subscriptions): acknowledging does nothing, and a retry hands
+/// the same envelope back to this process's listener after the delay, as
+/// the next attempt. A stopped listener drops it.
+pub(crate) struct LocalRetry {
+    deliveries: mpsc::Sender<Delivery>,
+    envelope: Envelope,
+    index: usize,
+    attempt: u32,
+}
+
+impl LocalRetry {
+    /// The first delivery of `envelope` for subscription `index`.
+    pub(crate) fn delivery(deliveries: mpsc::Sender<Delivery>, envelope: Envelope, index: usize) -> Delivery {
+        let actions = LocalRetry {
+            deliveries,
+            envelope: envelope.clone(),
+            index,
+            attempt: 1,
+        };
+        Delivery::new(envelope, index, 1, actions)
+    }
+}
+
+impl DeliveryActions for LocalRetry {
+    fn ack(self: Box<Self>) -> BoxFuture<'static, Result<(), MicroError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn retry_in(self: Box<Self>, delay: Duration) -> BoxFuture<'static, Result<(), MicroError>> {
+        let this = *self;
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let attempt = this.attempt + 1;
+            let actions = LocalRetry {
+                deliveries: this.deliveries.clone(),
+                envelope: this.envelope.clone(),
+                index: this.index,
+                attempt,
+            };
+            let delivery = Delivery::new(this.envelope, this.index, attempt, actions);
+            let _ = this.deliveries.send(delivery).await;
+        });
+        Box::pin(async { Ok(()) })
+    }
+
+    fn reply(self: Box<Self>, _reply: Envelope) -> BoxFuture<'static, Result<(), MicroError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
 /// The transports `micro.transport` names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TransportKind {
