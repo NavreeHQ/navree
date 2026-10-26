@@ -1,0 +1,22 @@
+# PostgreSQL via the pg gem. One Active Record pool per Puma worker, sized to
+# the worker's thread count (RAILS_MAX_THREADS), so the container opens at most
+# WEB_CONCURRENCY x RAILS_MAX_THREADS connections (8 x 5 = 40 in the benchmark).
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  # For details on connection pooling, see Rails configuration guide
+  # https://guides.rubyonrails.org/configuring.html#database-pooling
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+development:
+  <<: *default
+  url: <%= ENV.fetch("DATABASE_URL", "postgres://bench:bench@localhost:55432/bench") %>
+
+test:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"] %>
+
+# The schema already exists (bench/db/init.sql); the app never migrates.
+production:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"] %>

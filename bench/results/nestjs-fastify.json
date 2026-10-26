@@ -1,0 +1,247 @@
+{
+  "name": "nestjs-fastify",
+  "label": "NestJS (Fastify)",
+  "language": "TypeScript",
+  "category": "full-stack",
+  "mode": "full",
+  "started_at": "2026-10-26T04:35:17.483Z",
+  "settings": {
+    "runs": 3,
+    "duration_s": 15,
+    "warmup_s": 10,
+    "connections": 256,
+    "threads": 6,
+    "cpus": {
+      "ncpu": 24,
+      "app": "0-7",
+      "pg": "8-17",
+      "load": "18-23"
+    }
+  },
+  "image_mb": 424.9426145553589,
+  "startup_ms": 876,
+  "idle_mem_mb": 709.9,
+  "conformance": {
+    "ok": true,
+    "output": "PASS: 170 checks passed, 0 failed"
+  },
+  "tests": {
+    "json": {
+      "rps": 644279.9388998328,
+      "requests": 9728495,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 0.3822,
+        "stdev": 0.26389999999999997,
+        "max": 8.798,
+        "p50": 0.297,
+        "p75": 0.494,
+        "p90": 0.664,
+        "p99": 1.264,
+        "p999": 2.514
+      },
+      "peak_mem_mb": 1057.792,
+      "avg_cpu_pct": 793.8871428571429,
+      "pg_avg_cpu_pct": 0,
+      "wrk_avg_cpu_pct": 499.31857142857143,
+      "runs": [
+        {
+          "rps": 662712.9276258006,
+          "errors": 0,
+          "p99_ms": 1.45
+        },
+        {
+          "rps": 644279.9388998328,
+          "errors": 0,
+          "p99_ms": 1.264
+        },
+        {
+          "rps": 636128.9129102209,
+          "errors": 0,
+          "p99_ms": 1.396
+        }
+      ]
+    },
+    "db": {
+      "rps": 80132.41537595604,
+      "requests": 1209980,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 3.3428,
+        "stdev": 2.6129000000000002,
+        "max": 61,
+        "p50": 3.028,
+        "p75": 3.794,
+        "p90": 4.641,
+        "p99": 12.112,
+        "p999": 37.404
+      },
+      "peak_mem_mb": 2276.352,
+      "avg_cpu_pct": 802.4885714285714,
+      "pg_avg_cpu_pct": 598.1342857142856,
+      "wrk_avg_cpu_pct": 153.25857142857143,
+      "runs": [
+        {
+          "rps": 80132.41537595604,
+          "errors": 0,
+          "p99_ms": 12.112
+        },
+        {
+          "rps": 83612.61844644674,
+          "errors": 0,
+          "p99_ms": 9.503
+        },
+        {
+          "rps": 79988.30489225451,
+          "errors": 0,
+          "p99_ms": 10.021
+        }
+      ]
+    },
+    "queries": {
+      "rps": 6652.894807865539,
+      "requests": 100007,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 38.022400000000005,
+        "stdev": 12.444700000000001,
+        "max": 173.144,
+        "p50": 37.918,
+        "p75": 45.096,
+        "p90": 50.908,
+        "p99": 79.358,
+        "p999": 116.751
+      },
+      "peak_mem_mb": 2608.128,
+      "avg_cpu_pct": 699.7349999999999,
+      "pg_avg_cpu_pct": 664.34,
+      "wrk_avg_cpu_pct": 17.448749999999997,
+      "runs": [
+        {
+          "rps": 6640.33957486209,
+          "errors": 0,
+          "p99_ms": 81.031
+        },
+        {
+          "rps": 6681.263622348626,
+          "errors": 0,
+          "p99_ms": 79.056
+        },
+        {
+          "rps": 6652.894807865539,
+          "errors": 0,
+          "p99_ms": 79.358
+        }
+      ]
+    },
+    "deals_list": {
+      "rps": 4728.935156241817,
+      "requests": 71330,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 53.2836,
+        "stdev": 14.3643,
+        "max": 189.018,
+        "p50": 51.316,
+        "p75": 58.62,
+        "p90": 66.268,
+        "p99": 108.436,
+        "p999": 163.192
+      },
+      "peak_mem_mb": 2702.336,
+      "avg_cpu_pct": 798.342857142857,
+      "pg_avg_cpu_pct": 774.8957142857143,
+      "wrk_avg_cpu_pct": 24.04,
+      "runs": [
+        {
+          "rps": 4728.935156241817,
+          "errors": 0,
+          "p99_ms": 108.436
+        },
+        {
+          "rps": 4882.416171890975,
+          "errors": 0,
+          "p99_ms": 108.831
+        },
+        {
+          "rps": 4689.001499171137,
+          "errors": 0,
+          "p99_ms": 115.383
+        }
+      ]
+    },
+    "deals_create": {
+      "rps": 14817.047703693315,
+      "requests": 223111,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 17.1644,
+        "stdev": 5.736,
+        "max": 122.351,
+        "p50": 16.237,
+        "p75": 18.657,
+        "p90": 22.055,
+        "p99": 31.127,
+        "p999": 90.97
+      },
+      "peak_mem_mb": 2703.36,
+      "avg_cpu_pct": 796.1642857142859,
+      "pg_avg_cpu_pct": 445.89714285714297,
+      "wrk_avg_cpu_pct": 53.895714285714284,
+      "runs": [
+        {
+          "rps": 14817.047703693315,
+          "errors": 0,
+          "p99_ms": 31.127
+        },
+        {
+          "rps": 14868.34918057555,
+          "errors": 0,
+          "p99_ms": 31.217
+        },
+        {
+          "rps": 14626.625493358004,
+          "errors": 0,
+          "p99_ms": 33.002
+        }
+      ]
+    }
+  },
+  "ok": true,
+  "finished_at": "2026-10-26T04:40:27.519Z"
+}

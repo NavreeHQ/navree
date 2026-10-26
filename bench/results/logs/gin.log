@@ -1,0 +1,3 @@
+
+2026/10/26 04:14:36 gin v1.12.0, go1.27.3, GOMAXPROCS=8, NumCPU=8, db pool max 64
+2026/10/26 04:16:51 GET /queries: write failed: write tcp 172.18.0.3:39936->172.18.0.2:5432: i/o timeout

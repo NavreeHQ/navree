@@ -1,0 +1,20 @@
+<section class="card findings">
+<h2 style="margin-top:0">What the numbers say about Navree</h2>
+<ul>
+  <li><b>On the two realistic endpoints, Navree is 4th of the 10 full-stack frameworks.</b> On the authenticated paginated list it does 15,458 req/s: level with Loco (16,202) and Spring Boot (16,256), behind ASP.NET Core (20,352), and 3.3× NestJS, 4.7× Rails, 6.9× Django and 8.8× Laravel Octane. On the validated insert it does 20,295 req/s: behind Loco (34,308), ASP.NET Core (29,245) and Spring Boot (28,540), ahead of NestJS (1.4×) and 4–6× Rails, Django and Laravel Octane.</li>
+  <li><b>Navree's own per-request cost is high.</b> On the plain JSON test it is the slowest of the compiled and JIT frameworks: 214k req/s, against 542k for Loco, 963k for Axum (its own foundation) and 357k–644k for NestJS. On a single query it reaches 46.5k req/s, while Loco, ASP.NET Core, Spring Boot and NestJS all do 65k–80k. In both tests Navree used nearly all of its CPUs (772% of 800% on JSON; 586% on one query, with PostgreSQL only at 329%), so the time goes into Navree's request pipeline, not the database.</li>
+  <li><b>Same foundations, different results.</b> Navree, Loco and Axum all run on Axum, Tokio and sqlx (Navree and Loco add SeaORM). Compared with Axum, Navree delivers 22% of the JSON throughput, 43% on one query and 41% on the insert. Compared with Loco, it delivers 40%, 61% and 59%.</li>
+  <li><b>Its resource use is excellent.</b> It idles at 4 MB, peaks at 38 MB under load (NestJS: 2.7 GB, Spring Boot: 1 GB), is ready 23 ms after starting, has a 144 MB image, and had zero errors and steady p99 latency in every test.</li>
+</ul>
+<h3>Where Navree loses the time (from reading its code; fixing these is the next step)</h3>
+<ol>
+  <li><code>navree-db</code> leaves sqlx's <code>test_before_acquire</code> on, so every pool checkout pings PostgreSQL first: <code>/db</code> costs 2 round trips instead of 1.</li>
+  <li>Every unit-of-work transaction adds a <code>SELECT set_config('navree.actor', …)</code> round trip.</li>
+  <li><code>navree-db</code>'s unit-of-work layer spawns a task for every request, <code>/json</code> included.</li>
+  <li>Process-wide locks are taken on every request: maintenance mode (a Mutex and an RwLock) and the per-IP rate limiter (one global <code>Mutex&lt;HashMap&gt;</code>).</li>
+  <li>The request-context layer builds metrics labels (fresh Strings) even when no metrics recorder is installed, plus a request scope and a UUID request id.</li>
+  <li><code>CurrentUser</code> finds <code>AuthService</code> by scanning every provider, and loads every user column, including the password hash and 2FA secrets.</li>
+  <li>JSON bodies are parsed twice: into a <code>serde_json::Value</code>, then into the DTO.</li>
+  <li><code>Repo::insert</code> serializes each new row for a change event even when nothing listens for change events.</li>
+</ol>
+</section>

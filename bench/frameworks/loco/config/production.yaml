@@ -1,0 +1,75 @@
+# Loco configuration: production (LOCO_ENV=production).
+#
+# Generated from `loco new`'s production template (Rest API, Postgres, async
+# background mode), trimmed to what this app uses. Secrets and addresses come
+# from the environment; `get_env` without a default fails at boot when unset.
+#
+# Required: DATABASE_URL, JWT_SECRET. Optional: JWT_ISSUER (default `navree`).
+
+# Application logging configuration
+logger:
+  # Enable or disable logging.
+  enable: true
+  # Off in production: it costs performance.
+  pretty_backtrace: false
+  # Log level, options: trace, debug, info, warn or error.
+  level: warn
+  # Define the logging format. options: compact, pretty or json
+  format: json
+
+# Web server configuration
+server:
+  # Port on which the server will listen.
+  port: <%= get_env(name="PORT", default="8080") %>
+  # Binding for the server (which interface to bind to).
+  binding: <%= get_env(name="BINDING", default="0.0.0.0") %>
+  # The UI hostname or IP address that mailers will point to (no mailers here).
+  host: <%= get_env(name="HOST", default="http://localhost:8080") %>
+  # Out of the box middleware configuration. Everything not listed keeps
+  # Loco's production default (see README.md).
+  middlewares:
+    # The request-trace middleware (tower-http TraceLayer, one span per
+    # request). No per-request logging in production.
+    logger:
+      enable: false
+
+# Worker configuration. Without a `queue:` block the default mode
+# (BackgroundQueue) refuses to boot; this app has no workers.
+workers:
+  mode: BackgroundAsync
+
+# Database Configuration
+database:
+  # Database connection URI.
+  uri: <%= get_env(name="DATABASE_URL") %>
+  # When enabled, the sql query will be logged.
+  enable_logging: false
+  # Set the timeout duration when acquiring a connection.
+  connect_timeout: <%= get_env(name="DB_CONNECT_TIMEOUT", default="500") %>
+  # Set the idle duration before closing a connection.
+  idle_timeout: <%= get_env(name="DB_IDLE_TIMEOUT", default="500") %>
+  # Minimum number of connections for a pool.
+  min_connections: <%= get_env(name="DB_MIN_CONNECTIONS", default="1") %>
+  # Maximum number of connections for a pool: the benchmark's cap (SPEC §4).
+  max_connections: <%= get_env(name="DB_MAX_CONNECTIONS", default="64") %>
+  # The schema belongs to bench/db/init.sql; nothing migrates at boot.
+  auto_migrate: false
+  # Truncate database when application loaded. This is a dangerous operation, make sure that you using this flag only on dev environments or test mode
+  dangerously_truncate: false
+  # Recreating schema when application loaded.  This is a dangerous operation, make sure that you using this flag only on dev environments or test mode
+  dangerously_recreate: false
+
+# Authentication Configuration
+auth:
+  # JWT authentication
+  jwt:
+    # Secret key for token verification (Navree signs HS256 with it).
+    secret: <%= get_env(name="JWT_SECRET") %>
+    # Token expiration time in seconds (for tokens this app would issue; it
+    # issues none).
+    expiration: 604800 # 7 days
+
+# Application settings (`src/data/settings.rs`).
+settings:
+  # The `iss` an access token must carry.
+  jwt_issuer: <%= get_env(name="JWT_ISSUER", default="navree") %>

@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*"]
+# The benchmark apps (Navree's and other Rust frameworks') are separate projects.
+exclude = ["bench"]
 
 [workspace.package]
 version = "0.1.0"

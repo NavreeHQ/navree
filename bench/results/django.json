@@ -1,0 +1,247 @@
+{
+  "name": "django",
+  "label": "Django + DRF",
+  "language": "Python",
+  "category": "full-stack",
+  "mode": "full",
+  "started_at": "2026-10-26T04:50:47.731Z",
+  "settings": {
+    "runs": 3,
+    "duration_s": 15,
+    "warmup_s": 10,
+    "connections": 256,
+    "threads": 6,
+    "cpus": {
+      "ncpu": 24,
+      "app": "0-7",
+      "pg": "8-17",
+      "load": "18-23"
+    }
+  },
+  "image_mb": 271.05305576324463,
+  "startup_ms": 859,
+  "idle_mem_mb": 653.3,
+  "conformance": {
+    "ok": true,
+    "output": "PASS: 170 checks passed, 0 failed"
+  },
+  "tests": {
+    "json": {
+      "rps": 25488.802948592485,
+      "requests": 384074,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 13.082799999999999,
+        "stdev": 16.406,
+        "max": 309.953,
+        "p50": 8.489,
+        "p75": 17.622,
+        "p90": 29.085,
+        "p99": 72.589,
+        "p999": 179.127
+      },
+      "peak_mem_mb": 909.9,
+      "avg_cpu_pct": 799.9957142857141,
+      "pg_avg_cpu_pct": 0,
+      "wrk_avg_cpu_pct": 60.84857142857142,
+      "runs": [
+        {
+          "rps": 25915.46474558273,
+          "errors": 0,
+          "p99_ms": 73.538
+        },
+        {
+          "rps": 25459.551780757974,
+          "errors": 0,
+          "p99_ms": 95.315
+        },
+        {
+          "rps": 25488.802948592485,
+          "errors": 0,
+          "p99_ms": 72.589
+        }
+      ]
+    },
+    "db": {
+      "rps": 7534.9204545839375,
+      "requests": 113476,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 39.8242,
+        "stdev": 37.055699999999995,
+        "max": 411.956,
+        "p50": 27.61,
+        "p75": 57.031,
+        "p90": 94.892,
+        "p99": 153.359,
+        "p999": 271.145
+      },
+      "peak_mem_mb": 940.8,
+      "avg_cpu_pct": 795.85,
+      "pg_avg_cpu_pct": 75.17999999999999,
+      "wrk_avg_cpu_pct": 21.241428571428575,
+      "runs": [
+        {
+          "rps": 7519.386130063022,
+          "errors": 0,
+          "p99_ms": 115.57
+        },
+        {
+          "rps": 7534.9204545839375,
+          "errors": 0,
+          "p99_ms": 153.359
+        },
+        {
+          "rps": 7556.262268131525,
+          "errors": 0,
+          "p99_ms": 84.71
+        }
+      ]
+    },
+    "queries": {
+      "rps": 1471.22005727768,
+      "requests": 22193,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 184.05010000000001,
+        "stdev": 149.979,
+        "max": 898.358,
+        "p50": 128.084,
+        "p75": 285.627,
+        "p90": 365.402,
+        "p99": 696.792,
+        "p999": 832.085
+      },
+      "peak_mem_mb": 954.4,
+      "avg_cpu_pct": 693.3349999999999,
+      "pg_avg_cpu_pct": 175.43625,
+      "wrk_avg_cpu_pct": 4.6937500000000005,
+      "runs": [
+        {
+          "rps": 1471.22005727768,
+          "errors": 0,
+          "p99_ms": 696.792
+        },
+        {
+          "rps": 1452.8606505887046,
+          "errors": 0,
+          "p99_ms": 425.752
+        },
+        {
+          "rps": 1474.2945815441847,
+          "errors": 0,
+          "p99_ms": 568.858
+        }
+      ]
+    },
+    "deals_list": {
+      "rps": 2236.4777883673996,
+      "requests": 33749,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 130.0677,
+        "stdev": 114.1707,
+        "max": 752.376,
+        "p50": 82.489,
+        "p75": 182.671,
+        "p90": 305.323,
+        "p99": 456.888,
+        "p999": 707.261
+      },
+      "peak_mem_mb": 1019,
+      "avg_cpu_pct": 798.892857142857,
+      "pg_avg_cpu_pct": 138.33428571428573,
+      "wrk_avg_cpu_pct": 9.885714285714288,
+      "runs": [
+        {
+          "rps": 2271.3564876379087,
+          "errors": 0,
+          "p99_ms": 338.768
+        },
+        {
+          "rps": 2236.4777883673996,
+          "errors": 0,
+          "p99_ms": 456.888
+        },
+        {
+          "rps": 2190.599363164593,
+          "errors": 0,
+          "p99_ms": 309.397
+        }
+      ]
+    },
+    "deals_create": {
+      "rps": 3436.9498471136635,
+      "requests": 51823,
+      "errors": 0,
+      "error_detail": {
+        "connect": 0,
+        "read": 0,
+        "write": 0,
+        "status": 0,
+        "timeout": 0
+      },
+      "latency_ms": {
+        "mean": 80.28989999999999,
+        "stdev": 60.053599999999996,
+        "max": 405.44,
+        "p50": 67.187,
+        "p75": 95.724,
+        "p90": 162.87,
+        "p99": 260.957,
+        "p999": 379.75
+      },
+      "peak_mem_mb": 1019,
+      "avg_cpu_pct": 793.9157142857142,
+      "pg_avg_cpu_pct": 90.91857142857144,
+      "wrk_avg_cpu_pct": 14.064285714285713,
+      "runs": [
+        {
+          "rps": 3489.8784840035746,
+          "errors": 0,
+          "p99_ms": 235.21
+        },
+        {
+          "rps": 3436.9498471136635,
+          "errors": 0,
+          "p99_ms": 260.957
+        },
+        {
+          "rps": 3420.8521023151557,
+          "errors": 0,
+          "p99_ms": 227.559
+        }
+      ]
+    }
+  },
+  "ok": true,
+  "finished_at": "2026-10-26T04:55:59.728Z"
+}

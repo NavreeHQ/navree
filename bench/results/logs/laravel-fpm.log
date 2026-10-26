@@ -1,0 +1,11 @@
+
+   INFO  Caching framework bootstrap, configuration, and metadata.  
+
+  config ......................................................... 4.92ms DONE
+  events ......................................................... 0.46ms DONE
+  routes ......................................................... 4.96ms DONE
+  views .......................................................... 9.72ms DONE
+
+
+[26-Oct-2026 05:17:06] NOTICE: fpm is running, pid 10
+[26-Oct-2026 05:17:06] NOTICE: ready to handle connections
