@@ -3,5 +3,6 @@
 
 mod events;
 mod request_response;
+mod services;
 mod support;
 mod transports;
