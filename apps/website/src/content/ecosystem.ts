@@ -358,7 +358,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-graphql",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features graphql",
     href: "/docs/microservices/graphql/",
-    status: "planned",
+    status: "stable",
     signature: "#[resolver]",
   },
   {
