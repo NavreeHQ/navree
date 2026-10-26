@@ -222,3 +222,44 @@ Don't:
   the sticky header and overlays only), text below 12 px.
 - `hover:bg-accent` (that is the green), raw hex colors in components (use
   tokens), new fonts.
+
+## 9. App UI (products, dashboards and product mocks)
+
+Everything that is an application rather than a marketing page follows these
+rules: the CRM (Next and Nuxt), Helm, Lighthouse, Fleet, Logbook, Navigator,
+any server-rendered dashboard (the shared kit in `crates/navree-ui`), the
+starter kits, and every product mock on this site. Marketing pages keep
+sections 1–8.
+
+**The shell** follows the shadcn/ui Sidebar pattern (the `sidebar-07`
+layout), built with the shadcn `Sidebar` component in React apps and its
+equivalent in Vue and in server-rendered HTML:
+- Width 16rem expanded, 3rem collapsed to icons; `Ctrl/Cmd+B` toggles; the
+  state persists; on phones it becomes an off-canvas sheet.
+- Full height, sticky, `ink-1` background, a 1px `line` border on the right.
+- **Header**: the workspace or app switcher: a 32px square tile with the
+  logo mark (4px radius), two lines (name in `fg` 14px medium, plan or
+  context in `fg-3` 12px) and a `chevrons-up-down` icon. No glowing tiles.
+- **Groups**: a label 12px, `fg-3`, sentence case (no letter-spacing, no
+  uppercase), 32px tall; items below it.
+- **Items**: 32px tall, 8px horizontal padding, 8px gap, a 16px lucide icon
+  (stroke 1.75) and 14px text in `fg-2`. Hover: `ink-2` background, `fg`
+  text. Active: `ink-3` background, `fg` text, medium weight. No left bar,
+  no green text, no glow, no letter or avatar tiles in place of icons.
+  Counts and badges sit right-aligned in mono 12px `fg-3`.
+- **Sub-items**: indented, with a 1px `line` guide on the left.
+- **Footer**: the user menu: a 32px square avatar (4px radius), name and
+  email on two lines, `chevrons-up-down`.
+- **Top bar**: 48px, a sidebar trigger, a separator, the breadcrumb, then
+  search (`Ctrl/Cmd+K`) and page actions on the right.
+
+**Corners**: 4px for buttons, inputs, menu items, badges, tabs and
+avatars; 6px for cards, popovers and dialogs. No pills and no fully rounded
+shapes in app UI (status dots excepted).
+
+**Color**: the green accent is for the primary action, focus rings, and
+positive data (won amounts, success states). Navigation, selection and
+hover use the ink steps.
+
+**Density**: 14px body text, 13px secondary; table rows 40px with 12px
+cell padding; page padding 24px; headings 20–24px semibold.
