@@ -160,4 +160,51 @@ describe("Navree error mapping", () => {
       "The server hit an error. Try again in a moment.",
     );
   });
+
+  it("reads the machine-readable code and shows the message for known codes", () => {
+    const wrong = new ApiError({
+      statusCode: 401,
+      message: "Invalid credentials",
+      error: "Unauthorized",
+      code: "invalid_credentials",
+    });
+    expect(wrong.code).toBe("invalid_credentials");
+    expect(errorMessage(wrong)).toBe("That email and password don't match an account. Check them and try again.");
+
+    const demo = new ApiError({
+      statusCode: 403,
+      message: "Demo workspaces are read-only.",
+      error: "Forbidden",
+      code: "demo_read_only",
+    });
+    expect(errorMessage(demo)).toBe("This is a demo workspace, so changes aren't saved.");
+
+    // A code without its own message keeps the status rules and the API's detail.
+    const taken = new ApiError({
+      statusCode: 409,
+      message: "That email is already taken",
+      error: "Conflict",
+      code: "conflict",
+    });
+    expect(errorMessage(taken)).toBe("That email is already taken");
+
+    // With `http.errors.code` off, there is no code.
+    expect(new ApiError({ statusCode: 404, message: "Not Found", error: "Not Found" }).code).toBeUndefined();
+  });
+
+  it("keeps the code of an error body and has none for a non-JSON error", async () => {
+    const body = {
+      statusCode: 409,
+      message: "The campaign is already running.",
+      error: "Conflict",
+      code: "campaign_already_running",
+    };
+    const response = new Response(JSON.stringify(body), { status: 409, headers: { "x-request-id": "abc" } });
+    const error = ApiError.fromResponse(response, body);
+    expect(error.code).toBe("campaign_already_running");
+    expect(error.requestId).toBe("abc");
+
+    const plain = ApiError.fromResponse(new Response("upstream timeout", { status: 504 }), "upstream timeout");
+    expect(plain.code).toBeUndefined();
+  });
 });

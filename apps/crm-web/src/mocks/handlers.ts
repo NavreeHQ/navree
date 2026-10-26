@@ -3,8 +3,8 @@
  * browser sees it through the BFF: same-origin `/api/*`, the session held
  * "server side" (here: sessionStorage stands in for the httpOnly token
  * cookies), `POST /api/auth/login` returning only `{user}`, Navree error bodies
- * (`{statusCode, message, error}`; validation = 400 with `message[]` and
- * `errors`), CASL authorization + 403 (the same rules the UI receives), login
+ * (`{statusCode, message, error, code}`; validation = 400 `validation_failed`
+ * with `message[]` and `errors`), CASL authorization + 403 (the same rules the UI receives), login
  * throttling + 429, pagination, and `deal.updated` / `notification.created`
  * broadcasts on a window event bus.
  */
@@ -69,24 +69,37 @@ function requestId(): string {
   return makeId(Date.now());
 }
 
-/** Navree error body: `{statusCode, message, error}` (+ `errors` for validation). */
+/** Navree's code for each status (an error without a code of its own gets its status's). */
+const CODES: Record<number, string> = {
+  400: "bad_request",
+  401: "unauthenticated",
+  403: "forbidden",
+  404: "not_found",
+  409: "conflict",
+  429: "too_many_requests",
+  500: "internal_error",
+};
+
+/** Navree error body: `{statusCode, message, error, code}` (+ `errors` for validation). */
 function errorResponse(
   status: number,
   message?: string | string[],
   errors?: Record<string, string[]>,
   headers?: Record<string, string>,
+  code?: string,
 ): Response {
   const body: ApiErrorBody = {
     statusCode: status,
     message: message ?? REASONS[status] ?? "Error",
     error: REASONS[status] ?? "Error",
+    code: code ?? (errors ? "validation_failed" : (CODES[status] ?? "error")),
     ...(errors ? { errors } : {}),
   };
   return HttpResponse.json(body, { status, headers: { "X-Request-Id": requestId(), ...headers } });
 }
 
-function fail(status: number, message?: string | string[], errors?: Record<string, string[]>): never {
-  throw new HttpError(errorResponse(status, message, errors));
+function fail(status: number, message?: string | string[], errors?: Record<string, string[]>, code?: string): never {
+  throw new HttpError(errorResponse(status, message, errors, undefined, code));
 }
 
 /** 400 with `message: string[]` and `errors: {field: [messages]}`, like Navree's validation pipe. */
@@ -697,13 +710,19 @@ export const handlers = [
         invalid(errors);
         if (failedAttempts(email) >= 5) {
           throw new HttpError(
-            errorResponse(429, "Too many login attempts. Try again in 60 seconds.", undefined, { "Retry-After": "60" }),
+            errorResponse(
+              429,
+              "Too many login attempts. Try again in 60 seconds.",
+              undefined,
+              { "Retry-After": "60" },
+              "too_many_login_attempts",
+            ),
           );
         }
         const user = db.users.find((u) => u.email.toLowerCase() === email);
         if (!user || user.password !== password) {
           recordFailedAttempt(email);
-          fail(401, "Invalid credentials");
+          fail(401, "Invalid credentials", undefined, "invalid_credentials");
         }
         recordFailedAttempt(email, true);
         setSessionUser(user.id);

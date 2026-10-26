@@ -62,8 +62,9 @@ The Next.js server is a backend-for-frontend (spec §7, §10). The browser only 
   `APP_HTTP__TRUSTED_PROXIES` (default `127.0.0.1,::1`, enough for a BFF on the same host); in production, list the
   BFF's address there.
 
-Errors use Navree's JSON shape `{statusCode, message, error}`; 400 validation errors carry `errors: {field: [..]}`,
-which forms show next to the fields. See `.env.example` for every setting. Mock data lives in the tab's
+Errors use Navree's JSON shape `{statusCode, message, error, code}`; 400 validation errors carry
+`errors: {field: [..]}`, which forms show next to the fields. The UI branches on `code` (`invalid_two_factor_code`),
+never on the English `message`, and `CODE_MESSAGES` in `src/lib/api/errors.ts` maps codes to the text people see. See `.env.example` for every setting. Mock data lives in the tab's
 sessionStorage; run `__navreeMock.reset()` in the console (or open a new tab) to start over. In mock mode MSW answers
 `/api/*` in the browser with the same BFF semantics.
 

@@ -298,6 +298,7 @@ describe("BFF proxy", () => {
       statusCode: 502,
       message: "The Navree API is unreachable",
       error: "Bad Gateway",
+      code: "api_unreachable",
     });
   });
 });
@@ -324,7 +325,12 @@ describe("BFF origin check (CSRF defence for the cookie hop)", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ statusCode: 403, message: "Invalid origin", error: "Forbidden" });
+    expect(await response.json()).toEqual({
+      statusCode: 403,
+      message: "Invalid origin",
+      error: "Forbidden",
+      code: "invalid_origin",
+    });
     expect(k.calls).toHaveLength(0);
   });
 
@@ -547,7 +553,10 @@ describe("BFF two-factor sign-in", () => {
     );
 
     expect(response.status).toBe(401);
-    expect((await response.json()).message).toBe("Your sign-in attempt expired. Sign in again.");
+    expect(await response.json()).toMatchObject({
+      message: "Your sign-in attempt expired. Sign in again.",
+      code: "two_factor_challenge_expired",
+    });
     expect(navree.calls).toHaveLength(0);
   });
 
