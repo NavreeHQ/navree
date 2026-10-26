@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use crate::commands::commands;
 use crate::controller::{InvitationController, WorkspaceController};
+use crate::org_controller::OrganizationController;
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
 use crate::directory::{TableUserDirectory, UserDirectory};
@@ -283,6 +284,7 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
         .exports::<Partitions>()
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()
+        .controller::<OrganizationController>()
         .migrations(migrations())
         .http_layer(tenant_layer())
         .map_error::<WorkspaceError>(map_workspace_error);

@@ -17,11 +17,15 @@ use uuid::Uuid;
 
 use crate::current::{CurrentWorkspace, InWorkspace};
 use crate::directory::UserSummary;
-use crate::entity::{Invitation, Member, Workspace};
+use crate::entity::{Invitation, Member, Partition, Workspace};
 use crate::invitations::AcceptedInvitation;
 use crate::members::MemberInfo;
+use crate::org_current::PartitionScope;
 use crate::workspaces::NewWorkspace;
-use crate::{Invitations, Members, WorkspaceConfig, WorkspaceRole, Workspaces};
+use crate::{
+    Invitations, Members, NewPartition, PartitionSelector, Partitions, Selector, WorkspaceConfig,
+    WorkspaceRole, Workspaces,
+};
 
 /// The path parameter naming the workspace (a slug or an id).
 const WORKSPACE_PARAM: &str = "workspace";
@@ -41,6 +45,8 @@ pub struct WorkspaceResource {
     pub slug: String,
     /// The owner.
     pub owner_id: Uuid,
+    /// The organization the workspace is attached to, if any.
+    pub organization_id: Option<Uuid>,
     /// The caller's role in the workspace.
     #[schema(value_type = String, example = "owner")]
     pub role: WorkspaceRole,
@@ -59,6 +65,7 @@ impl WorkspaceResource {
             name: workspace.name.clone(),
             slug: workspace.slug.clone(),
             owner_id: workspace.owner_id,
+            organization_id: workspace.organization_id,
             role,
             created_at: workspace.created_at,
             updated_at: workspace.updated_at,
@@ -153,8 +160,104 @@ impl From<&Invitation> for InvitationResource {
 
 /// A list response: `{"data": [...]}`.
 #[derive(Clone, Debug, Serialize)]
-struct DataList<T> {
-    data: Vec<T>,
+pub(crate) struct DataList<T> {
+    pub(crate) data: Vec<T>,
+}
+
+/// A partition as the API returns it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct PartitionResource {
+    /// Always `WorkspacePartition`.
+    #[serde(rename = "__type")]
+    #[schema(rename = "__type", example = "WorkspacePartition")]
+    pub kind: String,
+    /// The id.
+    pub id: Uuid,
+    /// The workspace.
+    pub workspace_id: Uuid,
+    /// The display name.
+    pub name: String,
+    /// The slug, unique in the workspace.
+    pub slug: String,
+    /// When it was created.
+    pub created_at: DateTime<Utc>,
+    /// When it last changed.
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<&Partition> for PartitionResource {
+    fn from(partition: &Partition) -> Self {
+        Self {
+            kind: "WorkspacePartition".to_owned(),
+            id: partition.id,
+            workspace_id: partition.workspace_id,
+            name: partition.name.clone(),
+            slug: partition.slug.clone(),
+            created_at: partition.created_at,
+            updated_at: partition.updated_at,
+        }
+    }
+}
+
+/// The partitions a member sees, as the API returns them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct PartitionAccessResource {
+    /// The member.
+    pub user_id: Uuid,
+    /// `"all"` or a list of partition ids.
+    #[schema(value_type = Object)]
+    pub partitions: PartitionSelector,
+}
+
+/// The body of `POST /workspaces/{workspace}/partitions`.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+pub struct CreatePartitionInput {
+    /// The display name.
+    pub name: String,
+    /// The slug; derived from the name when absent.
+    pub slug: Option<String>,
+}
+
+/// The body of `PATCH /workspaces/{workspace}/partitions/{partition}`.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+pub struct RenamePartitionInput {
+    /// The new name.
+    pub name: String,
+}
+
+/// The body of `PUT /workspaces/{workspace}/members/{user}/partitions`.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+pub struct PartitionAccessInput {
+    /// `"all"` or a list of partition ids.
+    #[schema(value_type = Object)]
+    pub partitions: PartitionSelector,
+}
+
+/// A 403 unless the caller sees every partition `selector` names.
+fn check_partition_reach(
+    scope: &PartitionScope,
+    selector: &PartitionSelector,
+) -> Result<(), AppError> {
+    let covered = match (scope.allowed(), selector) {
+        (Selector::All, _) => true,
+        (Selector::Only(_), Selector::All) => false,
+        (Selector::Only(mine), Selector::Only(theirs)) => theirs.iter().all(|id| mine.contains(id)),
+    };
+    if covered {
+        Ok(())
+    } else {
+        Err(AppError::forbidden().with_detail("You can only grant partitions you see."))
+    }
+}
+
+/// A 403 unless the caller sees every partition.
+fn check_partition_manager(scope: &PartitionScope) -> Result<(), AppError> {
+    if scope.allowed().is_all() {
+        Ok(())
+    } else {
+        Err(AppError::forbidden()
+            .with_detail("Only members who see every partition can manage partitions."))
+    }
 }
 
 /// The body of `POST /workspaces`.
@@ -250,11 +353,28 @@ pub struct AcceptedInvitationResource {
 /// Granting the `owner` role, or changing or removing a member who has it,
 /// also takes the `owner` role (a 403 otherwise). `POST
 /// /invitations/accept` is [`InvitationController`].
+///
+/// With `workspace.partitions.enabled`, the partition routes join them:
+///
+/// | Route | Permission | Answer |
+/// |---|---|---|
+/// | `GET /workspaces/{workspace}/partitions` | `workspace.partitions.read` | the partitions the caller sees, `{data: [..]}` |
+/// | `POST /workspaces/{workspace}/partitions` `{name, slug?}` | `workspace.partitions.create` | 201, the partition |
+/// | `PATCH /workspaces/{workspace}/partitions/{partition}` `{name}` | `workspace.partitions.update` | the partition |
+/// | `DELETE /workspaces/{workspace}/partitions/{partition}` | `workspace.partitions.delete` | 204 |
+/// | `GET /workspaces/{workspace}/members/{user}/partitions` | `workspace.members.read` | `{user_id, partitions}` |
+/// | `PUT /workspaces/{workspace}/members/{user}/partitions` `{partitions}` | `workspace.members.update` | `{user_id, partitions}` |
+///
+/// Creating, renaming and deleting partitions also takes seeing every
+/// partition, and a member limited to some partitions grants only those
+/// (a 403 otherwise).
 pub struct WorkspaceController {
     workspaces: Arc<Workspaces>,
     members: Arc<Members>,
     invitations: Arc<Invitations>,
+    partitions: Arc<Partitions>,
     enabled: bool,
+    partitions_enabled: bool,
 }
 
 impl Injectable for WorkspaceController {
@@ -263,17 +383,21 @@ impl Injectable for WorkspaceController {
             ProviderKey::of::<Workspaces>(),
             ProviderKey::of::<Members>(),
             ProviderKey::of::<Invitations>(),
+            ProviderKey::of::<Partitions>(),
             ProviderKey::of::<WorkspaceConfig>(),
         ]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let config = r.get::<WorkspaceConfig>().await?;
             Ok(WorkspaceController {
                 workspaces: r.get::<Workspaces>().await?,
                 members: r.get::<Members>().await?,
                 invitations: r.get::<Invitations>().await?,
-                enabled: r.get::<WorkspaceConfig>().await?.routes,
+                partitions: r.get::<Partitions>().await?,
+                enabled: config.routes,
+                partitions_enabled: config.routes && config.partitions.enabled,
             })
         })
     }
@@ -481,7 +605,7 @@ impl Controller for WorkspaceController {
                 }
             };
         let guard = || InWorkspace::from_path(WORKSPACE_PARAM);
-        vec![
+        let mut routes = vec![
             RouteDef::on(Method::GET, "/", index)
                 .authenticated()
                 .name("workspaces.index")
@@ -620,6 +744,186 @@ impl Controller for WorkspaceController {
                 success_status: 204,
                 ..api("Revoke an invitation", &[401, 403, 404], None, None)
             }),
+        ];
+        if self.partitions_enabled {
+            routes.extend(self.partition_routes());
+        }
+        routes
+    }
+}
+
+impl WorkspaceController {
+    /// `/workspaces/{workspace}/partitions...` and the members' partition
+    /// access.
+    fn partition_routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let partitions = self.partitions.clone();
+        let index = move |ws: CurrentWorkspace, scope: PartitionScope| {
+            let partitions = partitions.clone();
+            async move {
+                let data = partitions
+                    .visible(ws.id(), scope.allowed())
+                    .await?
+                    .iter()
+                    .map(PartitionResource::from)
+                    .collect();
+                Ok::<_, AppError>(Json(DataList::<PartitionResource> { data }))
+            }
+        };
+        let partitions = self.partitions.clone();
+        let store = move |ws: CurrentWorkspace,
+                          scope: PartitionScope,
+                          uow: Uow,
+                          uri: Uri,
+                          Json(input): Json<CreatePartitionInput>| {
+            let partitions = partitions.clone();
+            async move {
+                check_partition_manager(&scope)?;
+                let created = partitions
+                    .create(
+                        &uow,
+                        ws.id(),
+                        NewPartition {
+                            name: input.name,
+                            slug: input.slug,
+                        },
+                    )
+                    .await?;
+                let location = format!("{}/{}", uri.path().trim_end_matches('/'), created.slug);
+                Ok::<_, AppError>(Created(location, PartitionResource::from(&created)))
+            }
+        };
+        let partitions = self.partitions.clone();
+        let rename = move |ws: CurrentWorkspace,
+                           scope: PartitionScope,
+                           uow: Uow,
+                           Path((_, partition)): Path<(String, String)>,
+                           Json(input): Json<RenamePartitionInput>| {
+            let partitions = partitions.clone();
+            async move {
+                check_partition_manager(&scope)?;
+                let found = partitions.resolve(ws.id(), &partition).await?;
+                let renamed = partitions
+                    .rename(&uow, ws.id(), found.id, &input.name)
+                    .await?;
+                Ok::<_, AppError>(Json(PartitionResource::from(&renamed)))
+            }
+        };
+        let partitions = self.partitions.clone();
+        let destroy = move |ws: CurrentWorkspace,
+                            scope: PartitionScope,
+                            uow: Uow,
+                            Path((_, partition)): Path<(String, String)>| {
+            let partitions = partitions.clone();
+            async move {
+                check_partition_manager(&scope)?;
+                let found = partitions.resolve(ws.id(), &partition).await?;
+                partitions.delete(&uow, ws.id(), found.id).await?;
+                Ok::<_, AppError>(NoContent)
+            }
+        };
+        let partitions = self.partitions.clone();
+        let show_access =
+            move |ws: CurrentWorkspace, Path((_, user)): Path<(String, Uuid)>| {
+                let partitions = partitions.clone();
+                async move {
+                    let access = partitions.access(ws.id(), user).await?;
+                    Ok::<_, AppError>(Json(PartitionAccessResource {
+                        user_id: user,
+                        partitions: access,
+                    }))
+                }
+            };
+        let partitions = self.partitions.clone();
+        let grant = move |ws: CurrentWorkspace,
+                          scope: PartitionScope,
+                          uow: Uow,
+                          Path((_, user)): Path<(String, Uuid)>,
+                          Json(input): Json<PartitionAccessInput>| {
+            let partitions = partitions.clone();
+            async move {
+                check_partition_reach(&scope, &input.partitions)?;
+                let current = partitions.access(ws.id(), user).await?;
+                check_partition_reach(&scope, &current)?;
+                partitions
+                    .grant(&uow, ws.id(), user, input.partitions.clone())
+                    .await?;
+                Ok::<_, AppError>(Json(PartitionAccessResource {
+                    user_id: user,
+                    partitions: input.partitions,
+                }))
+            }
+        };
+        let guard = || InWorkspace::from_path(WORKSPACE_PARAM);
+        vec![
+            RouteDef::on(Method::GET, "/{workspace}/partitions", index)
+                .permissions(&["workspace.partitions.read"])
+                .guard(guard())
+                .name("workspaces.partitions.index")
+                .api(api(
+                    "List the partitions the caller sees",
+                    &[401, 403, 404],
+                    None,
+                    None,
+                )),
+            RouteDef::on(Method::POST, "/{workspace}/partitions", store)
+                .permissions(&["workspace.partitions.create"])
+                .guard(guard())
+                .name("workspaces.partitions.store")
+                .api(ApiMeta {
+                    success_status: 201,
+                    ..api(
+                        "Create a partition",
+                        &[400, 401, 403, 404],
+                        Some(schema_fn::<CreatePartitionInput>),
+                        Some(schema_fn::<PartitionResource>),
+                    )
+                }),
+            RouteDef::on(Method::PATCH, "/{workspace}/partitions/{partition}", rename)
+                .permissions(&["workspace.partitions.update"])
+                .guard(guard())
+                .name("workspaces.partitions.update")
+                .api(api(
+                    "Rename a partition",
+                    &[400, 401, 403, 404],
+                    Some(schema_fn::<RenamePartitionInput>),
+                    Some(schema_fn::<PartitionResource>),
+                )),
+            RouteDef::on(Method::DELETE, "/{workspace}/partitions/{partition}", destroy)
+                .permissions(&["workspace.partitions.delete"])
+                .guard(guard())
+                .name("workspaces.partitions.destroy")
+                .api(ApiMeta {
+                    success_status: 204,
+                    ..api("Delete a partition", &[401, 403, 404], None, None)
+                }),
+            RouteDef::on(
+                Method::GET,
+                "/{workspace}/members/{user}/partitions",
+                show_access,
+            )
+            .permissions(&["workspace.members.read"])
+            .guard(guard())
+            .name("workspaces.members.partitions.show")
+            .api(api(
+                "Show the partitions a member sees",
+                &[401, 403, 404],
+                None,
+                Some(schema_fn::<PartitionAccessResource>),
+            )),
+            RouteDef::on(
+                Method::PUT,
+                "/{workspace}/members/{user}/partitions",
+                grant,
+            )
+            .permissions(&["workspace.members.update"])
+            .guard(guard())
+            .name("workspaces.members.partitions.update")
+            .api(api(
+                "Set the partitions a member sees",
+                &[400, 401, 403, 404, 409],
+                Some(schema_fn::<PartitionAccessInput>),
+                Some(schema_fn::<PartitionAccessResource>),
+            )),
         ]
     }
 }
