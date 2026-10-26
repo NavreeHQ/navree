@@ -2700,6 +2700,7 @@ dependencies = [
  "axum",
  "chrono",
  "garde",
+ "metrics",
  "navree-access",
  "navree-api",
  "navree-audit",
