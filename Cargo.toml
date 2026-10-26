@@ -52,6 +52,8 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
+navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
+navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -222,6 +224,20 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# Localization (navree-i18n): Fluent messages, locale negotiation, and
+# ICU4X decimal and date formatting with compiled data (pure Rust).
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+# 0.13: 0.14 pulls in ICU4X 1.x; fluent-bundle 0.16 uses 0.13 itself.
+fluent-langneg = "0.13.1"
+unic-langid = "0.9.6"
+intl-memoizer = "0.5.3"
+icu_decimal = "2.4.0"
+icu_datetime = "2.4.0"
+icu_locale_core = "2.4.0"
+fixed_decimal = "0.7.3"
+# Plural rules of fluent-bundle, checked per locale at boot.
+intl_pluralrules = "7.0.2"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

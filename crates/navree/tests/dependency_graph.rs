@@ -52,6 +52,8 @@ const HIERARCHY: &[Rule] = &[
     // no navree dependencies; the CLI uses it and the facade re-exports it
     // behind the opt-in `dock` feature.
     rule("navree-dock", 0, &[]),
+    // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
+    rule("navree-i18n-macros", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -124,6 +126,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // Localization: Fluent messages, the request's locale (the signed-in
+    // user's or the workspace's saved one, a query parameter, a cookie,
+    // Accept-Language), translated validation messages, a `t` function in
+    // views and notifications in the recipient's locale.
+    rule("navree-i18n", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-db", "navree-validation", "navree-notify", "navree-workspace",
+        "navree-i18n-macros",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -189,6 +200,8 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-i18n",
+    "navree-i18n-macros",
 ];
 
 /// Cargo dependency kind of an edge.
