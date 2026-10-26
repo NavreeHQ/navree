@@ -5,15 +5,16 @@ description: "The layers of Navree crates, the rule that a crate depends only on
 
 ## Introduction
 
-Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) to L6 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
+Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) to L8 (the `navree` facade and the CLI), with the ecosystem libraries at L6 and applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
 
 This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows nothing about databases, and authentication builds on everything else rather than the other way round. You can read, test or use any crate with only what's below it. Most apps never see the split, because they depend on the facade, but it explains why things are where they are.
 
 ## The layers
 
 ```text
-L7  apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
-L6  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
+L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
+L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
+L6  navree-social (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -51,8 +52,9 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
-| L6 | `navree` | The facade: re-exports every module crate and the macros |
-| L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
+| L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
+| L8 | `navree` | The facade: re-exports every module crate and the macros |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
 ## The allowed edges
 
@@ -74,6 +76,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
 | `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
+| `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | No Navree crate: everything it knows about the framework is in the code it generates |
 
@@ -168,7 +171,7 @@ crate hierarchy violations (spec §3):
   navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-kernel, navree-contracts, navree-config]
 ```
 
-The CRM is in the table too: `crm-core` at L7, `crm-testkit` at L8, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L9 and the `crm-api` binary at L10. They may depend only on the `navree` facade and the CRM crates below them.
+The CRM is in the table too: `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them.
 
 Two more tests in `crates/navree/tests/facade.rs` keep the facade's [features](/docs/architecture/facade-and-features/) in step with the hierarchy.
 
