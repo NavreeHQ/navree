@@ -201,6 +201,39 @@ async fn assert_validation_error_checks_400_and_the_field() {
 }
 
 #[tokio::test]
+async fn assert_error_code_checks_the_machine_readable_code() {
+    let app = TestApp::builder().module(DemoModule).build().await;
+    let response = app.client().get("/api/nowhere").send().await;
+    response
+        .clone()
+        .assert_error_code(404, "not_found")
+        .assert_error(404, "Not Found");
+    app.client()
+        .post("/api/demo/invalid")
+        .send()
+        .await
+        .assert_error_code(400, "validation_failed");
+
+    let wrong = panic_message(|| {
+        response.clone().assert_error_code(404, "deal_not_found");
+    });
+    assert!(
+        wrong.contains(r#"expected code "deal_not_found""#) && wrong.contains(r#""code":"not_found""#),
+        "{wrong}"
+    );
+
+    let missing = panic_message(|| {
+        not_found_response().assert_error_code(404, "not_found");
+    });
+    assert!(missing.contains("no `code`"), "{missing}");
+
+    let wrong_status = panic_message(|| {
+        response.clone().assert_error_code(410, "not_found");
+    });
+    assert!(wrong_status.contains("expected status 410"), "{wrong_status}");
+}
+
+#[tokio::test]
 #[allow(deprecated)]
 async fn assert_problem_is_a_deprecated_alias_of_assert_error() {
     let app = TestApp::builder().module(DemoModule).build().await;
@@ -210,6 +243,10 @@ async fn assert_problem_is_a_deprecated_alias_of_assert_error() {
         .await
         .assert_problem(404, "not_found")
         .assert_problem(404, None);
+    let wrong = panic_message(|| {
+        not_found_response().assert_problem(404, "gone");
+    });
+    assert!(wrong.contains("no `code`"), "checks the code: {wrong}");
 }
 
 /// A 404 error response like the one an app returns for unknown paths.
