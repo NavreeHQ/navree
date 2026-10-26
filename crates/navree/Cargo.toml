@@ -181,6 +181,8 @@ navree-webhooks = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 
 [dev-dependencies]
+# `tests/jose_docs.rs` builds fixture keys by hand.
+base64 = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }
 sea-orm = { workspace = true }

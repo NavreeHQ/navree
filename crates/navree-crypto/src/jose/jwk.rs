@@ -181,7 +181,7 @@ impl fmt::Debug for Jwk {
 ///
 /// Reading a set skips the entries that are not keys (RFC 7517 §5), so one
 /// odd key in a provider's set does not make the others unusable. Keys of
-/// unknown types are kept; they just never verify anything.
+/// unknown types are kept; they never verify anything.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct JwkSet {
     /// The keys.
