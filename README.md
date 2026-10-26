@@ -94,9 +94,11 @@ Documents:
 
 ## Crate hierarchy
 
-The crates form layers (spec §3; the ecosystem packages sit in L6 and L7). A crate may depend only on crates in
-lower layers, dev-dependencies included, and its runtime dependencies must
-also match the spec's table of allowed edges. Cross-cutting needs (audit,
+The crates form layers (spec §3): the framework from L0 to L5, ecosystem
+libraries at L6, packages built on them at L7, and the facade and CLI at L8.
+A crate may depend only on crates in lower layers, dev-dependencies included,
+and its runtime dependencies must also match the spec's table of allowed
+edges. Cross-cutting needs (audit,
 events, broadcasting, sessions, health checks, jobs, the current principal)
 go through traits in `navree-contracts`, so modules don't depend on each
 other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
@@ -106,6 +108,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-search (search engines, sync, vectors; facade feature `search`)
+L6  navree-social  navree-webhooks  navree-oauth  navree-flags (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -144,6 +147,10 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
+| L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
+| L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
+| L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
 | L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |

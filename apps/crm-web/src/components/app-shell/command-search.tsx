@@ -1,6 +1,22 @@
 "use client";
 
-import { Building2Icon, ColumnsIcon, GaugeIcon, ListChecksIcon, SearchIcon, UserIcon, UsersIcon } from "lucide-react";
+import { useAbility } from "@casl/react";
+import {
+  Building2Icon,
+  ColumnsIcon,
+  CornerDownLeftIcon,
+  GaugeIcon,
+  ListChecksIcon,
+  LogOutIcon,
+  PlusIcon,
+  ScrollTextIcon,
+  SearchIcon,
+  SettingsIcon,
+  UserCogIcon,
+  UserIcon,
+  UsersIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { StageDot } from "@/components/stage";
@@ -14,26 +30,55 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Kbd } from "@/components/ui/kbd";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { useCurrentUser, useLogout } from "@/features/auth/queries";
 import { useCompanies } from "@/features/companies/queries";
 import { useContacts } from "@/features/contacts/queries";
 import { useDeals } from "@/features/deals/queries";
+import { requestCreate, type CreateKind } from "@/hooks/use-create-intent";
 import { useDebouncedValue } from "@/hooks/use-url-state";
+import type { SubjectName } from "@/lib/api/types";
+import type { AppAbility } from "@/lib/casl/ability";
 import { formatMoney } from "@/lib/format";
 
-const PAGES = [
-  { href: "/", label: "Dashboard", icon: GaugeIcon },
-  { href: "/companies", label: "Companies", icon: Building2Icon },
-  { href: "/contacts", label: "Contacts", icon: UsersIcon },
-  { href: "/deals", label: "Deals", icon: ColumnsIcon },
-  { href: "/tasks", label: "Tasks", icon: ListChecksIcon },
+type Page = { href: string; label: string; icon: LucideIcon; keywords?: string[] };
+
+const PAGES: Page[] = [
+  { href: "/", label: "Dashboard", icon: GaugeIcon, keywords: ["home", "overview"] },
+  { href: "/companies", label: "Companies", icon: Building2Icon, keywords: ["accounts"] },
+  { href: "/contacts", label: "Contacts", icon: UsersIcon, keywords: ["people"] },
+  { href: "/deals", label: "Deals", icon: ColumnsIcon, keywords: ["pipeline", "board"] },
+  { href: "/tasks", label: "Tasks", icon: ListChecksIcon, keywords: ["follow-ups", "todo"] },
+  { href: "/settings", label: "Settings", icon: SettingsIcon, keywords: ["profile", "permissions"] },
 ];
 
-/** Global search across companies, contacts and deals (Ctrl/⌘ K). */
+const CREATE: { kind: CreateKind; href: string; label: string; subject: SubjectName }[] = [
+  { kind: "deal", href: "/deals", label: "New deal", subject: "Deal" },
+  { kind: "company", href: "/companies", label: "New company", subject: "Company" },
+  { kind: "contact", href: "/contacts", label: "New contact", subject: "Contact" },
+  { kind: "task", href: "/tasks", label: "New task", subject: "Activity" },
+];
+
+const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** Whether a static command matches what was typed (its label or a keyword). */
+function matches(filter: string, label: string, keywords: readonly string[] = []): boolean {
+  return !filter || [label, ...keywords].some((k) => k.toLowerCase().includes(filter));
+}
+
+/**
+ * The command menu (Ctrl/Cmd K): jump to a screen, create a record, sign out,
+ * or search companies, contacts and deals through the API.
+ */
 export function CommandSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Rendered only in the browser (behind sign-in), so the platform is known on first render.
+  const [mod] = useState(() => (isMac() ? "⌘" : "Ctrl"));
   const router = useRouter();
+  const ability = useAbility<AppAbility>();
+  const me = useCurrentUser();
+  const logout = useLogout();
   const term = useDebouncedValue(query.trim(), 200);
   const enabled = open && term.length >= 2;
 
@@ -52,17 +97,52 @@ export function CommandSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const go = (href: string) => {
+  const close = () => {
     setOpen(false);
     setQuery("");
+  };
+  const go = (href: string) => {
+    close();
     router.push(href);
   };
+  const create = (kind: CreateKind, href: string) => {
+    close();
+    router.push(href);
+    requestCreate(kind);
+  };
+  const signOut = () => {
+    close();
+    logout.mutate(
+      {},
+      {
+        onSettled: () => {
+          ability.update([]);
+          router.replace("/login");
+        },
+      },
+    );
+  };
+
+  const pages: Page[] = [
+    ...PAGES,
+    ...(ability.can("create", "User")
+      ? [{ href: "/settings/users", label: "Users and roles", icon: UserCogIcon, keywords: ["team", "roles"] }]
+      : []),
+    ...(me.data?.roles.includes("admin")
+      ? [{ href: "/settings/audit", label: "Audit log", icon: ScrollTextIcon, keywords: ["history"] }]
+      : []),
+  ];
+  const creatable = CREATE.filter((c) => ability.can("create", c.subject));
+  const filter = query.trim().toLowerCase();
+  const shownPages = pages.filter((p) => matches(filter, p.label, p.keywords));
+  const shownCreate = creatable.filter((c) => matches(filter, c.label, ["add", "create", c.kind]));
+  const showSignOut = matches(filter, "Sign out", ["log out", "logout"]);
 
   // Results arrive asynchronously, so keep the highlighted item in state and default it to the first result.
   const [highlighted, setHighlighted] = useState("");
   const firstValue =
     term.length < 2
-      ? PAGES[0].label
+      ? (shownPages[0]?.label ?? shownCreate[0]?.label ?? (showSignOut ? "Sign out" : ""))
       : companies.data?.data[0]
         ? `company-${companies.data.data[0].id}`
         : contacts.data?.data[0]
@@ -81,22 +161,29 @@ export function CommandSearch() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-8 w-full max-w-sm items-center gap-2 rounded-lg border border-input bg-card px-2.5 text-sm text-muted-foreground transition-colors hover:border-ring/40 hover:text-foreground"
+        aria-keyshortcuts="Control+K Meta+K"
+        className="group flex h-9 w-full max-w-md items-center gap-2.5 rounded-full border border-line-2 bg-ink-1 pr-1.5 pl-3.5 text-sm text-fg-3 transition-colors hover:border-fg-3/50 hover:bg-ink-2 hover:text-fg-2"
       >
-        <SearchIcon className="size-4" />
-        <span className="flex-1 truncate text-left">Search companies, contacts, deals</span>
-        <Kbd className="hidden sm:inline-flex">Ctrl K</Kbd>
+        <SearchIcon className="size-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1 truncate text-left">
+          <span className="sm:hidden">Search</span>
+          <span className="hidden sm:inline">Search or jump to…</span>
+        </span>
+        <KbdGroup className="hidden sm:inline-flex">
+          <Kbd>{mod}</Kbd>
+          <Kbd>K</Kbd>
+        </KbdGroup>
       </button>
       <CommandDialog
         open={open}
-        onOpenChange={setOpen}
-        title="Search"
-        description="Search companies, contacts and deals"
+        onOpenChange={(next) => (next ? setOpen(true) : close())}
+        title="Command menu"
+        description="Jump to a screen, create a record, or search companies, contacts and deals"
       >
-        {/* Results come from the API, so cmdk's own filtering is off. */}
+        {/* Search results come from the API, so cmdk's own filtering only runs on the static commands. */}
         <Command shouldFilter={false} value={highlighted || firstValue} onValueChange={setHighlighted}>
           <CommandInput
-            placeholder="Type a name, email or deal title"
+            placeholder="Search companies, contacts and deals, or type a command"
             value={query}
             onValueChange={(q) => {
               setQuery(q);
@@ -105,14 +192,14 @@ export function CommandSearch() {
           />
           <CommandList>
             {term.length < 2 ? (
-              <CommandGroup heading="Go to">
-                {PAGES.map(({ href, label, icon: Icon }) => (
-                  <CommandItem key={href} value={label} onSelect={() => go(href)}>
-                    <Icon />
-                    {label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
+              <StaticCommands
+                pages={shownPages}
+                creatable={shownCreate}
+                showSignOut={showSignOut}
+                onGo={go}
+                onCreate={create}
+                onSignOut={signOut}
+              />
             ) : (
               <>
                 <CommandEmpty>{searching ? "Searching…" : `Nothing matches “${term}”.`}</CommandEmpty>
@@ -142,7 +229,7 @@ export function CommandSearch() {
                   <CommandGroup heading="Deals">
                     {deals.data.data.map((d) => (
                       <CommandItem key={d.id} value={`deal-${d.id}`} onSelect={() => go(`/deals/${d.id}`)}>
-                        <StageDot stage={d.stage} />
+                        <StageDot stage={d.stage} className="mx-1" />
                         <span className="truncate">{d.title}</span>
                         <CommandShortcut className="figures">
                           {formatMoney(d.amount_cents, d.currency, { compact: true })}
@@ -154,8 +241,81 @@ export function CommandSearch() {
               </>
             )}
           </CommandList>
+          <div
+            className="flex items-center gap-4 border-t bg-ink-0/40 px-4 py-2.5 text-xs text-fg-3"
+            aria-hidden="true"
+          >
+            <span className="flex items-center gap-1.5">
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
+              to move
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Kbd>
+                <CornerDownLeftIcon />
+              </Kbd>
+              to open
+            </span>
+            <span className="ml-auto flex items-center gap-1.5">
+              <Kbd>Esc</Kbd>
+              to close
+            </span>
+          </div>
         </Command>
       </CommandDialog>
+    </>
+  );
+}
+
+/** The commands shown before a search (screens, new records, signing out), already filtered by what was typed. */
+function StaticCommands({
+  pages: shownPages,
+  creatable: shownCreate,
+  showSignOut,
+  onGo,
+  onCreate,
+  onSignOut,
+}: {
+  pages: Page[];
+  creatable: typeof CREATE;
+  showSignOut: boolean;
+  onGo: (href: string) => void;
+  onCreate: (kind: CreateKind, href: string) => void;
+  onSignOut: () => void;
+}) {
+  if (shownPages.length + shownCreate.length === 0 && !showSignOut) {
+    return <p className="py-10 text-center text-sm text-fg-2">Keep typing to search records.</p>;
+  }
+  return (
+    <>
+      {shownPages.length ? (
+        <CommandGroup heading="Go to">
+          {shownPages.map(({ href, label, icon: Icon }) => (
+            <CommandItem key={href} value={label} onSelect={() => onGo(href)}>
+              <Icon />
+              {label}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ) : null}
+      {shownCreate.length ? (
+        <CommandGroup heading="Create">
+          {shownCreate.map((c) => (
+            <CommandItem key={c.kind} value={c.label} onSelect={() => onCreate(c.kind, c.href)}>
+              <PlusIcon />
+              {c.label}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ) : null}
+      {showSignOut ? (
+        <CommandGroup heading="Account">
+          <CommandItem value="Sign out" onSelect={onSignOut}>
+            <LogOutIcon />
+            Sign out
+          </CommandItem>
+        </CommandGroup>
+      ) : null}
     </>
   );
 }

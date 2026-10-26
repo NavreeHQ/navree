@@ -1,12 +1,12 @@
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 function Empty({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty"
       className={cn(
-        "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed p-6 text-center text-balance",
+        "isolate flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed border-line-2 p-6 text-center text-balance",
         className
       )}
       {...props}
@@ -30,7 +30,7 @@ const emptyMediaVariants = cva(
     variants: {
       variant: {
         default: "bg-transparent",
-        icon: "flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground [&_svg:not([class*='size-'])]:size-4",
+        icon: "relative mb-3 flex size-11 shrink-0 items-center justify-center rounded-xl border border-line-2 bg-ink-2 text-fg-1 shadow-bezel before:absolute before:-inset-8 before:-z-10 before:rounded-full before:bg-[radial-gradient(closest-side,rgb(61_255_143/0.11),transparent)] [&_svg:not([class*='size-'])]:size-5",
       },
     },
     defaultVariants: {
@@ -59,7 +59,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty-title"
       className={cn(
-        "font-heading text-sm font-medium tracking-tight",
+        "font-heading text-base font-semibold tracking-[-0.01em] text-fg",
         className
       )}
       {...props}
@@ -72,7 +72,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
     <div
       data-slot="empty-description"
       className={cn(
-        "text-sm/relaxed text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
+        "text-sm/relaxed text-fg-2 [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
         className
       )}
       {...props}

@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { OwnerFilter } from "@/components/filters";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
-import { stageStyle } from "@/components/stage";
+import { StageDot, stageStyle } from "@/components/stage";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/user-avatar";
@@ -75,35 +75,42 @@ function DealCardBody({ deal, lockReason, dragging }: { deal: Deal; lockReason?:
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-md border bg-card p-3 text-left shadow-[0_1px_0_rgb(0_0_0/0.03)]",
-        dragging && "shadow-lg ring-1 ring-ring/30",
+        "flex flex-col gap-2 rounded-xl border border-line bg-ink-1 p-3 text-left shadow-bezel transition-[border-color,background-color] duration-150 group-hover/card:border-line-2 group-hover/card:bg-[color-mix(in_oklab,var(--color-ink-1),var(--color-ink-2))]",
+        deal.stage === "won" && "border-accent/20",
+        dragging && "rotate-[1.5deg] border-accent/40 bg-ink-2 shadow-float ring-1 ring-accent/25",
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <Link
           href={`/deals/${deal.id}`}
-          className="line-clamp-2 text-[13px] leading-snug font-medium hover:underline"
+          className="line-clamp-2 text-[0.8125rem] leading-snug font-medium text-fg hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
           {deal.title}
         </Link>
         {lockReason ? (
-          <LockIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground/70" aria-label={lockReason}>
+          <LockIcon className="mt-0.5 size-3 shrink-0 text-fg-3" aria-label={lockReason}>
             <title>{lockReason}</title>
           </LockIcon>
         ) : null}
       </div>
-      <span className="truncate text-xs text-muted-foreground">{deal.company.name}</span>
+      <span className="truncate text-xs text-fg-3">{deal.company.name}</span>
       {deal.stage === "lost" && deal.lost_reason ? (
-        <span className="line-clamp-2 text-xs text-muted-foreground">{deal.lost_reason}</span>
+        <span className="line-clamp-2 rounded-md border border-danger/20 bg-danger/8 px-2 py-1 text-xs text-fg-2">
+          {deal.lost_reason}
+        </span>
       ) : null}
-      <div className="flex items-center justify-between gap-2">
-        <Money cents={deal.amount_cents} currency={deal.currency} className="text-[13px] font-semibold" />
+      <div className="mt-0.5 flex items-center justify-between gap-2 border-t border-line pt-2">
+        <Money
+          cents={deal.amount_cents}
+          currency={deal.currency}
+          className={cn("text-[0.8125rem] font-semibold", deal.stage === "won" ? "text-accent" : "text-fg")}
+        />
         <span className="flex items-center gap-2">
           {deal.closed_at || deal.expected_close_date ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1 text-[11px] text-muted-foreground figures",
+                "inline-flex items-center gap-1 text-xs text-fg-3 figures",
                 due === "overdue" && "font-medium text-destructive",
               )}
               title={closed ? "Closed" : "Expected close"}
@@ -132,9 +139,9 @@ function SortableDealCard({ deal, canMove }: { deal: Deal; canMove: boolean }) {
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
-        "rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group/card rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring",
         canMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-        isDragging && "opacity-40",
+        isDragging && "opacity-30",
       )}
       data-testid="deal-card"
       data-deal-id={deal.id}
@@ -181,32 +188,46 @@ function StageColumn({
       data-stage={stage.stage}
       style={stageStyle(stage.stage)}
       className={cn(
-        "flex max-h-full w-[17rem] shrink-0 flex-col rounded-lg border border-t-[3px] border-t-(--stage) bg-muted/45 transition-colors",
-        isOver && "bg-(--stage)/10",
+        "relative flex max-h-full w-[17.5rem] shrink-0 flex-col overflow-hidden rounded-2xl border bg-ink-1/50 transition-[background-color,border-color] duration-150",
+        isOver &&
+          "border-[color-mix(in_oklab,var(--stage)_45%,transparent)] bg-[color-mix(in_oklab,var(--stage)_6%,var(--color-ink-1))]",
         closed && stage.stage === "won" && "ml-3",
       )}
     >
-      <header className="flex flex-col gap-1 px-3 pt-2.5 pb-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 id={`stage-${stage.stage}`} className="text-sm font-semibold">
+      <span
+        aria-hidden="true"
+        className={cn("absolute inset-x-0 top-0 h-0.5 bg-(--stage)", stage.stage === "won" && "shadow-glow-sm")}
+      />
+      <header className="flex flex-col gap-1.5 px-3.5 pt-3.5 pb-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id={`stage-${stage.stage}`} className="flex items-center gap-2 text-sm font-semibold text-fg">
+            <StageDot stage={stage.stage} />
             {stage.label}
           </h2>
-          {!closed ? <span className="text-xs text-muted-foreground figures">{stage.probability}%</span> : null}
+          {!closed ? (
+            <span className="rounded-full border border-line-2 px-1.5 text-xs leading-5 text-fg-3 figures">
+              {stage.probability}%
+            </span>
+          ) : null}
         </div>
-        <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+        <div className="flex items-baseline justify-between gap-2 text-xs text-fg-3">
           <span className="figures" data-testid="column-count">
             {formatNumber(deals.length)} {deals.length === 1 ? "deal" : "deals"}
           </span>
-          <Money cents={total} compact className="font-medium text-foreground" />
+          <Money
+            cents={total}
+            compact
+            className={cn("font-medium", stage.stage === "won" ? "text-accent" : "text-fg-1")}
+          />
         </div>
       </header>
       <SortableContext id={columnId(stage.stage)} items={deals.map((d) => d.id)} strategy={verticalListSortingStrategy}>
-        <ol ref={setNodeRef} className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+        <ol ref={setNodeRef} className="flex min-h-24 flex-1 scroll-thin flex-col gap-2 overflow-y-auto px-2 pb-2">
           {deals.map((deal) => (
             <SortableDealCard key={deal.id} deal={deal} canMove={canMove(deal)} />
           ))}
           {deals.length === 0 ? (
-            <li className="flex flex-1 items-center justify-center rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+            <li className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-2 px-3 py-8 text-center text-xs text-fg-3">
               {stage.stage === "lost" ? "Drop a deal here to mark it lost" : "No deals in this stage"}
             </li>
           ) : null}
@@ -220,10 +241,10 @@ function BoardSkeleton() {
   return (
     <div className="flex gap-3 overflow-hidden" aria-busy="true">
       {DEAL_STAGES.map((s) => (
-        <div key={s.stage} className="flex w-[17rem] shrink-0 flex-col gap-2 rounded-lg border bg-muted/45 p-2">
-          <Skeleton className="h-10" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
+        <div key={s.stage} className="flex w-[17.5rem] shrink-0 flex-col gap-2 rounded-2xl border bg-ink-1/50 p-2">
+          <Skeleton className="h-12 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
         </div>
       ))}
     </div>
@@ -353,7 +374,7 @@ export function DealsBoardView() {
           openTotal ? (
             <>
               {formatNumber(openTotal.count)} open {openTotal.count === 1 ? "deal" : "deals"} worth{" "}
-              <Money cents={openTotal.amount} className="text-foreground" />. Drag a card to change its stage.
+              <Money cents={openTotal.amount} className="font-medium text-fg" />. Drag a card to change its stage.
             </>
           ) : (
             "Your pipeline by stage"
@@ -364,6 +385,7 @@ export function DealsBoardView() {
             <OwnerFilter value={ownerId} onChange={(owner) => url.set({ owner })} currentUserId={me.data?.id} />
             <Can I="create" a="Deal">
               <DealFormDialog
+                openOnCreateIntent
                 trigger={
                   <Button>
                     <PlusIcon data-icon="inline-start" />
@@ -397,7 +419,7 @@ export function DealsBoardView() {
           }}
         >
           <div
-            className="-mx-4 flex h-[calc(100svh-11.75rem)] min-h-96 gap-3 overflow-x-auto px-4 pb-3 lg:-mx-8 lg:px-8"
+            className="-mx-4 flex h-[calc(100svh-12.5rem)] min-h-[26rem] scroll-thin gap-3 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:h-[calc(100svh-13.5rem)] lg:px-8"
             role="region"
             aria-label="Deal board"
           >
@@ -412,7 +434,7 @@ export function DealsBoardView() {
           </div>
           <DragOverlay dropAnimation={{ duration: 160, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
             {activeDeal ? (
-              <div className="w-[16rem] cursor-grabbing" data-testid="deal-drag-overlay">
+              <div className="w-[16.5rem] cursor-grabbing" data-testid="deal-drag-overlay">
                 <DealCardBody deal={activeDeal} dragging />
               </div>
             ) : null}

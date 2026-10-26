@@ -55,6 +55,19 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L6
+    assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+}
+
+/// Opt-in ecosystem crates are re-exported whole behind their feature
+/// (`cargo test -p navree --features oauth --test facade`).
+#[cfg(feature = "oauth")]
+#[test]
+fn opt_in_crates_are_reexported_with_their_feature() {
+    assert!(same::<navree::oauth::OAuthServerModule, OAuthServerModule>());
+    assert!(same::<navree::oauth::OAuthToken, OAuthToken>());
+    let (verifier, challenge) = navree::oauth::testing::pkce_pair();
+    assert_eq!(navree::oauth::pkce_challenge(&verifier), challenge);
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -362,9 +375,10 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`), and ecosystem packages an app turns on
-/// itself (`features = ["search"]`).
-const OPT_IN: &[&str] = &["dock", "search"];
+/// runtime never needs (`dock`), and ecosystem libraries and packages an
+/// app turns on by name (`features = ["social"]`, `features = ["oauth"]`,
+/// `features = ["flags"]`, `features = ["search"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "search"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
@@ -397,4 +411,23 @@ fn dock_is_reexported_with_its_feature() {
     let file = navree::dock::DockFile::parse("[services.redis]\n", "shop").unwrap();
     assert_eq!(navree::dock::DOCK_FILE, "dock.toml");
     assert_eq!(file.env()[0].1, "redis://127.0.0.1:6379");
+}
+
+/// The opt-in ecosystem libraries are re-exported whole too.
+#[cfg(feature = "social")]
+#[test]
+fn opt_in_libraries_are_reexported_whole() {
+    assert!(same::<navree::social::SocialModule, SocialModule>());
+    let (_social, _fake): (navree::social::Social, navree::social::SocialFake) =
+        navree::social::Social::fake();
+}
+
+/// `navree::flags` is navree-flags re-exported whole, and the `flags`
+/// feature puts its module and extractor in the prelude
+/// (`cargo test -p navree --features flags`).
+#[cfg(feature = "flags")]
+#[test]
+fn flags_is_reexported_with_its_feature() {
+    assert!(same::<navree::flags::FlagsModule, FlagsModule>());
+    assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
 }

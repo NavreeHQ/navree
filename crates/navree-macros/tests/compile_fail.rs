@@ -47,6 +47,11 @@ fn searchable_reports_misuse() {
 }
 
 #[test]
+fn flag_reports_misuse() {
+    trybuild::TestCases::new().compile_fail("tests/ui/flag/*.rs");
+}
+
+#[test]
 fn bad_duration_is_error() {
     trybuild::TestCases::new().compile_fail("tests/ui/bad_duration_is_error.rs");
 }

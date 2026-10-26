@@ -48,6 +48,10 @@ navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
 navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
 navree-dock = { path = "crates/navree-dock", version = "0.1.0" }
+navree-social = { path = "crates/navree-social", version = "0.1.0" }
+navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
+navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
+navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-search = { path = "crates/navree-search", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
@@ -177,8 +181,15 @@ argon2 = "0.6.0"
 password-hash = { version = "0.6.1", features = ["alloc", "getrandom"] }
 hmac = "0.13.0"
 sha2 = "0.11.1"
+# HMAC-SHA1 for incoming webhook sources that still sign with SHA-1.
+sha1 = "0.11.0"
 subtle = "2.6.1"
+# JWS signatures (navree-social: RS256/ES256 ID tokens, the ES256 client secret
+# of Sign in with Apple). Already in the tree through rustls.
+ring = "0.17.14"
 rand = "0.10.3"
+# Ed25519 signatures (navree-oauth's OpenID Connect ID tokens), pure Rust.
+ed25519-dalek = "3.0.0"
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
 qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
 # JWT access tokens (navree-auth): no crypto backend feature and no PEM parsing.
@@ -234,7 +245,8 @@ tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
 proptest = "1.12.0"
-# Local HTTP mock servers for the search engines' REST clients.
+# HTTP mock servers for provider integrations (navree-social) and the
+# search engines' REST clients (navree-search).
 wiremock = "0.6.5"
 
 # Keep debug info small: less memory, faster links (many agents build at once).

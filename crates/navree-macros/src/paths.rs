@@ -32,6 +32,13 @@ pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
     facade_module: "access",
 };
 
+/// navree-flags: `Flag` (`#[flag]`) and `requires_flag`
+/// (`#[requires_flag(NewPipeline)]`).
+pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {
+    package: "navree-flags",
+    facade_module: "flags",
+};
+
 /// navree-search: `Searchable`, `IndexSettings`, `Document`
 /// (`#[derive(Searchable)]`).
 pub(crate) const SEARCH: RuntimeCrate = RuntimeCrate {

@@ -63,7 +63,7 @@ function GuideLink({ href, children }: { href: string; children: ReactNode }) {
 const number = (i: number) => String(i + 1).padStart(2, "0");
 
 /** The page's backdrop, from the generated image series (public/images/generated). */
-const hero = { src: "/images/generated/hero-archipelago.webp", width: 1584, height: 672 };
+const hero = { src: "/images/generated/hero-archipelago.webp", width: 3200, height: 1358 };
 
 function Hero() {
   return (

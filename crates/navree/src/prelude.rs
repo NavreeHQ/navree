@@ -84,11 +84,23 @@ pub use navree_validation::{Valid, ValidAsync, ValidationModule};
 #[cfg(feature = "auth")]
 pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt as _};
 
+#[cfg(feature = "flags")]
+pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
+
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow,
 };
+
+#[cfg(feature = "webhooks")]
+pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
+
+#[cfg(feature = "social")]
+pub use navree_social::SocialModule;
+
+#[cfg(feature = "oauth")]
+pub use navree_oauth::{OAuthServerModule, OAuthToken};
 
 #[cfg(feature = "search")]
 pub use navree_search::SearchModule;

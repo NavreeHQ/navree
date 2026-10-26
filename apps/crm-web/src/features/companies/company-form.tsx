@@ -11,6 +11,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { nullable, SelectField, TextField } from "@/components/form-fields";
 import { UserSelect } from "@/components/record-pickers";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { Company, CompanyInput, CompanySize, CompanyUpdateInput } from "@/lib/api/types";
 import { COMPANY_SIZES } from "@/lib/api/types";
@@ -73,7 +74,16 @@ function toValues(company?: Company): Values {
 }
 
 /** Create or edit a company. Owner can only be chosen by people who manage companies. */
-export function CompanyFormDialog({ company, trigger }: { company?: Company; trigger: ReactNode }) {
+export function CompanyFormDialog({
+  company,
+  trigger,
+  openOnCreateIntent,
+}: {
+  company?: Company;
+  trigger: ReactNode;
+  /** Open when the command menu asks for a new company (set on one dialog per screen). */
+  openOnCreateIntent?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const ability = useAbility<AppAbility>();
@@ -86,6 +96,7 @@ export function CompanyFormDialog({ company, trigger }: { company?: Company; tri
     if (next) form.reset(toValues(company));
     setOpen(next);
   };
+  useCreateIntent(openOnCreateIntent && !company ? "company" : undefined, () => onOpenChange(true));
 
   const onSubmit = form.handleSubmit((values) => {
     // Valid for both POST and PATCH (PATCH takes no null owner_id).

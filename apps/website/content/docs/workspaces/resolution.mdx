@@ -77,6 +77,10 @@ base_domain = "app.example.com"
 
 The default is `["header", "path", "subdomain", "claim"]`. From the environment, use a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. A list with an unknown resolver or the same resolver twice fails the boot.
 
+### Pinned credentials
+
+A credential can belong to one workspace, such as a token of an [OAuth client](/docs/packages/oauth-server/) created with `--workspace`. Its authentication strategy puts a `PinnedWorkspace(id)` in the request extensions. A pinned request that names no workspace resolves to the pinned one, and a request that names another one, through a resolver or a route's path parameter, gets a 403 `This token is limited to another workspace.` The membership check still applies. A custom strategy can pin its credentials the same way: `parts.extensions.insert(PinnedWorkspace(workspace_id))`.
+
 ## `CurrentWorkspace`
 
 Take `CurrentWorkspace` in a handler to get the resolved workspace and the user's membership. It dereferences to the workspace row, so `ws.name` and `ws.slug` work directly:
@@ -134,6 +138,7 @@ The guard and the extractor answer in Navree's JSON error shape:
 | No resolver found a workspace | 400 | `The request names no workspace.` |
 | No workspace with that slug or id | 404 | `Workspace not found.` |
 | The user is not a member | 403 | `You are not a member of this workspace.` |
+| A pinned credential names another workspace | 403 | `This token is limited to another workspace.` |
 
 ```json title="400 Bad Request"
 { "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request" }

@@ -1,11 +1,9 @@
 "use client";
 
 import { useAbility } from "@casl/react";
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { roleLabel } from "@/components/app-shell/user-menu";
 import { DetailRow, Panel } from "@/components/page-header";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { UserAvatar } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import type { AppAbility, AppAction } from "@/lib/casl/ability";
@@ -20,6 +18,12 @@ const PERMISSION_ROWS: { subject: SubjectName; label: string }[] = [
   { subject: "Activity", label: "Activities and tasks" },
   { subject: "User", label: "Users" },
 ];
+
+const SHORTCUTS = [
+  { label: "Open the command menu", keys: ["Ctrl", "K"] },
+  { label: "Move a focused deal card", keys: ["Space", "Arrows"] },
+  { label: "Close a dialog or menu", keys: ["Esc"] },
+] as const;
 
 /** Summarises what the current rules allow, so people know why a button is missing. */
 function AccessSummary() {
@@ -52,7 +56,6 @@ function AccessSummary() {
 
 export function GeneralSettings() {
   const me = useCurrentUser();
-  const { theme, setTheme } = useTheme();
   const user = me.data;
   if (!user) return null;
 
@@ -75,31 +78,25 @@ export function GeneralSettings() {
         </dl>
         <p className="mt-3 text-xs text-muted-foreground">Ask an admin to change your name or role.</p>
       </Panel>
-      <Panel title="Appearance">
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">Choose how Navree looks on this device.</p>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={theme ?? "system"}
-            onValueChange={(v) => v && setTheme(v)}
-            aria-label="Theme"
-            className="self-start"
-          >
-            <ToggleGroupItem value="light" className="gap-1.5 px-3">
-              <SunIcon />
-              Light
-            </ToggleGroupItem>
-            <ToggleGroupItem value="dark" className="gap-1.5 px-3">
-              <MoonIcon />
-              Dark
-            </ToggleGroupItem>
-            <ToggleGroupItem value="system" className="gap-1.5 px-3">
-              <MonitorIcon />
-              Match system
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
+      <Panel title="Keyboard">
+        <dl>
+          {SHORTCUTS.map((shortcut) => (
+            <div
+              key={shortcut.label}
+              className="flex items-center justify-between gap-4 py-1.5 text-sm [&:not(:first-child)]:border-t"
+            >
+              <dt className="text-fg-1">{shortcut.label}</dt>
+              <dd>
+                <KbdGroup>
+                  {shortcut.keys.map((key) => (
+                    <Kbd key={key}>{key}</Kbd>
+                  ))}
+                </KbdGroup>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-xs text-muted-foreground">On a Mac, use Cmd instead of Ctrl.</p>
       </Panel>
       <Panel title="What you can do">
         <AccessSummary />

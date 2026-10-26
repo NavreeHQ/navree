@@ -109,6 +109,9 @@ navree list                                 # every command of the app
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
+| Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
+| Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
+| Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
 | Search box, command palette, indexes, Meilisearch/Typesense/Tantivy, vector search | `navree-search` |
 
 ## Common mistakes

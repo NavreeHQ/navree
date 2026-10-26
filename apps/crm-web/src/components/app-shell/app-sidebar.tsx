@@ -42,8 +42,9 @@ const WORK = [
   { href: "/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const;
 
-/** Active item: a shoal-tint rule on the left edge, echoing the stage depth ramp. */
-const ACTIVE_MARK = "data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]";
+/** The current page carries the green running light: a rule on the left edge and a green icon. */
+const ACTIVE_MARK =
+  "text-fg-2 [&>svg]:text-fg-3 data-[active=true]:shadow-[inset_2px_0_0_var(--color-accent)] data-[active=true]:[&>svg]:text-accent";
 
 export function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
@@ -59,17 +60,14 @@ export function AppSidebar({ user }: { user: User }) {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="h-14 justify-center px-3">
-        <Link
-          href="/"
-          onClick={closeMobile}
-          className="flex items-center rounded-md px-1 text-sidebar-accent-foreground"
-        >
+      <SidebarHeader className="h-(--header-h) justify-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:px-2">
+        <Link href="/" onClick={closeMobile} aria-label="Navree CRM home" className="flex items-center rounded-md px-1">
           <NavreeWordmark className="group-data-[collapsible=icon]:[&>span]:hidden" />
         </Link>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="scroll-thin pt-2">
         <SidebarGroup>
+          <SidebarGroupLabel>Sales</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {WORK.map(({ href, label, icon: Icon }) => (
@@ -137,7 +135,8 @@ export function AppSidebar({ user }: { user: User }) {
       </SidebarContent>
       {env.mocks ? (
         <SidebarFooter className="px-3 pb-3 group-data-[collapsible=icon]:hidden">
-          <p className="rounded-md border border-sidebar-border px-2.5 py-2 text-xs leading-snug text-sidebar-foreground/75">
+          <p className="flex gap-2 rounded-lg border border-line-2 bg-ink-2/60 px-3 py-2.5 text-xs leading-snug text-fg-2">
+            <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-amber" />
             Demo data from the mock API. Changes last until you close this tab.
           </p>
         </SidebarFooter>

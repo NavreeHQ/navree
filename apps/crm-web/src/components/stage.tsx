@@ -12,23 +12,28 @@ export function stageStyle(stage: DealStage): CSSProperties {
   return { "--stage": stageVar(stage) } as CSSProperties;
 }
 
+/** A small running light in the stage's color (a won deal glows). */
 export function StageDot({ stage, className }: { stage: DealStage; className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-block size-2 shrink-0 rounded-[2px]", className)}
+      className={cn(
+        "inline-block size-2 shrink-0 rounded-full",
+        stage === "won" && "shadow-[0_0_8px_rgb(61_255_143/0.7)]",
+        className,
+      )}
       style={{ backgroundColor: stageVar(stage) }}
     />
   );
 }
 
-/** Squared tag (like a chart label) tinted with the stage's depth colour. */
+/** A pill tinted with the stage's color, with its light and its name. */
 export function StageBadge({ stage, className }: { stage: DealStage; className?: string }) {
   return (
     <span
       style={stageStyle(stage)}
       className={cn(
-        "inline-flex h-5 items-center gap-1.5 rounded-[4px] stage-wash px-1.5 text-xs font-medium whitespace-nowrap text-foreground",
+        "inline-flex h-[1.375rem] items-center gap-1.5 rounded-full border border-[color-mix(in_oklab,var(--stage)_30%,transparent)] stage-wash px-2 text-xs font-medium whitespace-nowrap text-fg",
         className,
       )}
     >

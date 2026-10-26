@@ -34,7 +34,9 @@ interface SharpImage {
 }
 const sharp = createRequire(createRequire(import.meta.url).resolve("next/package.json"))("sharp") as (input: Buffer | string) => SharpImage;
 
-const MODEL = process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-lite-image";
+const MODEL = process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image";
+// "1K", "2K" or "4K": the size the model renders at, before the WebP resize.
+const IMAGE_SIZE = process.env.GEMINI_IMAGE_SIZE ?? "4K";
 const API = "https://generativelanguage.googleapis.com/v1beta";
 const args = process.argv.slice(2);
 const FORCE = args.includes("--force");
@@ -72,7 +74,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-lighthouse",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A minimal black lighthouse casting a green beam across the dark",
     subject:
       "A sleek, minimal lighthouse tower sculpted from matte black ceramic, standing on a small black rock. Its lamp room is smoked glass and emits one sharp, thin neon green beam that cuts diagonally across the darkness. Centered, seen from a low three-quarter angle.",
@@ -80,7 +82,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-fleet",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "Five small black vessels in precise formation with green running lights",
     subject:
       "Five small, minimal, abstract vessels of matte black metal moving in a precise V formation across a perfectly still black reflective surface, seen from slightly above. Each vessel has one thin neon green running light along its deck line, reflected in the water.",
@@ -88,7 +90,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-harbor",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A black gantry crane lowering a glowing green cube onto a pier",
     subject:
       "A minimal harbor gantry crane of black anodized aluminium lowering a single glowing neon green glass cube onto the end of a black stone pier. Precise industrial design, centered, three-quarter view.",
@@ -96,7 +98,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-helm",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A precision-machined black ship's wheel with a thin green light ring",
     subject:
       "A ship's helm wheel reimagined as a precision-machined object: black anodized aluminium hub and eight spokes, with a thin neon green light ring set into the rim. Floating slightly tilted toward the viewer.",
@@ -104,7 +106,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-logbook",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A closed black leather logbook with a glowing green ribbon",
     subject:
       "A closed, hardbound logbook in black leather lying at an angle on a black obsidian surface, with a glowing neon green silk ribbon bookmark trailing out of its pages. The cover is completely blank.",
@@ -112,7 +114,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-dock",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A neat grid of black containers on a dock, one lit green from within",
     subject:
       "A neat three-by-three grid of small matte black shipping-container shapes on a black dock, seen from an isometric angle above. One container in the grid glows softly neon green from within. The container sides are plain, with no markings.",
@@ -120,7 +122,7 @@ const BRIEFS: Brief[] = [
   {
     key: "tool-navigator",
     ratio: "1:1",
-    width: 1024,
+    width: 2048,
     alt: "A black titanium compass with a glowing green needle",
     subject:
       "A precision navigation compass of black titanium and smoked glass resting on a black obsidian surface, its slim needle glowing neon green. The dial is perfectly plain, with no marks, numbers or letters.",
@@ -129,7 +131,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-hull",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "The bow of a sleek black hull in still dark water, its edge traced by green light",
     subject:
       "The bow of a sleek, minimal, modern black yacht hull seen in profile at water level, emerging from darkness on the right side of the frame. One continuous thin neon green light line traces the hull's upper edge from the bow backward and is mirrored in the perfectly still black water. Only the hull and its reflection; no masts, no railings, no structures, nothing below the waterline shown. The left half of the frame is calm empty darkness.",
@@ -137,7 +139,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-archipelago",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "Black modular islands linked by thin bridges of green light",
     subject:
       "Seen from high above at night: an archipelago of small, precise, modular black islands of different sizes on black water, connected by thin straight bridges of neon green light, forming a clear network. The network sits in the right two-thirds of the frame; the left side is empty darkness.",
@@ -145,7 +147,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-constellation",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "Green star points joined into a navigation route across a black sky",
     subject:
       "A black night sky with a few dozen tiny neon green star points joined by hair-thin green lines into a calm navigation route that curves from the lower left to the upper right, like a ship's course plotted across the stars. Very sparse and elegant. Only the stars and the lines on pure black: no planets, no horizon, no curves of any object, no ships, no text, no symbols.",
@@ -153,7 +155,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-wake",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "A black hull cutting through still water, leaving a wake of green light",
     subject:
       "A long exposure of a sleek black hull moving fast across perfectly still black water, seen from above at an angle, leaving a crisp V-shaped wake of neon green light behind it. The hull is in the right third of the frame; the wake trails toward the left.",
@@ -161,7 +163,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-rooms",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "A row of black glass rooms, each softly lit, one glowing green",
     subject:
       "An isometric row of identical small rooms made of black smoked glass, separated by thin walls, like cells in a precise structure. Each room is softly lit from inside with faint cool light; exactly one room glows neon green. The row recedes from the right side toward the center; the left side is empty darkness.",
@@ -169,7 +171,7 @@ const BRIEFS: Brief[] = [
   {
     key: "hero-harbor",
     ratio: "21:9",
-    width: 1584,
+    width: 3200,
     alt: "A minimal harbor at night with vessels in their berths and a green lighthouse beam",
     subject:
       "A minimal harbor at night seen from high above: piers drawn as fine black lines on black water, vessels of different sizes resting in orderly berths, and one small lighthouse on the breakwater sweeping a thin neon green beam across the water. Composition weighted to the right; the left side calm and empty.",
@@ -179,7 +181,7 @@ const BRIEFS: Brief[] = [
 function request(brief: Brief) {
   return {
     contents: [{ role: "user", parts: [{ text: `${brief.subject}\n\n${STYLE}` }] }],
-    generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: brief.ratio } },
+    generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: brief.ratio, imageSize: IMAGE_SIZE } },
   };
 }
 
@@ -221,7 +223,7 @@ async function save(brief: Brief, image: Buffer) {
   fs.mkdirSync(rawDir, { recursive: true });
   fs.writeFileSync(path.join(rawDir, `${brief.key}.png`), image);
   const file = path.join(outDir, `${brief.key}.webp`);
-  await sharp(image).resize({ width: brief.width, withoutEnlargement: true }).webp({ quality: 82, effort: 6 }).toFile(file);
+  await sharp(image).resize({ width: brief.width, withoutEnlargement: true }).webp({ quality: 86, effort: 6 }).toFile(file);
   console.log(`saved ${path.relative(root, file)} (${Math.round(fs.statSync(file).size / 1024)} KB)`);
 }
 

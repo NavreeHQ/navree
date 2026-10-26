@@ -9,7 +9,7 @@ use syn::{FnArg, Ident, ImplItem, ImplItemFn, Item, ItemImpl, Lit, LitStr, Recei
 
 use crate::attr::Errors;
 use crate::path;
-use crate::paths::{ACCESS, HTTP};
+use crate::paths::{ACCESS, FLAGS, HTTP};
 use crate::route::{Api, Can, Name, Route, RouteAttrs, Site};
 
 /// Expands `#[controller(args)] impl X { .. }`.
@@ -163,6 +163,8 @@ struct Paths {
     http: TokenStream,
     /// navree-access, needed for `#[can]` with marker types.
     access: Option<TokenStream>,
+    /// navree-flags, needed for `#[requires_flag]`.
+    flags: Option<TokenStream>,
 }
 
 impl Paths {
@@ -180,7 +182,18 @@ impl Paths {
             Some((_, at)) => Some(ACCESS.path(at.span())?),
             None => None,
         };
-        Ok(Paths { http, access })
+        let flagged = routes
+            .iter()
+            .find_map(|route| route.attrs.requires_flag.as_ref());
+        let flags = match flagged {
+            Some(requires) => Some(FLAGS.path(requires.at.span())?),
+            None => None,
+        };
+        Ok(Paths {
+            http,
+            access,
+            flags,
+        })
     }
 }
 
@@ -445,6 +458,20 @@ fn route_def(route: &RouteFn, paths: &Paths) -> TokenStream {
     });
     let options = options(&route.attrs);
     let api = route.attrs.api.as_ref().map(|api| api_call(api, http));
+    let mut def = quote! {
+        #http::RouteDef::on(#method_var, #path, move |#(#params),*| async move {
+            Self::#ident(&*#this, #(#args),*).await
+        })
+        #access
+    };
+    // The flag's guard goes first, so the route "does not exist" before
+    // any other guard runs.
+    if let (Some(requires), Some(flags)) = (&route.attrs.requires_flag, &paths.flags) {
+        let (flag, status) = (&requires.flag, requires.status);
+        def = quote_spanned! {flag.span()=>
+            #flags::requires_flag::<#flag>(#def, #status)
+        };
+    }
     quote! {
         {
             // `http::Method` without naming the `http` crate: inferred from
@@ -454,10 +481,7 @@ fn route_def(route: &RouteFn, paths: &Paths) -> TokenStream {
                 ::core::result::Result::Err(_) => ::core::unreachable!(),
             };
             let #this = ::std::sync::Arc::clone(&self);
-            #http::RouteDef::on(#method_var, #path, move |#(#params),*| async move {
-                Self::#ident(&*#this, #(#args),*).await
-            })
-            #access
+            #def
             #(#guards)*
             #options
             #api

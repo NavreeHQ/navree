@@ -174,6 +174,14 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentWorkspace {
     }
 }
 
+/// A request extension that limits the request to one workspace: set by an
+/// authentication strategy whose credential belongs to a workspace (an
+/// OAuth client created for one workspace). When the request names no
+/// workspace, [`CurrentWorkspace`] and [`InWorkspace`] use this one; when
+/// it names another, they answer 403.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PinnedWorkspace(pub Uuid);
+
 /// Where a request's workspace identifier comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Source {
@@ -205,16 +213,24 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         .get::<WorkspaceConfig>()
         .await
         .map_err(|_| AppError::internal("CurrentWorkspace needs WorkspaceModule in the app"))?;
+    let pinned = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
     let (resolver, identifier) = match source {
         Source::Configured => {
             resolve::identifier(&config, parts).map(|(kind, identifier)| (Some(kind), identifier))
         }
         Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
     }
+    // A pinned credential names its workspace when the request doesn't.
+    .or_else(|| pinned.map(|id| (None, id.to_string())))
     .ok_or(WorkspaceError::NoWorkspace)
     .map_err(app_error)?;
     let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
     let workspace = workspaces.resolve(&identifier).await.map_err(app_error)?;
+    if pinned.is_some_and(|pin| pin != workspace.id) {
+        return Err(
+            AppError::forbidden().with_detail("This token is limited to another workspace.")
+        );
+    }
     let member = workspaces
         .membership(workspace.id, principal.user_id)
         .await

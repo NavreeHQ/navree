@@ -10,7 +10,7 @@
 //!   ViewModule for MailModule). This covers `navree-testing` (L3) for every
 //!   crate in layer 4 or above.
 //! - `navree-macros` tests expand the macros against the runtime crates, so
-//!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 5).
+//!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 7).
 //!
 //! It also checks the external side of the graph: `Cargo.lock` must not contain
 //! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only).
@@ -39,9 +39,10 @@ const fn rule(krate: &'static str, layer: u8, allowed: &'static [&'static str]) 
     }
 }
 
-/// Spec §3, "Allowed runtime dependency edges", the ecosystem layers (L6 and
-/// L7, build plan §3), the entry points (L8) and the app layers (L9 and up)
-/// whose crates may use anything below them. Kept one row per crate.
+/// Spec §3, "Allowed runtime dependency edges", the ecosystem layers of the
+/// ecosystem build plan (§3: L6 libraries, L7 packages built on them, L8 the
+/// entry points), and the app layers (L9 and up) whose crates may use
+/// anything below them. Kept one row per crate, like the spec.
 #[rustfmt::skip]
 const HIERARCHY: &[Rule] = &[
     // L0
@@ -90,7 +91,39 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access",
     ]),
-    // L6: ecosystem libraries (none yet in this crate set).
+    // L6: ecosystem libraries (ecosystem build plan §3).
+    // Social sign-in: links provider accounts to navree-auth users and
+    // issues their tokens.
+    rule("navree-social", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
+        "navree-auth",
+    ]),
+    // Webhooks: signed outgoing deliveries through the queue (a job
+    // dispatcher from navree-contracts) and the HTTP client, endpoints in the
+    // database, routes scoped to the request's workspace.
+    rule("navree-webhooks", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
+        "navree-workspace",
+    ]),
+    // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
+    // access tokens for navree-auth users, scopes mapped to navree-access
+    // permissions, workspace-limited clients.
+    rule("navree-oauth", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-db", "navree-access", "navree-auth", "navree-workspace",
+        // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+        "navree-testing",
+    ]),
+    // Feature flags: user ids come from the request's `Principal`; navree-auth
+    // only gives `From<&User> for FlagScope` (the crate's default `auth`
+    // feature).
+    rule("navree-flags", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
+        "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
+        "navree-workspace",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -99,11 +132,11 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-http-client", "navree-db", "navree-queue", "navree-access", "navree-workspace",
     ]),
-    // L8
+    // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`.
     rule("navree-cli", 8, &["navree-dock"]),
-    // L9+ (apps): anything below, except the CLI binary.
+    // L9 and up (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
     // of the crates above it); the feature crates build on crm-core; the
@@ -159,6 +192,10 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-auth",
     "navree-workspace",
+    "navree-social",
+    "navree-webhooks",
+    "navree-oauth",
+    "navree-flags",
     "navree-search",
 ];
 
