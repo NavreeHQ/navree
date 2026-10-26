@@ -295,3 +295,73 @@ async fn run_with_args_registers_each_module_once() {
         );
     }
 }
+
+/// Records what `AppContext::command` reports while booting and running.
+struct InvocationProbe {
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+impl Module for InvocationProbe {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let at_boot = self.seen.clone();
+        m.factory(Factory::<Expensive>::new(move |r| {
+            let at_boot = at_boot.clone();
+            async move {
+                let command = r
+                    .app()
+                    .command()
+                    .map(|c| format!("boot {} {}", c.name, c.stdio));
+                at_boot
+                    .lock()
+                    .unwrap()
+                    .push(command.unwrap_or_else(|| "boot none".to_owned()));
+                Ok::<_, BoxError>(Arc::new(Expensive))
+            }
+        }));
+        for (name, stdio) in [("plain", false), ("protocol", true)] {
+            let seen = self.seen.clone();
+            let spec = CommandSpec::new(name, "probe", move |ctx, _args| {
+                let seen = seen.clone();
+                async move {
+                    let command = ctx.command().expect("the running command");
+                    seen.lock()
+                        .unwrap()
+                        .push(format!("run {} {}", command.name, command.stdio));
+                    Ok(())
+                }
+            });
+            m.command(if stdio { spec.stdio() } else { spec });
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_running_command_is_known_from_boot_on() {
+    for (command, expected) in [
+        ("plain", ["boot plain false", "run plain false"]),
+        ("protocol", ["boot protocol true", "run protocol true"]),
+    ] {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        Navree::app()
+            .module(InvocationProbe { seen: seen.clone() })
+            .run_with_args(args(&[command]))
+            .await
+            .expect("command runs");
+        assert_eq!(*seen.lock().unwrap(), expected);
+    }
+
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let app = Navree::app()
+        .module(InvocationProbe { seen: seen.clone() })
+        .boot()
+        .await
+        .expect("boot");
+    assert!(app.ctx().command().is_none(), "a plain boot runs no command");
+    assert_eq!(*seen.lock().unwrap(), ["boot none"]);
+}
+
+#[test]
+fn commands_do_not_own_stdout_unless_marked() {
+    assert!(!noop("x").stdio);
+    assert!(noop("x").stdio().stdio);
+}

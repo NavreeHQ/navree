@@ -124,6 +124,7 @@ impl TestClient {
             method,
             path: path.to_owned(),
             headers: http::HeaderMap::new(),
+            without: Vec::new(),
             body: Bytes::new(),
         }
     }
@@ -215,6 +216,8 @@ pub struct TestRequest {
     method: Method,
     path: String,
     headers: http::HeaderMap,
+    /// Headers left out, defaults included ([`TestRequest::without_header`]).
+    without: Vec<HeaderName>,
     body: Bytes,
 }
 
@@ -297,7 +300,29 @@ impl TestRequest {
         let value = value
             .try_into()
             .unwrap_or_else(|error| panic!("invalid value for header `{name}`: {error}"));
+        self.without.retain(|left_out| *left_out != name);
         self.headers.insert(name, value);
+        self
+    }
+
+    /// Leaves header `name` out of the request: a default (`Accept`,
+    /// `Origin`) or one set earlier. A later [`header`](TestRequest::header)
+    /// with the same name sends it again. Clients that are not browsers (an
+    /// MCP client, a webhook sender) send no `Origin`, for example.
+    ///
+    /// # Panics
+    ///
+    /// When `name` is not a valid header name.
+    pub fn without_header<K>(mut self, name: K) -> Self
+    where
+        K: TryInto<HeaderName>,
+        K::Error: std::fmt::Display,
+    {
+        let name = name
+            .try_into()
+            .unwrap_or_else(|error| panic!("invalid header name: {error}"));
+        self.headers.remove(&name);
+        self.without.push(name);
         self
     }
 
@@ -326,12 +351,31 @@ impl TestRequest {
 
     /// Sends the request through the app's router, stores the cookies the
     /// response sets and collects the whole body (so not for endless
-    /// streams such as server-sent events).
+    /// streams such as server-sent events: use
+    /// [`send_stream`](TestRequest::send_stream)).
     ///
     /// # Panics
     ///
     /// When the path is not a valid URI or the response body fails.
     pub async fn send(self) -> TestResponse {
+        let (parts, body) = self.send_stream().await.into_parts();
+        let body = body
+            .collect()
+            .await
+            .expect("the response body is readable")
+            .to_bytes();
+        TestResponse::from_parts(parts.status, parts.headers, body)
+    }
+
+    /// Sends the request like [`send`](TestRequest::send), storing the
+    /// cookies the response sets, but returns the response with its body
+    /// unread, for streams such as server-sent events (read it with
+    /// `http_body_util::BodyExt`).
+    ///
+    /// # Panics
+    ///
+    /// When the path is not a valid URI.
+    pub async fn send_stream(self) -> http::Response<Body> {
         let mut request = Request::builder()
             .method(self.method)
             .uri(&self.path)
@@ -346,6 +390,9 @@ impl TestRequest {
             && !headers.contains_key(ORIGIN)
         {
             headers.insert(ORIGIN, origin.clone());
+        }
+        for name in &self.without {
+            headers.remove(name);
         }
         let path = request.uri().path().to_owned();
         if let Some(cookies) = self.client.jar().header_for(&path) {
@@ -371,21 +418,15 @@ impl TestRequest {
             .oneshot(request)
             .await
             .unwrap_or_else(|never| match never {});
-        let (parts, body) = response.into_parts();
         {
             let mut jar = self.client.jar();
-            for set_cookie in parts.headers.get_all(SET_COOKIE) {
+            for set_cookie in response.headers().get_all(SET_COOKIE) {
                 if let Ok(set_cookie) = set_cookie.to_str() {
                     jar.store(&path, set_cookie);
                 }
             }
         }
-        let body = body
-            .collect()
-            .await
-            .expect("the response body is readable")
-            .to_bytes();
-        TestResponse::from_parts(parts.status, parts.headers, body)
+        response
     }
 }
 

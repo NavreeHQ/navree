@@ -82,7 +82,7 @@ impl AppBuilder {
     /// order), then runs `on_init` and `on_bootstrap` hooks.
     pub async fn boot(self) -> Result<App, BootErrors> {
         let graph = self.graph()?;
-        self.boot_graph(graph).await
+        self.boot_graph(graph, None).await
     }
 
     /// Walks and validates the modules (calls every `register` once).
@@ -90,9 +90,18 @@ impl AppBuilder {
         Graph::build(&self.modules, &self.overrides)
     }
 
-    /// Boots from an already validated graph, so `register` is not called again.
-    async fn boot_graph(self, graph: Graph) -> Result<App, BootErrors> {
-        let ctx = AppContext::from_inner(Arc::new(AppInner::new(graph, self.shutdown.clone())));
+    /// Boots from an already validated graph, so `register` is not called
+    /// again; `command` is the command the app is booted to run.
+    async fn boot_graph(
+        self,
+        graph: Graph,
+        command: Option<CommandSpec>,
+    ) -> Result<App, BootErrors> {
+        let ctx = AppContext::from_inner(Arc::new(AppInner::new(
+            graph,
+            self.shutdown.clone(),
+            command,
+        )));
         match ctx.start().await {
             Ok(hooks) => {
                 tracing::debug!(modules = ctx.inner.graph.modules.len(), "navree app booted");
@@ -187,10 +196,10 @@ impl AppBuilder {
         name: String,
         args: Vec<String>,
     ) -> Result<(), BoxError> {
-        if !graph.has_command(&name) {
+        let Some(command) = graph.commands().find(|c| c.name == name).cloned() else {
             return Err(KernelError::UnknownCommand { name }.into());
-        }
-        let app = self.boot_graph(graph).await?;
+        };
+        let app = self.boot_graph(graph, Some(command)).await?;
         let result = app.run_command(&name, args).await;
         let shutdown = app.shutdown().await;
         result.and(shutdown)
@@ -471,6 +480,15 @@ impl AppContext {
     /// Every registered command, modules in dependency order.
     pub fn commands(&self) -> Vec<CommandSpec> {
         self.inner.graph.commands().cloned().collect()
+    }
+
+    /// The command this app was booted to run by
+    /// [`AppBuilder::run_with_args`] (or [`AppBuilder::run`]), known from
+    /// the first provider built on; `None` after a plain
+    /// [`boot`](AppBuilder::boot). Providers check
+    /// [`CommandSpec::stdio`] here before writing to standard output.
+    pub fn command(&self) -> Option<&CommandSpec> {
+        self.inner.command.as_ref()
     }
 
     /// Every module of the app in dependency order (imports first).

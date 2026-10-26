@@ -9,6 +9,7 @@ use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
+use crate::CommandSpec;
 use crate::builder::Instance;
 use crate::graph::Graph;
 
@@ -19,16 +20,23 @@ pub(crate) struct AppInner {
     pub(crate) singletons: Vec<OnceCell<Instance>>,
     pub(crate) shutdown: CancellationToken,
     pub(crate) tracker: TaskTracker,
+    /// The command the app was booted to run, if any.
+    pub(crate) command: Option<CommandSpec>,
 }
 
 impl AppInner {
-    pub(crate) fn new(graph: Graph, shutdown: CancellationToken) -> Self {
+    pub(crate) fn new(
+        graph: Graph,
+        shutdown: CancellationToken,
+        command: Option<CommandSpec>,
+    ) -> Self {
         let singletons = graph.providers.iter().map(|_| OnceCell::new()).collect();
         Self {
             graph,
             singletons,
             shutdown,
             tracker: TaskTracker::new(),
+            command,
         }
     }
 }
