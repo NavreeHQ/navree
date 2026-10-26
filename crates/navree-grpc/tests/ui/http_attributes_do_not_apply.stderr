@@ -1,0 +1,5 @@
+error: #[throttle] does not apply to gRPC methods: they take #[public], #[authenticated], #[roles], #[permissions], #[can] and #[guard]
+  --> tests/ui/http_attributes_do_not_apply.rs:15:5
+   |
+15 |     #[throttle(limit = 10, per = "1m")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

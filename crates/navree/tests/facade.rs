@@ -376,11 +376,12 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries an app turns on by
-/// name (`features = ["social"]`, `features = ["oauth"]`, `features = ["flags"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags"];
+/// name (`features = ["social"]`, `features = ["oauth"]`, `features = ["flags"]`,
+/// `features = ["grpc"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "grpc"];
 
 #[test]
-fn full_is_the_default_and_turns_on_every_module() {
+fn full_is_the_default_and_turns_on_every_module_but_the_opt_in_ones() {
     let features = Features::read();
     assert_eq!(features.table["default"], ["full"]);
     let full = features.closure("full");

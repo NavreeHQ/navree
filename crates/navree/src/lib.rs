@@ -37,10 +37,11 @@
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
+//! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `grpc`, `dock`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
@@ -172,6 +173,8 @@ pub use navree_workspace as workspace;
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
+#[cfg(feature = "grpc")]
+pub use navree_grpc as grpc;
 #[cfg(feature = "oauth")]
 pub use navree_oauth as oauth;
 #[cfg(feature = "social")]
