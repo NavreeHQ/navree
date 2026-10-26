@@ -329,7 +329,10 @@ fn make_mcp_generates_a_server_and_registers_it() {
         "    #[mcp_tool(read_only, idempotent)]\n    #[authenticated]\n    async fn crm_echo(",
         "#[derive(Debug, Deserialize, ToSchema, Validate)]\npub struct CrmEchoArgs {",
     ] {
-        assert!(server.contains(expected), "missing `{expected}` in\n{server}");
+        assert!(
+            server.contains(expected),
+            "missing `{expected}` in\n{server}"
+        );
     }
     assert_eq!(
         read(&root, "src/modules/users/mcp/mod.rs"),

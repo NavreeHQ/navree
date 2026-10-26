@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use http::header::ORIGIN;
+use navree_auth::{AuthModule, AuthService, ClientMeta};
 use navree_cache::Cache;
+use navree_crypto::CryptoModule;
 use navree_http::route_table;
 use navree_mcp::testing::McpTestClient;
 use navree_testing::TestClient;
@@ -42,6 +44,57 @@ async fn guests_get_a_401_with_a_bearer_challenge() {
     assert_eq!(response.status(), 401);
     assert_eq!(response.header("www-authenticate"), Some("Bearer"));
     response.assert_error(401, "Unauthorized");
+}
+
+#[tokio::test]
+async fn navree_auth_access_tokens_are_bearer_tokens() {
+    let app = builder()
+        .config("app.key", navree_crypto::generate_key())
+        .config("hashing.memory_kib", 1024)
+        .config("hashing.iterations", 1)
+        .module(CryptoModule::from_config())
+        .module(AuthModule::from_config())
+        .build()
+        .await;
+    let auth = app.get::<AuthService>().await;
+    let ada = auth
+        .create_user("Ada", "ada@example.com", "a-long-password")
+        .await
+        .expect("user");
+    let tokens = auth
+        .issue_tokens(&ada, ClientMeta::default())
+        .await
+        .expect("tokens");
+
+    // The guest client carries the access token on every request.
+    let mcp = McpTestClient::new(app.client())
+        .bearer(&tokens.access_token)
+        .initialize()
+        .await;
+    mcp.call_tool("whoami", json!({}))
+        .await
+        .assert_ok()
+        .assert_json_path("user_id", json!(ada.id));
+    assert_eq!(mcp.close().await, 202, "DELETE carries the token too");
+
+    // A token the authenticators refuse is a 401 with their challenge.
+    let refused = app
+        .client()
+        .post("/mcp")
+        .bearer("not-a-jwt")
+        .without_header(ORIGIN)
+        .header("accept", "application/json, text/event-stream")
+        .json(&initialize())
+        .send()
+        .await;
+    assert_eq!(refused.status(), 401);
+    assert!(
+        refused
+            .header("www-authenticate")
+            .is_some_and(|challenge| challenge.starts_with("Bearer")),
+        "{:?}",
+        refused.header("www-authenticate")
+    );
 }
 
 #[tokio::test]

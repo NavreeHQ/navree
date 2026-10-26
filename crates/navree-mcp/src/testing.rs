@@ -10,7 +10,7 @@ use base64::engine::general_purpose::STANDARD;
 use bytes::{Buf, Bytes};
 use http::header::{ACCEPT, ORIGIN};
 use http_body_util::BodyExt;
-use navree_testing::{TestClient, TestResponse};
+use navree_testing::{TestClient, TestRequest, TestResponse};
 use rmcp::model::{Prompt, Resource, ResourceTemplate, Tool};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -19,8 +19,10 @@ use serde_json::{Value, json};
 const PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// An MCP client for tests. Build it from any `TestClient`, so it acts as
-/// whoever that client acts as (its bearer token, `acting_as` principal or
-/// guest status), then [`initialize`](McpTestClient::initialize):
+/// whoever that client acts as (its `acting_as` principal, its cookies or
+/// guest status; add a bearer token with
+/// [`bearer`](McpTestClient::bearer)), then
+/// [`initialize`](McpTestClient::initialize):
 ///
 /// ```no_run
 /// # async fn demo(app: navree_testing::TestApp, user: navree_contracts::Principal) {
@@ -43,6 +45,7 @@ const PROTOCOL_VERSION: &str = "2025-11-25";
 pub struct McpTestClient {
     client: TestClient,
     path: String,
+    bearer: Option<String>,
     protocol_version: String,
     session_id: Option<String>,
     server: Value,
@@ -87,6 +90,7 @@ impl McpTestClient {
         Self {
             client,
             path: "/mcp".to_owned(),
+            bearer: None,
             protocol_version: PROTOCOL_VERSION.to_owned(),
             session_id: None,
             server: Value::Null,
@@ -98,6 +102,14 @@ impl McpTestClient {
     /// Speaks to `path` instead of `/mcp` (when `mcp.path` is set).
     pub fn path(mut self, path: impl Into<String>) -> Self {
         self.path = path.into();
+        self
+    }
+
+    /// Sends `Authorization: Bearer <token>` with every request, as a
+    /// remote client does (a navree-auth access token, a personal access
+    /// token, ...).
+    pub fn bearer(mut self, token: impl Into<String>) -> Self {
+        self.bearer = Some(token.into());
         self
     }
 
@@ -285,9 +297,7 @@ impl McpTestClient {
             .clone()
             .expect("listen needs a session: call initialize first");
         let response = self
-            .client
-            .get(&self.path)
-            .without_header(ORIGIN)
+            .prepare(self.client.get(&self.path))
             .header(ACCEPT, "text/event-stream")
             .header("mcp-session-id", session)
             .header("mcp-protocol-version", self.protocol_version.clone())
@@ -306,18 +316,26 @@ impl McpTestClient {
 
     /// Ends the session (`DELETE`); returns the HTTP status.
     pub async fn close(&self) -> u16 {
-        let mut request = self.client.delete(&self.path).without_header(ORIGIN);
+        let mut request = self.prepare(self.client.delete(&self.path));
         if let Some(session) = &self.session_id {
             request = request.header("mcp-session-id", session.clone());
         }
         request.send().await.status().as_u16()
     }
 
+    /// A request as an MCP client sends it: no `Origin` (not a browser),
+    /// and the bearer token when there is one.
+    fn prepare(&self, request: TestRequest) -> TestRequest {
+        let request = request.without_header(ORIGIN);
+        match &self.bearer {
+            Some(token) => request.bearer(token),
+            None => request,
+        }
+    }
+
     async fn post(&self, message: &Value) -> TestResponse {
         let mut request = self
-            .client
-            .post(&self.path)
-            .without_header(ORIGIN)
+            .prepare(self.client.post(&self.path))
             .header(ACCEPT, "application/json, text/event-stream")
             .json(message);
         if let Some(session) = &self.session_id {

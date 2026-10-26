@@ -176,7 +176,9 @@ async fn every_call_is_logged_and_counted_without_its_arguments() {
     )
     .await
     .assert_ok();
-    mcp.call_tool("explode", json!({})).await.assert_error(500, None);
+    mcp.call_tool("explode", json!({}))
+        .await
+        .assert_error(500, None);
     mcp.call_tool("not_a_tool", json!({ "x": 1 })).await;
     mcp.read_resource("crm://notes/kickoff").await.assert_ok();
     mcp.get_prompt("summarize", json!({ "days": 7 }))
@@ -214,7 +216,9 @@ async fn every_call_is_logged_and_counted_without_its_arguments() {
         assert_eq!(fields["message"], "mcp call");
         assert!(fields["duration_ms"].is_u64(), "{fields}");
         assert!(
-            fields["request_id"].as_str().is_some_and(|id| !id.is_empty()),
+            fields["request_id"]
+                .as_str()
+                .is_some_and(|id| !id.is_empty()),
             "{fields}"
         );
         assert_eq!(fields["client"], "navree-test", "{fields}");
