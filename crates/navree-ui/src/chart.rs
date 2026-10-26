@@ -13,9 +13,14 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SeriesTone {
-    /// Grey (the default for data that is not the point of the chart).
+    /// Grey (the default for data that is not the point of the chart:
+    /// comparisons, other periods, the rest of a breakdown).
     Muted,
-    /// The accent: positive data, the one series the chart is about.
+    /// Light neutral: the series the chart is about, when it is not
+    /// positive data (traffic, counts, durations).
+    Bright,
+    /// The accent: positive data (revenue, won deals, sign-ups) and the
+    /// highlighted bar.
     Accent,
     /// Amber (warnings, slow requests).
     Amber,
@@ -330,12 +335,10 @@ impl Serialize for Chart {
                 (0..count).map(|i| i % every == 0).collect()
             }
             Kind::Line => {
-                let slots = if self.label_every > 0 {
-                    (count - 1) / self.label_every + 1
-                } else {
-                    count.min(7)
-                }
-                .clamp(1, count);
+                let slots = (count - 1)
+                    .checked_div(self.label_every)
+                    .map_or(count.min(7), |steps| steps + 1)
+                    .clamp(1, count);
                 let mut shown = vec![false; count];
                 if slots == 1 {
                     shown[0] = true;
@@ -419,8 +422,9 @@ impl Serialize for Chart {
                     }
                 };
                 for (s_index, series) in self.series.iter().enumerate() {
-                    let points: Vec<(f64, f64)> =
-                        (0..count).map(|i| (x(i), y(self.value(series, i)))).collect();
+                    let points: Vec<(f64, f64)> = (0..count)
+                        .map(|i| (x(i), y(self.value(series, i))))
+                        .collect();
                     let line = points
                         .iter()
                         .enumerate()
@@ -499,42 +503,42 @@ impl Serialize for Chart {
     }
 }
 
-/// A small trend line for a stat card (`ui.stat(.., spark=..)`).
+/// A small trend line for a stat card (`ui.stat(.., spark=..)`). It is
+/// drawn neutral (the delta next to it carries the color) unless marked
+/// [`positive`](Sparkline::positive) or [`negative`](Sparkline::negative).
 ///
 /// ```
 /// use navree_ui::Sparkline;
 ///
 /// let spark = serde_json::to_value(Sparkline::new([3.0, 5.0, 4.0, 8.0])).unwrap();
 /// assert_eq!(spark["trend"], "up");
+/// assert_eq!(spark["tone"], "neutral");
 /// assert!(spark["line"].as_str().unwrap().starts_with("M0 "));
 /// ```
 #[derive(Clone, Debug)]
 pub struct Sparkline {
     values: Vec<f64>,
-    trend: Option<&'static str>,
+    tone: &'static str,
 }
 
 impl Sparkline {
-    /// A sparkline of `values`; its color follows the trend (last value
-    /// against the first): up in the accent, down in the danger color.
+    /// A sparkline of `values` (non-finite values are dropped).
     pub fn new(values: impl IntoIterator<Item = f64>) -> Self {
         Self {
             values: values.into_iter().filter(|v| v.is_finite()).collect(),
-            trend: None,
+            tone: "neutral",
         }
     }
 
-    /// Draws it neutral whatever the trend (for values where up is not
-    /// better, such as latency, pass the trend yourself with
-    /// [`Sparkline::trend`]).
-    pub fn neutral(mut self) -> Self {
-        self.trend = Some("flat");
+    /// Drawn in the accent: the trend is good news.
+    pub fn positive(mut self) -> Self {
+        self.tone = "positive";
         self
     }
 
-    /// The trend that picks the color: `"up"`, `"down"` or `"flat"`.
-    pub fn trend(mut self, trend: &'static str) -> Self {
-        self.trend = Some(trend);
+    /// Drawn in the danger color: the trend is bad news.
+    pub fn negative(mut self) -> Self {
+        self.tone = "negative";
         self
     }
 }
@@ -546,10 +550,15 @@ impl Serialize for Sparkline {
             line: String,
             area: String,
             trend: &'static str,
+            tone: &'static str,
         }
         let count = self.values.len();
         let min = self.values.iter().copied().fold(f64::INFINITY, f64::min);
-        let max = self.values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let max = self
+            .values
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let span = if max > min { max - min } else { 1.0 };
         let points: Vec<(f64, f64)> = self
             .values
@@ -576,12 +585,18 @@ impl Serialize for Sparkline {
             (Some(first), Some(last)) => format!("{line} L{} 32 L{} 32 Z", last.0, first.0),
             _ => String::new(),
         };
-        let trend = self.trend.unwrap_or(match (self.values.first(), self.values.last()) {
+        let trend = match (self.values.first(), self.values.last()) {
             (Some(first), Some(last)) if last > first => "up",
             (Some(first), Some(last)) if last < first => "down",
             _ => "flat",
-        });
-        View { line, area, trend }.serialize(serializer)
+        };
+        View {
+            line,
+            area,
+            trend,
+            tone: self.tone,
+        }
+        .serialize(serializer)
     }
 }
 
@@ -622,18 +637,29 @@ mod tests {
             .dashed_series("Last week", SeriesTone::Muted, [8.0, 12.0, 30.0]);
         let view = serde_json::to_value(&chart).unwrap();
         assert_eq!(view["kind"], "line");
-        assert!(view["lines"][0]["line"].as_str().unwrap().starts_with("M0 "));
+        assert!(
+            view["lines"][0]["line"]
+                .as_str()
+                .unwrap()
+                .starts_with("M0 ")
+        );
         assert!(view["lines"][0]["area"].is_string());
         assert!(view["lines"][1]["area"].is_null());
-        assert_eq!(view["hovers"][1]["title"], "Tue: Requests: 20, Last week: 12");
+        assert_eq!(
+            view["hovers"][1]["title"],
+            "Tue: Requests: 20, Last week: 12"
+        );
         assert_eq!(view["x_labels"][2]["show"], true);
     }
 
     #[test]
-    fn sparklines_follow_the_trend() {
-        let down = serde_json::to_value(Sparkline::new([5.0, 3.0])).unwrap();
+    fn sparklines_report_their_trend_and_tone() {
+        let down = serde_json::to_value(Sparkline::new([5.0, 3.0]).negative()).unwrap();
         assert_eq!(down["trend"], "down");
-        let flat = serde_json::to_value(Sparkline::new([5.0, 9.0]).neutral()).unwrap();
+        assert_eq!(down["tone"], "negative");
+        let up = serde_json::to_value(Sparkline::new([5.0, 9.0]).positive()).unwrap();
+        assert_eq!(up["tone"], "positive");
+        let flat = serde_json::to_value(Sparkline::new([4.0, 4.0])).unwrap();
         assert_eq!(flat["trend"], "flat");
         let empty = serde_json::to_value(Sparkline::new([])).unwrap();
         assert_eq!(empty["line"], "");

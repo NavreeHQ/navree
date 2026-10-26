@@ -128,7 +128,7 @@
 
 {#- A sparkline from a `Sparkline`. -#}
 {%- macro sparkline(spark) -%}
-<svg class="ui-stat__spark ui-spark ui-spark--{{ spark.trend }}" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path class="ui-spark__area" d="{{ spark.area }}"/><path class="ui-spark__line" d="{{ spark.line }}" vector-effect="non-scaling-stroke"/></svg>
+<svg class="ui-stat__spark ui-spark ui-spark--{{ spark.tone }}" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path class="ui-spark__area" d="{{ spark.area }}"/><path class="ui-spark__line" d="{{ spark.line }}" vector-effect="non-scaling-stroke"/></svg>
 {%- endmacro -%}
 
 {#- A stat card. `trend` (up, down, flat) picks the delta's arrow; its
@@ -223,7 +223,7 @@
 {%- set role = "menuitem" if item.checked is none else "menuitemcheckbox" -%}
 {%- set classes = "ui-menu__item" ~ (" ui-menu__item--danger" if item.danger else "") ~ (" ui-menu__item--tall" if item.description else "") -%}
 {%- set inner -%}
-{% if item.icon %}{% if tiles %}<span class="ui-menu__tile">{{ svg_icon(item.icon) }}</span>{% else %}{{ svg_icon(item.icon) }}{% endif %}{% endif %}{% if item.description %}<span class="ui-menu__text"><span>{{ item.label }}</span><span class="ui-menu__desc">{{ item.description }}</span></span>{% else %}<span class="ui-menu__text">{{ item.label }}</span>{% endif %}{% if item.shortcut %}<span class="ui-menu__shortcut">{{ item.shortcut }}</span>{% endif %}{% if item.checked is not none %}{{ svg_icon("check", class="ui-menu__check") }}{% endif %}
+{% if item.checked is not none and not tiles and not item.icon %}{{ svg_icon("check", class="ui-menu__check") }}{% endif %}{% if item.icon %}{% if tiles %}<span class="ui-menu__tile">{{ svg_icon(item.icon) }}</span>{% else %}{{ svg_icon(item.icon) }}{% endif %}{% endif %}{% if item.description %}<span class="ui-menu__text"><span>{{ item.label }}</span><span class="ui-menu__desc">{{ item.description }}</span></span>{% else %}<span class="ui-menu__text">{{ item.label }}</span>{% endif %}{% if item.shortcut %}<span class="ui-menu__shortcut">{{ item.shortcut }}</span>{% endif %}{% if item.checked is not none and (tiles or item.icon) %}{{ svg_icon("check", class="ui-menu__check ui-menu__check--end") }}{% endif %}
 {%- endset -%}
 {%- if item.href -%}
 <a class="{{ classes }}" href="{{ item.href }}" role="{{ role }}" tabindex="-1"{% if item.checked is not none %} aria-checked="{{ 'true' if item.checked else 'false' }}"{% endif %}>{{ inner }}</a>
@@ -317,7 +317,8 @@
 {%- if table.selectable %}<th class="ui-col-check" scope="col"><input type="checkbox" class="ui-checkbox" data-ui-select-all aria-label="Select all rows"{% if table.loading or not table.rows %} disabled{% endif %}></th>{% endif -%}
 {%- for column in table.columns -%}
 {%- set direction = "ascending" if table.sort == column.key else ("descending" if table.sort and table.sort == "-" ~ column.key else none) -%}
-<th scope="col"{% if column.numeric or column.hide_on_mobile %} class="{% if column.numeric %}ui-col-num{% endif %}{% if column.hide_on_mobile %} ui-hide-sm{% endif %}"{% endif %}{% if direction %} aria-sort="{{ direction }}"{% endif %}>{% if column.sortable and table.sort_url %}{{ sort_link(column.label, column.key, table.sort, table.sort_url) }}{% else %}{{ column.label }}{% endif %}</th>
+{%- set header_classes = (["ui-col-num"] if column.numeric else []) + (["ui-hide-sm"] if column.hide_on_mobile else []) -%}
+<th scope="col"{% if header_classes %} class="{{ header_classes|join(' ') }}"{% endif %}{% if direction %} aria-sort="{{ direction }}"{% endif %}>{% if column.sortable and table.sort_url %}{{ sort_link(column.label, column.key, table.sort, table.sort_url) }}{% else %}{{ column.label }}{% endif %}</th>
 {%- endfor -%}
 {%- if table.has_actions %}<th class="ui-col-actions" scope="col"><span class="ui-sr-only">Actions</span></th>{% endif -%}
 </tr></thead>

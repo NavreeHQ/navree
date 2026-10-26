@@ -198,9 +198,9 @@ impl Shell {
         };
         let path = path.split(['?', '#']).next().unwrap_or(path);
         let home = self.app.href.trim_end_matches('/');
-        // (group, item, child) of the best match and its score.
-        let mut best: Option<((usize, usize, Option<usize>), usize)> = None;
-        let mut consider = |at: (usize, usize, Option<usize>), href: &str| {
+        // Where the best match is and its score.
+        let mut best: Option<(Slot, usize)> = None;
+        let mut consider = |at: Slot, href: &str| {
             // The app's home is a prefix of every page: it matches only itself.
             if href.trim_end_matches('/') == home && path.trim_end_matches('/') != home {
                 return;
@@ -237,6 +237,9 @@ impl Shell {
         groups
     }
 }
+
+/// A sidebar position: (group, item, sub-item).
+type Slot = (usize, usize, Option<usize>);
 
 /// How well `href` matches `path`: exact matches beat prefixes, longer
 /// prefixes beat shorter ones; `None` when it does not match.
@@ -754,7 +757,10 @@ mod tests {
             .current("/helm/users/roles/7");
         let json = serde_json::to_value(&shell).unwrap();
         let items = &json["groups"][0]["items"];
-        assert_eq!(items[0]["active"], false, "the dashboard is a shorter prefix");
+        assert_eq!(
+            items[0]["active"], false,
+            "the dashboard is a shorter prefix"
+        );
         assert_eq!(items[1]["open"], true);
         assert_eq!(items[1]["has_active_child"], true);
         assert_eq!(items[1]["children"][0]["active"], false);

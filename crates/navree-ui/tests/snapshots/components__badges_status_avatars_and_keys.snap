@@ -1,0 +1,24 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{{ ui.badge(\"Admin\") }}{{ ui.badge(\"Paid\", \"success\", icon=\"check\") }}{{ ui.badge(\"Live\", \"success\", dot=true) }}\n{{ ui.status(\"Degraded\", \"warning\") }}\n{{ ui.avatar(\"Ada Lovelace\") }}{{ ui.avatar(\"Grace\", src=\"/avatars/grace.png\") }}\n{{ ui.kbd(\"mod+shift+P\") }}\"#,\njson!({}),)"
+---
+<span class="ui-badge">Admin</span>
+<span class="ui-badge ui-badge--success">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M20 6 9 17l-5-5"/>
+</svg>Paid</span>
+<span class="ui-badge ui-badge--success">
+<span class="ui-dot ui-dot--current">
+</span>Live</span>
+<span class="ui-status">
+<span class="ui-dot ui-dot--warning" aria-hidden="true">
+</span>Degraded</span>
+<span class="ui-avatar" aria-hidden="true">AL</span>
+<span class="ui-avatar">
+<img src="&#x2f;avatars&#x2f;grace.png" alt="Grace">
+</span>
+<kbd class="ui-kbd">
+<span data-ui-mod>Ctrl</span>
+<span>shift</span>
+<span>P</span>
+</kbd>

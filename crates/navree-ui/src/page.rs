@@ -103,7 +103,10 @@ mod tests {
             HeaderValue::from_static("a=1; navree_ui_sidebar=collapsed; b=2"),
         );
         assert!(sidebar_collapsed(&headers));
-        headers.insert(COOKIE, HeaderValue::from_static("navree_ui_sidebar=expanded"));
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_static("navree_ui_sidebar=expanded"),
+        );
         assert!(!sidebar_collapsed(&headers));
     }
 

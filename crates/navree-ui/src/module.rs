@@ -331,10 +331,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(ui.mount(), "/admin/ui");
-        assert_eq!(
-            ui.assets_url(),
-            format!("/admin/ui/{}", assets::version())
-        );
+        assert_eq!(ui.assets_url(), format!("/admin/ui/{}", assets::version()));
         for bad in ["ui", "/ui/{x}", "/ui/*", "/a b"] {
             assert!(
                 Ui::new(UiOptions {

@@ -609,6 +609,9 @@ mod tests {
         assert!(added.is_empty());
         added.add("title", "title is required");
         assert_eq!(added.first("title"), Some("title is required"));
-        assert_eq!(FormErrors::from_body(&serde_json::json!({})), FormErrors::new());
+        assert_eq!(
+            FormErrors::from_body(&serde_json::json!({})),
+            FormErrors::new()
+        );
     }
 }
