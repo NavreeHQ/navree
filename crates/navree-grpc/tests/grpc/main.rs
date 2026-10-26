@@ -10,3 +10,4 @@ mod pipeline;
 mod protocols;
 mod serving;
 mod streaming;
+mod workspace;
