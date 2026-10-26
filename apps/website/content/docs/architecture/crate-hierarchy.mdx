@@ -5,7 +5,7 @@ description: "The layers of Navree crates, the rule that a crate depends only on
 
 ## Introduction
 
-Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) to L8 (the `navree` facade and the CLI), with the ecosystem libraries at L6 and applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
+Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) through the ecosystem libraries (L6) and the packages built on them (L7) to L8 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
 
 This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows nothing about databases, and authentication builds on everything else rather than the other way round. You can read, test or use any crate with only what's below it. Most apps never see the split, because they depend on the facade, but it explains why things are where they are.
 
@@ -14,7 +14,8 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ```text
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
-L6  navree-social (ecosystem libraries)
+L7  packages built on other packages
+L6  navree-social  navree-webhooks (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -53,6 +54,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
+| L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
@@ -77,6 +79,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
 | `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
+| `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | No Navree crate: everything it knows about the framework is in the code it generates |
 

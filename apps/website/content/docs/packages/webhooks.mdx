@@ -1,7 +1,6 @@
 ---
 title: "Webhooks"
 description: "Send HMAC-signed webhooks from your events, with queue-backed retries, a delivery log and endpoint management, and verify incoming webhooks from Stripe, GitHub, Paddle and any Standard Webhooks sender."
-status: "planned"
 ---
 
 ## Introduction
@@ -16,11 +15,11 @@ Outgoing messages follow Standard Webhooks too, so your customers can verify the
 
 ## Installation
 
-Turn on the `webhooks` feature of the `navree` facade:
+The `webhooks` feature of the `navree` facade is part of `full`, which is on by default. With `default-features = false`, turn it on:
 
 ```toml title="Cargo.toml"
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["webhooks"] }
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["webhooks"] }
 ```
 
 Add `WebhooksModule` to your app root. Outgoing delivery needs the database, the queue, the events bus and the HTTP client; verifying incoming webhooks needs none of them:
@@ -28,6 +27,7 @@ Add `WebhooksModule` to your app root. Outgoing delivery needs the database, the
 ```rust title="src/app.rs"
 Navree::app()
     .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config()) // encrypts endpoint secrets with APP_KEY
     .module(DatabaseModule::from_config())
     .module(EventsModule::for_root())
     .module(QueueModule::from_config())
@@ -37,6 +37,8 @@ Navree::app()
 ```
 
 The module contributes the migration set `webhooks`, which creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts` and `webhook_receipts`.
+
+Endpoint secrets are encrypted at rest with your app key when the app includes `CryptoModule` and `APP_KEY` is set. Without a key they are stored as they are, and the module logs a warning the first time it stores one.
 
 ## Configuration
 
@@ -99,7 +101,7 @@ impl WebhookEvent for DealWon {
 }
 ```
 
-The event's `NAME` (`deal.won`) is the webhook's type. Without a `payload` method, `data` is the event itself as JSON; without `workspace_id`, the event goes to app-wide endpoints only. Register each webhook event with `for_feature` in the module that owns it:
+The event's `NAME` (`deal.won`) is the webhook's type. Without a `payload` method, `data` is the event itself as JSON. An event with a `workspace_id` goes to that workspace's endpoints only; without one (the default), it goes to app-wide endpoints only. Register each webhook event with `for_feature` in the module that owns it:
 
 ```rust title="src/modules/deals/mod.rs"
 #[module(
@@ -120,19 +122,34 @@ From then on, emitting the event is all it takes. The deals service already emit
 self.events.emit(DealWon { deal_id, workspace_id, won_by, /* ... */ }).await?;
 ```
 
-When the event is emitted inside a [unit of work](/docs/database/unit-of-work/), as in a request handler, the fan-out job joins it: a request that rolls back sends no webhook. The job finds the endpoints subscribed to `deal.won` in the event's workspace, builds the payload once, stores one delivery per endpoint and queues each delivery.
+When the event is emitted inside a [unit of work](/docs/database/unit-of-work/), as in a request handler, the fan-out job joins it: a request that rolls back sends no webhook. The job builds the payload once, finds the enabled endpoints subscribed to `deal.won` in the event's workspace, stores one delivery per endpoint and queues each delivery.
 
-To send a webhook that isn't an event, dispatch it by name. The name must be registered as an event type, by an event or with `WebhooksModule::for_type("export.ready", "A CSV export finished.")`:
+To send a webhook that isn't an event, dispatch it by name. Register the name first, with `m.webhook_type(name, description)` in a module's `register` function:
+
+```rust title="src/modules/exports/mod.rs"
+#[module(providers = [ExportService], register = Self::wire)]
+pub struct ExportsModule;
+
+impl ExportsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.webhook_type("export.ready", "A CSV export finished.");
+    }
+}
+```
+
+Then send it with the `Webhooks` service. `send` returns the message id; inside a unit of work the job joins it, like an event's:
 
 ```rust
 use navree::webhooks::Webhooks;
 
-webhooks
+let message_id = webhooks
     .dispatch_json("export.ready", json!({ "export_id": export.id, "url": url }))
     .workspace(workspace_id)
     .send()
     .await?;
 ```
+
+An unregistered name, or a payload larger than `webhooks.max_payload_bytes`, fails the dispatch.
 
 ### What endpoints receive
 
@@ -150,15 +167,17 @@ webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=
 {"type":"deal.won","timestamp":"2026-10-26T08:17:07Z","data":{"deal":{"id":"0199c1d2-...","title":"Lovelace renewal","amount_cents":4200000,"currency":"USD","stage":"won"},"won_by":"01a17748-..."}}
 ```
 
-- `webhook-id` is unique per message and stays the same across retries, so receivers can drop duplicates.
+- `webhook-id` is the message id: the same for every endpoint of one event and across retries, so receivers can drop duplicates.
+- `webhook-timestamp` is when the attempt was signed, in Unix seconds; the body's `timestamp` is when the event happened.
 - `webhook-signature` is `v1,` followed by the base64 HMAC-SHA256 of `{webhook-id}.{webhook-timestamp}.{body}`, keyed with the endpoint's secret (the bytes after `whsec_`, base64-decoded).
 - While a secret is being rotated, the header carries two signatures separated by a space, one per secret, for 24 hours.
+- Endpoints can add their own headers (an `Authorization` token, a team name). `Host`, `Content-Type`, `Content-Length`, `User-Agent`, `Connection`, `Transfer-Encoding`, `TE` and every `webhook-*` header are reserved.
 
 A receiver in any language verifies it with a Standard Webhooks library. In a Navree app on the other end, that's `VerifiedWebhook<S>` with the [`StandardWebhooks` verifier](#verifying-incoming-webhooks).
 
 ### Retries and the delivery log
 
-An attempt succeeds when the endpoint answers 2xx within `webhooks.timeout_secs`. Anything else (a non-2xx status, a timeout, a refused connection) is a failed attempt, and the delivery is tried again on this schedule:
+An attempt succeeds when the endpoint answers 2xx within `webhooks.timeout_secs`. Anything else (a non-2xx status, a timeout, a refused connection) is a failed attempt, and the delivery is tried again on this schedule (`RETRY_SCHEDULE`):
 
 | Attempt | After the previous one |
 |---|---|
@@ -171,7 +190,7 @@ An attempt succeeds when the endpoint answers 2xx within `webhooks.timeout_secs`
 | 7 | 10 hours |
 | 8 | 10 hours |
 
-After the eighth attempt, about 27 hours later, the delivery is marked `failed`. An endpoint that has done nothing but fail for `webhooks.disable_after_days` (5) is disabled, and `WebhookEndpointDisabled` is emitted so you can tell its owner. An endpoint that answers `410 Gone` is disabled at once.
+After the eighth attempt, about 27 hours later, the delivery is marked `failed` and `WebhookDeliveryFailed` is emitted. An endpoint whose attempts have done nothing but fail for `webhooks.disable_after_days` (5) is disabled, and `WebhookEndpointDisabled` is emitted so you can tell its owner. An endpoint that answers `410 Gone` is disabled at once. A success clears the failure clock. Deliveries still pending for a disabled endpoint fail when their next attempt is due.
 
 Each attempt is recorded with its status code, the first 4 KB of the response, the error and the duration. Read them with `Webhooks`:
 
@@ -180,10 +199,13 @@ let page = webhooks.deliveries(endpoint_id, PageQuery::default()).await?;
 for delivery in &page.data {
     println!("{} {} {:?} attempts={}", delivery.id, delivery.event_type, delivery.status, delivery.attempts);
 }
-webhooks.retry(&delivery_id).await?; // queue a failed delivery again
+let attempts = webhooks.attempts(delivery.id).await?;
+webhooks.retry(delivery.id).await?; // one more attempt for a failed delivery
 ```
 
-Deliveries go through the [HTTP client](/docs/digging-deeper/http-client/) and its SSRF guard: an endpoint URL that resolves to a private, loopback or cloud metadata address is refused when it is created and again on every attempt. To deliver to a service on your own network, list it in `http_client.ssrf.allow_hosts`.
+A delivery's `status` is `Pending`, `Succeeded` or `Failed`. `retry` gives a failed delivery one more attempt, as soon as a worker is free, with the same id and `webhook-id`; retrying a delivery that has not failed is a `NotRetryable` error (409 over HTTP).
+
+Deliveries go through the [HTTP client](/docs/digging-deeper/http-client/) and its SSRF guard: an endpoint URL that points to, or resolves to, a private, loopback or cloud metadata address is refused when it is created or changed, and again on every attempt. To deliver to a service on your own network, list it in `http_client.ssrf.allow_hosts`.
 
 ## Managing endpoints
 
@@ -198,7 +220,8 @@ let created = webhooks
         NewEndpoint::new("https://hooks.lovelace.io/navree")
             .events(["deal.won", "deal.lost"])
             .workspace(workspace.id)
-            .description("Revenue dashboard"),
+            .description("Revenue dashboard")
+            .header("X-Team", "revenue"),
     )
     .await?;
 // created.endpoint.id, and created.secret (shown once):
@@ -208,36 +231,38 @@ let created = webhooks
 | Method | What it does |
 |---|---|
 | `create_endpoint(&uow, new)` | Creates an endpoint and returns it with its secret |
-| `update_endpoint(&uow, id, changes)` | Changes the URL, events, description or headers |
-| `delete_endpoint(&uow, id)` | Deletes it; pending deliveries are dropped |
+| `update_endpoint(&uow, id, changes)` | Changes the URL, events, description or headers (`EndpointChanges::new().url(..).events(..)`) |
+| `delete_endpoint(&uow, id)` | Deletes it with its deliveries; pending deliveries are dropped |
 | `rotate_secret(&uow, id)` | A new secret; the old one keeps signing for 24 hours |
-| `enable(&uow, id)`, `disable(&uow, id)` | Turns delivery on or off |
-| `endpoints(workspace_id)` | The workspace's endpoints (`None` for app-wide ones) |
+| `enable(&uow, id)`, `disable(&uow, id)` | Turns delivery on or off (enabling forgets past failures) |
+| `endpoint(id)`, `endpoints(workspace_id)` | One endpoint; a workspace's endpoints (`None` for app-wide ones) |
 | `send_test(id)` | Sends a `webhook.test` message at once and returns the attempt |
-| `deliveries(id, page)`, `delivery(id)` | The log |
-| `retry(delivery_id)` | Queues a delivery again, keeping its id |
+| `deliveries(id, page)`, `delivery(id)`, `attempts(delivery_id)` | The log |
+| `retry(delivery_id)`, `retry_failed()` | Queues a failed delivery, or every one, again |
+| `prune(days)` | Deletes old deliveries and incoming receipts |
+| `event_types()` | Every registered event type, with its description |
 
-An endpoint subscribed to `*` receives every event type.
+The URL must use `https` (unless `webhooks.require_https` is off) and carry no credentials; put tokens in a header instead. The events must be registered types; an endpoint subscribed to `*` receives every event type. A test message is recorded in the log but never counts towards disabling its endpoint. Deleting a [workspace](/docs/workspaces/introduction/) deletes its endpoints.
 
 ### Built-in routes
 
-With `webhooks.routes = true` (the default), the module mounts JSON routes for a webhooks settings page. In an app with [workspaces](/docs/workspaces/introduction/) they act on the request's workspace, and they require the `webhooks.manage` permission:
+With `webhooks.routes = true` (the default) and `DatabaseModule` in the app, the module mounts JSON routes for a webhooks settings page. They require the `webhooks.manage` permission, so the app also needs `AccessModule` and an authenticator. In an app with [workspaces](/docs/workspaces/introduction/) they act on the request's workspace (from the `X-Workspace` header or the other resolvers), and the permission is checked in it; a workspace role gets it through `workspace.roles.<role>.permissions`, and the owner has it already.
 
 | Route | Does |
 |---|---|
 | `GET /api/webhooks/event-types` | Every registered type, with its description |
 | `GET /api/webhooks/endpoints`, `POST` | Lists or creates endpoints (the secret is in the create response only) |
-| `GET /api/webhooks/endpoints/{id}`, `PATCH`, `DELETE` | One endpoint |
+| `GET /api/webhooks/endpoints/{id}`, `PATCH`, `DELETE` | One endpoint; `PATCH` takes `{url?, events?, description?, headers?, enabled?}` |
 | `POST /api/webhooks/endpoints/{id}/rotate-secret` | `{secret}` |
 | `POST /api/webhooks/endpoints/{id}/test` | Sends `webhook.test` and returns the attempt |
-| `GET /api/webhooks/endpoints/{id}/deliveries` | The delivery log, paginated |
-| `POST /api/webhooks/deliveries/{id}/retry` | Queues a delivery again |
+| `GET /api/webhooks/endpoints/{id}/deliveries` | The delivery log, newest first, paginated |
+| `POST /api/webhooks/deliveries/{id}/retry` | Queues a failed delivery again |
 
-Registered event types also appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under `webhooks`, with the schema of their payload, so your API reference documents them next to your routes.
+The routes appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the `Webhooks` tag.
 
 ## Verifying incoming webhooks
 
-A webhook endpoint is a public route that anyone can call, so check that the request comes from who it claims. Take `VerifiedWebhook<S>` instead of `Json<T>`: it reads the raw body, verifies the signature with the secret of source `S`, rejects a timestamp older than `tolerance_secs`, and only then runs your handler.
+A webhook endpoint is a public route that anyone can call, so check that the request comes from who it claims. Take `VerifiedWebhook<S>` instead of `Json<T>`, as the last argument: it reads the raw body, verifies the signature with the secret of source `S`, rejects a signed timestamp more than `tolerance_secs` away from now, and only then runs your handler.
 
 ```rust title="src/modules/integrations/github.rs"
 use navree::prelude::*;
@@ -281,16 +306,18 @@ A request that fails verification never reaches the handler:
 { "statusCode": 400, "message": "Invalid webhook signature", "error": "Bad Request" }
 ```
 
+A body larger than `webhooks.incoming.max_body_bytes` is answered with 413.
+
 | `VerifiedWebhook<S>` | |
 |---|---|
 | `json::<T>()` | The body as `T`; a body that doesn't match is a 400 |
-| `body()` | The raw bytes that were verified |
-| `id()` | The sender's delivery id (`webhook-id`, `X-GitHub-Delivery`, the Stripe event id) |
-| `event_type()` | The sender's event type, when it sends one in a header (GitHub's `X-GitHub-Event`) |
-| `timestamp()` | The signed timestamp |
+| `body()`, `headers()` | The raw bytes that were verified, and the request headers |
+| `id()` | The sender's delivery id (`webhook-id`, `X-GitHub-Delivery`, the Stripe event id, Paddle's `event_id`), or the SHA-256 of the body when it sends none |
+| `event_type()` | The sender's event type, when it sends one: GitHub's `X-GitHub-Event`, the `type` of a Stripe or Standard Webhooks payload, Paddle's `event_type` |
+| `timestamp()` | The signed timestamp (`None` for GitHub, which signs none) |
 | `mark_processed(&uow)` | Records the id in `webhook_receipts` in your unit of work; `false` if it was already there |
 
-Senders retry when they don't get a 2xx in time, so the same message can arrive twice. `mark_processed` writes the receipt in the same transaction as your changes: a message whose handling rolled back is handled again on the next delivery, and one that committed isn't. Receipts are pruned after `webhooks.incoming.receipt_days` (30).
+Senders retry when they don't get a 2xx in time, so the same message can arrive twice. `mark_processed` writes the receipt in the same transaction as your changes: a message whose handling rolled back is handled again on the next delivery, and one that committed isn't. `webhooks:prune` deletes receipts older than `webhooks.incoming.receipt_days` (30).
 
 ### Built-in sources
 
@@ -301,7 +328,9 @@ Senders retry when they don't get a 2xx in time, so the same message can arrive 
 | `Paddle` | `webhooks.incoming.paddle.secret` | `Paddle-Signature` (`ts=`, `h1=`) |
 | `StandardWebhooks` | `webhooks.incoming.standard.secret` | `webhook-id`, `webhook-timestamp`, `webhook-signature` |
 
-GitHub signs no timestamp, so only the signature is checked for it; use `mark_processed` to drop replays. [Billing](/docs/packages/billing/) verifies its Stripe and Paddle webhooks with these same verifiers, using its own secrets (`billing.stripe.webhook_secret`, `billing.paddle.webhook_secret`).
+GitHub signs no timestamp, so only the signature is checked for it; use `mark_processed` to drop replays. The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)` and `GitHub::verify(secret, headers, body)`, so a module that keeps its own secrets can check requests with them; [Billing](/docs/packages/billing/) uses them for its Stripe and Paddle webhooks.
+
+A source table (`[webhooks.incoming.<source>]`) with an empty secret fails the boot, naming the key. A request for a source that has no table at all is answered with 500, and the error log names the missing key.
 
 ### Your own sources
 
@@ -320,20 +349,31 @@ impl WebhookSource for MailEvents {
 }
 ```
 
-Then take `VerifiedWebhook<MailEvents>`. For a sender with its own scheme, implement `WebhookVerifier`, or use the generic `Hmac` verifier with the header, algorithm and encoding:
+Then take `VerifiedWebhook<MailEvents>`. A source can also set its own `tolerance_secs`. For a sender with its own scheme, implement `WebhookVerifier`, or use the generic `Hmac` verifier, configured with the header, algorithm and encoding:
+
+```rust
+use navree::webhooks::{Hmac, WebhookSource};
+
+pub struct Calendly;
+
+impl WebhookSource for Calendly {
+    const NAME: &'static str = "calendly";
+    type Verifier = Hmac;
+}
+```
 
 ```toml
 [webhooks.incoming.calendly]
 secret = ""                       # APP_WEBHOOKS__INCOMING__CALENDLY__SECRET
-verifier = "hmac"
 header = "Calendly-Webhook-Signature"
 algorithm = "sha256"              # sha1 | sha256 | sha512
 encoding = "hex"                  # hex | base64
 format = "t={timestamp},v1={signature}"
 signed = "{timestamp}.{body}"
+tolerance_secs = 180              # optional, instead of webhooks.incoming.tolerance_secs
 ```
 
-A source whose secret is missing fails the boot when a route uses it, naming the key.
+`format` is the shape of the header value: `{signature}` once and `{timestamp}` at most once, with text between them. `signed` is what is signed, from `{timestamp}`, `{id}` and `{body}`. When the timestamp or the delivery id come in headers of their own, name them with `timestamp_header` and `id_header`; `event_header` names the header that carries the event type.
 
 ## Testing
 
@@ -359,6 +399,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
     let app = TestApp::builder()
         .temp_database()
         .config("queue.driver", "memory")
+        .config("webhooks.routes", false) // the routes need AccessModule
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(QueueModule::from_config())
@@ -391,7 +432,13 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
 }
 ```
 
-Answer with `FakeResponse::new(500)` to test retries: the delivery stays `pending` with one attempt, and moving a `FixedClock` past the backoff makes the next `run_pending` try again. To check that an event fans out without sending anything, install a [`QueueFake`](/docs/testing/fakes/#the-queue) and assert on `navree::webhooks::FanOut` (job `webhooks.fan_out`).
+The last argument of `verify` is the tolerance: `None` checks the signature only, `Some(Tolerance::secs(300))` also checks the timestamp against the system clock, and `Tolerance::at(now, 300)` against a time you pick.
+
+Answer with `FakeResponse::new(500)` to test retries: the delivery stays `Pending` with one attempt. Override the app's clock with a `FixedClock` (`.override_value::<dyn Clock>(clock.clone())`), and moving it past the next wait (`clock.advance(RETRY_SCHEDULE[1])`) makes the next `run_pending` try again. To check that an event fans out without sending anything, install a [`QueueFake`](/docs/testing/fakes/#the-queue) and assert on `navree::webhooks::FanOut` (job `webhooks.fan_out`):
+
+```rust
+fake.assert_dispatched::<FanOut>(|job| job.event_type == "deal.won");
+```
 
 ### Incoming
 
@@ -417,7 +464,7 @@ app.client()
     .assert_status(204);
 ```
 
-`Stripe::sign(secret, timestamp, body)`, `Paddle::sign(secret, timestamp, body)` and `StandardWebhooks::sign(secret, id, timestamp, body)` return the header values for theirs.
+`Stripe::sign(secret, timestamp, body)`, `Paddle::sign(secret, timestamp, body)` and `StandardWebhooks::sign(secret, id, timestamp, body)` return the header values for theirs (timestamps in Unix seconds), and `Hmac::sign(&source_options, Some(timestamp), None, body)` for a configured source.
 
 ## Reference
 
@@ -434,18 +481,20 @@ app.client()
 | `webhooks.incoming.max_body_bytes` | `1048576` | Largest incoming body |
 | `webhooks.incoming.receipt_days` | `30` | How long `mark_processed` receipts are kept |
 | `webhooks.incoming.<source>.secret` | none | The secret of a source; from `.env` |
+| `webhooks.incoming.<source>.tolerance_secs` | none | The source's own tolerance |
+| `webhooks.incoming.<source>.header`, `algorithm`, `encoding`, `format`, `signed`, `timestamp_header`, `id_header`, `event_header` | see above | The scheme of an `Hmac` source |
 
 | Command | What it does |
 |---|---|
 | `webhooks:endpoints [--workspace <slug>]` | Lists endpoints with their status and failure counts |
-| `webhooks:test <endpoint-id>` | Sends `webhook.test` and prints the response |
+| `webhooks:test <endpoint-id>` | Sends `webhook.test` and prints the response; fails when the endpoint does |
 | `webhooks:retry <delivery-id>\|failed` | Queues one failed delivery, or all of them, again |
-| `webhooks:prune [--days N]` | Deletes deliveries and receipts older than N days |
+| `webhooks:prune [--days N]` | Deletes deliveries older than `retain_days` and receipts older than `receipt_days`, or both older than N days |
 
 | Event | `NAME` | When |
 |---|---|---|
-| `WebhookDeliveryFailed` | `webhook.delivery_failed` | A delivery used its last attempt |
-| `WebhookEndpointDisabled` | `webhook.endpoint_disabled` | An endpoint was disabled after failing |
+| `WebhookDeliveryFailed` | `webhook.delivery_failed` | A delivery used its last attempt (or its endpoint was disabled) |
+| `WebhookEndpointDisabled` | `webhook.endpoint_disabled` | An endpoint was disabled after failing (`reason` `failing` or `gone`) |
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/events/" title="Events">

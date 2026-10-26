@@ -90,5 +90,8 @@ pub use navree_workspace::{
     WorkspaceScoped, WorkspaceUow,
 };
 
+#[cfg(feature = "webhooks")]
+pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
+
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;

@@ -99,6 +99,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
         "navree-auth",
     ]),
+    // Webhooks: signed outgoing deliveries through the queue (a job
+    // dispatcher from navree-contracts) and the HTTP client, endpoints in the
+    // database, routes scoped to the request's workspace.
+    rule("navree-webhooks", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
+        "navree-workspace",
+    ]),
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -161,6 +169,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-auth",
     "navree-workspace",
     "navree-social",
+    "navree-webhooks",
 ];
 
 /// Cargo dependency kind of an edge.
