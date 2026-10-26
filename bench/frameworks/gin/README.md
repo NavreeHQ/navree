@@ -9,6 +9,7 @@
 | JWT | golang-jwt/jwt v5.3.1 in a middleware: `WithValidMethods(HS256)`, `WithIssuer`, `WithExpirationRequired`, then the user row is loaded (401 when it is missing) |
 | Validation | Gin's binding tags (go-playground/validator v10.30.1) on the query and body structs; failures give 400 with a JSON body |
 | UUIDs | google/uuid 1.6.0 (v4 for new deals) |
+| Security updates | Indirect modules raised above the versions Gin 1.12.0 requires, to clear OSV advisories: `golang.org/x/crypto` 0.58.0, `x/net` 0.61.0, `x/sys` 0.49.0, `x/text` 0.43.0, `github.com/quic-go/quic-go` 0.64.1 (and `x/sync` 0.24.0, which those need) |
 
 Notes:
 - `GOMAXPROCS`: Go sizes it from the process's CPU affinity mask, which `--cpuset-cpus` sets, and since Go 1.25 it also honours a cgroup CPU quota. Nothing is set by hand.
