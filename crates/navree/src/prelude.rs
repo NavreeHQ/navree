@@ -84,6 +84,9 @@ pub use navree_validation::{Valid, ValidAsync, ValidationModule};
 #[cfg(feature = "auth")]
 pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt as _};
 
+#[cfg(feature = "graphql")]
+pub use navree_graphql::{GraphqlModule, ModuleBuilderGraphqlExt as _};
+
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,

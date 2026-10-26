@@ -51,6 +51,7 @@ navree-dock = { path = "crates/navree-dock", version = "0.1.0" }
 navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
+navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -221,6 +222,11 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# GraphQL (navree-graphql): no default features (no handlebars, no
+# multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+# Line diffs for `graphql:schema --check` (the version insta already uses).
+similar = "2.7.0"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

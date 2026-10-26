@@ -20,6 +20,22 @@ use crate::engine::Ability;
 use crate::extract::request_access;
 use crate::factory::{AbilityFactory, PrincipalAccess};
 
+/// A check of something that is not a route, such as a GraphQL field, put
+/// in the request extensions before calling the authorizer:
+///
+/// - `can(.., from = "x")` reads the record id from `args["x"]` instead of
+///   the path parameters;
+/// - a denial names `path` in its log line (`field`) and in the
+///   `access.denied` audit entry (metadata `field`), and leaves the unit of
+///   work in the extensions to the caller (it is not rolled back).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FieldCheck {
+    /// What is checked, e.g. the GraphQL field path `moveDeal`.
+    pub path: String,
+    /// The arguments `from` may name, as text.
+    pub args: HashMap<String, String>,
+}
+
 /// The record a `can(.., from = "id")` route loaded and authorized, kept in
 /// the request extensions for [`Authorized`](crate::Authorized).
 #[derive(Clone)]
@@ -98,14 +114,20 @@ impl AccessAuthorizer {
                 meta.method, meta.full_path
             ))
         };
-        let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
-            .await
-            .map_err(|rejection| match rejection {
-                PathRejection::MissingPathParams(_) => misdeclared(),
-                // A parameter that is not valid percent-encoded UTF-8 names
-                // no record.
-                _ => AppError::not_found(),
-            })?;
+        let params = match parts.extensions.get::<FieldCheck>() {
+            Some(check) => check.args.clone(),
+            None => {
+                let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
+                    .await
+                    .map_err(|rejection| match rejection {
+                        PathRejection::MissingPathParams(_) => misdeclared(),
+                        // A parameter that is not valid percent-encoded UTF-8
+                        // names no record.
+                        _ => AppError::not_found(),
+                    })?;
+                params
+            }
+        };
         let id = params.get(param).ok_or_else(misdeclared)?;
         let loader = self.factory.subjects().loader(subject).ok_or_else(|| {
             AppError::internal(format!(
@@ -146,10 +168,12 @@ impl AccessAuthorizer {
         access: &PrincipalAccess,
         denial: Denial,
     ) -> AppError {
+        let field = parts.extensions.get::<FieldCheck>();
         tracing::warn!(
             target: "navree::security",
             method = %meta.method,
             route = %meta.full_path,
+            field = field.map(|check| tracing::field::display(&check.path)),
             user_id = access.user.map(tracing::field::display),
             check = %denial.metadata["check"],
             "access denied"
@@ -162,8 +186,10 @@ impl AccessAuthorizer {
             // A 403 rolls the request's unit of work back anyway; doing it
             // now releases the locks a record check took (on SQLite, the
             // database write lock), which an audit sink writing on its own
-            // connection would otherwise wait for.
-            if let Some(uow) = parts.extensions.get::<Uow>()
+            // connection would otherwise wait for. A field check's unit of
+            // work may be shared with other fields: its caller finishes it.
+            if field.is_none()
+                && let Some(uow) = parts.extensions.get::<Uow>()
                 && let Err(error) = uow.rollback().await
             {
                 tracing::warn!(target: "navree::audit", %error, "rolling back before the denial audit entry failed");
@@ -203,6 +229,9 @@ impl Denial {
         if let Some(object) = metadata.as_object_mut() {
             object.insert("method".to_owned(), json!(meta.method));
             object.insert("route".to_owned(), json!(meta.full_path));
+            if let Some(check) = parts.extensions.get::<FieldCheck>() {
+                object.insert("field".to_owned(), json!(check.path));
+            }
         }
         let mut entry = AuditEntry::new(AuditKind::Security, "access.denied").metadata(metadata);
         if let Some(user) = access.user {
