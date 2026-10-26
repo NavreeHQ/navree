@@ -55,6 +55,9 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L7 (opt-in)
+    #[cfg(feature = "billing")]
+    assert!(same::<navree::billing::BillingModule, BillingModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -213,6 +216,9 @@ struct Features {
     runtime_deps: BTreeMap<String, Vec<String>>,
 }
 
+/// Package features an app turns on itself: not in `full`.
+const OPT_IN: &[&str] = &["billing"];
+
 /// Always compiled into the facade (not behind a feature).
 const ALWAYS: [&str; 4] = [
     "navree-kernel",
@@ -369,7 +375,19 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    // The opt-in packages stay out of `full`, so default builds don't
+    // compile them.
+    for feature in OPT_IN {
+        assert!(
+            features.table.contains_key(*feature),
+            "no feature `{feature}`"
+        );
+        assert!(
+            !full.contains(*feature),
+            "`full` turns on opt-in `{feature}`"
+        );
+    }
 }
