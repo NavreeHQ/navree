@@ -8,7 +8,7 @@ use navree_kernel::{
     ProviderKey, Resolver,
 };
 
-use crate::{LogControl, LogOptions, install};
+use crate::{Console, LogControl, LogOptions, install};
 
 /// The global logging module: installs Navree's tracing subscriber and exports
 /// [`LogControl`] and [`LogOptions`] to every module.
@@ -96,8 +96,11 @@ fn register(m: &mut ModuleBuilder, options: Option<LogOptions>) {
     m.factory(
         Factory::<LogControl>::new(|r: Resolver| async move {
             let options = r.get::<LogOptions>().await?;
+            // A command that speaks a protocol on stdout gets the console
+            // lines on stderr.
+            let console = Console::for_command(r.app().command());
             // Opening the log file touches the disk: keep it off async workers.
-            let control = tokio::task::spawn_blocking(move || install(&options)).await??;
+            let control = tokio::task::spawn_blocking(move || install(&options, console)).await??;
             Ok(Arc::new(control))
         })
         .deps(vec![ProviderKey::of::<LogOptions>()]),

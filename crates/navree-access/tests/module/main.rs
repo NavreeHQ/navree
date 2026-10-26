@@ -7,6 +7,7 @@ mod routes;
 
 mod commands;
 mod endpoints;
+mod outside;
 mod parity;
 mod service;
 mod wiring;

@@ -39,6 +39,18 @@ pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {
     facade_module: "flags",
 };
 
+/// navree-mcp: `McpServer`, `McpItem` and the `__private` support of
+/// `#[mcp_server]`. Its own tests name it `::navree_mcp` (the crate has
+/// `extern crate self as navree_mcp`), not `crate`.
+pub(crate) const MCP: RuntimeCrate = RuntimeCrate {
+    package: "navree-mcp",
+    facade_module: "mcp",
+};
+
+/// The crates named by their own name even from inside themselves (their
+/// integration tests and doctests are separate crates).
+const NAMED_FROM_INSIDE: &[(&str, &str)] = &[("navree-mcp", "navree_mcp")];
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 
@@ -72,7 +84,17 @@ fn resolve(
         let root = crate_root(facade);
         return Some(quote!(#root::#module));
     }
-    lookup(krate.package).map(crate_root)
+    let found = lookup(krate.package)?;
+    match (
+        found,
+        NAMED_FROM_INSIDE.iter().find(|(p, _)| *p == krate.package),
+    ) {
+        (FoundCrate::Itself, Some((_, name))) => {
+            let name = format_ident!("{name}");
+            Some(quote!(::#name))
+        }
+        (found, _) => Some(crate_root(found)),
+    }
 }
 
 /// `crate` for the crate being compiled, `::name` for a dependency.
@@ -136,5 +158,30 @@ mod tests {
     #[test]
     fn none_when_neither_is_a_dependency() {
         assert_eq!(path(&[]), None);
+    }
+
+    #[test]
+    fn navree_mcp_names_itself_from_its_own_tests() {
+        let mcp = |found: &[(&str, FoundCrate)]| {
+            resolve(MCP, |name| {
+                found
+                    .iter()
+                    .find(|(package, _)| *package == name)
+                    .map(|(_, f)| f.clone())
+            })
+            .map(|tokens| tokens.to_string())
+        };
+        assert_eq!(
+            mcp(&[("navree-mcp", FoundCrate::Itself)]).as_deref(),
+            Some(":: navree_mcp")
+        );
+        assert_eq!(
+            mcp(&[("navree-mcp", FoundCrate::Name("navree_mcp".into()))]).as_deref(),
+            Some(":: navree_mcp")
+        );
+        assert_eq!(
+            mcp(&[("navree", FoundCrate::Name("navree".into()))]).as_deref(),
+            Some(":: navree :: mcp")
+        );
     }
 }

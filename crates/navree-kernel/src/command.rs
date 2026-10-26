@@ -20,6 +20,10 @@ pub struct CommandSpec {
     pub about: &'static str,
     /// Runs the command with the arguments after its name.
     pub run: CommandFn,
+    /// The command speaks a protocol on standard output (an MCP server over
+    /// stdio, for example), so nothing else may write there: the logger
+    /// writes to standard error instead. See [`CommandSpec::stdio`].
+    pub stdio: bool,
 }
 
 impl CommandSpec {
@@ -33,7 +37,17 @@ impl CommandSpec {
             name,
             about,
             run: Arc::new(move |ctx, args| Box::pin(f(ctx, args))),
+            stdio: false,
         }
+    }
+
+    /// Marks the command as owning standard output (it writes a protocol
+    /// there). The app knows the command it runs from boot on
+    /// ([`AppContext::command`]), so modules that would print to stdout,
+    /// navree-log's console output first among them, use stderr instead.
+    pub fn stdio(mut self) -> Self {
+        self.stdio = true;
+        self
     }
 }
 
@@ -42,6 +56,7 @@ impl fmt::Debug for CommandSpec {
         f.debug_struct("CommandSpec")
             .field("name", &self.name)
             .field("about", &self.about)
+            .field("stdio", &self.stdio)
             .finish_non_exhaustive()
     }
 }

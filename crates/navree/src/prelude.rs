@@ -87,6 +87,9 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 #[cfg(feature = "flags")]
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 
+#[cfg(feature = "mcp")]
+pub use navree_mcp::{McpModule, ModuleBuilderMcpExt as _};
+
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,

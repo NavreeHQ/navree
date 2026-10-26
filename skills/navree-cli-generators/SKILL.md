@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with the files it writes and what it registers, the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test), running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with the files it writes and what it registers, the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, MCP server), running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -48,6 +48,7 @@ hint with the line to add. Keep the markers:
 | `make:policy posts moderation` | `policies/moderation.rs` (ability rules) | a call in `src/abilities.rs` |
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, command `posts:publish-scheduled` | `m.command(..)` in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | `mod publishing;` in `tests/mod.rs` |
+| `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp` with one tool `assistant_echo` (see `navree-mcp`) | `navree::mcp::ModuleBuilderMcpExt::mcp_server::<..>(m)` in `wire`; prints the `mcp` feature, utoipa and `McpModule` steps |
 
 All `make:<kind>` take `--path <dir>` (default `src/modules`). The module
 must exist (`make:module` first); `make:listener --event` needs the event
