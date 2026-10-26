@@ -71,7 +71,6 @@ mod entity;
 mod error;
 mod events;
 mod fake;
-mod jose;
 mod migration;
 mod module;
 mod oauth;
