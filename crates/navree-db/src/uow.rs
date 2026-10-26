@@ -233,36 +233,50 @@ impl Uow {
     ///
     /// The unit of work counts as finished as soon as `commit` starts:
     /// observers write through the transaction they are given, and
-    /// [`tx`](Uow::tx) fails from then on.
+    /// [`tx`](Uow::tx) fails from then on. Observers may still register
+    /// [`after_commit`](Uow::after_commit) hooks; they run after the ones
+    /// registered before the commit.
     pub async fn commit(&self) -> Result<(), DbErr> {
+        let committed = self.commit_tx().await;
+        // Taken after the observers ran, so hooks they registered run too.
+        let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
+        if committed? {
+            for hook in hooks {
+                hook().await;
+            }
+        }
+        Ok(())
+    }
+
+    /// The first half of [`commit`](Uow::commit): marks the unit of work
+    /// finished, runs the observers and commits the transaction. `false`
+    /// when it was already finished (its hooks are dropped then, as after a
+    /// failed commit).
+    async fn commit_tx(&self) -> Result<bool, DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
-        let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
         let tx = match current {
-            TxState::Done => return Ok(()),
+            TxState::Done => return Ok(false),
             TxState::Open(tx) => Some(tx),
             TxState::Idle if !changes.is_empty() => Some(Arc::new(self.begin().await?)),
             TxState::Idle => None,
         };
-        if let Some(tx) = tx {
-            let tx = Arc::try_unwrap(tx).map_err(|_| {
-                DbErr::Custom(
-                    "cannot commit the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
-                        .to_owned(),
-                )
-            })?;
-            if let Err(error) = self.observe(&tx, &changes).await {
-                if let Err(rollback) = tx.rollback().await {
-                    tracing::warn!(target: "navree_db::uow", error = %rollback, "rollback after a change observer error failed");
-                }
-                return Err(error);
+        let Some(tx) = tx else {
+            return Ok(true);
+        };
+        let tx = Arc::try_unwrap(tx).map_err(|_| {
+            DbErr::Custom(
+                "cannot commit the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
+                    .to_owned(),
+            )
+        })?;
+        if let Err(error) = self.observe(&tx, &changes).await {
+            if let Err(rollback) = tx.rollback().await {
+                tracing::warn!(target: "navree_db::uow", error = %rollback, "rollback after a change observer error failed");
             }
-            tx.commit().await?;
+            return Err(error);
         }
-        for hook in hooks {
-            hook().await;
-        }
-        Ok(())
+        tx.commit().await.map(|()| true)
     }
 
     /// Rolls back and drops recorded changes and after-commit hooks.

@@ -276,3 +276,104 @@ async fn observer_using_uow_tx_gets_an_error_instead_of_a_deadlock() {
     assert!(error.to_string().contains("already committed"), "{error}");
     assert_eq!(count(&db, "notes").await, 0);
 }
+
+/// How many times [`HookingObserver`]'s after-commit hook ran.
+#[derive(Default)]
+struct HookRuns(std::sync::atomic::AtomicUsize);
+
+/// Registers an after-commit hook from inside the commit (as a search
+/// index sync does), and fails while the [`FailSwitch`] is on.
+struct HookingObserver {
+    runs: Arc<HookRuns>,
+    switch: Arc<FailSwitch>,
+}
+
+impl Injectable for HookingObserver {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![
+            ProviderKey::of::<HookRuns>(),
+            ProviderKey::of::<FailSwitch>(),
+        ]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(HookingObserver {
+                runs: r.get::<HookRuns>().await?,
+                switch: r.get::<FailSwitch>().await?,
+            })
+        })
+    }
+}
+
+impl ChangeObserver for HookingObserver {
+    fn observe<'a>(
+        &'a self,
+        _tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
+        _changes: &'a [ChangeEvent],
+    ) -> BoxFuture<'a, Result<(), DbErr>> {
+        Box::pin(async move {
+            let runs = self.runs.clone();
+            uow.after_commit(move || {
+                Box::pin(async move {
+                    runs.0.fetch_add(1, Ordering::SeqCst);
+                })
+            });
+            if self.switch.0.load(Ordering::SeqCst) {
+                Err(DbErr::Custom("observer refused".into()))
+            } else {
+                Ok(())
+            }
+        })
+    }
+}
+
+struct HookingModule;
+
+impl Module for HookingModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.migrations(MigrationSet::new("notes").migration(CreateNotes))
+            .value(HookRuns::default())
+            .value(FailSwitch::default())
+            .change_observer::<HookingObserver>();
+    }
+}
+
+#[tokio::test]
+async fn after_commit_hooks_registered_by_observers_run_after_the_commit() {
+    let temp = TempDb::new();
+    let mut options = temp.options();
+    options.migrate_on_boot = true;
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(options))
+        .module(HookingModule)
+        .boot()
+        .await
+        .expect("boots");
+    let db = app.ctx().get::<Db>().await.unwrap();
+    let runs = app.ctx().get::<HookRuns>().await.unwrap();
+
+    let uow = db.uow(None, None).await;
+    Notes::insert(&uow, new_note("a")).await.unwrap();
+    uow.commit().await.expect("commit");
+    assert_eq!(runs.0.load(Ordering::SeqCst), 1, "the observer's hook ran");
+
+    uow.commit().await.expect("committing again does nothing");
+    assert_eq!(runs.0.load(Ordering::SeqCst), 1);
+
+    app.ctx()
+        .get::<FailSwitch>()
+        .await
+        .unwrap()
+        .0
+        .store(true, Ordering::SeqCst);
+    let uow = db.uow(None, None).await;
+    Notes::insert(&uow, new_note("b")).await.unwrap();
+    uow.commit().await.unwrap_err();
+    assert_eq!(
+        runs.0.load(Ordering::SeqCst),
+        1,
+        "a hook from a rolled-back commit never runs"
+    );
+}
