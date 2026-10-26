@@ -75,6 +75,15 @@ pub enum Command {
     MakeTest(MakeArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
+    /// Run the app's local services (dock.toml) with Docker or Podman.
+    #[command(subcommand)]
+    Dock(DockCommand),
+    /// Add a service to dock.toml: postgres, redis, meilisearch, mailpit, minio or nats.
+    #[command(name = "dock:add")]
+    DockAdd(DockAddArgs),
+    /// Stop a service and remove it from dock.toml.
+    #[command(name = "dock:remove")]
+    DockRemove(DockRemoveArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -169,6 +178,62 @@ pub struct DevArgs {
     /// Arguments for the app's `serve` command (after `--`).
     #[arg(last = true)]
     pub serve_args: Vec<String>,
+}
+
+/// `navree dock <command>`: the app's local services.
+#[derive(Debug, Subcommand, PartialEq, Eq)]
+pub enum DockCommand {
+    /// Start every service, or the ones named, and wait until each is ready.
+    Up {
+        /// Services to start (default: all of dock.toml).
+        services: Vec<String>,
+    },
+    /// Stop and remove the containers of every service, or of the ones named.
+    Down {
+        /// Services to stop (default: all of dock.toml).
+        services: Vec<String>,
+        /// Also delete their data (the volumes).
+        #[arg(long)]
+        volumes: bool,
+    },
+    /// Each service's state, image and address.
+    Status,
+    /// A service's output.
+    Logs {
+        /// The service.
+        service: String,
+        /// Keep printing new output.
+        #[arg(long, short)]
+        follow: bool,
+    },
+    /// Print the settings your app gets, as NAME=value lines.
+    Env {
+        /// Prefix each line with `export` (for `eval` in a shell).
+        #[arg(long)]
+        export: bool,
+    },
+    /// Open the service's client: psql, redis-cli, the nats CLI, or a shell.
+    Shell {
+        /// The service.
+        service: String,
+    },
+}
+
+/// `navree dock:add <service>`.
+#[derive(Debug, Args)]
+pub struct DockAddArgs {
+    /// postgres, redis, meilisearch, mailpit, minio or nats.
+    pub service: String,
+}
+
+/// `navree dock:remove <service> [--volumes]`.
+#[derive(Debug, Args)]
+pub struct DockRemoveArgs {
+    /// The service to remove.
+    pub service: String,
+    /// Also delete its data (the volume).
+    #[arg(long)]
+    pub volumes: bool,
 }
 
 #[cfg(test)]
@@ -267,6 +332,84 @@ mod tests {
         };
         assert!(args.no_web);
         assert_eq!(args.serve_args, ["--addr", "0.0.0.0:8080"]);
+    }
+
+    fn dock(args: &[&str]) -> DockCommand {
+        let mut all = vec!["dock"];
+        all.extend(args);
+        let Command::Dock(command) = parse(&all) else {
+            panic!("{args:?} must be a dock command");
+        };
+        command
+    }
+
+    #[test]
+    fn dock_commands() {
+        assert_eq!(dock(&["up"]), DockCommand::Up { services: vec![] });
+        assert_eq!(
+            dock(&["up", "postgres", "nats"]),
+            DockCommand::Up {
+                services: vec!["postgres".into(), "nats".into()]
+            }
+        );
+        assert_eq!(
+            dock(&["down"]),
+            DockCommand::Down {
+                services: vec![],
+                volumes: false
+            }
+        );
+        assert_eq!(
+            dock(&["down", "postgres", "--volumes"]),
+            DockCommand::Down {
+                services: vec!["postgres".into()],
+                volumes: true
+            }
+        );
+        assert_eq!(dock(&["status"]), DockCommand::Status);
+        assert_eq!(
+            dock(&["logs", "postgres", "--follow"]),
+            DockCommand::Logs {
+                service: "postgres".into(),
+                follow: true
+            }
+        );
+        assert_eq!(
+            dock(&["logs", "redis", "-f"]),
+            DockCommand::Logs {
+                service: "redis".into(),
+                follow: true
+            }
+        );
+        assert_eq!(dock(&["env"]), DockCommand::Env { export: false });
+        assert_eq!(
+            dock(&["env", "--export"]),
+            DockCommand::Env { export: true }
+        );
+        assert_eq!(
+            dock(&["shell", "postgres"]),
+            DockCommand::Shell {
+                service: "postgres".into()
+            }
+        );
+        assert!(Cli::try_parse_from(["navree", "dock", "logs"]).is_err());
+        assert!(Cli::try_parse_from(["navree", "dock", "restart"]).is_err());
+    }
+
+    #[test]
+    fn dock_add_and_remove() {
+        let Command::DockAdd(args) = parse(&["dock:add", "postgres"]) else {
+            panic!("expected dock:add");
+        };
+        assert_eq!(args.service, "postgres");
+        let Command::DockRemove(args) = parse(&["dock:remove", "redis", "--volumes"]) else {
+            panic!("expected dock:remove");
+        };
+        assert_eq!((args.service.as_str(), args.volumes), ("redis", true));
+        let Command::DockRemove(args) = parse(&["dock:remove", "redis"]) else {
+            panic!("expected dock:remove");
+        };
+        assert!(!args.volumes);
     }
 
     #[test]

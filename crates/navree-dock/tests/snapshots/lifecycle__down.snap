@@ -1,0 +1,20 @@
+---
+source: crates/navree-dock/tests/lifecycle.rs
+expression: "transcript(&dock, &out)"
+---
+$ docker ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ docker compose --project-name crm-api --file .navree/dock/compose.yaml down --remove-orphans
+$ docker ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ docker compose --project-name crm-api --file .navree/dock/compose.yaml down --remove-orphans --volumes
+$ docker ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ docker rm --force crm-api-postgres
+$ docker ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ docker rm --force crm-api-postgres
+$ docker volume rm --force crm-api-postgres-data
+$ docker volume rm --force crm-api-redis-data
+--- printed ---
+Stopped crm-api services.
+Stopped crm-api services and deleted their data.
+  postgres  stopped
+  postgres  stopped, data deleted
+  redis     stopped, data deleted

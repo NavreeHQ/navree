@@ -82,7 +82,7 @@ export function DockVisual() {
   const services = [
     { name: "postgres", image: "postgres:17", addr: "127.0.0.1:5432", ready: "2.1 s" },
     { name: "redis", image: "redis:7", addr: "127.0.0.1:6379", ready: "0.4 s" },
-    { name: "mailpit", image: "axllent/mailpit", addr: "127.0.0.1:1025", ready: "0.6 s" },
+    { name: "mailpit", image: "axllent/mailpit:v1.31", addr: "127.0.0.1:1025", ready: "0.6 s" },
   ];
   return (
     <div aria-hidden className="rounded-lg border border-line bg-ink-0/60 px-3 py-2.5 font-mono text-xs leading-5">

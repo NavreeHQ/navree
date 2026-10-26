@@ -1,0 +1,19 @@
+---
+source: crates/navree-dock/tests/lifecycle.rs
+expression: "transcript(&dock, &out)"
+---
+$ docker ps --all --filter label=dev.navree.dock.project=crm-api --format '{{.Names}}|{{.State}}|{{.Image}}|{{.Ports}}'
+$ docker image inspect --format '{{.Id}}' postgres:17
+$ [attached] docker pull postgres:17
+$ docker image inspect --format '{{.Id}}' axllent/mailpit:v1.31
+$ docker compose --project-name crm-api --file .navree/dock/compose.yaml up --detach postgres mailpit
+$ docker exec crm-api-postgres pg_isready -h 127.0.0.1 -p 5432 -U navree -d crm_api
+$ docker exec crm-api-postgres pg_isready -h 127.0.0.1 -p 5432 -U navree -d crm_api
+$ docker exec crm-api-postgres pg_isready -h 127.0.0.1 -p 5432 -U navree -d crm_api
+--- printed ---
+Starting crm-api services with docker
+  pulling  postgres:17
+  postgres  postgres:17            127.0.0.1:5432  ready in 1.0 s
+  mailpit   axllent/mailpit:v1.31  127.0.0.1:1025  ready in 0.5 s
+Mailpit's inbox: http://127.0.0.1:8025
+Wrote 2 settings to .env: APP_DATABASE__URL, APP_MAIL__TRANSPORT.

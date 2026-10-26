@@ -2696,6 +2696,7 @@ dependencies = [
  "navree-contracts",
  "navree-crypto",
  "navree-db",
+ "navree-dock",
  "navree-events",
  "navree-http",
  "navree-http-client",
@@ -2862,6 +2863,7 @@ dependencies = [
  "heck 0.5.0",
  "insta",
  "minijinja",
+ "navree-dock",
  "notify",
  "notify-debouncer-mini",
  "serde",
@@ -2946,6 +2948,18 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "navree-dock"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]
@@ -5204,6 +5218,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 
