@@ -55,6 +55,9 @@ fn every_module_crate_is_reexported_whole() {
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
+    // L7 (opt-in)
+    #[cfg(feature = "billing")]
+    assert!(same::<navree::billing::BillingModule, BillingModule>());
 }
 
 /// The kernel names an app's `main` and root module use most.
@@ -213,6 +216,11 @@ struct Features {
     runtime_deps: BTreeMap<String, Vec<String>>,
 }
 
+/// Features an app turns on itself, left out of `full`: packages a default
+/// build doesn't compile (`billing`) and development tools an app's runtime
+/// never needs (`dock`).
+const OPT_IN: &[&str] = &["billing", "dock"];
+
 /// Always compiled into the facade (not behind a feature).
 const ALWAYS: [&str; 4] = [
     "navree-kernel",
@@ -360,10 +368,6 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     }
     assert!(extra.is_empty(), "{extra:#?}");
 }
-
-/// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs.
-const OPT_IN: &[&str] = &["dock"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
