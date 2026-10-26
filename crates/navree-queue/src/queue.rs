@@ -11,7 +11,9 @@ use navree_kernel::{AppContext, WeakAppContext};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::record::{FailedJob, NewJob, RetryTarget};
+use crate::batch::{Batch, BatchRow, JobBatch};
+use crate::operations::RunningJobs;
+use crate::record::{FailedJob, Membership, NewJob, RetryTarget};
 use crate::store::Store;
 use crate::{QueueError, QueueOptions};
 
@@ -37,6 +39,8 @@ pub(crate) struct Inner {
     pub(crate) registry: HashMap<&'static str, JobRegistration>,
     /// The app, for job contexts and the shutdown token.
     app: Option<WeakAppContext>,
+    /// The jobs this process's workers are running.
+    pub(crate) running: RunningJobs,
 }
 
 impl Queue {
@@ -58,8 +62,36 @@ impl Queue {
                 clock,
                 registry,
                 app,
+                running: RunningJobs::default(),
             }),
         }
+    }
+
+    /// Queues the job in `envelope` as the work of operation `operation`,
+    /// as part of `uow`.
+    pub(crate) async fn push_for_operation_in(
+        &self,
+        uow: &Uow,
+        envelope: JobEnvelope,
+        operation: Uuid,
+    ) -> Result<String, QueueError> {
+        let delay = envelope_delay(&envelope);
+        let mut job = self.prepare(envelope, delay)?;
+        job.membership.operation_id = Some(operation.to_string());
+        self.store_in(uow, job).await
+    }
+
+    /// Queues the job in `envelope` as the work of operation `operation`
+    /// (joining the current unit of work like [`dispatch`](Queue::dispatch)).
+    pub(crate) async fn push_for_operation(
+        &self,
+        envelope: JobEnvelope,
+        operation: Uuid,
+    ) -> Result<String, QueueError> {
+        let delay = envelope_delay(&envelope);
+        let mut job = self.prepare(envelope, delay)?;
+        job.membership.operation_id = Some(operation.to_string());
+        self.store(job).await
     }
 
     /// The options the queue runs with.
@@ -177,6 +209,147 @@ impl Queue {
         self.inner.store.pending_count(queue).await
     }
 
+    /// Dispatches `batch`: stores the batch and queues its jobs, all at
+    /// once; returns the stored batch. Joins the current unit of work like
+    /// [`dispatch`](Queue::dispatch). A batch with no jobs finishes at once
+    /// (its `then` and `finally` are queued with it).
+    ///
+    /// Every job type in the batch, callbacks included, must be registered
+    /// ([`QueueError::UnknownJob`] otherwise, and nothing is queued).
+    pub async fn dispatch_batch(&self, batch: Batch) -> Result<JobBatch, QueueError> {
+        let (row, jobs) = self.prepare_batch(batch)?;
+        if !matches!(self.inner.store, Store::Fake(_))
+            && let Some(uow) = Uow::current()
+            && !uow.is_finished().await
+        {
+            return self.store_batch_in(&uow, row, jobs).await;
+        }
+        let batch = row.to_batch();
+        self.inner.store.insert_batch(row, jobs).await?;
+        Ok(batch)
+    }
+
+    /// Dispatches `batch` as part of the unit of work `uow` (see
+    /// [`dispatch_in`](Queue::dispatch_in)): nothing is stored if it rolls
+    /// back.
+    pub async fn dispatch_batch_in(&self, uow: &Uow, batch: Batch) -> Result<JobBatch, QueueError> {
+        let (row, jobs) = self.prepare_batch(batch)?;
+        self.store_batch_in(uow, row, jobs).await
+    }
+
+    /// The batch `id`, with its counts as they are now.
+    pub async fn find_batch(&self, id: &str) -> Result<Option<JobBatch>, QueueError> {
+        Ok(self
+            .inner
+            .store
+            .find_batch(id)
+            .await?
+            .map(|row| row.to_batch()))
+    }
+
+    /// The most recent batches, newest first, at most `limit`.
+    pub async fn batches(&self, limit: usize) -> Result<Vec<JobBatch>, QueueError> {
+        Ok(self
+            .inner
+            .store
+            .batches(limit)
+            .await?
+            .iter()
+            .map(BatchRow::to_batch)
+            .collect())
+    }
+
+    /// Cancels batch `id`: its jobs that have not started are skipped, and
+    /// running ones see it through `ctx.is_cancelled()` and
+    /// `ctx.progress(..)`. `finally` still runs once every job has ended;
+    /// `then` does not. A finished batch stays as it is. Returns the batch
+    /// afterwards (`None` when there is none).
+    pub async fn cancel_batch(&self, id: &str) -> Result<Option<JobBatch>, QueueError> {
+        let now = self.now_ms();
+        Ok(self
+            .inner
+            .store
+            .cancel_batch(id, now)
+            .await?
+            .map(|row| row.to_batch()))
+    }
+
+    /// Deletes the batches whose jobs and callbacks all finished more than
+    /// `older_than` ago; returns how many.
+    pub async fn prune_batches(&self, older_than: Duration) -> Result<u64, QueueError> {
+        let before = self
+            .now_ms()
+            .saturating_sub(i64::try_from(older_than.as_millis()).unwrap_or(i64::MAX));
+        self.inner.store.prune_batches(before).await
+    }
+
+    /// The batch row and the jobs to store for `batch` (callbacks due at
+    /// once included).
+    fn prepare_batch(&self, batch: Batch) -> Result<(BatchRow, Vec<NewJob>), QueueError> {
+        batch.check()?;
+        let fake = matches!(self.inner.store, Store::Fake(_));
+        let callbacks = [
+            &batch.callbacks.then,
+            &batch.callbacks.catch,
+            &batch.callbacks.finally,
+        ];
+        for callback in callbacks.into_iter().flatten() {
+            if !fake && !self.inner.registry.contains_key(callback.job_type.as_str()) {
+                return Err(QueueError::UnknownJob {
+                    job_type: callback.job_type.clone(),
+                });
+            }
+        }
+        let now = self.now_ms();
+        let mut row = BatchRow::new(Uuid::now_v7().to_string(), &batch, now);
+        let mut jobs = Vec::with_capacity(batch.jobs.len());
+        for envelope in batch.jobs {
+            let mut job = self.prepare(not_unique(envelope), Duration::ZERO)?;
+            job.membership = Membership::batch_job(&row.id, row.operation_id.as_deref());
+            jobs.push(job);
+        }
+        for envelope in row.start_empty(now) {
+            jobs.push(self.prepare_callback(envelope, &row)?);
+        }
+        Ok((row, jobs))
+    }
+
+    /// A batch callback that became due, as the job to store.
+    pub(crate) fn prepare_callback(
+        &self,
+        envelope: JobEnvelope,
+        row: &BatchRow,
+    ) -> Result<NewJob, QueueError> {
+        let mut job = self.prepare(not_unique(envelope), Duration::ZERO)?;
+        job.membership = Membership::batch_callback(&row.id, row.operation_id.as_deref());
+        Ok(job)
+    }
+
+    /// Stores a prepared batch as part of `uow`.
+    async fn store_batch_in(
+        &self,
+        uow: &Uow,
+        row: BatchRow,
+        jobs: Vec<NewJob>,
+    ) -> Result<JobBatch, QueueError> {
+        let batch = row.to_batch();
+        match &self.inner.store {
+            Store::Database(_) => self.inner.store.insert_batch_in(uow, &row, &jobs).await?,
+            Store::Memory(_) | Store::Fake(_) => {
+                let queue = self.clone();
+                uow.after_commit(move || {
+                    Box::pin(async move {
+                        let id = row.id.clone();
+                        if let Err(error) = queue.inner.store.insert_batch(row, jobs).await {
+                            tracing::error!(target: "navree::job", batch_id = %id, %error, "cannot queue a batch after commit");
+                        }
+                    })
+                });
+            }
+        }
+        Ok(batch)
+    }
+
     /// The current time in Unix milliseconds (the app's `dyn Clock` when it
     /// has one).
     pub(crate) fn now_ms(&self) -> i64 {
@@ -228,8 +401,16 @@ impl Queue {
             created_at: now,
             unique_key,
             unique_for_ms,
+            membership: Membership::default(),
         })
     }
+}
+
+/// `envelope` without uniqueness: every job of a batch counts.
+fn not_unique(mut envelope: JobEnvelope) -> JobEnvelope {
+    envelope.unique_key = None;
+    envelope.options.unique_for_secs = None;
+    envelope
 }
 
 /// The envelope's `delay_secs`.

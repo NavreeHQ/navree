@@ -69,6 +69,48 @@ impl FailedJob {
             created_at: now,
             unique_key: None,
             unique_for_ms: None,
+            membership: Membership::default(),
+        }
+    }
+}
+
+/// What a job belongs to: a batch (as one of its jobs or as one of its
+/// callbacks) and an operation.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Membership {
+    /// The batch the job belongs to.
+    pub(crate) batch_id: Option<String>,
+    /// Whether the job is a `then`, `catch` or `finally` callback of its
+    /// batch rather than one of its jobs.
+    pub(crate) callback: bool,
+    /// The operation the job does the work of.
+    pub(crate) operation_id: Option<String>,
+}
+
+impl Membership {
+    /// One of the jobs of batch `batch_id`.
+    pub(crate) fn batch_job(batch_id: &str, operation_id: Option<&str>) -> Self {
+        Self {
+            batch_id: Some(batch_id.to_owned()),
+            callback: false,
+            operation_id: operation_id.map(str::to_owned),
+        }
+    }
+
+    /// A callback of batch `batch_id`.
+    pub(crate) fn batch_callback(batch_id: &str, operation_id: Option<&str>) -> Self {
+        Self {
+            batch_id: Some(batch_id.to_owned()),
+            callback: true,
+            operation_id: operation_id.map(str::to_owned),
+        }
+    }
+
+    /// One of a batch's jobs (not a callback).
+    pub(crate) fn in_batch(&self) -> Option<&str> {
+        match (&self.batch_id, self.callback) {
+            (Some(batch), false) => Some(batch),
+            _ => None,
         }
     }
 }
@@ -91,6 +133,8 @@ pub(crate) struct NewJob {
     /// How long a pending unique job blocks its duplicates (`None`: while
     /// it is pending).
     pub(crate) unique_for_ms: Option<i64>,
+    /// The batch and operation the job belongs to.
+    pub(crate) membership: Membership,
 }
 
 impl NewJob {
@@ -112,6 +156,8 @@ pub(crate) struct ReservedJob {
     pub(crate) options: JobOptions,
     /// Including the attempt that is starting.
     pub(crate) attempts: u32,
+    /// The batch and operation the job belongs to.
+    pub(crate) membership: Membership,
 }
 
 /// How long a reservation of a job without a time limit (`timeout_secs`

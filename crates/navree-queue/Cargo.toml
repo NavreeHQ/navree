@@ -11,13 +11,19 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# The operations routes and their SSE stream.
+axum = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
+navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The authorizer of the private channel `operations.{id}`.
+navree-realtime = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
@@ -27,6 +33,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

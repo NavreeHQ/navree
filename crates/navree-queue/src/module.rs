@@ -3,12 +3,17 @@
 use std::sync::Arc;
 
 use navree_config::{ConfigSection, ModuleBuilderConfigExt};
-use navree_contracts::{Clock, Dispatcher, JobRegistration};
+use navree_contracts::{Clock, Dispatcher, JobMonitor, JobRegistration};
 use navree_db::{Db, ModuleBuilderDbExt};
+use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_realtime::ModuleBuilderRealtimeExt;
 
+use crate::operations::{QueueMonitor, authorize_channel};
 use crate::store::{DatabaseStore, MemoryStore, Store};
-use crate::{Queue, QueueDriver, QueueOptions, commands, migration};
+use crate::{
+    Operations, OperationsController, Queue, QueueDriver, QueueOptions, commands, migration,
+};
 
 /// The queue module. Global; provides and exports [`Queue`] (also as the
 /// app's `dyn Dispatcher`, so mail, events, notifications and schedules
@@ -139,6 +144,37 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
             .deps(vec![ProviderKey::of::<Queue>()]),
         )
         .exports::<dyn Dispatcher>()
+        .factory(
+            Factory::<dyn JobMonitor>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                Ok(Arc::new(QueueMonitor { queue }) as Arc<dyn JobMonitor>)
+            })
+            .deps(vec![ProviderKey::of::<Queue>()]),
+        )
+        .exports::<dyn JobMonitor>()
+        // Operations need the database: resolved lazily, so apps without
+        // `DatabaseModule` boot and simply have none.
+        .factory(
+            Factory::<Operations>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                let options = r.get::<QueueOptions>().await?;
+                let app = r.app();
+                let db = app.get::<Db>().await?;
+                Ok(Arc::new(Operations::new(
+                    (*db).clone(),
+                    queue,
+                    options.operations.clone(),
+                    Some(app.downgrade()),
+                )))
+            })
+            .deps(vec![
+                ProviderKey::of::<Queue>(),
+                ProviderKey::of::<QueueOptions>(),
+            ]),
+        )
+        .exports::<Operations>()
+        .controller::<OperationsController>()
+        .channel("operations.{id}", authorize_channel)
         .migrations(migration::migrations());
     for command in commands::commands() {
         m.command(command);
