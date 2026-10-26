@@ -253,7 +253,7 @@ pub(crate) struct ErrorState {
     pub(crate) mappers: Vec<ErrorMapper>,
 }
 
-/// Renders every error response in the NestJS format: [`AppError`]s (mapped
+/// Renders every error response in the JSON error shape: [`AppError`]s (mapped
 /// by the contributed [`ErrorMapper`]s, 5xx logged with the request id) and
 /// plain-text or empty error responses from Axum and Tower layers.
 pub(crate) async fn errors(

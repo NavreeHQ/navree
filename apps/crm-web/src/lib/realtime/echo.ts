@@ -7,7 +7,7 @@ import type { RealtimeConnection } from "./connection";
 type AuthCallback = (error: Error | null, data: { auth: string; channel_data?: string } | null) => void;
 
 /**
- * Connects to the API's Pusher-protocol server with Laravel Echo. The socket
+ * Connects to the API's Pusher-protocol server with Echo on pusher-js. The socket
  * goes straight to Navree; private channels authorise through same-origin
  * `POST /broadcasting/auth`, where the BFF adds the bearer token.
  */

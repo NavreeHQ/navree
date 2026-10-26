@@ -108,8 +108,8 @@ impl fmt::Debug for TokenPair {
     }
 }
 
-/// Accounts, credentials and token pairs (NestJS `AuthService` +
-/// `UsersService`). Provided and exported by the auth module.
+/// Accounts, credentials and token pairs: users, passwords and the
+/// tokens they sign in with. Provided and exported by the auth module.
 ///
 /// - Passwords are hashed with Argon2id (navree-crypto's `Hasher`) and
 ///   rehashed at login when the hashing parameters changed.
@@ -247,8 +247,8 @@ impl AuthService {
         .await
     }
 
-    /// The user with `email` and `password` (NestJS `LocalStrategy`
-    /// `validate`): [`AuthError::InvalidCredentials`] for an unknown email,
+    /// The user with `email` and `password` (the password sign-in check):
+    /// [`AuthError::InvalidCredentials`] for an unknown email,
     /// a wrong password or an unreadable stored hash, in about the same
     /// time. Rehashes the password when the hashing parameters changed.
     pub async fn validate_user(&self, email: &str, password: &str) -> Result<User, AuthError> {

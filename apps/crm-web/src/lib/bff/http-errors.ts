@@ -1,4 +1,4 @@
-/** NestJS-style error bodies (`{statusCode, message, error}`), as the Navree API returns them. */
+/** Error bodies (`{statusCode, message, error}`), as the Navree API returns them. */
 
 const REASONS: Record<number, string> = {
   400: "Bad Request",

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::{MailError, Message};
 
-/// Something that renders into a [`Message`] (Laravel's mailable): send it
+/// Something that renders into a [`Message`] (a mailable): send it
 /// with [`Mailer::send`](crate::Mailer::send) or
 /// [`Mailer::queue`](crate::Mailer::queue).
 ///

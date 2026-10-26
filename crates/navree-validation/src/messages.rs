@@ -1,5 +1,5 @@
-//! The message table: English validation messages in the NestJS
-//! (class-validator) style, keyed by rule, and [`Messages`], the table an
+//! The message table: English validation messages (the field path, then
+//! the rule, in lower case without a full stop), keyed by rule, and [`Messages`], the table an
 //! app actually uses (defaults plus overrides from
 //! [`ValidationOptions`](crate::ValidationOptions)).
 //!
@@ -153,8 +153,7 @@ impl Messages {
     }
 
     /// The display name of `field`: its configured attribute name, else the
-    /// field path itself (`first_name`, `items.0.sku`), as class-validator
-    /// names properties.
+    /// field path itself (`first_name`, `items.0.sku`).
     pub fn attribute(&self, field: &str) -> String {
         match self.attributes.get(field) {
             Some(name) => name.clone(),

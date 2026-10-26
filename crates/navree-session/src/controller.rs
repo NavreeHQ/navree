@@ -9,7 +9,7 @@ use navree_kernel::{BoxFuture, Injectable, KernelError, Resolver};
 use crate::Session;
 
 /// Serves `GET /sanctum/csrf-cookie` (absolute: no API prefix), the
-/// Sanctum-style handshake of single-page apps: 204 with the `XSRF-TOKEN`
+/// CSRF handshake of single-page apps: 204 with the `XSRF-TOKEN`
 /// cookie (and the session cookie when the session is new).
 pub(crate) struct CsrfCookieController;
 

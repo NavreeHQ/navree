@@ -1,6 +1,6 @@
 [package]
 name = "navree-auth"
-description = "Navree AuthModule: NestJS-style JWT authentication with rotating refresh tokens, Passport-style strategies and user accounts."
+description = "Navree AuthModule: JWT authentication with rotating refresh tokens, pluggable strategies and user accounts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

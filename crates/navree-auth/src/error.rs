@@ -37,7 +37,7 @@ pub enum AuthError {
     Invalid {
         /// The input field.
         field: &'static str,
-        /// A class-validator style message, e.g. "password must be longer
+        /// A field message in the validation style, e.g. "password must be longer
         /// than or equal to 8 characters".
         message: String,
     },
@@ -201,7 +201,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn credentials_and_tokens_are_401_with_nest_messages() {
+    fn credentials_and_tokens_are_401_with_auth_messages() {
         let error = AuthError::InvalidCredentials.into_app_error();
         assert_eq!(
             error.body(),
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn account_flow_errors_map_to_nest_responses() {
+    fn account_flow_errors_map_to_json_responses() {
         let cases = [
             (
                 AuthError::InvalidResetToken,

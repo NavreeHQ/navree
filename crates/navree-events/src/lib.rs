@@ -1,7 +1,7 @@
 //! # navree-events
 //!
 //! `EventsModule`: a typed, in-process event bus with synchronous and queued
-//! listeners (Laravel events and listeners, NestJS `@OnEvent`).
+//! listeners.
 //!
 //! - An [`Event`] is a serializable value with a stable [`NAME`](Event::NAME).
 //! - A [`Listener`] is a provider that handles one or more event types. Modules

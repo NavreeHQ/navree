@@ -21,7 +21,7 @@ use crate::relay::{self, RelayClient};
 use crate::{Realtime, RealtimeOptions};
 
 /// The realtime module: a Pusher-protocol (version 7) WebSocket server in
-/// the app's own HTTP server, so `laravel-echo` and `pusher-js` work
+/// the app's own HTTP server, so `pusher-js` and any Pusher client work
 /// unchanged.
 ///
 /// Global; provides and exports [`Realtime`] and `dyn Broadcaster` (the same
@@ -216,7 +216,7 @@ impl fmt::Debug for ChannelRegistration {
     }
 }
 
-/// Channel authorizers on a [`ModuleBuilder`] (Laravel's `Broadcast::channel`).
+/// Channel authorizers on a [`ModuleBuilder`].
 pub trait ModuleBuilderRealtimeExt {
     /// Authorizes private and presence channels whose name, without the
     /// `private-` / `presence-` prefix, matches `pattern`: literal text and

@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer};
 /// ```toml
 /// [realtime]
 /// app_id = "crm"
-/// key = "navree-crm-key"          # the key in `ws://host/app/{key}` and in Echo's config
+/// key = "navree-crm-key"          # the key in `ws://host/app/{key}` and in the client's config
 /// secret = "change-me"          # signs private and presence subscriptions
 /// allowed_origins = ["http://localhost:3000"]
 /// activity_timeout_secs = 120

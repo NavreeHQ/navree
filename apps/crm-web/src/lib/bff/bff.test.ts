@@ -280,7 +280,7 @@ describe("BFF proxy", () => {
     expect(kept.length).toBeGreaterThan(0);
   });
 
-  it("returns 502 in the NestJS format when Navree is unreachable", async () => {
+  it("returns 502 in Navree's error shape when Navree is unreachable", async () => {
     const bff = createBff({
       apiUrl: API,
       fetch: (async () => {

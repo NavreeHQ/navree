@@ -304,7 +304,7 @@ pub struct ApiMeta {
     pub description: Option<String>,
     /// Tags (groups in the docs UI).
     pub tags: Vec<String>,
-    /// Documented error statuses (rendered as NestJS-format error
+    /// Documented error statuses (rendered as JSON error
     /// responses).
     pub responses: Vec<u16>,
     /// The success status; `0` means the method's default (200).

@@ -1,4 +1,4 @@
-//! NestJS-format errors and request ids.
+//! JSON errors and request ids.
 
 use std::collections::BTreeMap;
 
@@ -36,7 +36,7 @@ fn validation_route() -> RouteDef {
 }
 
 #[tokio::test]
-async fn nest_error_shape_and_content_type() {
+async fn json_error_shape_and_content_type() {
     let app = Setup::new(vec![validation_route()]).boot().await;
 
     let response = app
@@ -65,7 +65,7 @@ async fn nest_error_shape_and_content_type() {
         .iter()
         .map(|key| text.find(key).expect(key))
         .collect();
-    assert!(positions.is_sorted(), "NestJS member order: {text}");
+    assert!(positions.is_sorted(), "error member order: {text}");
 }
 
 #[tokio::test]
@@ -194,7 +194,7 @@ struct NewThing {
 }
 
 #[tokio::test]
-async fn framework_rejections_become_nest_errors() {
+async fn framework_rejections_become_json_errors() {
     let app = Setup::new(vec![
         RouteDef::new(
             Method::POST,

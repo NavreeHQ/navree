@@ -25,7 +25,7 @@
 //!   out.
 //! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
 //!   [`create_many`] build test records.
-//! - [`PageQuery`] / [`Page`] / [`paginate`] give Laravel-style offset
+//! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
 //!   pages (`{"data", "meta": {"current_page", "per_page", "total",
 //!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
 //!   page by a UUID v7 key.

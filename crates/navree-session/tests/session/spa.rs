@@ -1,4 +1,4 @@
-//! The Sanctum-style SPA flow at the session level: an authenticator that
+//! The single-page-app flow at the session level: an authenticator that
 //! reads the session (as navree-auth's does), login with session
 //! regeneration, authenticated requests and logout.
 

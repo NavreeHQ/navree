@@ -12,7 +12,7 @@ use navree_kernel::AppContext;
 
 use crate::{AuthError, AuthService, ClientMeta, User};
 
-/// The signed-in user, loaded from the database (NestJS `@CurrentUser()`).
+/// The signed-in user, loaded from the database, as a handler argument.
 /// 401 for guests and for principals whose user no longer exists. Loaded
 /// once per request.
 ///

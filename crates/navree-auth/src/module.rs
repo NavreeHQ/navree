@@ -20,7 +20,7 @@ use crate::{
 /// The purpose the JWT signing key is derived for from the application key.
 const JWT_KEY_PURPOSE: &str = "navree-auth.jwt";
 
-/// The auth module: NestJS-style JWT authentication. Global; provides and
+/// The auth module: JWT authentication. Global; provides and
 /// exports [`AuthOptions`], [`JwtService`], [`AuthService`] and navree-http's
 /// `dyn Authenticator` (a [`StrategyAuthenticator`] running every
 /// `dyn Strategy`, the built-in [`JwtStrategy`] first), and contributes:

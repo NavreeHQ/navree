@@ -223,8 +223,8 @@ impl TaskBuilder {
     }
 
     /// Runs each tick on one server only. Every Navree task already does (each
-    /// tick is claimed in `schedule_runs`), so this only states the intent,
-    /// as in Laravel.
+    /// tick is claimed in `schedule_runs`), so this only states the
+    /// intent.
     pub fn on_one_server(&mut self) -> &mut Self {
         self.on_one_server = true;
         self

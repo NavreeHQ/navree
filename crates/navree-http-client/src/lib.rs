@@ -1,7 +1,7 @@
 //! # navree-http-client
 //!
 //! `HttpClientModule`: outgoing HTTP with retries, timeouts, an SSRF policy
-//! and test fakes (Laravel's `Http` facade, on reqwest and rustls/ring).
+//! and test fakes, on reqwest and rustls/ring.
 //!
 //! - [`HttpClientModule`] is global and exports one shared [`HttpClient`],
 //!   configured with [`HttpClientModule::for_root`] or read from section

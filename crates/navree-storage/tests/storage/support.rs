@@ -106,7 +106,7 @@ impl TestResponse {
         String::from_utf8_lossy(&self.body).into_owned()
     }
 
-    /// Asserts a NestJS-format error response with `status` and returns its
+    /// Asserts a JSON error response with `status` and returns its
     /// body.
     pub fn error(&self, status: u16) -> serde_json::Value {
         assert_eq!(self.status.as_u16(), status, "body: {}", self.text());

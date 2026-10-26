@@ -1,6 +1,6 @@
 //! # navree-testing
 //!
-//! The testing kit for Navree apps, in the spirit of Laravel's HTTP tests:
+//! The testing kit for Navree apps, which tests through the real pipeline:
 //!
 //! - [`TestApp`] boots an app for one test. [`TestApp::builder`] assembles
 //!   it from modules, with hermetic configuration

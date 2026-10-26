@@ -29,8 +29,8 @@ impl fmt::Debug for dyn MailTransport {
     }
 }
 
-/// Writes messages to the log instead of delivering them (Laravel's `log`
-/// mailer), for development.
+/// Writes messages to the log instead of delivering them (the `log`
+/// transport), for development.
 ///
 /// The envelope (sender, recipients, subject) is logged at `INFO` with
 /// target `navree::mail`; the bodies only at `DEBUG` with target
@@ -61,8 +61,8 @@ impl MailTransport for LogTransport {
     }
 }
 
-/// Tries its transports in order until one delivers the message (Laravel's
-/// `failover` mailer). Each failure is logged as a warning; if every
+/// Tries its transports in order until one delivers the message (the
+/// `failover` transport). Each failure is logged as a warning; if every
 /// transport fails, the error is [`MailError::AllTransportsFailed`] with
 /// each transport's error.
 #[derive(Clone)]

@@ -79,7 +79,7 @@ async fn uuid_date_and_one_of_rules() {
             .assert_status(200);
     }
 
-    // Only the hyphenated form is a UUID, as in Laravel.
+    // Only the hyphenated form is a UUID.
     let simple = uuid::Uuid::now_v7().simple().to_string();
     app.client()
         .post("/v/schedule")

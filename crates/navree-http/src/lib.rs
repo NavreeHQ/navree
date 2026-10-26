@@ -1,7 +1,7 @@
 //! # navree-http
 //!
 //! `HttpModule`: Axum integration, the default Tower layer stack,
-//! NestJS-format errors, controllers and route metadata.
+//! JSON errors, controllers and route metadata.
 //!
 //! - Modules contribute routes with [`Controller`]s
 //!   ([`ModuleBuilderHttpExt::controller`]); each [`RouteDef`] carries a
@@ -19,7 +19,7 @@
 //!   [`Authenticator`] runs first) → [`LayerSlot::Uow`] → router → per-route:
 //!   authentication → per-user throttle → [`Guard`]s → [`RouteAuthorizer`]
 //!   → route timeout → handler → audit action.
-//! - Every error is an [`AppError`] rendered in the NestJS format, as
+//! - Every error is an [`AppError`] rendered in one JSON shape, as
 //!   `application/json`: `{"statusCode": 404, "message": "Not Found",
 //!   "error": "Not Found"}`; validation errors are 400s whose `message` lists
 //!   every field message and whose `errors` maps fields to their messages.

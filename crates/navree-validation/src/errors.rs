@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Field errors: `{"field.path": ["message", ...]}`, fields in sorted order.
 ///
 /// Converts into a 400 [`AppError`] (code `validation_failed`), which is
-/// what the extractors reject with. It renders in the NestJS format:
+/// what the extractors reject with. It renders in the JSON error shape:
 /// `message` lists every message in field order and `errors` maps each
 /// field to its messages.
 ///

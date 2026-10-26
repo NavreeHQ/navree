@@ -146,7 +146,7 @@ impl TestResponse {
         );
     }
 
-    /// Asserts a NestJS-format error response: `status`, content type
+    /// Asserts a JSON error response: `status`, content type
     /// `application/json`, a body `{"statusCode", "message", "error"}` with a
     /// matching `statusCode`, an `X-Request-Id` header and, when `message`
     /// is given, that message (`message` is a string, or for validation
@@ -242,7 +242,7 @@ impl TestResponse {
     /// Like [`assert_error`](Self::assert_error).
     #[deprecated(
         since = "0.1.0",
-        note = "errors use the NestJS format; use `assert_error(status, message)`"
+        note = "errors use the JSON error shape; use `assert_error(status, message)`"
     )]
     #[track_caller]
     pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
@@ -283,7 +283,7 @@ fn lookup<'v>(root: &'v Value, path: &str) -> Result<&'v Value, String> {
     Ok(node)
 }
 
-/// A NestJS `message`: a string, or a list of strings.
+/// An error `message`: a string, or a list of strings.
 fn is_message(message: &Value) -> bool {
     match message {
         Value::String(_) => true,

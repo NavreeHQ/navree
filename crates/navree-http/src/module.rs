@@ -19,7 +19,7 @@ use crate::{
     AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
 };
 
-/// The HTTP module: Axum server, default layer stack, NestJS-format errors,
+/// The HTTP module: Axum server, default layer stack, JSON errors,
 /// controllers. Global; provides and exports [`HttpOptions`], [`HttpServer`]
 /// and [`UrlSigner`]; registers the commands `serve`, `routes`, `down` and
 /// `up`; and checks every route at boot (access declarations, duplicate

@@ -1,4 +1,4 @@
-//! The whole NestJS-style flow through `TestClient` with bearer headers:
+//! The whole token flow through `TestClient` with bearer headers:
 //! login → authenticated request → refresh → logout, and the OpenAPI
 //! document of the auth routes.
 

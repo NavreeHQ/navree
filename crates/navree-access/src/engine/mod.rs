@@ -1,4 +1,4 @@
-//! The ability engine: CASL-compatible rules, record checks and SQL list
+//! The ability engine: rules in CASL's JSON format, record checks and SQL list
 //! filters. Pure: no database, HTTP or module wiring (that is the
 //! `AccessModule` half of the crate).
 //!

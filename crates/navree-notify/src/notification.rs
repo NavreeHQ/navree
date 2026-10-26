@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{Channel, Notifiable};
 
-/// A notification (Laravel's notification class): it picks its channels per
+/// A notification: it picks its channels per
 /// recipient with [`via`](Notification::via) and renders itself for each
 /// one. Send it with [`Notifier::send`](crate::Notifier::send).
 ///

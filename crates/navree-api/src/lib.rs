@@ -13,7 +13,7 @@
 //!   (`#[api(...)]` in controllers): request and response schemas come from
 //!   [`navree_http::schema_fn`], and the schemas they reference become
 //!   component schemas. Error statuses render as `application/json`
-//!   responses with the [`HttpError`] schema (the NestJS error format:
+//!   responses with the [`HttpError`] schema (Navree's JSON error shape:
 //!   `statusCode`, `message`, `error`, and `errors` for validation errors);
 //!   non-public routes carry the `cookie` (session)
 //!   and `bearer` (JWT access token) security schemes. See [`openapi_document`] for the

@@ -2,7 +2,7 @@
 //!
 //! `RealtimeModule`: a Pusher-protocol (version 7) WebSocket server with
 //! public, private and presence channels, served by the app's own HTTP
-//! server, so `laravel-echo` and `pusher-js` work unchanged.
+//! server, so `pusher-js` and any Pusher client work unchanged.
 //!
 //! - **Connect** at `ws://host/app/{key}` (public route). The page's
 //!   `Origin` must be allowed ([`RealtimeOptions::allowed_origins`], else the
@@ -76,18 +76,16 @@
 //! }
 //! ```
 //!
-//! On the front end (`laravel-echo` with `pusher-js`):
+//! On the front end (`pusher-js`):
 //!
 //! ```js
-//! new Echo({
-//!   broadcaster: "pusher",
-//!   key: "navree-crm-key",
+//! new Pusher("navree-crm-key", {
 //!   cluster: "",
 //!   wsHost: "127.0.0.1",
 //!   wsPort: 8080,
 //!   forceTLS: false,
 //!   enabledTransports: ["ws"],
-//!   authEndpoint: "/broadcasting/auth",
+//!   channelAuthorization: { endpoint: "/broadcasting/auth", transport: "ajax" },
 //! });
 //! ```
 #![forbid(unsafe_code)]

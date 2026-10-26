@@ -1,4 +1,4 @@
-//! [`AppError`]: every HTTP error, rendered in the NestJS error format.
+//! [`AppError`]: every HTTP error, rendered in Navree's JSON error shape.
 
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
@@ -23,7 +23,7 @@ const INTERNAL_MESSAGE: &str = "Internal server error";
 pub type Result<T, E = AppError> = std::result::Result<T, E>;
 
 /// An HTTP error. Handlers, extractors, guards and layers return it; it
-/// renders in the NestJS error format, as `application/json`:
+/// renders in Navree's JSON error shape, as `application/json`:
 ///
 /// ```json
 /// {"statusCode": 404, "message": "Deal not found", "error": "Not Found"}
@@ -283,7 +283,7 @@ fn slug(title: &str) -> String {
         .collect()
 }
 
-/// The wire format, in NestJS member order.
+/// The wire format, members in their documented order.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ErrorBody<'a> {

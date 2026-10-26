@@ -6,8 +6,8 @@ use navree_kernel::BoxFuture;
 
 use crate::{MailError, MailTransport, Message};
 
-/// Records every message instead of delivering it (Laravel's `array`
-/// mailer, `Mail::fake()`).
+/// Records every message instead of delivering it (the `array`
+/// transport), for tests.
 ///
 /// Clones share the recorded messages, so a test can keep a clone of the
 /// transport it hands to the app:

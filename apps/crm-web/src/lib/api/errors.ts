@@ -1,7 +1,7 @@
 import type { ApiErrorBody } from "./types";
 
 /**
- * An error response from the API, in the NestJS format:
+ * An error response from the API, in Navree's JSON error shape:
  * `{statusCode, message: string | string[], error, errors?: {field: [messages]}}`.
  * Validation failures are 400 with `message: string[]` and `errors`.
  */
@@ -18,7 +18,7 @@ export class ApiError extends Error {
     this.requestId = requestId;
   }
 
-  /** `message` as a list (NestJS sends a string, or a list for validation errors). */
+  /** `message` as a list (the API sends a string, or a list for validation errors). */
   get messages(): string[] {
     return Array.isArray(this.body.message) ? this.body.message : [this.body.message];
   }
@@ -79,7 +79,7 @@ function defaultReason(status: number): string {
   }
 }
 
-/** NestJS's built-in messages, which say nothing a person can act on. */
+/** Generic built-in messages, which say nothing a person can act on. */
 const GENERIC_MESSAGES = new Set(["Forbidden resource", "Internal server error", "Unauthorized", "Forbidden"]);
 
 /** True when `message` is just the reason phrase or a framework default, i.e. carries no detail. */

@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json", "X-Request-Id": "req-1" },
   });
 
-/** NestJS error body. */
+/** Navree error body. */
 const nest = (statusCode: number, message: string | string[], error: string, extra: object = {}) =>
   json({ statusCode, message, error, ...extra }, statusCode);
 
@@ -49,7 +49,7 @@ describe("API client (browser → BFF)", () => {
   });
 });
 
-describe("NestJS error mapping", () => {
+describe("Navree error mapping", () => {
   it("turns a 400 validation error into an ApiError with field errors", async () => {
     const { client } = recordingClient(() =>
       nest(400, ["name should not be empty", "website must be a URL address"], "Bad Request", {

@@ -89,7 +89,7 @@ pub struct StoredFile {
 /// otherwise) when it is UTF-8 text, else `application/octet-stream`; so an
 /// SVG or other markup is never accepted as an image.
 ///
-/// Errors (in the NestJS error format):
+/// Errors (in Navree's JSON error shape):
 /// - 400 validation errors, keyed by the field name, for an empty file or
 ///   a type `rules` does not allow (nothing is written);
 /// - 413 for a file over `rules.max_bytes`, detected
