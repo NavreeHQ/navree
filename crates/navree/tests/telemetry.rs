@@ -74,20 +74,18 @@ pub struct StoreModule(tokio::sync::mpsc::UnboundedSender<TelemetryRecord>);
 impl Module for StoreModule {
     fn register(&self, m: &mut ModuleBuilder) {
         let stored = self.0.clone();
-        m.telemetry_sink_factory(Factory::<dyn TelemetrySink>::new(
-            move |_r: Resolver| {
-                let stored = stored.clone();
-                async move {
-                    let (tx, mut rx) = tokio::sync::mpsc::channel::<TelemetryRecord>(1024);
-                    tokio::spawn(async move {
-                        while let Some(record) = rx.recv().await {
-                            let _ = stored.send(record);
-                        }
-                    });
-                    Ok(Arc::new(ChannelSink(tx)) as Arc<dyn TelemetrySink>)
-                }
-            },
-        ));
+        m.telemetry_sink_factory(Factory::<dyn TelemetrySink>::new(move |_r: Resolver| {
+            let stored = stored.clone();
+            async move {
+                let (tx, mut rx) = tokio::sync::mpsc::channel::<TelemetryRecord>(1024);
+                tokio::spawn(async move {
+                    while let Some(record) = rx.recv().await {
+                        let _ = stored.send(record);
+                    }
+                });
+                Ok(Arc::new(ChannelSink(tx)) as Arc<dyn TelemetrySink>)
+            }
+        }));
     }
 }
 
@@ -107,7 +105,7 @@ impl RatesController {
     async fn show(&self, Path(currency): Path<String>) -> Result<Json<Value>> {
         let response = self
             .http
-            .get(&format!(
+            .get(format!(
                 "https://rates.example.com/v1/{currency}?key=secret"
             ))
             .send()
@@ -325,7 +323,10 @@ async fn a_handler_reports_an_error_it_handled() {
         ["calendar sync failed", "connection reset"]
     );
     assert!(!exception.panic);
-    let location = exception.location.as_deref().expect("the caller's location");
+    let location = exception
+        .location
+        .as_deref()
+        .expect("the caller's location");
     assert!(location.contains("telemetry.rs"), "{location}");
     app.shutdown().await.unwrap();
 }
