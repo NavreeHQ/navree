@@ -1,0 +1,194 @@
+---
+title: "Components preview"
+description: "Every MDX component and Markdown element the docs can use, rendered with the site's styles. Not linked from the navigation."
+---
+
+This page shows every component from `AUTHORING.md` as readers will see it. Open it at `/styleguide/` while you write. Links look [like this](/docs/basics/validation/), inline code looks like `Valid<Json<T>>`, and **strong text** stands out a little.
+
+## Callouts
+
+<Callout type="note">
+A plain note: extra context the reader can skip. It can hold `inline code` and [links](/docs/).
+</Callout>
+
+<Callout type="tip" title="Run one crate's tests">
+Use `cargo test -p navis-validation` while you work on one crate. It builds less and finishes sooner.
+</Callout>
+
+<Callout type="warning" title="Commit before you rotate keys">
+Changing `APP_KEY` without moving the old key to `app.previous_keys` makes existing encrypted values unreadable.
+</Callout>
+
+## Code blocks
+
+A fence with a language gets highlighted. Add `title="..."` for a filename, and `{3-5}` to highlight lines.
+
+```rust title="src/deals/controller.rs" {6-8}
+use navis::prelude::*;
+
+#[controller("/deals", version = "1")]
+impl DealsController {
+    #[patch("/{id}")]
+    #[can(Update, Deal, from = "id")]
+    async fn update(&self, uow: Uow, deal: Authorized<Deal, Update>) -> Result<Json<DealResource>> {
+        Ok(Json(self.deals.touch(&uow, deal).await?))
+    }
+}
+```
+
+Without a title, the bar shows the language:
+
+```sh
+cargo install navis-cli
+navis new blog && cd blog
+navis dev
+```
+
+Notation comments mark lines in place, which is handy for changes:
+
+```toml title="Cargo.toml"
+[dependencies]
+navis = { version = "0.1", default-features = false, features = ["http", "db"] } # [!code --]
+navis = { version = "0.1", features = ["postgres"] } # [!code ++]
+tokio = { version = "1", features = ["full"] }
+```
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["title must be shorter than or equal to 200 characters"],
+  "error": "Bad Request",
+  "errors": { "title": ["title must be shorter than or equal to 200 characters"] }
+}
+```
+
+## Code groups
+
+<CodeGroup>
+
+```rust title="src/main.rs"
+fn main() -> Result<(), BoxError> {
+    app::app(ConfigSources::defaults()).run()
+}
+```
+
+```toml title="config/app.toml"
+[http]
+addr = "127.0.0.1:8080"
+
+[database]
+url = "sqlite://storage/app.db?mode=rwc"
+```
+
+```sh title=".env"
+APP_KEY=base64:...
+APP_DATABASE__URL=postgres://localhost/blog
+```
+
+</CodeGroup>
+
+## Tabs
+
+<Tabs>
+<Tab label="SQLite">
+
+SQLite is the default. Nothing to install: the driver is compiled in.
+
+```toml title="config/app.toml"
+[database]
+url = "sqlite://storage/app.db?mode=rwc"
+```
+
+</Tab>
+<Tab label="PostgreSQL">
+
+Turn on the `postgres` feature, then point `database.url` at your server.
+
+```sh
+cargo add navis --features postgres
+```
+
+</Tab>
+</Tabs>
+
+## Steps
+
+<Steps>
+<Step title="Install the CLI">
+
+```sh
+cargo install navis-cli
+```
+
+</Step>
+<Step title="Create an app">
+
+`navis new` writes a working app with a health check and one module.
+
+</Step>
+<Step title="Run it">
+
+`navis dev` builds, serves and restarts when you save.
+
+</Step>
+</Steps>
+
+## File trees
+
+<FileTree title="A new app">{`
+Cargo.toml
+config/
+  app.toml          # settings, overridden by .env and APP_* variables
+src/
+  main.rs           # boots the app
+  app.rs
+  modules/
+    deals/ *
+      mod.rs        # DealsModule
+      controller.rs
+      service.rs
+tests/
+  deals.rs
+`}</FileTree>
+
+## Badges
+
+The queue needs a feature of the facade <Badge feature="queue" /> and the scheduler too <Badge feature="schedule" />. Other labels: <Badge>Since 0.1</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
+
+## Link cards
+
+<LinkCards>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    Validated extractors on garde, with field-level messages.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Background jobs with retries, backoff and unique jobs.
+  </LinkCard>
+  <LinkCard href="https://docs.rs/garde" title="garde on docs.rs">
+    The validation library underneath.
+  </LinkCard>
+</LinkCards>
+
+## Markdown
+
+### Lists and tables
+
+- Unordered lists use a quiet marker.
+- Keep items short.
+  - Nested items work too.
+
+1. Ordered lists number themselves.
+2. Use them only for real sequences.
+
+| Attribute | Who may call the route |
+|---|---|
+| `#[public]` | Anyone, signed in or not |
+| `#[authenticated]` | Any signed-in user |
+| `#[roles("admin", "manager")]` | Users with one of these roles |
+| `#[can(Update, Deal, from = "id")]` | Users whose abilities allow updating that deal |
+
+> A blockquote, for quoting a spec or an error message verbatim.
+
+#### A fourth-level heading
+
+Use `####` sparingly: it doesn't appear in "On this page".

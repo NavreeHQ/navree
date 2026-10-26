@@ -1,0 +1,566 @@
+/*
+ * Long-form technical writing: the docs body (`.prose-navis`) and the MDX
+ * components. Selectors inside `.prose-navis` use :where() so any component
+ * class overrides them without a specificity fight.
+ */
+
+.prose-navis {
+  color: var(--color-fg-1);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+:where(.prose-navis) > :first-child {
+  margin-top: 0;
+}
+
+:where(.prose-navis) :where(p, ul, ol, blockquote, dl) {
+  margin-block: 1.15em;
+}
+
+:where(.prose-navis) :where(h2, h3, h4) {
+  color: var(--color-fg);
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+:where(.prose-navis) h2 {
+  margin: 3.25rem 0 1rem;
+  font-size: 1.625rem;
+  line-height: 1.25;
+  letter-spacing: -0.022em;
+}
+
+:where(.prose-navis) h3 {
+  margin: 2.5rem 0 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+}
+
+:where(.prose-navis) h4 {
+  margin: 2rem 0 0.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+
+/* The heading is its own anchor link; a "#" appears beside it on hover. */
+.heading-anchor {
+  position: relative;
+  color: inherit;
+  text-decoration: none;
+}
+.heading-anchor::before {
+  content: "#" / "";
+  position: absolute;
+  right: 100%;
+  padding-right: 0.4em;
+  color: var(--color-fg-3);
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.heading-anchor:hover::before,
+.heading-anchor:focus-visible::before {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+:where(.prose-navis) a:not(.heading-anchor, .link-card) {
+  color: var(--color-accent);
+  text-decoration-line: underline;
+  text-decoration-color: rgb(61 255 143 / 0.35);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+:where(.prose-navis) a:not(.heading-anchor, .link-card):hover {
+  text-decoration-color: var(--color-accent);
+}
+
+:where(.prose-navis) :where(strong, b) {
+  color: var(--color-fg);
+  font-weight: 620;
+}
+
+:where(.prose-navis) ul {
+  list-style: disc;
+  padding-left: 1.35em;
+}
+:where(.prose-navis) ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+}
+:where(.prose-navis) li {
+  margin-block: 0.4em;
+  padding-left: 0.2em;
+}
+:where(.prose-navis) li::marker {
+  color: var(--color-fg-3);
+}
+:where(.prose-navis) ol > li::marker {
+  font-variant-numeric: tabular-nums;
+}
+:where(.prose-navis) li > :where(ul, ol) {
+  margin-block: 0.4em;
+}
+
+/* Inline code. */
+:where(.prose-navis) :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  background: var(--color-ink-2);
+  color: var(--color-fg);
+  font-size: 0.84em;
+  white-space: break-spaces;
+}
+:where(.prose-navis) a > code {
+  color: inherit;
+}
+:where(.prose-navis) :where(h2, h3, h4) code {
+  font-size: 0.86em;
+}
+
+:where(.prose-navis) blockquote {
+  padding-left: 1.1em;
+  border-left: 2px solid var(--color-line-2);
+  color: var(--color-fg-2);
+}
+
+:where(.prose-navis) hr {
+  margin-block: 3rem;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+:where(.prose-navis) img {
+  max-width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+
+:where(.prose-navis) kbd {
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--color-line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-size: 0.85em;
+}
+
+/* Tables. */
+.table-wrap {
+  margin-block: 1.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+.table-wrap th {
+  padding: 0.65rem 0.9rem;
+  background: var(--color-ink-1);
+  border-bottom: 1px solid var(--color-line-2);
+  color: var(--color-fg);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--color-line);
+  vertical-align: top;
+}
+.table-wrap tbody th {
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 0;
+  background: transparent;
+  font-weight: 400;
+  white-space: normal;
+}
+.table-wrap tbody tr:first-child > * {
+  border-top: 0;
+}
+
+/* ------------------------------------------------------------ code blocks */
+
+.code-block {
+  position: relative;
+  margin-block: 1.75rem;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-ink-1);
+}
+
+.code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.5rem;
+  padding: 0.2rem 0.35rem 0.2rem 1rem;
+  border-bottom: 1px solid var(--color-line);
+  font-size: 0.8125rem;
+}
+.code-block-title {
+  color: var(--color-fg-1);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-block-lang {
+  color: var(--color-fg-3);
+}
+
+.code-block pre,
+.code-panel pre {
+  margin: 0;
+  padding: 1rem 0;
+  overflow-x: auto;
+  background: transparent !important;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  tab-size: 4;
+}
+.code-block pre:focus-visible,
+.code-panel pre:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0 0 11px 11px;
+}
+
+.code-block code,
+.code-panel code {
+  display: grid;
+  min-width: max-content;
+}
+
+.code-block .line,
+.code-panel .line {
+  display: block;
+  min-height: 1lh;
+  padding: 0 1.25rem;
+  border-left: 2px solid transparent;
+}
+
+.code-block .line.highlighted,
+.code-panel .line.highlighted {
+  background: rgb(61 255 143 / 0.07);
+  border-left-color: var(--color-accent);
+}
+
+.code-block .line.diff.add {
+  background: rgb(61 255 143 / 0.08);
+  border-left-color: rgb(61 255 143 / 0.6);
+}
+.code-block .line.diff.remove {
+  background: rgb(255 120 110 / 0.08);
+  border-left-color: rgb(255 120 110 / 0.6);
+  opacity: 0.75;
+}
+.code-block .line.diff.add::before {
+  content: "+";
+  margin-left: -0.95rem;
+  margin-right: 0.3rem;
+  color: var(--color-accent);
+}
+.code-block .line.diff.remove::before {
+  content: "-";
+  margin-left: -0.95rem;
+  margin-right: 0.3rem;
+  color: #ff9a8f;
+}
+
+/* ---------------------------------------------------------------- callouts */
+
+.callout-body > :first-child {
+  margin-top: 0;
+}
+.callout-body > :last-child {
+  margin-bottom: 0;
+}
+.callout-body p {
+  margin-block: 0.6em;
+}
+.callout .code-block {
+  margin-block: 1rem;
+}
+
+/* -------------------------------------------------------------------- tabs */
+
+.tabs {
+  margin-block: 1.75rem;
+}
+
+.tabs-list {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-line);
+  scrollbar-width: none;
+}
+
+.tabs-tab {
+  position: relative;
+  padding: 0.6rem 0.8rem 0.7rem;
+  color: var(--color-fg-3);
+  font-size: 0.875rem;
+  font-weight: 550;
+  white-space: nowrap;
+  transition: color 150ms;
+}
+.tabs-tab:hover {
+  color: var(--color-fg-1);
+}
+.tabs-tab[aria-selected="true"] {
+  color: var(--color-fg);
+}
+.tabs-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0.6rem -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  box-shadow: 0 0 10px rgb(61 255 143 / 0.5);
+}
+.tabs-tab:focus-visible {
+  outline-offset: -2px;
+}
+
+.tabs-panel > .tab-content > :first-child {
+  margin-top: 1.25rem;
+}
+
+/* A code group: one frame, tabs instead of a title bar. */
+.tabs-code {
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-ink-1);
+}
+.tabs-code .tabs-list {
+  padding: 0 0.4rem;
+}
+.tabs-code .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.tabs-code .code-block-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-height: 0;
+  padding: 0.35rem;
+  border: 0;
+}
+.tabs-code .code-block-title,
+.tabs-code .code-block-lang {
+  display: none;
+}
+.tabs-code .code-block pre {
+  padding-right: 2.5rem;
+}
+
+/* ------------------------------------------------------------------- steps */
+
+.steps {
+  margin-block: 2rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.step {
+  position: relative;
+  margin: 0;
+  padding: 0 0 1.75rem 3rem;
+  counter-increment: step;
+}
+.step::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border: 1px solid var(--color-line-2);
+  border-radius: 999px;
+  background: var(--color-ink-1);
+  color: var(--color-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.step::after {
+  content: "";
+  position: absolute;
+  top: 2.25rem;
+  bottom: 0.4rem;
+  left: 0.9rem;
+  width: 1px;
+  background: var(--color-line-2);
+}
+.step:last-child {
+  padding-bottom: 0;
+}
+.step:last-child::after {
+  display: none;
+}
+.step-title {
+  margin: 0.15rem 0 0.4rem;
+  color: var(--color-fg);
+  font-weight: 620;
+}
+.step-body > :first-child {
+  margin-top: 0;
+}
+.step-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------------------- file tree */
+
+.file-tree {
+  margin-block: 1.75rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-ink-1);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.85;
+}
+.file-tree-caption {
+  margin: -0.15rem 0 0.5rem;
+  color: var(--color-fg-3);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+.file-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.file-tree ul ul {
+  margin-left: 0.55rem;
+  padding-left: 0.95rem;
+  border-left: 1px solid var(--color-line-2);
+}
+.file-tree li {
+  margin: 0;
+  padding: 0;
+}
+.file-tree-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  margin-left: -0.3rem;
+}
+.file-tree-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+  color: var(--color-fg-3);
+}
+.file-tree-icon.is-dir {
+  color: var(--color-fg-2);
+}
+.file-tree-name {
+  color: var(--color-fg-1);
+}
+.file-tree-name.is-dir {
+  color: var(--color-fg);
+}
+.file-tree-comment {
+  margin-left: 0.75rem;
+  color: var(--color-fg-3);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+.file-tree li.is-highlighted > .file-tree-entry {
+  background: rgb(61 255 143 / 0.08);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.file-tree li.is-highlighted > .file-tree-entry .file-tree-name {
+  color: var(--color-accent);
+}
+
+/* ------------------------------------------------------------------- badge */
+
+.badge-code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-fg);
+}
+
+/* -------------------------------------------------------------- link cards */
+
+.link-cards {
+  display: grid;
+  gap: 0.875rem;
+  margin-block: 1.75rem;
+}
+@media (min-width: 40rem) {
+  .link-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.link-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-ink-1);
+  text-decoration: none;
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+}
+.link-card:hover {
+  border-color: var(--color-line-2);
+  background: var(--color-ink-2);
+}
+.link-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.link-card-icon {
+  flex-shrink: 0;
+  color: var(--color-fg-3);
+  transition:
+    color 150ms,
+    transform 150ms var(--ease-out-quint);
+}
+.link-card:hover .link-card-icon {
+  color: var(--color-accent);
+  transform: translateX(2px);
+}
+.link-card-text {
+  color: var(--color-fg-2);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+.link-card-text > p {
+  margin: 0;
+}

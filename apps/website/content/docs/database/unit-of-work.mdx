@@ -1,0 +1,10 @@
+---
+title: "The unit of work and transactions"
+description: "One lazy transaction per request, committed when the request succeeds."
+---
+
+This page explains the unit of work: a lazy transaction per request that commits when the response succeeds and rolls back when it fails. It covers using it in handlers and services, how queued jobs and events wait for it to commit, and running transactions of your own.
+
+<Callout type="note" title="This page is being written">
+The summary above says what this page will cover. Until then, the API documentation of `navis-db` is the reference: run `cargo doc -p navis-db --open` in the repository.
+</Callout>
