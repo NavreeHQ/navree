@@ -1,0 +1,5 @@
+error: `from = "deal_id"` names no argument of field `deal`: the record id must come from an argument such as `deal_id: Uuid`
+  --> tests/ui/from_names_no_argument.rs:10:34
+   |
+10 |     #[can("read", "Deal", from = "deal_id")]
+   |                                  ^^^^^^^^^

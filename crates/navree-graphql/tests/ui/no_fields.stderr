@@ -1,0 +1,5 @@
+error: a #[resolver] impl block needs at least one method marked #[query], #[mutation] or #[subscription]
+ --> tests/ui/no_fields.rs:7:6
+  |
+7 | impl DealResolver {
+  |      ^^^^^^^^^^^^

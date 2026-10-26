@@ -12,7 +12,8 @@ workspace = true
 
 [features]
 default = ["full"]
-## Every module crate, except the opt-in ones (`billing`, `dock`).
+## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
+## `graphql`, `billing`, `dock`).
 full = [
     "access",
     "api",
@@ -139,6 +140,18 @@ flags = [
     "workspace",
     "auth",
 ]
+## L6 (opt-in, not in `full`)
+## GraphQL: `GraphqlModule`, `#[resolver]`, dataloaders, subscriptions.
+graphql = [
+    "dep:navree-graphql",
+    "http",
+    "events",
+    "db",
+    "validation",
+    "access",
+    "auth",
+    "workspace",
+]
 ## L7 (opt-in, not in `full`)
 ## Billing: subscriptions, trials, seats, usage, invoices and the portal
 ## with Stripe, Paddle or a fake; verified webhooks on the queue.
@@ -180,6 +193,7 @@ navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
+navree-graphql = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
@@ -203,6 +217,9 @@ navree-webhooks = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 
 [dev-dependencies]
+# The `graphql` test's object derives name async-graphql directly, as an
+# app's do.
+async-graphql = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }
 metrics = { workspace = true }
@@ -214,3 +231,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
+
+[[test]]
+name = "graphql"
+required-features = ["graphql"]

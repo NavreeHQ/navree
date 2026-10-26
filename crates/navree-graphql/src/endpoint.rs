@@ -1,0 +1,233 @@
+//! The HTTP endpoint: `POST <path>` executes operations, `GET <path>`
+//! serves GraphiQL (or answers 405), `GET <path>/ws` serves subscriptions.
+
+use std::sync::Arc;
+
+use async_graphql::{BatchRequest, BatchResponse, Response};
+use axum::body::{Body, Bytes};
+use axum::extract::ws::WebSocketUpgrade;
+use axum::response::{IntoResponse, Response as HttpResponse};
+use http::header::{ACCEPT, ALLOW, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use http::request::Parts;
+use http::{HeaderMap, HeaderValue, Method, StatusCode};
+use navree_contracts::AuthState;
+use navree_http::{AppError, Controller, RouteDef};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Resolver};
+
+use crate::error::{is_request_error, request_error};
+use crate::graphiql;
+use crate::operation::Origin;
+use crate::schema::GraphqlSchema;
+use crate::ws;
+
+/// The routes of `GraphqlModule`.
+pub(crate) struct GraphqlController {
+    schema: Arc<GraphqlSchema>,
+}
+
+impl Injectable for GraphqlController {
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(Self {
+                schema: r.get::<GraphqlSchema>().await?,
+            })
+        })
+    }
+}
+
+impl Controller for GraphqlController {
+    fn prefix(&self) -> &'static str {
+        ""
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let options = self.schema.options();
+        let path = format!("!{}", options.path);
+        let post = self.schema.clone();
+        let get = self.schema.clone();
+        let mut routes = vec![
+            RouteDef::on(
+                Method::POST,
+                path.clone(),
+                move |parts: Parts, body: Bytes| {
+                    let schema = post.clone();
+                    async move { execute(&schema, parts, body).await }
+                },
+            )
+            .name("graphql")
+            .public(),
+            RouteDef::on(Method::GET, path, move |headers: HeaderMap| {
+                let schema = get.clone();
+                async move { graphiql_page(&schema, &headers) }
+            })
+            .name("graphql.graphiql")
+            .public(),
+        ];
+        if options.subscriptions {
+            let socket = self.schema.clone();
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}", options.ws_path()),
+                    move |parts: Parts, upgrade: WebSocketUpgrade| {
+                        let schema = socket.clone();
+                        async move { ws::upgrade(&schema, parts, upgrade) }
+                    },
+                )
+                .name("graphql.ws")
+                .public(),
+            );
+        }
+        routes
+    }
+}
+
+/// The origin of an operation sent with the request `parts`.
+pub(crate) fn origin(parts: &Parts) -> Origin {
+    Origin {
+        extensions: parts.extensions.clone(),
+        headers: parts.headers.clone(),
+        uri: parts.uri.clone(),
+        principal: parts
+            .extensions
+            .get::<AuthState>()
+            .and_then(|state| state.0.clone()),
+    }
+}
+
+/// `POST <path>`: one operation, or a batch when batching is on.
+async fn execute(schema: &GraphqlSchema, parts: Parts, body: Bytes) -> HttpResponse {
+    if !is_json(&parts.headers) {
+        return AppError::from_status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            .with_detail("Expected a GraphQL request with `Content-Type: application/json`")
+            .into_response();
+    }
+    let batch = match serde_json::from_slice::<BatchRequest>(&body) {
+        Ok(batch) => batch,
+        Err(error) => {
+            let response = Response::from_errors(vec![request_error(format!(
+                "Invalid GraphQL request: {error}"
+            ))]);
+            return graphql_response(StatusCode::BAD_REQUEST, &response);
+        }
+    };
+    let origin = origin(&parts);
+    match batch {
+        BatchRequest::Single(request) => {
+            let response = schema.execute_from(request, origin).await;
+            let status = if is_request_error(&response) {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::OK
+            };
+            graphql_response(status, &response)
+        }
+        BatchRequest::Batch(requests) => {
+            if !schema.options().batching {
+                let response = Response::from_errors(vec![request_error(
+                    "Batched requests are disabled: send one operation per request \
+                     (or turn on graphql.batching)",
+                )]);
+                return graphql_response(StatusCode::BAD_REQUEST, &response);
+            }
+            let mut responses = Vec::with_capacity(requests.len());
+            for request in requests {
+                responses.push(schema.execute_from(request, origin.clone()).await);
+            }
+            let body = serde_json::to_vec(&BatchResponse::Batch(responses)).unwrap_or_default();
+            json(StatusCode::OK, body, HeaderMap::new())
+        }
+    }
+}
+
+/// A GraphQL response as JSON; a request error has no `data` member.
+fn graphql_response(status: StatusCode, response: &Response) -> HttpResponse {
+    let mut value = serde_json::to_value(response).unwrap_or_default();
+    if status == StatusCode::BAD_REQUEST
+        && let Some(object) = value.as_object_mut()
+    {
+        object.remove("data");
+    }
+    let body = serde_json::to_vec(&value).unwrap_or_default();
+    json(status, body, response.http_headers.clone())
+}
+
+fn json(status: StatusCode, body: Vec<u8>, headers: HeaderMap) -> HttpResponse {
+    let mut response = HttpResponse::new(Body::from(body));
+    *response.status_mut() = status;
+    let target = response.headers_mut();
+    for (name, value) in &headers {
+        target.append(name, value.clone());
+    }
+    target.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    response
+}
+
+/// Whether the request body is JSON (`application/json` or a `+json` type):
+/// a cross-site form cannot send one without a CORS preflight.
+fn is_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(|essence| essence.trim().to_ascii_lowercase())
+        .is_some_and(|essence| essence == "application/json" || essence.ends_with("+json"))
+}
+
+/// `GET <path>`: GraphiQL for browsers when it is on; 405 otherwise.
+fn graphiql_page(schema: &GraphqlSchema, headers: &HeaderMap) -> HttpResponse {
+    let options = schema.options();
+    if options.graphiql && accepts_html(headers) {
+        let subscriptions = options.subscriptions.then(|| options.ws_path());
+        let html = graphiql::page(&options.path, subscriptions.as_deref());
+        return (
+            [
+                (
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                ),
+                (
+                    CONTENT_SECURITY_POLICY,
+                    HeaderValue::from_static(graphiql::CSP),
+                ),
+            ],
+            html,
+        )
+            .into_response();
+    }
+    AppError::from_status(StatusCode::METHOD_NOT_ALLOWED)
+        .with_detail("Send GraphQL operations as POST requests with a JSON body")
+        .with_header(ALLOW, HeaderValue::from_static("POST"))
+        .into_response()
+}
+
+fn accepts_html(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(ACCEPT)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| value.contains("text/html"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_bodies_are_recognized() {
+        let mut headers = HeaderMap::new();
+        assert!(!is_json(&headers));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+        assert!(is_json(&headers));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/graphql-response+json"),
+        );
+        assert!(is_json(&headers));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+        assert!(!is_json(&headers));
+    }
+}
