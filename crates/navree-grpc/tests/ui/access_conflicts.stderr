@@ -1,0 +1,17 @@
+error: method `ping` is #[public] but also declares #[authenticated]: a public method needs no authentication or authorization; remove one of them
+  --> tests/ui/access_conflicts.rs:23:5
+   |
+23 |     #[public]
+   |     ^^^^^^^^^
+
+error: method `ping` has #[can] here and on the impl block: a method checks one ability
+  --> tests/ui/access_conflicts.rs:36:5
+   |
+36 |     #[can("update", "Ping")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `from = ..` reads the record id from the request message, but `import_deals` receives a stream
+  --> tests/ui/access_conflicts.rs:81:5
+   |
+81 |     #[can("create", "Deal", from = "id")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
