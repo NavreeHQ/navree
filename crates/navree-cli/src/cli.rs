@@ -75,6 +75,11 @@ pub enum Command {
     MakeTest(MakeArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
+    /// Harbor: harbor:init, harbor:provision, harbor:secrets, deploy,
+    /// deploy:rollback, deploy:releases, harbor:status, harbor:logs,
+    /// harbor:run, harbor:ssh, harbor:backup, harbor:ci and build:image.
+    #[command(flatten)]
+    Harbor(navree_harbor::HarborCommand),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -267,6 +272,36 @@ mod tests {
         };
         assert!(args.no_web);
         assert_eq!(args.serve_args, ["--addr", "0.0.0.0:8080"]);
+    }
+
+    #[test]
+    fn harbor_commands_are_not_forwarded() {
+        for args in [
+            &["harbor:init"][..],
+            &["harbor:provision", "app-1"],
+            &["harbor:secrets", "set", "APP_KEY", "--generate"],
+            &["deploy", "--no-migrate"],
+            &["deploy:rollback", "--to", "20261025-163003-9b17e44"],
+            &["deploy:releases"],
+            &["harbor:status"],
+            &["harbor:logs", "--follow"],
+            &["harbor:run", "migrate:status"],
+            &["harbor:ssh"],
+            &["harbor:backup", "--download"],
+            &["harbor:ci", "github"],
+            &["build:image", "--push"],
+        ] {
+            assert!(
+                matches!(parse(args), Command::Harbor(_)),
+                "{args:?} must be a Harbor command"
+            );
+        }
+        let error = Cli::try_parse_from(["navree", "--help"]).unwrap_err();
+        let help = error.to_string();
+        assert!(
+            help.contains("harbor:provision") && help.contains("deploy:rollback"),
+            "{help}"
+        );
     }
 
     #[test]

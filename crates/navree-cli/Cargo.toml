@@ -1,6 +1,6 @@
 [package]
 name = "navree-cli"
-description = "The navree command-line tool: new, make:*, dev, and forwarding of runtime commands."
+description = "The navree command-line tool: new, make:*, dev, Harbor's deploy commands, and forwarding of runtime commands."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -27,6 +27,7 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 heck = { workspace = true }
 minijinja = { workspace = true }
+navree-harbor = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
 serde = { workspace = true }

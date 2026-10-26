@@ -1,0 +1,28 @@
+# harbor: caddy on {{ server.name }}
+{% include "provision/prelude.sh" %}
+if ! harbor_installed caddy; then
+	harbor_apt install debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
+	apt-get update -q
+	harbor_apt install caddy
+fi
+install -d -m 0755 /etc/caddy/sites
+reload=0
+harbor_file /etc/caddy/Caddyfile 0644 root:root <<'HARBOR_EOF'
+{{ files.caddyfile }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+# The site follows the live slot, which navree deploy switches.
+if [ "$(cat {{ base }}/.harbor-live 2> /dev/null || echo blue)" = green ]; then
+	harbor_file {{ caddy_site }} 0644 {{ user }}:{{ user }} <<'HARBOR_EOF'
+{{ files.site_green }}HARBOR_EOF
+else
+	harbor_file {{ caddy_site }} 0644 {{ user }}:{{ user }} <<'HARBOR_EOF'
+{{ files.site_blue }}HARBOR_EOF
+fi
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+if ! systemctl is-active --quiet caddy; then
+	systemctl enable --now caddy > /dev/null 2>&1
+elif [ "$reload" = 1 ]; then
+	systemctl reload caddy
+fi

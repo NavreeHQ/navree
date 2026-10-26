@@ -46,6 +46,9 @@ const HIERARCHY: &[Rule] = &[
     // L0
     rule("navree-kernel", 0, &[]),
     rule("navree-macros", 0, &[]),
+    // Harbor: servers and deployments. A tool crate for the CLI (and the
+    // facade's opt-in `harbor` feature) that builds on no navree crate.
+    rule("navree-harbor", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -87,7 +90,8 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6
     rule("navree", 6, RUNTIME_CRATES),
-    rule("navree-cli", 6, &[]),
+    // The CLI uses no runtime crate; Harbor's commands come from navree-harbor.
+    rule("navree-cli", 6, &["navree-harbor"]),
     // L7 (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -112,8 +116,9 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 5) plus navree-macros: what the facade may
-/// re-export and what navree-macros tests may dev-depend on.
+/// Every runtime crate (layers 0 to 5) plus navree-macros and the
+/// navree-harbor tool crate: what the facade may re-export and what
+/// navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
@@ -142,6 +147,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-auth",
     "navree-workspace",
+    "navree-harbor",
 ];
 
 /// Cargo dependency kind of an edge.
@@ -541,6 +547,19 @@ fn navree_macros_may_dev_depend_on_runtime_crates_only() {
 #[test]
 fn navree_cli_has_no_navree_dependencies() {
     let found = violations(&[edge("navree-cli", "navree-kernel", Kind::Normal)]);
+    assert_eq!(found.len(), 1, "{found:?}");
+}
+
+#[test]
+fn navree_cli_uses_harbor_which_uses_no_navree_crate() {
+    assert_eq!(
+        violations(&[
+            edge("navree-cli", "navree-harbor", Kind::Normal),
+            edge("navree", "navree-harbor", Kind::Normal),
+        ]),
+        Vec::<String>::new()
+    );
+    let found = violations(&[edge("navree-harbor", "navree-crypto", Kind::Normal)]);
     assert_eq!(found.len(), 1, "{found:?}");
 }
 

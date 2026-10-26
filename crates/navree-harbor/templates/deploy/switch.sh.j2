@@ -1,0 +1,16 @@
+# harbor: switch to {{ slot }} on {{ server.name }}
+cat > {{ caddy_site }} <<'HARBOR_EOF'
+{{ site }}HARBOR_EOF
+sudo -n systemctl reload caddy
+cd {{ base }}
+ln -sfn releases/{{ release }} current.new
+mv -Tf current.new current
+echo {{ slot }} > .harbor-live.new
+mv -f .harbor-live.new .harbor-live
+sed -i "s/^APP_LIGHTHOUSE__RELEASE=.*/APP_LIGHTHOUSE__RELEASE='{{ release }}'/" {{ env_file }}
+{% for unit in enable %}
+sudo -n systemctl enable {{ unit }}
+{% endfor %}
+{% for unit in disable %}
+sudo -n systemctl disable {{ unit }}
+{% endfor %}

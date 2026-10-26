@@ -361,6 +361,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Features left out of `full` on purpose: tools an app rarely compiles in.
+const OPT_IN: &[&str] = &["harbor"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +372,27 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    for feature in OPT_IN {
+        assert!(
+            features.table.contains_key(*feature) && !full.contains(*feature),
+            "`{feature}` is an opt-in feature, outside `full`"
+        );
+    }
+}
+
+/// `navree::harbor` is navree-harbor, with `--features harbor`.
+#[cfg(feature = "harbor")]
+#[test]
+fn harbor_is_reexported_with_its_feature() {
+    assert!(same::<
+        navree::harbor::HarborConfig,
+        navree::harbor::HarborConfig,
+    >());
+    assert!(same::<
+        navree::harbor::cli::HarborCommand,
+        navree::harbor::HarborCommand,
+    >());
 }
