@@ -17,5 +17,5 @@ Notes:
 - `/queries` runs its N queries one after another in a plain loop, and the deals list runs the count, then the page query (one join for the owners). Both are sequential, as straightforward handler code is; Express runs them concurrently.
 - sqlx prepares statements and caches them per connection.
 - New deal ids are UUID v4. `created_at`/`updated_at` come from the database's `now()`, returned by `RETURNING`.
-- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Navree's workspace uses `rust_crypto`).
+- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Navree installs its own HMAC-only provider on RustCrypto `hmac`/`sha2`).
 - sqlx has no TLS feature enabled, since the benchmark database is plain TCP.

@@ -1,5 +1,7 @@
 //! [`JwtService`]: HS256 access tokens and their [`Claims`].
 
+mod provider;
+
 use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
@@ -48,14 +50,19 @@ pub enum TokenType {
     TwoFactorChallenge,
 }
 
-/// Signs and verifies HS256 JWTs (jsonwebtoken on RustCrypto). Provided and
-/// exported by the auth module, keyed by `auth.jwt.secret` or a key derived
-/// from the application key.
+/// Signs and verifies HS256 JWTs (jsonwebtoken with an HMAC-only RustCrypto
+/// provider). Provided and exported by the auth module, keyed by
+/// `auth.jwt.secret` or a key derived from the application key.
 ///
-/// Verification accepts only HS256, checks the signature, `iss`, `aud`
-/// (when configured), the token type and the expiry with
-/// [`LEEWAY_SECS`] of leeway, against the app's `dyn Clock` when one is
-/// registered.
+/// Verification accepts only HS256, checks the signature (in constant
+/// time), `iss`, `aud` (when configured), the token type and the expiry
+/// with [`LEEWAY_SECS`] of leeway, against the app's `dyn Clock` when one
+/// is registered.
+///
+/// Building one installs navree-auth's jsonwebtoken `CryptoProvider` for
+/// the process unless one is installed already. It has no RSA, ECDSA or
+/// EdDSA: in-process users of jsonwebtoken that need those install their
+/// own provider before the auth module is built.
 pub struct JwtService {
     encoding: EncodingKey,
     decoding: DecodingKey,
@@ -70,9 +77,9 @@ impl JwtService {
     /// A service signing with `secret` (use at least 32 random bytes) and
     /// the issuer, audience and access-token lifetime of `options`.
     pub fn new(secret: &[u8], options: &JwtOptions) -> Self {
-        // Only the RustCrypto backend is compiled in; installing it
-        // explicitly keeps working if another crate enables aws-lc too.
-        let _ = jsonwebtoken::crypto::rust_crypto::DEFAULT_PROVIDER.install_default();
+        // jsonwebtoken is built without a crypto backend: install the
+        // HMAC-only one before any token is signed or verified.
+        provider::install();
         let mut validation = Validation::new(Algorithm::HS256);
         // Expiry is checked against the app's clock in `verify`.
         validation.validate_exp = false;
@@ -170,12 +177,26 @@ mod tests {
 
     use chrono::{TimeZone, Utc};
     use navree_contracts::FixedClock;
+    use serde_json::json;
     use uuid::Uuid;
 
     use super::*;
     use crate::{AuthError, JwtOptions};
 
     const SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
+
+    /// Every algorithm jsonwebtoken knows besides the HMAC family.
+    const NOT_HMAC: [Algorithm; 9] = [
+        Algorithm::ES256,
+        Algorithm::ES384,
+        Algorithm::RS256,
+        Algorithm::RS384,
+        Algorithm::RS512,
+        Algorithm::PS256,
+        Algorithm::PS384,
+        Algorithm::PS512,
+        Algorithm::EdDSA,
+    ];
 
     fn service() -> JwtService {
         JwtService::new(SECRET, &JwtOptions::default())
@@ -366,6 +387,287 @@ mod tests {
     fn debug_output_hides_the_keys() {
         let debug = format!("{:?}", service());
         assert!(!debug.contains("0123456789abcdef"), "{debug}");
+    }
+
+    #[test]
+    fn rs256_and_unsigned_tokens_are_rejected() {
+        let jwt = service();
+        let token = jwt.sign_access(Uuid::now_v7()).unwrap();
+        let payload = token.split('.').nth(1).unwrap();
+
+        // Another algorithm in the header, signed with an HMAC of the secret
+        // (algorithm confusion) or with signature-sized garbage.
+        for alg in ["RS256", "RS512", "PS256", "ES256", "ES384", "EdDSA"] {
+            let header = format!(r#"{{"alg":"{alg}","typ":"JWT"}}"#);
+            let message = format!("{}.{payload}", b64(header.as_bytes()));
+            let hmac = jsonwebtoken::crypto::sign(
+                message.as_bytes(),
+                &EncodingKey::from_secret(SECRET),
+                Algorithm::HS256,
+            )
+            .unwrap();
+            assert_invalid(&jwt, &format!("{message}.{hmac}"));
+            assert_invalid(&jwt, &format!("{message}.{}", b64(&[7; 256])));
+        }
+
+        // Unsigned: `alg: none` (any spelling), or HS256 without a signature.
+        for header in [
+            r#"{"alg":"none","typ":"JWT"}"#,
+            r#"{"alg":"None"}"#,
+            r#"{"alg":"NONE"}"#,
+            r#"{"alg":"HS256","typ":"JWT"}"#,
+        ] {
+            let message = format!("{}.{payload}", b64(header.as_bytes()));
+            assert_invalid(&jwt, &format!("{message}."));
+            assert_invalid(&jwt, &message);
+        }
+
+        // HS512 with the right secret: verification is pinned to HS256.
+        let claims = jwt.verify(&token, TokenType::Access).unwrap();
+        let hs512 = jsonwebtoken::encode(
+            &Header::new(Algorithm::HS512),
+            &claims,
+            &EncodingKey::from_secret(SECRET),
+        )
+        .unwrap();
+        assert_invalid(&jwt, &hs512);
+    }
+
+    #[test]
+    fn hs256_tokens_round_trip() {
+        let jwt = service();
+        let user = Uuid::now_v7();
+        let token = jwt.sign_access(user).unwrap();
+        let header = jsonwebtoken::decode_header(&token).unwrap();
+        assert_eq!(header.alg, Algorithm::HS256);
+        assert_eq!(header.typ.as_deref(), Some("JWT"));
+        assert_eq!(jwt.verify(&token, TokenType::Access).unwrap().sub, user);
+
+        // Another instance with the same secret (another app server).
+        let replica = JwtService::new(SECRET, &JwtOptions::default());
+        assert_eq!(replica.verify(&token, TokenType::Access).unwrap().sub, user);
+    }
+
+    #[test]
+    fn a_token_signed_with_another_secret_is_rejected() {
+        let jwt = service();
+        for secret in [
+            b"another-secret-another-secret-xx".as_slice(),
+            // One character off, and a prefix of the real secret.
+            b"0123456789abcdef0123456789abcdeF",
+            &SECRET[..31],
+        ] {
+            let other = JwtService::new(secret, &JwtOptions::default());
+            let token = other.sign_access(Uuid::now_v7()).unwrap();
+            assert!(other.verify(&token, TokenType::Access).is_ok());
+            assert_invalid(&jwt, &token);
+        }
+    }
+
+    #[test]
+    fn tampered_tokens_are_rejected() {
+        let jwt = service();
+        let token = jwt.sign_access(Uuid::now_v7()).unwrap();
+        let other_token = jwt.sign_access(Uuid::now_v7()).unwrap();
+        let claims = jwt.verify(&token, TokenType::Access).unwrap();
+        let [header, payload, signature]: [&str; 3] =
+            token.split('.').collect::<Vec<_>>().try_into().unwrap();
+
+        // Edited claims under the original signature.
+        for forged in [
+            Claims {
+                sub: Uuid::now_v7(),
+                ..claims.clone()
+            },
+            Claims {
+                exp: claims.exp + 86_400,
+                ..claims.clone()
+            },
+            Claims {
+                jti: "another".to_owned(),
+                ..claims.clone()
+            },
+        ] {
+            let forged = b64(&serde_json::to_vec(&forged).unwrap());
+            assert_invalid(&jwt, &format!("{header}.{forged}.{signature}"));
+        }
+
+        // An edited header under the original signature.
+        for alg in ["HS384", "HS512"] {
+            let edited = b64(format!(r#"{{"typ":"JWT","alg":"{alg}"}}"#).as_bytes());
+            assert_invalid(&jwt, &format!("{edited}.{payload}.{signature}"));
+        }
+
+        // Edited signatures: one character, truncated, extended, empty,
+        // another token's.
+        let flipped = match signature.as_bytes()[0] {
+            b'A' => format!("B{}", &signature[1..]),
+            _ => format!("A{}", &signature[1..]),
+        };
+        let other_signature = other_token.rsplit('.').next().unwrap();
+        for edited in [
+            flipped.as_str(),
+            &signature[..signature.len() - 1],
+            &format!("{signature}AA"),
+            "",
+            other_signature,
+        ] {
+            assert_invalid(&jwt, &format!("{header}.{payload}.{edited}"));
+        }
+
+        // Rearranged or extra segments.
+        assert_invalid(&jwt, &format!("{payload}.{header}.{signature}"));
+        assert_invalid(&jwt, &format!("{header}.{payload}.{signature}.{signature}"));
+        assert!(jwt.verify(&token, TokenType::Access).is_ok());
+    }
+
+    /// `jsonwebtoken::crypto::{sign, verify}` go straight to the installed
+    /// provider, without the algorithm checks of `encode` and `decode`.
+    #[test]
+    fn the_jwt_crypto_provider_refuses_every_algorithm_but_hmac() {
+        let _ = service();
+        let message = b"header.payload";
+        for alg in NOT_HMAC {
+            for key in [
+                EncodingKey::from_secret(SECRET),
+                EncodingKey::from_rsa_der(b"0"),
+                EncodingKey::from_ec_der(b"0"),
+                EncodingKey::from_ed_der(b"0"),
+            ] {
+                let Err(error) = jsonwebtoken::crypto::sign(message, &key, alg) else {
+                    panic!("signed with {alg:?}");
+                };
+                assert_unsupported(&error, alg);
+            }
+            for key in [
+                DecodingKey::from_secret(SECRET),
+                DecodingKey::from_rsa_der(b"0"),
+                DecodingKey::from_ec_der(b"0"),
+                DecodingKey::from_ed_der(b"0"),
+            ] {
+                let Err(error) = jsonwebtoken::crypto::verify("c2ln", message, &key, alg) else {
+                    panic!("verified with {alg:?}");
+                };
+                assert_unsupported(&error, alg);
+            }
+        }
+    }
+
+    #[test]
+    fn jsonwebtoken_cannot_sign_or_verify_rs256_even_when_asked() {
+        let _ = service();
+        let header = b64(br#"{"alg":"RS256","typ":"JWT"}"#);
+        let token = format!("{header}.{}.{}", b64(br#"{"sub":"x"}"#), b64(&[7; 256]));
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.required_spec_claims.clear();
+        validation.validate_exp = false;
+        let decoded = jsonwebtoken::decode::<serde_json::Value>(
+            &token,
+            &DecodingKey::from_rsa_der(b"0"),
+            &validation,
+        );
+        let Err(error) = decoded else {
+            panic!("an RS256 token was accepted");
+        };
+        assert_unsupported(&error, Algorithm::RS256);
+
+        let signed = jsonwebtoken::encode(
+            &Header::new(Algorithm::RS256),
+            &json!({"sub": "x"}),
+            &EncodingKey::from_rsa_der(b"0"),
+        );
+        let Err(error) = signed else {
+            panic!("an RS256 token was signed");
+        };
+        assert_unsupported(&error, Algorithm::RS256);
+    }
+
+    #[test]
+    fn hmac_signatures_match_known_answers_and_round_trip() {
+        let _ = service();
+        // RFC 7515 appendix A.1 (HS256); HS384 and HS512 over the same key
+        // and message, computed with Python's `hmac`.
+        let key = EncodingKey::from_urlsafe_base64_secret(
+            "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow==",
+        )
+        .unwrap();
+        let message = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.\
+            eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ";
+        let decoding = DecodingKey::from_secret(key.as_bytes());
+        for (alg, expected) in [
+            (
+                Algorithm::HS256,
+                "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+            ),
+            (
+                Algorithm::HS384,
+                "azVX8-2q_DEdR5zRuXcG0qXAudGzchZHmWo-uKNQi_S5q9lpGrlH7hnDyIKEhZmX",
+            ),
+            (
+                Algorithm::HS512,
+                "MNHB8V8aB0FknfHyFENJHJkpilOknuKGNCH5xJc_m1eUHtYzi0zNjSqbQ5IK9BYQb9_dyIzws4Zjt3AcsuKZAg",
+            ),
+        ] {
+            let signature = jsonwebtoken::crypto::sign(message.as_bytes(), &key, alg).unwrap();
+            assert_eq!(signature, expected, "{alg:?}");
+            let verify = |signature: &str| {
+                matches!(
+                    jsonwebtoken::crypto::verify(signature, message.as_bytes(), &decoding, alg),
+                    Ok(true)
+                )
+            };
+            assert!(verify(expected), "{alg:?}");
+            assert!(!verify(&expected[1..]), "{alg:?}");
+            assert!(!verify(""), "{alg:?}");
+
+            // Through `encode` and `decode`.
+            let mut validation = Validation::new(alg);
+            validation.required_spec_claims.clear();
+            validation.validate_exp = false;
+            let token = jsonwebtoken::encode(
+                &Header::new(alg),
+                &json!({"sub": "joe"}),
+                &EncodingKey::from_secret(SECRET),
+            )
+            .unwrap();
+            let data = jsonwebtoken::decode::<serde_json::Value>(
+                &token,
+                &DecodingKey::from_secret(SECRET),
+                &validation,
+            )
+            .unwrap();
+            assert_eq!(data.header.alg, alg);
+            assert_eq!(data.claims["sub"], "joe");
+            let wrong = jsonwebtoken::decode::<serde_json::Value>(
+                &token,
+                &DecodingKey::from_secret(b"another-secret-another-secret-xx"),
+                &validation,
+            );
+            assert!(
+                matches!(
+                    wrong.map(|_| ()).unwrap_err().kind(),
+                    ErrorKind::InvalidSignature
+                ),
+                "{alg:?}"
+            );
+        }
+    }
+
+    fn assert_invalid(jwt: &JwtService, token: &str) {
+        assert!(
+            matches!(
+                jwt.verify(token, TokenType::Access),
+                Err(AuthError::InvalidToken)
+            ),
+            "accepted {token}"
+        );
+    }
+
+    fn assert_unsupported(error: &jsonwebtoken::errors::Error, alg: Algorithm) {
+        assert!(
+            matches!(error.kind(), ErrorKind::UnsupportedAlgorithm),
+            "{alg:?}: {error:?}"
+        );
     }
 
     fn b64(bytes: &[u8]) -> String {

@@ -18,5 +18,5 @@ Notes:
 - One pool shared by all workers, as Actix apps usually set up sqlx. Each connection's socket stays registered with the worker runtime that opened it, so a connection used by another worker is woken through that worker's I/O driver.
 - sqlx prepares statements and caches them per connection.
 - New deal ids are UUID v4. `created_at`/`updated_at` come from the database's `now()`, returned by `RETURNING`.
-- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Navree's workspace uses `rust_crypto`).
+- jsonwebtoken 10+ requires a crypto backend feature. Its README's install line uses `aws_lc_rs`, so this app does too (Navree installs its own HMAC-only provider on RustCrypto `hmac`/`sha2`).
 - sqlx has no TLS feature enabled, since the benchmark database is plain TCP. actix-web's default compression features are compiled in, but no `Compress` middleware is installed.
