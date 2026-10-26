@@ -152,7 +152,7 @@ function LineView({ line, shown, typed }: { line: Line; shown: boolean; typed: n
   switch (line.kind) {
     case "prompt":
       return (
-        <div className={cn(base, "mb-3 rounded-lg border border-line bg-ink-2 px-3 py-2.5 text-fg")}>
+        <div className={cn(base, "mb-3 rounded-md border border-line-2 bg-ink-2 px-3 py-2.5 text-fg")}>
           <span className="flex gap-2">
             <span aria-hidden className="text-fg-3">
               ›
@@ -185,7 +185,7 @@ function LineView({ line, shown, typed }: { line: Line; shown: boolean; typed: n
         <div className={cn(base, "mt-2")}>
           <div className="flex items-baseline gap-2">
             <span aria-hidden className="relative top-[-0.05em] size-1.5 w-3 shrink-0">
-              <span className="mx-auto block size-1.5 rounded-full bg-accent shadow-[0_0_6px_rgb(61_255_143/0.8)]" />
+              <span className="mx-auto block size-1.5 rounded-full bg-fg-2" />
             </span>
             <span>
               <span className="text-fg-3">navree · </span>
@@ -357,8 +357,8 @@ export function AgentSession({
             </div>
             <span className="truncate font-mono text-xs text-fg-3">agent · {title}</span>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-line-2 bg-ink-2 px-2.5 py-0.5 font-mono text-[0.75rem] text-fg-2">
-            <span aria-hidden className="size-1.5 rounded-full bg-accent shadow-[0_0_6px_rgb(61_255_143/0.8)]" />
+          <span className="inline-flex h-6 shrink-0 items-center gap-2 rounded-sm border border-line-2 bg-ink-2 px-2 font-mono text-[0.75rem] text-fg-2">
+            <span aria-hidden className="size-1.5 rounded-full bg-accent" />
             navree mcp
           </span>
         </div>
@@ -385,7 +385,7 @@ export function AgentSession({
                 onClick={() => select(i)}
                 className={cn(
                   "relative h-10 cursor-pointer px-2 text-[0.8125rem] font-medium transition-colors duration-200",
-                  "after:absolute after:inset-x-2 after:-bottom-px after:h-px after:bg-accent after:transition-opacity",
+                  "after:absolute after:inset-x-2 after:-bottom-px after:h-px after:bg-fg after:transition-opacity",
                   i === active ? "text-fg after:opacity-100" : "text-fg-3 after:opacity-0 hover:text-fg-1",
                 )}
               >

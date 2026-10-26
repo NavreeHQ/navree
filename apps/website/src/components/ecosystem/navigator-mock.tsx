@@ -1,10 +1,11 @@
 "use client";
 
-import { CompassIcon } from "lucide-react";
+import { CheckIcon, CompassIcon, LoaderCircleIcon } from "lucide-react";
 import { Fragment } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { LogoTile, StatusDot } from "./app-shell";
 import { MockFrame } from "./frame";
 import { navigatorSession, navigatorTools } from "./mock-data";
 import { useSteps } from "./use-steps";
@@ -36,7 +37,7 @@ function InlineCode({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`)/);
   return parts.map((p, i) =>
     p.startsWith("`") ? (
-      <code key={i} className="rounded-[5px] border border-line bg-ink-2 px-1 py-px font-mono text-[0.8em] text-fg">
+      <code key={i} className="rounded-sm border border-line bg-ink-2 px-1 py-px font-mono text-[0.8em] text-fg">
         {p.slice(1, -1)}
       </code>
     ) : (
@@ -58,7 +59,7 @@ export function AgentSession({ step, compact = false }: { step: number; compact?
         const visible = shownItems.has(i);
         if (item.type === "prompt") {
           return (
-            <div key={i} className={cn("rounded-lg border border-line bg-ink-2 px-3 py-2 text-[0.8125rem] leading-relaxed text-fg", fade(visible))}>
+            <div key={i} className={cn("rounded-md border border-line-2 bg-ink-2 px-3 py-2 text-[0.8125rem] leading-relaxed text-fg", fade(visible))}>
               <span className="mr-2 font-mono text-fg-3">&gt;</span>
               {item.text}
             </div>
@@ -72,7 +73,7 @@ export function AgentSession({ step, compact = false }: { step: number; compact?
                 <span
                   className={cn(
                     "size-1.5 shrink-0 rounded-full transition-colors duration-300",
-                    done ? "bg-accent" : "bg-fg-1 motion-safe:animate-pulse",
+                    done ? "bg-fg-3" : "bg-fg-1 motion-safe:animate-pulse",
                   )}
                 />
                 <span className="min-w-0 truncate">
@@ -118,50 +119,76 @@ export function NavigatorMock({ className }: { className?: string }) {
     if (!call || !shownItems.has(call.i)) return "idle";
     return resulted.has(call.i) ? "done" : "active";
   };
+  const used = calls.filter((c) => resulted.has(c.i)).length;
 
   return (
     <MockFrame
       title="agent · ~/code/crm"
       className={className}
       bodyClassName="@container"
-      label="A coding agent fixing the example CRM with Navigator. Asked why the deals page returns 500, it calls last_error, which shows a missing column deals.expected_close_date; describe_schema, which shows the migration that adds it is pending; and list_commands. It answers: run navree migrate. Beside the session, Navigator's twelve tools, with the three it used lit."
+      label="A coding agent fixing the example CRM with Navigator. Asked why the deals page returns 500, it calls last_error, which shows a missing column deals.expected_close_date; describe_schema, which shows the migration that adds it is pending; and list_commands. It answers: run navree migrate. Beside the session, Navigator's twelve tools, with the three it used marked."
     >
-      <div ref={ref} className="grid @3xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+      <div ref={ref} className="grid h-full @3xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <div className="min-w-0 p-4 @xl:p-5">
           <AgentSession step={step} />
         </div>
-        <div className="min-w-0 border-t border-line bg-ink-0/30 p-4 @xl:p-5 @3xl:border-t-0 @3xl:border-l">
-          <div className="flex items-center gap-2.5">
-            <CompassIcon className="size-4 text-accent" strokeWidth={1.5} />
-            <span className="text-[0.8125rem] font-semibold text-fg">navree</span>
-            <span className="ml-auto font-mono text-xs text-fg-3">stdio · 12 tools</span>
-          </div>
-          <div className="mt-1 font-mono text-xs text-fg-3">navree mcp · read-only</div>
-          <div className="mt-4 grid grid-cols-2 gap-1.5">
-            {navigatorTools.map((tool) => {
-              const s = state(tool);
-              return (
-                <span
-                  key={tool}
-                  className={cn(
-                    "truncate rounded-md border px-2 py-1 font-mono text-xs transition-[color,border-color,background-color,box-shadow] duration-300",
-                    s === "active"
-                      ? "border-accent/60 bg-accent/10 text-accent shadow-glow-sm"
-                      : s === "done"
-                        ? "border-line-2 bg-ink-2 text-fg"
-                        : "border-line text-fg-3",
-                  )}
-                >
-                  {tool}
-                </span>
-              );
-            })}
-          </div>
-          <div className="mt-4 rounded-lg border border-line bg-ink-1 px-3 py-2 font-mono text-xs leading-5 text-fg-3">
-            <div>
-              navree <span className="text-fg-2">0.1</span> · rust <span className="text-fg-2">1.95</span>
+        {/* The MCP server, as the agent's client lists it. */}
+        <div className="flex min-w-0 flex-col border-t border-line bg-ink-0 @3xl:border-t-0 @3xl:border-l">
+          <div className="flex items-center gap-2.5 border-b border-line p-3 @xl:px-4">
+            <LogoTile tone="outline">
+              <CompassIcon strokeWidth={1.75} />
+            </LogoTile>
+            <div className="grid min-w-0 flex-1 leading-tight">
+              <span className="truncate text-sm font-medium text-fg">navree</span>
+              <span className="truncate font-mono text-xs text-fg-3">navree mcp · stdio</span>
             </div>
-            <div>database sqlite · local only</div>
+            <span className="inline-flex shrink-0 items-center gap-2 text-xs text-fg-2">
+              <StatusDot />
+              Connected
+            </span>
+          </div>
+          <div className="p-2 @xl:px-3">
+            <div className="flex h-8 items-center justify-between px-2 text-xs text-fg-3">
+              <span>Tools</span>
+              <span className="font-mono tabular-nums">
+                {used} of {navigatorTools.length} used
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-1 gap-y-0.5">
+              {navigatorTools.map((tool) => {
+                const s = state(tool);
+                return (
+                  <span
+                    key={tool}
+                    className={cn(
+                      "flex h-7 min-w-0 items-center gap-2 rounded-sm px-2 font-mono text-xs transition-colors duration-300",
+                      s === "active" ? "bg-ink-3 text-fg" : s === "done" ? "bg-ink-2 text-fg-1" : "text-fg-3",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{tool}</span>
+                    {s === "active" ? (
+                      <LoaderCircleIcon className="size-3.5 shrink-0 text-fg-2 motion-safe:animate-spin" strokeWidth={2} />
+                    ) : s === "done" ? (
+                      <CheckIcon className="size-3.5 shrink-0 text-fg-2" strokeWidth={2} />
+                    ) : null}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-auto border-t border-line px-4 py-3 text-xs leading-5 text-fg-3">
+            <div className="flex justify-between gap-3">
+              <span>Version</span>
+              <span className="font-mono text-fg-2">navree 0.1 · rust 1.95</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Database</span>
+              <span className="font-mono text-fg-2">sqlite · local only</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Access</span>
+              <span className="font-mono text-fg-2">read-only</span>
+            </div>
           </div>
         </div>
       </div>
