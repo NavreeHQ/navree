@@ -1,7 +1,7 @@
 //! # navree
 //!
-//! Navree: a Laravel-class, NestJS-structured application framework on Rust
-//! and Tokio. This facade is the one dependency an app needs: it re-exports
+//! Navree: the complete backend framework for Rust, modular, API-first and
+//! AI-native, on Tokio. This facade is the one dependency an app needs: it re-exports
 //! every module crate (one Cargo feature each, all on by default), the
 //! attribute macros and a [`prelude`].
 //!
@@ -10,7 +10,7 @@
 //! | [`kernel`] | navree-kernel | always | module graph, DI container, lifecycle, commands |
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML and `APP_*` sources |
-//! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (NestJS error format) |
+//! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
 //! | `crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, app key |
 //! | `events` | navree-events | `events` | `EventsModule`: events and (queued) listeners |
@@ -28,10 +28,11 @@
 //! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
 //! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
 //! | `audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
-//! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, CASL abilities |
-//! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: cron-style tasks |
+//! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
+//! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
+//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
 //!
 //! A feature also turns on the features of the crates its crate builds on
 //! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
@@ -155,6 +156,8 @@ pub use navree_validation as validation;
 // L5
 #[cfg(feature = "auth")]
 pub use navree_auth as auth;
+#[cfg(feature = "workspace")]
+pub use navree_workspace as workspace;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).
@@ -172,6 +175,6 @@ pub use navree_kernel::{
 };
 
 /// A handler's result: the error defaults to [`AppError`](navree_http::AppError),
-/// rendered in the NestJS error format.
+/// rendered in Navree's JSON error shape.
 #[cfg(feature = "http")]
 pub type Result<T, E = navree_http::AppError> = std::result::Result<T, E>;

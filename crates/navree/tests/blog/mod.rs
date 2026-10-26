@@ -5,7 +5,7 @@
 //! ```text
 //! blog/
 //! ├── mod.rs           # app(): the root module list, configured once
-//! ├── abilities.rs     # who may do what (CASL-style rules)
+//! ├── abilities.rs     # who may do what (ability rules)
 //! └── posts/           # PostsModule: entity, migration, DTOs, service, controller
 //! ```
 
