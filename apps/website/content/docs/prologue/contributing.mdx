@@ -40,7 +40,7 @@ cargo test --workspace
 
 ## The crate hierarchy
 
-Navree's crates form eight layers, from the kernel (L0) to the facade and the CLI (L6), with applications on top (L7). **A crate may depend only on crates in lower layers, and only along the edges the build design allows.** The rule covers dev-dependencies too.
+Navree's crates form layers, from the kernel (L0) through the framework's modules and the ecosystem's packages (L6 and L7) to the facade and the CLI (L8), with applications on top (L9 and up). **A crate may depend only on crates in lower layers, and only along the edges the build design allows.** The rule covers dev-dependencies too.
 
 Modules often need something from a module beside them: the auth module wants to write to the audit log, a queue worker wants to broadcast. Those needs go through traits in `navree-contracts` (L1), such as `AuditSink`, `Broadcaster`, `Principal` and the job traits. The module that provides the feature registers an implementation, and the module that needs it resolves the trait from the container. No module depends sideways on another.
 

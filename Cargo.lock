@@ -2780,6 +2780,7 @@ dependencies = [
  "navree-api",
  "navree-audit",
  "navree-auth",
+ "navree-billing",
  "navree-cache",
  "navree-config",
  "navree-contracts",
@@ -2927,6 +2928,46 @@ dependencies = [
  "tracing",
  "utoipa",
  "uuid",
+]
+
+[[package]]
+name = "navree-billing"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "hex",
+ "hmac",
+ "http",
+ "navree-access",
+ "navree-auth",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-queue",
+ "navree-schedule",
+ "navree-testing",
+ "navree-workspace",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]
