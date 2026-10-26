@@ -91,7 +91,8 @@ pub fn check_name(name: &str) -> Result<(), String> {
             "the flag name `{name}` is longer than {MAX_NAME_LEN} characters"
         ));
     }
-    let valid = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.');
+    let valid =
+        |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_' | '.');
     let first = name.chars().next().unwrap_or('-');
     if !name.chars().all(valid) || !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
         return Err(format!(

@@ -39,7 +39,10 @@ async fn conformance(store: &dyn FlagStore) {
     state.rollout = None;
     state.killed = true;
     store.save_state(None, &state).await.unwrap();
-    assert_eq!(store.state(None, "new-pipeline").await.unwrap(), Some(state.clone()));
+    assert_eq!(
+        store.state(None, "new-pipeline").await.unwrap(),
+        Some(state.clone())
+    );
     let other = FlagState {
         updated_at: Some(at),
         ..FlagState::unset("ai-summaries")
@@ -71,7 +74,10 @@ async fn conformance(store: &dyn FlagStore) {
         .await
         .unwrap();
     store
-        .set_override(None, &entry("new-pipeline", ScopeType::Workspace, acme, true))
+        .set_override(
+            None,
+            &entry("new-pipeline", ScopeType::Workspace, acme, true),
+        )
         .await
         .unwrap();
     store
@@ -83,7 +89,10 @@ async fn conformance(store: &dyn FlagStore) {
         .await
         .unwrap();
     assert_eq!(
-        store.overrides_of(None, ScopeType::User, ada).await.unwrap(),
+        store
+            .overrides_of(None, ScopeType::User, ada)
+            .await
+            .unwrap(),
         BTreeMap::from([
             ("deal-export".to_owned(), true),
             ("new-pipeline".to_owned(), false),
@@ -114,7 +123,10 @@ async fn conformance(store: &dyn FlagStore) {
     assert!(listed[0].scope_id < listed[1].scope_id, "then by id");
     assert_eq!(
         store.override_counts(None).await.unwrap(),
-        BTreeMap::from([("deal-export".to_owned(), 1), ("new-pipeline".to_owned(), 3)])
+        BTreeMap::from([
+            ("deal-export".to_owned(), 1),
+            ("new-pipeline".to_owned(), 3)
+        ])
     );
     assert!(
         store
@@ -141,9 +153,18 @@ async fn conformance(store: &dyn FlagStore) {
     );
     store.purge(None, "new-pipeline").await.unwrap();
     assert_eq!(store.state(None, "new-pipeline").await.unwrap(), None);
-    assert!(store.overrides(None, "new-pipeline").await.unwrap().is_empty());
+    assert!(
+        store
+            .overrides(None, "new-pipeline")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
-        store.overrides_of(None, ScopeType::User, ada).await.unwrap(),
+        store
+            .overrides_of(None, ScopeType::User, ada)
+            .await
+            .unwrap(),
         BTreeMap::from([("deal-export".to_owned(), true)]),
         "other flags keep their overrides"
     );
@@ -203,7 +224,12 @@ async fn the_database_store_writes_in_the_unit_of_work() {
     store.save_state(Some(&uow), &state).await.unwrap();
     uow.commit().await.unwrap();
     assert_eq!(
-        store.state(None, "new-pipeline").await.unwrap().unwrap().everyone,
+        store
+            .state(None, "new-pipeline")
+            .await
+            .unwrap()
+            .unwrap()
+            .everyone,
         Some(true)
     );
 }

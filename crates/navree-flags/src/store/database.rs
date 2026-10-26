@@ -304,7 +304,10 @@ impl FlagStore for DatabaseFlagStore {
         scope_id: Uuid,
     ) -> BoxFuture<'a, Result<BTreeMap<String, bool>, FlagsError>> {
         Box::pin(async move {
-            with_reader!(self, uow, |conn| overrides_of_in(conn, scope_type, scope_id).await)
+            with_reader!(self, uow, |conn| overrides_of_in(
+                conn, scope_type, scope_id
+            )
+            .await)
         })
     }
 
@@ -339,7 +342,10 @@ impl FlagStore for DatabaseFlagStore {
         scope_id: Uuid,
     ) -> BoxFuture<'a, Result<bool, FlagsError>> {
         Box::pin(async move {
-            with_writer!(self, uow, |conn| remove_override_in(conn, flag, scope_type, scope_id).await)
+            with_writer!(self, uow, |conn| remove_override_in(
+                conn, flag, scope_type, scope_id
+            )
+            .await)
         })
     }
 

@@ -160,10 +160,7 @@ impl Flags {
     }
 
     /// Turns `F` off for one user, one workspace, or everyone.
-    pub async fn deactivate<F: Flag>(
-        &self,
-        scope: impl Into<FlagScope>,
-    ) -> Result<(), FlagsError> {
+    pub async fn deactivate<F: Flag>(&self, scope: impl Into<FlagScope>) -> Result<(), FlagsError> {
         let change = Change::for_scope(&scope.into(), Some(false))?;
         self.change(&FlagDefinition::of::<F>(), change).await
     }

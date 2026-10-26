@@ -105,7 +105,11 @@ pub(crate) fn render_list<'a>(
             on_off(definition.default),
             everyone,
             rollout,
-            counts.get(definition.name).copied().unwrap_or(0).to_string(),
+            counts
+                .get(definition.name)
+                .copied()
+                .unwrap_or(0)
+                .to_string(),
         ]);
     }
     if rows.len() == 1 {
@@ -145,7 +149,11 @@ pub(crate) fn parse_toggle(command: &str, args: &[String]) -> Result<(String, Ta
     let flag = args
         .next()
         .filter(|arg| !arg.starts_with("--"))
-        .ok_or_else(|| format!("{command}: name a flag: {command} <flag> [--user <id>] [--workspace <id-or-slug>]"))?
+        .ok_or_else(|| {
+            format!(
+                "{command}: name a flag: {command} <flag> [--user <id>] [--workspace <id-or-slug>]"
+            )
+        })?
         .clone();
     let mut target = Target::Everyone;
     while let Some(arg) = args.next() {
@@ -160,16 +168,17 @@ pub(crate) fn parse_toggle(command: &str, args: &[String]) -> Result<(String, Ta
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| format!("{command}: `{name}` needs a value"))
         };
-        let next = match option {
-            "--user" => {
-                let raw = value("--user")?;
-                Target::User(Uuid::parse_str(&raw).map_err(|_| {
-                    format!("{command}: `--user {raw}` is not a user id (a UUID)")
-                })?)
-            }
-            "--workspace" => Target::Workspace(value("--workspace")?),
-            other => return Err(format!("{command}: unexpected argument `{other}`")),
-        };
+        let next =
+            match option {
+                "--user" => {
+                    let raw = value("--user")?;
+                    Target::User(Uuid::parse_str(&raw).map_err(|_| {
+                        format!("{command}: `--user {raw}` is not a user id (a UUID)")
+                    })?)
+                }
+                "--workspace" => Target::Workspace(value("--workspace")?),
+                other => return Err(format!("{command}: unexpected argument `{other}`")),
+            };
         if target != Target::Everyone {
             return Err(format!(
                 "{command}: name one user or one workspace, not both"
@@ -357,7 +366,10 @@ mod tests {
             Ok(("new-pipeline".to_owned(), Target::Everyone))
         );
         assert_eq!(
-            parse_toggle("flags:on", &args(&["new-pipeline", "--user", &user.to_string()])),
+            parse_toggle(
+                "flags:on",
+                &args(&["new-pipeline", "--user", &user.to_string()])
+            ),
             Ok(("new-pipeline".to_owned(), Target::User(user)))
         );
         assert_eq!(
@@ -386,7 +398,13 @@ mod tests {
             ))
         );
         assert_eq!(
-            parse_rollout(&args(&["ai", "100%", "--of=workspaces", "--plans", "pro, business"])),
+            parse_rollout(&args(&[
+                "ai",
+                "100%",
+                "--of=workspaces",
+                "--plans",
+                "pro, business"
+            ])),
             Ok(("ai".to_owned(), Some(Rollout::plans(["pro", "business"]))))
         );
         assert_eq!(
@@ -448,7 +466,10 @@ mod tests {
                 },
             ),
         ]);
-        let counts = BTreeMap::from([("deal-export".to_owned(), 2), ("new-pipeline".to_owned(), 1)]);
+        let counts = BTreeMap::from([
+            ("deal-export".to_owned(), 2),
+            ("new-pipeline".to_owned(), 1),
+        ]);
         assert_eq!(
             render_list(definitions.iter(), &states, &counts),
             "flag          default  everyone  rollout             overrides\n\

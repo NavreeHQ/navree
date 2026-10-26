@@ -34,8 +34,16 @@ async fn writes_join_the_current_unit_of_work() {
         })
         .await;
     assert!(result.is_err());
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
-    assert!(events.drain().is_empty(), "no event for a rolled-back change");
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
+    assert!(
+        events.drain().is_empty(),
+        "no event for a rolled-back change"
+    );
 
     // Committed with it: the state and the event, after the commit.
     let actor = Uuid::now_v7();
@@ -46,7 +54,12 @@ async fn writes_join_the_current_unit_of_work() {
         .unwrap();
     assert!(events.drain().is_empty(), "nothing before the commit");
     uow.commit().await.unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     let events = events.drain();
     assert_eq!(events.len(), 1, "{events:?}");
     let (name, payload) = &events[0];
@@ -160,10 +173,18 @@ async fn checks_are_cached_and_changes_clear_the_cache() {
     let db = world.db().await;
     let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
 
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     turn_on_behind_the_cache(&db, acme).await;
     assert!(
-        !flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap(),
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap(),
         "the cached overrides of acme still say nothing"
     );
     assert!(
@@ -181,15 +202,30 @@ async fn checks_are_cached_and_changes_clear_the_cache() {
         .deactivate::<NewPipeline>(FlagScope::workspace(acme))
         .await
         .unwrap();
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     flags
         .activate::<NewPipeline>(FlagScope::workspace(acme))
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
 
     // The global state is cached too.
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(globex)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(globex))
+            .await
+            .unwrap()
+    );
     db.conn()
         .execute(
             Query::insert()
@@ -204,9 +240,19 @@ async fn checks_are_cached_and_changes_clear_the_cache() {
         )
         .await
         .unwrap();
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(globex)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(globex))
+            .await
+            .unwrap()
+    );
     world.app.get::<Cache>().await.flush().await.unwrap();
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(globex)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(globex))
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -214,11 +260,26 @@ async fn other_instances_see_a_change_once_the_cache_expires() {
     let world = World::with(builder().config("flags.cache_ttl_secs", 1)).await;
     let flags = world.flags().await;
     let acme = Uuid::now_v7();
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     turn_on_behind_the_cache(&*world.db().await, acme).await;
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     tokio::time::sleep(Duration::from_millis(1200)).await;
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -226,9 +287,19 @@ async fn a_zero_ttl_turns_the_cache_off() {
     let world = World::with(builder().config("flags.cache_ttl_secs", 0)).await;
     let flags = world.flags().await;
     let acme = Uuid::now_v7();
-    assert!(!flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     turn_on_behind_the_cache(&*world.db().await, acme).await;
-    assert!(flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap());
+    assert!(
+        flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap()
+    );
     assert!(
         !world
             .app
@@ -253,14 +324,20 @@ async fn reads_in_a_unit_of_work_see_its_writes_without_caching_them() {
             .await
             .unwrap();
         assert!(
-            flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap(),
+            flags
+                .active::<NewPipeline>(FlagScope::workspace(acme))
+                .await
+                .unwrap(),
             "the write is visible in its own unit of work"
         );
     })
     .await;
     uow.rollback().await.unwrap();
     assert!(
-        !flags.active::<NewPipeline>(FlagScope::workspace(acme)).await.unwrap(),
+        !flags
+            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .await
+            .unwrap(),
         "the rolled-back state was not cached"
     );
 }
@@ -276,7 +353,12 @@ async fn the_memory_store_applies_changes_at_once() {
         .activate::<NewPipeline>(FlagScope::user(ada))
         .await
         .unwrap();
-    assert!(store.overrides_of(None, ScopeType::User, ada).await.unwrap()["new-pipeline"]);
+    assert!(
+        store
+            .overrides_of(None, ScopeType::User, ada)
+            .await
+            .unwrap()["new-pipeline"]
+    );
     assert_eq!(events.drain().len(), 1, "emitted at once");
     world.app.get::<AuditLog>().await.flush().await;
     let audited = audit_log::Entity::find()

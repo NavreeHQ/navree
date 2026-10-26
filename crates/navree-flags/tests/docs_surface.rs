@@ -6,12 +6,12 @@
 use navree_access::{AccessModule, AccessOptions};
 use navree_db::DatabaseModule;
 use navree_events::Event;
+use navree_flags::entity::{feature_flag, feature_flag_override};
 use navree_flags::{
     CurrentFlags, FLAG_EXTENSION, FLAGS_MANAGE_PERMISSION, FLAGS_MIGRATIONS, Flag, FlagChanged,
     FlagScope, FlagState, FlagStoreKind, Flags, FlagsError, FlagsFake, FlagsModule, FlagsOptions,
     MissingScope, PlanResolver, RequireFlag, Rollout, UserScope, requires_flag,
 };
-use navree_flags::entity::{feature_flag, feature_flag_override};
 use navree_testing::TestApp;
 use sea_orm::EntityName;
 
@@ -71,7 +71,13 @@ fn the_documented_api_exists() {
     } = FlagsOptions::default();
     assert_eq!(
         (store, cache_ttl_secs, routes, admin_routes, missing_scope),
-        (FlagStoreKind::Database, 60, true, true, MissingScope::Default)
+        (
+            FlagStoreKind::Database,
+            60,
+            true,
+            true,
+            MissingScope::Default
+        )
     );
     let _ = (FlagStoreKind::Memory, MissingScope::Off);
     assert_eq!(<FlagsOptions as navree_config::ConfigSection>::KEY, "flags");

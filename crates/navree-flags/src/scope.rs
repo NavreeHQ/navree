@@ -199,7 +199,9 @@ impl From<&navree_auth::CurrentUser> for FlagScope {
 
 /// The kind of an override: for one user or for one workspace (the
 /// `scope_type` column of `feature_flag_overrides`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeType {
     /// A user.
@@ -263,11 +265,17 @@ mod tests {
         );
 
         let both = FlagScope::user(user).workspace(workspace);
-        assert_eq!((both.user_id(), both.workspace_id()), (Some(user), Some(workspace)));
+        assert_eq!(
+            (both.user_id(), both.workspace_id()),
+            (Some(user), Some(workspace))
+        );
         assert_eq!(both.target(), Err(()));
         assert_eq!(FlagScope::workspace(workspace).with_user(user), both);
         assert_eq!(FlagScope::from(&both), both);
-        assert_eq!(both.to_string(), format!("user {user} in workspace {workspace}"));
+        assert_eq!(
+            both.to_string(),
+            format!("user {user} in workspace {workspace}")
+        );
     }
 
     #[test]

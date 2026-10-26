@@ -337,7 +337,10 @@ impl Controller for FlagsAdminController {
             .api(ApiMeta {
                 request: Some(schema_fn::<OverrideInput>),
                 response: Some(schema_fn::<FlagDetailsResource>),
-                ..admin_api("Turn a flag on or off for a user or workspace", vec![400, 404])
+                ..admin_api(
+                    "Turn a flag on or off for a user or workspace",
+                    vec![400, 404],
+                )
             }),
             RouteDef::on(
                 Method::DELETE,
@@ -376,7 +379,10 @@ impl FlagsAdminController {
         Ok(Json(FlagListResource { data }))
     }
 
-    async fn details(&self, definition: &FlagDefinition) -> Result<FlagDetailsResource, FlagsError> {
+    async fn details(
+        &self,
+        definition: &FlagDefinition,
+    ) -> Result<FlagDetailsResource, FlagsError> {
         let state = self.flags.state_of(definition).await?;
         let overrides = self.flags.overrides(definition).await?;
         let count = u64::try_from(overrides.len()).unwrap_or(u64::MAX);

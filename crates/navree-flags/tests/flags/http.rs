@@ -222,7 +222,10 @@ async fn get_flags_serves_exposed_flags_to_the_front_end() {
         json!({"ai-summaries": true}),
         "only flags marked expose leave the server"
     );
-    assert_eq!(response.header("cache-control"), Some("private, max-age=60"));
+    assert_eq!(
+        response.header("cache-control"),
+        Some("private, max-age=60")
+    );
 
     world
         .as_user(ada)

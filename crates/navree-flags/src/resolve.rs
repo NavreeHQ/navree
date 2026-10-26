@@ -239,7 +239,11 @@ mod tests {
 
         // A rollout of workspaces needs a workspace in the scope.
         let by_workspace = Case {
-            state: Some(state(None, Some(Rollout::percent(30).of_workspaces()), false)),
+            state: Some(state(
+                None,
+                Some(Rollout::percent(30).of_workspaces()),
+                false,
+            )),
             ..Case::new()
         };
         assert!(by_workspace.decide(&FlagScope::workspace(inside), d));
@@ -257,7 +261,9 @@ mod tests {
     #[test]
     fn plan_rollouts_ask_for_the_workspace_plan() {
         let workspace = id_with_bucket(true, 50);
-        let rollout = Rollout::percent(50).of_workspaces().on_plans(["pro", "business"]);
+        let rollout = Rollout::percent(50)
+            .of_workspaces()
+            .on_plans(["pro", "business"]);
         let state = state(None, Some(rollout), false);
         let scope = FlagScope::workspace(workspace);
         let facts = Facts {
