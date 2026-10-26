@@ -18,7 +18,7 @@ use navree_view::{ViewModule, ViewOptions};
 use navree_workspace::{
     AccessRequests, Invitations, Members, ModuleBuilderWorkspaceExt, NewOrganization,
     NewPartition, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Partition,
-    PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped,
+    PartitionScoped, PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped,
     WorkspaceSelector, Workspaces,
 };
 use sea_orm::sea_query::{ColumnDef, Query, Table};
@@ -99,6 +99,69 @@ impl MigrationTrait for CreateDeals {
     }
 }
 
+/// `contacts(id, workspace_id, partition_id, name)`: a table owned by
+/// workspaces and sliced by partitions.
+struct CreateContacts;
+
+impl MigrationName for CreateContacts {
+    fn name(&self) -> &str {
+        "m20261026_000003_create_contacts"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for CreateContacts {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table("contacts")
+                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
+                    .col(ColumnDef::new("workspace_id").uuid().not_null())
+                    .col(ColumnDef::new("partition_id").uuid().null())
+                    .col(ColumnDef::new("name").string().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table("contacts").to_owned())
+            .await
+    }
+}
+
+/// The `contacts` entity.
+pub mod contact {
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[sea_orm(table_name = "contacts")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+        pub partition_id: Option<Uuid>,
+        pub name: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+impl Subject for contact::Entity {
+    const SUBJECT: &'static str = "Contact";
+    const PERMISSION_PREFIX: &'static str = "contacts";
+}
+
+impl WorkspaceScoped for contact::Entity {}
+
+impl PartitionScoped for contact::Entity {}
+
 /// The `deals` entity.
 pub mod deal {
     use sea_orm::entity::prelude::*;
@@ -136,9 +199,11 @@ impl Module for FixturesModule {
             .migrations(
                 MigrationSet::new("deals")
                     .after(["workspace"])
-                    .migration(CreateDeals),
+                    .migration(CreateDeals)
+                    .migration(CreateContacts),
             )
             .import(AccessModule::for_feature::<deal::Entity>())
+            .import(AccessModule::for_feature::<contact::Entity>())
             .workspace_scoped::<deal::Entity>();
     }
 }
