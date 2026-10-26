@@ -47,6 +47,7 @@ navree-schedule = { path = "crates/navree-schedule", version = "0.1.0" }
 navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
 navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
+navree-mcp = { path = "crates/navree-mcp", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -208,6 +209,14 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# The official Rust MCP SDK (navree-mcp): the server, stdio and the
+# streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
+rmcp = { version = "3.7.0", default-features = false, features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+async-trait = "0.1.92"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

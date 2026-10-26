@@ -33,9 +33,11 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //!
 //! A feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
+//! (`auth` turns on `access`, `db`, `http`, ...). Ecosystem features such as
+//! `mcp` are not in `full`: turn them on by name. The `postgres` feature adds
 //! navree-db's PostgreSQL driver. `axum` is re-exported with `http`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
@@ -158,6 +160,15 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L6 (ecosystem)
+/// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
+/// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
+#[cfg(feature = "mcp")]
+pub mod mcp {
+    pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
+    pub use navree_mcp::*;
+}
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

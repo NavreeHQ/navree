@@ -361,6 +361,10 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Ecosystem features apps turn on by name: not in `full` (they pull in
+/// dependencies most apps do not need).
+const OPT_IN: [&str; 1] = ["mcp"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +373,12 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    let opted_in: Vec<&str> = OPT_IN
+        .into_iter()
+        .filter(|feature| full.contains(*feature))
+        .collect();
+    assert!(opted_in.is_empty(), "`full` turns on opt-in {opted_in:?}");
 }

@@ -16,19 +16,66 @@ use navree_http::{AppError, ClientIp, RouteAuthorizer, RouteMeta};
 use navree_kernel::{AppContext, BoxFuture};
 use serde_json::{Value, json};
 
-use crate::engine::Ability;
+use sea_orm::EntityTrait;
+
+use crate::Authorized;
+use crate::engine::{Ability, ActionMarker, Subject};
 use crate::extract::request_access;
 use crate::factory::{AbilityFactory, PrincipalAccess};
 
-/// The record a `can(.., from = "id")` route loaded and authorized, kept in
-/// the request extensions for [`Authorized`](crate::Authorized).
+/// A record loaded and authorized by subject name: what a `can(.., from =
+/// "id")` route keeps in the request extensions for
+/// [`Authorized`](crate::Authorized), and what
+/// [`AbilityFactory::authorize_record`] returns outside a request.
 #[derive(Clone)]
-pub(crate) struct AuthorizedRecord {
+pub struct AuthorizedRecord {
     pub(crate) subject: String,
     pub(crate) action: String,
     pub(crate) json: Arc<Value>,
     pub(crate) model: Arc<dyn Any + Send + Sync>,
     pub(crate) ability: Arc<Ability>,
+}
+
+impl AuthorizedRecord {
+    /// The subject type, e.g. `Deal`.
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+
+    /// The action that was checked, e.g. `update`.
+    pub fn action(&self) -> &str {
+        &self.action
+    }
+
+    /// The record as conditions see it (see [`record_json`](crate::record_json)).
+    pub fn record(&self) -> &Value {
+        &self.json
+    }
+
+    /// The typed record, or `None` when `E`'s subject or `A`'s action is not
+    /// the one that was checked (or the model is not `E`'s).
+    pub fn into_authorized<E, A>(self) -> Option<Authorized<E, A>>
+    where
+        E: EntityTrait + Subject,
+        E::Model: Sync,
+        A: ActionMarker,
+    {
+        if self.subject != E::SUBJECT || self.action != A::NAME {
+            return None;
+        }
+        let model = self.model.downcast::<E::Model>().ok()?;
+        Some(Authorized::from_parts(model, self.json, self.ability))
+    }
+}
+
+impl fmt::Debug for AuthorizedRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthorizedRecord")
+            .field("subject", &self.subject)
+            .field("action", &self.action)
+            .field("record", &self.json)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Checks a route's access declaration, in order:
