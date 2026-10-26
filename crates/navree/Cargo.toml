@@ -85,6 +85,18 @@ workspace = [
     "mail",
     "access",
 ]
+## L6 (ecosystem libraries, opt-in: not part of `full`)
+## Feature flags: `#[flag]`, `Flags`, `CurrentFlags`, `#[requires_flag]`.
+flags = [
+    "dep:navree-flags",
+    "http",
+    "cache",
+    "db",
+    "events",
+    "audit",
+    "workspace",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 
@@ -99,6 +111,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
+navree-flags = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }

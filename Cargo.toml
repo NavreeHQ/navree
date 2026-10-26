@@ -47,6 +47,7 @@ navree-schedule = { path = "crates/navree-schedule", version = "0.1.0" }
 navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
 navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
+navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)

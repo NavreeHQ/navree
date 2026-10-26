@@ -79,6 +79,9 @@ fn missing_message(missing: &[(String, String)]) -> String {
 /// - Request and response schemas, and the schemas they reference, are
 ///   component schemas. A body schema whose name another, different schema
 ///   already holds is inlined.
+/// - The route's specification extensions
+///   ([`RouteMeta::extensions`](navree_http::RouteMeta::extensions), such
+///   as `x-navree-flag`) are members of its operation.
 ///
 /// # Errors
 ///
@@ -338,6 +341,9 @@ impl Builder {
         operation.insert("responses".into(), self.responses(route, label, response));
         if !route.access.public {
             operation.insert("security".into(), json!([{"cookie": []}, {"bearer": []}]));
+        }
+        for (name, value) in &route.extensions {
+            operation.insert(name.clone(), value.clone());
         }
         Value::Object(operation)
     }
