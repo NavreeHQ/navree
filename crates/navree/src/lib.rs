@@ -33,10 +33,13 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //!
 //! A feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`.
+//! (`auth` turns on `access`, `db`, `http`, ...). Every module feature is in
+//! the default `full` set except the opt-in ones (`grpc`). The `postgres`
+//! feature adds navree-db's PostgreSQL driver. `axum` is re-exported with
+//! `http`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -158,6 +161,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L6 (opt-in)
+#[cfg(feature = "grpc")]
+pub use navree_grpc as grpc;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

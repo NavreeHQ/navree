@@ -47,6 +47,7 @@ navree-schedule = { path = "crates/navree-schedule", version = "0.1.0" }
 navree-notify = { path = "crates/navree-notify", version = "0.1.0" }
 navree-auth = { path = "crates/navree-auth", version = "0.1.0" }
 navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
+navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -99,6 +100,27 @@ reqwest = { version = "0.13.5", default-features = false, features = [
     "stream",
 ] }
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
+# gRPC (navree-grpc): tonic on hyper and h2, TLS with rustls and ring, no
+# system `protoc` (protox compiles .proto files in pure Rust).
+tonic = { version = "0.14.6", default-features = false, features = [
+    "channel",
+    "codegen",
+    "router",
+    "tls-native-roots",
+    "tls-ring",
+] }
+tonic-prost = "0.14.6"
+tonic-web = "0.14.6"
+tonic-health = { version = "0.14.6", default-features = false }
+tonic-reflection = { version = "0.14.6", default-features = false, features = ["server"] }
+tonic-types = "0.14.6"
+tonic-prost-build = { version = "0.14.6", default-features = false }
+prost = "0.14.4"
+prost-types = "0.14.4"
+prost-reflect = { version = "0.16.5", features = ["serde"] }
+protox = "0.10.0"
+http-body = "1.0.1"
+hyper-util = { version = "0.1.21", features = ["http1", "http2", "server", "server-auto", "server-graceful", "service", "tokio"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
 

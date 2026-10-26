@@ -361,15 +361,30 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Module features that stay out of `full` (heavier, or not everyone's):
+/// apps turn them on by name.
+const OPT_IN: [&str; 1] = ["grpc"];
+
 #[test]
-fn full_is_the_default_and_turns_on_every_module() {
+fn full_is_the_default_and_turns_on_every_module_but_the_opt_in_ones() {
     let features = Features::read();
     assert_eq!(features.table["default"], ["full"]);
     let full = features.closure("full");
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    let included: Vec<&&str> = OPT_IN
+        .iter()
+        .filter(|feature| full.contains(**feature))
+        .collect();
+    assert!(included.is_empty(), "opt-in features in `full`: {included:?}");
+    for feature in OPT_IN {
+        assert!(
+            features.feature_of.values().any(|f| f == feature),
+            "opt-in feature `{feature}` turns on no crate"
+        );
+    }
 }

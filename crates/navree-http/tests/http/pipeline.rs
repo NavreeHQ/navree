@@ -470,3 +470,31 @@ async fn body_limit_returns_413() {
         .unwrap();
     assert_eq!(app.send(upload).await.text(), "100");
 }
+
+#[test]
+fn client_ip_of_a_request_follows_the_proxy_settings() {
+    use std::net::{IpAddr, SocketAddr};
+
+    use axum::extract::ConnectInfo;
+    use navree_http::ClientIp;
+
+    let mut request = Request::get("/")
+        .header("x-forwarded-for", "203.0.113.9")
+        .body(Body::empty())
+        .unwrap();
+    request
+        .extensions_mut()
+        .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 4000))));
+    let (parts, _) = request.into_parts();
+    let proxy: IpAddr = [127, 0, 0, 1].into();
+    let client: IpAddr = [203, 0, 113, 9].into();
+
+    let direct = ClientIp::of(&parts.headers, &parts.extensions, &HttpOptions::default());
+    assert_eq!(direct, ClientIp(proxy), "untrusted peers name themselves");
+    let behind_proxy = HttpOptions {
+        trusted_proxies: vec!["127.0.0.1".to_owned()],
+        ..HttpOptions::default()
+    };
+    let forwarded = ClientIp::of(&parts.headers, &parts.extensions, &behind_proxy);
+    assert_eq!(forwarded, ClientIp(client));
+}
