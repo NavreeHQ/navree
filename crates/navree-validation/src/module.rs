@@ -4,16 +4,19 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use navree_config::Config;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::Messages;
+use crate::{Country, HtmlPolicy, InputContext, Messages, RegionSource};
 
 /// The configuration section of [`ValidationModule::from_config`].
 pub const CONFIG_SECTION: &str = "validation";
 
-/// Message and attribute-name overrides (section `validation`).
+/// Message and attribute-name overrides, the default phone region and the
+/// HTML policy (section `validation`).
 ///
 /// ```toml
 /// [validation.messages]
@@ -22,10 +25,17 @@ pub const CONFIG_SECTION: &str = "validation";
 ///
 /// [validation.attributes]
 /// first_name = "first name"
+///
+/// [validation.phone]
+/// default_region = "GB"
+///
+/// [validation.html]
+/// tags = ["p", "br", "strong", "em", "a", "ul", "ol", "li"]
 /// ```
 ///
 /// Nested tables flatten to dotted keys, so `[validation.messages.min]
-/// string = "..."` sets `min.string`.
+/// string = "..."` sets `min.string`. In code, start from the defaults:
+/// `ValidationOptions { messages, ..ValidationOptions::default() }`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ValidationOptions {
@@ -36,11 +46,36 @@ pub struct ValidationOptions {
     /// Display names by field path (`"address.city"`), used for `:attribute`.
     #[serde(deserialize_with = "flat_strings")]
     pub attributes: BTreeMap<String, String>,
+    /// Phone numbers (`validation.phone`).
+    pub phone: PhoneOptions,
+    /// What `SafeHtml` keeps (`validation.html`).
+    pub html: HtmlPolicy,
+}
+
+/// Phone numbers (section `validation.phone`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PhoneOptions {
+    /// The region of numbers written without a country code (`"GB"`, from
+    /// `APP_VALIDATION__PHONE__DEFAULT_REGION`), unless the app's
+    /// [`RegionSource`] gives one for the request. Unset, such numbers are
+    /// invalid.
+    pub default_region: Option<Country>,
 }
 
 impl From<ValidationOptions> for Messages {
     fn from(options: ValidationOptions) -> Self {
         Messages::new(options.messages, options.attributes)
+    }
+}
+
+impl InputContext {
+    /// The context of `options`, refusing an unsafe HTML policy.
+    fn from_options(options: &ValidationOptions) -> Result<InputContext, String> {
+        options.html.check()?;
+        Ok(InputContext::new()
+            .with_default_region(options.phone.default_region)
+            .with_html(options.html.clone()))
     }
 }
 
@@ -81,8 +116,11 @@ fn flat_strings<'de, D: Deserializer<'de>>(
 
 /// The validation module. Global; provides and exports the app's
 /// [`Messages`], which the [`Valid`](crate::Valid) and
-/// [`ValidAsync`](crate::ValidAsync) extractors render errors with (without
-/// the module they use the built-in messages).
+/// [`ValidAsync`](crate::ValidAsync) extractors render errors with, and its
+/// [`InputContext`] (default phone region, HTML policy), which the
+/// international types read. Without the module the extractors use the
+/// built-in messages and the default context. An unsafe HTML policy
+/// ([`HtmlPolicy::check`]) fails the boot.
 ///
 /// - [`for_root`](ValidationModule::for_root): the built-in messages.
 /// - [`with_options`](ValidationModule::with_options): explicit overrides.
@@ -148,17 +186,83 @@ impl Module for ConfiguredValidationModule {
 fn register(m: &mut ModuleBuilder, options: Option<ValidationOptions>) {
     m.global();
     match options {
-        Some(options) => m.value(Messages::from(options)),
+        Some(options) => m.value(options),
         None => m.factory(
-            Factory::<Messages>::new(|r: Resolver| async move {
+            Factory::<ValidationOptions>::new(|r: Resolver| async move {
                 let config = r.get::<Config>().await?;
                 let options: ValidationOptions = config.section_or_default(CONFIG_SECTION)?;
-                Ok(Arc::new(Messages::from(options)))
+                Ok(Arc::new(options))
             })
             .deps(vec![ProviderKey::of::<Config>()]),
         ),
     };
-    m.exports::<Messages>();
+    m.factory(
+        Factory::<Messages>::new(|r: Resolver| async move {
+            let options = r.get::<ValidationOptions>().await?;
+            Ok(Arc::new(Messages::from(ValidationOptions::clone(&options))))
+        })
+        .deps(vec![ProviderKey::of::<ValidationOptions>()]),
+    )
+    .exports::<Messages>()
+    .factory(
+        Factory::<InputContext>::new(|r: Resolver| async move {
+            let options = r.get::<ValidationOptions>().await?;
+            Ok(Arc::new(InputContext::from_options(&options)?))
+        })
+        .deps(vec![ProviderKey::of::<ValidationOptions>()]),
+    )
+    .exports::<InputContext>();
+}
+
+/// Validation registrations on a [`ModuleBuilder`].
+pub trait ModuleBuilderValidationExt {
+    /// Registers provider `R` as the app's `dyn RegionSource`, which picks
+    /// the default region of each request's phone numbers.
+    ///
+    /// ```
+    /// use http::request::Parts;
+    /// use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+    /// use navree_validation::{Country, ModuleBuilderValidationExt, RegionSource};
+    ///
+    /// /// The country of the signed-in user's workspace, cached in the request.
+    /// struct WorkspaceRegion;
+    ///
+    /// # #[derive(Clone)] struct WorkspaceCountry(Country);
+    /// impl RegionSource for WorkspaceRegion {
+    ///     fn region<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Option<Country>> {
+    ///         let country = parts.extensions.get::<WorkspaceCountry>().map(|c| c.0);
+    ///         Box::pin(async move { country })
+    ///     }
+    /// }
+    ///
+    /// impl Injectable for WorkspaceRegion {
+    ///     fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+    ///         Box::pin(async { Ok(WorkspaceRegion) })
+    ///     }
+    /// }
+    ///
+    /// struct ContactsModule;
+    ///
+    /// impl Module for ContactsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.region_source::<WorkspaceRegion>();
+    ///     }
+    /// }
+    /// ```
+    fn region_source<R: RegionSource + Injectable>(&mut self) -> &mut Self;
+}
+
+impl ModuleBuilderValidationExt for ModuleBuilder {
+    fn region_source<R: RegionSource + Injectable>(&mut self) -> &mut Self {
+        self.provider::<R>()
+            .factory(
+                Factory::<dyn RegionSource>::new(|r: Resolver| async move {
+                    Ok(r.get::<R>().await? as Arc<dyn RegionSource>)
+                })
+                .deps(vec![ProviderKey::of::<R>()]),
+            )
+            .exports::<dyn RegionSource>()
+    }
 }
 
 #[cfg(test)]
@@ -187,6 +291,46 @@ mod tests {
         assert!(
             error.to_string().contains("`required` must be a string"),
             "{error}"
+        );
+    }
+
+    #[test]
+    fn options_read_the_phone_and_html_sections() {
+        let options: ValidationOptions = serde_json::from_value(serde_json::json!({
+            "phone": { "default_region": "gb" },
+            "html": { "tags": ["p"], "link_rel": "" },
+        }))
+        .unwrap();
+        assert_eq!(options.phone.default_region, Country::parse("GB").ok());
+        assert_eq!(options.html.tags, ["p".to_owned()].into());
+        assert_eq!(options.html.link_rel, "");
+        assert_eq!(
+            options.html.url_schemes,
+            HtmlPolicy::default().url_schemes
+        );
+        let context = InputContext::from_options(&options).unwrap();
+        assert_eq!(context.default_region(), options.phone.default_region);
+        assert_eq!(context.html(), &options.html);
+
+        let error = serde_json::from_value::<ValidationOptions>(serde_json::json!({
+            "phone": { "default_region": "UK" },
+        }))
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`UK` is not an ISO 3166-1 alpha-2 country code"),
+            "{error}"
+        );
+
+        let unsafe_html = ValidationOptions {
+            html: HtmlPolicy::default().allow_tags(["script"]),
+            ..ValidationOptions::default()
+        };
+        assert!(
+            InputContext::from_options(&unsafe_html)
+                .unwrap_err()
+                .starts_with("validation.html.tags")
         );
     }
 }
