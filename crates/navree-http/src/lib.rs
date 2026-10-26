@@ -21,8 +21,10 @@
 //!   → route timeout → handler → audit action.
 //! - Every error is an [`AppError`] rendered in one JSON shape, as
 //!   `application/json`: `{"statusCode": 404, "message": "Not Found",
-//!   "error": "Not Found"}`; validation errors are 400s whose `message` lists
-//!   every field message and whose `errors` maps fields to their messages.
+//!   "error": "Not Found", "code": "not_found"}`; `code` is one of the
+//!   stable [`codes`] (or an app's own) for front ends to translate, and
+//!   validation errors are 400s whose `message` lists every field message
+//!   and whose `errors` maps fields to their messages.
 //!   This covers panics (`"Internal server error"`, nothing leaked),
 //!   timeouts, 404s and framework rejections (Axum's 422 becomes a 400), and
 //!   every response carries `X-Request-Id` and, for allowed origins, the
@@ -80,6 +82,7 @@
 #![forbid(unsafe_code)]
 
 mod auth;
+pub mod codes;
 mod controller;
 mod error;
 mod extract;
@@ -99,7 +102,7 @@ pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
 pub use extract::{ClientIp, Created, NoContent, Scoped};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};
-pub use options::{CorsOptions, HttpOptions};
+pub use options::{CorsOptions, ErrorOptions, HttpOptions};
 pub use route::{AccessSpec, ApiMeta, CanSpec, RouteDef, RouteMeta, SchemaFn, Throttle, schema_fn};
 pub use router::{RouteErrors, build_router, route_table};
 pub use signed::{UrlSigner, ValidSignature};

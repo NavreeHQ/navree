@@ -38,7 +38,7 @@ impl MaintenanceInfo {
             .unwrap_or_else(|| "The application is down for maintenance.".to_owned());
         let mut error = AppError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "maintenance",
+            crate::codes::MAINTENANCE,
             "Service Unavailable",
         )
         .with_detail(detail);

@@ -24,7 +24,10 @@ use uuid::Uuid;
 use crate::controller::ControllerRegistration;
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
-use crate::pipeline::{self, ContextState, ErrorState, TimeoutOverride, X_REQUEST_ID};
+use crate::error::ErrorFormat;
+use crate::pipeline::{
+    self, ContextState, ErrorState, TimeoutOverride, TimeoutState, X_REQUEST_ID,
+};
 use crate::{
     AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
     HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
@@ -87,8 +90,9 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         .into_iter()
         .map(|c| (*c.value).clone())
         .collect();
+    let format = ErrorFormat::from(&options.errors);
     router = router.layer(from_fn_with_state(
-        Arc::new(ErrorState { mappers }),
+        Arc::new(ErrorState { mappers, format }),
         pipeline::errors,
     ));
     if options.compression {
@@ -98,10 +102,13 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         router = router.layer(from_fn(pipeline::security_headers));
     }
     router = router.layer(from_fn_with_state(
-        Duration::from_secs(options.timeout_secs),
+        TimeoutState {
+            default: Duration::from_secs(options.timeout_secs),
+            format,
+        },
         pipeline::timeout,
     ));
-    router = router.layer(from_fn(pipeline::catch_panic));
+    router = router.layer(from_fn_with_state(format, pipeline::catch_panic));
     if let Some(cors) = cors_layer(&options.cors)? {
         router = router.layer(cors);
     }

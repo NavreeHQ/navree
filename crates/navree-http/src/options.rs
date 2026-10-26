@@ -16,6 +16,7 @@ use serde::{Deserialize, Deserializer};
 /// api_prefix = "/api"
 /// timeout_secs = 30
 /// cors = { allowed_origins = ["http://localhost:3000"] }
+/// errors = { code = true }
 /// ```
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
@@ -67,6 +68,28 @@ pub struct HttpOptions {
     /// How long `serve` waits for in-flight requests after a shutdown signal
     /// (default 30 s).
     pub shutdown_grace_secs: u64,
+    /// How error bodies are rendered (`http.errors`).
+    pub errors: ErrorOptions,
+}
+
+/// How error bodies are rendered (configuration section `http.errors`).
+///
+/// ```toml
+/// [http.errors]
+/// code = true
+/// ```
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct ErrorOptions {
+    /// Send the machine-readable `code` member in every error body (default
+    /// `true`). `false` leaves it out (`APP_HTTP__ERRORS__CODE=false`).
+    pub code: bool,
+}
+
+impl Default for ErrorOptions {
+    fn default() -> Self {
+        Self { code: true }
+    }
 }
 
 impl Default for HttpOptions {
@@ -88,6 +111,7 @@ impl Default for HttpOptions {
             trusted_proxies: Vec::new(),
             signing_key: None,
             shutdown_grace_secs: 30,
+            errors: ErrorOptions::default(),
         }
     }
 }
@@ -215,6 +239,19 @@ mod tests {
     }
 
     #[test]
+    fn error_codes_are_rendered_unless_the_environment_turns_them_off() {
+        assert!(HttpOptions::default().errors.code, "on by default");
+        let config = navree_config::Config::load(
+            &navree_config::ConfigSources::new()
+                .env_vars("APP_", [("APP_HTTP__ERRORS__CODE", "false")]),
+        )
+        .unwrap();
+        let options = config.typed::<HttpOptions>().unwrap();
+        assert!(!options.errors.code);
+        assert_eq!(options.api_prefix, "/api", "other keys keep defaults");
+    }
+
+    #[test]
     fn missing_keys_deserialize_to_defaults() {
         let options: HttpOptions = serde_json::from_value(
             serde_json::json!({"cors": {"allowed_origins": ["https://a.example"]}}),
@@ -223,6 +260,7 @@ mod tests {
         assert_eq!(options.api_prefix, "/api");
         assert!(options.cors.allow_credentials);
         assert_eq!(options.cors.allowed_origins, ["https://a.example"]);
+        assert!(options.errors.code);
     }
 
     #[test]

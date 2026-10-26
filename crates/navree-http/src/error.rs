@@ -13,6 +13,9 @@ use http::{HeaderMap, StatusCode};
 use navree_kernel::BoxError;
 use serde::Serialize;
 
+use crate::codes;
+use crate::options::ErrorOptions;
+
 /// The content type of every error response.
 pub const ERROR_CONTENT_TYPE: &str = "application/json";
 
@@ -26,7 +29,7 @@ pub type Result<T, E = AppError> = std::result::Result<T, E>;
 /// renders in Navree's JSON error shape, as `application/json`:
 ///
 /// ```json
-/// {"statusCode": 404, "message": "Deal not found", "error": "Not Found"}
+/// {"statusCode": 404, "message": "Deal not found", "error": "Not Found", "code": "not_found"}
 /// ```
 ///
 /// - `statusCode` is the HTTP status.
@@ -35,11 +38,17 @@ pub type Result<T, E = AppError> = std::result::Result<T, E>;
 ///   `"Internal server error"` for 500s). For validation errors it is every
 ///   field message, flattened in field order.
 /// - `error` is the reason phrase of the status (`"Not Found"`).
+/// - `code` is the machine-readable [`code`](AppError::code) a front end
+///   maps to a translation key: one of the framework's stable
+///   [`codes`](crate::codes), or an app's own
+///   ([`with_code`](AppError::with_code)). `http.errors.code = false`
+///   leaves it out.
 /// - `errors` (validation errors only) maps fields to their messages:
 ///
 /// ```json
 /// {"statusCode": 400, "message": ["email must be a valid email address"],
-///  "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}
+///  "error": "Bad Request", "code": "validation_failed",
+///  "errors": {"email": ["email must be a valid email address"]}}
 /// ```
 ///
 /// The request id is in the `X-Request-Id` response header, not the body.
@@ -52,8 +61,10 @@ pub type Result<T, E = AppError> = std::result::Result<T, E>;
 pub struct AppError {
     /// The HTTP status.
     pub status: StatusCode,
-    /// A short machine-readable code (`"not_found"`, `"validation_failed"`)
-    /// for logs, tests and error mappers; not rendered.
+    /// The machine-readable code, rendered as `code` (`"not_found"`,
+    /// `"validation_failed"`, `"campaign_already_running"`): lower snake
+    /// case, stable across releases, what a front end maps to a translation
+    /// key. Empty leaves the member out.
     pub code: String,
     /// The default message, rendered as `message` when there is no
     /// [`detail`](AppError::detail): the reason phrase for statuses built
@@ -91,8 +102,8 @@ impl AppError {
     pub fn from_status(status: StatusCode) -> Self {
         let reason = status.canonical_reason().unwrap_or("Error");
         match status.as_u16() {
-            401 => Self::new(status, "unauthenticated", reason),
-            500 => Self::new(status, "internal_error", INTERNAL_MESSAGE),
+            401 => Self::new(status, codes::UNAUTHENTICATED, reason),
+            500 => Self::new(status, codes::INTERNAL_ERROR, INTERNAL_MESSAGE),
             _ => Self::new(status, slug(reason), reason),
         }
     }
@@ -102,9 +113,23 @@ impl AppError {
         Self::from_status(StatusCode::BAD_REQUEST).with_detail(detail)
     }
 
+    /// 400 `invalid_filter` with a message: a list filter that names an
+    /// unknown field or has a malformed value.
+    pub fn invalid_filter(detail: impl Into<String>) -> Self {
+        Self::bad_request(detail).with_code(codes::INVALID_FILTER)
+    }
+
     /// 401: the request is not authenticated.
     pub fn unauthenticated() -> Self {
         Self::from_status(StatusCode::UNAUTHORIZED)
+    }
+
+    /// 401 `two_factor_required` `"Two-factor authentication required"`:
+    /// the password was right, and the account also needs a second factor.
+    pub fn two_factor_required() -> Self {
+        Self::unauthenticated()
+            .with_code(codes::TWO_FACTOR_REQUIRED)
+            .with_detail("Two-factor authentication required")
     }
 
     /// 403: the user may not do this.
@@ -122,12 +147,26 @@ impl AppError {
         Self::from_status(StatusCode::CONFLICT).with_detail(detail)
     }
 
+    /// 409 `limit_reached` with a message: a plan or quota limit stops the
+    /// change (seats, projects, monthly sends).
+    pub fn limit_reached(detail: impl Into<String>) -> Self {
+        Self::conflict(detail).with_code(codes::LIMIT_REACHED)
+    }
+
+    /// 403 `demo_read_only` `"Demo workspaces are read-only."`: a write in a
+    /// workspace that only shows sample data.
+    pub fn demo_read_only() -> Self {
+        Self::forbidden()
+            .with_code(codes::DEMO_READ_ONLY)
+            .with_detail("Demo workspaces are read-only.")
+    }
+
     /// 403 `"Invalid CSRF token"`: the CSRF token is missing or does not
     /// match the session.
     pub fn csrf_mismatch() -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
-            "csrf_token_mismatch",
+            codes::CSRF_TOKEN_MISMATCH,
             "Invalid CSRF token",
         )
     }
@@ -135,7 +174,11 @@ impl AppError {
     /// 400 with field errors (`{"field.path": ["message"]}`): `message` is
     /// every field message, flattened in field order, and `errors` the map.
     pub fn validation(errors: BTreeMap<String, Vec<String>>) -> Self {
-        let mut error = Self::new(StatusCode::BAD_REQUEST, "validation_failed", "Bad Request");
+        let mut error = Self::new(
+            StatusCode::BAD_REQUEST,
+            codes::VALIDATION_FAILED,
+            "Bad Request",
+        );
         error.errors = Some(Box::new(errors));
         error
     }
@@ -172,6 +215,13 @@ impl AppError {
         self
     }
 
+    /// Sets the machine-readable `code` (lower snake case, such as
+    /// `campaign_already_running`); the status and the message stay.
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = code.into();
+        self
+    }
+
     /// Adds a response header.
     pub fn with_header(mut self, name: HeaderName, value: HeaderValue) -> Self {
         self.headers.insert(name, value);
@@ -185,13 +235,18 @@ impl AppError {
     }
 
     /// The response body:
-    /// `{"statusCode", "message", "error"}`, plus `"errors"` for validation
-    /// errors.
+    /// `{"statusCode", "message", "error", "code"}`, plus `"errors"` for
+    /// validation errors.
     pub fn body(&self) -> serde_json::Value {
-        serde_json::to_value(self.wire()).unwrap_or_default()
+        self.body_as(ErrorFormat::default())
     }
 
-    fn wire(&self) -> ErrorBody<'_> {
+    /// The response body in `format`.
+    pub(crate) fn body_as(&self, format: ErrorFormat) -> serde_json::Value {
+        serde_json::to_value(self.wire(format)).unwrap_or_default()
+    }
+
+    fn wire(&self, format: ErrorFormat) -> ErrorBody<'_> {
         let errors = self.errors.as_deref();
         let message = match errors {
             Some(errors) if !errors.is_empty() => {
@@ -199,17 +254,20 @@ impl AppError {
             }
             _ => Message::One(self.detail.as_deref().unwrap_or(&self.title)),
         };
+        let code = (format.code && !self.code.is_empty()).then_some(self.code.as_str());
         ErrorBody {
             status_code: self.status.as_u16(),
             message,
             error: self.status.canonical_reason().unwrap_or(&self.title),
+            code,
             errors,
         }
     }
 
-    /// Renders the response (the pipeline sets `X-Request-Id` itself).
-    pub(crate) fn render(&self) -> Response {
-        let body = serde_json::to_vec(&self.wire()).unwrap_or_default();
+    /// Renders the response in `format` (the pipeline sets `X-Request-Id`
+    /// itself).
+    pub(crate) fn render(&self, format: ErrorFormat) -> Response {
+        let body = serde_json::to_vec(&self.wire(format)).unwrap_or_default();
         let mut response = Response::new(Body::from(body));
         *response.status_mut() = self.status;
         let headers = response.headers_mut();
@@ -283,6 +341,25 @@ fn slug(title: &str) -> String {
         .collect()
 }
 
+/// How error bodies are rendered: `http.errors`, read once at boot.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ErrorFormat {
+    /// Render the `code` member (`http.errors.code`).
+    pub(crate) code: bool,
+}
+
+impl Default for ErrorFormat {
+    fn default() -> Self {
+        Self { code: true }
+    }
+}
+
+impl From<&ErrorOptions> for ErrorFormat {
+    fn from(options: &ErrorOptions) -> Self {
+        Self { code: options.code }
+    }
+}
+
 /// The wire format, members in their documented order.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -290,6 +367,8 @@ struct ErrorBody<'a> {
     status_code: u16,
     message: Message<'a>,
     error: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     errors: Option<&'a BTreeMap<String, Vec<String>>>,
 }
@@ -336,7 +415,7 @@ impl<E: Into<BoxError>> From<E> for AppError {
 /// and log it.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let mut response = self.render();
+        let mut response = self.render(ErrorFormat::default());
         response
             .extensions_mut()
             .insert(PendingError(Arc::new(Mutex::new(Some(self)))));
@@ -416,6 +495,160 @@ mod tests {
         );
     }
 
+    /// One body snapshot per framework error: the stable `code` follows
+    /// `error`.
+    #[test]
+    fn framework_errors_render_their_stable_codes() {
+        use serde_json::json;
+
+        let errors = BTreeMap::from([(
+            "email".to_owned(),
+            vec!["email must be a valid email address".to_owned()],
+        )]);
+        let cases = [
+            (
+                AppError::bad_request("The export is empty."),
+                json!({"statusCode": 400, "message": "The export is empty.", "error": "Bad Request", "code": "bad_request"}),
+            ),
+            (
+                AppError::validation(errors.clone()),
+                json!({
+                    "statusCode": 400,
+                    "message": ["email must be a valid email address"],
+                    "error": "Bad Request",
+                    "code": "validation_failed",
+                    "errors": {"email": ["email must be a valid email address"]},
+                }),
+            ),
+            (
+                AppError::invalid_filter("Unknown filter `colour`."),
+                json!({"statusCode": 400, "message": "Unknown filter `colour`.", "error": "Bad Request", "code": "invalid_filter"}),
+            ),
+            (
+                AppError::unauthenticated(),
+                json!({"statusCode": 401, "message": "Unauthorized", "error": "Unauthorized", "code": "unauthenticated"}),
+            ),
+            (
+                AppError::two_factor_required(),
+                json!({"statusCode": 401, "message": "Two-factor authentication required", "error": "Unauthorized", "code": "two_factor_required"}),
+            ),
+            (
+                AppError::forbidden(),
+                json!({"statusCode": 403, "message": "Forbidden", "error": "Forbidden", "code": "forbidden"}),
+            ),
+            (
+                AppError::csrf_mismatch(),
+                json!({"statusCode": 403, "message": "Invalid CSRF token", "error": "Forbidden", "code": "csrf_token_mismatch"}),
+            ),
+            (
+                AppError::demo_read_only(),
+                json!({"statusCode": 403, "message": "Demo workspaces are read-only.", "error": "Forbidden", "code": "demo_read_only"}),
+            ),
+            (
+                AppError::not_found(),
+                json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"}),
+            ),
+            (
+                AppError::conflict("Email taken"),
+                json!({"statusCode": 409, "message": "Email taken", "error": "Conflict", "code": "conflict"}),
+            ),
+            (
+                AppError::limit_reached("Your plan includes 5 seats."),
+                json!({"statusCode": 409, "message": "Your plan includes 5 seats.", "error": "Conflict", "code": "limit_reached"}),
+            ),
+            (
+                AppError::payload_too_large(16),
+                json!({"statusCode": 413, "message": "The request body must not exceed 16 bytes.", "error": "Payload Too Large", "code": "payload_too_large"}),
+            ),
+            (
+                AppError::too_many_requests(Duration::from_secs(3)),
+                json!({"statusCode": 429, "message": "Too Many Requests", "error": "Too Many Requests", "code": "too_many_requests"}),
+            ),
+            (
+                AppError::internal("db password=hunter2"),
+                json!({"statusCode": 500, "message": "Internal server error", "error": "Internal Server Error", "code": "internal_error"}),
+            ),
+            (
+                AppError::service_unavailable("Try again later."),
+                json!({"statusCode": 503, "message": "Try again later.", "error": "Service Unavailable", "code": "service_unavailable"}),
+            ),
+        ];
+        for (error, body) in cases {
+            assert!(
+                codes::ALL.contains(&error.code.as_str()),
+                "`{}` is in the table of stable codes",
+                error.code
+            );
+            assert_eq!(error.body(), body, "{error}");
+        }
+    }
+
+    #[test]
+    fn statuses_without_a_constructor_derive_their_code() {
+        let cases = [
+            (StatusCode::METHOD_NOT_ALLOWED, codes::METHOD_NOT_ALLOWED),
+            (StatusCode::UNSUPPORTED_MEDIA_TYPE, codes::UNSUPPORTED_MEDIA_TYPE),
+            (StatusCode::PAYMENT_REQUIRED, "payment_required"),
+            (StatusCode::GONE, "gone"),
+        ];
+        for (status, code) in cases {
+            assert_eq!(AppError::from_status(status).code, code, "{status}");
+        }
+    }
+
+    #[test]
+    fn with_code_sets_the_rendered_code() {
+        let error = AppError::conflict("The campaign is already running.")
+            .with_code("campaign_already_running");
+        assert_eq!(error.status, StatusCode::CONFLICT);
+        assert_eq!(error.code, "campaign_already_running");
+        assert_eq!(
+            error.body(),
+            serde_json::json!({
+                "statusCode": 409,
+                "message": "The campaign is already running.",
+                "error": "Conflict",
+                "code": "campaign_already_running",
+            })
+        );
+    }
+
+    #[test]
+    fn code_comes_after_error_and_before_errors() {
+        let errors = BTreeMap::from([("name".to_owned(), vec!["name is required".to_owned()])]);
+        let response = AppError::validation(errors).render(ErrorFormat::default());
+        let text = futures_util::FutureExt::now_or_never(http_body_util::BodyExt::collect(
+            response.into_body(),
+        ))
+        .expect("a full body")
+        .expect("collects")
+        .to_bytes();
+        let text = String::from_utf8_lossy(&text);
+        let positions: Vec<usize> = [
+            "\"statusCode\"",
+            "\"message\"",
+            "\"error\"",
+            "\"code\"",
+            "\"errors\"",
+        ]
+        .iter()
+        .map(|key| text.find(key).expect(key))
+        .collect();
+        assert!(positions.is_sorted(), "member order: {text}");
+    }
+
+    #[test]
+    fn the_code_is_left_out_when_turned_off_or_empty() {
+        let off = ErrorFormat { code: false };
+        let body = AppError::not_found().body_as(off);
+        assert_eq!(
+            body,
+            serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        );
+        let empty = AppError::new(StatusCode::IM_A_TEAPOT, "", "Short and stout");
+        assert!(empty.body().get("code").is_none(), "{}", empty.body());
+    }
+
     #[test]
     fn statuses_have_codes_and_titles() {
         assert_eq!(AppError::unauthenticated().status, StatusCode::UNAUTHORIZED);
@@ -442,6 +675,7 @@ mod tests {
                 "statusCode": 403,
                 "message": "Invalid CSRF token",
                 "error": "Forbidden",
+                "code": "csrf_token_mismatch",
             })
         );
     }
@@ -450,11 +684,11 @@ mod tests {
     fn body_uses_detail_as_message_and_reason_phrase_as_error() {
         assert_eq!(
             AppError::not_found().body(),
-            serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+            serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"})
         );
         assert_eq!(
             AppError::conflict("Email taken").body(),
-            serde_json::json!({"statusCode": 409, "message": "Email taken", "error": "Conflict"})
+            serde_json::json!({"statusCode": 409, "message": "Email taken", "error": "Conflict", "code": "conflict"})
         );
         let custom = AppError::new(
             StatusCode::UNAUTHORIZED,
@@ -467,6 +701,7 @@ mod tests {
                 "statusCode": 401,
                 "message": "Invalid signature.",
                 "error": "Unauthorized",
+                "code": "invalid_signature",
             })
         );
         let odd = AppError::from_status(StatusCode::from_u16(599).unwrap());
@@ -501,6 +736,7 @@ mod tests {
                     "name should not be empty",
                 ],
                 "error": "Bad Request",
+                "code": "validation_failed",
                 "errors": errors,
             })
         );
@@ -511,7 +747,7 @@ mod tests {
 
     #[test]
     fn rendered_errors_are_application_json() {
-        let response = AppError::not_found().render();
+        let response = AppError::not_found().render(ErrorFormat::default());
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(response.headers()[CONTENT_TYPE], ERROR_CONTENT_TYPE);
         assert_eq!(ERROR_CONTENT_TYPE, "application/json");
@@ -534,6 +770,7 @@ mod tests {
                 "statusCode": 500,
                 "message": "Internal server error",
                 "error": "Internal Server Error",
+                "code": "internal_error",
             })
         );
         assert!(error.log_chain().contains("hunter2"), "logged, not sent");

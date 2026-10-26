@@ -29,7 +29,8 @@ use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
-use crate::error::PendingError;
+use crate::codes;
+use crate::error::{ErrorFormat, PendingError};
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
 use crate::maintenance::MaintenanceMode;
@@ -57,7 +58,7 @@ pub(crate) struct TimeoutOverride(pub(crate) Arc<OnceLock<Duration>>);
 pub(crate) fn timeout_error() -> AppError {
     AppError::new(
         StatusCode::SERVICE_UNAVAILABLE,
-        "request_timeout",
+        codes::REQUEST_TIMEOUT,
         "Request Timeout",
     )
     .with_detail("The server did not finish the request in time.")
@@ -152,7 +153,11 @@ pub(crate) async fn request_context(
 // ---------------------------------------------------------------------------
 
 /// Turns a panicking handler or layer into a 500 error.
-pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
+pub(crate) async fn catch_panic(
+    State(format): State<ErrorFormat>,
+    request: Request,
+    next: Next,
+) -> Response {
     let request_id = request_id_of(&request);
     match AssertUnwindSafe(next.run(request)).catch_unwind().await {
         Ok(response) => response,
@@ -164,7 +169,7 @@ pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
                 panic = %message,
                 "request handler panicked"
             );
-            AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR).render()
+            AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR).render(format)
         }
     }
 }
@@ -179,10 +184,19 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
     }
 }
 
+/// The state of the app-wide timeout layer.
+#[derive(Clone, Copy)]
+pub(crate) struct TimeoutState {
+    /// `http.timeout_secs`.
+    pub(crate) default: Duration,
+    /// The timeout layer renders its 503 itself, outside the error layer.
+    pub(crate) format: ErrorFormat,
+}
+
 /// The app-wide request timeout. A route with its own timeout records it in
 /// [`TimeoutOverride`]; the deadline then moves to the route's.
 pub(crate) async fn timeout(
-    State(default): State<Duration>,
+    State(TimeoutState { default, format }): State<TimeoutState>,
     mut request: Request,
     next: Next,
 ) -> Response {
@@ -209,7 +223,7 @@ pub(crate) async fn timeout(
                     request_id = request_id.as_ref().map(tracing::field::display),
                     "request timed out"
                 );
-                return timeout_error().render();
+                return timeout_error().render(format);
             }
         }
     }
@@ -251,6 +265,7 @@ pub(crate) async fn security_headers(request: Request, next: Next) -> Response {
 
 pub(crate) struct ErrorState {
     pub(crate) mappers: Vec<ErrorMapper>,
+    pub(crate) format: ErrorFormat,
 }
 
 /// Renders every error response in the JSON error shape: [`AppError`]s (mapped
@@ -265,20 +280,13 @@ pub(crate) async fn errors(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let response = next.run(request).await;
-    finalize(
-        response,
-        request_id.as_ref(),
-        &state.mappers,
-        &method,
-        &path,
-    )
-    .await
+    finalize(response, request_id.as_ref(), &state, &method, &path).await
 }
 
 async fn finalize(
     mut response: Response,
     request_id: Option<&RequestId>,
-    mappers: &[ErrorMapper],
+    state: &ErrorState,
     method: &Method,
     path: &str,
 ) -> Response {
@@ -302,7 +310,7 @@ async fn finalize(
     };
 
     let error = if error.status == StatusCode::INTERNAL_SERVER_ERROR && error.source.is_some() {
-        ErrorMapper::apply(mappers, &error).unwrap_or(error)
+        ErrorMapper::apply(&state.mappers, &error).unwrap_or(error)
     } else {
         error
     };
@@ -317,7 +325,7 @@ async fn finalize(
         );
     }
 
-    let rendered = error.render();
+    let rendered = error.render(state.format);
     let (mut parts, _) = response.into_parts();
     let (rendered_parts, body) = rendered.into_parts();
     parts.status = rendered_parts.status;
