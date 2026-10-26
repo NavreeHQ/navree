@@ -1,0 +1,23 @@
+error: message pattern `deals.get` (`get`) has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+  --> tests/ui/access.rs:10:14
+   |
+10 |     async fn get(&self) -> Result<()> {
+   |              ^^^
+
+error: event pattern `deal.won` (`won`) takes no access declaration: events are facts, and the access check ran where the change was made; remove #[authenticated]
+  --> tests/ui/access.rs:15:5
+   |
+15 |     #[authenticated]
+   |     ^^^^^^^^^^^^^^^^
+
+error: message pattern `deals.open` (`open`) is #[public] but also declares #[roles]: a public pattern needs no authentication or authorization; remove one of them
+  --> tests/ui/access.rs:22:5
+   |
+22 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: message pattern `guarded.get` (`get`) has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default; a #[guard] alone is not an access declaration)
+  --> tests/ui/access.rs:34:14
+   |
+34 |     async fn get(&self) -> Result<()> {
+   |              ^^^
