@@ -2,6 +2,7 @@
 
 mod agents;
 mod budget;
+mod docs_surface;
 mod failover;
 mod module;
 mod retrieval;

@@ -52,6 +52,7 @@ pub enum Sentiment {
     AtRisk,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct Triage {
     pub sentiment: Sentiment,
@@ -131,6 +132,7 @@ async fn ai_sdk_page(
     Ok(())
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, ToSchema)]
 struct ContractLike {
     /// The term in months.
@@ -461,7 +463,11 @@ fn errors_and_their_statuses() {
 #[tokio::test]
 async fn the_fake_api() {
     let fake = AiFake::new();
-    let ai = fake.ai();
+    // No retries, so the scripted error is the answer rather than retried.
+    let ai = fake.ai_with(AiOptions {
+        max_retries: 0,
+        ..AiOptions::default()
+    });
     fake.respond(FakeReply::text("Two sentences.").with_usage(10, 2));
     fake.respond(FakeReply::json(json!({ "sentiment": "neutral", "reason": "Fine." })));
     fake.respond(FakeReply::error(AiError::unavailable("anthropic")));
