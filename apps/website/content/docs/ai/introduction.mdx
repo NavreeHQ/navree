@@ -1,7 +1,6 @@
 ---
 title: "Navree for AI"
 description: "Navree is AI-native on two sides: your coding agent builds with skills, Navigator and docs written for models, and your product uses models through the AI SDK, agents, RAG and MCP servers."
-status: "planned"
 ---
 
 ## Two sides of AI-native
@@ -69,7 +68,7 @@ Give it `https://navree.com/llms.txt`, or a page's Markdown, such as `https://na
 
 ## AI in your product
 
-`AiModule` adds models to your app as a service like any other: configured in `config/app.toml`, injected where you need it, faked in tests. Here is the whole path from configuration to a route, summarizing a deal in the reference CRM:
+`AiModule` (the facade's opt-in `ai` feature) adds models to your app as a service like any other: configured in `config/app.toml`, injected where you need it, faked in tests. Here is the whole path from configuration to a route, summarizing a deal in the reference CRM:
 
 ```toml title="config/app.toml"
 [ai]
@@ -110,7 +109,7 @@ The route keeps its access rule, the timeline is read with the user's own access
 
 - **[AI SDK](/docs/ai/ai-sdk/).** `ai.text`, `ai.structured::<T>` for typed answers checked against your garde rules, and `ai.stream` to the browser over server-sent events or to every tab over real time. Anthropic, OpenAI, Google Gemini, Mistral, Ollama and AWS Bedrock, with failover, budgets and usage metrics.
 - **[Agents and tools](/docs/ai/agents-and-tools/).** A deals assistant that searches deals, reads their activity and logs calls through your own services, as the signed-in user, with conversation memory and approvals for risky actions.
-- **[Embeddings and RAG](/docs/ai/embeddings-and-rag/).** Index notes through the queue into pgvector or Qdrant, and answer "What did they say about the rollout?" from the deal's own activity, with sources.
+- **[Embeddings and RAG](/docs/ai/embeddings-and-rag/).** Index notes through the queue into pgvector, Qdrant or memory, and answer "What did they say about the rollout?" from the deal's own activity, with sources.
 - **[MCP servers](/docs/ai/mcp-servers/).** Let reps log calls from Claude or ChatGPT: your services as MCP tools, with OAuth sign-in and per-tool permissions.
 
 ## Principles
