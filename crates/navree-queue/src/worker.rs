@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use futures_util::FutureExt;
 use navree_contracts::{JobContext, JobRegistration};
 use navree_kernel::AppContext;
+use navree_telemetry::{EventKind, JobFailed, JobProcessed, TelemetryContext, TelemetryEvent};
 use serde_json::Value;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -194,8 +195,24 @@ impl Queue {
         }
     }
 
-    /// Runs one reserved job and records the outcome.
+    /// Runs one reserved job in its own telemetry context (the job id and a
+    /// new trace), and records the outcome.
     async fn run_reserved(
+        &self,
+        ctx: &AppContext,
+        job: ReservedJob,
+        worker: &str,
+    ) -> Result<Outcome, QueueError> {
+        let mut context =
+            TelemetryContext::new(self.inner.telemetry.clone()).with_job_id(job.id.as_str());
+        if let Some(trace) = self.inner.policy.start(None, None) {
+            context = context.with_trace(trace);
+        }
+        context.scope(self.run_attempt(ctx, job, worker)).await
+    }
+
+    /// Runs one reserved job and records the outcome.
+    async fn run_attempt(
         &self,
         ctx: &AppContext,
         job: ReservedJob,
@@ -227,6 +244,17 @@ impl Queue {
         match execute(registration, job.payload.clone(), job_ctx, limit).await {
             Ok(()) => {
                 self.inner.store.complete(&job.id).await?;
+                self.inner
+                    .telemetry
+                    .emit_with(EventKind::JobProcessed, || {
+                        TelemetryEvent::JobProcessed(JobProcessed {
+                            queue: job.queue.clone(),
+                            job_type: job.job_type.clone(),
+                            job_id: job.id.clone(),
+                            attempt: job.attempts,
+                            duration: started.elapsed(),
+                        })
+                    });
                 tracing::info!(
                     target: "navree::job",
                     name = %job.job_type,
@@ -263,6 +291,7 @@ impl Queue {
         let available_at = self.now_ms().saturating_add(delay_ms);
         let released = self.inner.store.release(job, worker, available_at).await?;
         if released {
+            self.report_failure(job, error, started, true);
             tracing::warn!(
                 target: "navree::job",
                 name = %job.job_type,
@@ -295,6 +324,7 @@ impl Queue {
             .fail(job, worker, error, self.now_ms())
             .await?;
         if moved {
+            self.report_failure(job, error, started, false);
             tracing::error!(
                 target: "navree::job",
                 name = %job.job_type,
@@ -310,6 +340,23 @@ impl Queue {
             lost_reservation(job, worker);
         }
         Ok(())
+    }
+}
+
+impl Queue {
+    /// Emits a [`JobFailed`] for a failed attempt of `job`.
+    fn report_failure(&self, job: &ReservedJob, error: &str, started: Instant, will_retry: bool) {
+        self.inner.telemetry.emit_with(EventKind::JobFailed, || {
+            TelemetryEvent::JobFailed(JobFailed {
+                queue: job.queue.clone(),
+                job_type: job.job_type.clone(),
+                job_id: job.id.clone(),
+                attempt: job.attempts,
+                duration: started.elapsed(),
+                error: error.to_owned(),
+                will_retry,
+            })
+        });
     }
 }
 

@@ -6,8 +6,12 @@ use std::time::Duration;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::BytesMut;
-use http::{HeaderValue, Method, StatusCode};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use navree_config::ConfigSection;
+use navree_telemetry::{
+    EventKind, HttpClientRequest, SpanId, Telemetry, TelemetryContext, TelemetryEvent,
+    TraceContext,
+};
 use tokio::time::Instant;
 use url::Url;
 
@@ -18,10 +22,23 @@ use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
 use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response};
 
 /// The outgoing HTTP client: cheap to clone, shared as a singleton.
+///
+/// Inside a request or job with a trace (a
+/// [`TelemetryContext`](navree_telemetry::TelemetryContext) whose trace is
+/// set), every request carries a W3C `traceparent` for a new client span of
+/// that trace, and its `tracestate`, unless the caller set `traceparent`
+/// itself. Each finished request (after retries) is reported as an
+/// [`HttpClientRequest`] event to the client's telemetry (the app's, for
+/// the module's client) or, without one, to the current context's.
 #[derive(Clone)]
 pub struct HttpClient {
     inner: Arc<Inner>,
+    telemetry: Telemetry,
 }
+
+/// The W3C Trace Context headers.
+static TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
+static TRACESTATE: HeaderName = HeaderName::from_static("tracestate");
 
 /// The longest wait between two attempts.
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
@@ -105,7 +122,21 @@ impl HttpClient {
                 guard,
                 transport,
             }),
+            telemetry: Telemetry::disabled(),
         })
+    }
+
+    /// This client, reporting [`HttpClientRequest`] events to `telemetry`
+    /// (`HttpClientModule` gives its client the app's registry).
+    #[must_use]
+    pub fn with_telemetry(mut self, telemetry: Telemetry) -> HttpClient {
+        self.telemetry = telemetry;
+        self
+    }
+
+    /// The registry this client reports to (disabled unless set).
+    pub fn telemetry(&self) -> &Telemetry {
+        &self.telemetry
     }
 
     /// The options this client was built with.
@@ -153,11 +184,12 @@ impl HttpClient {
     /// `retry_base_ms`). After the last retry the last outcome is returned.
     pub(crate) async fn send(
         &self,
-        request: PreparedRequest,
+        mut request: PreparedRequest,
         retries: Option<u32>,
         timeout: Option<Duration>,
     ) -> Result<Response, HttpClientError> {
         self.inner.guard.check_url(&request.url)?;
+        let span_id = inject_trace(&mut request.headers);
         let options = &self.inner.options;
         let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
         let retries = if is_idempotent(&request.method) {
@@ -195,7 +227,9 @@ impl HttpClient {
             }
             break outcome;
         };
-        let elapsed_ms = started.elapsed().as_millis() as u64;
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        self.report(&request, &url, &outcome, elapsed, attempts, span_id);
         match &outcome {
             Ok(response) => tracing::debug!(
                 method = %request.method,
@@ -215,6 +249,41 @@ impl HttpClient {
             ),
         }
         outcome
+    }
+
+    /// Emits an [`HttpClientRequest`] to this client's telemetry, or to the
+    /// current context's when the client has none.
+    fn report(
+        &self,
+        request: &PreparedRequest,
+        url: &str,
+        outcome: &Result<Response, HttpClientError>,
+        duration: Duration,
+        attempts: u32,
+        span_id: Option<SpanId>,
+    ) {
+        let current;
+        let telemetry = if self.telemetry.is_active() {
+            &self.telemetry
+        } else {
+            current = Telemetry::current();
+            &current
+        };
+        telemetry.emit_with(EventKind::HttpClientRequest, || {
+            let (status, error) = match outcome {
+                Ok(response) => (Some(response.status().as_u16()), None),
+                Err(error) => (None, Some(error.to_string())),
+            };
+            TelemetryEvent::HttpClientRequest(HttpClientRequest {
+                method: request.method.to_string(),
+                url: url.to_owned(),
+                status,
+                duration,
+                attempts,
+                error,
+                span_id,
+            })
+        });
     }
 
     /// Sends `request` once.
@@ -303,6 +372,27 @@ fn transport_error(error: reqwest::Error, url: &Url) -> HttpClientError {
             source: Box::new(error),
         }
     }
+}
+
+/// Adds `traceparent` (and `tracestate`) for a new child span of the
+/// current trace, unless there is no trace or the caller set its own;
+/// returns the new span's id.
+fn inject_trace(headers: &mut HeaderMap) -> Option<SpanId> {
+    if headers.contains_key(&TRACEPARENT) {
+        return None;
+    }
+    let span = TelemetryContext::with_current(|context| context.trace().map(TraceContext::child))
+        .flatten()?;
+    let traceparent = HeaderValue::from_str(&span.traceparent()).ok()?;
+    headers.insert(TRACEPARENT.clone(), traceparent);
+    if let Some(state) = span
+        .trace_state
+        .as_deref()
+        .and_then(|state| HeaderValue::from_str(state).ok())
+    {
+        headers.insert(TRACESTATE.clone(), state);
+    }
+    Some(span.span_id)
 }
 
 /// Methods that are safe to repeat (RFC 9110, section 9.2.2).

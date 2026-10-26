@@ -12,6 +12,9 @@ use futures_util::future::join_all;
 use navree_contracts::Clock;
 use navree_db::Db;
 use navree_kernel::{AppContext, BoxError, CommandFn, WeakAppContext};
+use navree_telemetry::{
+    EventKind, ScheduledTaskRan, Telemetry, TelemetryContext, TelemetryEvent, TracePolicy,
+};
 use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use tokio_util::sync::CancellationToken;
@@ -70,11 +73,18 @@ pub struct TaskInfo {
 /// [`ModuleBuilderScheduleExt`](crate::ModuleBuilderScheduleExt)).
 ///
 /// Provided and exported by `ScheduleModule`. Ticks are whole minutes, UTC.
+///
+/// Each run is reported as a `ScheduledTaskRan` telemetry event (skipped
+/// ticks are not), and the task runs in its own telemetry context with a
+/// new trace (by `observe.tracing`), so its queries and outgoing calls
+/// belong together.
 pub struct Scheduler {
     app: WeakAppContext,
     db: Arc<Db>,
     clock: Arc<dyn Clock>,
     tasks: Vec<Arc<Task>>,
+    telemetry: Telemetry,
+    policy: TracePolicy,
 }
 
 /// A validated task.
@@ -157,7 +167,16 @@ impl Scheduler {
             db,
             clock,
             tasks,
+            telemetry: Telemetry::disabled(),
+            policy: TracePolicy::default(),
         })
+    }
+
+    /// Reports runs to `telemetry` and traces them by `policy`.
+    pub(crate) fn instrumented(mut self, telemetry: Telemetry, policy: TracePolicy) -> Self {
+        self.telemetry = telemetry;
+        self.policy = policy;
+        self
     }
 
     /// Runs every task due at the minute of `now` and waits for them;
@@ -279,7 +298,11 @@ impl Scheduler {
         }
 
         let started = Instant::now();
-        let run = execute(task.clone(), app.clone(), tick);
+        let mut context = TelemetryContext::new(self.telemetry.clone());
+        if let Some(trace) = self.policy.start(None, None) {
+            context = context.with_trace(trace);
+        }
+        let run = context.clone().scope(execute(task.clone(), app.clone(), tick));
         let handle = app.tracker().spawn(async move {
             // Released when the run ends, even if this tick is dropped meanwhile.
             let _overlap_guard = overlap_guard;
@@ -290,7 +313,19 @@ impl Scheduler {
             Ok(Err(error)) => Some(error_chain(&*error)),
             Err(join) => Some(panic_message(join)),
         };
-        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let elapsed = started.elapsed();
+        let telemetry = self.telemetry.clone();
+        context.sync_scope(|| {
+            telemetry.emit_with(EventKind::ScheduledTaskRan, || {
+                TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
+                    task: task.name.clone(),
+                    tick,
+                    duration: elapsed,
+                    error: error.clone(),
+                })
+            });
+        });
+        let duration_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
         let stored = error.as_deref().map(|e| truncate(e, MAX_ERROR_LEN));
         if let Err(db_error) = store::finish(conn, &task.name, tick, self.clock.now(), stored).await
         {
