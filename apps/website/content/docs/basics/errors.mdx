@@ -1,9 +1,9 @@
 ---
 title: "Errors"
-description: "Navree's JSON error shape, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
+description: "Navree's JSON error shape, the machine-readable `code` front ends translate, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
 ---
 
-Every error a Navree app sends has the same JSON body: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Internal details never reach the client: they go to the log.
+Every error a Navree app sends has the same JSON body: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Every body carries a machine-readable `code`, so a front end can show the refusal in the user's own language. Internal details never reach the client: they go to the log.
 
 Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` are in the prelude.
 
@@ -13,13 +13,15 @@ Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` a
 {
   "statusCode": 404,
   "message": "Invoice not found",
-  "error": "Not Found"
+  "error": "Not Found",
+  "code": "not_found"
 }
 ```
 
 - `statusCode` is the HTTP status.
 - `message` is the error's detail when it has one, else its title (the reason phrase by default). For validation errors it is a list of every field message.
 - `error` is the status's reason phrase.
+- `code` is the error's [machine-readable code](#error-codes): stable, in lower snake case, and what a front end maps to a translation key.
 - `errors` appears on validation errors only and maps field paths to their messages:
 
 ```json title="400 Bad Request"
@@ -27,27 +29,28 @@ Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` a
   "statusCode": 400,
   "message": ["email must be a valid email address"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": { "email": ["email must be a valid email address"] }
 }
 ```
 
-Error responses are `application/json` with `X-Content-Type-Options: nosniff`. The request id is in the `X-Request-Id` header, never in the body. Members always come in the same order: `statusCode`, `message`, `error`, `errors`.
+Error responses are `application/json` with `X-Content-Type-Options: nosniff`. The request id is in the `X-Request-Id` header, never in the body. Members always come in the same order: `statusCode`, `message`, `error`, `code`, `errors`.
 
 ### Statuses Navree sends itself
 
-| Status | When | `message` |
-|---|---|---|
-| 400 | invalid input ([validation](/docs/basics/validation/)), malformed JSON, a path or query value of the wrong type | field messages, or the parser's explanation |
-| 401 | the route needs a user and there is none, or the credentials are invalid | `Unauthorized`, or the auth module's message such as `Invalid credentials` |
-| 403 | [access control](/docs/basics/access-control/) refuses, or the CSRF check fails | `Forbidden`, `Invalid CSRF token` |
-| 404 | no route matches, or a record isn't found | `Not Found` |
-| 405 | the path exists for other methods (with an `Allow` header) | `Method Not Allowed` |
-| 409 | a unique or foreign-key constraint fails | see [database errors](#database-errors) |
-| 413 | the body is over `http.body_limit_bytes` (2 MiB by default) or the route's own limit | `The request body must not exceed 2097152 bytes.` when `Content-Length` declares it, else the extractor's explanation |
-| 415 | a JSON or form extractor gets another content type | the expected content type |
-| 429 | a [rate limit](/docs/basics/rate-limiting/) is exceeded (with `Retry-After`) | `Too Many Requests`, or the login throttle's `Too many login attempts. Please try again in N seconds.` |
-| 500 | an unexpected error or a panic | `Internal server error` |
-| 503 | [maintenance mode](/docs/digging-deeper/maintenance-mode/), or the request ran out of time | the maintenance message, or `The server did not finish the request in time.` |
+| Status | When | `message` | `code` |
+|---|---|---|---|
+| 400 | invalid input ([validation](/docs/basics/validation/)), malformed JSON, a path or query value of the wrong type | field messages, or the parser's explanation | `validation_failed`, or `bad_request` |
+| 401 | the route needs a user and there is none, or the credentials are invalid | `Unauthorized`, or the auth module's message such as `Invalid credentials` | `unauthenticated`, or the auth module's code such as `invalid_credentials` |
+| 403 | [access control](/docs/basics/access-control/) refuses, or the CSRF check fails | `Forbidden`, `Invalid CSRF token` | `forbidden`, `csrf_token_mismatch` |
+| 404 | no route matches, or a record isn't found | `Not Found` | `not_found` |
+| 405 | the path exists for other methods (with an `Allow` header) | `Method Not Allowed` | `method_not_allowed` |
+| 409 | a unique or foreign-key constraint fails | see [database errors](#database-errors) | `conflict` |
+| 413 | the body is over `http.body_limit_bytes` (2 MiB by default) or the route's own limit | `The request body must not exceed 2097152 bytes.` when `Content-Length` declares it, else the extractor's explanation | `payload_too_large` |
+| 415 | a JSON or form extractor gets another content type | the expected content type | `unsupported_media_type` |
+| 429 | a [rate limit](/docs/basics/rate-limiting/) is exceeded (with `Retry-After`) | `Too Many Requests`, or the login throttle's `Too many login attempts. Please try again in N seconds.` | `too_many_requests`, `too_many_login_attempts` |
+| 500 | an unexpected error or a panic | `Internal server error` | `internal_error` |
+| 503 | [maintenance mode](/docs/digging-deeper/maintenance-mode/), or the request ran out of time | the maintenance message, or `The server did not finish the request in time.` | `maintenance`, `request_timeout` |
 
 Navree itself never answers 422 or 419: input errors are 400s and CSRF failures are 403s.
 
@@ -72,7 +75,8 @@ impl InvoicesController {
             return Err(AppError::not_found().with_detail("Invoice not found"));
         }
         if id.get_version_num() != 7 {
-            return Err(AppError::conflict("The invoice has already been sent."));
+            return Err(AppError::conflict("The invoice has already been sent.")
+                .with_code("invoice_already_sent"));
         }
         Ok(Json(json!({ "sent": true })))
     }
@@ -83,32 +87,39 @@ impl InvoicesController {
 {
   "statusCode": 409,
   "message": "The invoice has already been sent.",
-  "error": "Conflict"
+  "error": "Conflict",
+  "code": "invoice_already_sent"
 }
 ```
 
-| Constructor | Status | `message` |
-|---|---|---|
-| `AppError::bad_request("The export is empty.")` | 400 | the text |
-| `AppError::unauthenticated()` | 401 | `Unauthorized` |
-| `AppError::forbidden()` | 403 | `Forbidden` |
-| `AppError::not_found()` | 404 | `Not Found` |
-| `AppError::conflict("...")` | 409 | the text |
-| `AppError::validation(map)` | 400 | every field message, plus `errors` |
-| `AppError::payload_too_large(limit)` | 413 | `The request body must not exceed {limit} bytes.` |
-| `AppError::too_many_requests(duration)` | 429 | `Too Many Requests`, with `Retry-After` in whole seconds |
-| `AppError::service_unavailable("...")` | 503 | the text |
-| `AppError::internal(error)` | 500 | `Internal server error`; `error` is logged |
-| `AppError::from_status(StatusCode::PAYMENT_REQUIRED)` | any | the reason phrase (`Payment Required`) |
-| `AppError::new(status, code, title)` | any | `title` |
+| Constructor | Status | `message` | `code` |
+|---|---|---|---|
+| `AppError::bad_request("The export is empty.")` | 400 | the text | `bad_request` |
+| `AppError::validation(map)` | 400 | every field message, plus `errors` | `validation_failed` |
+| `AppError::invalid_filter("Unknown filter: colour.")` | 400 | the text | `invalid_filter` |
+| `AppError::unauthenticated()` | 401 | `Unauthorized` | `unauthenticated` |
+| `AppError::two_factor_required()` | 401 | `Two-factor authentication required` | `two_factor_required` |
+| `AppError::forbidden()` | 403 | `Forbidden` | `forbidden` |
+| `AppError::demo_read_only()` | 403 | `Demo workspaces are read-only.` | `demo_read_only` |
+| `AppError::csrf_mismatch()` | 403 | `Invalid CSRF token` | `csrf_token_mismatch` |
+| `AppError::not_found()` | 404 | `Not Found` | `not_found` |
+| `AppError::conflict("...")` | 409 | the text | `conflict` |
+| `AppError::limit_reached("Your plan includes 5 seats.")` | 409 | the text | `limit_reached` |
+| `AppError::payload_too_large(limit)` | 413 | `The request body must not exceed {limit} bytes.` | `payload_too_large` |
+| `AppError::too_many_requests(duration)` | 429 | `Too Many Requests`, with `Retry-After` in whole seconds | `too_many_requests` |
+| `AppError::service_unavailable("...")` | 503 | the text | `service_unavailable` |
+| `AppError::internal(error)` | 500 | `Internal server error`; `error` is logged | `internal_error` |
+| `AppError::from_status(StatusCode::PAYMENT_REQUIRED)` | any | the reason phrase (`Payment Required`) | the reason phrase in snake case (`payment_required`) |
+| `AppError::new(status, code, title)` | any | `title` | `code` |
 
 And the builder methods:
 
 - `.with_detail("Only the owner can archive a project.")` sets the `message`.
+- `.with_code("project_archived")` sets the `code`; the status and the message stay.
 - `.with_header(name, value)` adds a response header, such as `WWW-Authenticate`.
 - `.with_source(error)` records the cause. It's logged for 5xx responses and never sent.
 
-`AppError` also has public fields (`status`, `code`, `title`, `detail`, `errors`, `headers`, `source`). `code` is a short machine-readable name (`not_found`, `validation_failed`) for logs, tests and error mappers; it isn't part of the response body.
+`AppError` also has public fields (`status`, `code`, `title`, `detail`, `errors`, `headers`, `source`). `code` is the rendered `code`, so error mappers and tests can match on it; an empty `code` leaves the member out.
 
 ```rust
 use navree::axum::http::header::WWW_AUTHENTICATE;
@@ -116,8 +127,127 @@ use navree::axum::http::{HeaderValue, StatusCode};
 
 let error = AppError::new(StatusCode::UNAUTHORIZED, "invalid_signature", "Invalid signature.")
     .with_header(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-// {"statusCode": 401, "message": "Invalid signature.", "error": "Unauthorized"}
+// {"statusCode": 401, "message": "Invalid signature.", "error": "Unauthorized", "code": "invalid_signature"}
 ```
+
+## Error codes
+
+`message` is English text for people. `code` is for programs: a front end looks it up in its translation catalogue, so a refused request reaches each user in their own language, and client code can branch on `code` instead of comparing messages.
+
+```json title="messages/fr.json"
+{
+  "errors": {
+    "invalid_credentials": "Adresse e-mail ou mot de passe incorrect.",
+    "not_a_member": "Vous n'êtes pas membre de cet espace de travail.",
+    "limit_reached": "Vous avez atteint la limite de votre offre."
+  }
+}
+```
+
+```ts title="lib/errors.ts"
+type ErrorBody = { statusCode: number; message: string | string[]; error: string; code?: string };
+
+/** The text to show for an error body: its translated code, else the API's message. */
+export function errorText(body: ErrorBody, messages: Record<string, string>): string {
+  const translated = body.code ? messages[body.code] : undefined;
+  return translated ?? [body.message].flat().join(" ");
+}
+```
+
+Codes are part of Navree's public contract: a code never changes once released, and new ones are only added. The framework's codes are constants in `navree::http::codes` (`codes::NOT_FOUND`, `codes::VALIDATION_FAILED`, and `codes::ALL` for the whole list).
+
+### The framework's codes
+
+| Code | Status | Sent by |
+|---|---|---|
+| `bad_request` | 400 | `AppError::bad_request`, malformed input |
+| `validation_failed` | 400 | `AppError::validation`, the validated extractors; field errors are in `errors` |
+| `invalid_filter` | 400 | `AppError::invalid_filter`: an unknown or malformed list filter |
+| `unauthenticated` | 401 | `AppError::unauthenticated`: no user on a route that needs one |
+| `two_factor_required` | 401 | `AppError::two_factor_required` |
+| `invalid_signature` | 401 | a [signed URL](/docs/basics/middleware/#guards) that does not verify (403 for storage links) |
+| `forbidden` | 403 | `AppError::forbidden`, access control |
+| `csrf_token_mismatch` | 403 | the [CSRF check](/docs/basics/sessions-and-csrf/) |
+| `demo_read_only` | 403 | `AppError::demo_read_only`: a write in a demo workspace |
+| `not_found` | 404 | `AppError::not_found`, a path no route matches |
+| `method_not_allowed` | 405 | a path that exists for other methods |
+| `conflict` | 409 | `AppError::conflict`, constraint violations |
+| `limit_reached` | 409 | `AppError::limit_reached`: a plan or quota limit |
+| `payload_too_large` | 413 | `AppError::payload_too_large`, the body limit |
+| `unsupported_media_type` | 415 | a JSON or form body with another content type |
+| `too_many_requests` | 429 | `AppError::too_many_requests`, the rate limits |
+| `internal_error` | 500 | `AppError::internal`, `?` on any error, panics |
+| `service_unavailable` | 503 | `AppError::service_unavailable` |
+| `maintenance` | 503 | maintenance mode |
+| `request_timeout` | 503 | a request that ran out of time |
+
+### The modules' codes
+
+Navree's modules give each refusal its own code, so a login form can say "wrong password" and an invitation page "this invitation has expired" in the user's language.
+
+| Module | Code | Status | `message` |
+|---|---|---|---|
+| auth | `invalid_credentials` | 401 | `Invalid credentials` |
+| auth | `too_many_login_attempts` | 429 | `Too many login attempts. Please try again in N seconds.` |
+| auth | `invalid_token` | 401 | `Invalid token` |
+| auth | `token_expired` | 401 | `Token expired` |
+| auth | `invalid_refresh_token` | 401 | `Invalid refresh token` |
+| auth | `two_factor_required` | 401 | `Two-factor authentication required` |
+| auth | `invalid_two_factor_code` | 401 | `Invalid two-factor code` |
+| auth | `two_factor_already_enabled` | 409 | `Two-factor authentication is already enabled` |
+| auth | `two_factor_not_enabled` | 400 | `Two-factor authentication is not enabled` |
+| auth | `invalid_reset_token` | 400 | `Invalid or expired password reset token` |
+| auth | `invalid_verification_link` | 403 | `Invalid verification link` |
+| auth | `user_not_found` | 404 | `Not Found` |
+| workspace | `workspace_required` | 400 | `The request names no workspace.` |
+| workspace | `workspace_not_found` | 404 | `Workspace not found.` |
+| workspace | `not_a_member` | 403 | `You are not a member of this workspace.` |
+| workspace | `token_workspace_mismatch` | 403 | `This token is limited to another workspace.` |
+| workspace | `owner_role_required` | 403 | `Only an owner can grant or change the owner role.` |
+| workspace | `already_a_member` | 409 | `The user is already a member of this workspace.` |
+| workspace | `member_not_found` | 404 | `Member not found.` |
+| workspace | `owner_required` | 409 | `The workspace owner can't be removed or demoted; transfer ownership first.` |
+| workspace | `invitation_not_found` | 404 | `Invitation not found.` |
+| workspace | `invitation_expired` | 410 | `The invitation has expired.` |
+| workspace | `invitation_email_mismatch` | 403 | `This invitation was sent to a different email address.` |
+| access | `role_not_found` | 404 | ``The role `name` does not exist.`` |
+| access | `role_already_exists` | 409 | ``The role `name` already exists.`` |
+| access | `forbidden_fields` | 403 | `You may not change these fields: author_id.` |
+
+Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
+
+### Your own codes
+
+Give every refusal your users can see its own code with `.with_code(...)`, on any constructor. Keep codes in lower snake case: 1 to 64 ASCII letters, digits and `_`, starting with a letter. `navree::http::codes::is_valid(code)` checks one, which is handy in a test that walks your app's error mappers.
+
+```rust
+#[post("/{id}/start")]
+async fn start(&self, Path(id): Path<Uuid>) -> Result<NoContent> {
+    if self.campaigns.is_running(id).await? {
+        return Err(AppError::conflict("The campaign is already running.")
+            .with_code("campaign_already_running"));
+    }
+    self.campaigns.start(id).await?;
+    Ok(NoContent)
+}
+```
+
+Choose a code that names what happened (`campaign_already_running`), not the status (`conflict`): the status already says that, and the front end needs to tell one 409 from another.
+
+### Turning codes off
+
+The `code` member is on by default. Set `http.errors.code` to `false` to send the three-member body without it, for clients that validate error bodies strictly:
+
+```toml title="config/default.toml"
+[http.errors]
+code = false
+```
+
+```env
+APP_HTTP__ERRORS__CODE=false
+```
+
+The switch covers every error the app sends, panics and timeouts included. `AppError::code` keeps its value either way, so error mappers and logs still see it, and the OpenAPI `HttpError` schema lists `code` as optional.
 
 ## The question mark operator
 
@@ -135,7 +265,8 @@ async fn total(&self, Path(raw): Path<String>) -> Result<String> {
 {
   "statusCode": 500,
   "message": "Internal server error",
-  "error": "Internal Server Error"
+  "error": "Internal Server Error",
+  "code": "internal_error"
 }
 ```
 
@@ -174,9 +305,12 @@ fn billing_error(error: &BillingError) -> Option<AppError> {
     match error {
         BillingError::CardDeclined { reason } => Some(
             AppError::from_status(StatusCode::PAYMENT_REQUIRED)
+                .with_code("card_declined")
                 .with_detail(format!("The card was declined: {reason}.")),
         ),
-        BillingError::InvoicePaid => Some(AppError::conflict("The invoice is already paid.")),
+        BillingError::InvoicePaid => {
+            Some(AppError::conflict("The invoice is already paid.").with_code("invoice_paid"))
+        }
         BillingError::Gateway(_) => None, // stays a 500
     }
 }
@@ -191,7 +325,7 @@ impl BillingModule {
 }
 ```
 
-Now a handler propagates the error with `?` and the client gets the right status:
+Now a handler propagates the error with `?` and the client gets the right status and code:
 
 ```rust
 #[post("/{id}/charge")]
@@ -205,7 +339,8 @@ async fn charge(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
 {
   "statusCode": 402,
   "message": "The card was declined: insufficient funds.",
-  "error": "Payment Required"
+  "error": "Payment Required",
+  "code": "card_declined"
 }
 ```
 
@@ -217,7 +352,7 @@ Mappers apply to the whole app, whichever module registers them. They only see 5
 
 </Callout>
 
-Navree's own modules register mappers the same way: navree-auth turns its errors into 401s, 403s and 429s (`Invalid credentials`, `Token expired`), navree-access turns an unknown role into a 404, and navree-storage turns a missing file into a 404 and an invalid path into a 400.
+Navree's own modules register mappers the same way: navree-auth turns its errors into 401s, 403s and 429s (`invalid_credentials`, `token_expired`), navree-access turns an unknown role into a 404 (`role_not_found`), and navree-storage turns a missing file into a 404 and an invalid path into a 400. [The modules' codes](#the-modules-codes) lists them.
 
 ## Database errors
 
@@ -225,12 +360,12 @@ Navree's own modules register mappers the same way: navree-auth turns its errors
 
 | `DbErr` | Response |
 |---|---|
-| `RecordNotFound`, `RecordNotUpdated` | 404 `Not Found` |
-| a unique constraint violation | 409 `A record with the same unique value already exists.` |
-| a foreign key constraint violation | 409 `The change conflicts with a related record.` |
-| anything else | 500 |
+| `RecordNotFound`, `RecordNotUpdated` | 404 `Not Found`, code `not_found` |
+| a unique constraint violation | 409 `A record with the same unique value already exists.`, code `conflict` |
+| a foreign key constraint violation | 409 `The change conflicts with a related record.`, code `conflict` |
+| anything else | 500, code `internal_error` |
 
-No SQL text or driver message reaches the client. The mapping function is public as `navree::db::map_db_error`, so your own mapper can reuse it for an error type that wraps `DbErr`.
+No SQL text or driver message reaches the client. The mapping function is public as `navree::db::map_db_error`, so your own mapper can reuse it for an error type that wraps `DbErr`, and give the result a more specific code with `.with_code(...)`.
 
 The [unit of work](/docs/database/unit-of-work/) rolls back whenever the response status is 400 or above, so a request that fails halfway leaves no partial writes.
 
@@ -240,8 +375,8 @@ An error raised while the unit of work commits, after your handler returned, goe
 
 Errors from Axum and from Navree's own layers use the same format:
 
-- A path that matches no route is a 404, and a path that exists for other methods is a 405 with an `Allow` header.
-- Axum's extractor rejections become Navree errors. Axum's 422 for well-formed JSON of the wrong shape becomes a 400, like every other input error; the message is Axum's explanation (it names the missing field).
+- A path that matches no route is a 404 (`not_found`), and a path that exists for other methods is a 405 (`method_not_allowed`) with an `Allow` header.
+- Axum's extractor rejections become Navree errors, with the code of their status. Axum's 422 for well-formed JSON of the wrong shape becomes a 400 (`bad_request`), like every other input error; the message is Axum's explanation (it names the missing field).
 - Any other error response with an empty or `text/plain` body (up to 16 KiB) is rewritten into the format, so layers you add keep the shape. A JSON body you build yourself with an error status is left as it is.
 
 ## Logging server errors
@@ -288,7 +423,8 @@ A request that runs longer than `http.timeout_secs` (30 seconds by default), or 
 {
   "statusCode": 503,
   "message": "The server did not finish the request in time.",
-  "error": "Service Unavailable"
+  "error": "Service Unavailable",
+  "code": "request_timeout"
 }
 ```
 
@@ -300,21 +436,22 @@ Error responses from panics, timeouts and the rate limiter still carry `X-Reques
 
 ```rust
 let body = AppError::not_found().with_detail("Deal not found").body();
-// {"statusCode": 404, "message": "Deal not found", "error": "Not Found"}
+// {"statusCode": 404, "message": "Deal not found", "error": "Not Found", "code": "not_found"}
 ```
 
-Middleware you add with `http_layer` should answer errors with `AppError`, so they keep the format.
+`body()` always includes the code; responses follow `http.errors.code`. Middleware you add with `http_layer` should answer errors with `AppError`, so they keep the format.
 
 ## Testing
 
-`assert_error(status, message)` checks the status, the content type, the `statusCode`, `error` and `message` members and the `X-Request-Id` header. Pass `None` to skip the message check:
+`assert_error(status, message)` checks the status, the content type, the `statusCode`, `error` and `message` members and the `X-Request-Id` header. Pass `None` to skip the message check. `assert_error_code(status, code)` checks the same and the `code`:
 
 ```rust title="tests/invoices.rs"
 client
     .post(&format!("/api/v1/invoices/{}/send", Uuid::nil()))
     .send()
     .await
-    .assert_error(404, "Invoice not found");
+    .assert_error(404, "Invoice not found")
+    .assert_error_code(404, "not_found");
 
 client.get("/api/v1/nope").send().await.assert_error(404, None);
 ```
