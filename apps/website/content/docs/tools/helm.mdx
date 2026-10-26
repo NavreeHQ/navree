@@ -13,7 +13,7 @@ Helm works with what your app already has:
 - **Your access rules.** Every screen, row, field and action is checked against your [abilities](/docs/security/authorization/), the same rules your API enforces. A sales rep who may only edit their own deals sees exactly that in Helm.
 - **Your unit of work.** Every change runs in a transaction with the signed-in user as the actor, so your observers run and the [audit log](/docs/security/audit-log/) records who changed what.
 
-The screens are rendered on the server from templates, with a small stylesheet and script embedded in the crate: there is nothing to build and no front-end toolchain. They work without the script, which only adds conveniences such as confirmations, local times and searchable pickers.
+The screens are rendered on the server from templates, with a small stylesheet and script embedded in the crate: there is nothing to build and no front-end toolchain. They work without the script, which only adds conveniences such as confirmations, local times, searchable pickers, the command menu and the collapsible sidebar.
 
 ## Installation
 
@@ -166,7 +166,7 @@ impl Resource for DealResource {
 | `type Entity` | The SeaORM entity. It must implement `Subject`, which it already does if your routes check it with `#[can]`. `m.resource::<R>()` registers it with navree-access (like `AccessModule::for_feature`), so permissions such as `deals.read` map to it. |
 | `LABEL`, `SINGULAR` | The plural and singular names on screen. `SINGULAR` defaults to `LABEL`. |
 | `GROUP` | The menu group. Resources without one go under **Resources**. |
-| `ICON` | A [Lucide](https://lucide.dev/icons/) icon name, given to custom front ends by the [metadata API](#the-json-api). The built-in menu shows the label's initial. |
+| `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu, such as `handshake`, `users`, `building-2`, `receipt` or `package`. Helm embeds about 140 common Lucide icons (no external requests); any other name shows a folder icon and logs a warning at boot. Custom front ends get the name from the [metadata API](#the-json-api). |
 | `TITLE` | The column that names a record: in headings, breadcrumbs and relationship fields. Defaults to `id`. |
 | `SEARCH` | The columns the search box matches, case-insensitively. |
 | `SLUG` | The resource's path segment, `/admin/resources/deals`. Defaults to the table name, with `-` for `_`. |
@@ -204,7 +204,7 @@ Each field names a column of the entity, except `computed`, `has_many` and `view
 | `Field::select(column)` | The option's label, or a badge with `.badge()` | A select of `.options(..)` |
 | `Field::date(column)`, `Field::datetime(column)` | The date; a date-time in the viewer's time zone | A date or date-time picker (in the viewer's time zone; stored in UTC) |
 | `Field::email(column)`, `Field::url(column)` | A link | A text input, validated |
-| `Field::file(column, disk)` | A download link, or a preview for images | An upload to that [storage disk](/docs/digging-deeper/storage/) (needs `StorageModule`); the column holds the file's path |
+| `Field::file(column, disk)` | A download link, or a preview for images | An upload to that [storage disk](/docs/digging-deeper/storage/) (needs `StorageModule`); the column holds the file's path, and a refused file (its type or size) shows its error under the field |
 | `Field::belongs_to::<R>(column)` | The related record's title, linked to its page | A picker of the records of `R` the user may read |
 | `Field::has_many::<R>(foreign_key)` | A panel on the detail page listing the related records, with their own actions | Not in forms |
 | `Field::computed(name, f)` | The value `f(&model)` returns | Not in forms |
@@ -377,7 +377,11 @@ accent = "#3dff8f"
 per_page = 25
 ```
 
-The look is dark, with your accent on buttons, links and focus rings, and it adapts to phones (the table becomes a list of cards). Resources are listed in the menu by `GROUP`, then by `const ORDER: i32` (lower first), then by label.
+The look is dark, on ink surfaces, with your accent on the primary button of each screen, focus rings and positive figures. The layout is a sidebar and a top bar:
+
+- **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, each with its `ICON`. Its header shows `helm.title` with `helm.logo`, and its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons; the panel remembers the choice in a cookie (`navree_helm_sidebar`), so the next page opens the same way.
+- **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource or page of the menu by name and, on a list with a search box, searches it.
+- **On phones** the sidebar opens as a sheet over the page, and tables become lists of cards.
 
 ### Custom pages
 
@@ -456,7 +460,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 | `POST /admin/api/resources/{resource}/actions/{action}` | Runs an action: `{"ids": [..], "input": {..}}`; answers the result (`{"type": "message", "message"}`, or `"redirect"` / `"download"` with `url`) with `ran`, `skipped` and `queued` |
 | `GET /admin/api/resources/{resource}/metrics/{metric}` | One metric (its name is its label in kebab-case, `open-pipeline`): `range`; answers `value`, `previous`, `change` and `display`, trend `points` or partition `groups` |
 
-A record is `{"id", "title", "values", "display", "can": {"update", "delete"}}`: `values` holds the raw column values (money in minor units), `display` the text the screens show, and a single record also lists the fields the user may not change under `readonly`. A field sent that isn't an editable field of the resource is a 400 (`property created_at should not exist`).
+A record is `{"id", "title", "values", "display", "can": {"update", "delete"}}`: `values` holds the raw column values (money in minor units), `display` the text the screens show, and a single record also lists the fields the user may not change under `readonly`. A field sent that isn't an editable field of the resource is a 400 (`property created_at should not exist`). The API doesn't take uploads: a file field accepts only the path of a file the panel's forms stored for that resource (`deals/<random name>.pdf`), and anything else is a 400 (`attachment is invalid`).
 
 Errors use Navree's JSON error shape (`{ "statusCode", "message", "error" }`), and a validation error lists its field messages under `errors`, as in your API.
 
@@ -468,8 +472,8 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 |---|---|---|
 | `helm.path` | `/admin` | Where the panel is served. |
 | `helm.title` | `Admin` | The name in the header and the browser tab. |
-| `helm.logo` | none | A logo URL for the header and the sign-in screen: a path on your app or an `http(s)` URL. |
-| `helm.accent` | `#3dff8f` | The accent color of buttons and links (`#rgb` or `#rrggbb`). |
+| `helm.logo` | none | A logo URL for the sidebar's header and the sign-in screen: a path on your app or an `http(s)` URL. |
+| `helm.accent` | `#3dff8f` | The accent color of the primary buttons, focus rings and positive figures (`#rgb` or `#rrggbb`). |
 | `helm.per_page` | `25` | Rows per page on lists (at most 100). |
 | `helm.metrics_cache_secs` | `60` | How long metric results are cached per user and range; `0` turns the cache off. |
 | `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
