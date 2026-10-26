@@ -15,6 +15,7 @@ import { createHighlighter, type Highlighter, type ShikiTransformer } from "shik
 import { visit } from "unist-util-visit";
 
 import { mdxComponents } from "@/components/mdx";
+import { remarkFileTreeSource } from "@/lib/file-tree-source";
 import { languageAliases, languages, navreeTheme } from "@/lib/shiki-theme";
 
 export type Heading = { depth: 2 | 3; id: string; text: string };
@@ -66,7 +67,7 @@ export async function renderMdx(source: string): Promise<{ content: ReactElement
   const shiki = await getHighlighter();
   const { default: Content } = await evaluate(source, {
     ...runtime,
-    remarkPlugins: [remarkGfm],
+    remarkPlugins: [remarkGfm, remarkFileTreeSource],
     rehypePlugins: [
       rehypeSlug,
       rehypeCollectHeadings(headings),

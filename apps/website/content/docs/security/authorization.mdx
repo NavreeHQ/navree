@@ -1,9 +1,9 @@
 ---
 title: "Authorization"
-description: "Roles, permissions and CASL-compatible abilities, checked on routes, on loaded records and in SQL list filters, and shared with the front end."
+description: "Roles, permissions and abilities, checked on routes, on loaded records and in SQL list filters, and shared with the front end."
 ---
 
-[Authentication](/docs/security/authentication/) tells you who is calling; authorization decides what they may do. `navree-access` combines Laravel-style roles and permissions with CASL-style abilities. You write the rules once, in Rust, and Navree uses them in four places:
+[Authentication](/docs/security/authentication/) tells you who is calling; authorization decides what they may do. `navree-access` combines roles and permissions, stored in the database and managed at run time, with abilities: rules that allow or deny actions on subjects. You write the rules once, in Rust, and Navree uses them in four places:
 
 - on routes, before the handler runs (`#[can(Update, Post, from = "id")]`);
 - on a loaded record, in your services;
@@ -52,7 +52,7 @@ The migration set `access` creates the tables `roles`, `permissions`, `role_perm
 | Ability | One user's rules, in order. Navree builds it from your abilities function. |
 | Role, permission | Stored in the database and managed at run time. A permission such as `posts.publish` becomes a rule. |
 
-Abilities use the rule model of [CASL](https://casl.js.org): the same rules, in the same JSON, mean the same thing in Rust and in the browser.
+Abilities serialise to the JSON rule format of [CASL](https://casl.js.org), so the same rules mean the same thing in Rust and, through `@casl/ability`, in the browser.
 
 ### Subjects
 
@@ -131,7 +131,7 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 |---|---|
 | `user` | `Some(AccessUser { id, roles })` for a signed-in user (`has_role`, `has_any_role`); `None` for guests |
 | `permissions` | The user's permission strings, through their roles and granted directly, sorted |
-| `team_id` | Always `None`: teams aren't implemented yet |
+| `team_id` | Inside a workspace request, `Some(workspace id)`, and `user.roles` and `permissions` describe the member's workspace role; `None` otherwise. See [How workspace roles reach access control](/docs/workspaces/members-and-roles/#how-workspace-roles-reach-access-control) |
 | `permission_subjects` | The permission prefix of every registered subject, for `grant_permissions` |
 
 The function is a plain `fn(&AbilityCtx, &mut Rules)`: it can't capture state or query the database. Everything a rule decides on must be a role, a permission, or a column of the record being checked.
@@ -165,7 +165,7 @@ A check scans the rules from last to first, and the first rule that matches the 
 | `.fields(..)` | Checks of those fields (see [Fields](#fields)) |
 | `.because(..)` | Nothing: a reason that `access:explain` and the front end can show |
 
-A check without a record is a **type-level** check: "may this user update some post?". It follows CASL: a conditional `can` rule counts as a match, because some records may be allowed, and a conditional `cannot` rule is skipped. `ability.can(UPDATE, "Post", None)` is therefore true for an author, although they may update only their own posts.
+A check without a record is a **type-level** check: "may this user update some post?". A conditional `can` rule counts as a match, because some records may be allowed, and a conditional `cannot` rule is skipped. `ability.can(UPDATE, "Post", None)` is therefore true for an author, although they may update only their own posts.
 
 `Rules::build` panics on an invalid rule (an unsupported operator, say), because rules are code. `Rules::try_build` returns the `RuleError` instead. In the module, an invalid rule makes every request of that user a 500, so test your abilities function (see [Testing](#testing)).
 
@@ -182,7 +182,7 @@ rules.can(READ, "Invoice").when(
 rules.can(READ, "Invoice").when(field("archived_at").eq(None::<&str>));
 ```
 
-| Method | CASL operator |
+| Method | JSON operator |
 |---|---|
 | `eq`, `ne` | `$eq`, `$ne` |
 | `lt`, `lte`, `gt`, `gte` | `$lt`, `$lte`, `$gt`, `$gte` |
@@ -201,7 +201,7 @@ rules.can(READ, "Invoice").when(field("archived_at").eq(None::<&str>));
 - `ability.can(UPDATE, "Post", Some(&post))` is true: the author may update the post;
 - `ability.can_field(UPDATE, "Post", Some(&post), "author_id")` is false: they may not change its author.
 
-A field-limited `cannot` rule never denies a whole-record check, only checks of its fields, as in CASL. `ability.permitted_fields(action, subject, record, &all_fields)` lists the allowed ones. In a handler, `Authorized::check_fields` turns the check into a 403:
+A field-limited `cannot` rule never denies a whole-record check, only checks of its fields. `ability.permitted_fields(action, subject, record, &all_fields)` lists the allowed ones. In a handler, `Authorized::check_fields` turns the check into a 403:
 
 ```rust
 post.check_fields(&input.changed_fields())?;
@@ -543,7 +543,7 @@ export function createAppAbility(rules: readonly CaslRule[] = []): AppAbility {
 </Can>
 ```
 
-The browser's checks only decide what to show. Navree differs from `@casl/ability` in a few corners, which can only affect the UI because the API checks again:
+The browser's checks only decide what to show. In a few corners `@casl/ability` answers differently from Navree, which can only affect the UI because the API checks again:
 
 - a column the record lacks is `null` to Navree and `undefined` to CASL, which `$eq: null` doesn't match;
 - range operators never match `null` or a value of another type in Navree, where JavaScript would compare them;

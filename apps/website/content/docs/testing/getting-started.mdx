@@ -5,7 +5,7 @@ description: "Test a Navree app the way it runs: `TestApp` boots your modules in
 
 Navree tests exercise your application the way it runs in production. A test boots your real modules in-process, sends requests through the full pipeline (request id, CORS, authentication, access checks, the unit of work, the error format) and reads the results from a real database. Only the edges you choose are faked: outgoing mail, the queue, the clock, outgoing HTTP.
 
-This is the approach of Laravel's feature tests, and it keeps tests honest: a test that passes has gone through the same router, extractors and transactions as a real request. It also stays fast, because there is no server process and no network, and the database is a SQLite file in a temporary directory.
+This keeps tests honest: a test that passes has gone through the same router, extractors and transactions as a real request. It also stays fast, because there is no server process and no network, and the database is a SQLite file in a temporary directory.
 
 ## The testing kit
 
@@ -219,6 +219,10 @@ async fn board_reads_and_a_move_under_load() {
 }
 ```
 
+## Testing in a real browser
+
+These tests stop at the API. To check a whole user journey through your front end, [browser testing](/docs/packages/browser-testing/) drives a real Chromium from your Rust tests over the Chrome DevTools Protocol: visit a page, type into fields, press buttons and assert on what the user sees, with a screenshot when a step fails.
+
 <LinkCards>
   <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
     Requests, signed-in users and JSON assertions.
@@ -228,5 +232,8 @@ async fn board_reads_and_a_move_under_load() {
   </LinkCard>
   <LinkCard href="/docs/testing/fakes/" title="Fakes">
     Mail, the queue, the clock, outgoing HTTP and more.
+  </LinkCard>
+  <LinkCard href="/docs/packages/browser-testing/" title="Browser testing">
+    Drive a real browser from your tests.
   </LinkCard>
 </LinkCards>

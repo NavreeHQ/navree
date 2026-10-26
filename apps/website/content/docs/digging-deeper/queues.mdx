@@ -14,11 +14,13 @@ description: "Background jobs on the database or memory driver: dispatching, del
 
 The rest of the framework queues through the same module: queued [mail](/docs/digging-deeper/mail/), queued [event listeners](/docs/digging-deeper/events/#queued-listeners), queued [notifications](/docs/digging-deeper/notifications/) and scheduled jobs all become jobs on it.
 
-<Callout type="note" title="Drivers in 0.1">
+<Callout type="note" title="Drivers">
 
-Redis and [apalis](https://docs.rs/apalis) drivers aren't built yet (see the [roadmap](/docs/prologue/roadmap/)). The database driver's PostgreSQL reservation (`FOR UPDATE SKIP LOCKED`) is written but has never run against a PostgreSQL server: the queue's tests run on SQLite.
+More queue backends, Redis among them, are on the [roadmap](/docs/prologue/roadmap/#more-drivers). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`; the queue's tests run on SQLite, so try that path in staging first (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
 
 </Callout>
+
+[Fleet](/docs/tools/fleet/) adds a dashboard for your queues and a supervisor for the workers: throughput, wait and runtime per queue, retries for failed jobs, and workers balanced across queues by load.
 
 ## Configuration
 
@@ -361,7 +363,7 @@ let waiting = queue.pending_count("default").await?; // waiting, delayed or runn
 
 ## Running workers in production
 
-Run one or more worker processes next to the server, from the same build and with the same configuration, so they use the same database. Navree doesn't ship a process manager: use the one your platform has (systemd, supervisord, a Laravel Forge daemon, a container restart policy) and keep the worker running. A systemd unit, for example:
+Run one or more worker processes next to the server, from the same build and with the same configuration, so they use the same database. [Fleet](/docs/tools/fleet/) supervises them for you with `navree fleet`, balancing workers across queues and restarting them when they exit. To run workers under your platform's process manager instead (systemd, supervisord, a container restart policy), keep each `queue:work` process running. A systemd unit, for example:
 
 ```text title="/etc/systemd/system/crm-queue.service"
 [Unit]
@@ -390,7 +392,7 @@ The CRM runs one server and one worker in development: `cargo run -p crm-api -- 
 
 ### Faking the queue
 
-`QueueFake` records jobs instead of queueing them (Laravel's `Queue::fake()`). Install its queue in place of the app's, then assert on what was dispatched:
+`QueueFake` records jobs instead of queueing them. Install its queue in place of the app's, then assert on what was dispatched:
 
 ```rust title="tests/export.rs"
 use navree::prelude::*;

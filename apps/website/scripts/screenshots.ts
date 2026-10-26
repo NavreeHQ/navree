@@ -22,7 +22,10 @@ const pages: [string, string][] = [
   ["docs-validation", "/docs/basics/validation/"],
   ["docs-authentication", "/docs/security/authentication/"],
   ["styleguide", "/styleguide/"],
-  ["benchmarks", "/benchmarks/"],
+  ["ecosystem", "/ecosystem/"],
+  ["architecture", "/architecture/"],
+  ["ai", "/ai/"],
+  ["performance", "/performance/"],
 ];
 
 const viewports = [

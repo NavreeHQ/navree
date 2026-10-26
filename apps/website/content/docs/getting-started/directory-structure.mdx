@@ -154,7 +154,7 @@ The browser only talks to the Next.js server, which talks to the API. The tokens
 
 ## The framework repository
 
-Navree is developed in one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the framework's crates, the CLI, a reference application, the benchmark and this website.
+Navree is developed in one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the framework's crates, the CLI, the agent skills, a reference application, the performance harness and this website.
 
 <FileTree title="navree/">{`
 Cargo.toml            # the workspace: crates/*, apps/crm-api, apps/crm-api/crates/*
@@ -176,7 +176,8 @@ apps/
     tests/
   crm-web/            # the CRM front end (Next.js), Vitest and Playwright
   website/            # navree.com and these docs
-bench/                # the benchmark: SPEC.md, implementations, results
+skills/               # the agent skills, one SKILL.md per directory
+bench/                # the performance harness: SPEC.md, the load runner, results
 docs/                 # product requirements, build design, plans, notes
 assets/               # the logo
 deploy/               # scripts that deploy navree.com

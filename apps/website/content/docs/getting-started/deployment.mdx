@@ -7,6 +7,17 @@ A Navree app deploys as one binary. The same executable serves HTTP, runs queue 
 
 The examples use Linux with nginx and systemd because they are common. Navree doesn't depend on either: any reverse proxy that forwards HTTP and any process manager that runs a command and sends it a stop signal will do.
 
+## Deploying with Harbor
+
+[Harbor](/docs/tools/harbor/) does everything on this page for you. `navree harbor:provision` prepares an Ubuntu server over SSH with Caddy, PostgreSQL, Redis, TLS, a firewall and systemd units for the server, the queue workers and the scheduler. `navree deploy` ships a release and switches to it atomically once its health check passes, and `navree deploy:rollback` goes back to the previous one. Servers, their roles and the encrypted environment secrets live in `harbor.toml`.
+
+```sh
+navree harbor:provision
+navree deploy
+```
+
+The rest of this page explains what a deployment involves, for when you run your own servers, containers or tooling.
+
 ## Building a release binary
 
 ```sh
@@ -17,7 +28,7 @@ The binary is `target/release/<package>`, for example `target/release/planner` (
 
 A release build changes two defaults: logs are written as JSON lines instead of the pretty format, and templates are read once instead of reloaded when they change. See [Configuration: environments](/docs/getting-started/configuration/#environments).
 
-If you want more speed from the binary at the cost of longer builds, tune the release profile in your `Cargo.toml`. The benchmark's build of Navree used these settings:
+If you want more speed from the binary at the cost of longer builds, tune the release profile in your `Cargo.toml`. The build behind Navree's [performance](/performance/) measurements uses these settings:
 
 ```toml title="Cargo.toml"
 [profile.release]
@@ -295,10 +306,10 @@ curl -s http://127.0.0.1:8080/health/ready
 
 ## Containers
 
-The same rules apply in a container: the binary, `config/` in the working directory, settings from the environment, and `APP_HTTP__ADDR=0.0.0.0:8080` so the server listens outside the container. The benchmark runs Navree in a two-stage image, building with `rust:1-bookworm` and running on `debian:bookworm-slim` (137 MB); its `bench/frameworks/navree/Dockerfile` is a working example. Because the benchmark app depends on Navree by path, that Dockerfile copies the repository's `crates/` into the build stage, and an app of yours needs the same until the crates are published.
+The same rules apply in a container: the binary, `config/` in the working directory, settings from the environment, and `APP_HTTP__ADDR=0.0.0.0:8080` so the server listens outside the container. Navree's performance harness runs its app in a two-stage image, building with `rust:1-bookworm` and running on `debian:bookworm-slim` (137 MB); `bench/frameworks/navree/Dockerfile` is a working example. Because that app depends on Navree by path, the Dockerfile copies the repository's `crates/` into the build stage, and an app of yours needs the same until the crates are published. [Harbor](/docs/tools/harbor/) builds images for you with `navree build:image`.
 
 ## The database in production
 
 SQLite is the default and suits a single server: Navree opens it in WAL mode with a 5-second busy timeout, so the server, workers and scheduler on one machine can share the file. Keep `storage/` on a persistent disk and back the file up.
 
-For several servers, use PostgreSQL. Turn on the `postgres` feature of `navree` and set `database.url`. Be aware of the testing status in 0.1: the benchmark runs Navree on PostgreSQL (the pool, the unit of work, pagination, inserts and the auth user lookup), but the test suite runs on SQLite, and the PostgreSQL-only paths, such as the queue's `FOR UPDATE SKIP LOCKED` job reservation, haven't been run against a real server. See the [release notes](/docs/prologue/release-notes/#known-limitations).
+For several servers, use PostgreSQL. Turn on the `postgres` feature of `navree` and set `database.url`. Navree's performance harness runs on PostgreSQL (the pool, the unit of work, pagination, inserts and the auth user lookup) while the test suite runs on SQLite; [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql) lists the paths to try in staging first, such as the queue's `FOR UPDATE SKIP LOCKED` job reservation.

@@ -1,0 +1,509 @@
+---
+title: "gRPC"
+description: "Serve gRPC, gRPC-Web and Connect from your modules with `#[grpc_service]` on tonic services, sharing dependency injection, guards, access rules and the unit of work with your routes."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="grpc" /> gRPC gives a service a typed contract in a `.proto` file that any language can call. `navree-grpc` serves [tonic](https://docs.rs/tonic) services from your modules: you write the `.proto`, tonic generates the Rust types and the service trait, and you implement the trait on an `#[injectable]` struct marked `#[grpc_service]`.
+
+Navree runs its own pipeline around every call: the request id, tracing, authentication, guards, the access check, the deadline and a unit of work. A gRPC method declares who may call it with the same attributes as a route, takes the same extractors and returns the same `AppError`, which Navree turns into the matching gRPC status. The services run on your HTTP port by default, and answer gRPC, gRPC-Web and Connect clients.
+
+## Installation
+
+`navree-grpc` is the `grpc` feature of the facade. The code tonic generates names `tonic` and `prost` directly, so your crate depends on them too, at the versions navree-grpc uses (`cargo tree -p navree-grpc` shows them):
+
+```toml title="services/deals/Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["grpc"] }
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+pbjson = "0.8"            # JSON for Connect clients
+pbjson-types = "0.8"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+pbjson-build = "0.8"
+```
+
+The `grpc` feature isn't in the default `full` set.
+
+## Defining the service
+
+Write the contract in a `.proto` file. This is the deals service's:
+
+```text title="services/deals/proto/crm/deals/v1/deals.proto"
+syntax = "proto3";
+
+package crm.deals.v1;
+
+service Deals {
+  rpc GetDeal(GetDealRequest) returns (Deal);
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse);
+  rpc MoveDeal(MoveDealRequest) returns (Deal);
+  rpc WatchDeals(WatchDealsRequest) returns (stream DealEvent);
+}
+
+message GetDealRequest { string id = 1; }
+
+message ListDealsRequest {
+  string company_id = 1;
+  uint32 page = 2;
+  uint32 per_page = 3;
+}
+
+message ListDealsResponse {
+  repeated Deal deals = 1;
+  uint64 total = 2;
+}
+
+message MoveDealRequest {
+  string id = 1;
+  string stage = 2;
+  optional int64 position = 3;
+  optional string lost_reason = 4;
+}
+
+message Deal {
+  string id = 1;
+  string title = 2;
+  int64 amount_cents = 3;
+  string currency = 4;
+  string stage = 5;
+  string company_id = 6;
+  string owner_id = 7;
+}
+
+message WatchDealsRequest {}
+
+message DealEvent {
+  string deal_id = 1;
+  string stage = 2;
+}
+```
+
+Generate the Rust code in `build.rs`. The descriptor set feeds server reflection and Connect's JSON encoding; the attributes add garde rules to the request messages you want validated:
+
+```rust title="services/deals/build.rs"
+use std::{env, fs, path::PathBuf};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let descriptor = PathBuf::from(env::var("OUT_DIR")?).join("deals_descriptor.bin");
+
+    tonic_prost_build::configure()
+        .file_descriptor_set_path(&descriptor)
+        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(garde::Validate)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[garde(length(min = 1))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[garde(range(min = 0))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[garde(length(chars, max = 1000))]")
+        .compile_protos(&["proto/crm/deals/v1/deals.proto"], &["proto"])?;
+
+    let descriptors = fs::read(&descriptor)?;
+    pbjson_build::Builder::new()
+        .register_descriptors(&descriptors)?
+        .build(&[".crm.deals.v1"])?;
+    Ok(())
+}
+```
+
+Include the generated code in a module:
+
+```rust title="services/deals/src/grpc/pb.rs"
+tonic::include_proto!("crm.deals.v1");
+include!(concat!(env!("OUT_DIR"), "/crm.deals.v1.serde.rs"));
+
+pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("deals_descriptor");
+```
+
+## Implementing it
+
+Implement the generated trait on an injectable struct and mark the impl block `#[grpc_service]`, naming the generated server type:
+
+```rust title="services/deals/src/grpc/mod.rs"
+pub mod pb;
+
+use crm_core::{Deal, Move};
+use navree::grpc::{Request, Response, grpc_service};
+use navree::http::CurrentPrincipal;
+use navree::prelude::*;
+
+use crate::service::DealService;
+use pb::deals_server::{Deals, DealsServer};
+
+#[injectable]
+pub struct DealsGrpc {
+    deals: Arc<DealService>,
+}
+
+#[grpc_service(server = DealsServer)]
+#[authenticated]
+impl Deals for DealsGrpc {
+    #[can(Read, Deal, from = "id")]
+    async fn get_deal(
+        &self,
+        _request: Request<pb::GetDealRequest>,
+        uow: Uow,
+        deal: Authorized<Deal, Read>,
+    ) -> Result<Response<pb::Deal>> {
+        let view = self.deals.view(&uow, deal.into_inner()).await?;
+        Ok(Response::new(view.into()))
+    }
+
+    #[can(Read, Deal)]
+    async fn list_deals(
+        &self,
+        request: Request<pb::ListDealsRequest>,
+        uow: Uow,
+        scope: Accessible<Deal, Read>,
+    ) -> Result<Response<pb::ListDealsResponse>> {
+        let input = request.into_inner();
+        let page = self.deals.of_company_page(&uow, scope, &input).await?;
+        Ok(Response::new(page.into()))
+    }
+
+    #[can(Move, Deal, from = "id")]
+    async fn move_deal(
+        &self,
+        Valid(request): Valid<Request<pb::MoveDealRequest>>,
+        uow: Uow,
+        CurrentPrincipal(me): CurrentPrincipal,
+        deal: Authorized<Deal, Move>,
+    ) -> Result<Response<pb::Deal>> {
+        let input = request.into_inner().try_into()?;
+        let view = self.deals.move_to(&uow, me.user_id, deal.into_inner(), input).await?;
+        Ok(Response::new(view.into()))
+    }
+
+    // `watch_deals`: see "Streaming" below.
+}
+```
+
+The methods are tonic's, with three additions that `#[grpc_service]` handles:
+
+- **The first parameter is tonic's `Request<T>`**, as the trait declares it, or `Valid<Request<T>>` to validate the message with its garde rules first.
+- **Navree extractors may follow it**: `Uow`, `CurrentPrincipal`, `CurrentUser`, `Abilities`, `Accessible<E, A>`, `Authorized<E, A>`, `Scoped<T>`, `CurrentWorkspace` and your own. The macro generates the method tonic expects and runs the extractors from the call's metadata.
+- **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, `MicroError` and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too.
+
+Conversions between your domain types and the generated messages are plain `From` and `TryFrom` impls, like `impl From<DealView> for pb::Deal`. A `TryFrom` that fails on a bad UUID or an unknown stage should return `AppError::bad_request(..)`, which reaches the client as `INVALID_ARGUMENT`.
+
+### Registering the service
+
+Register the struct in its module, and add `GrpcModule` to the app root:
+
+```rust title="services/deals/src/lib.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<DealsHandlers>()
+            .grpc_service::<DealsGrpc>()
+            .grpc_descriptors(grpc::pb::FILE_DESCRIPTOR_SET);
+    }
+}
+```
+
+```rust title="services/deals/src/main.rs"
+platform(Navree::app(), ConfigSources::defaults())
+    .module(GrpcModule::from_config())
+    .module(MicroModule::from_config())
+    .module(CrmCoreModule)
+    .module(DealsModule)
+    .run()
+```
+
+The same `DealService` now answers HTTP routes, messages and gRPC calls, with one set of access rules.
+
+## Serving
+
+By default, gRPC shares the HTTP server's port. The server speaks HTTP/1.1 and HTTP/2 on one listener and sends requests whose `content-type` is `application/grpc` (or gRPC-Web or Connect, when they're on) to the gRPC services, and everything else to your routes. gRPC paths are absolute (`/crm.deals.v1.Deals/GetDeal`): `http.api_prefix` and route versions don't apply to them.
+
+`serve` starts it all, and Ctrl-C or SIGTERM stops new calls, lets unary calls in flight finish, and ends open streams with `UNAVAILABLE`.
+
+gRPC needs HTTP/2 end to end. Plain-text HTTP/2 (h2c) works in development and between services on a private network. Behind a reverse proxy, the proxy must speak HTTP/2 to the app: with Caddy, `reverse_proxy h2c://127.0.0.1:8080`, which is what [Harbor](/docs/tools/harbor/) configures when the app has `GrpcModule`.
+
+To serve gRPC on a port of its own, set `grpc.addr`:
+
+```toml title="config/app.toml"
+[grpc]
+addr = "0.0.0.0:50051"
+web = true
+connect = true
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `grpc.addr` | none | A separate listener for gRPC. Without it, gRPC shares `http.addr`. |
+| `grpc.web` | `true` | Accept gRPC-Web (binary and text) over HTTP/1.1 and HTTP/2. |
+| `grpc.connect` | `true` | Accept the Connect protocol, with protobuf or JSON. |
+| `grpc.reflection` | `true` in debug builds | Serve server reflection (needs `m.grpc_descriptors(..)`). |
+| `grpc.health` | `true` | Serve `grpc.health.v1.Health`, from the app's readiness checks. |
+| `grpc.timeout_secs` | `http.timeout_secs` | The deadline of a call whose client sets none. |
+| `grpc.max_message_bytes` | `4194304` | The largest message, received or sent. |
+| `grpc.concurrency_per_connection` | `256` | Calls in flight on one HTTP/2 connection. |
+
+As environment variables: `APP_GRPC__ADDR=0.0.0.0:50051`, `APP_GRPC__REFLECTION=false`. In code: `GrpcModule::for_root(GrpcOptions { addr: Some("0.0.0.0:50051".parse()?), ..GrpcOptions::default() })`.
+
+## The call pipeline
+
+Every call, unary or streaming, goes through these steps before your method runs:
+
+1. **Request id and tracing.** `x-request-id` from the metadata, or a new one, returned in the response metadata; the call continues the caller's trace from `traceparent`.
+2. **Interceptors** you attached to the service, if any.
+3. **Authentication** of the `authorization` metadata, by the app's `dyn Authenticator`: a bearer token works exactly as on HTTP. Invalid credentials end the call with `UNAUTHENTICATED`.
+4. **Guards** (`#[guard(..)]` on the impl block or the method), which see the metadata as request headers.
+5. **The access check**: `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`.
+6. **The deadline**: the client's `grpc-timeout`, or `grpc.timeout_secs`.
+7. **The unit of work** (unary calls), around the extractors and your method.
+
+### Access and guards
+
+gRPC methods are deny by default: each needs an access attribute, on the method or on the impl block, or the service doesn't compile. `#[can(.., from = "id")]` reads the record's id from the request message's `id` field, loads the record in the call's unit of work and checks it, so `get_deal` above answers `NOT_FOUND` or `PERMISSION_DENIED` before it runs. See [access control](/docs/basics/access-control/) for the attributes.
+
+Guards are the same `Guard` trait as on routes and message handlers. A guard reading `x-api-version` from a route's headers reads it from the call's metadata here, unchanged. A refused call is recorded as `access.denied` in the audit log, with the gRPC path as the route.
+
+### Validation
+
+`Valid<Request<T>>` runs the garde rules of a message type, which you add in `build.rs` with `type_attribute` and `field_attribute` as above. A message that breaks a rule ends the call with `INVALID_ARGUMENT`, a message listing every broken rule, and a `google.rpc.BadRequest` detail with one field violation per rule, which gRPC clients in every language can read:
+
+```text
+code: INVALID_ARGUMENT
+message: position must not be less than 0
+details: google.rpc.BadRequest { field_violations: [ { field: "position", description: "position must not be less than 0" } ] }
+```
+
+### The unit of work
+
+A unary call gets a unit of work like an HTTP request: it commits when the method returns `Ok`, then the response is sent; it rolls back on an error. Jobs, notifications and events emitted during the call join it. Streaming calls have no unit of work of their own, since they can last for hours: open a transaction per item with `Db::transaction` when a stream writes.
+
+### Interceptors
+
+Tonic interceptors work unchanged. Attach one to a service with the `interceptor` option; it runs before authentication, so use it for cheap checks on the raw metadata:
+
+```rust
+use navree::grpc::{Request, Status};
+
+fn require_client_version(request: Request<()>) -> Result<Request<()>, Status> {
+    match request.metadata().get("x-client-version") {
+        Some(_) => Ok(request),
+        None => Err(Status::failed_precondition("x-client-version is required")),
+    }
+}
+
+#[grpc_service(server = DealsServer, interceptor = require_client_version)]
+#[authenticated]
+impl Deals for DealsGrpc {
+    // ...
+}
+```
+
+## Errors
+
+An `AppError` becomes the gRPC status that means the same thing, with the error's message:
+
+| `AppError` status | gRPC code |
+|---|---|
+| 400 Bad Request | `INVALID_ARGUMENT` (field errors in `google.rpc.BadRequest`) |
+| 401 Unauthorized | `UNAUTHENTICATED` |
+| 403 Forbidden | `PERMISSION_DENIED` |
+| 404 Not Found | `NOT_FOUND` |
+| 409 Conflict | `ALREADY_EXISTS` |
+| 412 Precondition Failed | `FAILED_PRECONDITION` |
+| 429 Too Many Requests | `RESOURCE_EXHAUSTED` |
+| 501 Not Implemented | `UNIMPLEMENTED` |
+| 503 Service Unavailable | `UNAVAILABLE` |
+| 504 Gateway Timeout, or the deadline passed | `DEADLINE_EXCEEDED` |
+| 500 and anything else | `INTERNAL` |
+
+Server errors keep the message `"Internal server error"` on the wire and are logged with the request id, as on HTTP. A `Status` you return yourself is sent as it is. The opposite mapping applies when your code calls another gRPC service: `?` on a `Status` gives the `AppError` of the same meaning, so a `NOT_FOUND` from the deals service is a 404 in the API that called it.
+
+## Streaming
+
+Server-streaming, client-streaming and bidirectional methods work as tonic defines them. The access check and the guards run once, when the stream opens. This one streams deal changes from the app's [event bus](/docs/digging-deeper/events/):
+
+```rust
+use std::pin::Pin;
+
+use navree::events::EventBus;
+use navree::grpc::Status;
+use tokio_stream::{Stream, StreamExt, wrappers::BroadcastStream};
+
+type DealEvents = Pin<Box<dyn Stream<Item = Result<pb::DealEvent, Status>> + Send>>;
+
+#[grpc_service(server = DealsServer)]
+#[authenticated]
+impl Deals for DealsGrpc {
+    type WatchDealsStream = DealEvents;
+
+    #[can(Read, Deal)]
+    async fn watch_deals(
+        &self,
+        _request: Request<pb::WatchDealsRequest>,
+    ) -> Result<Response<Self::WatchDealsStream>> {
+        let updates = BroadcastStream::new(self.events.subscribe_json("deal.updated"));
+        let stream = updates.filter_map(|update| {
+            let value = update.ok()?;
+            Some(Ok(pb::DealEvent {
+                deal_id: value["deal_id"].as_str()?.to_owned(),
+                stage: value["stage"].as_str()?.to_owned(),
+            }))
+        });
+        Ok(Response::new(Box::pin(stream) as DealEvents))
+    }
+
+    // ...
+}
+```
+
+(`events: Arc<EventBus>` is a field of `DealsGrpc` here, and `tokio-stream` a dependency with its `sync` feature.) With several instances, each instance's bus only sees its own events; `m.receive_event::<DealUpdated>()` from [navree-micro](/docs/microservices/events/#every-instance-broadcast) puts events published anywhere on every instance's bus.
+
+## Deadlines and metadata
+
+A client's `grpc-timeout` is the call's deadline. When it passes, the method is cut off, its unit of work rolls back, and the client gets `DEADLINE_EXCEEDED`. Calls without one get `grpc.timeout_secs`. Messages your method sends with `ServiceClient` and calls it makes through a [Navree channel](#calling-other-grpc-services) inherit the remaining time.
+
+Navree reads and writes these metadata keys:
+
+| Key | Direction | Meaning |
+|---|---|---|
+| `authorization` | in | `Bearer` credentials, checked by the app's authenticator. |
+| `x-request-id` | in and out | The request id; generated when missing, always returned. |
+| `traceparent`, `tracestate` | in | The caller's trace context. |
+| `x-workspace` | in | The [workspace](/docs/workspaces/resolution/) of the call, when header resolution is on. |
+| `grpc-timeout` | in | The deadline. |
+
+Read any other metadata from the request: `request.metadata().get("x-client-version")`.
+
+## gRPC-Web and Connect
+
+Browsers can't speak gRPC directly. With `grpc.web` and `grpc.connect` on (the default), the same services answer:
+
+- **gRPC-Web**, for clients generated by `protoc-gen-grpc-web` and Connect's gRPC-Web transport, over HTTP/1.1 or HTTP/2;
+- **Connect**, a protocol of plain HTTP POSTs that carries protobuf or JSON, so a unary call is one request you can make with `curl`:
+
+```sh
+curl -X POST http://localhost:8081/crm.deals.v1.Deals/GetDeal \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $TOKEN" \
+  -d '{"id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23"}'
+```
+
+```json
+{
+  "id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23",
+  "title": "Acme renewal",
+  "amountCents": "1200000",
+  "currency": "USD",
+  "stage": "negotiation",
+  "companyId": "0199c1d0-1b2c-7d3e-8f40-5a6b7c8d9e0f",
+  "ownerId": "0192f0c1-0000-7000-8000-00000000000a"
+}
+```
+
+JSON follows protobuf's JSON mapping (camelCase names, 64-bit integers as strings), from the serde code `pbjson-build` generated. Browser calls go through the app's [CORS](/docs/basics/cors-and-security-headers/) settings; Navree adds the gRPC-Web and Connect headers to the allowed and exposed headers itself.
+
+## Reflection and health
+
+In debug builds, server reflection is on, so tools discover your services without the `.proto` files:
+
+```sh
+grpcurl -plaintext localhost:8081 list
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23"}' \
+  localhost:8081 crm.deals.v1.Deals/GetDeal
+```
+
+`grpc.health.v1.Health` answers `SERVING` while the app's [readiness checks](/docs/digging-deeper/health-and-metrics/) pass and `NOT_SERVING` otherwise, for load balancers and orchestrators that probe over gRPC. Both are `#[public]`; turn reflection off in production with `grpc.reflection = false` (the default in release builds) if your contract isn't public.
+
+## Calling other gRPC services
+
+Name the services your app calls in `grpc.clients`:
+
+```toml title="services/crm-api/config/app.toml"
+[grpc.clients.deals]
+url = "http://deals.internal:8081"
+timeout_ms = 3000
+```
+
+Inject `GrpcChannels` and build tonic's generated client on the named channel:
+
+```rust
+use navree::grpc::GrpcChannels;
+use crm_proto::deals::v1::{GetDealRequest, deals_client::DealsClient};
+
+#[injectable]
+pub struct DealLookup {
+    channels: Arc<GrpcChannels>,
+}
+
+impl DealLookup {
+    pub async fn get(&self, id: Uuid) -> Result<crm_proto::deals::v1::Deal> {
+        let mut deals = DealsClient::new(self.channels.get("deals")?);
+        let reply = deals.get_deal(GetDealRequest { id: id.to_string() }).await?;
+        Ok(reply.into_inner())
+    }
+}
+```
+
+Channels connect lazily, reconnect on their own and are shared by the whole app. A Navree channel adds what `ServiceClient` adds to messages: the request id, the trace context, the forwarded `authorization`, the workspace, and a `grpc-timeout` no later than the current deadline. Here the generated code comes from a `crm-proto` crate that both services depend on, which is the gRPC version of the shared contract crate.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `grpc.clients.<name>.url` | required | `http://` (h2c) or `https://` (TLS with the system's roots). |
+| `grpc.clients.<name>.timeout_ms` | `5000` | The deadline of calls on this channel. |
+| `grpc.clients.<name>.forward_auth` | `true` | Forward the current request's `authorization`. |
+| `grpc.clients.<name>.tls.ca`, `.cert`, `.key` | none | A private CA, and a client certificate for mutual TLS. |
+
+## Testing
+
+`navree::grpc::testing::TestChannel` connects tonic clients to a `TestApp` in-process, with the whole pipeline and no port:
+
+```rust title="services/deals/tests/grpc.rs"
+use deals::grpc::pb::{GetDealRequest, deals_client::DealsClient};
+use navree::grpc::testing::TestChannel;
+use navree::grpc::Code;
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+use uuid::Uuid;
+
+#[tokio::test]
+async fn get_deal_checks_access() {
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(GrpcModule::from_config())
+        .module(DealsModule)
+        .build()
+        .await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+    let request = || GetDealRequest { id: deal_id.to_string() };
+
+    let mut guest = DealsClient::new(TestChannel::new(&app));
+    let status = guest.get_deal(request()).await.unwrap_err();
+    assert_eq!(status.code(), Code::Unauthenticated);
+
+    let mut stranger = DealsClient::new(TestChannel::new(&app).acting_as(principal(Uuid::now_v7())));
+    let status = stranger.get_deal(request()).await.unwrap_err();
+    assert_eq!(status.code(), Code::PermissionDenied);
+
+    let mut owner = DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)));
+    let deal = owner.get_deal(request()).await.unwrap().into_inner();
+    assert_eq!(deal.owner_id, rep.to_string());
+
+    app.shutdown().await.unwrap();
+}
+```
+
+`TestChannel::new(&app).bearer(token)` sends real credentials instead, and `.metadata(key, value)` adds metadata. To test a service that calls others over gRPC, serve a stub implementation of their trait from the test app, or put `MicroFake` in front of message-based calls.
+
+<LinkCards>
+  <LinkCard href="/docs/microservices/introduction/" title="Microservices">
+    Messages and events between services over a broker.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control">
+    The attributes every gRPC method declares.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/tracing/" title="Distributed tracing">
+    gRPC calls in the same trace as the HTTP request that made them.
+  </LinkCard>
+</LinkCards>

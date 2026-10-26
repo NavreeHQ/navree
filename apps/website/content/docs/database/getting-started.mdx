@@ -9,7 +9,7 @@ Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), wh
 - a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds;
 - [migrations](/docs/database/migrations/) owned by modules, with `migrate`, `migrate:rollback` and `migrate:fresh` commands;
 - [seeders and factories](/docs/database/seeding-and-factories/);
-- [pagination](/docs/database/pagination/) in Laravel's response shape;
+- [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
 - [repository helpers](/docs/database/entities-and-repositories/) that record every change for the [audit log](/docs/security/audit-log/).
 
 Navree supports two databases:
@@ -131,9 +131,9 @@ On PostgreSQL, Navree behaves differently in a few places:
 
 <Callout type="warning" title="What has been run on PostgreSQL">
 
-The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the benchmark app (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
+The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
 
-These PostgreSQL paths are written but have not yet run against a real server: migrations (the benchmark's schema comes from an SQL script), `migrate:fresh` and `migrate:rollback`, `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
+These PostgreSQL paths are written but have not yet run against a real server: migrations (that app's schema comes from an SQL script), `migrate:fresh` and `migrate:rollback`, `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
 
 </Callout>
 

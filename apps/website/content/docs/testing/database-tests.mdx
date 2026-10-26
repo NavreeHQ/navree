@@ -24,7 +24,7 @@ async fn app() -> TestApp {
 }
 ```
 
-There is no equivalent of Laravel's `RefreshDatabase` trait to remember, and tests aren't wrapped in a transaction that rolls back at the end. Each request commits or rolls back as it would in production, so a test can check what was committed, after-commit hooks included.
+There is nothing to reset between tests, and tests aren't wrapped in a transaction that rolls back at the end. Each request commits or rolls back as it would in production, so a test can check what was committed, after-commit hooks included.
 
 These databases are SQLite only. There is no PostgreSQL counterpart: `temp_database()` always creates a SQLite file, and nothing creates a PostgreSQL database per test.
 

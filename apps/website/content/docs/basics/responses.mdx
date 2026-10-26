@@ -89,7 +89,7 @@ async fn import(&self) -> (StatusCode, Json<Value>) {
 }
 ```
 
-Error statuses come from `AppError`, so they share the NestJS error format; see [errors](/docs/basics/errors/). To document a route's status in the OpenAPI document, add `status = 201` to its `#[api(...)]` attribute ([OpenAPI](/docs/digging-deeper/openapi/)).
+Error statuses come from `AppError`, so they share Navree's JSON error shape; see [errors](/docs/basics/errors/). To document a route's status in the OpenAPI document, add `status = 201` to its `#[api(...)]` attribute ([OpenAPI](/docs/digging-deeper/openapi/)).
 
 ## Headers
 
@@ -135,7 +135,7 @@ x-request-id: 01a17749fe6c725e935830d1c31aba93
 
 ## API resources
 
-Returning a database model as JSON ties your API to your table: a renamed column or a new private field changes what clients see. An API resource is a separate struct that decides the shape. Laravel calls these resources; NestJS calls them response DTOs.
+Returning a database model as JSON ties your API to your table: a renamed column or a new private field changes what clients see. An API resource is a separate struct that decides the shape, so the table and the API can change independently.
 
 ### The resource pattern
 
@@ -188,7 +188,7 @@ impl From<company::Model> for CompanyResource {
 
 The pieces of the pattern:
 
-- **`__type`** carries the subject type, so a front end using CASL can check permissions on plain JSON objects (`detectSubjectType: (o) => o.__type`). The name matches the subject your [access rules](/docs/security/authorization/) use.
+- **`__type`** carries the subject type, so a front end using `@casl/ability` can check permissions on plain JSON objects (`detectSubjectType: (o) => o.__type`). The name matches the subject your [access rules](/docs/security/authorization/) use.
 - **`ToSchema`** with `#[schema(as = Company)]` puts the resource in the [OpenAPI document](/docs/digging-deeper/openapi/) under a clean name; reference it with `#[api(response = CompanyResource)]`.
 - **Embeds.** The CRM's `DealResource` embeds `company`, `contact` and `owner` objects. Its `load_many` reads them with one query per kind of embed for a whole page of deals, never one per row.
 - **Derived fields.** `DealResource` adds `probability`, computed from the stage, which the table doesn't store.
@@ -341,7 +341,7 @@ See [HTTP tests](/docs/testing/http-tests/).
 
 <LinkCards>
   <LinkCard href="/docs/basics/errors/" title="Errors">
-    Error responses in the NestJS format.
+    One JSON shape for every error response.
   </LinkCard>
   <LinkCard href="/docs/database/pagination/" title="Pagination">
     Offset and cursor pagination with `Page<T>` and `CursorPage<T>`.

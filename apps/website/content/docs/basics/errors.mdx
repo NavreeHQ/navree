@@ -1,9 +1,9 @@
 ---
 title: "Errors"
-description: "The NestJS error format, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
+description: "Navree's JSON error shape, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
 ---
 
-Every error a Navree app sends has the same JSON body, the one NestJS uses: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Internal details never reach the client: they go to the log.
+Every error a Navree app sends has the same JSON body: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Internal details never reach the client: they go to the log.
 
 Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` are in the prelude.
 
@@ -31,7 +31,7 @@ Errors are part of `navree-http` (the `http` feature). `AppError` and `Result` a
 }
 ```
 
-Error responses are `application/json` with `X-Content-Type-Options: nosniff`. The request id is in the `X-Request-Id` header, never in the body. Members come in the NestJS order: `statusCode`, `message`, `error`, `errors`.
+Error responses are `application/json` with `X-Content-Type-Options: nosniff`. The request id is in the `X-Request-Id` header, never in the body. Members always come in the same order: `statusCode`, `message`, `error`, `errors`.
 
 ### Statuses Navree sends itself
 
@@ -49,7 +49,7 @@ Error responses are `application/json` with `X-Content-Type-Options: nosniff`. T
 | 500 | an unexpected error or a panic | `Internal server error` |
 | 503 | [maintenance mode](/docs/digging-deeper/maintenance-mode/), or the request ran out of time | the maintenance message, or `The server did not finish the request in time.` |
 
-Navree itself never answers 422 or 419: input errors are 400s and CSRF failures are 403s, as in NestJS.
+Navree itself never answers 422 or 419: input errors are 400s and CSRF failures are 403s.
 
 ## Returning errors
 
@@ -241,7 +241,7 @@ An error raised while the unit of work commits, after your handler returned, goe
 Errors from Axum and from Navree's own layers use the same format:
 
 - A path that matches no route is a 404, and a path that exists for other methods is a 405 with an `Allow` header.
-- Axum's extractor rejections become NestJS errors. Axum's 422 for well-formed JSON of the wrong shape becomes a 400, like every other input error; the message is Axum's explanation (it names the missing field).
+- Axum's extractor rejections become Navree errors. Axum's 422 for well-formed JSON of the wrong shape becomes a 400, like every other input error; the message is Axum's explanation (it names the missing field).
 - Any other error response with an empty or `text/plain` body (up to 16 KiB) is rewritten into the format, so layers you add keep the shape. A JSON body you build yourself with an error status is left as it is.
 
 ## Logging server errors

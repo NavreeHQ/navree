@@ -6,9 +6,11 @@ export const site = {
   name: "Navree",
   domain: "navree.com",
   url: "https://navree.com",
-  tagline: "Laravel's completeness, NestJS's structure, Rust's speed and footprint.",
+  /** The category line: the homepage H1 and the default page title. */
+  headline: "The complete backend framework for Rust.",
+  tagline: "Modular, API-first and AI-native. Everything your backend needs, checked by the compiler.",
   description:
-    "Navree is a web application framework for Rust. Routing, validation, an ORM, auth, queues, mail, real time and testing come in the box, organised into modules like NestJS, running on Tokio and Axum.",
+    "Navree is a batteries-included Rust framework for building secure, scalable server-side applications. Modules and dependency injection give every app the same clear structure, and auth, workspaces, an ORM, queues, search, real time, monitoring, deployment and AI come in the box.",
   repoUrl: "https://github.com/NavreeHQ/navree",
   /** The branch that "Edit this page" links point at. */
   repoBranch: "main",
@@ -27,7 +29,25 @@ export const site = {
   },
   /** The minimum supported Rust version. */
   rustVersion: "1.95",
+  /**
+   * Pages and catalogue entries for things not built yet carry
+   * `status: "planned"`. While this is false the site shows everything as
+   * available; set it to true to show an "In development" badge on each.
+   */
+  showPlannedBadges: false as boolean,
+  /** The main navigation, read by the header and the footer. */
+  nav: [
+    { label: "Docs", href: "/docs/", match: "/docs" },
+    { label: "Ecosystem", href: "/ecosystem/", match: "/ecosystem" },
+    { label: "Architecture", href: "/architecture/", match: "/architecture" },
+    { label: "AI", href: "/ai/", match: "/ai" },
+    { label: "Performance", href: "/performance/", match: "/performance" },
+  ],
+  /** The "Get started" button in the header. */
+  getStarted: "/docs/getting-started/installation/",
 } as const;
+
+export type NavItem = (typeof site.nav)[number];
 
 /** A link to `path` (repository-relative) on the default branch. */
 export function repoBlob(path: string): string {

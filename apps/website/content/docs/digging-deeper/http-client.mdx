@@ -3,7 +3,7 @@ title: "HTTP client"
 description: "Outgoing HTTP requests with retries, per-attempt timeouts, an SSRF guard and a fake for tests."
 ---
 
-<Badge feature="http-client" /> Most apps call other services: a payment provider, a webhook, an exchange-rate API. `navree-http-client` gives you one shared `HttpClient` for that, in the spirit of Laravel's `Http` facade. It is built on [reqwest](https://docs.rs/reqwest) with rustls, and it adds what you would otherwise write by hand: retries with backoff, a timeout per attempt, a response size limit, a guard against server-side request forgery, logs that never contain secrets, and a fake for tests.
+<Badge feature="http-client" /> Most apps call other services: a payment provider, a webhook, an exchange-rate API. `navree-http-client` gives you one shared `HttpClient` for that, injected like any other service. It is built on [reqwest](https://docs.rs/reqwest) with rustls, and it adds what you would otherwise write by hand: retries with backoff, a timeout per attempt, a response size limit, a guard against server-side request forgery, logs that never contain secrets, and a fake for tests.
 
 ## Configuration
 
@@ -177,7 +177,7 @@ response.bytes();              // Bytes
 let body: Rates = response.json()?;
 ```
 
-A `4xx` or `5xx` status is **not** an error: you get the response and decide. Call `error_for_status()` to turn it into `HttpClientError::Status` (Laravel's `throw()`).
+A `4xx` or `5xx` status is **not** an error: you get the response and decide. Call `error_for_status()` to turn it into `HttpClientError::Status`.
 
 A body larger than `max_response_bytes` fails with `HttpClientError::BodyTooLarge` as soon as the limit is passed, so a misbehaving server can't fill your memory. There is no streaming response API: for large downloads, raise the limit for that client or use reqwest directly.
 

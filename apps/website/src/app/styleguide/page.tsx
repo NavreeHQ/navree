@@ -7,12 +7,17 @@ import type { Metadata } from "next";
 import { Toc } from "@/components/docs/toc";
 import { renderMdx } from "@/lib/mdx";
 
+import { SiteComponents } from "./site-components";
+
 export const metadata: Metadata = {
   title: "Components preview",
   robots: { index: false, follow: false },
 };
 
-/** Renders `content/styleguide.mdx`: every docs component, for authors. */
+/**
+ * Renders `content/styleguide.mdx` (every docs component, for authors),
+ * then the site building blocks: shadcn/ui and Magic UI, as restyled.
+ */
 export default async function Styleguide() {
   const file = fs.readFileSync(path.join(process.cwd(), "content", "styleguide.mdx"), "utf8");
   const { data, content: source } = matter(file);
@@ -23,6 +28,7 @@ export default async function Styleguide() {
         <h1 className="text-[2.25rem] leading-[1.12] font-semibold tracking-[-0.03em] text-fg sm:text-[2.625rem]">{String(data.title)}</h1>
         <p className="mt-4 mb-9 text-lg leading-relaxed text-fg-2">{String(data.description)}</p>
         <div className="prose-navree">{content}</div>
+        <SiteComponents />
       </article>
       <aside className="hidden xl:block">
         <div className="sticky top-[calc(var(--header-h)+3rem)]">

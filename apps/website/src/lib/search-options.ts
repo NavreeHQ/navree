@@ -11,7 +11,7 @@ export type SearchDoc = {
   href: string;
   /** The page title. */
   page: string;
-  /** The docs section ("The basics"), or the page group ("Benchmarks"). */
+  /** The docs section ("The basics"), or the page group ("Performance"). */
   section: string;
   /** The heading of the chunk; empty for a page's introduction. */
   heading: string;

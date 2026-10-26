@@ -5,13 +5,13 @@ description: "Run code when the app boots and when it shuts down: `on_init`, `on
 
 ## Introduction
 
-Some providers need to do work at a particular moment: load data before the first request, start a background loop once everything is wired, flush a buffer or close a pool on the way out. Navree gives them three hooks, with the same meaning as in NestJS:
+Some providers need to do work at a particular moment: load data before the first request, start a background loop once everything is wired, flush a buffer or close a pool on the way out. Navree gives them three hooks:
 
-| Hook | NestJS | When it runs |
-|---|---|---|
-| `on_init` | `onModuleInit` | At boot, once every singleton exists |
-| `on_bootstrap` | `onApplicationBootstrap` | At boot, after every `on_init` succeeded |
-| `on_shutdown` | `onApplicationShutdown` | During a graceful shutdown, after background tasks have stopped |
+| Hook | When it runs |
+|---|---|
+| `on_init` | At boot, once every singleton exists |
+| `on_bootstrap` | At boot, after every `on_init` succeeded |
+| `on_shutdown` | During a graceful shutdown, after background tasks have stopped |
 
 The hooks belong to the `Lifecycle` trait, in `navree::kernel`. Each has a default that does nothing, so you implement only the ones you need.
 

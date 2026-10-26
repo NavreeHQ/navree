@@ -1,0 +1,156 @@
+---
+title: "Choosing an architecture"
+description: "The shapes of system Navree is built for, how to pick one by team size, deploy cadence, isolation and scale, and how an app moves between them without a rewrite."
+---
+
+## Introduction
+
+Navree builds every shape of backend from the same unit: the **module**. A module owns one feature's services, routes, tables, jobs and events, declares what it imports and exports, and is checked by the kernel when the app boots. Arrange modules differently and you get a different architecture:
+
+- one binary with many modules is a **modular monolith**;
+- modules in separate binaries, talking over a broker, are **microservices**;
+- modules whose data is scoped to the current workspace make a **multi-tenant SaaS**;
+- modules that announce changes and react to each other's events are **event-driven**;
+- modules whose routes, inputs, outputs and errors form a documented contract are **API-first**;
+- a web server that holds the tokens and calls those routes is a **backend for frontend**.
+
+These shapes are not exclusive. A typical Navree product is all six at once: a modular monolith, API-first, multi-tenant by workspace, event-driven inside, with a BFF for its web app and one or two services split out where the load demands it. The reference CRM in `apps/crm-api` and `apps/crm-web` is a modular monolith, API-first and event-driven, with a BFF.
+
+## The map
+
+### Modular monolith
+
+One deployable binary, divided into modules with explicit boundaries. Calls between features are function calls, a request that touches three features commits in one transaction, and the kernel refuses to boot when a module uses something another module didn't export. It is where every Navree app starts.
+
+<Diagram name="modular-monolith" />
+
+[Modular monolith](/docs/patterns/modular-monolith/): boundaries, layout, one database with tables per module, enforcing boundaries in tests.
+
+### Microservices
+
+Some modules run as services of their own, deployed and scaled independently, talking through request-response messages and events over NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP or gRPC. A message handler is written like a route, so a module moves into a service without being rewritten.
+
+<Diagram name="microservices" />
+
+[Microservices](/docs/patterns/microservices/): when to split, contracts, request-response or events, data and consistency, tracing.
+
+### Multi-tenant SaaS
+
+Every customer gets a workspace with members and roles, and every request and query is scoped to the current one. Isolate workspaces by row, by PostgreSQL schema or by database, chosen in configuration.
+
+<Diagram name="multi-tenancy" />
+
+[Multi-tenant SaaS](/docs/patterns/multi-tenancy/): resolving the workspace, scoping queries, isolation strategies, per-workspace roles and billing.
+
+### Event-driven
+
+Modules announce what happened; listeners react, in the request or on a worker. Work that must follow a change is stored in the same transaction as the change and leaves only after the commit, then reaches workers, browsers and other services.
+
+<Diagram name="event-driven" />
+
+[Event-driven](/docs/patterns/event-driven/): events, sync and queued listeners, the outbox, broadcasting, idempotency.
+
+### API-first
+
+The API is the product: versioned routes, validated inputs, typed resources, one JSON error shape and an OpenAPI 3.1 document generated from the code, with typed clients generated from the document.
+
+<Diagram name="api-first" />
+
+[API-first](/docs/patterns/api-first/): resources, DTOs, errors, versioning, pagination, OpenAPI and contract tests.
+
+### Backend for frontend
+
+The browser never sees a token. A web server on the same origin keeps the access and refresh tokens in httpOnly cookies, rotates them and calls the API with a bearer token.
+
+<Diagram name="backend-for-frontend" />
+
+[Backend for frontend](/docs/patterns/backend-for-frontend/): sign-in, refresh rotation, CSRF, client addresses, real time through the BFF.
+
+## A decision guide
+
+Start with a modular monolith that is API-first. Then let these questions decide what to add.
+
+### Team size
+
+- **One team, up to about fifteen engineers:** a modular monolith with a directory per module.
+- **Several teams, each owning features:** a modular monolith with a crate per module. Cargo enforces the boundaries, and each team compiles and tests its crates on its own.
+- **Independent teams with their own on-call and release process:** split the modules those teams own into services.
+
+### Deploy cadence
+
+- **Everything ships on one cadence:** one binary.
+- **One feature ships far more often than the rest, and coordinated releases slow both down:** split that feature into a service.
+
+### Customers and data isolation
+
+- **One organization:** no workspaces.
+- **Many organizations sharing the product:** workspaces with row isolation.
+- **Customers who require separate schemas or databases, or data residency:** workspaces with schema or database isolation.
+- **A feature whose failures or data must be kept from the rest of the system** (payments, untrusted code): a service for that feature.
+
+### Scale
+
+- **Load grows evenly across features:** more copies of the same binary. Web processes behind a load balancer, more `queue:work` workers.
+- **One feature's load is unlike the rest** (bulk imports, fan-out, heavy computation): queue that work first, and split it into a service if it still needs to scale on its own.
+
+### Clients
+
+- **Your own web app:** a BFF, so no token reaches the browser.
+- **Mobile apps, partners, other teams:** API-first, with a versioned, exported OpenAPI document and generated clients.
+- **Third-party apps acting for your users:** the [OAuth server](/docs/packages/oauth-server/).
+
+### What follows a change
+
+- **Side effects** (mail, notifications, calls to other systems): queued listeners, so they run after the commit and retry.
+- **Screens that must update live:** broadcasting after the commit.
+- **Other services that must hear about it:** events forwarded to the broker through the outbox.
+
+Two defaults hold for almost every app:
+
+- **Scale with processes before services.** One Navree binary runs as `serve`, `queue:work` and `schedule:work`, each scaled on its own. That covers most growth without a network between your features.
+- **Events before services.** A module that reacts to another module's events instead of calling it is already decoupled. When it becomes a service, its listeners become event handlers and little else changes.
+
+## Moving between shapes
+
+An architecture is a decision you can revisit, because the unit doesn't change: a module stays a module whether it runs in the monolith, in a service, scoped to a workspace or behind a BFF. Its providers, its rules, its migrations and its tests come along. What changes is the wiring around it.
+
+| From | To | What changes | What stays |
+|---|---|---|---|
+| Directory per module | Crate per module | Each module's directory becomes a crate; the root depends on them | Every line of module code; the module graph |
+| A call to an exported service | A message to a service | `self.deals.show(..)` becomes `self.client.send("deals.get", ..)`; the module gets a `#[message_handlers]` struct | The service, its rules, its access checks |
+| An in-process event | An event between services | The emitting module adds `m.forward_event::<DealWon>()`; listeners become `#[event_pattern]` handlers | The event type, its name, the emitting code |
+| A sync listener | A queued listener | Its `queued` method returns `true` | Its code; the emitter |
+| Single-tenant | Multi-tenant | `WorkspaceModule` in the root, a `workspace_id` column on tenant tables, the `InWorkspace` guard on tenant controllers, `WorkspaceRepo` in place of `Repo` | Routes, access rules, the rest of the service code |
+| Row isolation | Schema or database isolation | `workspace.isolation`, tenant tables registered with `m.workspace_migrations`, and a data migration | Handlers written with `WorkspaceUow` and `WorkspaceRepo` |
+| A web app holding tokens | A BFF | The front end's server and its cookies | The API: it serves bearer tokens to every client |
+| A service | Back into the monolith | Its module is added to the monolith's root; messages become calls again | Its module code |
+
+Keep the option open from the first day:
+
+- **Talk across modules through exports and events**, never through another module's private types or tables.
+- **Keep payloads and event types small and serializable**, so the same type can travel on the bus, the queue and the broker.
+- **Run `check` in CI**, so a crossed boundary fails before review.
+- **Test each module on its own**, booting only what it imports.
+
+A codebase that follows these four rules can take any of the shapes on this page with a change of wiring, and can change its mind later.
+
+<LinkCards>
+  <LinkCard href="/docs/patterns/modular-monolith/" title="Modular monolith">
+    The default shape, and the easiest one to split later.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/microservices/" title="Microservices">
+    Services that talk over brokers, with the same module code.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/multi-tenancy/" title="Multi-tenant SaaS">
+    Workspaces, scoped queries and isolation strategies.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/event-driven/" title="Event-driven">
+    Events, queued listeners, the outbox and broadcasting.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/api-first/" title="API-first">
+    A versioned, validated, documented contract.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    A web app that never sees a token.
+  </LinkCard>
+</LinkCards>

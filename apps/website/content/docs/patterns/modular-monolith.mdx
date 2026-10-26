@@ -1,0 +1,352 @@
+---
+title: "Modular monolith"
+description: "One binary, many modules with explicit boundaries: the default shape of a Navree app, checked at boot and the easiest one to split later."
+---
+
+## Introduction
+
+A modular monolith is one deployable binary whose code is divided into modules with hard boundaries. Every feature lives in its own module. A module declares what it imports, what it provides and what it exports, and nothing else can reach inside it. The app ships as one process (or a few copies of it), shares one database and one deploy, and still reads like a set of small, separate programs.
+
+This is the shape every Navree app starts in. `navree new` writes one, `navree make:module` adds to it, and the reference CRM in `apps/crm-api` is one: a shared core module, six feature modules and a demo seeder on top of the framework's own modules, served by a single binary.
+
+<Diagram name="modular-monolith" />
+
+You get three things from the shape:
+
+- **One thing to run.** One build, one binary, one database to back up. Calls between features are function calls, and a request that touches three features commits in one transaction.
+- **Boundaries the compiler and the kernel enforce.** A module can only use what another module exports, and the app refuses to boot when a boundary is crossed.
+- **A way out.** Because a module already talks to the rest of the app through its exports and its events, moving it into its own service later changes its wiring, not its code. See [Microservices](/docs/patterns/microservices/).
+
+## What a module owns
+
+A module is the unit of ownership. Everything about one feature registers through it:
+
+| What | How the module registers it |
+|---|---|
+| Services | `providers = [DealService]` |
+| HTTP routes | `controllers = [DealsController]` |
+| Its public API | `exports = [DealService]` |
+| What it needs from others | `imports = [CrmCoreModule]` |
+| Its tables | `m.migrations(MigrationSet::new("deals"))` |
+| Background work | `m.job::<J>()`, `m.listen::<E, L>()` |
+| Scheduled tasks and commands | `m.schedule(..)`, `m.command(..)` |
+| Settings | `m.config::<T>()` for its own config section |
+
+This is the CRM's deals module, from `crates/crm-deals/src/lib.rs`:
+
+```rust title="crates/crm-deals/src/lib.rs"
+#[module(
+    imports = [CrmCoreModule],
+    providers = [DealService],
+    controllers = [DealsController],
+    exports = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    /// The owner notifications (a queued listener of both events) and
+    /// their mail template.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>()
+            .templates(notification::TEMPLATES);
+    }
+}
+```
+
+`DealService` is the module's public face: other modules that import `DealsModule` can inject it. `DealsController` and `NotifyDealOwner` are private. Nothing outside the module can inject them, so you can rename, split or delete them without touching another feature. [Modules](/docs/architecture/modules/) covers every key of `#[module]`.
+
+## Boundaries: imports, exports and private providers
+
+A module can resolve exactly three kinds of providers: its own, the exports of the modules it imports directly, and the exports of global modules (the framework's `DatabaseModule`, `QueueModule`, `AuthModule` and the rest). Visibility is not transitive: importing `DealsModule` does not give you what `DealsModule` imports.
+
+That gives each module a small, explicit surface:
+
+- **Exports are the API.** Export services, not entities or controllers. A service method is a contract you can keep while its internals change.
+- **Imports are the dependencies.** Read a module's `imports` and you know everything it can call. A reviewer sees a new dependency as a one-line change to the attribute.
+- **Everything else is private.** Helpers, listeners, repositories and controllers stay inside.
+
+### The boot check
+
+The kernel builds the module graph before it constructs a single provider, and stops the boot when a boundary is crossed. Each error names the module, the type and the fix:
+
+```text wrap
+module `ReportsModule` cannot use `crm_deals::service::DealService`: it is exported by module `DealsModule`, which `ReportsModule` does not import
+
+module `ReportsModule` cannot use `crm_deals::notification::NotifyDealOwner`: it is private to module `DealsModule`; add it to the exports of `DealsModule`
+```
+
+The same check also catches import cycles, provider cycles, a provider registered twice, a module configured twice and a singleton that depends on a request-scoped provider. [Boot-time checks](/docs/architecture/modules/#boot-time-checks) lists them all.
+
+Run it without booting anything, so it costs nothing in CI. This is the CRM:
+
+```sh
+cargo run -p crm-api -- check
+```
+
+```text
+module graph OK: 33 modules, 84 providers
+```
+
+`check --graph` prints the whole graph as a tree. Each module lists what it provides, with each provider's dependencies after `<-`, and what it exports. The deals module's entry shows its boundary at a glance: one export, and everything else private (the two `ListenerBinding` entries are the event subscriptions `wire` registered).
+
+```text
+├── DealsModule
+│   ├── provides crm_deals::service::DealService (singleton) <- dyn navree_contracts::clock::Clock, navree_events::bus::EventBus, dyn navree_contracts::broadcast::Broadcaster
+│   ├── provides crm_deals::controller::DealsController (singleton) <- crm_deals::service::DealService
+│   ├── provides crm_deals::notification::NotifyDealOwner (singleton) <- navree_notify::notifier::Notifier, navree_auth::service::AuthService, navree_config::config::Config
+│   ├── provides navree_events::registry::ListenerBinding<crm_deals::events::DealAssigned, crm_deals::notification::NotifyDealOwner> (transient) <- crm_deals::notification::NotifyDealOwner
+│   ├── provides navree_events::registry::ListenerBinding<crm_deals::events::DealWon, crm_deals::notification::NotifyDealOwner> (transient) <- crm_deals::notification::NotifyDealOwner
+│   ├── exports crm_deals::service::DealService
+│   └── CrmCoreModule (see above)
+```
+
+`check` doesn't connect to a database or bind a port. Run it on every push and a crossed boundary fails the build before review.
+
+## Laying out the code
+
+### One crate, a directory per module
+
+A new app keeps every feature module in `src/modules/`, one directory each. `navree make:module` writes the whole module and registers it in `src/app.rs`:
+
+```sh
+navree make:module deals --crud
+```
+
+<FileTree title="src/">{`
+  main.rs
+  lib.rs
+  app.rs                # the root: platform modules, then every feature module
+  abilities.rs
+  modules/
+    mod.rs
+    companies/
+    deals/ *
+      mod.rs            # DealsModule: imports, providers, controllers, exports
+      controller.rs
+      service.rs
+      entity.rs
+      dto.rs
+      migrations/
+      tests/
+    activities/
+`}</FileTree>
+
+Inside one crate, the kernel enforces boundaries between providers. The compiler doesn't stop `deals/service.rs` from naming a `pub` type in `companies/`, so keep each module's items `pub(crate)` or private unless another module is meant to use them, and let the module's `mod.rs` re-export its public API.
+
+### A crate per module
+
+When the app grows, or several teams work on it, give each feature its own crate. The CRM does this:
+
+<FileTree title="apps/crm-api">{`
+  src/
+    app.rs              # the root: platform() plus every CRM module
+    main.rs
+  crates/
+    crm-core/ *         # shared entities, enums, migrations, roles, abilities, platform()
+    crm-users/          # UsersModule
+    crm-companies/      # CompaniesModule, ContactsModule
+    crm-deals/          # DealsModule
+    crm-activities/     # ActivitiesModule, DashboardModule
+    crm-testkit/        # TestCrm: a booted CRM for feature tests
+`}</FileTree>
+
+Now Cargo enforces the boundary too: `crm-deals` can't name anything in `crm-companies`, because it doesn't depend on it. Each feature crate depends only on `navree` and `crm-core`, compiles in parallel with the others and has a test suite that boots only what it needs.
+
+The root stays short. `platform` adds the framework modules, configured once, and the features come on top:
+
+```rust title="apps/crm-api/src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    platform(Navree::app(), sources)
+        .module(CrmCoreModule)
+        .module(UsersModule)
+        .module(CompaniesModule)
+        .module(ContactsModule)
+        .module(DealsModule)
+        .module(ActivitiesModule)
+        .module(DashboardModule)
+        .module(DemoModule)
+    // navree:modules
+}
+```
+
+### The shared core module
+
+Some things belong to no single feature: the entities several features read, enums, roles and abilities, and the event types other modules listen to. Put them in one core module that every feature imports. The CRM's `CrmCoreModule` owns the tables, registers every entity as an access subject and seeds the roles:
+
+```rust title="crates/crm-core/src/module.rs"
+#[module(
+    imports = [
+        AccessModule::for_feature::<Company>(),
+        AccessModule::for_feature::<Contact>(),
+        AccessModule::for_feature::<Deal>(),
+        AccessModule::for_feature::<Activity>(),
+        AccessModule::for_feature::<User>(),
+    ],
+    register = Self::wire,
+)]
+pub struct CrmCoreModule;
+
+impl CrmCoreModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations());
+        m.seeder::<RolesSeeder>();
+    }
+}
+```
+
+Keep the core small and stable. It holds shared vocabulary, not behavior: once business rules collect there, every feature depends on all of them.
+
+## How modules talk to each other
+
+Pick one of three ways, from the most coupled to the least:
+
+1. **Call an exported service.** Import the module and inject what it exports. Use this when you need an answer now, inside the same request and transaction: the deals module checking that a company exists before it saves a deal.
+2. **Emit an event.** The module that changed something emits an event; any module can listen without the emitter knowing. Use this for reactions: notify the owner, update a leaderboard, write to a search index. See [Event-driven](/docs/patterns/event-driven/).
+3. **Read shared entities.** Read-only views across features, such as a dashboard, can query the shared tables directly. The CRM's `DashboardModule` totals deals and tasks through `crm-core`'s entities and imports no feature module.
+
+An event keeps the boundary thinnest. This leaderboard module counts every won deal and never imports `DealsModule`:
+
+```rust title="src/modules/leaderboard/mod.rs"
+use crm_deals::DealWon;
+use navree::BoxFuture;
+use navree::cache::Cache;
+use navree::events::Listener;
+use navree::prelude::*;
+
+/// Counts each owner's wins for the leaderboard.
+#[injectable]
+pub struct CountWins {
+    cache: Arc<Cache>,
+}
+
+impl Listener<DealWon> for CountWins {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DealWon,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let key = format!("leaderboard:wins:{}", event.owner_id);
+            self.cache.increment(&key, 1).await?;
+            Ok(())
+        })
+    }
+}
+
+/// The sales leaderboard. It never imports `DealsModule`: it only reacts to
+/// `DealWon`.
+#[module(register = Self::wire)]
+pub struct LeaderboardModule;
+
+impl LeaderboardModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealWon, CountWins>();
+    }
+}
+```
+
+The event type is the only thing the two modules share. When modules live in separate crates, put event types that other crates listen to in the core crate, so the listener's crate doesn't depend on the emitter's.
+
+## One database, tables per module
+
+A modular monolith usually shares one database. Keep ownership clear anyway: **each table belongs to one module, and only that module writes to it.** Other modules change it by calling the owner's exported service, and read it through the service or a shared entity.
+
+Each module registers its own migration set, and `migrate` runs the sets in dependency order:
+
+```rust title="src/modules/deals/migrations/mod.rs"
+use navree::db::MigrationSet;
+
+mod m20261026_090000_create_deals_table;
+
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("deals")
+        .after(["companies"])
+        .migration(m20261026_090000_create_deals_table::Migration)
+}
+```
+
+`after` names the sets whose tables this one references. The `navree_migrations` table records each migration under its set, so `migrate:status` shows which module owns what. The CRM keeps a single `crm` set in `crm-core`, which runs after `auth` and `access`, because its features share most of their tables; generated modules each get their own set. See [Migrations](/docs/database/migrations/).
+
+One database is also what lets a request span modules safely. A handler's [unit of work](/docs/database/unit-of-work/) is one transaction: when creating a deal also writes audit rows and queues a notification, all of it commits or none of it does.
+
+## Enforcing boundaries in tests
+
+The boot check runs in every test that boots the app. Three more tests keep boundaries from eroding.
+
+**Validate the whole graph.** `AppBuilder::validate` returns a report without booting, and `run_with_args(["check"])` runs the same check the CLI does. The CRM asserts that every module is present and the graph lines up:
+
+```rust title="apps/crm-api/tests/app.rs"
+#[tokio::test]
+async fn boots_and_check_passes() {
+    let (url, _db) = temp_sqlite_url();
+    let report = crm_api::app(sources(url.clone()))
+        .validate()
+        .expect("every import and provider lines up");
+    let modules: BTreeSet<&str> = report.modules.iter().map(|m| m.name).collect();
+    for module in ["CrmCoreModule", "UsersModule", "DealsModule", "ActivitiesModule"] {
+        assert!(modules.contains(module), "{module} is missing from {modules:?}");
+    }
+    crm_api::app(sources(url))
+        .run_with_args(vec!["check".to_owned()])
+        .await
+        .expect("`check` passes");
+}
+```
+
+**Boot each module alone.** A module that boots with only the core and the framework underneath it has no hidden dependency on its neighbors. Every CRM feature crate starts its tests from `TestCrm`, which boots the platform plus the modules you add:
+
+```rust title="crates/crm-activities/tests/boot.rs"
+#[tokio::test]
+async fn boots_with_activities_and_dashboard() {
+    let crm = TestCrm::builder()
+        .module(ActivitiesModule)
+        .module(DashboardModule)
+        .build()
+        .await;
+    let rep = crm.login_as(Role::Rep1).await;
+    rep.get("/api/auth/me").send().await.assert_status(200);
+    crm.shutdown().await;
+}
+```
+
+**Check the crate graph.** With a crate per module, a test can read `cargo metadata` and fail on any dependency that crosses a boundary. Navree's own `crates/navree/tests/dependency_graph.rs` does this for the framework and the CRM: it gives every crate a layer and a list of crates it may depend on, so `crm-deals` depending on `crm-companies` fails the test and names the edge that broke the rule.
+
+## Running it in production
+
+One binary still runs as several processes. Each takes a command:
+
+| Process | Command | How many |
+|---|---|---|
+| Web | `crm-api serve` | As many as the traffic needs, behind a load balancer |
+| Workers | `crm-api queue:work` | Enough to keep the queue short; dedicate some to a queue with `--queue` |
+| Scheduler | `crm-api schedule:work` | One |
+
+Every process runs the same modules and the same configuration, so a job queued by a web process runs in any worker. Scaling out is adding processes, not splitting code. [Deployment](/docs/getting-started/deployment/) covers the processes and [Harbor](/docs/tools/harbor/) provisions servers that run all three.
+
+## When to split
+
+Most apps never need to. Consider moving a module into its own service when one of these is true:
+
+- **It scales differently.** An import pipeline needs twenty workers and a lot of memory, and the rest of the app needs two small web processes.
+- **It deploys on its own schedule.** A team ships it ten times a day and the rest of the app weekly, and coordinated releases slow both down.
+- **It needs isolation.** It handles payment data, runs untrusted code, or must keep running when the main app is down.
+- **A different team owns it end to end**, with its own on-call and its own release process.
+
+If the module already talks to others through exported services and events, the split is mechanical: the service calls become messages and the events go over a broker. [Microservices](/docs/patterns/microservices/) shows the move step by step, and [Choosing an architecture](/docs/patterns/overview/) compares the shapes.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/modules/" title="Modules">
+    Every `#[module]` key, visibility rules and configurable modules.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/event-driven/" title="Event-driven">
+    Decouple modules with events, queued listeners and the outbox.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/microservices/" title="Microservices">
+    Move a module into its own service without rewriting it.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    The reference modular monolith, module by module.
+  </LinkCard>
+</LinkCards>

@@ -154,7 +154,7 @@ Pass `db.conn()` in tests and seeders, or `&*uow.tx().await?` to insert inside a
 
 ### Variations
 
-A factory is a plain struct, so its fields are its options. Laravel calls these factory states; here they are builder methods:
+A factory is a plain struct, so its fields are its options. Variations, such as deals at another stage, are builder methods:
 
 ```rust
 use navree::db::Factory;

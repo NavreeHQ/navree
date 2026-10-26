@@ -1,10 +1,17 @@
 /**
- * The landing page's code tabs. Taken from the CRM (apps/crm-api): the deals
- * module, controller and `CreateDeal` DTO (crates/crm-deals), and a job
- * around crm-activities' `TaskReminders`. Every tab compiles: the scratch
- * crate target/docs-check/review depends on navree and the CRM crates and
- * holds each tab as shown; its test produced the 400 response below. Keep
- * them short, and keep them true to the APIs.
+ * The landing page's code tabs. The first four are taken from the CRM
+ * (apps/crm-api): the deals module, controller and `CreateDeal` DTO
+ * (crates/crm-deals), and a job around crm-activities' `TaskReminders`.
+ * They compile: the scratch crate target/docs-check/review depends on
+ * navree and the CRM crates and holds each tab as shown; its test produced
+ * the 400 response below.
+ *
+ * The Workspaces and Testing tabs are written from the crates' APIs but not
+ * compiled: `CurrentWorkspace`, `WorkspaceScoped` and `WorkspaceRepo` from
+ * the prelude, `navree::db::paginate` and the `workspace` config section
+ * (navree-workspace); `TestApp`, `acting_as` and `assert_error`
+ * (navree-testing). Recheck them when those crates change. Keep the tabs
+ * short, and keep them true to the APIs.
  */
 export type Showcase = {
   id: string;
@@ -25,7 +32,7 @@ export const showcases: Showcase[] = [
     label: "Modules",
     file: "src/modules/deals/mod.rs",
     title: "An app is a set of modules",
-    text: "As in NestJS, each module declares what it imports, the services it provides, its controllers and what it exports. The container wires them by type when the app boots, and refuses to start if a dependency is missing or private, naming the module and the type.",
+    text: "Each module declares what it imports, the services it provides, its controllers and what it exports. The container wires them by type when the app boots, and refuses to start if a dependency is missing or private, naming the module and the type. main.rs lists the modules; nothing else is global.",
     href: "/docs/architecture/modules/",
     linkText: "Read about modules",
     code: `use navree::prelude::*;
@@ -69,7 +76,7 @@ impl DealsModule {
     label: "Controllers",
     file: "src/modules/deals/controller.rs",
     title: "Every route says who may call it",
-    text: "A route that declares no access stops the app from booting. #[public] opens a route up, #[authenticated] and #[roles] check who is signed in, and #[can] checks CASL-compatible abilities: on a list it turns the rules into a SQL filter, and on a record it loads and checks the row before your handler runs.",
+    text: "A route that declares no access doesn't compile. #[public] opens a route up, #[authenticated] and #[roles] check who is signed in, and #[can] checks abilities: on a list it turns the rules into a SQL filter, and on a record it loads and checks the row before your handler runs.",
     href: "/docs/basics/access-control/",
     linkText: "Read about access control",
     code: `#[injectable]
@@ -113,7 +120,7 @@ impl DealsController {
     label: "Validation",
     file: "src/modules/deals/dto.rs",
     title: "Bad input never reaches your handler",
-    text: "Valid<Json<T>> deserializes the body and runs its garde rules first. A failure is one 400 response listing every field's errors, in the NestJS format your front end already understands. Below is the answer to a blank title and a negative amount with no company.",
+    text: "Valid<Json<T>> deserializes the body and runs its garde rules first. A failure is one 400 response that lists every field's errors in Navree's JSON error shape, the same shape as every other error. Below is the answer to a blank title and a negative amount with no company.",
     href: "/docs/basics/validation/",
     linkText: "Read about validation",
     code: `// Options with \`required\`: one response lists every missing field.
@@ -194,5 +201,105 @@ impl Job for SendTaskReminders {
 // Register it in a module with m.job::<SendTaskReminders>(), then
 // dispatch it; \`navree queue:work --queue reminders\` runs it.
 queue.dispatch(SendTaskReminders { day: Utc::now() }).await?;`,
+  },
+  {
+    id: "workspaces",
+    label: "Workspaces",
+    file: "src/modules/deals/controller.rs",
+    title: "Every query knows its workspace",
+    text: "CurrentWorkspace resolves the workspace from the subdomain, a header, the path or a token claim, loads it and checks that the user is a member, or answers 401, 403 or 404 in the usual JSON shape. WorkspaceRepo scopes every read and write to it, so another workspace's deal is a 404, never a leak.",
+    href: "/docs/workspaces/introduction/",
+    linkText: "Read about workspaces",
+    code: `use navree::db::paginate;
+use navree::prelude::*; // CurrentWorkspace, WorkspaceRepo, WorkspaceScoped
+
+// Deals belong to a workspace: their table has a \`workspace_id\`.
+impl WorkspaceScoped for deal::Entity {}
+
+type Deals = WorkspaceRepo<deal::Entity>;
+
+#[controller("/deals", version = "1")]
+impl DealsController {
+    /// The deals of the workspace this request names.
+    #[get("/")]
+    #[authenticated]
+    async fn index(
+        &self,
+        ws: CurrentWorkspace,
+        uow: Uow,
+        page: PageQuery,
+    ) -> Result<Page<deal::Model>> {
+        ws.authorize("deals.read")?;
+        Ok(paginate(Deals::select(ws.id()), &*uow.tx().await?, page).await?)
+    }
+
+    /// Another workspace's deal is a 404.
+    #[get("/{id}")]
+    #[authenticated]
+    async fn show(
+        &self,
+        ws: CurrentWorkspace,
+        uow: Uow,
+        Path(id): Path<Uuid>,
+    ) -> Result<Json<deal::Model>> {
+        Ok(Json(Deals::find_or_fail(&uow, ws.id(), id).await?))
+    }
+}`,
+    extra: {
+      file: "config/app.toml",
+      lang: "toml",
+      code: `[workspace]
+resolvers = ["subdomain", "header", "path", "claim"]  # first match wins
+base_domain = "app.example.com"   # acme.app.example.com -> acme
+header = "X-Workspace"            # X-Workspace: acme
+path_prefix = "/w"                # /api/w/acme/deals -> acme
+isolation = "row"                 # row | schema | database`,
+    },
+  },
+  {
+    id: "testing",
+    label: "Testing",
+    file: "src/modules/deals/tests/mod.rs",
+    title: "Tests boot the real app, in-process",
+    text: "TestApp boots your modules with a fresh SQLite database, and TestClient sends requests through the whole pipeline: request ids, authentication, access checks, the unit of work and the error format. Nothing listens on a port, so tests run in milliseconds and in parallel.",
+    href: "/docs/testing/http-tests/",
+    linkText: "Read about HTTP tests",
+    code: `use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+use serde_json::json;
+use uuid::Uuid;
+
+use super::DealsModule;
+use crate::modules::companies::CompaniesModule;
+
+#[tokio::test]
+async fn deals_are_closed_by_default() {
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(CompaniesModule)
+        .module(DealsModule)
+        .build()
+        .await;
+
+    // A guest is refused before any handler runs.
+    app.client()
+        .post("/api/v1/deals")
+        .json(&json!({ "title": "Acme renewal" }))
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
+
+    // Signed in, but holding no permission on deals.
+    app.acting_as(principal(Uuid::now_v7()))
+        .post("/api/v1/deals")
+        .json(&json!({ "title": "Acme renewal" }))
+        .send()
+        .await
+        .assert_error(403, "Forbidden");
+
+    app.shutdown().await.unwrap();
+}`,
   },
 ];

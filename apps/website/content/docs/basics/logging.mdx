@@ -320,7 +320,7 @@ In an async test, keep the subscriber active across `.await`s with `let _guard =
 
 - The subscriber is installed once per process. A second app booted in the same process (tests do this) reuses it: its `level` and `levels` apply, but its `format`, `file` and `redact` settings don't, and a warning says so.
 - If another global tracing subscriber was installed first, Navree leaves it in place, `LoggerModule` settings don't apply, and `LogControl` can't change levels.
-- There is no OpenTelemetry or Sentry export yet; see the [roadmap](/docs/prologue/roadmap/).
+- `LoggerModule` writes to the console and to files. Exception tracking, alerts and OpenTelemetry export come from [Lighthouse](/docs/tools/lighthouse/).
 
 <LinkCards>
   <LinkCard href="/docs/basics/errors/" title="Errors">

@@ -1,0 +1,389 @@
+---
+title: "Localization"
+description: "Translate your app with Fluent files and `t!`: plurals and variables, the locale negotiated from the user, the workspace or `Accept-Language`, and translated validation messages, mail and notifications."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="i18n" /> `navree-i18n` lets one app answer a sales team in Lyon in French and one in Munich in German, from the same code. You write your text in [Fluent](https://projectfluent.org) files, one directory per locale, and look messages up by id:
+
+```rust
+// "3 deals created", or "3 affaires créées" in French:
+let message = t!("deal-created", count = 3);
+```
+
+- **Fluent** handles what string tables can't: plurals with the rules of each language, gender and other selectors, and numbers and dates formatted for the locale.
+- **The locale is negotiated** for each request from, in an order you choose, a query parameter, the user's saved preference, the [workspace](/docs/workspaces/introduction/)'s default, a cookie and `Accept-Language`.
+- **It follows the work.** Jobs dispatched during a request run in the request's locale; mail and notifications render in the recipient's.
+- **Validation messages** are translated, with field names, so a `400` reads "prénom ne doit pas être vide".
+- **Checked in CI.** `navree i18n:check` fails on a syntax error or a message missing from a locale.
+
+## Installation
+
+Turn on the `i18n` feature of the `navree` facade:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["i18n"] }
+```
+
+Add `I18nModule` to your app root. Put it before `ValidationModule` and `MailModule`, whose messages it translates:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(I18nModule::from_config()) // section `i18n`
+    .module(ValidationModule::from_config())
+    .module(ViewModule::from_config())
+    .module(MailModule::from_config())
+    // ...
+```
+
+The module is global. It adds a layer that negotiates each request's locale, the `Locale` extractor, the `I18n` service and the `t()` function in [templates](/docs/digging-deeper/views/). With `DatabaseModule` in the app it contributes the migration set `i18n`, which creates `locale_preferences` for saved user and workspace locales.
+
+## Configuration
+
+```toml title="config/app.toml"
+[i18n]
+default_locale = "en"
+locales = ["en", "fr", "de", "pt-BR"]
+dir = "locales"
+negotiation = ["query", "user", "workspace", "cookie", "header"]
+missing = "warn"          # warn | error | id
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `i18n.default_locale` | `en` | The locale when negotiation finds nothing, and the last fallback for missing messages |
+| `i18n.locales` | `["en"]` | The supported locales, as BCP 47 tags |
+| `i18n.dir` | `locales` | Where the Fluent files are, relative to the working directory |
+| `i18n.negotiation` | `["user", "workspace", "header"]` | The sources the locale comes from, first match wins |
+| `i18n.query_param` | `locale` | The `query` source's parameter |
+| `i18n.cookie` | `locale` | The `cookie` source's cookie name |
+| `i18n.missing` | `warn` | A missing message: `warn` logs once and shows the id, `error` fails the lookup, `id` shows the id silently |
+| `i18n.reload` | `false` | Reloads changed files without a restart (development) |
+| `i18n.bidi_isolation` | `auto` | Unicode isolation marks around variables: `auto` uses them only when a locale is right-to-left |
+
+From the environment: `APP_I18N__DEFAULT_LOCALE=fr`, and lists as comma-separated strings, `APP_I18N__LOCALES=en,fr,de`. A locale tag that doesn't parse, a `default_locale` that isn't in `locales` or a Fluent file with a syntax error fails the boot, naming the file and line.
+
+### Shipping the files in the binary
+
+By default the files are read from `i18n.dir` at boot, so they must be deployed next to the binary. To build one self-contained binary, embed them at compile time instead:
+
+```rust title="src/app.rs"
+use navree::i18n::{I18nOptions, embed_locales};
+
+Navree::app().module(I18nModule::for_root(I18nOptions {
+    files: embed_locales!("locales"),
+    locales: vec!["en".into(), "fr".into(), "de".into()],
+    ..I18nOptions::default()
+}))
+```
+
+`embed_locales!` reads the directory when you build, so a syntax error in a Fluent file becomes a compile error.
+
+## Writing translations
+
+Each locale has a directory under `locales/`, and each directory holds any number of `.ftl` files. The file names are only for you: every message of a locale shares one namespace.
+
+<FileTree title="Translations for three locales">{`
+locales/
+  en/
+    main.ftl
+    deals.ftl *
+    mail.ftl
+    validation.ftl
+  fr/
+    main.ftl
+    deals.ftl *
+    mail.ftl
+    validation.ftl
+  pt-BR/
+    deals.ftl
+`}</FileTree>
+
+A message is an id, an equals sign and its text. Variables are `{ $name }`, and a selector picks a variant, with `*` marking the default one:
+
+```text title="locales/en/deals.ftl"
+deal-created = { $count ->
+    [one] One deal created
+   *[other] { $count } deals created
+}
+
+deal-won = { $owner } won { $title }.
+deal-won-subject = You won { $title }
+deal-stage-negotiation = Negotiation
+deal-amount = { NUMBER($amount, style: "currency", currency: $currency) }
+
+pipeline-empty = Your pipeline is empty. Create a deal to get started.
+```
+
+```text title="locales/fr/deals.ftl"
+deal-created = { $count ->
+    [one] Une affaire créée
+   *[other] { $count } affaires créées
+}
+
+deal-won = { $owner } a gagné { $title }.
+deal-won-subject = Affaire gagnée : { $title }
+deal-stage-negotiation = Négociation
+deal-amount = { NUMBER($amount, style: "currency", currency: $currency) }
+
+pipeline-empty = Votre pipeline est vide. Créez une affaire pour commencer.
+```
+
+Plural categories (`zero`, `one`, `two`, `few`, `many`, `other`) follow each language's rules: Polish has `few` and `many`, Japanese only `other`. Exact numbers like `[0]` match before categories. `NUMBER` and `DATETIME` format with the locale's conventions: `deal-amount` reads `$42,000.00` in `en` and `42 000,00 €` in `fr` for euros.
+
+A message missing from `fr-CA` falls back to `fr`, then to `default_locale`. Region-specific files only need the messages that differ.
+
+## Translating in code
+
+### The t! macro
+
+`t!` looks a message up in the current locale. Arguments are `name = value`; numbers, strings and dates work:
+
+```rust title="src/modules/deals/service.rs"
+use navree::i18n::t;
+
+pub fn import_summary(created: usize) -> String {
+    t!("deal-created", count = created)
+}
+
+let line = t!("deal-won", owner = user.name.as_str(), title = deal.title.as_str());
+```
+
+During a request, the current locale is the one negotiated for it. In a job, it is the locale of the request that dispatched the job. Elsewhere (a command, a scheduled task) it is `default_locale`. To translate in another locale, run the code inside `Locale::scope`:
+
+```rust
+use navree::i18n::Locale;
+
+let subject = Locale::scope("de", async {
+    t!("deal-won", owner = "Ada", title = "Lovelace renewal")
+})
+.await;
+// "Ada hat Lovelace renewal gewonnen."
+```
+
+### The Locale extractor
+
+Take `Locale` in a handler to see which locale was negotiated, or to format with it:
+
+```rust
+use navree::i18n::{Locale, t};
+
+#[get("/summary")]
+#[can(Read, Deal)]
+async fn summary(&self, locale: Locale, uow: Uow) -> Result<Json<serde_json::Value>> {
+    let open = self.deals.open_count(&uow).await?;
+    Ok(Json(serde_json::json!({
+        "locale": locale.tag(),                              // "fr"
+        "headline": t!("deal-created", count = open),
+        "total": locale.format_money(4_200_000, "EUR"),       // "42 000,00 €"
+        "updated": locale.format_date(chrono::Utc::now()),   // "26 oct. 2026"
+    })))
+}
+```
+
+Every response to a request with a negotiated locale carries `Content-Language: fr`.
+
+### The I18n service
+
+`I18n` translates in an explicit locale, without changing the current one, and manages saved preferences:
+
+```rust
+use navree::i18n::{I18n, args};
+
+let text = i18n.t("pt-BR", "deal-created", args!(count = 2))?; // "2 negócios criados"
+let supported = i18n.locales(); // ["en", "fr", "de", "pt-BR"]
+i18n.has("fr", "pipeline-empty"); // true
+
+i18n.set_user_locale(&uow, user.id, "fr").await?;
+i18n.set_workspace_locale(&uow, workspace.id, "de").await?;
+```
+
+## Negotiating the locale
+
+The layer tries the sources in `i18n.negotiation`, in order, and keeps the first supported locale:
+
+| Source | Reads |
+|---|---|
+| `query` | `?locale=fr`, for links in mails and shared URLs |
+| `user` | The signed-in user's saved locale |
+| `workspace` | The request's [workspace](/docs/workspaces/introduction/) default locale |
+| `cookie` | The `locale` cookie, which a BFF can set |
+| `header` | `Accept-Language`, by quality: `fr-CA;q=0.9, en;q=0.8` |
+
+Matching is lenient where it helps: `fr-CA` falls back to `fr` when only `fr` is supported, and `pt` matches `pt-BR` when that is the only Portuguese locale. A source that names an unsupported locale is skipped, not an error.
+
+Users save their locale with a built-in route, mounted when `i18n.routes` is on (the default):
+
+```http
+PUT /api/me/locale HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{ "locale": "fr" }
+```
+
+The answer is `204`. An unsupported locale is a 400 with `errors.locale`. `GET /api/i18n/locales` lists the supported locales with their names in their own language (`Français`, `Deutsch`) for a language picker.
+
+## Validation messages
+
+With `I18nModule` in the app, [validation](/docs/basics/validation/) messages come from Fluent. Each message key from the [validation message table](/docs/basics/validation/#message-keys) becomes an id prefixed with `validation-`, with dots turned into hyphens (`min.string` is `validation-min-string`), and the placeholders become variables:
+
+```text title="locales/fr/validation.ftl"
+validation-required = { $attribute } ne doit pas être vide
+validation-email = { $attribute } doit être une adresse e-mail valide
+validation-min-string = { $attribute } doit contenir au moins { $min } caractères
+validation-unique = { $attribute } est déjà utilisé
+
+field-first_name = prénom
+field-last_name = nom
+field-email = adresse e-mail
+```
+
+`field-<path>` gives a field its display name, as `validation.attributes` does. A request in French then gets:
+
+```json
+{
+  "statusCode": 400,
+  "message": ["prénom ne doit pas être vide", "adresse e-mail doit être une adresse e-mail valide"],
+  "error": "Bad Request",
+  "errors": {
+    "first_name": ["prénom ne doit pas être vide"],
+    "email": ["adresse e-mail doit être une adresse e-mail valide"]
+  }
+}
+```
+
+A key with no Fluent message falls back to the `validation.messages` section, then to the built-in English template. navree-i18n ships the validation messages in English, French, German, Spanish, Italian, Dutch and Brazilian Portuguese; copy them into your `locales/` to edit them:
+
+```sh
+navree i18n:publish validation
+```
+
+## Mail and notifications
+
+Templates get a `t` function, and the `money` and `date` filters format for the current locale:
+
+```jinja title="views/mail/deal-won.html"
+<h1>{{ t("deal-won", owner=owner.name, title=deal.title) }}</h1>
+<p>{{ deal.amount_cents | money(deal.currency) }}</p>
+<p>{{ t("mail-footer") }}</p>
+```
+
+A mail renders in the locale that is current when it is rendered, so translate the subject with `t!` where you build it:
+
+```rust
+let subject = t!("deal-won-subject", title = deal.title.as_str());
+let mail = TemplateMail::new(&owner.email, subject, "mail/deal-won")
+    .context(json!({ "owner": owner, "deal": deal }));
+mailer.queue(&mail).await?;
+```
+
+`Mailer::queue` dispatches a job, and the job runs in the locale of the request that queued it. Mail to someone else, such as a deal owner who reads French while a German manager reassigns the deal, should use the recipient's locale. [Notifications](/docs/digging-deeper/notifications/) do that for you: navree-i18n renders each notification inside `Locale::scope` with the notifiable user's saved locale. For a mail you send yourself, wrap it:
+
+```rust
+let locale = i18n.user_locale(owner.id).await?; // saved, or default_locale
+Locale::scope(locale, async { mailer.queue(&deal_won_mail(&owner, &deal)).await }).await?;
+```
+
+## Checking translations
+
+`i18n:check` parses every file of every locale and compares each locale with `default_locale`:
+
+```sh
+navree i18n:check
+```
+
+```text
+locales/fr/deals.ftl:14  deal-lost: missing (defined in en)
+locales/de/main.ftl:3    syntax error: expected a message value
+locales/pt-BR            12 of 148 messages missing (falls back to en)
+2 problem(s) in 4 locale(s)
+```
+
+It exits with status 1 when a locale other than a regional one (`pt-BR` falls back to `pt` or the default) is missing messages or a file has an error, so run it in CI. `i18n:missing fr` lists the missing ids of one locale, ready to send to a translator.
+
+## Testing
+
+Send `Accept-Language` (or `?locale=`) and assert on the translated text. Set `i18n.missing = "error"` in tests, so a missing message fails instead of showing its id:
+
+```rust title="tests/locale.rs"
+use navree::i18n::{Locale, t};
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn validation_errors_are_in_the_requested_language() {
+    let app = TestApp::builder()
+        .config("i18n.locales", json!(["en", "fr"]))
+        .config("i18n.missing", "error")
+        .module(I18nModule::from_config())
+        .module(ValidationModule::from_config())
+        .module(ContactsModule)
+        .build()
+        .await;
+
+    app.client()
+        .post("/api/v1/contacts")
+        .header("Accept-Language", "fr-FR,fr;q=0.9")
+        .json(&json!({ "last_name": "Lovelace" }))
+        .send()
+        .await
+        .assert_validation_error("first_name")
+        .assert_json_path("errors.first_name.0", json!("prénom ne doit pas être vide"));
+}
+
+#[tokio::test]
+async fn plurals_follow_the_language() {
+    let app = TestApp::builder().module(I18nModule::from_config()).build().await;
+    Locale::scope("fr", async {
+        assert_eq!(t!("deal-created", count = 1), "Une affaire créée");
+        assert_eq!(t!("deal-created", count = 3), "3 affaires créées");
+    })
+    .await;
+    app.shutdown().await.unwrap();
+}
+```
+
+`Locale::scope` works without a request, so unit tests of services that call `t!` don't need the HTTP client.
+
+## Reference
+
+| Item | |
+|---|---|
+| `t!(id, name = value, ...)` | Translates in the current locale |
+| `args!(name = value, ...)` | Fluent arguments for `I18n::t` |
+| `embed_locales!(dir)` | Embeds the Fluent files in the binary |
+| `Locale` | Extractor: `tag()`, `language()`, `format_money`, `format_date`, `format_number`; `Locale::scope(tag, future)`, `Locale::current()` |
+| `I18n` | Service: `t`, `has`, `locales`, `user_locale`, `set_user_locale`, `workspace_locale`, `set_workspace_locale` |
+
+| Route | |
+|---|---|
+| `PUT /api/me/locale` | Saves the signed-in user's locale |
+| `GET /api/i18n/locales` | The supported locales with their native names |
+
+| Command | What it does |
+|---|---|
+| `i18n:check` | Parses every file and reports missing messages; exits 1 on a problem |
+| `i18n:missing <locale>` | Lists the ids a locale is missing |
+| `i18n:publish validation` | Copies the shipped validation messages into `locales/` |
+
+<LinkCards>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    The message keys and placeholders that Fluent translates.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Templates and queued mail.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Rendered in each recipient's locale.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/introduction/" title="Workspaces">
+    A default locale per workspace.
+  </LinkCard>
+</LinkCards>

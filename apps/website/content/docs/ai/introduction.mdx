@@ -1,0 +1,137 @@
+---
+title: "Navree for AI"
+description: "Navree is AI-native on two sides: your coding agent builds with skills, Navigator and docs written for models, and your product uses models through the AI SDK, agents, RAG and MCP servers."
+status: "planned"
+---
+
+## Two sides of AI-native
+
+Navree is built for the way backends are written now, with an AI agent in the editor, and for what products do now, with models inside them. Both sides come in the box.
+
+**Building with an agent.** Your coding agent gets everything it needs to work on a Navree app the way your best engineer would: skills that walk it through each common task, an MCP server that shows it the running app, docs in a format it reads well, and project instructions in every new app.
+
+**AI in your product.** Your app gets a typed SDK for every major model provider, agents that call your services under the user's own permissions, embeddings and retrieval over your data, and MCP servers that let Claude, ChatGPT and Cursor use your app.
+
+| Building with an agent | AI in your product |
+|---|---|
+| [Agent skills](/docs/ai/agent-skills/): one per common task | [AI SDK](/docs/ai/ai-sdk/): text, structured output, streaming, failover |
+| [Navigator](/docs/ai/navigator/): `navree mcp`, the app as your agent sees it | [Agents and tools](/docs/ai/agents-and-tools/): models that act, as the user |
+| [Docs for agents](/docs/ai/docs-for-agents/): `llms.txt`, Markdown pages, AGENTS.md | [Embeddings and RAG](/docs/ai/embeddings-and-rag/): answers from your own data |
+| | [MCP servers](/docs/ai/mcp-servers/): your app's tools in any AI client |
+
+## Why Navree suits agents
+
+An agent does its best work in a codebase that is predictable, explicit and checked. Navree apps are all three by design:
+
+- **One structure.** Every feature is a module that declares what it imports, provides and exports. An agent that has seen one Navree app knows where to find things in the next, and the generators (`navree make:module`, `make:job`, `make:policy`) write new code in the same shape every time.
+- **Explicit access.** Every route says who may call it, and a route that doesn't won't compile. An agent can't open an endpoint to the world by forgetting an attribute.
+- **Mistakes fail early.** Requests, queries, jobs, events and configuration are typed, and the container checks the module graph at boot, naming the module and the missing type. `cargo check`, `navree check` and the tests catch an agent's slip before you review it.
+- **Fast feedback.** Tests boot the app in process with a fresh database each, so an agent can run the whole suite after every change.
+
+The [agent skills](/docs/ai/agent-skills/) turn those conventions into steps an agent follows, and [Navigator](/docs/ai/navigator/) lets it check its work against the running app: the route it added is in the route table, the provider it wired resolves, the migration ran.
+
+### Set up your agent
+
+<Steps>
+<Step title="Create an app">
+
+`navree new` writes `AGENTS.md` and `CLAUDE.md` with the app's conventions, so an agent reads them before its first change.
+
+```sh
+navree new crm
+```
+
+</Step>
+<Step title="Install the skills">
+
+```sh
+navree skills:install
+```
+
+Or `npx skills add NavreeHQ/navree`. See [Agent skills](/docs/ai/agent-skills/#installing-skills) for the options.
+
+</Step>
+<Step title="Connect Navigator">
+
+```sh
+claude mcp add navree -- navree mcp
+```
+
+Cursor, Codex and VS Code take the same command in their MCP settings; see [Navigator](/docs/ai/navigator/#connecting-your-agent).
+
+</Step>
+<Step title="Point it at the docs">
+
+Give it `https://navree.com/llms.txt`, or a page's Markdown, such as `https://navree.com/docs/basics/validation.md`. See [Docs for agents](/docs/ai/docs-for-agents/).
+
+</Step>
+</Steps>
+
+## AI in your product
+
+`AiModule` adds models to your app as a service like any other: configured in `config/app.toml`, injected where you need it, faked in tests. Here is the whole path from configuration to a route, summarizing a deal in the reference CRM:
+
+```toml title="config/app.toml"
+[ai]
+default = "fast"
+
+[ai.models.fast]
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+fallbacks = ["backup"]
+
+[ai.models.backup]
+provider = "openai"
+model = "gpt-5"
+```
+
+```rust title="crates/crm-deals/src/controller.rs"
+/// Two sentences on where the deal stands.
+#[get("/{id}/summary")]
+#[can(Read, Deal, from = "id")]
+async fn summary(
+    &self,
+    uow: Uow,
+    CurrentAccess(access): CurrentAccess,
+    deal: Authorized<Deal, Read>,
+) -> Result<Json<serde_json::Value>> {
+    let deal = self.deals.show(&uow, deal.into_inner()).await?;
+    let timeline = self.insights.timeline(&uow, &access, deal.id).await?;
+    let summary = self
+        .ai
+        .text(format!("Deal \"{}\", stage {}. Activity:\n{timeline}", deal.title, deal.stage.label()))
+        .system("You summarize CRM deals for sales managers in two sentences.")
+        .await?;
+    Ok(Json(json!({ "summary": summary.text })))
+}
+```
+
+The route keeps its access rule, the timeline is read with the user's own access, the provider's API key stays in `.env`, a provider outage fails over to the backup model, and a failure is Navree's usual JSON error. From there:
+
+- **[AI SDK](/docs/ai/ai-sdk/).** `ai.text`, `ai.structured::<T>` for typed answers checked against your garde rules, and `ai.stream` to the browser over server-sent events or to every tab over real time. Anthropic, OpenAI, Google Gemini, Mistral, Ollama and AWS Bedrock, with failover, budgets and usage metrics.
+- **[Agents and tools](/docs/ai/agents-and-tools/).** A deals assistant that searches deals, reads their activity and logs calls through your own services, as the signed-in user, with conversation memory and approvals for risky actions.
+- **[Embeddings and RAG](/docs/ai/embeddings-and-rag/).** Index notes through the queue into pgvector or Qdrant, and answer "What did they say about the rollout?" from the deal's own activity, with sources.
+- **[MCP servers](/docs/ai/mcp-servers/).** Let reps log calls from Claude or ChatGPT: your services as MCP tools, with OAuth sign-in and per-tool permissions.
+
+## Principles
+
+- **Models act as users, never as administrators.** Agent tools and MCP tools run with the permissions of the user they act for, and every write goes through your services, your access rules and your audit log. The model is never a security boundary.
+- **Providers are configuration.** Code names a model by its job (`fast`, `smart`, `embed`); `config/app.toml` maps it to a provider and a model id. Switching vendors, or moving to a model on your own hardware with Ollama, doesn't touch the code.
+- **Your data stays yours.** Nothing is sent to a provider unless you configure one. Prompts and outputs are not logged unless you turn it on, and secrets are redacted everywhere Navree prints configuration.
+- **Tested like everything else.** `AiFake` answers requests in tests without a network or a key, records them for assertions, and lets your tools run for real against the test database.
+- **Development tools stay in development.** Navigator is part of the CLI, runs over stdio on your machine and only reads. Your production binary doesn't contain it.
+
+<LinkCards>
+  <LinkCard href="/docs/ai/agent-skills/" title="Agent skills">
+    Teach your coding agent the Navree way, task by task.
+  </LinkCard>
+  <LinkCard href="/docs/ai/navigator/" title="Navigator">
+    Routes, the module graph, the schema and logs for your agent.
+  </LinkCard>
+  <LinkCard href="/docs/ai/ai-sdk/" title="AI SDK">
+    Models in your product, behind one typed service.
+  </LinkCard>
+  <LinkCard href="/docs/ai/mcp-servers/" title="MCP servers">
+    Your app's tools in Claude, ChatGPT and Cursor.
+  </LinkCard>
+</LinkCards>

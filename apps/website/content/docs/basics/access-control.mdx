@@ -86,7 +86,7 @@ A public route still sees the user when there is one: `AuthState` is set for eve
 
 ### Abilities with `#[can]`
 
-`#[can(Action, Subject)]` checks the user's abilities, CASL-style. Without `from`, it's a type-level check: it passes when the user may perform the action on at least some records of the subject, so a conditional rule ("update deals you own") counts. Use it on list and create routes:
+`#[can(Action, Subject)]` checks the user's abilities: rules that allow or forbid an action on a subject, optionally under conditions. Without `from`, it's a type-level check: it passes when the user may perform the action on at least some records of the subject, so a conditional rule ("update deals you own") counts. Use it on list and create routes:
 
 ```rust title="crates/crm-deals/src/controller.rs"
 #[get("/")]
@@ -242,7 +242,7 @@ route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) d
 
 ## Refusals: 401, 403 and 404
 
-The [route pipeline](/docs/architecture/request-lifecycle/#the-route-pipeline) checks access in this order, and the first refusal ends the request with an error in the [NestJS format](/docs/basics/errors/):
+The [route pipeline](/docs/architecture/request-lifecycle/#the-route-pipeline) checks access in this order, and the first refusal ends the request with a [JSON error](/docs/basics/errors/):
 
 | Situation | Status | Body `message` |
 |---|---|---|

@@ -275,7 +275,7 @@ impl LinkBuilder {
 | `.env_vars(prefix, pairs)` | A fixed list of variables, for tests. |
 | `.set(key, value)` | One value, applied above every source whatever the call order. An object merges into the existing table. |
 
-The benchmark's app, for example, maps the harness's own variables on top of the defaults:
+The app behind Navree's [performance](/performance/) measurements, for example, maps the load harness's own variables on top of the defaults:
 
 ```rust title="src/main.rs"
 fn sources() -> ConfigSources {

@@ -1,0 +1,464 @@
+---
+title: "GraphQL"
+description: "Serve a GraphQL API from your modules with `#[resolver]` on async-graphql: access rules on fields, validated inputs, per-request dataloaders, subscriptions over WebSockets and GraphiQL in development."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="graphql" /> GraphQL lets a front end ask for exactly the fields it needs, across entities, in one request. `navree-graphql` serves a GraphQL API from your modules, built on [async-graphql](https://docs.rs/async-graphql).
+
+Resolvers are providers. An `#[injectable]` struct with a `#[resolver]` impl block contributes query, mutation and subscription fields; every module can have its own, and Navree merges them into one schema when the app boots. Each field declares its access like a route does, takes validated input, runs mutations in a unit of work, and reports errors with the same status and messages your REST routes use, inside the GraphQL response.
+
+You get:
+
+- one endpoint, `/graphql`, with GraphiQL on it in development;
+- subscriptions over WebSockets, fed by your app's events;
+- dataloaders created per request, so batching never shares data between users;
+- depth and complexity limits, and introspection off in release builds;
+- `graphql:schema` to print the schema as SDL and check it in CI.
+
+## Installation
+
+`navree-graphql` is the `graphql` feature of the facade. async-graphql's derives name their own crate, so depend on it directly too, at the version navree-graphql uses:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
+async-graphql = { version = "7", features = ["uuid", "chrono"] }
+```
+
+The `graphql` feature isn't in the default `full` set. Add `GraphqlModule` to the app root:
+
+```rust title="src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    platform(Navree::app(), sources)
+        .module(GraphqlModule::from_config())
+        .module(CrmCoreModule)
+        .module(DealsModule)
+        .module(CompaniesModule)
+}
+```
+
+## Configuration
+
+`from_config()`, and a plain `.module(GraphqlModule)`, read the `graphql` section. Every key has a default:
+
+```toml title="config/app.toml"
+[graphql]
+path = "/graphql"
+depth_limit = 12
+complexity_limit = 500
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `graphql.path` | `/graphql` | The endpoint. Absolute: `http.api_prefix` doesn't apply. |
+| `graphql.graphiql` | `true` in debug builds | Serve GraphiQL to browsers that open the endpoint. |
+| `graphql.introspection` | `true` in debug builds | Answer introspection queries. |
+| `graphql.depth_limit` | `16` | The deepest selection a query may nest. |
+| `graphql.complexity_limit` | `1000` | The highest complexity score a query may have (each field counts 1 unless it says otherwise). |
+| `graphql.batching` | `false` | Accept a JSON array of operations in one request. |
+| `graphql.subscriptions` | `true` | Serve subscriptions over WebSockets at `<path>/ws`. |
+| `graphql.connection_init_timeout_secs` | `10` | How long a WebSocket may wait before sending `connection_init`. |
+| `graphql.keep_alive_secs` | `15` | How often the server pings an idle WebSocket. |
+
+As environment variables: `APP_GRAPHQL__INTROSPECTION=false`, `APP_GRAPHQL__COMPLEXITY_LIMIT=300`. In code, `GraphqlModule::for_root(GraphqlOptions { depth_limit: 12, ..GraphqlOptions::default() })`.
+
+## Types
+
+Object types are async-graphql types. Derive `SimpleObject` for plain data, and add `complex` when some fields need a resolver of their own:
+
+```rust title="src/deals/graphql/types.rs"
+use async_graphql::{ComplexObject, Enum, SimpleObject};
+use crm_contracts::deals::DealView;
+use uuid::Uuid;
+
+#[derive(Clone, Debug, SimpleObject)]
+#[graphql(name = "Deal", complex)]
+pub struct DealObject {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub stage: Stage,
+    pub owner_id: Uuid,
+    #[graphql(skip)]
+    pub company_id: Uuid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Enum)]
+#[graphql(remote = "crm_contracts::deals::Stage")]
+pub enum Stage {
+    Lead,
+    Qualified,
+    Proposal,
+    Negotiation,
+    Won,
+    Lost,
+}
+
+impl From<DealView> for DealObject {
+    fn from(deal: DealView) -> Self {
+        Self {
+            id: deal.id,
+            title: deal.title,
+            amount_cents: deal.amount_cents,
+            currency: deal.currency,
+            stage: deal.stage.into(),
+            owner_id: deal.owner_id,
+            company_id: deal.company_id,
+        }
+    }
+}
+```
+
+Field names become camelCase in the schema (`amountCents`), and enum values SCREAMING_CASE (`NEGOTIATION`), as async-graphql does by default. `remote` generates the conversions between the GraphQL enum and the contract's `Stage` both ways. `company` is resolved by a [dataloader](#dataloaders) below.
+
+## Resolvers
+
+A resolver is an `#[injectable]` struct whose `#[resolver]` impl block holds root fields. Mark each method `#[query]`, `#[mutation]` or `#[subscription]`:
+
+```rust title="src/deals/graphql/resolver.rs"
+use async_graphql::Context;
+use crm_contracts::deals::MoveDeal;
+use crm_core::{Deal, Move};
+use navree::graphql::{ContextExt, Result, resolver};
+use navree::prelude::*;
+use uuid::Uuid;
+
+use super::types::{DealObject, MoveDealInput, Stage};
+use crate::service::DealService;
+
+#[injectable]
+pub struct DealResolver {
+    deals: Arc<DealService>,
+}
+
+#[resolver]
+impl DealResolver {
+    /// One deal.
+    #[query]
+    #[can(Read, Deal, from = "id")]
+    async fn deal(&self, ctx: &Context<'_>, id: Uuid) -> Result<DealObject> {
+        let deal = ctx.authorized::<Deal, Read>()?.into_inner();
+        Ok(self.deals.view(&ctx.uow()?, deal).await?.into())
+    }
+
+    /// The deals the viewer may read, optionally in one stage.
+    #[query]
+    #[can(Read, Deal)]
+    async fn deals(
+        &self,
+        ctx: &Context<'_>,
+        stage: Option<Stage>,
+        #[graphql(default = 50, validator(maximum = 100))] limit: u64,
+    ) -> Result<Vec<DealObject>> {
+        let uow = ctx.uow()?;
+        let scope = ctx.accessible::<Deal, Read>().await?;
+        let deals = self.deals.find(&uow, scope, stage.map(Into::into), limit).await?;
+        Ok(deals.into_iter().map(Into::into).collect())
+    }
+
+    /// Moves a deal to another stage.
+    #[mutation]
+    #[can(Move, Deal, from = "id")]
+    async fn move_deal(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        input: Valid<MoveDealInput>,
+    ) -> Result<DealObject> {
+        let uow = ctx.uow()?;
+        let me = ctx.principal()?.user_id;
+        let deal = ctx.authorized::<Deal, Move>()?.into_inner();
+        let Valid(MoveDealInput { stage, position, lost_reason }) = input;
+        let to = MoveDeal { id, stage: stage.into(), position, lost_reason };
+        Ok(self.deals.move_to(&uow, me, deal, to).await?.into())
+    }
+}
+```
+
+The arguments after `ctx` are GraphQL arguments, with async-graphql's attributes (`#[graphql(default = ..)]`, validators). Navree's request state comes from the context through `ContextExt`:
+
+| Method | Gives you |
+|---|---|
+| `ctx.uow()` | The [unit of work](#the-unit-of-work) of this field. |
+| `ctx.principal()` | The authenticated viewer; an `UNAUTHENTICATED` error for guests. |
+| `ctx.current_user().await` | The viewer's user record. |
+| `ctx.abilities().await` | The viewer's abilities. |
+| `ctx.accessible::<E, A>().await` | A SQL filter for the records of `E` the viewer may `A`. |
+| `ctx.authorized::<E, A>()` | The record a `#[can(.., from = "arg")]` check loaded. |
+| `ctx.workspace()` | The current [workspace](/docs/workspaces/introduction/). |
+| `ctx.loader::<L>()` | This request's [dataloader](#dataloaders) of type `L`. |
+| `ctx.app()` | The `AppContext`, to resolve any provider. |
+
+`navree::graphql::Result<T>` is async-graphql's result. `?` works on `AppError`, database errors, `MicroError` and every other error, and Navree renders each with the status it has on HTTP (see [errors](#errors)).
+
+### Registering resolvers
+
+Register resolvers in a module's `register` hook, and dataloaders next to them:
+
+```rust title="src/deals/mod.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.resolver::<DealResolver>().dataloader::<CompanyLoader>();
+    }
+}
+```
+
+At boot, Navree builds one schema from every registered resolver. Root fields from different modules sit side by side (`deal` from the deals module, `company` from the companies module). Two resolvers that define the same root field fail the boot, naming both and their modules.
+
+A resolver's fields can call anything the module can see, so a GraphQL field and a REST route that share a service share its rules too. In a split system, the resolvers of the API service call the other services with [`ServiceClient`](/docs/microservices/request-response/) or [gRPC](/docs/microservices/grpc/), and GraphQL becomes the one API the front end talks to.
+
+## Access
+
+Root fields are deny by default, like routes. Each needs `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`, on the method or on the impl block, or the resolver doesn't compile. `#[can(.., from = "id")]` reads the record's id from the field's `id` argument, loads it in the field's unit of work and checks it; `ctx.authorized::<E, A>()` hands it over.
+
+The endpoint itself is open to everyone; the checks run per field. A guest's query for `deal` gets an error for that field, while a `#[public]` field in the same query still resolves.
+
+Fields of object types (the `company` of a `Deal`) run after their parent resolved, so whoever may read the deal reaches them. When one nested field needs a check of its own, make it in the field:
+
+```rust
+#[ComplexObject]
+impl DealObject {
+    /// The margin, for users who may read it.
+    async fn margin_cents(&self, ctx: &Context<'_>) -> Result<Option<i64>> {
+        let abilities = ctx.abilities().await?;
+        if !abilities.can("read_margin", "Deal", None) {
+            return Ok(None);
+        }
+        // ...
+    }
+}
+```
+
+Refusals are logged on target `navree::security` and, with an audit trail, recorded as `access.denied` with the field's path, as on routes.
+
+## Validation
+
+Wrap an input object in `Valid<T>` and its garde rules run when the argument is parsed. Derive `InputObject` and `Validate` on the same struct:
+
+```rust title="src/deals/graphql/types.rs"
+use async_graphql::InputObject;
+use garde::Validate;
+
+#[derive(Debug, InputObject, Validate)]
+pub struct MoveDealInput {
+    #[garde(skip)]
+    pub stage: Stage,
+    #[garde(range(min = 0))]
+    pub position: Option<i64>,
+    #[garde(length(chars, max = 1000))]
+    pub lost_reason: Option<String>,
+}
+```
+
+A broken rule fails the field before the resolver runs, with every message and the field errors in `extensions`, under the argument's name:
+
+```json title="200 OK"
+{
+  "data": null,
+  "errors": [
+    {
+      "message": "position must not be less than 0",
+      "path": ["moveDeal"],
+      "locations": [{ "line": 2, "column": 3 }],
+      "extensions": {
+        "code": "BAD_REQUEST",
+        "statusCode": 400,
+        "error": "Bad Request",
+        "errors": { "input.position": ["position must not be less than 0"] }
+      }
+    }
+  ]
+}
+```
+
+The messages are the ones [validation](/docs/basics/validation/) gives everywhere else. async-graphql's own validators (`#[graphql(validator(..))]`) work too, for single arguments.
+
+## Errors
+
+A GraphQL response carries errors next to the data, so a failed field doesn't fail the whole query. Navree renders each error with its message and an `extensions` object that holds the rest of the JSON error shape:
+
+| `extensions` member | Value |
+|---|---|
+| `code` | The status's reason phrase in upper snake case: `BAD_REQUEST`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR`. |
+| `statusCode` | The HTTP status the same error has on a route. |
+| `error` | The status's reason phrase. |
+| `errors` | Field errors, for validation failures. |
+
+A 404 from `?` on a missing record is `NOT_FOUND` with `"statusCode": 404`, and a server error keeps the message `"Internal server error"` while the real error is logged with the request id.
+
+The HTTP status of the response is `200` whenever the query ran, with or without field errors. A document that doesn't parse, breaks the schema, or goes over the depth or complexity limit is a `400` with the errors and no data. Invalid credentials are a `401` before the query runs, as on every route.
+
+## Dataloaders
+
+Listing 50 deals with their company would run 50 company queries, one per deal. A dataloader collects the ids that the fields of one request ask for and loads them in one query.
+
+A loader implements async-graphql's `Loader` and is an injectable provider:
+
+```rust title="src/companies/graphql/loader.rs"
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use async_graphql::dataloader::Loader;
+use crm_core::entities::company;
+use navree::db::Db;
+use navree::injectable;
+use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+use uuid::Uuid;
+
+use super::types::CompanyObject;
+
+#[injectable]
+pub struct CompanyLoader {
+    db: Arc<Db>,
+}
+
+impl Loader<Uuid> for CompanyLoader {
+    type Value = CompanyObject;
+    type Error = Arc<DbErr>;
+
+    async fn load(&self, ids: &[Uuid]) -> Result<HashMap<Uuid, CompanyObject>, Self::Error> {
+        let companies = company::Entity::find()
+            .filter(company::Column::Id.is_in(ids.iter().copied()))
+            .filter(company::Column::DeletedAt.is_null())
+            .all(self.db.conn())
+            .await?;
+        Ok(companies.into_iter().map(|c| (c.id, c.into())).collect())
+    }
+}
+```
+
+Register it with `m.dataloader::<CompanyLoader>()` and use it from any field:
+
+```rust
+#[ComplexObject]
+impl DealObject {
+    async fn company(&self, ctx: &Context<'_>) -> Result<Option<CompanyObject>> {
+        Ok(ctx.loader::<CompanyLoader>().load_one(self.company_id).await?)
+    }
+}
+```
+
+Navree creates a new `DataLoader` for every request, so its cache lives as long as one query: results are never shared between two viewers, and a mutation never reads a value cached before it. Loads requested in the same tick are batched into one call to `load`. Loaders read through the pool, outside the field's unit of work, and don't check access: load only what the parent field was allowed to show, or filter with `ctx.accessible` before you call the loader.
+
+## The unit of work
+
+Queries read: their fields share the request's unit of work, which never writes and commits nothing. Each **mutation** field runs in a unit of work of its own, because GraphQL runs a document's mutations one after another and each must succeed or fail on its own. The unit of work commits when the field returns `Ok` and rolls back when it returns an error, and then the next mutation runs. Jobs, notifications and events emitted in a mutation join its unit of work, as they would in a route.
+
+## Subscriptions
+
+Subscriptions stream events to the client over a WebSocket at `<path>/ws` (`/graphql/ws`). Navree speaks the `graphql-transport-ws` protocol, and the older `graphql-ws` one for clients that still use it.
+
+A `#[subscription]` field returns a stream. `EventStream::<E>` streams every `E` emitted on the app's [event bus](/docs/digging-deeper/events/) from the moment the client subscribed:
+
+```rust
+use async_graphql::futures_util::{Stream, StreamExt};
+use crm_contracts::deals::DealUpdated;
+use navree::graphql::EventStream;
+
+#[resolver]
+impl DealResolver {
+    /// Deal changes, optionally for one stage.
+    #[subscription]
+    #[can(Read, Deal)]
+    async fn deal_updated(
+        &self,
+        ctx: &Context<'_>,
+        stage: Option<Stage>,
+    ) -> Result<impl Stream<Item = DealUpdatedObject>> {
+        let updates = EventStream::<DealUpdated>::new(ctx)?;
+        Ok(updates
+            .filter(move |event| std::future::ready(stage.is_none_or(|s| event.stage == s.into())))
+            .map(DealUpdatedObject::from))
+    }
+}
+```
+
+- **Authentication.** Clients send their token in the `connection_init` payload, `{ "authorization": "Bearer <token>" }`, and Navree authenticates it with the app's authenticator. Browsers on the app's own origin may rely on the session cookie instead; the WebSocket's `Origin` must then be one of `http.cors.allowed_origins`.
+- **Access** is checked when the subscription starts. When the token's expiry passes, Navree closes the socket with code `4401`, and the client reconnects with a fresh token.
+- **Several instances.** An instance's event bus only sees events emitted in that instance. When the API runs on several instances, add `m.receive_event::<DealUpdated>()` from [navree-micro](/docs/microservices/events/#every-instance-broadcast), and events published by any instance or service reach every subscriber.
+
+A subscriber that falls more than 256 events behind skips the oldest, like any subscriber of the bus.
+
+## GraphiQL
+
+In development, open `http://localhost:8080/graphql` in a browser to get GraphiQL, with the schema's documentation, autocompletion and a subscriptions client. Put your token in its headers tab:
+
+```json
+{ "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..." }
+```
+
+GraphiQL is served only when `graphql.graphiql` is on (debug builds by default). In release builds, a `GET` on the endpoint answers 405: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
+
+## The schema as a file
+
+The schema is code-first: your types and resolvers define it. `graphql:schema` prints it as SDL, so you can review it, publish it, and generate client types from it:
+
+```sh
+cargo run -- graphql:schema schema.graphql
+```
+
+Commit `schema.graphql`, and check in CI that it's up to date:
+
+```sh
+cargo run -- graphql:schema schema.graphql --check
+```
+
+`--check` exits with status 1 and prints the difference when the code's schema and the file disagree. Teams that design the schema first write the SDL, then implement resolvers until `--check` passes. A change that removes a field or an argument shows up in the diff before any client breaks.
+
+## Testing
+
+Test GraphQL through the endpoint with `TestClient`, as you test routes. `assert_json_path` reads into `data` and `errors`:
+
+```rust title="tests/graphql_deals.rs"
+use navree::prelude::*;
+use navree::testing::{TestApp, TestAuthenticator, principal};
+use serde_json::json;
+
+#[tokio::test]
+async fn deal_by_id_respects_access() {
+    let app = TestApp::from_builder(TestAuthenticator::install(app(test_sources()))).await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+    let query = json!({
+        "query": "query($id: UUID!) { deal(id: $id) { title stage company { name } } }",
+        "variables": { "id": deal_id },
+    });
+
+    app.client()
+        .post("/graphql")
+        .json(&query)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data", json!(null))
+        .assert_json_path("errors.0.extensions.code", json!("UNAUTHENTICATED"));
+
+    app.acting_as(principal(rep))
+        .post("/graphql")
+        .json(&query)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data.deal.title", json!("Acme renewal"))
+        .assert_json_path("data.deal.stage", json!("NEGOTIATION"));
+
+    app.shutdown().await.unwrap();
+}
+```
+
+To test without HTTP, `app.get::<GraphqlSchema>().await.execute(request)` runs an `async_graphql::Request` against the app's schema; add the viewer with `.data(principal(rep))`. `GraphqlSchema::sdl()` returns the SDL, for a test that compares it with `schema.graphql`.
+
+<LinkCards>
+  <LinkCard href="/docs/basics/access-control/" title="Access control">
+    The attributes every root field declares.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/events/" title="Events between services">
+    Feeding subscriptions on every instance.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    One API shaped for your front end, over many services.
+  </LinkCard>
+</LinkCards>

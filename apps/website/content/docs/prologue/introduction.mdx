@@ -1,31 +1,26 @@
 ---
 title: "Introduction"
-description: "What Navree is, who it's for, what comes in the box, and how it compares with Laravel, NestJS, Loco and Axum."
+description: "What Navree is, the ideas it is built on, what comes in the box, who it's for and how to read these docs."
 ---
 
-Navree is a web application framework for Rust. It aims to give you everything Laravel gives a PHP developer (routing, validation, an ORM, authentication, authorization, queues, a scheduler, mail, notifications, file storage, real-time broadcasting, testing helpers and code generators), organised the way NestJS organises an application: into modules with dependency injection. It runs on Tokio and Axum, so a whole application compiles to one small, fast binary.
+Navree is a framework for building efficient, secure and scalable server-side applications in Rust. It gives you an application architecture out of the box: features live in modules, modules declare what they import and export, and a dependency-injection container wires them together when the app boots, refusing to start if anything is missing. Around that structure sits a complete standard library for backends, from routing and validation to workspaces, queues, monitoring and AI, designed together, documented together and released together. The result is code that stays easy to test, easy to change and easy to hand to a new teammate, or to an AI agent.
 
-Navree is young: this documentation describes version 0.1, its first release. The [release notes](/docs/prologue/release-notes/) list what works and what doesn't yet, and the [roadmap](/docs/prologue/roadmap/) lists what was left for later.
+Navree runs on [Tokio](https://tokio.rs), [Axum](https://docs.rs/axum), Hyper and Tower, talks to databases through [SeaORM](https://www.sea-ql.org/SeaORM/) and sqlx, validates input with [garde](https://docs.rs/garde), speaks TLS through rustls and hashes passwords with Argon2id. A whole application compiles to one static binary.
 
-## Who Navree is for
+This documentation describes Navree 0.1. The [release notes](/docs/prologue/release-notes/) list what it ships, and the [roadmap](/docs/prologue/roadmap/) says where it goes next.
 
-Navree is for developers who build back ends: JSON APIs for web and mobile front ends, with users, permissions, background jobs and mail. In particular:
+## What Navree stands for
 
-- **Laravel developers** who want the same range of features in a compiled, statically typed language, with far lower memory use.
-- **NestJS developers** who like modules, providers and guards, and want an application that starts in milliseconds and idles at a few megabytes.
-- **Rust developers** who would rather not assemble and wire a dozen crates for every new service.
-
-It is not the right choice yet if you need a long-proven framework, Redis-backed drivers, GraphQL or gRPC, or server-rendered HTML pages. It isn't the fastest Rust option either: if raw throughput matters more than anything else, use Axum directly.
-
-## The idea
-
-Navree combines three things that usually come separately.
-
-**Laravel's completeness.** A Laravel app gets queues, mail, a scheduler, validation and the rest from the framework, configured the same way and tested with the same tools. Navree ships the same set as module crates that know about each other: a validated request runs in a unit of work, the unit of work feeds the audit log, a queued mail goes out only after the transaction commits, and the test client exercises all of it in-process.
-
-**NestJS's modules and dependency injection.** Everything above a small kernel is a module that declares its imports, providers, controllers and exports, and an app is a composition of modules. Providers are injected through their constructors. The module graph is checked when the app boots, so a missing provider is an error that names it, not a runtime surprise. Routes are deny-by-default, like a global guard with a `@Public()` opt-out, and errors use the NestJS format (`{statusCode, message, error}`).
-
-**Rust's speed and footprint.** In the [benchmark](/benchmarks/), Navree idles at 4 MB, peaks at 38 MB under load and is ready 23 ms after it starts. On an authenticated, paginated list it serves 3.3 times as many requests as NestJS and 8.8 times as many as Laravel Octane. Its own per-request overhead is still high for a Rust framework; the comparison below has the details.
+- **Modular by design.** Every feature is a module that declares what it imports, provides and exports. Apps stay navigable at five modules or five hundred.
+- **Dependency injection.** A type-keyed container wires services at boot and refuses to start with a missing or private dependency, naming the module and the type.
+- **API-first.** Versioned routes, validated input, one JSON error shape and an OpenAPI 3.1 document generated from your code.
+- **Type-safe end to end.** Requests, queries, jobs, events and configuration are typed. If it compiles, it's wired.
+- **Secure by default.** Routes deny until you allow them. Rotating refresh tokens, two-factor, Argon2id, encrypted cookies, CSRF, rate limits, security headers, an audit log and an SSRF guard ship on.
+- **Workspaces built in.** Multi-tenancy at the workspace level: members, roles, invitations, and isolation by row, schema or database.
+- **AI-native.** Agent skills, an MCP server for your coding agent, docs written for models as well as people, and an AI SDK for the product itself.
+- **Observable.** Structured logs, traces, metrics, health checks and [Lighthouse](/docs/tools/lighthouse/) monitoring, self-hosted and on by default.
+- **Scales out.** Start as one binary; split into services over NATS, Kafka, RabbitMQ, Redis Streams or gRPC without rewriting your modules.
+- **Fast and frugal.** One binary, under 40 MB of memory under load and ready in milliseconds. [Performance](/performance/) has the measurements and how to reproduce them.
 
 ## What a Navree app looks like
 
@@ -88,68 +83,73 @@ This route answers `PATCH /api/v1/tasks/{id}`. Before the handler runs, Navree a
 
 ## What's in the box
 
-Each module is its own crate, and the `navree` crate re-exports all of them, one Cargo feature each.
+### The framework
+
+Each module is its own crate, and the `navree` crate re-exports all of them, one Cargo feature each. The default `full` feature turns them all on.
 
 | Area | Modules |
 |---|---|
 | Foundation | The kernel (module graph, dependency injection, lifecycle hooks, commands); typed configuration from `.env`, TOML files and `APP_*` variables; structured logging with redaction |
-| HTTP | Controllers and route attributes on Axum, deny-by-default access declarations, the NestJS error format, rate limits, CORS and security headers, signed URLs, maintenance mode |
-| Validation | `Valid<T>` extractors on [garde](https://docs.rs/garde), class-validator-style messages, async `unique` and `exists` rules |
+| HTTP | Controllers and route attributes on Axum, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error" }`), rate limits, CORS and security headers, signed URLs, maintenance mode |
+| Validation | `Valid<T>` extractors on garde, one readable message per broken rule, async `unique` and `exists` rules |
 | Database | SeaORM integration, a unit of work per request, per-module migrations, seeders, factories and pagination; SQLite by default, PostgreSQL behind a feature |
-| Security | JWT access tokens with rotating refresh tokens, Passport-style strategies, registration, password reset, email verification and two-factor authentication; roles, permissions and CASL-compatible abilities with record checks and SQL list filters; AES-256-GCM encryption and Argon2id hashing; an audit trail |
-| Background work | Database and memory job queues with retries, backoff, unique and delayed jobs; events with synchronous and queued listeners; a cron-style scheduler that runs each task once across servers |
-| Communication | Mail from templates over SMTP; notifications over mail, the database and broadcasts; a Pusher-protocol WebSocket server with public, private and presence channels |
+| Security | JWT access tokens with rotating refresh tokens, pluggable authentication strategies, registration, password reset, email verification and two-factor authentication; roles, permissions and abilities with record checks and SQL list filters, shared with the front end; AES-256-GCM encryption and Argon2id hashing; an audit log |
+| Workspaces | Workspaces, members, roles and invitations; the current workspace from a header, a subdomain, a path or a token; isolation by row, schema or database |
+| Background work | Database and memory job queues with retries, backoff, unique and delayed jobs; events with synchronous and queued listeners; a scheduler on cron expressions that runs each task once across servers |
+| Communication | Mail from templates over SMTP; notifications over mail, the database and broadcasts; a WebSocket server that speaks the Pusher protocol, with public, private and presence channels |
 | Integrations | File storage on named disks with signed temporary URLs; an HTTP client with retries, timeouts, an SSRF policy and fakes; a cache with tags and locks; MiniJinja templates |
 | Operations | Health and readiness probes, Prometheus metrics, an OpenAPI 3.1 document with a docs UI |
-| Testing and tools | `TestApp` and an in-process test client with fakes; the `navree` CLI with `navree new`, thirteen generators and a rebuilding dev server |
+| Testing and tools | `TestApp` and an in-process test client with fakes; the `navree` CLI with `navree new`, code generators and a rebuilding dev server |
 
-The repository also holds a reference application, a CRM with an API built on Navree and a Next.js front end, and a [benchmark](/benchmarks/) against fourteen other framework set-ups. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
+### The ecosystem
 
-## How Navree compares
+Everything else a production backend needs is first-party too: open source under MIT or Apache-2.0, free and self-hosted, released with the framework.
 
-### Laravel
+| Tool | What it does |
+|---|---|
+| [Lighthouse](/docs/tools/lighthouse/) | Application monitoring: exceptions, slow requests and queries, failed jobs and alerts |
+| [Logbook](/docs/tools/logbook/) | A local debugging timeline of every request, query, job, mail, event, cache call and log line |
+| [Fleet](/docs/tools/fleet/) | A queue dashboard and worker supervisor |
+| [Helm](/docs/tools/helm/) | An admin panel generated from your entities |
+| [Harbor](/docs/tools/harbor/) | Server provisioning and zero-downtime deployments |
+| [Dock](/docs/tools/dock/) | PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS for local development, with one command |
+| [Navigator](/docs/ai/navigator/) | The MCP server for your coding agent |
 
-Navree borrows Laravel's scope and many of its ideas: `make:*` generators, migrations, seeders and factories, queued jobs and mail, notifications, a scheduler, signed URLs, maintenance mode with `down` and `up`, and an application key. A Laravel developer finds most things where they expect them.
+| Package | What it does |
+|---|---|
+| [Starter kits](/docs/getting-started/starter-kits/) | Production-ready apps from one command: SaaS, API and microservice |
+| [Microservices](/docs/microservices/introduction/), [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/) | Services over NATS, Kafka, RabbitMQ, Redis Streams, MQTT and TCP, gRPC and Connect, and GraphQL, all sharing your modules |
+| [AI SDK](/docs/ai/ai-sdk/) and [MCP servers](/docs/ai/mcp-servers/) | Text, structured output, agents with tools, embeddings and RAG; your app's tools exposed to AI clients |
+| [Search](/docs/packages/search/) | Full-text and vector search over your entities |
+| [Billing](/docs/packages/billing/) | Subscriptions, usage metering and invoices with Stripe or Paddle |
+| [Feature flags](/docs/packages/feature-flags/) | Roll features out per user, workspace or percentage |
+| [OAuth server](/docs/packages/oauth-server/) and [Social sign-in](/docs/packages/social-sign-in/) | OAuth 2.1 and OpenID Connect for third parties; sign-in with Google, GitHub, Apple and Microsoft |
+| [Webhooks](/docs/packages/webhooks/) | Signed outgoing webhooks with retries, and verified incoming ones |
+| [Localization](/docs/packages/localization/) | Translations, plurals and locale negotiation |
+| [Browser testing](/docs/packages/browser-testing/) | Drive a real browser from your tests |
 
-The differences are real, though:
+The repository also holds a reference application: a CRM with an API built on Navree and a Next.js front end. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
 
-- Laravel has a decade of development behind it, a large community and an ecosystem of first-party packages and services. Navree 0.1 has none of that yet.
-- Navree is built for JSON APIs. Its templates are meant for mail and other text; it has nothing like Blade components, Livewire or Inertia.
-- Data access goes through SeaORM entities and a repository, not Eloquent's active records.
-- Authentication follows NestJS rather than Sanctum: stateless JWTs plus rotating refresh tokens, with no SPA cookie authentication.
-- Rust needs a compile step, so the edit-and-reload loop is slower than PHP's. `navree dev` rebuilds and restarts on every change.
+## Who Navree is for
 
-In exchange, the benchmark shows Navree serving 8.8 times as many authenticated, paginated requests per second as Laravel on Octane (15,458 against 1,757), idling at 4 MB where Octane uses 153 MB. See the [benchmarks](/benchmarks/).
+Navree is for teams that build back ends and want the structure decided before the first line of code:
 
-### NestJS
+- **API and product teams** building JSON APIs for web and mobile front ends, with users, permissions, background jobs, mail and real time.
+- **SaaS builders** who need workspaces, billing, feature flags and an admin panel on day one, not in month six.
+- **Systems that grow.** Start as a modular monolith and split modules into services when the load or the team calls for it. The [architecture patterns](/docs/patterns/overview/) show each shape.
+- **Rust developers** who would rather build the product than choose, wire and maintain a dozen crates for every new service.
+- **Teams that work with AI agents.** Every app has the same layout, every feature has an [agent skill](/docs/ai/agent-skills/), and [Navigator](/docs/ai/navigator/) lets the agent read your routes, modules and schema.
 
-Navree's structure is NestJS's: modules with imports, providers, controllers and exports; constructor injection; a global authentication guard with a public opt-out; Passport-style strategies; a `CurrentUser` extractor; and the same error format. NestJS developers should feel at home.
+## How to read these docs
 
-The decorators become attribute macros, checked at compile time. A route without an access declaration doesn't compile, and neither does `#[public]` combined with another declaration. The module graph is validated before anything is constructed.
+- **Getting started** installs Navree and builds a small API with authentication, access rules and tests. Start with [Your first app](/docs/getting-started/your-first-app/).
+- **Architecture concepts** explains how an app is put together: the [request lifecycle](/docs/architecture/request-lifecycle/), [modules](/docs/architecture/modules/) and [providers](/docs/architecture/providers/). Read it once; everything else builds on it.
+- **Architecture patterns** shows the shapes of system you can build: modular monolith, microservices, multi-tenant SaaS, event-driven, API-first and backend-for-frontend.
+- **The basics, Security, Workspaces, Database and Digging deeper** are the reference, one page per feature. Read them when you need the feature.
+- **Microservices, AI, Packages and Tools** cover the ecosystem.
+- **Testing** and the **Example application** show how it all comes together.
 
-NestJS has things Navree doesn't: GraphQL, microservice transports, gRPC and a large ecosystem. Navree's WebSockets speak the Pusher protocol (Laravel Echo and pusher-js work with it) rather than Socket.IO gateways.
-
-In the benchmark, Navree handles 3.3 times NestJS's throughput on the authenticated list and about 1.4 times on the validated insert. It idles at 4 MB where NestJS uses over 600 MB, and starts in 23 ms rather than about a second. NestJS on Fastify is faster on plain JSON serialisation (644k against 214k requests per second).
-
-### Loco
-
-Loco is the closest Rust peer: a Rails-inspired framework on the same foundations (Axum, Tokio and SeaORM), with generators, background workers and mailers. It follows Rails' conventions of controllers, models, views, workers and tasks, where Navree follows NestJS's modules and dependency injection. Loco is also older and further along.
-
-Navree's additions are mostly in the request pipeline: deny-by-default access declarations, CASL-compatible abilities that also filter SQL queries and can be sent to the front end, a unit of work per request that commits or rolls back with the response, an audit trail and a Pusher-compatible WebSocket server.
-
-Loco is faster today. It is level with Navree on the authenticated list (16,202 against 15,458 requests per second) and well ahead elsewhere: 2.5 times on plain JSON, 1.6 times on a single query and 1.7 times on the validated insert. Memory use is similar (5 MB against 4 MB at idle).
-
-### Axum
-
-Axum is a library, not a framework: routing, extractors and Tower middleware. You choose and wire the database layer, authentication, validation, jobs and everything else yourself. Navree is built on Axum and is that wiring, done once. Axum extractors still work in Navree handlers, and `navree::axum` re-exports the crate.
-
-All that wiring has a cost, measured against a hand-written Axum and sqlx service. Navree delivers 22% of its throughput on plain JSON, 43% on a single query, 41% on the validated insert and 63% on the authenticated list. The benchmark's findings trace the gap to specific parts of Navree's pipeline, and the [roadmap](/docs/prologue/roadmap/#performance-work) lists them. If you need every request per second, use Axum directly; if you want a framework's features, Navree costs you some throughput but no extra memory: 38 MB at peak against Axum's 31 MB.
-
-The [benchmarks](/benchmarks/) page has every number, the method and the caveats.
-
-## Why the name
-
-Navree blends two names that matter to its author.
+A <Badge feature="queue" /> badge at the top of a page or section names the Cargo feature of `navree` it needs. Every page is also available as Markdown for AI agents: see [Docs for agents](/docs/ai/docs-for-agents/).
 
 ## Where to next
 
@@ -163,7 +163,10 @@ Navree blends two names that matter to its author.
   <LinkCard href="/docs/architecture/modules/" title="Modules">
     How an app is put together.
   </LinkCard>
-  <LinkCard href="/benchmarks/" title="Benchmarks">
-    Navree against fourteen other framework set-ups.
+  <LinkCard href="/docs/patterns/overview/" title="Architecture patterns">
+    Monoliths, microservices, multi-tenant SaaS and more.
+  </LinkCard>
+  <LinkCard href="/performance/" title="Performance">
+    Navree's own measurements, the method and how to reproduce them.
   </LinkCard>
 </LinkCards>

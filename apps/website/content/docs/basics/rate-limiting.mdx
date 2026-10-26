@@ -120,7 +120,7 @@ How route throttles work:
 
 <Callout type="note" title="No named limiters">
 
-Navree has no equivalent of Laravel's `RateLimiter::for('api', ...)`: limits are declared per route, with a fixed number per period, and can't depend on the user's plan or on the request. For limits like those, write a [guard](/docs/basics/access-control/) that counts requests itself.
+Limits are declared per route, with a fixed number per period. They can't depend on the user's plan or on the request, and there are no named limiters shared between routes. For limits like those, write a [guard](/docs/basics/access-control/) that counts requests itself.
 
 </Callout>
 
@@ -178,7 +178,7 @@ async fn whoami(&self, ClientIp(ip): ClientIp) -> String {
 
 ## Limits of the built-in limiter
 
-- Counters are kept in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. There's no shared (Redis) store yet; see the [roadmap](/docs/prologue/roadmap/).
+- Counters are kept in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. A shared Redis store is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
 - Counters are lost when the process restarts.
 - The login throttle keeps its counters in the cache module instead; with the memory cache store, the only one so far, that's per process too.
 

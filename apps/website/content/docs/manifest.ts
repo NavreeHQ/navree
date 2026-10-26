@@ -23,7 +23,7 @@ export type DocsSection = {
   pages: string[];
 };
 
-/** A sidebar entry that links outside the docs content, e.g. `/benchmarks`. */
+/** A sidebar entry that links outside the docs content, e.g. `/performance/`. */
 export type DocsLink = {
   title: string;
   href: string;
@@ -40,7 +40,7 @@ export const sections: DocsSection[] = [
     // Owner: A
     slug: "getting-started",
     title: "Getting started",
-    pages: ["installation", "your-first-app", "configuration", "directory-structure", "deployment"],
+    pages: ["installation", "your-first-app", "configuration", "directory-structure", "starter-kits", "deployment"],
   },
   {
     // Owner: B
@@ -53,6 +53,20 @@ export const sections: DocsSection[] = [
       "lifecycle-hooks",
       "crate-hierarchy",
       "facade-and-features",
+    ],
+  },
+  {
+    // Owner: patterns
+    slug: "patterns",
+    title: "Architecture patterns",
+    pages: [
+      "overview",
+      "modular-monolith",
+      "microservices",
+      "multi-tenancy",
+      "event-driven",
+      "api-first",
+      "backend-for-frontend",
     ],
   },
   {
@@ -78,6 +92,12 @@ export const sections: DocsSection[] = [
     slug: "security",
     title: "Security",
     pages: ["authentication", "account-flows", "authorization", "encryption-and-hashing", "audit-log"],
+  },
+  {
+    // Owner: workspace
+    slug: "workspaces",
+    title: "Workspaces",
+    pages: ["introduction", "resolution", "members-and-roles", "invitations", "isolation"],
   },
   {
     // Owner: D
@@ -115,6 +135,48 @@ export const sections: DocsSection[] = [
     ],
   },
   {
+    // Owner: micro
+    slug: "microservices",
+    title: "Microservices",
+    pages: ["introduction", "transports", "request-response", "events", "grpc", "graphql", "tracing"],
+  },
+  {
+    // Owner: aidocs
+    slug: "ai",
+    title: "AI",
+    pages: [
+      "introduction",
+      "agent-skills",
+      "navigator",
+      "docs-for-agents",
+      "ai-sdk",
+      "agents-and-tools",
+      "embeddings-and-rag",
+      "mcp-servers",
+    ],
+  },
+  {
+    // Owner: pkg
+    slug: "packages",
+    title: "Packages",
+    pages: [
+      "search",
+      "billing",
+      "feature-flags",
+      "oauth-server",
+      "social-sign-in",
+      "webhooks",
+      "localization",
+      "browser-testing",
+    ],
+  },
+  {
+    // Owner: tools
+    slug: "tools",
+    title: "Tools",
+    pages: ["lighthouse", "logbook", "fleet", "helm", "harbor", "dock"],
+  },
+  {
     // Owner: D
     slug: "testing",
     title: "Testing",
@@ -129,4 +191,8 @@ export const sections: DocsSection[] = [
 ];
 
 /** Links shown after the sections in the sidebar. */
-export const links: DocsLink[] = [{ title: "Benchmarks", href: "/benchmarks/" }];
+export const links: DocsLink[] = [
+  { title: "Ecosystem", href: "/ecosystem/" },
+  { title: "Architectures", href: "/architecture/" },
+  { title: "Performance", href: "/performance/" },
+];

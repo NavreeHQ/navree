@@ -182,7 +182,7 @@ http_request_duration_seconds_sum{method="GET",route="/api/v1/deals",status="401
 http_request_duration_seconds_count{method="GET",route="/api/v1/deals",status="401"} 1
 ```
 
-These are the only metrics Navree records today: there are no built-in metrics for the queue, the cache or the database pool yet, and no OpenTelemetry or Sentry integration (see the [roadmap](/docs/prologue/roadmap/)).
+These are the HTTP metrics `ObserveModule` records. Queue throughput, wait and runtime are on [Fleet](/docs/tools/fleet/)'s dashboard, and [Lighthouse](/docs/tools/lighthouse/) covers the rest of monitoring.
 
 ### Protecting the endpoint
 
@@ -226,6 +226,10 @@ Keep label values bounded (ids and paths make the number of series explode), and
 ### Turning metrics off
 
 With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mounted. Do that when another library installs its own `metrics` recorder: there is one per process, and `ObserveModule` fails the boot if another one is already installed.
+
+## Monitoring with Lighthouse
+
+Health checks and metrics tell an orchestrator and a dashboard whether the app is up. [Lighthouse](/docs/tools/lighthouse/) tells you what went wrong: it records exceptions grouped by fingerprint, slow requests and queries and failed jobs, shows them on a dashboard at `/_lighthouse`, sends alerts to email, Slack or webhooks, and exports to OpenTelemetry. It runs inside your app, so there is nothing else to host.
 
 ## Testing
 
@@ -282,6 +286,9 @@ async fn readiness_fails_when_payments_are_down() {
 ## Related
 
 <LinkCards>
+  <LinkCard href="/docs/tools/lighthouse/" title="Lighthouse">
+    Exceptions, slow requests and queries, failed jobs and alerts.
+  </LinkCard>
   <LinkCard href="/docs/basics/logging/" title="Logging">
     Request logs, levels and redaction.
   </LinkCard>

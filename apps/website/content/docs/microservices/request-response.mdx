@@ -1,0 +1,590 @@
+---
+title: "Request-response"
+description: "Answer messages with `#[message_pattern]` handlers and call them with `ServiceClient::send`: payloads, validation, access, the unit of work, deadlines, errors across services and testing with `MicroFake`."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="micro" /> Request-response is a call between services: one service sends a message and waits for the answer. Use it when the caller needs the result now, to read a deal, to check a quota, to move a deal and show the board that results. When the caller only needs to say that something happened, publish an [event](/docs/microservices/events/) instead: nobody waits, and the receiving services can be down for a while.
+
+A handler answers one **pattern**, a dotted name like `deals.get`. The caller names the pattern, sends a payload and gets back either the handler's result or its error, in Navree's JSON error shape.
+
+## Message handlers
+
+### Defining handlers
+
+Handlers are methods of an `#[injectable]` struct, in an impl block marked `#[message_handlers]`. Each method marked `#[message_pattern("...")]` answers that pattern. These are the deals service's:
+
+```rust title="services/deals/src/handlers.rs"
+use crm_contracts::deals::{DealView, DealsOfCompany, GetDeal, MoveDeal};
+use crm_core::{Deal, Move};
+use navree::http::CurrentPrincipal;
+use navree::prelude::*;
+
+use crate::service::DealService;
+
+#[injectable]
+pub struct DealsHandlers {
+    deals: Arc<DealService>,
+}
+
+#[message_handlers]
+impl DealsHandlers {
+    /// `deals.get`: one deal.
+    #[message_pattern("deals.get")]
+    #[can(Read, Deal, from = "id")]
+    async fn get(&self, uow: Uow, deal: Authorized<Deal, Read>) -> Result<DealView> {
+        self.deals.view(&uow, deal.into_inner()).await
+    }
+
+    /// `deals.of_company`: the deals of a company that the caller may read.
+    #[message_pattern("deals.of_company")]
+    #[can(Read, Deal)]
+    async fn of_company(
+        &self,
+        uow: Uow,
+        scope: Accessible<Deal, Read>,
+        Valid(Payload(input)): Valid<Payload<DealsOfCompany>>,
+    ) -> Result<Vec<DealView>> {
+        self.deals.of_company(&uow, scope, input.company_id).await
+    }
+
+    /// `deals.move`: moves a deal to another stage and position.
+    #[message_pattern("deals.move")]
+    #[can(Move, Deal, from = "id")]
+    async fn move_deal(
+        &self,
+        uow: Uow,
+        CurrentPrincipal(me): CurrentPrincipal,
+        deal: Authorized<Deal, Move>,
+        Valid(Payload(input)): Valid<Payload<MoveDeal>>,
+    ) -> Result<DealView> {
+        self.deals.move_to(&uow, me.user_id, deal.into_inner(), input).await
+    }
+}
+```
+
+The method's name is yours; the pattern is what callers use. A handler is an `async fn(&self, extractors..)`, like a route handler, and returns `Result<T>` where `T` is the reply.
+
+### Registering handlers
+
+Register the struct in its module's `register` hook. The handlers then resolve their dependencies with the module's visibility, like its controllers:
+
+```rust title="services/deals/src/lib.rs"
+#[module(
+    imports = [CrmCoreModule, AccessModule::for_feature::<Deal>()],
+    providers = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<DealsHandlers>();
+    }
+}
+```
+
+The boot fails, naming both handlers and their modules, when two handlers in one app answer the same pattern.
+
+### Patterns
+
+A pattern is one or more lower-case segments separated by dots, each made of letters, digits, `_` and `-`. A message pattern names exactly one handler, so it has no wildcards. Name patterns `<service>.<action>`: `deals.get`, `deals.move`, `companies.get`. The prefix tells a reader which service answers, and keeps two services from answering the same pattern, which the boot of one app can't detect.
+
+A breaking change to a payload or a reply is a new pattern, such as `deals.get.v2`: keep the old handler until every caller has moved. See [changing a payload](/docs/microservices/transports/#changing-a-payload).
+
+## The payload
+
+`Payload<T>` decodes the message's payload into `T`, any type that implements `serde::Deserialize`. Keep payload types in the [shared contract crate](/docs/microservices/introduction/#a-first-service), so both sides compile against the same definition:
+
+```rust title="crates/crm-contracts/src/deals.rs"
+/// `deals.move`. Replies with a `DealView`.
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
+pub struct MoveDeal {
+    #[garde(skip)]
+    pub id: Uuid,
+    #[garde(skip)]
+    pub stage: Stage,
+    /// The 0-based place within the stage; the end when absent.
+    #[garde(range(min = 0))]
+    pub position: Option<i64>,
+    #[garde(length(chars, max = 1000))]
+    pub lost_reason: Option<String>,
+}
+
+/// The body of the API's `POST /api/v1/deals/{id}/move`: a `MoveDeal`
+/// without the id, which comes from the path.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MoveTo {
+    pub stage: Stage,
+    pub position: Option<i64>,
+    pub lost_reason: Option<String>,
+}
+
+/// `deals.of_company`. Replies with a `Vec<DealView>`.
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
+pub struct DealsOfCompany {
+    #[garde(skip)]
+    pub company_id: Uuid,
+}
+```
+
+### Validation
+
+`Valid<Payload<T>>` runs the garde rules of `T` after decoding, exactly like `Valid<Json<T>>` on a route, with the same messages. A payload that breaks a rule never reaches the handler; the caller gets a 400 reply with every broken rule:
+
+```json title="400 reply to deals.move"
+{
+  "statusCode": 400,
+  "message": ["position must not be less than 0"],
+  "error": "Bad Request",
+  "errors": {
+    "position": ["position must not be less than 0"]
+  }
+}
+```
+
+`ValidAsync<Payload<T>>` adds the database rules (`unique`, `exists`), and a payload that doesn't decode at all (a missing field, a wrong type) is a 400 too, with serde's message for the field. See [validation](/docs/basics/validation/) for every rule.
+
+## Extractors
+
+A handler takes any of these, in any order:
+
+| Extractor | Gives you |
+|---|---|
+| `Payload<T>` | The decoded payload. |
+| `Valid<Payload<T>>`, `ValidAsync<Payload<T>>` | The decoded and validated payload. |
+| `Uow` | The message's [unit of work](#the-unit-of-work). |
+| `CurrentPrincipal` | The authenticated caller (401 for anonymous messages). |
+| `CurrentUser` | The caller's user record, loaded with navree-auth. |
+| `Abilities` | The caller's abilities. |
+| `Accessible<E, A>` | A SQL filter for the records of `E` the caller may `A`. |
+| `Authorized<E, A>` | The record named by a `#[can(.., from = "field")]` check. |
+| `Scoped<T>` | A request-scoped provider, built once per message. |
+| `CurrentWorkspace` | The workspace the message was sent in, from its `x-workspace` header. |
+| `MessageContext` | The pattern, the message id, the sending service, the deadline and the headers. |
+
+Every extractor that works on request parts works here, your own included, because a message reaches the handler as request parts: its headers are the message headers, and its extensions hold the app, the request id and the authentication state.
+
+```rust
+use navree::micro::MessageContext;
+
+#[message_pattern("deals.export")]
+#[permissions("deals.export")]
+async fn export(&self, msg: MessageContext) -> Result<ExportStarted> {
+    tracing::info!(from = msg.service(), message_id = %msg.message_id(), "export requested");
+    // ...
+}
+```
+
+## Credentials and access
+
+Message patterns are **deny by default**, like routes. Each handler declares who may call it with `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`, on the method or on the impl block; a handler without one doesn't compile:
+
+```text wrap
+error: message pattern `deals.get` (`get`) has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+```
+
+The checks are the [same as on routes](/docs/basics/access-control/), with one difference: `#[can(.., from = "id")]` reads the record's id from the payload field `id` (a top-level field holding a UUID, a string or an integer) instead of a path parameter. A missing record is a 404 reply and a refused one a 403, before the handler runs.
+
+### Forwarded credentials
+
+When a service sends a message while it handles an HTTP request or another message, `ServiceClient` copies that request's `Authorization` header into the message. The receiving service authenticates it with its own `dyn Authenticator`, so the deals service sees the same user the API saw, and its access rules apply to that user.
+
+For a JWT to verify everywhere, every service needs the signing secret: set the same `auth.jwt.secret` (`APP_AUTH__JWT__SECRET`) in each. Verifying a token needs no database. Roles, permissions and abilities do: navree-access reads them from its tables, so services that check them read the same tables (in the CRM, every service connects to the database that holds the identity tables).
+
+Turn forwarding off with `micro.forward_auth = false`, or for one call with `.without_auth()`.
+
+### Calls without a user
+
+Jobs, scheduled tasks, event handlers and commands have no request to forward. Their messages are anonymous, so `#[authenticated]` handlers answer them with a 401. Two ways to allow them:
+
+- **Act as a user.** Pass a token yourself with `.bearer(token)`, for example one signed for a system account with `JwtService::sign_access(user_id)`. The handler then checks that account's roles as usual.
+- **Mark the handler internal.** Make it `#[public]` and protect it with a [guard](#guards), so only your own services get through.
+
+### Guards
+
+Guards are the same `navree::http::Guard` trait as on routes, attached with `#[guard(..)]` to a handler or to the impl block. This one lets a message through only with the key that every internal service is configured with:
+
+```rust title="services/deals/src/internal.rs"
+use navree::BoxFuture;
+use navree::axum::http::request::Parts;
+use navree::config::Config;
+use navree::crypto::constant_time_eq;
+use navree::http::Guard;
+use navree::prelude::*;
+
+/// Lets a message through only with this deployment's service key
+/// (`services.key`, `APP_SERVICES__KEY`).
+#[derive(Debug)]
+#[injectable]
+pub struct InternalOnly {
+    config: Arc<Config>,
+}
+
+impl Guard for InternalOnly {
+    fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<(), AppError>> {
+        let expected = self.config.get_string("services.key").unwrap_or_default();
+        let ok = !expected.is_empty()
+            && parts
+                .headers
+                .get("x-service-key")
+                .is_some_and(|value| constant_time_eq(value.as_bytes(), expected.as_bytes()));
+        Box::pin(async move { if ok { Ok(()) } else { Err(AppError::forbidden()) } })
+    }
+}
+```
+
+`services.key` is a setting of your app, not of Navree: any section name works.
+
+```rust
+#[injectable]
+pub struct PipelineHandlers {
+    deals: Arc<DealService>,
+    internal: Arc<InternalOnly>, // a provider of the module: providers = [DealService, InternalOnly]
+}
+
+#[message_handlers]
+#[public]
+#[guard(self.internal.clone())]
+impl PipelineHandlers {
+    /// `deals.pipeline_totals`: the open pipeline per owner, for the nightly report.
+    #[message_pattern("deals.pipeline_totals")]
+    async fn totals(&self, uow: Uow) -> Result<Vec<OwnerTotal>> {
+        self.deals.pipeline_totals(&uow).await
+    }
+}
+```
+
+The caller sets the header with `.header("x-service-key", key)`. Guards run after authentication and before the access check, in the order they are written, and a refusal is the reply. When the app has an audit trail, a 403 from a guard or an access check is recorded as `access.denied`, with the message's pattern in place of the route.
+
+## The unit of work
+
+A message handler gets a unit of work the way a request does. It is lazy, holds the caller's user id as its actor and the message's request id, and:
+
+- **commits** when the handler returns `Ok`: [change observers](/docs/database/unit-of-work/#change-events-and-observers) run, the transaction commits, the after-commit hooks run, and then the reply is sent;
+- **rolls back** when the handler returns an error or panics, and the error is the reply.
+
+The reply waits for the commit, so a caller never sees a result that is then rolled back. If the commit itself fails, the reply is the error the database mapping gives (a 409 for a unique or foreign-key violation, a 500 otherwise). Everything that joins a request's unit of work joins a message's: queued jobs, queued mail, notifications, and events emitted with `client.emit`, which go through the [outbox](/docs/microservices/events/#the-outbox).
+
+A `send` is different: it calls another service at once and doesn't wait for your commit. If the deals service changes a deal and the caller's own unit of work then rolls back, the change in the deals service stays. Use `send` for reads and for commands whose failure you handle where you call them; to change several services together, have one service do its part and emit an event that the others react to.
+
+## Replies
+
+A handler returns `Result<T>`, where `T` is any `Serialize` type: a struct, a `Vec`, an `Option` (`None` replies `null`), or `()` for a handler with nothing to say. The reply carries status `200` and the encoded value.
+
+An error is a reply too. Return an `AppError`, or use `?` on any error, and the reply carries the error's status and its JSON body. Database errors map as they do for routes: a missing record is a 404, a unique violation a 409. Errors with a 5xx status are logged on the handler's side with the request id; their message stays `"Internal server error"`, so internals never cross the wire.
+
+## Sending requests
+
+Inject `Arc<ServiceClient>`, the client of the app's transport, and call `send` with the pattern and a reference to the payload. The result is the reply, decoded into the type you ask for:
+
+```rust title="services/crm-api/src/deals/controller.rs"
+use std::time::Duration;
+
+use crm_contracts::deals::{DealView, GetDeal, MoveDeal, MoveTo};
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealsController {
+    client: Arc<ServiceClient>,
+}
+
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl DealsController {
+    #[get("/{id}")]
+    async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<DealView>> {
+        let deal: DealView = self.client.send("deals.get", &GetDeal { id }).await?;
+        Ok(Json(deal))
+    }
+
+    #[post("/{id}/move")]
+    async fn move_deal(&self, Path(id): Path<Uuid>, Json(to): Json<MoveTo>) -> Result<Json<DealView>> {
+        let input = MoveDeal {
+            id,
+            stage: to.stage,
+            position: to.position,
+            lost_reason: to.lost_reason,
+        };
+        let deal: DealView = self
+            .client
+            .send("deals.move", &input)
+            .timeout(Duration::from_secs(2))
+            .await?;
+        Ok(Json(deal))
+    }
+}
+```
+
+The API doesn't validate the move itself: the deals service does, and its 400, with the field errors, reaches the browser unchanged. Ask for `serde_json::Value` when you don't want a typed reply.
+
+`send` returns a builder; `.await` sends the message. Before that, you can change the call:
+
+| Method | Effect |
+|---|---|
+| `.timeout(duration)` | The deadline of this call, instead of `micro.request_timeout_ms`. |
+| `.retries(n)` | Retry up to `n` times on a timeout or a transport failure. See [retries](#retries-and-idempotency). |
+| `.bearer(token)` | Send these credentials instead of the forwarded ones. |
+| `.without_auth()` | Send no credentials. |
+| `.header(name, value)` | Add a header. |
+
+Navree adds the rest itself: a new message id, `navree-service`, the request id and the trace context of the current request, its `Authorization` (unless turned off), its workspace as `x-workspace`, and the deadline.
+
+### Calling several services at once
+
+`send` is a future like any other. Run independent calls concurrently with `tokio::try_join!`; each keeps its own deadline:
+
+```rust
+use std::future::IntoFuture;
+
+let (deal, company): (DealView, CompanyView) = tokio::try_join!(
+    self.client.send("deals.get", &GetDeal { id }).into_future(),
+    self.client.send("companies.get", &GetCompany { id: company_id }).into_future(),
+)?;
+```
+
+### Sending outside a request
+
+Jobs, listeners and commands resolve the client from the app:
+
+```rust
+use navree::config::Config;
+
+let client = ctx.app.get::<ServiceClient>().await?;
+let key = ctx.app.get::<Config>().await?.get_string("services.key").unwrap_or_default();
+let totals: Vec<OwnerTotal> = client
+    .send("deals.pipeline_totals", &())
+    .header("x-service-key", key)
+    .await?;
+```
+
+`&()` sends an empty payload, for a handler that takes none.
+
+## Timeouts and deadlines
+
+Every request has a **deadline**: `micro.request_timeout_ms` (5 seconds) from the moment it is sent, or `.timeout(..)`. It travels with the message as `navree-deadline`, and both sides respect it:
+
+- **The caller** stops waiting at the deadline and gets `MicroError::Timeout`.
+- **The receiving service** drops a message whose deadline has already passed without running the handler, since nobody is waiting for the answer. A handler still running at the deadline is cut off: its unit of work rolls back, and no reply is sent. A handler's `#[timeout("2s")]` sets a shorter limit of its own.
+- **Calls made while handling a message** inherit what is left of the deadline. If `crm-api` gives `deals.move` two seconds and the deals service spends 1.5 of them before it calls `companies.get`, that call gets the remaining half second, even if its own timeout is longer. A chain of calls can't outlive the request that started it.
+
+In an HTTP handler, `http.timeout_secs` (or the route's `#[timeout]`) still bounds the whole request, so give a `send` a deadline shorter than the route's.
+
+## Errors across services
+
+`send` returns `Result<R, MicroError>`. With `?` in a handler, `MicroModule` maps each error to an `AppError`, so it reaches your client in the usual error shape:
+
+| `MicroError` | When | Becomes |
+|---|---|---|
+| `Remote(RemoteError)` with a 4xx status | The handler refused or failed the request | The same status, message and field errors |
+| `Remote(RemoteError)` with a 5xx status | The handler failed | 502 Bad Gateway |
+| `Timeout { pattern, after }` | No reply before the deadline | 504 Gateway Timeout |
+| `NoResponders { pattern }` | Nobody listens to the pattern (NATS, and transports that know) | 503 Service Unavailable |
+| `Transport(..)` | The broker is unreachable, or the connection broke | 503 Service Unavailable |
+| `Decode { pattern, .. }` | The reply doesn't decode into the type you asked for | 502 Bad Gateway |
+| `PayloadTooLarge { size, limit }` | The payload is over `micro.max_message_bytes` | 500 Internal Server Error |
+| `ShutDown` | The app is shutting down | 503 Service Unavailable |
+
+A 4xx passes through because it describes the user's request: a deal that doesn't exist is a 404 for the browser too. A 5xx doesn't, because the failure is between your services, not in what the user sent; the original error is logged by the service where it happened, under the same request id.
+
+Match on the error when a failure has a meaning for you. Here a deal that doesn't exist, or that the user may not read, isn't shown:
+
+```rust
+use navree::micro::MicroError;
+use navree::axum::http::StatusCode;
+
+let deal: Option<DealView> = match self.client.send("deals.get", &GetDeal { id }).await {
+    Ok(deal) => Some(deal),
+    Err(MicroError::Remote(error))
+        if matches!(error.status(), StatusCode::NOT_FOUND | StatusCode::FORBIDDEN) =>
+    {
+        None
+    }
+    Err(error) => return Err(error.into()),
+};
+```
+
+`RemoteError` has `status()`, `message()` (the message, or the first of several), `errors()` (the field errors of a 400) and `body()` (the whole JSON).
+
+## Retries and idempotency
+
+`send` doesn't retry by itself: a request that timed out may have run, and running it twice can be wrong. When it is safe, ask for retries:
+
+```rust
+let deal: DealView = self
+    .client
+    .send("deals.get", &GetDeal { id })
+    .timeout(Duration::from_millis(800))
+    .retries(2)
+    .await?;
+```
+
+A retry happens on a timeout, a transport failure or `NoResponders`, never on a reply (an error reply is an answer). Each attempt gets the full timeout, after a pause of 100 ms that doubles, and every attempt carries the same message id.
+
+Reads are safe to retry. For a handler that changes data, let the receiving side remember the answer: with `dedupe`, Navree stores the reply under the message id in the inbox, inside the handler's transaction, and answers a repeated id with the stored reply instead of running the handler again:
+
+```rust
+#[message_pattern("deals.move", dedupe)]
+#[can(Move, Deal, from = "id")]
+async fn move_deal(/* ... */) -> Result<DealView> {
+    // ...
+}
+```
+
+Stored replies are kept for `micro.inbox_retention_hours` (72). `dedupe` needs `DatabaseModule` and `micro.inbox` (on by default with a database).
+
+## Scaling
+
+All the instances of a service share its requests: each request goes to one of them. One process handles up to `micro.concurrency` messages at once, over every pattern. Limit a single pattern with the attribute's `concurrency` option, for a handler that is expensive or uses a scarce resource:
+
+```rust
+#[message_pattern("reports.build", concurrency = 2)]
+#[permissions("reports.build")]
+async fn build(&self, uow: Uow, Valid(Payload(input)): Valid<Payload<BuildReport>>) -> Result<ReportView> {
+    // ...
+}
+```
+
+Requests over the limit wait in the broker, not in the process, so another instance can take them.
+
+## Testing
+
+`MicroFake` gives the app an in-memory transport, sends messages into its handlers, answers the messages it sends to other services, and records everything:
+
+```rust
+use navree::micro::MicroFake;
+
+let micro = MicroFake::new();
+let app = TestApp::builder()
+    .module(MicroModule::for_root(micro.transport()))
+    // ...
+```
+
+### Testing handlers
+
+`micro.client()` sends into the app through the whole pipeline: authentication, guards, the access check, validation, the unit of work. `acting_as` authenticates the message as a test user, as `TestApp::acting_as` does for HTTP. `request` returns the reply for assertions, in the style of `TestResponse`:
+
+```rust title="services/deals/tests/move.rs"
+use crm_contracts::deals::{DealView, MoveDeal, Stage};
+use navree::micro::MicroFake;
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+use uuid::Uuid;
+
+#[tokio::test]
+async fn moving_a_deal_validates_and_checks_ownership() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(MicroModule::for_root(micro.transport()))
+        .module(DealsModule)
+        .build()
+        .await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+    let move_to = |position| MoveDeal {
+        id: deal_id,
+        stage: Stage::Proposal,
+        position,
+        lost_reason: None,
+    };
+
+    // Anonymous messages are refused.
+    micro.client()
+        .request("deals.move", &move_to(None))
+        .await
+        .assert_error(401, "Unauthorized");
+
+    // Validation runs before the handler.
+    micro.client()
+        .acting_as(principal(rep))
+        .request("deals.move", &move_to(Some(-1)))
+        .await
+        .assert_validation_error("position");
+
+    // Someone else's deal is refused.
+    micro.client()
+        .acting_as(principal(Uuid::now_v7()))
+        .request("deals.move", &move_to(None))
+        .await
+        .assert_error(403, "Forbidden");
+
+    // The owner moves it.
+    let deal: DealView = micro
+        .client()
+        .acting_as(principal(rep))
+        .send("deals.move", &move_to(Some(0)))
+        .await
+        .unwrap();
+    assert_eq!(deal.stage, Stage::Proposal);
+
+    app.shutdown().await.unwrap();
+}
+```
+
+The reply assertions are the ones HTTP tests use: `assert_status`, `assert_error`, `assert_validation_error` and `assert_json_path`, plus `json::<T>()` to decode the reply.
+
+### Stubbing other services
+
+Messages the app sends to patterns it doesn't handle itself go to the fake. Tell it how to answer with `on`; a pattern without an answer fails the call with `MicroError::NoResponders`, as on a broker where nobody listens:
+
+```rust title="services/crm-api/tests/deals.rs"
+use crm_contracts::deals::GetDeal;
+use navree::micro::{MicroFake, Reply};
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+use uuid::Uuid;
+
+#[tokio::test]
+async fn the_api_passes_deal_errors_through() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .module(MicroModule::for_root(micro.transport()))
+        .module(GatewayModule)
+        .build()
+        .await;
+    let user = app.acting_as(principal(Uuid::now_v7()));
+    let missing = Uuid::now_v7();
+
+    micro.on("deals.get", Reply::error(AppError::not_found()));
+    user.get(&format!("/api/v1/deals/{missing}"))
+        .send()
+        .await
+        .assert_error(404, "Not Found");
+
+    micro.on("deals.get", Reply::timeout());
+    user.get(&format!("/api/v1/deals/{missing}"))
+        .send()
+        .await
+        .assert_error(504, None);
+
+    micro.assert_sent("deals.get", |payload: &GetDeal| payload.id == missing);
+    micro.assert_sent_times("deals.get", 2);
+    app.shutdown().await.unwrap();
+}
+```
+
+| Answer | Behaves like |
+|---|---|
+| `Reply::json(&value)` | A handler that returned `Ok(value)`. |
+| `Reply::error(app_error)` | A handler that returned the error. |
+| `Reply::from_fn(\|payload: T\| ...)` | A handler you write inline: it receives the decoded payload and returns `Result<R, AppError>`. |
+| `Reply::timeout()` | A service that never answers: the call times out at once, without waiting for the deadline. |
+| `Reply::sequence([..])` | Each answer in turn, then the last one again: for testing retries. |
+
+A later `on` for the same pattern replaces the earlier one. `micro.sent::<T>(pattern)` returns the decoded payloads sent to a pattern, and `assert_nothing_sent()` checks that nothing went out.
+
+<LinkCards>
+  <LinkCard href="/docs/microservices/events/" title="Events">
+    Publish facts to every interested service.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control">
+    The access attributes handlers share with routes.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/tracing/" title="Distributed tracing">
+    One trace across the API and every service it calls.
+  </LinkCard>
+</LinkCards>

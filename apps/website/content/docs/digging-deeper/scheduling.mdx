@@ -1,6 +1,6 @@
 ---
 title: "Task scheduling"
-description: "Cron-style schedules declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, all in UTC."
+description: "Schedules on cron expressions, declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, all in UTC."
 ---
 
 ## Introduction
@@ -156,7 +156,7 @@ A cron expression has five fields: minute, hour, day of month, month and day of 
 
 An invalid expression, an `hourly_at` minute over 59 or a `daily_at` time that isn't a 24-hour `HH:MM` fails the boot with the task, its module and the reason. The last frequency you set wins.
 
-Laravel's other helpers (`twiceDaily`, `weekdays`, `monthlyOn` and so on) don't exist; write the cron expression instead, for example `.cron("0 9 * * MON-FRI")` for weekdays at nine.
+For any other rhythm, write the cron expression, for example `.cron("0 9 * * MON-FRI")` for weekdays at nine.
 
 ## Time zones
 
@@ -183,7 +183,7 @@ The scheduler sees a running run in its own process (an in-process lock) and on 
 
 You can run the scheduler on every server, for redundancy. Each due tick of each task is claimed in the database first, with an `INSERT … ON CONFLICT DO NOTHING` on `schedule_runs` keyed by task and minute; only the scheduler whose insert succeeds runs it, and the others report it skipped. A second `schedule:run` in the same minute skips it too.
 
-Laravel needs `onOneServer()` for this. In Navree every task already runs on one server per tick; `.on_one_server()` exists so your intent is written down, and changes nothing.
+Every task already runs on one server per tick; `.on_one_server()` exists so your intent is written down, and changes nothing.
 
 Two conditions apply: every scheduler must use the same database, and the servers' clocks must agree (keep NTP running). Ticks are whole minutes of each server's own clock, so a server whose clock is a minute off claims a different tick.
 

@@ -2,11 +2,11 @@
  * Runs before every `dev`, `build` and `typecheck` (Node strips the types;
  * no build step). It generates everything the site reads at build time:
  *
- * - `src/generated/benchmarks.json`: the benchmark results, from
- *   `bench/results/*.json` (not `env.json`), `bench/results/extra/` (the
- *   drift check and the Laravel-FPM run with default kernel settings),
- *   `bench/frameworks.json` and each implementation's README table.
- * - `public/data/bench/`: the raw result files, for download.
+ * - `src/generated/performance.json`: Navree's own benchmark results, from
+ *   `bench/results/navree.json`, the repeat run in
+ *   `bench/results/extra/navree-control.json`, `bench/results/env.json` and
+ *   the README of Navree's benchmark app (`bench/frameworks/navree`).
+ * - `public/data/bench/`: those two result files, for download.
  * - `public/data/search-index.json`: the docs search index (MiniSearch).
  *
  * It also checks that every page in `content/docs/manifest.ts` exists and
@@ -23,7 +23,7 @@ import MiniSearch from "minisearch";
 import remarkGfm from "remark-gfm";
 
 import { sections, links } from "../content/docs/manifest.ts";
-import type { BenchData, CpuSet, Framework, StackRow, TestInfo, TestKey, TestResult } from "../src/lib/bench-types.ts";
+import type { CpuSet, PerfData, StackRow, TestInfo, TestKey, TestResult } from "../src/lib/bench-types.ts";
 import { searchOptions, type SearchDoc } from "../src/lib/search-options.ts";
 
 const WEBSITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,28 +33,6 @@ const RESULTS = path.join(BENCH, "results");
 const DOCS = path.join(WEBSITE, "content/docs");
 const GENERATED = path.join(WEBSITE, "src/generated");
 const PUBLIC_DATA = path.join(WEBSITE, "public/data");
-
-/** The framework the site is about; it gets the accent in every chart. */
-const HIGHLIGHT = "navree";
-
-/** The five tests, as `bench/run.mjs` and `bench/report.mjs` name them. */
-const TESTS: TestInfo[] = [
-  { key: "json", label: "JSON", path: "GET /json", what: "Serialize a small object: routing and HTTP overhead only." },
-  { key: "db", label: "Single query", path: "GET /db", what: "One random row by primary key." },
-  { key: "queries", label: "20 queries", path: "GET /queries?queries=20", what: "20 separate random-row queries per request." },
-  {
-    key: "deals_list",
-    label: "Auth + paginated list",
-    path: "GET /api/deals",
-    what: "JWT check, user lookup, a count and one page of 20 deals with their owners.",
-  },
-  {
-    key: "deals_create",
-    label: "Auth + validated insert",
-    path: "POST /api/deals",
-    what: "JWT check, user lookup, body validation and an INSERT … RETURNING.",
-  },
-];
 
 // ------------------------------------------------------------------ helpers
 
@@ -127,36 +105,93 @@ function parseReadme(file: string): ReadmeInfo {
 }
 
 /**
- * The stack details of `name` from its README: the rows of the tables whose
- * first header cell is empty (`| | |`). A table with one column per variant
- * (Laravel: Octane and FPM) contributes the column whose header names it.
+ * The stack details from a README: the rows of the tables whose first
+ * header cell is empty (`| | |`).
  */
-function stackRows(readme: ReadmeInfo, name: string): StackRow[] {
+function stackRows(readme: ReadmeInfo): StackRow[] {
   const rows: StackRow[] = [];
   for (const table of readme.tables) {
     if (table.header[0] !== "") continue;
-    let column = 1;
-    if (table.header.length > 2) {
-      const found = table.header.findIndex((h, i) => i > 0 && h.includes(name));
-      if (found === -1) continue;
-      column = found;
-    }
     for (const row of table.rows) {
       const label = row[0]?.replace(/\*\*/g, "");
-      const value = row[column];
+      const value = row[1];
       if (label && value) rows.push({ label, html: inlineMarkdown(value) });
     }
   }
   return rows;
 }
 
-// --------------------------------------------------------------- benchmarks
+// -------------------------------------------------------------- performance
+
+/**
+ * The site shows Navree's own measurements only. `bench/` also holds the
+ * harness's other implementations and their results (internal engineering
+ * data); none of it is read here, copied or shipped.
+ */
+const SUBJECT = "navree";
+
+/** The machine, as `bench/results/method-notes.html` records it. */
+const MACHINE = {
+  cpu: "Intel Core Ultra 9 275HX",
+  host: "Docker Desktop on WSL2",
+  network: "one Docker bridge network",
+};
+
+/** The source the performance page shows: the code being measured. */
+const CODE_FILES = ["src/deals/controller.rs", "src/deals/dto.rs"];
+
+/** The app container's memory limit, from `startApp` in `bench/run.mjs`. */
+const APP_MEM_GB = 4;
+
+/** The five tests, as `bench/run.mjs` names them, with the request wrk sends. */
+const TESTS: TestInfo[] = [
+  {
+    key: "json",
+    label: "JSON",
+    path: "GET /json",
+    request: "GET /json",
+    what: "Serialize a small object per request: routing and the HTTP pipeline, no database.",
+    realistic: false,
+  },
+  {
+    key: "db",
+    label: "Single query",
+    path: "GET /db",
+    request: "GET /db",
+    what: "Read one random row by primary key from the connection pool.",
+    realistic: false,
+  },
+  {
+    key: "queries",
+    label: "20 queries",
+    path: "GET /queries",
+    request: "GET /queries?queries=20",
+    what: "Twenty separate single-row reads, one after another.",
+    realistic: false,
+  },
+  {
+    key: "deals_list",
+    label: "Auth + paginated list",
+    path: "GET /api/deals",
+    request: "GET /api/deals?page=1…50&per_page=20",
+    what: "Verify the JWT, load the user, validate the query, count the deals and load a page of 20 with their owners.",
+    realistic: true,
+  },
+  {
+    key: "deals_create",
+    label: "Auth + validated insert",
+    path: "POST /api/deals",
+    request: "POST /api/deals",
+    what: "Verify the JWT, load the user, validate the body and insert the deal with INSERT … RETURNING.",
+    realistic: true,
+  },
+];
 
 type RawTest = {
   rps: number;
   requests: number;
   errors: number;
-  latency_ms: { mean: number; p50: number; p90: number; p99: number; p999: number; max: number };
+  latency_ms: { mean: number; p50: number; p75: number; p90: number; p99: number; p999: number; max: number };
   peak_mem_mb: number;
   avg_cpu_pct: number;
   pg_avg_cpu_pct: number;
@@ -168,8 +203,8 @@ type RawResult = {
   name: string;
   label: string;
   language: string;
-  category: "full-stack" | "micro";
   started_at: string;
+  finished_at?: string;
   settings: {
     runs: number;
     duration_s: number;
@@ -185,16 +220,6 @@ type RawResult = {
   tests: Partial<Record<TestKey, RawTest>>;
 };
 
-type FrameworkEntry = {
-  name: string;
-  label: string;
-  language: string;
-  category: "full-stack" | "micro";
-  context?: string;
-  dockerfile?: string;
-  note?: string;
-};
-
 function testResult(raw: RawTest): TestResult {
   return {
     rps: raw.rps,
@@ -203,6 +228,7 @@ function testResult(raw: RawTest): TestResult {
     latencyMs: {
       mean: raw.latency_ms.mean,
       p50: raw.latency_ms.p50,
+      p75: raw.latency_ms.p75,
       p90: raw.latency_ms.p90,
       p99: raw.latency_ms.p99,
       p999: raw.latency_ms.p999,
@@ -216,105 +242,51 @@ function testResult(raw: RawTest): TestResult {
   };
 }
 
-/** The implementation's directory, relative to the repository. */
-function sourceDir(entry: FrameworkEntry): string {
-  if (entry.dockerfile) return path.posix.join("bench", path.posix.dirname(entry.dockerfile));
-  if (entry.context && entry.context !== "..") return path.posix.join("bench", entry.context);
-  return path.posix.join("bench/frameworks", entry.name);
-}
-
-function copyRaw(file: string, relative: string, downloads: BenchData["downloads"]): string {
-  const target = path.join(PUBLIC_DATA, "bench", relative);
+function copyRaw(file: string, name: string, what: string, downloads: PerfData["downloads"]): string {
+  const target = path.join(PUBLIC_DATA, "bench", name);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(file, target);
-  const href = `/data/bench/${relative.split(path.sep).join("/")}`;
-  downloads.push({ file: relative.split(path.sep).join("/"), href, bytes: fs.statSync(file).size });
+  const href = `/data/bench/${name}`;
+  downloads.push({ file: name, href, bytes: fs.statSync(file).size, what });
   return href;
 }
 
-function buildBenchmarks(): BenchData {
-  const entries = readJson<FrameworkEntry[]>(path.join(BENCH, "frameworks.json"));
+function buildPerformance(): PerfData {
+  // Start clean, so nothing but Navree's files is ever served.
   fs.rmSync(path.join(PUBLIC_DATA, "bench"), { recursive: true, force: true });
+  fs.rmSync(path.join(GENERATED, "benchmarks.json"), { force: true });
 
-  const downloads: BenchData["downloads"] = [];
-  const frameworks: Framework[] = [];
-  const missing: BenchData["missing"] = [];
-  let settings: BenchData["settings"] | null = null;
+  const file = path.join(RESULTS, `${SUBJECT}.json`);
+  if (!fs.existsSync(file)) fail(`no ${SUBJECT}.json in ${RESULTS}`);
+  const raw = readJson<RawResult>(file);
 
-  for (const entry of entries) {
-    const file = path.join(RESULTS, `${entry.name}.json`);
-    if (!fs.existsSync(file)) {
-      missing.push({ name: entry.name, label: entry.label });
-      continue;
-    }
-    const raw = readJson<RawResult>(file);
-    const rawHref = copyRaw(file, `${entry.name}.json`, downloads);
-    const results: Framework["results"] = {};
-    for (const test of TESTS) {
-      const t = raw.tests?.[test.key];
-      if (t) results[test.key] = testResult(t);
-    }
-    const peaks = Object.values(results).map((r) => r.peakMemMb);
-    const conformance = /(\d+) checks passed, (\d+) failed/.exec(raw.conformance?.output ?? "");
-    const dir = sourceDir(entry);
-    const readme = parseReadme(path.join(REPO, dir, "README.md"));
-    frameworks.push({
-      name: entry.name,
-      label: entry.label,
-      language: entry.language,
-      category: entry.category,
-      note: entry.note ?? null,
-      startupMs: raw.startup_ms,
-      idleMemMb: raw.idle_mem_mb,
-      imageMb: raw.image_mb,
-      peakMemMb: peaks.length ? Math.max(...peaks) : 0,
-      conformance: {
-        ok: Boolean(raw.conformance?.ok),
-        passed: conformance ? Number(conformance[1]) : null,
-        failed: conformance ? Number(conformance[2]) : null,
-        output: raw.conformance?.output ?? "",
-      },
-      results,
-      startedAt: raw.started_at,
-      stack: stackRows(readme, entry.name),
-      sourceDir: dir,
-      readmeTitle: readme.title || entry.label,
-      rawHref,
-    });
-    if (entry.name === HIGHLIGHT || !settings) {
-      const s = raw.settings;
-      settings = {
-        runs: s.runs,
-        durationS: s.duration_s,
-        warmupS: s.warmup_s,
-        connections: s.connections,
-        threads: s.threads,
-        ncpu: s.cpus.ncpu,
-        app: cpuSet(s.cpus.app),
-        pg: cpuSet(s.cpus.pg),
-        load: cpuSet(s.cpus.load),
-      };
-    }
+  const downloads: PerfData["downloads"] = [];
+  const rawHref = copyRaw(file, `${SUBJECT}.json`, "The measured run: every test, all three runs", downloads);
+
+  const results = {} as PerfData["results"];
+  for (const test of TESTS) {
+    const t = raw.tests?.[test.key];
+    if (!t) fail(`${SUBJECT}.json has no result for ${test.key}`);
+    results[test.key] = testResult(t);
   }
 
-  if (!settings) fail(`no benchmark results in ${RESULTS}`);
-  if (!frameworks.some((f) => f.name === HIGHLIGHT)) fail(`no ${HIGHLIGHT}.json in ${RESULTS}`);
+  const s = raw.settings;
+  const conformance = /(\d+) checks passed, (\d+) failed/.exec(raw.conformance?.output ?? "");
+  const sourceDir = `bench/frameworks/${SUBJECT}`;
+  const env = path.join(RESULTS, "env.json");
+  const docker = fs.existsSync(env) ? (readJson<{ docker?: string }>(env).docker ?? null) : null;
 
-  // The drift check: the highlighted framework measured first and last.
-  const extra = path.join(RESULTS, "extra");
-  let drift: BenchData["drift"] = null;
-  const firstFile = path.join(extra, `${HIGHLIGHT}-run1.json`);
-  const secondFile = path.join(extra, `${HIGHLIGHT}-control.json`);
-  if (fs.existsSync(firstFile) && fs.existsSync(secondFile)) {
-    const first = readJson<RawResult>(firstFile);
-    const second = readJson<RawResult>(secondFile);
-    copyRaw(firstFile, path.join("extra", path.basename(firstFile)), downloads);
-    copyRaw(secondFile, path.join("extra", path.basename(secondFile)), downloads);
-    drift = {
-      firstAt: first.started_at,
-      secondAt: second.started_at,
+  // The same tests measured again at the end of the session (the drift check).
+  let repeat: PerfData["repeat"] = null;
+  const repeatFile = path.join(RESULTS, "extra", `${SUBJECT}-control.json`);
+  if (fs.existsSync(repeatFile)) {
+    const second = readJson<RawResult>(repeatFile);
+    repeat = {
+      startedAt: second.started_at,
+      minutesLater: Math.round((Date.parse(second.started_at) - Date.parse(raw.started_at)) / 60000),
+      rawHref: copyRaw(repeatFile, `${SUBJECT}-repeat.json`, "The same tests, measured again later in the session", downloads),
       tests: TESTS.flatMap((test) => {
-        const a = first.tests[test.key];
+        const a = raw.tests[test.key];
         const b = second.tests[test.key];
         if (!a || !b) return [];
         return [{ key: test.key, first: a.rps, second: b.rps, deltaPct: ((b.rps - a.rps) / a.rps) * 100 }];
@@ -322,24 +294,47 @@ function buildBenchmarks(): BenchData {
     };
   }
 
-  // Laravel on PHP-FPM with Docker's default sysctls (before tcp_tw_reuse).
-  let fpmDefault: BenchData["fpmDefault"] = null;
-  const fpmFile = path.join(extra, "laravel-fpm-default-sysctls.json");
-  if (fs.existsSync(fpmFile)) {
-    const fpm = readJson<RawResult>(fpmFile);
-    fpmDefault = {
-      label: fpm.label,
-      rawHref: copyRaw(fpmFile, path.join("extra", path.basename(fpmFile)), downloads),
-      tests: TESTS.flatMap((test) => {
-        const t = fpm.tests[test.key];
-        if (!t) return [];
-        const total = t.requests || 1;
-        return [{ key: test.key, rps: t.rps, requests: t.requests, errors: t.errors, errorPct: (t.errors / total) * 100 }];
-      }),
-    };
-  }
-
-  return { highlight: HIGHLIGHT, settings, tests: TESTS, frameworks, missing, drift, fpmDefault, downloads };
+  return {
+    label: raw.label,
+    language: raw.language,
+    startedAt: raw.started_at,
+    finishedAt: raw.finished_at ?? null,
+    docker,
+    machine: MACHINE,
+    settings: {
+      runs: s.runs,
+      durationS: s.duration_s,
+      warmupS: s.warmup_s,
+      connections: s.connections,
+      threads: s.threads,
+      ncpu: s.cpus.ncpu,
+      app: cpuSet(s.cpus.app),
+      pg: cpuSet(s.cpus.pg),
+      load: cpuSet(s.cpus.load),
+      appMemGb: APP_MEM_GB,
+    },
+    tests: TESTS,
+    results,
+    startupMs: raw.startup_ms,
+    idleMemMb: raw.idle_mem_mb,
+    imageMb: raw.image_mb,
+    peakMemMb: Math.max(...Object.values(results).map((r) => r.peakMemMb)),
+    conformance: {
+      ok: Boolean(raw.conformance?.ok),
+      passed: conformance ? Number(conformance[1]) : null,
+      failed: conformance ? Number(conformance[2]) : null,
+    },
+    stack: stackRows(parseReadme(path.join(REPO, sourceDir, "README.md"))),
+    sourceDir,
+    code: CODE_FILES.map((file) => {
+      const full = path.join(REPO, sourceDir, file);
+      if (!fs.existsSync(full)) fail(`${sourceDir}/${file} is missing`);
+      return { file, source: fs.readFileSync(full, "utf8").replace(/\r\n/g, "\n") };
+    }),
+    rawHref,
+    repeat,
+    downloads,
+  };
 }
 
 // --------------------------------------------------------------------- docs
@@ -414,7 +409,7 @@ function chunks(content: string): { heading: string; id: string; text: string }[
     .filter((c, i) => i > 0 || c.text);
 }
 
-function buildDocs(bench: BenchData): SearchDoc[] {
+function buildDocs(perf: PerfData): SearchDoc[] {
   const docs: SearchDoc[] = [];
   const problems: string[] = [];
   const listed = new Set<string>();
@@ -469,24 +464,27 @@ function buildDocs(bench: BenchData): SearchDoc[] {
 
   if (problems.length) fail(`the docs have problems:\n  - ${problems.join("\n  - ")}`);
 
-  // The benchmarks page is in the sidebar, so it is searchable too.
-  const benchmarks = links.find((l) => l.href.startsWith("/benchmarks"));
-  if (benchmarks) {
-    const sectionsOfBenchmarks: [string, string, string][] = [
-      ["", "", `How Navree compares with ${bench.frameworks.length - 1} other web frameworks on the same API and machine: throughput, latency, memory and startup.`],
-      ["results", "Results", "Requests per second for every framework and test, ranked. JSON, single query, 20 queries, auth + paginated list, auth + validated insert."],
-      ["latency", "Latency", "p99 latency per test for every framework."],
-      ["memory-and-startup", "Memory and startup", "Peak memory under load, idle memory, image size and startup time."],
-      ["all-results", "All results", "The full results table: requests per second and p99 latency for every test."],
-      ["stacks", "The stacks", "Versions, server and workers, database library and pool, JWT and validation of each implementation."],
-      ["methodology", "Methodology", "The API contract, the conformance gate, fairness rules, CPU pinning, warmup and runs, the drift check."],
-      ["caveats", "Caveats", "Load-generator limits, database-bound tests, Laravel PHP-FPM port exhaustion, wrk clock fix."],
-      ["where-navree-is-slower", "Where Navree is slower", "Where Navree loses time per request and why: pool pings, set_config, task spawning, locks."],
-      ["reproduce", "Reproduce it yourself", "Commands to run the benchmark, the source of each implementation and the raw JSON."],
+  // The performance page is in the sidebar, so it is searchable too.
+  const performancePage = links.find((l) => l.href.startsWith("/performance"));
+  if (performancePage) {
+    const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+    const r = perf.results;
+    const sectionsOfPerformance: [string, string, string][] = [
+      [
+        "",
+        "",
+        `Navree's own measurements on a CRM-style API: ${fmt(r.deals_list.rps)} authenticated paginated lists and ${fmt(r.deals_create.rps)} validated inserts a second on ${perf.settings.app.count} CPUs, ${fmt(perf.peakMemMb)} MB peak memory, ready in ${fmt(perf.startupMs)} ms.`,
+      ],
+      ["results", "Results", "Requests per second, p50 and p99 latency, peak memory and CPU for each test: JSON, single query, 20 queries, auth + paginated list, auth + validated insert."],
+      ["workload", "The workload", "The benchmark API: JWT authentication, validation, a paginated list with owners, inserts, single and multiple queries, plain JSON. The request pipeline every request goes through."],
+      ["method", "The machine and the method", "Docker containers with fixed CPUs for the app, PostgreSQL and wrk; warm-up and measured runs; wrk on the monotonic clock; the conformance test; the repeat run."],
+      ["efficiency", "What makes it efficient", "One binary, Tokio, Axum and Hyper, pooled PostgreSQL connections, no garbage collector."],
+      ["next", "What we are optimizing next", "Per-request overhead in Navree: pool pings, set_config round trips, a task per request, locks, metrics labels, the user lookup, JSON parsing, change events."],
+      ["reproduce", "Reproduce it", "The commands to run the benchmark yourself with Docker and Node.js, and the raw result files."],
     ];
-    for (const [id, heading, text] of sectionsOfBenchmarks) {
-      const href = id ? `${benchmarks.href}#${id}` : benchmarks.href;
-      docs.push({ id: href, href, page: benchmarks.title, section: "Benchmarks", heading, text });
+    for (const [id, heading, text] of sectionsOfPerformance) {
+      const href = id ? `${performancePage.href}#${id}` : performancePage.href;
+      docs.push({ id: href, href, page: performancePage.title, section: "Performance", heading, text });
     }
   }
   return docs;
@@ -527,17 +525,17 @@ function buildCrates(): CrateInfo[] {
 // --------------------------------------------------------------------- main
 
 const started = performance.now();
-const bench = buildBenchmarks();
-writeFile(path.join(GENERATED, "benchmarks.json"), JSON.stringify(bench, null, 2));
+const perf = buildPerformance();
+writeFile(path.join(GENERATED, "performance.json"), JSON.stringify(perf, null, 2));
 const crates = buildCrates();
 writeFile(path.join(GENERATED, "crates.json"), JSON.stringify(crates, null, 2));
 
-const docs = buildDocs(bench);
+const docs = buildDocs(perf);
 const index = new MiniSearch<SearchDoc>(searchOptions);
 index.addAll(docs);
 writeFile(path.join(PUBLIC_DATA, "search-index.json"), JSON.stringify(index));
 
 console.log(
-  `prebuild: ${bench.frameworks.length} benchmark results, ${bench.downloads.length} raw files, ${crates.length} crates, ` +
+  `prebuild: performance data, ${perf.downloads.length} raw files, ${crates.length} crates, ` +
     `${docs.length} search entries (${Math.round(performance.now() - started)} ms)`,
 );

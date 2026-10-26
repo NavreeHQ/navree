@@ -14,7 +14,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ```text
 L7  apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L6  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
-L5  navree-auth
+L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
@@ -28,7 +28,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
-| L2 | `navree-http` | Axum integration, default Tower layers, NestJS-format errors, controllers, rate limits, trusted proxies |
+| L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
@@ -43,13 +43,14 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF |
-| L4 | `navree-validation` | `Valid<T>` extractors on garde, class-validator style messages, async rules |
+| L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async rules |
 | L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
-| L4 | `navree-access` | Roles, permissions and CASL-compatible abilities, record checks, SQL list filters |
-| L4 | `navree-schedule` | Cron-style schedules, overlap prevention, single-node runs |
+| L4 | `navree-access` | Roles, permissions and abilities, record checks, SQL list filters |
+| L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
+| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
 | L6 | `navree` | The facade: re-exports every module crate and the macros |
 | L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
 
@@ -72,6 +73,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-access` | kernel, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
+| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | No Navree crate: everything it knows about the framework is in the code it generates |
 

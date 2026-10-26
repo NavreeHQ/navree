@@ -1,0 +1,427 @@
+---
+title: "Social sign-in"
+description: "Sign people in with Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord or any OpenID Connect provider, link the accounts to Navree users and issue normal Navree tokens."
+status: "planned"
+---
+
+## Introduction
+
+<Badge feature="social" /> Many people would rather click "Continue with Google" than invent another password. `navree-social` adds that button to your app without changing how the rest of it works: a social sign-in ends with the same Navree user and the same access and refresh tokens as a [password login](/docs/security/authentication/), so every route, permission and audit entry behaves as before.
+
+It covers the whole flow:
+
+- **Providers:** Google, GitHub, Apple, Microsoft, GitLab (including self-hosted), Slack, LinkedIn and Discord built in, any OpenID Connect provider by its issuer URL, and your own through a trait.
+- **A safe redirect:** the state parameter is sealed with your application key and carries a PKCE verifier and, for OpenID Connect, a nonce. It expires after 10 minutes and works once.
+- **Linked accounts:** one user can sign in with a password, GitHub and Google. Accounts are linked automatically only when the provider has verified the email address.
+- **Navree tokens:** the callback answers exactly like `POST /api/auth/login`, two-factor challenge included.
+- **Provider tokens** (optional), encrypted at rest and refreshed for you, for apps that call the provider's API later, such as syncing meetings from Google Calendar into CRM activities.
+
+## Installation
+
+Turn on the `social` feature of the `navree` facade:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["social"] }
+```
+
+Add `SocialModule` after `AuthModule`. It calls the providers through the [HTTP client](/docs/digging-deeper/http-client/), so include `HttpClientModule`:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config())      // seals states, encrypts tokens
+    .module(HttpModule::from_config())
+    .module(HttpClientModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(CacheModule::from_config())       // remembers used states
+    .module(AuthModule::from_config())
+    .module(SocialModule::from_config())      // section `social`
+    // ...
+```
+
+The module contributes the migration set `social` (after `auth`), which creates `social_accounts`: one row per linked provider account, with the user, the provider, the provider's user id, the email and name it reported, and the encrypted provider tokens when you store them.
+
+## Configuration
+
+Register an OAuth app with each provider, then list the providers in the `social` section. Each provider's callback URL is `{redirect_base}/{provider}`; register that exact URL with the provider:
+
+```toml title="config/app.toml"
+[social]
+redirect_base = "https://app.acme.test/auth/callback"  # the front end's page
+link_by_email = "verified"                             # verified | never
+
+[social.providers.github]
+client_id = "Iv1.8a61f9b3a7aba766"
+
+[social.providers.google]
+client_id = "481203-k2l9.apps.googleusercontent.com"
+hosted_domain = "acme.test"   # optional: only this Google Workspace
+
+[social.providers.microsoft]
+client_id = "0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f"
+tenant = "organizations"      # common | organizations | consumers | <tenant id>
+```
+
+Client secrets go in `.env`:
+
+```env title=".env"
+APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET=4f1c0e7b9a...
+APP_SOCIAL__PROVIDERS__GOOGLE__CLIENT_SECRET=GOCSPX-7Hk2...
+APP_SOCIAL__PROVIDERS__MICROSOFT__CLIENT_SECRET=Q8a8Q~mX2...
+```
+
+A provider without a `client_id`, an unknown provider type or a `redirect_base` that isn't an absolute URL fails the boot, naming the key. `SocialModule::for_root(SocialOptions { .. })` takes the same options in code.
+
+### Providers
+
+| Key | Provider | Notes |
+|---|---|---|
+| `google` | Google | OpenID Connect. `hosted_domain` limits sign-in to one Google Workspace domain. |
+| `github` | GitHub | Reads the primary verified email from the emails API. |
+| `apple` | Sign in with Apple | Needs `team_id`, `key_id` and `private_key` (the `.p8` key); Navree signs the client secret JWT for you. Apple sends the name only on the first sign-in, and Navree stores it then. |
+| `microsoft` | Microsoft Entra ID and personal accounts | `tenant` picks who may sign in. |
+| `gitlab` | GitLab | `url` for a self-hosted instance (default `https://gitlab.com`). |
+| `slack` | Slack | OpenID Connect; `team` limits sign-in to one workspace. |
+| `linkedin` | LinkedIn | OpenID Connect. |
+| `discord` | Discord | Only verified emails link accounts. |
+
+Any other OpenID Connect provider (Okta, Auth0, Keycloak, Zitadel, your company's SSO) works by its issuer. Navree reads its discovery document at boot:
+
+```toml
+[social.providers.okta]
+type = "oidc"
+name = "Okta"                        # shown in errors and in the accounts list
+issuer = "https://acme.okta.com"
+client_id = "0oa8f2kq1xYz3AbC4d5e"
+scopes = ["openid", "profile", "email", "groups"]
+```
+
+Each provider asks for the scopes it needs to read a name and an email. Add more with `scopes`; they are requested in addition to the defaults.
+
+## How the flow works
+
+<Diagram name="backend-for-frontend" />
+
+Navree's auth is token-based and a browser app keeps the tokens in its [backend-for-frontend](/docs/patterns/backend-for-frontend/) (BFF), so a social sign-in runs through the BFF too:
+
+1. The sign-in page links to a BFF route, say `/auth/social/github`. The BFF calls `GET /api/auth/social/github/redirect`, stores the returned `state` in a short-lived httpOnly cookie and redirects the browser to `url`.
+2. The user approves at GitHub, and GitHub sends the browser to `https://app.acme.test/auth/callback/github?code=...&state=...`.
+3. The BFF's callback page checks that the `state` in the URL equals the one in its cookie. That check binds the flow to this browser, so nobody can sign a victim into the attacker's account.
+4. The BFF posts `{code, state}` to `POST /api/auth/social/github/callback` and gets the same answer as a login: it stores the tokens in its cookies, as it does for a password login, and sends the browser on to the app.
+
+The first call:
+
+```http
+GET /api/auth/social/github/redirect?return_to=/deals HTTP/1.1
+```
+
+```json wrap
+{
+  "url": "https://github.com/login/oauth/authorize?client_id=Iv1.8a61f9b3a7aba766&redirect_uri=https%3A%2F%2Fapp.acme.test%2Fauth%2Fcallback%2Fgithub&scope=read%3Auser+user%3Aemail&state=nvs1.Bq2...&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256",
+  "state": "nvs1.Bq2..."
+}
+```
+
+The callback:
+
+```http
+POST /api/auth/social/github/callback HTTP/1.1
+Content-Type: application/json
+
+{ "code": "6f0a3d1e9b2c8f7a4e5d", "state": "nvs1.Bq2..." }
+```
+
+```json
+{
+  "user": { "__type": "User", "id": "01a17748-e211-72fc-abb3-836e604457d0", "name": "Ada Lovelace", "email": "ada@example.com", "email_verified_at": "2026-10-26T08:17:07Z", "created_at": "2026-10-26T08:17:07Z" },
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4Fa...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "return_to": "/deals"
+}
+```
+
+`return_to` comes back from the sealed state, and only relative paths are accepted, so it can't send the browser to another site. A native or mobile app that holds its own tokens follows the same two calls, with its own redirect URI and its own state check.
+
+## Linking accounts
+
+When someone signs in with a provider, Navree looks for their user in this order:
+
+1. **A linked account.** A `social_accounts` row for this provider and provider user id signs in its user.
+2. **The same verified email.** With `link_by_email = "verified"` (the default), a user whose email matches an email the provider has **verified** gets the account linked, and is signed in. An unverified email never links: anyone can type any address into some providers.
+3. **A new user.** With `social.registration` on (it defaults to `auth.registration`), Navree creates the user with the provider's name and email, marks the email as verified when the provider did, links the account and signs them in. The user has no password until they set one through [password reset](/docs/security/account-flows/#password-reset).
+4. **Otherwise** the callback answers 409, so the person signs in with their password and connects the provider from their settings:
+
+```json
+{ "statusCode": 409, "message": "An account with this email already exists. Sign in, then connect GitHub in your settings.", "error": "Conflict" }
+```
+
+With registration off and no matching user, the answer is 403 `Registration is closed`. Restrict who may sign up through a provider with `allowed_email_domains = ["acme.test"]`, per provider or for the whole section.
+
+### Two-factor authentication
+
+A user with [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) gets the same challenge from the callback as from a password login (`two_factor_required`, `challenge_token`), and finishes with `POST /api/auth/2fa/verify`. Set `social.two_factor = "skip"` to trust the provider's own second factor instead.
+
+### Connecting and disconnecting providers
+
+Signed-in users manage their providers with three routes:
+
+| Route | Does |
+|---|---|
+| `GET /api/auth/social/accounts` | The user's linked accounts: provider, email, name, avatar URL, `linked_at` |
+| `POST /api/auth/social/{provider}/link` | `{code, state}` from a flow started with `GET .../redirect?intent=link`; links the account to the signed-in user (201) |
+| `DELETE /api/auth/social/accounts/{provider}` | Disconnects the provider (204) |
+
+Linking an account that already belongs to another user is a 409. Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too, so nobody locks themselves out.
+
+## Using the Social service
+
+The routes are built on the `Social` service. Use it directly when you want your own routes, a different response or extra checks:
+
+```rust title="src/modules/sso/controller.rs"
+use navree::auth::{ClientMeta, LoginOutcome};
+use navree::prelude::*;
+use navree::social::{Social, SocialCallback, SocialRedirect};
+
+#[injectable]
+pub struct SsoController {
+    social: Arc<Social>,
+}
+
+#[controller("/sso", version = "1")]
+impl SsoController {
+    /// `GET /api/v1/sso/okta`: where to send the browser.
+    #[get("/okta")]
+    #[public]
+    async fn redirect(&self) -> Result<Json<SocialRedirect>> {
+        Ok(Json(self.social.redirect("okta").await?))
+    }
+
+    /// `POST /api/v1/sso/okta`: `{code, state}` from the callback page.
+    #[post("/okta")]
+    #[public]
+    async fn callback(
+        &self,
+        meta: ClientMeta,
+        Json(callback): Json<SocialCallback>,
+    ) -> Result<Json<serde_json::Value>> {
+        let profile = self.social.user("okta", &callback).await?;
+        let groups = profile.raw["groups"].as_array().cloned().unwrap_or_default();
+        if !groups.iter().any(|g| g == "crm-users") {
+            return Err(AppError::forbidden().with_detail("Ask IT for access to the CRM"));
+        }
+        match self.social.sign_in(&profile, &meta).await? {
+            LoginOutcome::Authenticated { user, tokens } => Ok(Json(serde_json::json!({
+                "user_id": user.id,
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+            }))),
+            LoginOutcome::TwoFactorRequired { challenge_token, .. } => Ok(Json(serde_json::json!({
+                "two_factor_required": true,
+                "challenge_token": challenge_token,
+            }))),
+        }
+    }
+}
+```
+
+| Method | What it does |
+|---|---|
+| `redirect(provider)` | The provider's authorization URL and the sealed `state` |
+| `redirect_with(provider, RedirectOptions { scopes, params, return_to, intent })` | The same with extra scopes, extra query parameters (`prompt=consent`) and a return path |
+| `user(provider, &callback)` | Checks the state, exchanges the code and returns the `SocialUser` |
+| `sign_in(&social_user, &meta)` | Finds, links or creates the user and issues tokens: a `LoginOutcome` |
+| `link(&uow, user_id, &social_user)`, `unlink(&uow, user_id, provider)` | Connects or disconnects a provider |
+| `accounts(user_id)` | The user's linked accounts |
+| `find_user(provider, provider_user_id)` | The linked user, if any |
+| `token(user_id, provider)` | A current provider access token (see below) |
+
+`SocialUser` has `provider`, `id` (the provider's user id), `name`, `email`, `email_verified`, `avatar_url`, `nickname`, `token` and `raw`, the provider's whole profile as JSON.
+
+## Calling the provider's API later
+
+To call the provider on the user's behalf after sign-in (read their Google Calendar, post to their Slack), ask for the scopes and store the tokens:
+
+```toml
+[social]
+store_tokens = true
+
+[social.providers.google]
+client_id = "481203-k2l9.apps.googleusercontent.com"
+scopes = ["https://www.googleapis.com/auth/calendar.readonly"]
+# Ask Google for a refresh token:
+params = { access_type = "offline", prompt = "consent" }
+```
+
+Tokens are encrypted with the application key before they're written to `social_accounts`. `token` returns a current access token, refreshing it first when it has expired:
+
+```rust
+let google = social.token(user.id, "google").await?; // Secret<String>
+let events = http
+    .get("https://www.googleapis.com/calendar/v3/calendars/primary/events")
+    .bearer(google.expose())
+    .send()
+    .await?;
+```
+
+When the provider refuses the refresh (the user revoked access), `token` returns `SocialError::Reauthorize`, and the account stays linked for sign-in.
+
+## Your own provider
+
+A provider that speaks neither OAuth 2.0 with a standard profile endpoint nor OpenID Connect gets a `SocialProvider` implementation. Implement the two steps, then register it under a key:
+
+```rust title="src/modules/sso/zoho.rs"
+use navree::BoxFuture;
+use navree::social::{
+    AuthorizeUrl, ProviderConfig, ProviderToken, SocialError, SocialProvider, SocialUser,
+};
+
+#[injectable]
+pub struct Zoho {
+    http: Arc<navree::http_client::HttpClient>,
+}
+
+impl SocialProvider for Zoho {
+    fn authorize_url(&self, config: &ProviderConfig, url: AuthorizeUrl) -> AuthorizeUrl {
+        url.endpoint("https://accounts.zoho.com/oauth/v2/auth").scopes(["AaaServer.profile.Read"])
+    }
+
+    fn user<'a>(
+        &'a self,
+        config: &'a ProviderConfig,
+        token: ProviderToken,
+    ) -> BoxFuture<'a, Result<SocialUser, SocialError>> {
+        Box::pin(async move {
+            let profile: serde_json::Value = self
+                .http
+                .get("https://accounts.zoho.com/oauth/user/info")
+                .bearer(token.access_token.expose())
+                .send()
+                .await?
+                .json()?;
+            Ok(SocialUser::new("zoho", profile["ZUID"].to_string())
+                .name(profile["Display_Name"].as_str().unwrap_or_default())
+                .email(profile["Email"].as_str(), true)
+                .token(token)
+                .raw(profile))
+        })
+    }
+}
+```
+
+Register it with `SocialModule::for_feature::<Zoho>()` and configure it as `[social.providers.zoho]` with `type = "custom"` and `token_url`. Navree still does the state, PKCE, code exchange, linking and token issuing.
+
+## Events and audit entries
+
+| Event | `NAME` | When |
+|---|---|---|
+| `SocialAccountLinked` | `social.linked` | A provider account was linked, at sign-in or from settings |
+| `SocialAccountUnlinked` | `social.unlinked` | A provider account was disconnected |
+
+With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider`, new users as `auth.register` with `metadata.provider`, and links as `social.linked` and `social.unlinked`. Provider tokens are never recorded.
+
+## Testing
+
+`Social::fake()` returns a `Social` that never calls a provider, and a `SocialFake` that decides what each code returns. States are still sealed and checked, so your tests go through the same steps as production:
+
+```rust title="tests/social.rs"
+use navree::prelude::*;
+use navree::social::{Social, SocialUser};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn a_new_github_user_gets_an_account_and_tokens() {
+    let (social, fake) = Social::fake();
+    fake.on_code(
+        "github",
+        "code-ada",
+        SocialUser::new("github", "583231")
+            .name("Ada Lovelace")
+            .email(Some("ada@example.com"), true),
+    );
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", navree::crypto::generate_key())
+        .config("social.redirect_base", "https://app.acme.test/auth/callback")
+        .config("social.providers.github.client_id", "test")
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(SocialModule::from_config())
+        .override_value(Arc::new(social))
+        .build()
+        .await;
+
+    let redirect = app
+        .client()
+        .get("/api/auth/social/github/redirect")
+        .send()
+        .await
+        .assert_status(200);
+    let state = redirect.json_value()["state"].as_str().unwrap().to_owned();
+
+    app.client()
+        .post("/api/auth/social/github/callback")
+        .json(&json!({ "code": "code-ada", "state": state }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("ada@example.com"));
+
+    // The state works once.
+    app.client()
+        .post("/api/auth/social/github/callback")
+        .json(&json!({ "code": "code-ada", "state": state }))
+        .send()
+        .await
+        .assert_error(400, "Invalid or expired state");
+}
+```
+
+`fake.on_code(provider, code, user)` answers a code with a profile, `fake.on_code_error(provider, code, error)` with a provider error, and `fake.exchanged()` lists the codes exchanged. To test a provider integration itself, keep the real `Social` and stub the provider's endpoints with [`HttpClient::fake()`](/docs/digging-deeper/http-client/).
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `social.redirect_base` | none | Callback URLs are `{redirect_base}/{provider}`; required |
+| `social.routes` | `true` | Mounts the `/api/auth/social` routes |
+| `social.registration` | `auth.registration` | Creates users on a first sign-in |
+| `social.link_by_email` | `verified` | `verified` links matching verified emails; `never` doesn't |
+| `social.allowed_email_domains` | `[]` | When not empty, only these email domains may sign in or sign up |
+| `social.two_factor` | `require` | `require` or `skip` for users with two-factor authentication |
+| `social.state_ttl_secs` | `600` | Lifetime of a sealed state |
+| `social.store_tokens` | `false` | Keeps encrypted provider tokens for `Social::token` |
+| `social.providers.<key>.type` | the key | `google`, `github`, `apple`, `microsoft`, `gitlab`, `slack`, `linkedin`, `discord`, `oidc` or `custom` |
+| `social.providers.<key>.client_id`, `.client_secret` | none | The OAuth app; the secret from `.env` |
+| `social.providers.<key>.scopes` | `[]` | Extra scopes |
+| `social.providers.<key>.params` | `{}` | Extra authorization URL parameters |
+| `social.providers.<key>.issuer` | none | The issuer of an `oidc` provider |
+| `social.providers.<key>.allowed_email_domains` | `[]` | Per-provider domain limit |
+
+| Route | Access |
+|---|---|
+| `GET /api/auth/social/{provider}/redirect` | Public |
+| `POST /api/auth/social/{provider}/callback` | Public; counted by the login throttle |
+| `GET /api/auth/social/accounts` | Signed in |
+| `POST /api/auth/social/{provider}/link` | Signed in |
+| `DELETE /api/auth/social/accounts/{provider}` | Signed in |
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    The tokens a social sign-in ends with.
+  </LinkCard>
+  <LinkCard href="/docs/security/account-flows/" title="Account flows">
+    Two-factor authentication, password reset and email verification.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    Where the browser's tokens live.
+  </LinkCard>
+  <LinkCard href="/docs/packages/oauth-server/" title="OAuth server">
+    Let other apps sign in with your app.
+  </LinkCard>
+</LinkCards>

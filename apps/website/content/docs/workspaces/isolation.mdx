@@ -1,0 +1,294 @@
+---
+title: "Data isolation"
+description: "Keep each workspace's data apart by row, by schema or by database."
+---
+
+Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`) always live in the app's main database; the strategy decides where your workspace-owned data lives.
+
+| Strategy | Where data lives | Enforced by | Databases |
+|---|---|---|---|
+| `row` (default) | Shared tables with a `workspace_id` column | `WorkspaceRepo` scoping, route record checks, and row-level security on PostgreSQL | SQLite, PostgreSQL |
+| `schema` | One PostgreSQL schema per workspace | The transaction's `search_path` | PostgreSQL |
+| `database` | One database per workspace | A separate connection pool | SQLite, PostgreSQL |
+
+Row isolation fits most apps: one schema to migrate, cross-workspace reporting with plain SQL, and a new workspace adds nothing but rows. Schema and database isolation put a harder wall between workspaces, for data residency, per-workspace backups or customers who ask for it, at the price of migrating every workspace.
+
+## Row isolation
+
+Workspace-owned tables carry the workspace's id, and every query filters by it.
+
+### Scoping queries
+
+Mark the entity, then read and write through `WorkspaceRepo`:
+
+```rust title="src/deals/entity.rs"
+/// Rows carry a `workspace_id` column.
+impl WorkspaceScoped for deal::Entity {}
+```
+
+A different column name goes in the trait: `impl WorkspaceScoped for deal::Entity { const WORKSPACE_COLUMN: &'static str = "team_id"; }`.
+
+| `WorkspaceRepo::<E>::` | Does |
+|---|---|
+| `select(workspace)` | `E::find()` limited to the workspace's rows |
+| `scope(workspace, select)` | Adds the workspace filter to any `Select<E>` |
+| `find(&uow, workspace, id)`, `find_or_fail` | Reads one record of the workspace; another workspace's record is not found (a 404 from a handler) |
+| `insert(&uow, workspace, model)` | Sets the workspace column, then inserts |
+| `update(&uow, workspace, model)` | Updates a record of the workspace; the workspace column can't change |
+| `delete(&uow, workspace, model)` | Deletes a record of the workspace |
+
+Writes go through `Repo`, so the [audit trail](/docs/security/audit-log/) and other change observers see them. `CurrentWorkspace::scope(select)` is the same filter for the request's workspace:
+
+```rust
+#[get("/")]
+#[permissions("deals.read")]
+async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+    let select = WorkspaceRepo::<Deal>::select(ws.id());
+    Ok(paginate(select, &*uow.tx().await?, page).await?)
+}
+```
+
+### Records checked by route
+
+A route that checks a record, `#[can(Update, Deal, from = "id")]`, loads it by primary key before the handler runs. Register the entity as workspace-scoped in its module, and the [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) first confirms the record belongs to the current workspace; a record of another workspace is a 404, whatever the member's role:
+
+```rust title="src/deals/mod.rs"
+#[module(
+    imports = [AccessModule::for_feature::<Deal>()],
+    controllers = [DealsController],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(
+            MigrationSet::new("deals")
+                .after(["workspace"])
+                .migration(migration::CreateDeals),
+        )
+        .workspace_scoped::<Deal>();
+    }
+}
+```
+
+### Row-level security on PostgreSQL
+
+On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (`set_config(.., true)`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. `RlsPolicy` writes the SQL; run it in the table's migration:
+
+```rust title="src/deals/migration.rs"
+use navree::db::sea_orm::sea_query::{ColumnDef, Table};
+use navree::db::sea_orm::{ConnectionTrait, DbBackend, DbErr};
+use navree::workspace::RlsPolicy;
+use sea_orm_migration::async_trait::async_trait;
+use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+
+pub struct CreateDeals;
+
+impl MigrationName for CreateDeals {
+    fn name(&self) -> &str {
+        "m20261026_000001_create_deals"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for CreateDeals {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table("deals")
+                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
+                    .col(ColumnDef::new("workspace_id").uuid().not_null())
+                    .col(ColumnDef::new("owner_id").uuid().not_null())
+                    .col(ColumnDef::new("title").string().not_null())
+                    .col(ColumnDef::new("amount_cents").big_integer().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        // On PostgreSQL the database enforces the scope as well.
+        if manager.get_database_backend() == DbBackend::Postgres {
+            manager
+                .get_connection()
+                .execute_unprepared(&RlsPolicy::new("deals").create_sql())
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table("deals").to_owned())
+            .await
+    }
+}
+```
+
+The SQL it runs (`rls_policy_sql("deals")` returns the same string):
+
+```sql
+ALTER TABLE "deals" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "deals" FORCE ROW LEVEL SECURITY;
+CREATE POLICY "deals_workspace_isolation" ON "deals"
+    USING ("workspace_id" = NULLIF(current_setting('navree.workspace', true), '')::uuid)
+    WITH CHECK ("workspace_id" = NULLIF(current_setting('navree.workspace', true), '')::uuid);
+```
+
+- `USING` hides other workspaces' rows from reads, updates and deletes; `WITH CHECK` refuses to write a row into another workspace.
+- `FORCE` applies the policy to the table's owner, usually the role the app connects as.
+- Without the setting, no row is visible. A transaction that hasn't entered a workspace sees an empty table.
+- PostgreSQL superusers and roles with `BYPASSRLS` skip every policy. Connect the app as an ordinary role, and keep a `BYPASSRLS` role for maintenance across workspaces.
+- `RlsPolicy::new("deals").column("team_id")` uses another column; `drop_sql()` removes the policy in `down`.
+
+Setting `navree.workspace` begins the request's transaction when the workspace is resolved, before any query the route runs. Jobs and commands set it with `Workspaces::enter`:
+
+```rust
+let uow = db.uow(None, None).await;
+workspaces.enter(&uow, workspace.id).await?; // navree.workspace for this transaction
+// ... queries in `uow` see only this workspace's rows
+uow.commit().await?;
+```
+
+On SQLite, `enter` and the request do nothing to the transaction: `WorkspaceRepo` and the route record checks are the scope.
+
+### Migrations
+
+Row isolation uses ordinary migrations (`m.migrations(..)`): one set of tables for every workspace.
+
+## Schema isolation
+
+<Badge feature="postgres" /> Each workspace gets its own PostgreSQL schema, `workspace_<id>` (the prefix is `workspace.schema_prefix`, the id has no hyphens). Every workspace request sets the transaction's `search_path` to `"workspace_<id>", public`, so unqualified table names find the workspace's tables first and the shared ones (users, workspaces) in `public`.
+
+```toml title="config/app.toml"
+[workspace]
+isolation = "schema"
+```
+
+The app refuses to boot with schema isolation on any other database.
+
+The tables in each workspace's schema come from workspace migrations, registered with `workspace_migrations` instead of `migrations`:
+
+```rust title="src/notes.rs"
+#[module(controllers = [NotesController], register = Self::wire)]
+pub struct NotesModule;
+
+impl NotesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.workspace_migrations(MigrationSet::new("notes").migration(CreateNotes));
+    }
+}
+```
+
+- Creating a workspace creates its schema and runs every workspace migration in it, in the same transaction.
+- Each schema records its own migrations in its own `navree_migrations` table.
+- New workspace migrations reach existing workspaces with `navree workspace:migrate` (every workspace) or `navree workspace:migrate acme globex` (some). Run it after `navree migrate` when you deploy.
+- Deleting a workspace drops its schema (`DROP SCHEMA ... CASCADE`) in the same transaction.
+
+Handlers write their queries without any workspace filter; `WorkspaceUow` (or the request's `Uow`, which is the same unit of work here) already points at the workspace's schema:
+
+```rust
+#[get("/")]
+async fn index(&self, uow: WorkspaceUow) -> Result<Json<Vec<note::Model>>> {
+    Ok(Json(note::Entity::find().all(&*uow.tx().await?).await?))
+}
+```
+
+Jobs and commands call `Workspaces::enter(&uow, id)`, which sets the same `search_path`.
+
+## Database isolation
+
+Each workspace gets its own database, named by a URL template where `{id}` is the workspace's id without hyphens:
+
+```toml title="config/app.toml"
+[workspace]
+isolation = "database"
+database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"
+# database_url = "postgres://app:secret@db.internal/workspace_{id}"
+```
+
+- `WorkspaceDatabases` (exported by the module) opens one connection pool per workspace on first use, with the pool settings of the `database` section, and keeps it for the life of the process.
+- The first time a process opens a workspace's database, it runs the pending workspace migrations (`workspace_migrations`, as above). `navree workspace:migrate` runs them for every workspace.
+- A SQLite file and its directory are created on first use. A PostgreSQL database must exist before first use: create it when the workspace is created, for example in a `WorkspaceCreated` listener.
+- Deleting a workspace closes its pool once the transaction commits and leaves the database in place, so you decide when the data goes.
+
+### `WorkspaceUow`
+
+`WorkspaceUow` is the unit of work for the current workspace's data under every strategy: the request's own `Uow` under row and schema isolation, and a unit of work on the workspace's database under database isolation. It dereferences to `Uow`, so `Repo`, `WorkspaceRepo` and `paginate` take it:
+
+```rust
+async fn store(&self, uow: WorkspaceUow, Json(input): Json<NewNote>) -> Result<Json<note::Model>> {
+    let note = Repo::<note::Entity>::insert(
+        &uow,
+        note::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            body: Set(input.body),
+        },
+    )
+    .await?;
+    Ok(Json(note))
+}
+```
+
+Under database isolation, the workspace's unit of work opens on first use and commits with the request: when the response status is below 400, after the handler; otherwise it rolls back. It commits separately from the main database's unit of work, so a change that spans both (a workspace row and a central row) is two commits.
+
+In a job or command, take the pool and run your own unit of work:
+
+```rust
+let db = databases.db(workspace_id).await?; // Arc<Db>
+let uow = db.uow(None, None).await;
+// ... write through `uow`
+uow.commit().await?;
+```
+
+`databases.url(workspace_id)` returns the workspace's URL, and `databases.forget(workspace_id)` closes its pool.
+
+## Choosing
+
+| | Row | Schema | Database |
+|---|---|---|---|
+| Migrations | `m.migrations(..)`, run once | `m.workspace_migrations(..)`, run per workspace | `m.workspace_migrations(..)`, run per workspace |
+| Queries | Filter with `WorkspaceRepo` | Plain queries | Plain queries |
+| Cross-workspace reports | Plain SQL | `UNION` across schemas | One query per database |
+| Cost of one more workspace | Its rows | A schema and its tables | A database and a connection pool |
+| Backup or delete one workspace | Delete by `workspace_id` | Dump or drop one schema | Dump or drop one database |
+
+## Testing
+
+Row isolation runs on SQLite, so tests need nothing special: create two workspaces and check that one can't see or change the other's records.
+
+```rust
+client
+    .get(&format!("/api/v1/deals/{}", globex_deal.id))
+    .header("X-Workspace", "acme")
+    .send()
+    .await
+    .assert_error(404, None);
+```
+
+Database isolation also runs on SQLite. Point the template at a temporary directory so each test gets its own files:
+
+```rust
+let dir = TempDirGuard::new();
+let template = format!(
+    "sqlite://{}?mode=rwc",
+    dir.path().join("workspace-{id}.sqlite").display()
+);
+let app = TestApp::builder()
+    .temp_database()
+    .config("workspace.isolation", "database")
+    .config("workspace.database_url", template)
+    // ... modules
+    .build()
+    .await;
+```
+
+Row-level security and schema isolation need PostgreSQL; run those tests against a disposable server, connecting as a role that isn't a superuser.
+
+<LinkCards>
+  <LinkCard href="/docs/database/unit-of-work/" title="Unit of work">
+    Transactions per request, job and command.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/multi-tenancy/" title="Multi-tenant SaaS">
+    The architecture around workspaces.
+  </LinkCard>
+</LinkCards>

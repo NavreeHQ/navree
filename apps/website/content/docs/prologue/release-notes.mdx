@@ -1,21 +1,21 @@
 ---
 title: "Release notes"
-description: "Navree 0.1.0, the first release: what each module ships, the CLI, the reference CRM and the benchmark, and the known limitations you may run into."
+description: "Navree 0.1.0, the first release: the framework's modules, workspaces, the tools and packages of the first-party ecosystem, AI-native tooling, the CLI and the reference CRM."
 ---
 
 ## Navree 0.1.0
 
-0.1.0 is Navree's first release. It contains 28 crates: the kernel, the shared contracts and 23 module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI. All of them share one version number. The repository also holds a reference CRM built on Navree and a benchmark against fourteen other framework set-ups.
+0.1.0 is Navree's first release. It ships the framework (the kernel, the shared contracts, the module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI) together with the first-party ecosystem: tools for monitoring, debugging, queues, administration, deployment and local services, and packages for search, AI, microservices, OAuth, billing and more. Everything shares one version number, is open source under MIT or Apache-2.0 and is free to self-host.
 
 Navree was developed under the working names Navree and, briefly, Navree. You may still meet those names in the repository's design notes from that time.
 
-<Callout type="warning" title="Not on crates.io yet">
+<Callout type="note" title="Installing from Git">
 
-The 0.1.0 crates haven't been published to crates.io. Install the CLI from the Git repository, and let new apps depend on a local checkout; [Installation](/docs/getting-started/installation/) shows how.
+Install the CLI from the Git repository, and let new apps depend on the repository or a local checkout; [Installation](/docs/getting-started/installation/) shows how.
 
 </Callout>
 
-## What's included
+## The framework
 
 ### Foundation
 
@@ -27,10 +27,10 @@ The 0.1.0 crates haven't been published to crates.io. Install the CLI from the G
 
 ### HTTP
 
-- **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and errors in the NestJS format (`{statusCode, message, error}`, validation failures as 400 with `errors`).
-- **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with class-validator-style messages and async `unique` and `exists` rules.
+- **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error" }`, validation failures as 400 with `errors`).
+- **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with one readable message per broken rule and async `unique` and `exists` rules.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, a docs UI at `/api/docs`, `openapi:export`, and API resource helpers.
-- **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection. It is optional; the CRM and new apps don't use it.
+- **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection for single-page apps that use cookies.
 
 ### Data
 
@@ -39,27 +39,31 @@ The 0.1.0 crates haven't been published to crates.io. Install the CLI from the G
 
 ### Security
 
-- **`navree-auth`**: NestJS-style authentication with 15-minute JWT access tokens and 30-day rotating refresh tokens with reuse detection, Passport-style strategies, `CurrentUser`, registration, password change and reset, email verification, TOTP two-factor authentication with recovery codes, and login throttling.
-- **`navree-access`**: roles, permissions and CASL-compatible abilities, record checks for `#[can(.., from = "id")]` routes, SQL list filters with `Accessible`, the abilities endpoint for front ends, management routes and the `access:role`, `access:grant` and `access:explain` commands.
+- **`navree-auth`**: 15-minute JWT access tokens and 30-day rotating refresh tokens with reuse detection, pluggable authentication strategies, `CurrentUser`, registration, password change and reset, email verification, TOTP two-factor authentication with recovery codes, and login throttling.
+- **`navree-access`**: roles, permissions and abilities, record checks for `#[can(.., from = "id")]` routes, SQL list filters with `Accessible`, the abilities endpoint that shares the rules with front ends (in the JSON form `@casl/ability` reads), management routes and the `access:role`, `access:grant` and `access:explain` commands.
 - **`navree-crypto`**: AES-256-GCM encryption with key rotation, Argon2id password hashing on a bounded blocking pool, token helpers and `key:generate`.
-- **`navree-audit`**: an audit trail of data changes, sign-ins, permission changes and access denials, with `audit:prune`.
+- **`navree-audit`**: an audit log of data changes, sign-ins, permission changes and access denials, with `audit:prune`.
+
+### Workspaces
+
+- **`navree-workspace`**: multi-tenancy at the workspace level, on in the default features. `WorkspaceModule`, the `CurrentWorkspace` extractor, the `Workspaces`, `Members` and `Invitations` services, the `Owner`, `Admin`, `Member` and `Viewer` roles plus your own, workspace-scoped permissions for `navree-access`, resolution from a header, a subdomain, a path prefix or a token claim, and isolation by row, schema or database. See [Workspaces](/docs/workspaces/introduction/).
 
 ### Background work
 
 - **`navree-queue`**: database and memory job queues with workers, retries with backoff, unique and delayed jobs, failed-job storage and the `queue:work`, `queue:failed`, `queue:retry` and `queue:flush` commands. Jobs dispatched during a request are queued only if its transaction commits.
 - **`navree-events`**: a typed event bus with synchronous and queued listeners.
-- **`navree-schedule`**: cron-style schedules in UTC, overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
+- **`navree-schedule`**: schedules on cron expressions in UTC, overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
 
 ### Communication
 
 - **`navree-mail`**: mailables rendered from templates, with SMTP, log, array and failover transports, and queued sending.
 - **`navree-notify`**: notifications over mail, the database and broadcasts, with read state.
-- **`navree-realtime`**: an in-process WebSocket server speaking the Pusher protocol, so Laravel Echo and pusher-js work unchanged, with public, private and presence channels and a signed relay that lets workers broadcast through the serving process.
+- **`navree-realtime`**: an in-process WebSocket server that speaks the Pusher protocol, so pusher-js and any Pusher client connects, with public, private and presence channels and a signed relay that lets workers broadcast through the serving process.
 - **`navree-view`**: MiniJinja templates for mail and other text.
 
 ### Integrations and operations
 
-- **`navree-storage`**: named disks on object_store (local filesystem and memory), streaming, signed temporary URLs and upload checks.
+- **`navree-storage`**: named disks on object_store, streaming, signed temporary URLs and upload checks.
 - **`navree-http-client`**: outgoing HTTP with retries, timeouts, an SSRF policy and fakes for tests.
 - **`navree-observe`**: `/health/live`, `/health/ready` with per-module checks, and Prometheus metrics at `/metrics`.
 
@@ -67,95 +71,63 @@ The 0.1.0 crates haven't been published to crates.io. Install the CLI from the G
 
 - **`navree-testing`**: `TestApp` to boot an app or a few modules on a temporary database, an in-process `TestClient` with cookies, `acting_as`, JSON assertions and validation-error assertions, and fakes.
 
-### The CLI
+## The ecosystem
+
+### Tools
+
+- **[Lighthouse](/docs/tools/lighthouse/)** (`navree-lighthouse`): application monitoring inside your app, with a dashboard at `/_lighthouse`. Exceptions grouped by fingerprint, slow requests and queries, failed jobs, alerts to email, Slack and webhooks, OpenTelemetry export, and MCP tools so agents can read and resolve issues.
+- **[Logbook](/docs/tools/logbook/)** (`navree-logbook`): a local debugging timeline at `/_logbook` of every request, query, job, mail, event, cache call and log line, with filters and request replay. Development only.
+- **[Fleet](/docs/tools/fleet/)** (`navree-fleet`): a queue dashboard at `/_fleet` and a worker supervisor (`navree fleet`) with auto-balanced workers per queue, throughput, wait and runtime metrics, retries for failed jobs, pause and continue, and long-wait alerts.
+- **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your entities, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.
+- **[Harbor](/docs/tools/harbor/)**: server provisioning and zero-downtime deployments from the CLI (`navree harbor:provision`, `navree deploy`, `navree deploy:rollback`), configured in `harbor.toml`, with health-checked atomic releases, encrypted secrets, several servers and roles, container images and push-to-deploy from GitHub Actions.
+- **[Dock](/docs/tools/dock/)**: local services for development. `navree dock up` starts PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS in Docker or Podman, configured in `dock.toml`.
+- **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, entity schemas, recent logs and the last error, runs read-only SQL and searches the docs for your version.
+
+### Packages
+
+- **[Search](/docs/packages/search/)** (`navree-search`): full-text and vector search over your entities with `#[derive(Searchable)]`, on PostgreSQL full text, Meilisearch, Typesense or embedded Tantivy, with vectors in pgvector or Qdrant and indexes kept in sync through the queue.
+- **[AI SDK](/docs/ai/ai-sdk/)** (`navree-ai`): text, structured output, streaming, [agents with tools](/docs/ai/agents-and-tools/), [embeddings and RAG](/docs/ai/embeddings-and-rag/), with provider failover across Anthropic, OpenAI, Google Gemini, Mistral, Ollama and AWS Bedrock, and `AiFake` for tests.
+- **[MCP servers](/docs/ai/mcp-servers/)** (`navree-mcp`): expose your app's tools, resources and prompts to AI clients over streamable HTTP or stdio, with per-tool permissions.
+- **[Microservices](/docs/microservices/introduction/)** (`navree-micro`): request-response and events between services over TCP, NATS, Kafka, RabbitMQ, Redis Streams and MQTT, and hybrid apps that serve HTTP and messages from one binary.
+- **[gRPC](/docs/microservices/grpc/)** (`navree-grpc`) and **[GraphQL](/docs/microservices/graphql/)** (`navree-graphql`): gRPC, gRPC-Web and Connect services on tonic, and GraphQL on async-graphql with dataloaders and subscriptions, both sharing your modules, guards and access rules.
+- **[OAuth server](/docs/packages/oauth-server/)** (`navree-oauth`): OAuth 2.1 and OpenID Connect for third-party apps, with PKCE, client credentials, device codes, scopes and consent, and personal access tokens.
+- **[Social sign-in](/docs/packages/social-sign-in/)** (`navree-social`): sign-in with Google, GitHub, Apple, Microsoft and more, linked to Navree users.
+- **[Billing](/docs/packages/billing/)** (`navree-billing`): subscriptions, trials, usage metering and invoices with Stripe or Paddle, for users or workspaces.
+- **[Feature flags](/docs/packages/feature-flags/)** (`navree-flags`): roll features out per user, workspace or percentage, stored in your database.
+- **[Webhooks](/docs/packages/webhooks/)** (`navree-webhooks`): signed outgoing webhooks with queue-backed retries and a delivery log, and verified incoming ones.
+- **[Localization](/docs/packages/localization/)** (`navree-i18n`): Fluent translations, plurals, locale negotiation and translated validation messages.
+- **[Browser testing](/docs/packages/browser-testing/)** (`navree-browser`): drive a real browser from your tests over the Chrome DevTools Protocol.
+- **[Starter kits](/docs/getting-started/starter-kits/)**: `navree new <name> --kit saas`, `--kit api` or `--kit micro`. The SaaS kit has a Next.js and shadcn/ui front end with sign-in, workspaces, billing, settings and admin.
+
+### AI-native
+
+- **[Agent skills](/docs/ai/agent-skills/)** for every common task, installed into a project with `navree skills:install`.
+- **`AGENTS.md`**: `navree new` writes the project's conventions for coding agents, and a `CLAUDE.md` that points at it.
+- **[Docs for agents](/docs/ai/docs-for-agents/)**: `/llms.txt`, `/llms-full.txt` and every docs page as Markdown.
+
+## The CLI
 
 The `navree` binary (crate `navree-cli`) creates apps, generates code and runs the dev loop:
 
-- `navree new <name>`, with `--ui next` for a Next.js front end that keeps tokens in httpOnly cookies, and `--navree-path` to choose the Navree checkout.
-- `navree make:module <name> [--crud]` and twelve `make:<kind>` generators: controller, service, entity, migration, job, event, listener, mail, notification, policy, command and test. Generators never overwrite files; they register what they create at marker comments.
+- `navree new <name>`, with `--kit` for a [starter kit](/docs/getting-started/starter-kits/), `--ui next` for a Next.js front end that keeps tokens in httpOnly cookies, and `--navree-path` to choose the Navree checkout.
+- `navree make:module <name> [--crud]` and `make:<kind>` generators for controllers, services, entities, migrations, jobs, events, listeners, mail, notifications, policies, commands and tests. Generators never overwrite files; they register what they create at marker comments.
 - `navree dev`, which rebuilds and restarts the app when its code changes, and keeps the last good build serving when a build fails.
+- The ecosystem's commands: `navree dock up`, `navree deploy`, `navree fleet`, `navree mcp` and `navree skills:install`.
 - Every other command is forwarded to the app's binary.
 
-### The reference CRM
+## The reference CRM
 
 `apps/crm-api` is a CRM API built on Navree: companies, contacts, a deals pipeline, activities, a dashboard, users and roles, with live updates over WebSockets, queued notifications, scheduled reminders and an audit log. `apps/crm-web` is its Next.js front end, whose server holds the tokens for the browser. Unit, feature and Playwright end-to-end tests cover both. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
 
-### The benchmark
+## Performance
 
-`bench/` compares Navree with Loco, Axum, Actix Web, Gin, ASP.NET Core, Spring Boot, NestJS (Express and Fastify), Express, FastAPI, Django, Laravel (Octane and PHP-FPM) and Rails, each implementing the same API and passing the same conformance checks. Every implementation runs against PostgreSQL, Navree's included: its benchmark app uses navree-db's pool, the unit of work, pagination, `Repo::insert` and navree-auth's user lookup on a real PostgreSQL server, with no changes to the framework. The [benchmarks](/benchmarks/) page has the results.
+A Navree app is one binary that needs a few megabytes at idle and starts in milliseconds. [Performance](/performance/) has Navree's measurements, the workload behind them, the method and how to reproduce them on your own machine.
 
 ## Design decisions
 
-A few things work differently from what the original plan described:
-
-- **Authentication and errors follow NestJS, not Laravel Sanctum.** Navree issues stateless JWT access tokens and rotating refresh tokens; navree-auth has no SPA cookie authentication, no personal access tokens and no session login. Errors use NestJS's `{statusCode, message, error}` format; there are no `application/problem+json` responses and no 422 or 419 statuses.
-- **Real time is built in.** Instead of relying on an external WebSocket server, Navree ships an in-process Pusher-protocol server. Processes that don't serve the sockets send their broadcasts to the one that does over a signed HTTP relay.
+- **Token authentication for APIs.** `navree-auth` issues stateless JWT access tokens and rotating refresh tokens, and a backend-for-frontend keeps them in httpOnly cookies for browsers. Cookie sessions with CSRF protection are a separate module, [Sessions and CSRF](/docs/basics/sessions-and-csrf/), for apps that want them.
+- **One error shape.** Every error is JSON in Navree's shape, `{ "statusCode", "message", "error" }`, with `errors` for validation failures. Input errors are 400s and CSRF failures are 403s.
+- **Real time is built in.** Navree ships an in-process Pusher-protocol server. Processes that don't serve the sockets send their broadcasts to the one that does over a signed HTTP relay.
 - **The framework's own crates don't use the macros.** They implement `Module`, `Injectable` and `Controller` by hand, the escape hatch every app can use too. Apps use the macros.
 
-## Known limitations
-
-These are the gaps in 0.1.0 you may run into. Most are listed again, as future work, on the [roadmap](/docs/prologue/roadmap/).
-
-### Installation and tooling
-
-- The crates aren't on crates.io. Without a local checkout, `navree new` writes `navree = "0.1.0"`, which doesn't resolve yet.
-- `navree help` prints the CLI's own help, not your app's commands, although the generated README says otherwise. Use `navree list`.
-- `navree dev` doesn't keep the listening socket open across restarts, so requests fail while the server restarts. If `navree dev` is killed forcibly, the server it started keeps running.
-
-### Configuration
-
-- In `ConfigSources::defaults()`, `config/app.toml` overrides `.env`, not the other way round. A key set in both keeps the TOML value, so editing `APP_HTTP__ADDR` or `APP_DATABASE__URL` in a new app's `.env` has no effect. Real environment variables do override the file. The comments in the generated `.env.example` and `config/app.toml` describe this the wrong way round. See [Configuration](/docs/getting-started/configuration/#where-settings-come-from).
-- `ConfigSources::defaults()` reads the real `APP_*` environment variables, so tests that use it can be affected by the machine they run on. Build test configuration with `ConfigSources::new()`.
-
-### Database
-
-- PostgreSQL support compiles and runs in the benchmark, but the test suite runs on SQLite only. Some PostgreSQL paths haven't been run against a real server yet, among them migrations, the `FOR UPDATE` row locks in `Repo::update`, `Repo::find_for_update` and record checks, and the queue's `FOR UPDATE SKIP LOCKED` job reservation; the [database page](/docs/database/getting-started/#postgresql) has the full list.
-- navree-db leaves sqlx's `test_before_acquire` on, so each connection checkout costs an extra round trip, and there is no setting to turn it off.
-
-### Authentication and security
-
-- A request with a present but invalid JWT gets a 401 on every route, public ones included. Clients must not send stale access tokens to `/api/auth/login`, `/api/auth/refresh` or the health probes.
-- Access tokens are stateless: they stay valid until they expire (15 minutes by default), even after logout or a password change.
-- The `refresh_tokens` table grows with every refresh and there is no command to prune it yet. A refresh token's lifetime slides: each rotation gets a fresh 30 days.
-- Registration, forgot-password and reset-password have no route-specific rate limits: only the global per-IP limit and the per-address mail throttle apply.
-- `POST /api/auth/2fa/enable` and `POST /api/auth/2fa/recovery-codes` need only a valid access token, not the password.
-- A bad or expired signed URL answers 401, where Laravel answers 403.
-
-### Validation and access
-
-- serde errors (a wrong type, a missing field, an unknown enum value) are reported one at a time, before and instead of the garde rules. A body with an empty `name` and an invalid `size` reports only `size`.
-- The record loader behind `#[can(.., from = "id")]` has no soft-delete scope, so a user whose rules deny the action gets 403 rather than 404 on a soft-deleted record. Async `exists` rules can't add `deleted_at IS NULL` either; check deleted records in your service.
-- A record check that fails answers 403 even when the user may not read the record, which tells the caller the id exists.
-- There is no command to assign a role to a user; use the access management routes or a seeder.
-
-### OpenAPI
-
-- The document can't describe query parameters or non-JSON bodies, such as a CSV export.
-- navree-db's `Page<T>` has no OpenAPI schema, so a paginated route documents its response with a page struct of its own, as the CRM's `DealPage` does (`#[api(response = DealPage)]`).
-- The `user` in login responses and `GET /api/auth/me` is documented without the fields an app adds to it.
-- Framework routes without schemas: the abilities and access management routes, broadcasting auth, the WebSocket endpoint, the health probes and `/metrics`.
-- Every operation lists a `cookie` security scheme, even in apps that use bearer tokens only.
-- The docs UI loads its script from jsDelivr without a subresource integrity hash.
-
-### HTTP and other modules
-
-- navree-http doesn't map multipart errors itself: only apps with `StorageModule` answer malformed uploads with a 4xx instead of a 500.
-- navree-http-client can't pick up the current request's id on its own; pass it with `.with_request_id(&id)`.
-- The memory cache store has no size limit, and there are no Redis drivers for the cache, the queue, sessions, locks or real-time scaling.
-- Storage disks are the local filesystem and memory only.
-- navree-session still serves `GET /sanctum/csrf-cookie`, a leftover from the original Sanctum plan. The module is optional.
-
-### Kernel and testing
-
-- A singleton that stores the `AppContext` creates a reference cycle, so that app's memory is never freed. It doesn't matter for a long-running process, but leaks in tests that boot many apps; resolve lazily with `r.lazy::<T>()` instead.
-- A provider registered with `.lifecycle::<T>()` must be a singleton. A request-scoped one fails at boot, and `check` doesn't catch it.
-- On Windows, a `TestApp` dropped without `app.shutdown().await` may leave its SQLite files in the temporary directory, because the pool is still open.
-- `TestAppBuilder::fake_auth` replaces the app's authenticator completely, so one test app can't mix `acting_as` with real bearer tokens.
-
-### Performance
-
-Navree's own per-request cost is high for a Rust framework: on plain JSON it delivers 22% of a hand-written Axum service's throughput. The benchmark's findings trace this to specific parts of the pipeline, listed on the [roadmap](/docs/prologue/roadmap/#performance-work).
-
-## Deliberately deferred
-
-Redis drivers, apalis as a queue backend, passkeys, social login, an OAuth2 server, billing, AI, gRPC, search and other modules were left out of 0.1 on purpose. The [roadmap](/docs/prologue/roadmap/) lists them with the reasons.
+What comes next is on the [roadmap](/docs/prologue/roadmap/).
