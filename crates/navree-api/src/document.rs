@@ -222,9 +222,10 @@ fn security_schemes(session_cookie: &str) -> Value {
 /// component schema.
 ///
 /// ```json
-/// {"statusCode": 404, "message": "Not Found", "error": "Not Found"}
+/// {"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"}
 /// {"statusCode": 400, "message": ["email must be a valid email address"],
-///  "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}
+///  "error": "Bad Request", "code": "validation_failed",
+///  "errors": {"email": ["email must be a valid email address"]}}
 /// ```
 ///
 /// The request id is in the `X-Request-Id` response header.
@@ -239,6 +240,12 @@ pub struct HttpError {
     pub message: HttpErrorMessage,
     /// The reason phrase of the status (`Not Found`, `Bad Request`).
     pub error: String,
+    /// The machine-readable error code (`not_found`, `validation_failed`,
+    /// `invalid_credentials`), stable across releases, for front ends to map
+    /// to a translation key. Left out when `http.errors.code` is `false`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = code_schema)]
+    pub code: Option<String>,
     /// Validation messages per field (400 validation errors only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub errors: Option<BTreeMap<String, Vec<String>>>,
@@ -253,6 +260,18 @@ pub enum HttpErrorMessage {
     One(String),
     /// Every validation message, in field order.
     Many(Vec<String>),
+}
+
+/// The schema of `code`: a string when present (never `null`).
+fn code_schema() -> Schema {
+    ObjectBuilder::new()
+        .schema_type(Type::String)
+        .description(Some(
+            "The machine-readable error code (`not_found`, `validation_failed`, `invalid_credentials`), stable across releases, for front ends to map to a translation key. Left out when `http.errors.code` is false.",
+        ))
+        .examples([serde_json::json!("not_found")])
+        .build()
+        .into()
 }
 
 /// The schema of `message`: `string | string[]`.
