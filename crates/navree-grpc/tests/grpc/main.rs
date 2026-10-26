@@ -6,6 +6,7 @@
 mod support;
 
 mod channels;
+mod metrics;
 mod pipeline;
 mod protocols;
 mod serving;

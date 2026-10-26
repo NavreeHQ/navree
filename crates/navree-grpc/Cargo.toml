@@ -61,6 +61,7 @@ uuid = { workspace = true }
 navree-access = { workspace = true }
 navree-events = { workspace = true }
 navree-mail = { workspace = true }
+navree-observe = { workspace = true }
 navree-testing = { workspace = true }
 navree-view = { workspace = true }
 navree-workspace = { workspace = true }
