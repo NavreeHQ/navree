@@ -80,6 +80,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::search` | navree-search | `search` (not in `full`) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 
 The facade's root also has:
 
@@ -136,11 +137,13 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
+| `search` | `http`, `http-client`, `db`, `queue`, `access`, `workspace` |
+| `search-tantivy` | `search`, and its embedded Tantivy engine |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in `search`.
 
 <Callout type="note">
 

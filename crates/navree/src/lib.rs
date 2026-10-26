@@ -34,12 +34,15 @@
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //!
 //! A feature also turns on the features of the crates its crate builds on
 //! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
-//! is not in `full`: it is a development tool (`navree dock`), for tools
-//! and tests that read `dock.toml`.
+//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`.
+//! `full` (the default) holds every module except `search` and `dock`, which
+//! are opt-in: `search` is an ecosystem package (`search-tantivy` adds its
+//! embedded Tantivy engine), and `dock` is a development tool (`navree dock`)
+//! for tools and tests that read `dock.toml`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -161,6 +164,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L7
+#[cfg(feature = "search")]
+pub use navree_search as search;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

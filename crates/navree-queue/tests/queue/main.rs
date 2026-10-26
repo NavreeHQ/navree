@@ -5,6 +5,7 @@ mod commands;
 mod database_driver;
 mod fake;
 mod module;
+mod observed;
 mod suite;
 mod support;
 

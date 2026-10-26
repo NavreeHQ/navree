@@ -89,3 +89,6 @@ pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow,
 };
+
+#[cfg(feature = "search")]
+pub use navree_search::SearchModule;

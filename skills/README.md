@@ -40,6 +40,7 @@ conventions, and says which skill to load for each task.
 | [`navree-security-checklist`](navree-security-checklist/SKILL.md) | What to check before shipping |
 | [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
+| [`navree-search`](navree-search/SKILL.md) | Full-text and vector search over entities, engines and index syncing |
 
 ## Installing
 
