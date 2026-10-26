@@ -81,6 +81,50 @@ impl RatesController {
 #[module(controllers = [RatesController])]
 pub struct RatesModule;
 
+// ---------------------------------------------------------------------------
+// Reporting an error the handler handled itself, as in health-and-metrics.mdx.
+
+/// The calendar sync failed.
+#[derive(Debug)]
+struct CalendarError(std::io::Error);
+
+impl std::fmt::Display for CalendarError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("calendar sync failed")
+    }
+}
+
+impl std::error::Error for CalendarError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+async fn sync_calendar(_user: &str) -> std::result::Result<(), CalendarError> {
+    Err(CalendarError(std::io::Error::other("connection reset")))
+}
+
+/// `POST /api/v1/calendar/sync` reports a failed sync and answers anyway.
+#[injectable]
+pub struct CalendarController;
+
+#[controller("/calendar", version = "1")]
+impl CalendarController {
+    #[post("/sync")]
+    #[public]
+    async fn sync(&self) -> Result<Json<Value>> {
+        let user = "u1";
+        if let Err(error) = sync_calendar(user).await {
+            Telemetry::current().report_exception(&error);
+        }
+        Ok(Json(json!({ "synced": false })))
+    }
+}
+
+/// The calendar routes.
+#[module(controllers = [CalendarController])]
+pub struct CalendarModule;
+
 const TRACEPARENT: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
 async fn rates_app(sink: impl Module) -> (TestApp, FakeServer) {
@@ -147,6 +191,86 @@ async fn the_recorder_sees_the_request_and_the_outgoing_call() {
         Some(request.request_id.as_str()),
         "the call happened in the request"
     );
+    app.shutdown().await.unwrap();
+}
+
+/// The "Testing with TelemetryRecorder" example, as written in the docs.
+#[tokio::test]
+async fn the_rates_call_happens_inside_the_request() {
+    let recorder = TelemetryRecorder::new();
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        "https://rates.example.com/*",
+        FakeResponse::new(200),
+    );
+    let app = TestApp::builder()
+        .module(HttpClientModule::from_config())
+        .module(RatesModule)
+        .module(recorder.module())
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    app.client()
+        .get("/api/v1/rates/eur")
+        .send()
+        .await
+        .assert_status(200);
+
+    let request = &recorder.requests()[0];
+    assert_eq!(request.route.as_deref(), Some("/api/v1/rates/{currency}"));
+    let call = &recorder.http_client_requests()[0];
+    assert_eq!(call.url, "https://rates.example.com/v1/eur");
+    let record = &recorder.of_kind(EventKind::HttpClientRequest)[0];
+    assert_eq!(
+        record.context.request_id.as_deref(),
+        Some(request.request_id.as_str())
+    );
+
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_handler_reports_an_error_it_handled() {
+    let recorder = TelemetryRecorder::only([EventKind::ExceptionReported]);
+    let app = TestApp::builder()
+        .module(CalendarModule)
+        .module(recorder.module())
+        .build()
+        .await;
+
+    app.client()
+        .post("/api/v1/calendar/sync")
+        .send()
+        .await
+        .assert_status(200);
+
+    let records = recorder.of_kind(EventKind::ExceptionReported);
+    assert_eq!(records.len(), 1);
+    assert!(
+        records[0].context.request_id.is_some(),
+        "reported inside the request"
+    );
+    let exception = &recorder.exceptions()[0];
+    assert_eq!(
+        exception.chain,
+        ["calendar sync failed", "connection reset"]
+    );
+    assert!(!exception.panic);
+    let location = exception.location.as_deref().expect("the caller's location");
+    assert!(location.contains("telemetry.rs"), "{location}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn without_a_sink_reporting_does_nothing() {
+    let app = TestApp::builder().module(CalendarModule).build().await;
+    app.client()
+        .post("/api/v1/calendar/sync")
+        .send()
+        .await
+        .assert_status(200);
     app.shutdown().await.unwrap();
 }
 
