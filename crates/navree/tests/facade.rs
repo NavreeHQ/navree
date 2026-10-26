@@ -361,6 +361,9 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
     assert!(extra.is_empty(), "{extra:#?}");
 }
 
+/// Ecosystem libraries an app turns on by name: `full` leaves them out.
+const OPT_IN: [&str; 1] = ["flags"];
+
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {
     let features = Features::read();
@@ -369,7 +372,23 @@ fn full_is_the_default_and_turns_on_every_module() {
     let missing: Vec<&String> = features
         .feature_of
         .values()
-        .filter(|feature| !full.contains(*feature))
+        .filter(|feature| !full.contains(*feature) && !OPT_IN.contains(&feature.as_str()))
         .collect();
     assert!(missing.is_empty(), "`full` lacks {missing:?}");
+    for feature in OPT_IN {
+        assert!(
+            features.table.contains_key(feature),
+            "the opt-in feature `{feature}` does not exist"
+        );
+        assert!(!full.contains(feature), "`full` turns on opt-in `{feature}`");
+    }
+}
+
+/// The opt-in features re-export their crate whole too, and put their
+/// module and extractor in the prelude.
+#[cfg(feature = "flags")]
+#[test]
+fn opt_in_crates_are_reexported_whole() {
+    assert!(same::<navree::flags::FlagsModule, FlagsModule>());
+    assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
 }

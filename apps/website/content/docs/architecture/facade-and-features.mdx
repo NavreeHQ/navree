@@ -80,6 +80,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
 
 The facade's root also has:
 
@@ -104,6 +105,7 @@ The facade's root also has:
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule` |
+| Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
 
@@ -115,7 +117,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries (today `flags`), which you add by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -136,11 +138,12 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
+| `flags` (opt-in) | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module but the opt-in ones.
 
 <Callout type="note">
 
@@ -156,7 +159,7 @@ Turning a feature off removes the module's crate from the build, along with its 
 2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
 3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
 
-`#[controller]` needs navree-http, and `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access; with the facade, that means the `http` and `access` features.
+`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, and `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`); with the facade, that means the `http`, `access` and `flags` features.
 
 ## Using a crate on its own
 

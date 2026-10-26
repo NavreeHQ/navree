@@ -33,10 +33,14 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //!
 //! A feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`.
+//! (`auth` turns on `access`, `db`, `http`, ...). Every module feature is
+//! part of `full` (on by default) except the ecosystem libraries marked
+//! opt-in, which an app turns on by name (`features = ["flags"]`). The
+//! `postgres` feature adds navree-db's PostgreSQL driver. `axum` is
+//! re-exported with `http`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -158,6 +162,16 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L6 (opt-in)
+/// Feature flags (the `flags` feature): navree-flags, re-exported whole,
+/// plus the `#[flag]` attribute macro (`use navree::flags::flag;`).
+#[cfg(feature = "flags")]
+pub mod flags {
+    pub use navree_flags::*;
+    /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
+    pub use navree_macros::flag;
+}
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

@@ -36,13 +36,16 @@ const docs: Record<string, string> = {
   "navree-notify": "/docs/digging-deeper/notifications/",
   "navree-auth": "/docs/security/authentication/",
   "navree-workspace": "/docs/workspaces/introduction/",
+  "navree-flags": "/docs/packages/feature-flags/",
   navree: "/docs/architecture/facade-and-features/",
   "navree-cli": "/docs/digging-deeper/cli/",
 };
 
 /** What each layer is for (docs: architecture/crate-hierarchy). */
 const layerNames: Record<number, string> = {
-  6: "Facade and CLI",
+  8: "Facade and CLI",
+  7: "Packages",
+  6: "Ecosystem libraries",
   5: "Identity and tenancy",
   4: "Application services",
   3: "Data and I/O",
@@ -52,7 +55,7 @@ const layerNames: Record<number, string> = {
 };
 
 /**
- * Every framework crate, drawn as the decks of a hull: layer 6 (the facade
+ * Every framework crate, drawn as the decks of a hull: layer 8 (the facade
  * and the CLI) on top, the kernel at the bottom as the foundation. Generated from
  * the workspace by scripts/prebuild.ts.
  */

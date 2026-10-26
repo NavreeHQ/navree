@@ -1,7 +1,7 @@
 //! # navree-macros
 //!
 //! Attribute macros for Navree applications: `#[module]`, `#[injectable]`,
-//! `#[controller]` and the route attributes.
+//! `#[controller]` and the route attributes, and `#[flag]` (feature flags).
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -11,9 +11,10 @@
 //!
 //! The generated code names the runtime crates through the `navree` facade when
 //! the crate being compiled depends on it (`::navree::kernel::…`,
-//! `::navree::http::…`, `::navree::access::…`, honouring a rename in
-//! `Cargo.toml`), and otherwise through the individual crates
-//! (`::navree_kernel::…`, `::navree_http::…`, `::navree_access::…`). Depending on
+//! `::navree::http::…`, `::navree::access::…`, `::navree::flags::…`,
+//! honouring a rename in `Cargo.toml`), and otherwise through the individual
+//! crates (`::navree_kernel::…`, `::navree_http::…`, `::navree_access::…`,
+//! `::navree_flags::…`). Depending on
 //! neither is a compile error that names the missing crate.
 #![forbid(unsafe_code)]
 
@@ -22,6 +23,7 @@ use proc_macro::TokenStream;
 mod attr;
 mod controller;
 mod duration;
+mod flag;
 mod injectable;
 mod module;
 mod path;
@@ -190,6 +192,7 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `#[audit(action = "deal.won")]` | fn | `.audit("deal.won")` |
 /// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
 /// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(400, 404), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `navree_http::schema_fn::<T>` |
+/// | `#[requires_flag(NewPipeline)]`, `#[requires_flag(NewPipeline, status = 403)]` | fn | `navree_flags::requires_flag::<NewPipeline>(route, 404)`: while the flag is off the route answers 404 (or 403) before its authorization, extractors and handler; OpenAPI shows `x-navree-flag` |
 ///
 /// Durations are a whole number followed by `ms`, `s`, `m` or `h` (`"500ms"`,
 /// `"5s"`, `"1m"`, `"1h"`). Access declarations on the impl add to a route's
@@ -204,7 +207,8 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// and two routes with the same method and path.
 ///
 /// `#[can]` with marker types needs `navree` (or `navree-access`) among the
-/// dependencies; everything else needs `navree` (or `navree-http`). Register the
+/// dependencies, `#[requires_flag]` needs `navree` with the `flags` feature
+/// (or `navree-flags`); everything else needs `navree` (or `navree-http`). Register the
 /// controller with `#[module(controllers = [DealController])]` or
 /// `ModuleBuilderHttpExt::controller`; it must also be `Injectable` (usually
 /// `#[injectable]`).
@@ -265,6 +269,41 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
     controller::expand(args.into(), item.into()).into()
+}
+
+/// Implements `navree_flags::Flag` for a unit struct: a feature flag.
+///
+/// ```text
+/// #[flag]                                             // name: the type in kebab case
+/// #[flag(name = "ai-summaries", default = true, expose)]
+/// ```
+///
+/// | Argument | Default | Meaning |
+/// |---|---|---|
+/// | `name = ".."` | the type name in kebab case (`NewPipeline` → `new-pipeline`) | the stored name: lower-case letters, digits, `-`, `_` and `.` |
+/// | `default = true` | `false` | the value when nothing else decides |
+/// | `expose` (or `expose = true`) | off | `GET /api/flags` serves the flag to the front end |
+///
+/// The doc comment becomes the flag's description. The struct must be a
+/// unit struct without generics; anything else, an unknown or duplicate
+/// key or an invalid name is a compile error. The expansion names
+/// `::navree::flags::Flag` (the facade's `flags` feature) or
+/// `::navree_flags::Flag`.
+///
+/// ```text
+/// /// The redesigned deal pipeline board.
+/// #[flag]
+/// pub struct NewPipeline;
+/// // impl navree::flags::Flag for NewPipeline {
+/// //     const NAME: &'static str = "new-pipeline";
+/// //     const DEFAULT: bool = false;
+/// //     const EXPOSE: bool = false;
+/// //     const DESCRIPTION: &'static str = "The redesigned deal pipeline board.";
+/// // }
+/// ```
+#[proc_macro_attribute]
+pub fn flag(args: TokenStream, item: TokenStream) -> TokenStream {
+    flag::expand(args.into(), item.into()).into()
 }
 
 /// Declares a `GET` route on a method of a [`macro@controller`] impl block:
