@@ -179,18 +179,30 @@ impl MigrationName for CreateTables {
 impl MigrationTrait for CreateTables {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let conn = manager.get_connection();
+        // SQLite stores uuids, timestamps and dates as text; PostgreSQL has
+        // types for them.
+        let (uuid, timestamp, date) = match manager.get_database_backend() {
+            sea_orm::DbBackend::Postgres => ("UUID", "TIMESTAMPTZ", "DATE"),
+            _ => ("TEXT", "TEXT", "TEXT"),
+        };
         for sql in [
-            "CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, first_name TEXT NOT NULL, \
-             last_name TEXT NOT NULL, email TEXT NULL, title TEXT NULL, status TEXT NOT NULL, \
-             owner_id TEXT NOT NULL, score BIGINT NOT NULL, created_at TEXT NOT NULL, \
-             notes TEXT NULL, deleted_at TEXT NULL)",
-            "CREATE TABLE companies (id TEXT PRIMARY KEY NOT NULL, workspace_id TEXT NOT NULL, \
-             name TEXT NOT NULL, domain TEXT NULL)",
-            "CREATE TABLE deals (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, \
-             company_id TEXT NULL, stage TEXT NOT NULL, amount_cents BIGINT NOT NULL, \
-             closes_on TEXT NULL, archived BOOLEAN NOT NULL DEFAULT FALSE)",
+            format!(
+                "CREATE TABLE contacts (id {uuid} PRIMARY KEY NOT NULL, first_name TEXT NOT NULL, \
+                 last_name TEXT NOT NULL, email TEXT NULL, title TEXT NULL, status TEXT NOT NULL, \
+                 owner_id {uuid} NOT NULL, score BIGINT NOT NULL, created_at {timestamp} NOT NULL, \
+                 notes TEXT NULL, deleted_at {timestamp} NULL)"
+            ),
+            format!(
+                "CREATE TABLE companies (id {uuid} PRIMARY KEY NOT NULL, workspace_id {uuid} NOT NULL, \
+                 name TEXT NOT NULL, domain TEXT NULL)"
+            ),
+            format!(
+                "CREATE TABLE deals (id {uuid} PRIMARY KEY NOT NULL, title TEXT NOT NULL, \
+                 company_id {uuid} NULL, stage TEXT NOT NULL, amount_cents BIGINT NOT NULL, \
+                 closes_on {date} NULL, archived BOOLEAN NOT NULL DEFAULT FALSE)"
+            ),
         ] {
-            conn.execute_unprepared(sql).await?;
+            conn.execute_unprepared(&sql).await?;
         }
         Ok(())
     }
@@ -333,4 +345,20 @@ pub async fn vector_app() -> (TestApp, Arc<WordEmbeddings>) {
         .build()
         .await;
     (app, embeddings)
+}
+
+/// The server URL from `var`, or `None` after printing the skip notice
+/// (`NAVREE_TEST_REQUIRE_SERVICES=1` makes a missing service a failure).
+pub fn service(var: &str, test: &str) -> Option<String> {
+    match std::env::var(var) {
+        Ok(url) if !url.is_empty() => Some(url),
+        _ => {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "{test} needs {var}"
+            );
+            println!("SKIPPED {test}: set {var}");
+            None
+        }
+    }
 }

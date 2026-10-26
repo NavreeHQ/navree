@@ -3,9 +3,12 @@
 
 use std::sync::Arc;
 
-use navree_db::{Db, Repo};
+use navree_contracts::{Dispatcher, JobEnvelope};
+use navree_db::{DatabaseModule, Db, Repo};
+use navree_kernel::{BoxError, BoxFuture};
 use navree_queue::{Queue, QueueFake};
-use navree_search::{Search, SyncDocuments};
+use navree_search::{Search, SearchModule, SyncDocuments};
+use navree_testing::{TestApp, TestAppBuilder};
 use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter};
 use uuid::Uuid;
 
@@ -291,4 +294,80 @@ async fn workspace_scoped_changes_carry_their_workspace() {
         .unwrap();
     assert_eq!(first.ids.len(), 2);
     assert_eq!(first.index, "companies");
+}
+
+/// A `dyn Dispatcher` that records what it is given.
+#[derive(Default)]
+struct RecordingDispatcher(std::sync::Mutex<Vec<JobEnvelope>>);
+
+impl RecordingDispatcher {
+    fn envelopes(&self) -> Vec<JobEnvelope> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl Dispatcher for RecordingDispatcher {
+    fn dispatch_envelope(&self, env: JobEnvelope) -> BoxFuture<'_, Result<String, BoxError>> {
+        Box::pin(async move {
+            self.0.lock().unwrap().push(env);
+            Ok("1".to_owned())
+        })
+    }
+}
+
+/// An app with `sync = "queued"` and no `QueueModule`.
+fn without_a_queue() -> TestAppBuilder {
+    TestApp::builder()
+        .temp_database()
+        .config("search.engine", "memory")
+        .config("search.sync", "queued")
+        .module(DatabaseModule::from_config())
+        .module(SearchModule::from_config())
+        .module(support::CrmModule)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn queued_sync_without_a_queue_goes_to_the_dispatcher() {
+    let dispatcher = Arc::new(RecordingDispatcher::default());
+    let app = without_a_queue()
+        .override_value(dispatcher.clone() as Arc<dyn Dispatcher>)
+        .build()
+        .await;
+    let db = app.get::<Db>().await;
+    let search = app.get::<Search>().await;
+    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+        .await
+        .try_into()
+        .unwrap();
+    let envelopes = dispatcher.envelopes();
+    assert_eq!(envelopes.len(), 1, "dispatched after the commit");
+    assert_eq!(envelopes[0].job_type, "search.sync");
+    let job: SyncDocuments = serde_json::from_value(envelopes[0].payload.clone()).unwrap();
+    assert_eq!(job.ids, [ada.id.to_string()]);
+    search.assert_not_indexed::<Contact>(ada.id).await;
+
+    // A rolled-back unit of work dispatches nothing.
+    let uow = db.uow(None, None).await;
+    Repo::<Contact>::insert(&uow, new_contact("Grace", "Hopper"))
+        .await
+        .unwrap();
+    uow.rollback().await.unwrap();
+    assert_eq!(dispatcher.envelopes().len(), 1);
+
+    // `reindex` goes the same way.
+    search.reindex::<Contact>([ada.id]).await.unwrap();
+    assert_eq!(dispatcher.envelopes().len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn queued_sync_without_a_queue_or_dispatcher_syncs_inline() {
+    let app = without_a_queue().build().await;
+    let db = app.get::<Db>().await;
+    let search = app.get::<Search>().await;
+    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+        .await
+        .try_into()
+        .unwrap();
+    settle(&app).await;
+    search.assert_indexed::<Contact>(ada.id).await;
 }
