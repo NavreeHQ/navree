@@ -72,6 +72,7 @@ mod isolation;
 mod members;
 mod migration;
 mod module;
+mod org_controller;
 mod org_current;
 mod org_members;
 mod org_role;
@@ -93,8 +94,10 @@ pub use config::{
 };
 pub use controller::{
     AcceptInvitationInput, AcceptedInvitationResource, AddMemberInput, ChangeRoleInput,
-    CreateWorkspaceInput, InvitationController, InvitationResource, InviteInput, MemberResource,
-    RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController, WorkspaceResource,
+    CreatePartitionInput, CreateWorkspaceInput, InvitationController, InvitationResource,
+    InviteInput, MemberResource, PartitionAccessInput, PartitionAccessResource, PartitionResource,
+    RenamePartitionInput, RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController,
+    WorkspaceResource,
 };
 pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
@@ -109,6 +112,12 @@ pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};
 pub use migration::WORKSPACE_MIGRATIONS;
 pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
+pub use org_controller::{
+    AccessRequestResource, AddOrgMemberInput, ApproveAccessRequestInput,
+    ApprovedAccessRequestResource, AttachWorkspaceInput, CreateOrganizationInput,
+    DeclineAccessRequestInput, OrgMemberResource, OrganizationController, OrganizationResource,
+    RequestAccessInput, TransferOrganizationInput, UpdateOrgMemberInput, UpdateOrganizationInput,
+};
 pub use org_current::{CurrentOrganization, CurrentPartition, InOrganization, PartitionScope};
 pub use org_members::{OrgMemberInfo, OrgMembers};
 pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
