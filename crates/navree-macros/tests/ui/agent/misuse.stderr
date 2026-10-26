@@ -1,0 +1,47 @@
+error: the tool `undocumented` needs a doc comment: the model chooses tools by it
+  --> tests/ui/agent/misuse.rs:10:14
+   |
+10 |     async fn undocumented(&self, run: &(), args: ()) -> Result<(), ()> {
+   |              ^^^^^^^^^^^^
+
+error: the tool `blocking` must be `async`
+  --> tests/ui/agent/misuse.rs:16:8
+   |
+16 |     fn blocking(&self, run: &()) -> Result<(), ()> {
+   |        ^^^^^^^^
+
+error: unknown #[tool] option `dangerous`: expected `read_only` or `needs_approval`
+  --> tests/ui/agent/misuse.rs:21:12
+   |
+21 |     #[tool(dangerous)]
+   |            ^^^^^^^^^
+
+error: a tool checks records with `run.authorize::<E, A>(id)`, not `from`
+  --> tests/ui/agent/misuse.rs:28:5
+   |
+28 |     #[can(Read, Deal, from = "id")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a #[tool] is `async fn too_many(&self, run: &AgentRun, args: Args) -> Result<T>` (or without `args`)
+  --> tests/ui/agent/misuse.rs:35:14
+   |
+35 |     async fn too_many(&self, run: &(), a: (), b: ()) -> Result<(), ()> {
+   |              ^^^^^^^^
+
+error: #[roles] only applies to #[tool] methods
+  --> tests/ui/agent/misuse.rs:39:5
+   |
+39 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: #[agent] takes no arguments
+  --> tests/ui/agent/misuse.rs:45:9
+   |
+45 | #[agent(name = "x")]
+   |         ^^^^^^^^^^
+
+error: #[agent] goes on an `impl Agent for YourAgent` block
+  --> tests/ui/agent/misuse.rs:51:1
+   |
+51 | impl Inherent {}
+   | ^^^^
