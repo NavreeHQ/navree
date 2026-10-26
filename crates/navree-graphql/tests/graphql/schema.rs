@@ -186,6 +186,39 @@ async fn execute_stream_runs_subscriptions_without_http() {
 }
 
 #[tokio::test]
+async fn a_refused_subscription_answers_once_with_the_error_and_ends() {
+    use async_graphql::futures_util::StreamExt;
+
+    let (app, audit) = app().await;
+    let schema = app.get::<GraphqlSchema>().await;
+    let viewer = uuid::Uuid::now_v7();
+    let mut stream = schema.execute_stream(
+        Request::new("subscription { moderationFeed }").data(navree_testing::principal(viewer)),
+    );
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+        .await
+        .expect("the refusal comes at once")
+        .expect("one response");
+    assert_eq!(first.errors.len(), 1, "{:?}", first.errors);
+    let extensions = first.errors[0].extensions.as_ref().unwrap();
+    assert_eq!(
+        extensions.get("code"),
+        Some(&async_graphql::Value::from("FORBIDDEN"))
+    );
+    let end = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+        .await
+        .expect("the stream ends at once");
+    assert!(end.is_none(), "nothing follows the refusal");
+    let denied = audit
+        .entries()
+        .into_iter()
+        .find(|entry| entry.action == "access.denied")
+        .expect("the refusal is audited");
+    assert_eq!(denied.metadata["field"], json!("moderationFeed"));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn an_app_without_resolvers_boots_with_an_empty_schema() {
     let app = TestApp::builder()
         .module(GraphqlModule::from_config())
