@@ -280,7 +280,18 @@ fn the_data_server_admits_the_app_servers_on_the_private_network() {
     insta::assert_snapshot!("data_postgres_script", step(&steps, "postgres").script);
     let redis = step(&steps, "redis");
     assert_eq!(redis.summary, "Redis on 127.0.0.1 and 10.0.0.31, 256 MB");
-    assert!(redis.script.contains("bind 127.0.0.1 -::1 10.0.0.31"));
+    // Plain addresses: the `-` (optional address) prefix needs Redis 6.2,
+    // and Ubuntu 22.04 ships 6.0.
+    assert!(redis.script.contains("\nbind 127.0.0.1 10.0.0.31\n"));
+}
+
+#[test]
+fn redis_binds_loopback_in_a_form_every_ubuntu_redis_reads() {
+    let steps = steps(SINGLE, "app-1", &plain(), 1987);
+    let redis = step(&steps, "redis");
+    assert_eq!(redis.summary, "Redis on 127.0.0.1, 256 MB");
+    assert!(redis.script.contains("\nbind 127.0.0.1\n"), "{}", redis.script);
+    assert!(!redis.script.contains("-::1"));
 }
 
 #[test]

@@ -24,8 +24,8 @@ use crate::ssh::{Identity, Ssh};
 
 /// The secret holding the database URL.
 pub const DATABASE_URL: &str = "APP_DATABASE__URL";
-/// The secret holding the Redis URL.
-pub const REDIS_URL: &str = "APP_REDIS__URL";
+/// The secret holding the Redis URL (the name Dock uses locally too).
+pub const REDIS_URL: &str = "REDIS_URL";
 
 /// What the `facts` script reports about a server.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -341,21 +341,23 @@ pub fn plan(
             .clone()
             .ok_or_else(|| HarborError::msg("no Redis password"))?;
         let remote = !config.only_local_clients(server);
-        let mut bind = "127.0.0.1 -::1".to_owned();
+        // Plain addresses only: the `-` (optional address) prefix needs
+        // Redis 6.2, and Ubuntu 22.04 ships 6.0. The app connects to
+        // 127.0.0.1, so IPv6 loopback is not needed.
+        let mut addresses = vec!["127.0.0.1".to_owned()];
         if remote && let Some(ip) = &server.private_ip {
-            bind.push(' ');
-            bind.push_str(ip);
+            addresses.push(ip.clone());
         }
         let redis = json!({
             "password": password,
-            "bind": bind,
+            "bind": addresses.join(" "),
             "maxmemory_mb": config.redis.maxmemory_mb,
         });
         steps.push(Step {
             area: "redis",
             summary: format!(
                 "Redis on {}, {} MB",
-                bind.replace(" -::1", "").replace(' ', " and "),
+                addresses.join(" and "),
                 config.redis.maxmemory_mb
             ),
             script: script(
