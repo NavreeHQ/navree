@@ -19,7 +19,7 @@
     {% if metric.range and range_links %}
     <nav class="ranges" aria-label="Range of {{ metric.label }}">
       {% for r in metric.ranges %}
-      <a href="{{ range_links[r.value] }}"{% if r.value == metric.range %} aria-current="true"{% endif %}>{{ r.label }}</a>
+      <a href="{{ range_links[r.value] }}" title="{{ r.label }}" aria-label="{{ r.label }}"{% if r.value == metric.range %} aria-current="true"{% endif %}>{% if r.value == "month" %}MTD{% elif r.value == "year" %}YTD{% else %}{{ r.value }}d{% endif %}</a>
       {% endfor %}
     </nav>
     {% endif %}
