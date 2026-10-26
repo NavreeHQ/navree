@@ -9,5 +9,6 @@ mod http_engines;
 mod migrations;
 mod queries;
 mod support;
+mod surface;
 mod sync;
 mod vectors;

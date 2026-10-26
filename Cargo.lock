@@ -2947,6 +2947,7 @@ dependencies = [
  "navree-queue",
  "navree-realtime",
  "navree-schedule",
+ "navree-search",
  "navree-session",
  "navree-storage",
  "navree-testing",

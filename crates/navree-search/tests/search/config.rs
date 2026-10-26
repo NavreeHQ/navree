@@ -133,3 +133,32 @@ async fn registering_an_entity_twice_is_harmless() {
         .build()
         .await;
 }
+
+#[cfg(feature = "tantivy")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_app_on_tantivy_syncs_and_searches() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = crate::support::builder("tantivy", "inline")
+        .config("search.tantivy.path", dir.path().to_string_lossy().to_string())
+        .config("search.tantivy.memory_budget_mb", 15)
+        .build()
+        .await;
+    let db = app.get::<navree_db::Db>().await;
+    let rows = crate::support::insert_contacts(
+        &db,
+        vec![crate::support::new_contact("Ada", "Lovelace")],
+    )
+    .await;
+    crate::support::settle(&app).await;
+    let search = app.get::<Search>().await;
+    assert_eq!(search.engine().name(), "tantivy");
+    let found = search
+        .query::<crate::support::Contact>("lovlace")
+        .ids(10)
+        .await
+        .unwrap();
+    assert_eq!(found, [rows[0].id.to_string()]);
+    app.run_command("search:import", &["Contact", "--fresh"]).await.unwrap();
+    search.assert_indexed::<crate::support::Contact>(rows[0].id).await;
+    app.shutdown().await.unwrap();
+}
