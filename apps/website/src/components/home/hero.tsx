@@ -42,8 +42,8 @@ export function Hero() {
             </a>
           </div>
 
-          <div className="terminal mt-9 flex max-w-[30rem] items-start justify-between gap-3 py-3 pr-2 pl-4" data-copy-root>
-            <pre className="min-w-0 overflow-x-auto py-1 text-[0.875rem] leading-7 text-fg">
+          <div className="terminal mt-9 flex max-w-[41rem] items-start justify-between gap-3 py-3 pr-2 pl-4" data-copy-root>
+            <pre className="min-w-0 py-1 text-[0.875rem] leading-7 whitespace-pre-wrap text-fg">
               <code>
                 {commands.map((command) => (
                   <span key={command} className="terminal-line block">

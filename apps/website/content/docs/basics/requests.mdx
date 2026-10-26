@@ -1,10 +1,350 @@
 ---
 title: "Requests and extractors"
-description: "Reading paths, query strings, bodies, headers and the current user."
+description: "Reading paths, query strings, JSON and other bodies, headers, the request id, the client IP behind trusted proxies, the current user, and body limits; writing your own extractor."
 ---
 
-This page covers extractors: `Path`, `Query` and `Json`, headers, the request id and client IP, `CurrentUser`, the unit of work, and how to write an extractor of your own.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` is the reference: run `cargo doc -p navree-http --open` in the repository.
+A handler doesn't receive a request object. It declares what it needs as arguments, and an *extractor* builds each one from the request: `Path(id)` from the path, `Query(filter)` from the query string, `Json(input)` from the body, `CurrentUser(user)` from the authenticated principal. This is Axum's model, and every Axum extractor works in a Navree handler; Navree adds extractors for the things it manages, such as the current user, the unit of work and validated input.
+
+```rust title="src/modules/deals/notes_controller.rs"
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Deserialize)]
+pub struct CreateNote {
+    pub body: String,
+}
+
+#[derive(Serialize)]
+pub struct NoteView {
+    pub id: u32,
+    pub deal_id: Uuid,
+    pub body: String,
+}
+
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl NotesController {
+    /// `POST /api/v1/deals/{id}/notes` with a JSON body.
+    #[post("/{id}/notes")]
+    async fn store(
+        &self,
+        Path(deal_id): Path<Uuid>,
+        Json(input): Json<CreateNote>,
+    ) -> Created<NoteView> {
+        let note = NoteView { id: 1, deal_id, body: input.body };
+        Created(format!("/api/v1/deals/{deal_id}/notes/1"), note)
+    }
+}
+```
+
+When an extractor fails, the handler doesn't run: the request ends with the extractor's error, rendered in the [error format](/docs/basics/errors/).
+
+## Path parameters
+
+`Path<T>` reads the parameters of the route's path (`{id}`, `{*rest}`) into a value, a tuple or a struct. A value that doesn't parse is a 400. [Routing](/docs/basics/routing/#path-parameters) covers the path syntax.
+
+## Query strings
+
+`Query<T>` deserializes the query string into `T` with serde:
+
+```rust
+#[derive(Deserialize)]
+pub struct DealFilter {
+    pub stage: Option<String>,
+    pub owner_id: Option<Uuid>,
+    #[serde(default)]
+    pub search: String,
+}
+
+/// `GET /api/v1/deals?stage=won&search=acme`
+#[get("/")]
+async fn index(&self, Query(filter): Query<DealFilter>) -> String {
+    format!("{:?} {:?} {}", filter.stage, filter.owner_id, filter.search)
+}
+```
+
+Missing fields must be `Option`s or have a serde default. A value of the wrong type is a 400:
+
+```json wrap
+{
+  "statusCode": 400,
+  "message": "Failed to deserialize query string: owner_id: UUID parsing failed: invalid character: found `n` at 0",
+  "error": "Bad Request"
+}
+```
+
+## JSON bodies
+
+`Json<T>` reads a JSON body into any `T: Deserialize`. It's Axum's `Json`, re-exported by navree-http and the prelude, and the same type serializes JSON responses. The request must say `Content-Type: application/json`:
+
+| Problem | Status | Message |
+|---|---|---|
+| No `Content-Type: application/json` | 415 | ``Expected request with `Content-Type: application/json` `` |
+| Not JSON | 400 | `Failed to parse the request body as JSON: EOF while parsing an object at line 1 column 1` |
+| JSON of the wrong shape | 400 | ``Failed to deserialize the JSON body into the target type: missing field `title` at line 1 column 13`` |
+
+Axum itself answers a wrongly shaped body with a 422; Navree turns it into a 400, like every other input error.
+
+To check the values (lengths, formats, ranges, uniqueness) and answer with a message per field, wrap the extractor: `Valid(Json(input)): Valid<Json<CreateNote>>`. See [validation](/docs/basics/validation/).
+
+### Other bodies
+
+| Extractor | Reads |
+|---|---|
+| `String` | The body as UTF-8 text |
+| `navree::axum::body::Bytes` | The raw body |
+| `navree::axum::Form<T>` | An `application/x-www-form-urlencoded` body |
+| `navree::axum::extract::Multipart` | A `multipart/form-data` body, part by part; [file storage](/docs/digging-deeper/storage/) has helpers for uploads |
+| `navree::axum::extract::Request` | The whole request |
+
+```rust
+use navree::axum::body::Bytes;
+
+#[post("/{id}/attachments")]
+async fn attach(&self, Path(deal_id): Path<Uuid>, body: Bytes) -> String {
+    format!("{} bytes for {deal_id}", body.len())
+}
+```
+
+An extractor that reads the body must be the handler's **last** argument: there is only one body. Putting it anywhere else is a compile error from Axum (the handler doesn't implement `Handler`).
+
+## Headers
+
+`HeaderMap` gives every header:
+
+```rust
+use navree::axum::http::HeaderMap;
+
+#[get("/agent")]
+async fn agent(&self, headers: HeaderMap) -> String {
+    headers
+        .get("user-agent")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown")
+        .to_owned()
+}
+```
+
+For one header you need often, write a small extractor (see [writing your own](#writing-your-own-extractor)). `axum-extra`'s `TypedHeader` isn't re-exported; add `axum-extra` to your dependencies if you want it.
+
+## The request id
+
+Every request has an id, which ties the request log, every log line written during the request, audit entries and the response together. The pipeline keeps an incoming `X-Request-Id` when it's 1 to 64 letters, digits, `-` or `_`, and generates one otherwise (a UUID v7 as 32 hex digits). The response carries it in `X-Request-Id`, error responses included.
+
+A handler reads it with Axum's `Extension` extractor:
+
+```rust
+use navree::axum::Extension;
+use navree::contracts::RequestId;
+
+#[get("/trace")]
+async fn trace(&self, Extension(request_id): Extension<RequestId>) -> String {
+    format!("request {request_id}")
+}
+```
+
+## The client IP and trusted proxies
+
+`ClientIp` (from `navree::http`) is the address of the client making the request:
+
+```rust
+use navree::http::ClientIp;
+
+#[get("/where")]
+async fn whereabouts(&self, ClientIp(ip): ClientIp) -> String {
+    format!("you are {ip}")
+}
+```
+
+The pipeline computes it once per request and uses it everywhere: the per-IP rate limit, route throttles for guests, the request log and audit entries. It's `0.0.0.0` when the request didn't arrive over a socket.
+
+Behind a reverse proxy, a load balancer or a backend-for-frontend, every request arrives from the proxy's address. The real client is in the `X-Forwarded-For` (or `X-Real-IP`) header the proxy adds, but anyone can send that header, so Navree only believes it from proxies you list:
+
+```toml title="config/app.toml"
+[http]
+trusted_proxies = ["127.0.0.1", "::1", "10.0.0.0/8"]
+```
+
+- A request from a listed proxy: the client is the first address in `X-Forwarded-For`, reading from the right, that isn't itself a listed proxy (the left-most when all are). Without that header, `X-Real-IP`; without either, the proxy's own address.
+- A request from any other peer: its own address. The headers are ignored, so a client that reaches the app directly can't choose its address.
+
+Entries are IP addresses or CIDR blocks, IPv4 or IPv6 (an IPv4-mapped IPv6 address counts as IPv4). An entry that isn't one fails the boot. From the environment, the list is comma-separated: `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`.
+
+`http.trust_proxy = true` believes the headers from **every** peer, taking the right-most `X-Forwarded-For` entry. Use it only when nothing can reach the app except through a proxy that sets the header; prefer `trusted_proxies`, which replaces it when both are set. Both are off by default.
+
+<Callout type="note" title="The CRM trusts its BFF">
+
+crm-web's server (its BFF) calls the API from the same machine for every browser. The CRM's `config/app.toml` sets `http.trusted_proxies` to `127.0.0.1` and `::1`, so the API believes an `X-Forwarded-For` the BFF sends. The BFF only sends one when `NAVREE_TRUSTED_PROXY_HOPS` (the number of reverse proxies in front of it) is above 0. With the default, 0, it sends none, and every web user shares the BFF's per-IP limit. Set `trusted_proxies` to the BFF's real address when it runs elsewhere.
+
 </Callout>
+
+## The current user
+
+Two extractors give you the signed-in user. Both answer guests with a 401, so they double as a check, but the route's [access declaration](/docs/basics/access-control/) is what keeps guests out.
+
+| Extractor | From | Gives |
+|---|---|---|
+| `CurrentPrincipal` | `navree::http` | The `Principal`: the user's id and how they authenticated. No database access |
+| `CurrentUser` | `navree::auth`, in the prelude | The user's database record (`navree::auth::User`), loaded once per request; also a 401 when the user no longer exists |
+
+```rust
+use navree::http::CurrentPrincipal;
+
+#[get("/whoami")]
+async fn whoami(&self, CurrentPrincipal(principal): CurrentPrincipal) -> String {
+    principal.user_id.to_string()
+}
+
+#[get("/profile")]
+async fn profile(&self, CurrentUser(user): CurrentUser) -> String {
+    user.email.clone()
+}
+```
+
+Use `CurrentPrincipal` when the id is enough, and `CurrentUser` when you need the user's fields. For the user's roles and abilities, see the extractors on the [authorization](/docs/security/authorization/) page (`Abilities`, `Authorized`, `Accessible`, `CurrentAccess`).
+
+### Client metadata
+
+navree-auth's `ClientMeta` (`navree::auth::ClientMeta`) bundles what you record about a client, for example with a token or in an audit entry: `ip` (`None` when unknown), `user_agent` and `request_id`, all `Option<String>`.
+
+```rust
+use navree::auth::ClientMeta;
+
+#[get("/")]
+#[authenticated]
+async fn show(&self, CurrentUser(user): CurrentUser, meta: ClientMeta) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "email": user.email,
+        "ip": meta.ip,
+        "user_agent": meta.user_agent,
+        "request_id": meta.request_id,
+    }))
+}
+```
+
+## Navree's other extractors
+
+| Extractor | Gives | Covered in |
+|---|---|---|
+| `Uow` | The request's unit of work | [The unit of work](/docs/database/unit-of-work/) |
+| `PageQuery` | `page` and `per_page` from the query string | [Pagination](/docs/database/pagination/) |
+| `Valid<Json<T>>`, `Valid<Query<T>>`, `Valid<Form<T>>`, `ValidAsync<..>` | Validated input | [Validation](/docs/basics/validation/) |
+| `Scoped<T>` | A request-scoped provider | [Providers](/docs/architecture/providers/#request-scoped-providers) |
+| `Authorized<E, A>`, `Accessible<E, A>`, `Abilities`, `CurrentAccess` | The authorized record, a list filter, the user's abilities | [Authorization](/docs/security/authorization/) |
+| `Session` | The session, with navree-session | [Sessions and CSRF](/docs/basics/sessions-and-csrf/) |
+
+## Body limits
+
+A request body may be at most `http.body_limit_bytes`, 2 MiB by default. The limit is checked twice:
+
+- **Before the handler:** a `Content-Length` over the limit is refused with a 413 before any byte is read: `"The request body must not exceed 2097152 bytes."`.
+- **While reading:** a body sent without a length (chunked) is cut off once it passes the limit, and the extractor answers 413: `"Failed to buffer the request body: length limit exceeded"`.
+
+```toml title="config/app.toml"
+[http]
+body_limit_bytes = 2097152
+```
+
+A route that needs a different limit, larger for an import or smaller for a webhook, sets its own with `.body_limit(bytes)` on a hand-written `RouteDef`. The route attributes have no body-limit attribute yet, so such a route goes in a [hand-written controller](/docs/basics/routing/#writing-controllers-by-hand). File uploads have their own size and type rules on top; see [file storage](/docs/digging-deeper/storage/).
+
+## Writing your own extractor
+
+An extractor is a type that implements Axum's `FromRequestParts` (or `FromRequest`, for one that reads the body). Use `AppError` as the rejection, so failures render in the error format:
+
+```rust
+use navree::axum::extract::FromRequestParts;
+use navree::axum::http::request::Parts;
+use navree::prelude::*;
+
+/// The `X-Tenant` header, required.
+pub struct Tenant(pub String);
+
+impl<S: Send + Sync> FromRequestParts<S> for Tenant {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .headers
+            .get("x-tenant")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| !value.is_empty())
+            .map(|value| Tenant(value.to_owned()))
+            .ok_or_else(|| AppError::bad_request("The X-Tenant header is required."))
+    }
+}
+```
+
+An extractor that needs a service resolves it through the `AppContext` the pipeline puts in every request:
+
+```rust
+/// The app's settings, resolved from the container.
+pub struct Settings(pub Arc<AppSettings>);
+
+impl<S: Send + Sync> FromRequestParts<S> for Settings {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let ctx = parts
+            .extensions
+            .get::<AppContext>()
+            .cloned()
+            .ok_or_else(|| AppError::internal("Settings used outside the navree pipeline"))?;
+        let settings = ctx.get::<AppSettings>().await.map_err(AppError::internal)?;
+        Ok(Settings(settings))
+    }
+}
+
+#[get("/")]
+#[public]
+async fn show(&self, Tenant(tenant): Tenant, Settings(settings): Settings) -> String {
+    format!("{tenant} pays in {}", settings.currency)
+}
+```
+
+Request extensions are also where you find the `RequestId`, the `ClientIp`, the `AuthState` and the route's metadata (as `Arc<RouteMeta>`), if your extractor needs them. A request without `X-Tenant` gets:
+
+```json
+{ "statusCode": 400, "message": "The X-Tenant header is required.", "error": "Bad Request" }
+```
+
+## Testing requests
+
+`TestRequest` builds requests for the in-process `TestClient`:
+
+```rust
+use navree::testing::{TestApp, principal};
+use serde_json::json;
+
+#[tokio::test]
+async fn notes_are_created() {
+    let app = TestApp::builder().module(NotesModule).build().await;
+    let deal = Uuid::now_v7();
+
+    app.acting_as(principal(Uuid::now_v7()))
+        .post(&format!("/api/v1/deals/{deal}/notes"))
+        .json(&json!({ "body": "Call back on Monday" }))
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("body", json!("Call back on Monday"));
+
+    app.shutdown().await.unwrap();
+}
+```
+
+Besides `json`, a request has `query`, `form`, `body`, `header` and `bearer`. Requests come from `127.0.0.1` and send `Accept: application/json`. See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    `Valid<Json<T>>` and field-level error messages.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses and API resources">
+    What handlers return.
+  </LinkCard>
+  <LinkCard href="/docs/basics/routing/" title="Routing and controllers">
+    Routes, paths and parameters.
+  </LinkCard>
+</LinkCards>

@@ -1,10 +1,334 @@
 ---
 title: "File storage"
-description: "Named disks, streaming and signed temporary URLs."
+description: "Named disks on object_store: putting, reading and streaming files, upload checks and signed temporary URLs."
 ---
 
-This page covers file storage: named disks on object_store, reading and writing files, streaming large uploads and downloads, upload checks, and signed temporary URLs.
+<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, and hand out links that expire. It is built on [object_store](https://docs.rs/object_store), the storage layer of Apache Arrow.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-storage` is the reference: run `cargo doc -p navree-storage --open` in the repository.
+<Callout type="note" title="Local and memory disks only">
+
+Two drivers exist today: `local` (a directory on the server) and `memory` (process memory, for tests and scratch data). S3, Google Cloud Storage and Azure drivers are not built yet, although object_store supports them; `DiskConfig` is non-exhaustive so they can be added without breaking your code. See the [roadmap](/docs/prologue/roadmap/).
+
 </Callout>
+
+## Configuration
+
+Add `StorageModule` to your app. With no configuration you get one disk, `local`, rooted at `storage/app` (relative to the working directory):
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(StorageModule::from_config()) // section `storage`
+}
+```
+
+Disks are described in the `storage` section. Each disk has a `driver`; local disks also take a `root` and an optional `public_url`:
+
+```toml title="config/app.toml"
+[storage]
+default = "local"
+base_url = "https://api.example.com"   # optional: makes temporary URLs absolute
+
+[storage.disks.local]
+driver = "local"
+root = "storage/app"
+
+[storage.disks.avatars]
+driver = "local"
+root = "storage/app/avatars"
+public_url = "https://cdn.example.com/avatars"
+
+[storage.disks.scratch]
+driver = "memory"
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `storage.default` | `local` | The disk injected as `Disk` and returned by `Storage::default_disk()`. It must exist. |
+| `storage.disks.<name>.driver` | | `local` or `memory`. |
+| `storage.disks.<name>.root` | | The directory of a local disk. It is created at boot if missing. |
+| `storage.disks.<name>.public_url` | none | Where a local disk's root is publicly served (a CDN or a static file server), for `Disk::url`. |
+| `storage.base_url` | none | An absolute `http(s)` URL put in front of temporary URLs. Without it they are path-only (`/storage/...`). |
+
+Defining `storage.disks` replaces the default `local` disk, so list every disk you need. Disk names use letters, digits, `-` and `_`. Invalid options (a missing default disk, an empty root, a relative `base_url`) fail the boot with a message naming the key. Like every section, these keys can come from the environment: `APP_STORAGE__BASE_URL=https://api.example.com`.
+
+You can also configure the module in code with `StorageModule::for_root`. Build `StorageOptions` from its default so you keep the `local` disk:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+use navree::storage::{DiskConfig, StorageOptions};
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    let mut storage = StorageOptions::default(); // one `local` disk at storage/app
+    storage.disks.insert(
+        "avatars".into(),
+        DiskConfig::Local {
+            root: "storage/app/avatars".into(),
+            public_url: Some("https://cdn.example.com/avatars".into()),
+        },
+    );
+
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(StorageModule::for_root(storage))
+}
+```
+
+`StorageModule` is global: every module can inject what it provides without importing it.
+
+## Getting a disk
+
+Inject `Arc<Disk>` for the default disk, or `Arc<Storage>` to pick disks by name:
+
+```rust title="src/modules/reports/service.rs"
+use chrono::{Duration, Utc};
+use navree::prelude::*;
+use navree::storage::{Disk, Storage, StorageError};
+
+#[injectable]
+pub struct ReportService {
+    /// The default disk.
+    disk: Arc<Disk>,
+    /// Every disk, by name.
+    storage: Arc<Storage>,
+}
+
+impl ReportService {
+    /// Stores the quarter's report and returns a link valid for 30 minutes.
+    pub async fn publish(&self, quarter: &str, csv: String) -> Result<String, StorageError> {
+        let path = format!("reports/{quarter}.csv");
+        self.disk.put(&path, csv).await?;
+        self.disk
+            .temporary_url(&path, Utc::now() + Duration::minutes(30))
+    }
+}
+
+#[module(providers = [ReportService])]
+pub struct ReportsModule;
+```
+
+`Storage::disk(name)` returns `Err(StorageError::UnknownDisk)` for a name that isn't configured, and `Storage::disk_names()` lists the configured ones. A `Disk` is cheap to clone.
+
+## Storing and reading files
+
+Paths are relative to the disk's root and use `/` as the separator. Every method normalises them first: `\` also counts as a separator, and leading, trailing and repeated separators and `.` segments are dropped, so `/a//./b.txt` is `a/b.txt`. A path containing `..`, a segment made only of dots or spaces, a control character, or more than 1024 bytes fails with `StorageError::InvalidPath` before it reaches the driver, so no path can leave the disk's root.
+
+```rust
+// Write a file (anything that converts into `Bytes`: a String, a Vec<u8>, ...).
+self.disk.put("reports/2026-q3.csv", csv).await?;
+
+// Read it back.
+let bytes = self.disk.get("reports/2026-q3.csv").await?;
+
+// Check, measure and delete.
+if self.disk.exists("reports/draft.csv").await? {
+    let size = self.disk.size("reports/draft.csv").await?; // bytes
+    self.disk.delete("reports/draft.csv").await?;
+}
+
+// Every file under a directory, recursively, sorted.
+let files: Vec<String> = self.disk.list("reports").await?; // ["reports/2026-q3.csv", ...]
+```
+
+- `put` replaces an existing file, and the write is atomic: readers see the old file or the new one, never half of it.
+- `delete` succeeds when the file doesn't exist.
+- `list("")` lists the whole disk.
+- `get` and `size` fail with `StorageError::NotFound` for a missing file.
+
+There is no `copy`, `move` or "last modified" helper yet; read and write the file instead.
+
+### Errors in handlers
+
+A `StorageError` that reaches a handler's `?` turns into a response: a missing file is a `404`, an invalid path a `400` with the message `Invalid file path.`, and anything else a `500` (logged, never shown). See [Errors](/docs/basics/errors/) for the response format.
+
+## Streaming large files
+
+`get` and `put` hold the whole file in memory. For large files, stream instead. `get_stream` returns a `ByteStream` of chunks (local files are read on Tokio's blocking pool), and `put_stream` writes any stream of `Result<Bytes, E>` chunks and returns the number of bytes written:
+
+```rust
+/// Copies a report to the `archive` disk without loading it into memory.
+pub async fn archive(&self, quarter: &str) -> Result<u64, StorageError> {
+    let path = format!("reports/{quarter}.csv");
+    let contents = self.disk.get_stream(&path).await?;
+    self.storage.disk("archive")?.put_stream(&path, contents).await
+}
+```
+
+`put_stream` uploads the file in parts and only makes it visible when the stream ends successfully. If the source stream fails, nothing is stored and the error is `StorageError::Stream`.
+
+To send a stored file in a response, wrap the stream in an Axum body:
+
+```rust title="src/modules/avatars/controller.rs"
+use navree::axum::body::Body;
+use navree::axum::response::{IntoResponse, Response};
+
+#[get("/{*path}")]
+#[authenticated]
+async fn show(&self, Path(path): Path<String>) -> Result<Response> {
+    let stream = self.storage.disk("avatars")?.get_stream(&path).await?;
+    Ok(Body::from_stream(stream).into_response())
+}
+```
+
+Set the `Content-Type` yourself when you serve files this way; the [temporary URL route](#temporary-urls) does it for you.
+
+## File uploads
+
+`store_upload` streams one multipart file field to a disk, checking it as it goes. Take Axum's `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
+
+```rust title="src/modules/avatars/controller.rs"
+use navree::axum::extract::Multipart;
+use navree::prelude::*;
+use navree::storage::{Storage, StoredFile, UploadRules, store_upload};
+
+#[injectable]
+pub struct AvatarController {
+    storage: Arc<Storage>,
+}
+
+#[controller("/avatars", version = "1")]
+impl AvatarController {
+    /// Stores the first file of a multipart form on the `avatars` disk.
+    #[post("/")]
+    #[authenticated]
+    async fn store(&self, mut form: Multipart) -> Result<Json<StoredFile>> {
+        let field = form
+            .next_field()
+            .await?
+            .ok_or_else(|| AppError::bad_request("avatar should not be empty"))?;
+        let disk = self.storage.disk("avatars")?;
+        let rules = UploadRules::new(1024 * 1024, ["image/png", "image/jpeg", "image/webp"]);
+        Ok(Json(store_upload(field, &disk, "users", rules).await?))
+    }
+}
+```
+
+The file is stored under the directory you pass (`users`) with a random 40-character name and an extension that matches its content. `StoredFile` tells you where it went:
+
+```json title="200 OK"
+{
+  "disk": "avatars",
+  "path": "users/3fQx...k9Ta.png",
+  "size": 48213,
+  "mime": "image/png",
+  "original_name": "me.png"
+}
+```
+
+`original_name` is the name the browser sent, without directories. It is untrusted: show it, but never use it as a path.
+
+### What gets checked
+
+- **The type comes from the content, not from the client.** The first 8 KiB are sniffed with [infer](https://docs.rs/infer). A renamed executable is not an image. Content `infer` doesn't recognise is `text/*` when it is UTF-8 text (the file name's extension picks the `text/` type, `text/plain` otherwise) and `application/octet-stream` otherwise, so an SVG or HTML file is never accepted as an image.
+- **Allowed types** are exact (`image/png`) or wildcards (`image/*`, `*/*`), case-insensitive. An empty list accepts any type.
+- **The size limit** is checked while streaming, so an oversized file is never stored.
+
+| Problem | Response |
+|---|---|
+| An empty file, or a type the rules don't allow | `400` validation error keyed by the field name, e.g. `avatar must be a file of type: image/png, image/jpeg, image/webp` |
+| A file over `UploadRules::max_bytes` | `413` `avatar must not be larger than 1048576 bytes` (the partial file is discarded) |
+| A request body over the route's body limit | `413` |
+| A malformed multipart body | `400` |
+| A storage failure | `500` |
+
+`StorageModule` also maps multipart errors you propagate with `?` (as in `form.next_field().await?`) to their client status, so a body over the limit is a `413`, not a `500`.
+
+<Callout type="warning" title="Raise the body limit for large uploads">
+
+Every request body is limited by `http.body_limit_bytes` (2 MiB by default) before your handler runs. `#[controller]` routes have no attribute to change it per route yet: raise `http.body_limit_bytes` for the whole app, or register the route with a hand-written controller and `RouteDef::body_limit(bytes)`. Keep `UploadRules::max_bytes` at or below the limit that applies.
+
+</Callout>
+
+## Public URLs
+
+A local disk served by a CDN or a static file server gets a `public_url`. `Disk::url` joins it with the percent-encoded path:
+
+```rust
+let avatars = self.storage.disk("avatars")?;
+let url = avatars.url("users/a b.png")?; // https://cdn.example.com/avatars/users/a%20b.png
+```
+
+A disk without a `public_url` (memory disks always) fails with `StorageError::NoPublicUrl`. Navree doesn't serve the disk's root itself: point your web server or CDN at it.
+
+## Temporary URLs
+
+`temporary_url` gives a link that downloads one file until a given time, with no sign-in needed. It works for every disk, private ones included:
+
+```rust
+use chrono::{Duration, Utc};
+
+let link = self.disk.temporary_url("reports/2026-q3.csv", Utc::now() + Duration::minutes(30))?;
+// /storage/local/reports/2026-q3.csv?expires=1793004277&signature=5c0f...e21a
+```
+
+The signature is an HMAC-SHA-256 of the disk, the path and the expiry time. With `storage.base_url` set, the link is absolute (`https://api.example.com/storage/...`).
+
+`StorageModule` serves these links at `GET /storage/{disk}/{*path}` when your app has `HttpModule`. The route is public (the signature is the authorisation) and is not under the API prefix. It:
+
+- answers `403` `Invalid signature.` for a forged or altered link, an unknown disk or an invalid path, and `403` `The link has expired.` once the time has passed (it uses the app's `dyn Clock` when one is registered);
+- answers `404` when the file is gone;
+- streams the file with a `Content-Type` guessed from its extension, `Content-Length`, `X-Content-Type-Options: nosniff` and `Cache-Control: private`;
+- sends HTML, XHTML, SVG, XML and JavaScript files as attachments (`Content-Disposition: attachment`), so a stored file can never run in your app's origin.
+
+<Callout type="warning" title="Set APP_KEY so links survive restarts">
+
+The signing key is derived from the app key (`app.key` / `APP_KEY`). Without one, Navree logs a warning and uses a random key per process: every link stops working when the app restarts, and links made by one instance fail on another. A malformed `app.key` fails the boot. See [Encryption and hashing](/docs/security/encryption-and-hashing/).
+
+</Callout>
+
+Anyone holding a link can download the file until it expires, so keep expiry times short and don't log the links.
+
+## Health check
+
+`StorageModule` registers a `storage` readiness check. On every disk it writes, reads back and deletes a small probe file under `.navree-health/`, and reports the disk as down if any step fails. It shows up in `GET /health/ready`; see [Health and metrics](/docs/digging-deeper/health-and-metrics/).
+
+## Testing
+
+Use a memory disk in tests: nothing touches the file system and every app starts empty.
+
+```rust title="src/modules/reports/tests/mod.rs"
+use navree::prelude::*;
+use navree::storage::{DiskConfig, Storage, StorageOptions};
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn publishing_a_report_stores_it() {
+    let app = TestApp::builder()
+        .module(StorageModule::for_root(StorageOptions {
+            default: "memory".into(),
+            disks: [("memory".to_owned(), DiskConfig::Memory)].into(),
+            ..StorageOptions::default()
+        }))
+        .module(ReportsModule)
+        .build()
+        .await;
+
+    let link = app.get::<ReportService>().await.publish("2026-q3", "a,b\n".into()).await.unwrap();
+
+    assert!(link.starts_with("/storage/memory/reports/2026-q3.csv?expires="));
+    let disk = app.get::<Storage>().await.default_disk();
+    assert_eq!(disk.get("reports/2026-q3.csv").await.unwrap(), "a,b\n");
+    app.shutdown().await.unwrap();
+}
+```
+
+To test uploads, send a `multipart/form-data` body with [`TestClient`](/docs/testing/http-tests/) (`.header("content-type", "multipart/form-data; boundary=...")` and `.body(...)`). Outside an app, `Storage::new(&options, signing_key)` builds the disks directly.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/basics/requests/" title="Requests and extractors">
+    Extractors, body limits and the order of arguments.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
+    The readiness report the storage check feeds.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    Sections, `.env` and `APP_*` variables.
+  </LinkCard>
+</LinkCards>

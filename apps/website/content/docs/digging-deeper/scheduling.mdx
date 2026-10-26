@@ -1,10 +1,302 @@
 ---
 title: "Task scheduling"
-description: "Cron-style schedules, overlap prevention and single-node runs."
+description: "Cron-style schedules declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, all in UTC."
 ---
 
-This page shows how to schedule commands and jobs: cron expressions and helpers such as `hourly` and `daily_at`, preventing overlapping runs, running a task on one server only, and running the scheduler with `schedule:work`.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-schedule` is the reference: run `cargo doc -p navree-schedule --open` in the repository.
-</Callout>
+<Badge feature="schedule" /> Without a scheduler, every recurring task needs its own crontab entry on the server, outside your code and your version control. With `ScheduleModule`, modules declare their schedules in code, next to the work they schedule, and one long-running process (or one crontab entry) runs them all.
+
+- A task is a registered CLI command, a [queued job](/docs/digging-deeper/queues/) or an async function.
+- Its frequency is a cron expression or a helper such as `hourly` or `daily_at("08:00")`. Times are UTC.
+- Every run is recorded in the database, which is how each run happens on one server only, however many servers run the scheduler, and how `without_overlapping` sees runs on other servers.
+
+## Registering the module
+
+Add `ScheduleModule` once, in your app root. It has no options. It needs `DatabaseModule`: its `schedule` migration set creates the `schedule_runs` table.
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(DatabaseModule::from_config())
+    .module(QueueModule::from_config()) // for scheduled jobs
+    .module(ScheduleModule::for_root())
+    // ...
+```
+
+The module is global and collects every module's schedule at boot. The scheduler takes the time from the app's `dyn Clock` when one is registered, and from the system clock otherwise.
+
+## Defining schedules
+
+Declare tasks in a module's `register` hook with `m.schedule` (the prelude brings it into scope). These are the CRM's two daily tasks, from `crm-activities/src/lib.rs`:
+
+```rust title="crm-activities/src/lib.rs"
+/// When `audit:prune` runs every day (UTC).
+pub const AUDIT_PRUNE_AT: &str = "03:00";
+
+impl ActivitiesModule {
+    /// The reminder command, its mail templates and the schedule.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.command(reminders::reminders_command());
+        m.templates(&reminders::TEMPLATES);
+        m.schedule(|s| {
+            s.command(TASK_REMINDERS_COMMAND, &[])
+                .daily_at(TASK_REMINDERS_AT)
+                .without_overlapping();
+            s.command("audit:prune", &[])
+                .daily_at(AUDIT_PRUNE_AT)
+                .without_overlapping();
+        });
+    }
+}
+```
+
+At 08:00 UTC, `crm:task-reminders` notifies everyone with open tasks due today. At 03:00 UTC, the audit module's `audit:prune` deletes audit entries older than the retention period. Each statement in the closure ends with a semicolon, so write the closure with a block.
+
+A module can define three kinds of task.
+
+### Scheduling commands
+
+`s.command(name, args)` runs a registered [CLI command](/docs/digging-deeper/cli/) with those arguments, as `cargo run -- <name> <args>` would, but inside the scheduler's process and app instead of a new one:
+
+```rust
+s.command("audit:prune", &["--days", "90"]).daily_at("03:30");
+```
+
+The task is named after the command line, here `audit:prune --days 90`. If no module registers the command, the boot fails.
+
+### Scheduling jobs
+
+`s.job(value)` dispatches a clone of the job on each due tick, through the app's job dispatcher, so a [queue worker](/docs/digging-deeper/queues/#running-workers) runs it and retries it if it fails. The job type must be `Clone`:
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RefreshPipelineStats;
+
+impl Job for RefreshPipelineStats {
+    const NAME: &'static str = "deals.refresh_pipeline_stats";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        // ...
+    }
+}
+
+// in the module's register hook:
+m.schedule(|s| {
+    s.job(RefreshPipelineStats).every_fifteen_minutes();
+});
+```
+
+The task is named after the job's `NAME`. `m.schedule` registers the job type with the queue for you, so you don't need `m.job::<J>()` as well (registering it twice is harmless). In an app without a queue, the job runs inline on the scheduler.
+
+### Scheduling functions
+
+`s.task(name, f)` calls an async function with the app's `AppContext`. A closure works:
+
+```rust
+use chrono::{TimeDelta, Utc};
+use navree::db::Db;
+use navree::notify::notifications;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+m.schedule(|s| {
+    s.task("notifications.prune", |ctx| async move {
+        let db = ctx.get::<Db>().await?;
+        let cutoff = Utc::now() - TimeDelta::days(90);
+        notifications::Entity::delete_many()
+            .filter(notifications::Column::ReadAt.lt(cutoff))
+            .exec(db.conn())
+            .await?;
+        Ok(())
+    })
+    .daily_at("04:00");
+});
+```
+
+So does a plain function with the signature `async fn(AppContext) -> Result<(), BoxError>`:
+
+```rust
+m.schedule(|s| {
+    s.task("deals.close-stale", close_stale_deals).cron("0 6 * * MON-FRI");
+});
+
+async fn close_stale_deals(ctx: AppContext) -> Result<(), BoxError> {
+    // ...
+    Ok(())
+}
+```
+
+### Task names
+
+Each task needs a unique name, at most 191 characters: it keys the task's runs in `schedule_runs`. Two tasks with the same name fail the boot, naming both modules. Rename a command or job task with `.name(...)`:
+
+```rust
+s.command("audit:prune", &["--days", "90"])
+    .cron("30 3 * * SUN")
+    .name("audit.prune-weekly");
+```
+
+## Schedule frequencies
+
+A task without a frequency runs every minute. The helpers build cron expressions:
+
+| Method | Runs | Cron |
+|---|---|---|
+| `.cron("*/10 9-17 * * MON-FRI")` | on a custom cron expression | as given |
+| `.every_minute()` | every minute (the default) | `* * * * *` |
+| `.every_five_minutes()` | every five minutes | `*/5 * * * *` |
+| `.every_fifteen_minutes()` | every fifteen minutes | `*/15 * * * *` |
+| `.hourly()` | at the start of every hour | `0 * * * *` |
+| `.hourly_at(17)` | every hour at 17 minutes past | `17 * * * *` |
+| `.daily()` | every day at midnight | `0 0 * * *` |
+| `.daily_at("08:00")` | every day at 08:00 | `0 8 * * *` |
+| `.weekly()` | every Sunday at midnight | `0 0 * * 0` |
+
+A cron expression has five fields: minute, hour, day of month, month and day of week. Expressions are parsed by [croner](https://docs.rs/croner), which also accepts names such as `MON-FRI` and the nicknames `@hourly`, `@daily`, `@weekly`, `@monthly` and `@yearly`. A seconds field isn't allowed.
+
+An invalid expression, an `hourly_at` minute over 59 or a `daily_at` time that isn't a 24-hour `HH:MM` fails the boot with the task, its module and the reason. The last frequency you set wins.
+
+Laravel's other helpers (`twiceDaily`, `weekdays`, `monthlyOn` and so on) don't exist; write the cron expression instead, for example `.cron("0 9 * * MON-FRI")` for weekdays at nine.
+
+## Time zones
+
+Every schedule is in UTC, and 0.1 has no time-zone setting, neither for the app nor per task. `daily_at("08:00")` runs at 08:00 UTC wherever your servers and users are: the CRM's reminders go out at 08:00 UTC for everyone.
+
+To run a task at a local time, convert it to UTC yourself, and remember that the conversion changes when daylight saving time starts or ends: a task at 08:00 in London is `daily_at("07:00")` in summer and `daily_at("08:00")` in winter.
+
+## Preventing overlaps
+
+A task that sometimes runs longer than its interval could start again while it's still running. `without_overlapping` skips a tick while an earlier run of the task is still in progress:
+
+```rust
+s.command("crm:task-reminders", &[])
+    .daily_at("08:00")
+    .without_overlapping();
+```
+
+The scheduler sees a running run in its own process (an in-process lock) and on other servers (a `running` row in `schedule_runs`). A skipped tick is reported as skipped and is not run later.
+
+- A `running` row older than 24 hours doesn't count: it was probably left by a process that crashed mid-run. Until then, though, such a row keeps skipping the task. If a scheduler crashed during a run and you need the task sooner, delete that row from `schedule_runs`.
+- For a [job task](#scheduling-jobs), the run is the dispatch, which is over at once, so `without_overlapping` doesn't stop two of its jobs from running at the same time on workers. Make the job [unique](/docs/digging-deeper/queues/#unique-jobs) for that.
+
+## Running on one server
+
+You can run the scheduler on every server, for redundancy. Each due tick of each task is claimed in the database first, with an `INSERT … ON CONFLICT DO NOTHING` on `schedule_runs` keyed by task and minute; only the scheduler whose insert succeeds runs it, and the others report it skipped. A second `schedule:run` in the same minute skips it too.
+
+Laravel needs `onOneServer()` for this. In Navree every task already runs on one server per tick; `.on_one_server()` exists so your intent is written down, and changes nothing.
+
+Two conditions apply: every scheduler must use the same database, and the servers' clocks must agree (keep NTP running). Ticks are whole minutes of each server's own clock, so a server whose clock is a minute off claims a different tick.
+
+## Running the scheduler
+
+Run the scheduler in one of two ways. Both run whatever is due at each minute.
+
+### `schedule:work`
+
+`schedule:work` runs in the foreground and ticks at every minute boundary until it is stopped:
+
+```sh
+cargo run -- schedule:work
+```
+
+Keep it running with a process manager, like a [queue worker](/docs/digging-deeper/queues/#running-workers-in-production). Each tick runs in the background, so a slow task never delays the next tick. Ctrl-C or SIGTERM stops it, and the app's graceful shutdown waits for running tasks (30 seconds by default). If the process stalls, for example because the machine was suspended, the minutes it missed are skipped, not caught up.
+
+### `schedule:run`
+
+`schedule:run` runs the tasks due in the current minute, waits for them and exits. Call it every minute from the system's cron:
+
+```text title="crontab"
+* * * * * cd /srv/crm && ./crm-api schedule:run >> /dev/null 2>&1
+```
+
+It prints one line per due task, for example at 08:00 UTC in the CRM:
+
+```text
+Ran: crm:task-reminders
+```
+
+The other lines are `Skipped: <task> (already run for this minute)`, `Skipped: <task> (still running)` and `Failed: <task> (<error>)`. When a task fails, the command exits with an error, so cron's mail or your monitoring sees it. With no task due it prints `No scheduled tasks are due.`
+
+### `schedule:list`
+
+`schedule:list` shows every task with its expression and next run. For the CRM, at noon UTC:
+
+```text
+Expression  Next run              Task
+0 8 * * *   2026-10-27 08:00 UTC  crm:task-reminders (without overlapping)
+0 3 * * *   2026-10-27 03:00 UTC  audit:prune (without overlapping)
+```
+
+## Failures and the run history
+
+A task that returns an error or panics is logged at `error` level, recorded as `failed` and not retried; the next due tick runs it as usual. For work that should be retried, schedule a job: the queue retries it with backoff.
+
+Every run is logged at target `navree::schedule` (task, tick, duration and outcome) and recorded in `schedule_runs`:
+
+| Column | Holds |
+|---|---|
+| `task`, `tick` | The task name and the minute it was due (the primary key). |
+| `started_at`, `finished_at` | When it ran. |
+| `status` | `running`, `succeeded` or `failed`. |
+| `error` | The error of a failed run (cut to 4,000 bytes). |
+
+Rows are kept for seven days; the scheduler deletes older ones at the top of every hour.
+
+## Testing
+
+Resolve the `Scheduler` and call `tick` with a time: it runs the tasks due at that minute, waits for them and returns one `RunOutcome` per due task (`task`, `tick` and a `RunStatus`). Tasks that aren't due are left out. Override the app's `dyn Clock` with a `FixedClock` so the tasks see the same time:
+
+```rust title="tests/schedule.rs"
+use chrono::{DateTime, Utc};
+use navree::contracts::{Clock, FixedClock};
+use navree::prelude::*;
+use navree::schedule::{RunStatus, Scheduler, SkipReason};
+use navree::testing::TestApp;
+
+fn at(time: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(time).unwrap().with_timezone(&Utc)
+}
+
+#[tokio::test]
+async fn reminders_run_once_at_eight() {
+    let clock = Arc::new(FixedClock::new(at("2026-10-26T07:59:00Z")));
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(ScheduleModule::for_root())
+        .module(RemindersModule)
+        .override_value::<dyn Clock>(clock.clone())
+        .build()
+        .await;
+    let scheduler = app.get::<Scheduler>().await;
+
+    assert!(scheduler.tick(at("2026-10-26T07:59:30Z")).await.unwrap().is_empty());
+
+    let outcomes = scheduler.tick(at("2026-10-26T08:00:10Z")).await.unwrap();
+    assert_eq!(outcomes[0].task, "reminders");
+    assert_eq!(outcomes[0].status, RunStatus::Succeeded);
+
+    // The same minute again: already claimed.
+    let again = scheduler.tick(at("2026-10-26T08:00:40Z")).await.unwrap();
+    assert_eq!(again[0].status, RunStatus::Skipped(SkipReason::AlreadyClaimed));
+    app.shutdown().await.unwrap();
+}
+```
+
+- `RunStatus::Failed(message)` carries the error a failed run returned.
+- `scheduler.list(now)` returns every task as a `TaskInfo` (`name`, `module`, `expr`, `next_run`, `without_overlapping`), to check that a module schedules what it should.
+- To test a command task's effect, you can also run the command directly with `app.run_command(...)`.
+
+The CRM's `crm-activities/tests/reminders.rs` does all of this with the whole CRM: it seeds tasks, ticks at 08:00 and checks the notifications and mail each user got.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Retries for scheduled jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="Console commands">
+    Writing the commands a schedule runs.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    What `audit:prune` deletes.
+  </LinkCard>
+</LinkCards>

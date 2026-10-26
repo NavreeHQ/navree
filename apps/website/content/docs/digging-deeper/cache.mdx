@@ -1,10 +1,392 @@
 ---
 title: "Cache"
-description: "Cache stores, `remember`, tags and locks."
+description: "`Cache` and `Locks` from `CacheModule`: the in-memory store on moka, `remember`, stale-while-revalidate, counters, tags and atomic locks."
 ---
 
-This page covers the cache module: the in-memory store built on moka, reading and writing values, `remember` for computing a value on a miss, tags for invalidating groups of keys, and atomic locks.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-cache` is the reference: run `cargo doc -p navree-cache --open` in the repository.
+<Badge feature="cache" /> Some data is expensive to compute and changes rarely: dashboard totals, exchange rates, the answer of a slow third-party API. `CacheModule` keeps such values for a while, so later calls read them from memory instead of computing them again. It gives your app two services:
+
+- **`Cache`**: typed values under string keys, each with its own time to live (TTL), plus `remember`, stale-while-revalidate, counters and tags.
+- **`Locks`**: named atomic locks with owner tokens and an expiry.
+
+Both sit on a store. Navree 0.1 ships one, an in-process store on [moka](https://docs.rs/moka). Framework crates use the cache too: when `CacheModule` is in the app, navree-auth counts failed logins in it (see [authentication](/docs/security/authentication/)).
+
+<Callout type="warning" title="The memory store belongs to one process">
+
+Every process has its own cache and its own locks. Two API servers, or `serve` and `queue:work`, don't see each other's entries, and a lock taken in one process doesn't stop another. There is no Redis or database store yet (see the [roadmap](/docs/prologue/roadmap/)). The store traits are public, so you can plug in your own: see [custom stores](#custom-stores).
+
 </Callout>
+
+## Configuration
+
+Add the module once, in your app root. It is global: feature modules use the cache without importing it.
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CacheModule::from_config())
+    // ...
+```
+
+`CacheModule::from_config()`, and a plain `.module(CacheModule)`, read the `cache` section of your [configuration](/docs/getting-started/configuration/). Every key has a default, so the section is optional:
+
+```toml title="config/app.toml"
+[cache]
+store = "memory"         # the only store in 0.1
+prefix = "crm:"          # added to every cache key and lock name
+default_ttl_secs = 3600  # what Ttl::Default means
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `cache.store` | `memory` | The backend. Any other value fails the boot. |
+| `cache.prefix` | empty | Prepended to every cache key and lock name. |
+| `cache.default_ttl_secs` | `3600` | The TTL of `Ttl::Default`, in seconds. `0` fails the boot. |
+
+Environment variables override the file: `APP_CACHE__PREFIX=crm:`, `APP_CACHE__DEFAULT_TTL_SECS=600`.
+
+To configure the module in code instead, without reading the configuration, use `for_root`:
+
+```rust
+use navree::cache::CacheOptions;
+
+Navree::app().module(CacheModule::for_root(CacheOptions {
+    prefix: "crm:".into(),
+    default_ttl_secs: 600,
+    ..CacheOptions::default()
+}))
+```
+
+The module also registers a `cache` health check and the `cache:clear` command (see [below](#the-health-check-and-cacheclear)).
+
+## Using the cache
+
+Inject `Arc<Cache>` into any provider. Here, the dashboard computes its pipeline totals at most once a minute:
+
+```rust title="src/modules/dashboard/services/pipeline.rs"
+use std::time::Duration;
+
+use navree::cache::{Cache, CacheError};
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PipelineTotals {
+    pub open_deals: u64,
+    pub open_amount_cents: i64,
+}
+
+#[injectable]
+pub struct PipelineService {
+    cache: Arc<Cache>,
+}
+
+impl PipelineService {
+    pub async fn totals(&self) -> Result<PipelineTotals, CacheError> {
+        self.cache
+            .remember("dashboard:pipeline", Duration::from_secs(60), || self.compute())
+            .await
+    }
+
+    async fn compute(&self) -> Result<PipelineTotals, BoxError> {
+        // ... the expensive queries
+    }
+}
+```
+
+Values are stored as JSON, so any type that implements serde's `Serialize` and `Deserialize` can be cached. `Cache` is cheap to clone; clones share the same store.
+
+### Retrieving items
+
+`get` returns the value under a key, or `None` when it is missing or has expired. Name the type you expect:
+
+```rust
+let last: Option<String> = cache.get("deals:last-import").await?;
+```
+
+A stored value that doesn't decode as that type is an error, `CacheError::Deserialize`. `has` tells you whether a key holds a live value, and `pull` returns the value and removes it in one call:
+
+```rust
+if cache.has("imports:running").await? {
+    // ...
+}
+let token: Option<String> = cache.pull("exports:download-token").await?;
+```
+
+### Storing items
+
+`put` stores a value for a TTL. The TTL is anything that converts into `Ttl`:
+
+```rust
+use navree::cache::Ttl;
+
+cache.put("deals:last-import", &imported_at, Duration::from_secs(600)).await?;
+cache.put("settings:currency", &"EUR", Ttl::Default).await?; // cache.default_ttl_secs
+cache.put("settings:fiscal-year-start", &4, Ttl::Forever).await?;
+cache.forever("settings:fiscal-year-start", &4).await?;      // the same
+```
+
+- A `Duration` expires the value after that long. `Duration::ZERO` removes the key instead of storing anything.
+- `Ttl::Default` uses `cache.default_ttl_secs` (one hour unless configured).
+- `Ttl::Forever` (or `forever`) never expires; the key can still be forgotten or flushed.
+
+`add` stores a value only if the key has no live value, atomically, and returns whether it stored it. It is a cheap way to make sure something happens once per window:
+
+```rust
+let first = cache.add("imports:started", &true, Duration::from_secs(300)).await?;
+if !first {
+    return Ok(()); // someone started an import in the last five minutes
+}
+```
+
+### Removing items
+
+`forget` removes a key and returns whether a live value was there. `flush` removes **every** entry of the store, whatever its prefix:
+
+```rust
+cache.forget("dashboard:pipeline").await?;
+cache.flush().await?;
+```
+
+### Counters
+
+`increment` and `decrement` change an integer and return the new value. A missing key counts as `0`. The entry keeps its TTL, but a counter that `increment` creates never expires, so when it should, store it first with `add`:
+
+```rust
+let key = format!("exports:{user_id}");
+// The first export opens a 24-hour window.
+cache.add(&key, &0, Duration::from_secs(86_400)).await?;
+if cache.increment(&key, 1).await? > 10 {
+    return Err("you can export contacts ten times a day".into());
+}
+```
+
+Counters are stored as decimal text, so `get::<i64>` reads them back. Incrementing a value that isn't an integer fails with `CacheError::NotAnInteger`, and one that would overflow an `i64` with `CacheError::Overflow` (the value is left unchanged).
+
+### Retrieve or compute: `remember`
+
+`remember` returns the cached value, or, on a miss, runs your closure, stores its result for the TTL and returns it:
+
+```rust
+let totals: PipelineTotals = cache
+    .remember("dashboard:pipeline", Duration::from_secs(60), || async {
+        Ok(load_totals(&db).await?)
+    })
+    .await?;
+```
+
+- The closure returns `Result<T, BoxError>`, so `?` works on any error inside it.
+- If it fails, nothing is cached and you get `CacheError::Compute` with the closure's error as its source.
+- Callers in the same process that ask for the same key at the same time wait for one computation instead of all running the closure.
+- A stored value that no longer decodes as `T`, for example after a deploy changed the type, counts as a miss and is replaced.
+
+`remember_forever(key, f)` does the same with no expiry.
+
+### Stale while revalidate: `flexible`
+
+With `remember`, the request that finds the value expired pays for recomputing it. `flexible` avoids that: the value is *fresh* for a first window, then *stale* for a second one, and a stale value is returned at once while a background task refreshes it.
+
+```rust title="src/modules/deals/services/exchange_rates.rs"
+#[injectable]
+pub struct ExchangeRates {
+    cache: Arc<Cache>,
+}
+
+impl ExchangeRates {
+    pub async fn eur_per_usd(&self) -> Result<f64, CacheError> {
+        let fresh = Duration::from_secs(5 * 60);
+        let stale = Duration::from_secs(55 * 60);
+        self.cache
+            .flexible("fx:eur-per-usd", fresh, stale, || async {
+                fetch_rate("USD", "EUR").await
+            })
+            .await
+    }
+}
+```
+
+`stale` is the extra window after `fresh`, not the total: the value above lives an hour.
+
+| The value is | `flexible` |
+|---|---|
+| fresh | returns it |
+| stale | returns it and refreshes it in the background |
+| missing, or older than both windows | computes it before returning, like `remember` |
+
+Only one refresh runs per key at a time, also across processes that share a store. A failed refresh is logged at `warn` and the stale value is kept. Inside an app, refreshes run on the app's task tracker, so a graceful shutdown waits for them. Because the closure runs in a background task, it must be `Send + 'static`: move clones of what it needs into it instead of borrowing `self`.
+
+## Cache tags
+
+Tags group entries so you can invalidate them together. `tags` returns a `TaggedCache` with the same methods as `Cache` (`get`, `put`, `forever`, `add`, `has`, `forget`, `increment`, `decrement`, `remember`, `remember_forever` and `flexible`), plus a `flush` that only touches its tags:
+
+```rust
+let company = format!("company:{company_id}");
+let deals = cache.tags(&["deals", company.as_str()]);
+deals.put("board", &board, Duration::from_secs(300)).await?;
+let board: Option<Board> = deals.get("board").await?;
+
+// A deal of this company changed: forget everything tagged with it.
+cache.tags(&[company.as_str()]).flush().await?;
+```
+
+- The tag set addresses the entries: `tags(&["a", "b"])` and `tags(&["b", "a"])` see the same entries, but `tags(&["a"])` and the untagged cache don't.
+- Flushing a tag invalidates every entry stored under a set that includes it.
+- Each tag has a version stored in the cache, and an entry's key includes the versions of its tags. Flushing gives the tag a new version, which makes the old entries unreachable; they stay in memory until their TTL ends. Give tagged entries a TTL rather than `forever`.
+
+## Atomic locks
+
+Locks make sure only one task at a time does something: importing contacts for a company, building a report. Inject `Arc<Locks>`, then ask for a lock by name with a TTL:
+
+```rust title="src/modules/contacts/services/import.rs"
+use navree::cache::Locks;
+
+#[injectable]
+pub struct ContactImporter {
+    locks: Arc<Locks>,
+}
+
+impl ContactImporter {
+    pub async fn import(&self, company_id: Uuid) -> Result<(), BoxError> {
+        let lock = self
+            .locks
+            .lock(&format!("imports:{company_id}"), Duration::from_secs(120));
+        let Some(_guard) = lock.acquire().await? else {
+            return Err("an import for this company is already running".into());
+        };
+        // ... import; the lock is released when `_guard` is dropped
+        Ok(())
+    }
+}
+```
+
+- `acquire` takes the lock if it is free and returns a `LockGuard`, or `None` when someone else holds it.
+- Dropping the guard releases the lock. `guard.release().await?` releases it explicitly and returns `false` when the lock had already expired and been taken by someone else.
+- Every lock expires after its TTL, even if it is never released, so a crashed holder can't block others forever. Pick a TTL longer than the work takes.
+
+`block` waits for the lock instead of giving up. It retries every 50 ms and fails with `CacheError::LockTimeout` after the timeout:
+
+```rust
+let guard = locks
+    .lock("reports:monthly", Duration::from_secs(300))
+    .block(Duration::from_secs(10))
+    .await?;
+// ... build the report
+guard.release().await?;
+```
+
+### Owner tokens
+
+Each `Lock` has a random owner token, and only that token releases it. To finish work in another task, keep the lock with `into_owner` and release it later with the same token:
+
+```rust
+let ttl = Duration::from_secs(600);
+if let Some(guard) = locks.lock("exports:contacts", ttl).acquire().await? {
+    let owner: String = guard.into_owner(); // the lock stays held
+    // ... later, where the export finishes:
+    locks.lock("exports:contacts", ttl).with_owner(owner).release().await?;
+}
+```
+
+<Callout type="note" title="Locks and several servers">
+
+With the memory store, a lock only excludes tasks in the same process. To run something on one server only, use the scheduler's [single-node runs](/docs/digging-deeper/scheduling/#running-on-one-server), which claim each run in the database, or [unique jobs](/docs/digging-deeper/queues/#unique-jobs).
+
+</Callout>
+
+## Keys, prefixes and errors
+
+Every cache key is stored as `prefix + key`, and every lock as `prefix + "lock:" + name` in the lock store. Some keys are used internally; don't use them for your own entries:
+
+- keys starting with `navree:` (tag versions, tagged entries and the health check);
+- keys ending with `#navree:fresh` or `#navree:refresh` (`flexible`'s markers).
+
+Every operation returns `Result<_, CacheError>`. Its messages name the key or lock involved, never the cached value:
+
+| Variant | When |
+|---|---|
+| `Serialize` / `Deserialize` | The value can't be encoded as JSON, or the stored value isn't the type you asked for. |
+| `NotAnInteger` / `Overflow` | `increment` or `decrement` on a non-integer, or past `i64`'s range. |
+| `Compute` | The closure of `remember` or `flexible` failed. |
+| `LockTimeout` | `block` gave up waiting. |
+| `Store` | The store itself failed. |
+
+In a handler, `?` turns a `CacheError` into a 500 [error response](/docs/basics/errors/).
+
+## The health check and `cache:clear`
+
+The module registers a readiness check named `cache` that writes a key and reads it back; [health and metrics](/docs/digging-deeper/health-and-metrics/) shows where it is reported.
+
+`cache:clear` flushes the store:
+
+```sh
+cargo run -- cache:clear
+```
+
+```text
+Cache cleared.
+```
+
+<Callout type="warning" title="cache:clear and the memory store">
+
+A command runs in a new process, and with the memory store that process has its own, empty cache. So `cache:clear` doesn't clear the cache of a running server; restart the server instead. The command is useful with a shared store, and in tests through `app.run_command("cache:clear", &[])`.
+
+</Callout>
+
+## Custom stores
+
+`Cache` and `Locks` talk to their stores through two traits, exported by `navree::cache`:
+
+| Trait | Methods | Must be atomic |
+|---|---|---|
+| `CacheStore` | `get`, `put`, `forget`, `flush`, `add`, `increment` (bytes with an optional TTL) | `add` and `increment` |
+| `LockStore` | `acquire`, `release`, `release_on_drop` | `acquire` and `release` |
+
+`Cache` adds the prefix, JSON encoding, tags, `remember` and `flexible` on top, so a store only implements these primitives. Swap the module's stores with an override in the app root (or a test):
+
+```rust
+use navree::cache::{CacheStore, LockStore};
+
+Navree::app()
+    .module(CacheModule::from_config())
+    .override_value::<dyn CacheStore>(Arc::new(MyCacheStore::new()))  // your implementations
+    .override_value::<dyn LockStore>(Arc::new(MyLockStore::new()))
+```
+
+`cache.store` only accepts `memory` in 0.1; leave it as it is when you override the stores. To build a `Cache` or `Locks` by hand over any store, use `Cache::new(store, prefix, default_ttl)` and `Locks::new(store, prefix)`.
+
+## Testing
+
+`Cache::memory()` and `Locks::memory()` give you a fresh in-memory cache and lock store, with no app: handy in unit tests. Expiry in the memory stores follows Tokio's clock, so a paused runtime controls it (this needs Tokio's `test-util` feature in your dev-dependencies):
+
+```rust title="tests/cache.rs"
+use std::time::Duration;
+
+use navree::cache::Cache;
+
+#[tokio::test(start_paused = true)]
+async fn cached_totals_expire_after_a_minute() {
+    let cache = Cache::memory();
+    cache.put("dashboard:pipeline", &12, Duration::from_secs(60)).await.unwrap();
+
+    tokio::time::advance(Duration::from_secs(59)).await;
+    assert_eq!(cache.get::<u32>("dashboard:pipeline").await.unwrap(), Some(12));
+
+    tokio::time::advance(Duration::from_secs(2)).await;
+    assert_eq!(cache.get::<u32>("dashboard:pipeline").await.unwrap(), None);
+}
+```
+
+In app tests, every `TestApp` gets its own memory store, so tests don't share cached values. Read or seed it with `app.get::<Cache>().await`. See [testing](/docs/testing/getting-started/) for `TestApp`.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Unique jobs and background work.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Single-node runs and overlap prevention.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/providers/" title="Providers">
+    Injecting `Arc<Cache>` and overriding providers.
+  </LinkCard>
+</LinkCards>

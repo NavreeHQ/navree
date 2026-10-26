@@ -1,10 +1,230 @@
 ---
 title: "Seeding and factories"
-description: "Filling the database with seeders and model factories."
+description: "Seeders for the data an app needs and demo data, the `db:seed` command, and model factories for tests."
 ---
 
-This page covers seeders for development and demo data, model factories for tests, and the `db:seed` command.
+Seeders fill a database with the data your app needs to run (roles, settings) or to be demonstrated (accounts, sample records). Factories build records with sensible defaults, so a test or a seeder can create ten deals in one line. Both live in `navree-db`.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-db` is the reference: run `cargo doc -p navree-db --open` in the repository.
-</Callout>
+## Writing seeders
+
+A seeder implements `Seeder`: a `name`, which `db:seed` selects it by, and a `run` method that receives the app context and the database. Seeders are providers, so they can inject services:
+
+```rust title="src/modules/companies/seeder.rs"
+use chrono::Utc;
+use navree::BoxFuture;
+use navree::auth::user;
+use navree::db::{Db, Seeder};
+use navree::prelude::*;
+use sea_orm::ActiveValue::Set;
+use sea_orm::{EntityTrait, PaginatorTrait};
+use uuid::Uuid;
+
+/// `db:seed demo-companies`: three companies, owned by the first user,
+/// only into an empty table.
+#[injectable]
+pub struct CompanySeeder;
+
+impl Seeder for CompanySeeder {
+    fn name(&self) -> &'static str {
+        "demo-companies"
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            if company::Entity::find().count(db.conn()).await? > 0 {
+                return Ok(());
+            }
+            let Some(owner) = user::Entity::find().one(db.conn()).await? else {
+                return Ok(()); // companies need an owner: seed the users first
+            };
+            let owner_id = owner.id;
+            db.transaction(|uow| async move {
+                for name in ["Northwind Logistics", "Halcyon Health", "Brightwater Analytics"] {
+                    let now = Utc::now();
+                    Repo::<company::Entity>::insert(
+                        &uow,
+                        company::ActiveModel {
+                            id: Set(Uuid::now_v7()),
+                            name: Set(name.to_owned()),
+                            domain: Set(None),
+                            owner_id: Set(owner_id),
+                            created_at: Set(now),
+                            updated_at: Set(now),
+                            deleted_at: Set(None),
+                        },
+                    )
+                    .await?;
+                }
+                Ok(())
+            })
+            .await?;
+            Ok(())
+        })
+    }
+}
+```
+
+Register it in its module:
+
+```rust title="src/modules/companies/mod.rs"
+impl CompaniesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        m.seeder::<CompanySeeder>();
+    }
+}
+```
+
+A few habits keep seeders safe to run:
+
+- **Make them safe to run twice.** The seeder above does nothing when the table already has rows. The CRM's seeders find existing accounts and roles again instead of creating duplicates, so running `db:seed` twice is harmless.
+- **Separate what the app needs from demo data.** The CRM has two seeders: `crm-roles` creates the roles and their permissions, which every environment needs, and `crm-demo` adds four demo accounts and a sales pipeline. An environment without demo data runs `db:seed crm-roles` alone.
+- **Choose whether the writes are audited.** Inserting through `Repo` in a unit of work (`db.transaction`, as above) records change events, so the [audit log](/docs/security/audit-log/) shows the seeded records. Inserting through the transaction with plain SeaORM, or through `db.conn()`, records nothing. The CRM's demo seeder does the latter, to keep its audit log for real activity.
+- **Use your services.** `ctx.get::<T>()` resolves any provider. The CRM creates its demo users with navree-auth's `AuthService::create_user`, so their passwords are hashed exactly as a sign-up would hash them.
+
+There is no `make:seeder` generator yet: write the file by hand, as above.
+
+## Running seeders
+
+```sh
+navree db:seed                     # every seeder
+navree db:seed demo-companies      # only the named ones
+navree migrate:fresh --seed        # a fresh database, then every seeder
+```
+
+`db:seed` runs the seeders of the modules in dependency order (a module's seeders run after those of the modules it imports), and the seeders of one module in the order it registered them. Once they have all run, the command prints a line for each:
+
+```text
+Seeded: demo-companies
+```
+
+A name that no seeder has stops the command before anything runs, with an error that lists the registered names ("unknown seeder `nope`; registered seeders: demo-companies"). A seeder that fails stops the run too; the seeders after it don't run. With no seeders registered, the command prints "No seeders are registered."
+
+From code, `run_seeders(&ctx, &names)` does the same and returns the names of the seeders that ran (all of them when `names` is empty). In a test, run the command:
+
+```rust
+app.run_command("db:seed", &["demo-companies"]).await?;
+```
+
+## Factories
+
+A factory knows how to build one kind of record. Implement `Factory` for a struct: `Entity` is the entity it builds, and `definition(n)` returns the active model of the `n`-th record of a batch:
+
+```rust title="src/modules/companies/factory.rs"
+use chrono::Utc;
+use navree::db::Factory;
+use sea_orm::ActiveValue::Set;
+use uuid::Uuid;
+
+/// Companies named `Company 0`, `Company 1`, ...
+pub struct CompanyFactory {
+    pub owner_id: Uuid,
+}
+
+impl Factory for CompanyFactory {
+    type Entity = company::Entity;
+
+    fn definition(&self, n: usize) -> company::ActiveModel {
+        let now = Utc::now();
+        company::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            name: Set(format!("Company {n}")),
+            domain: Set(Some(format!("company{n}.test"))),
+            owner_id: Set(self.owner_id),
+            created_at: Set(now),
+            updated_at: Set(now),
+            deleted_at: Set(None),
+        }
+    }
+}
+```
+
+In `navree::prelude`, this trait is called `ModelFactory`, because `Factory` there is the kernel's provider factory. Import it as `navree::db::Factory`, as above, or use the prelude name.
+
+Then insert records with `create` (one record, definition 0) or `create_many` (definitions `0..n`, in order). Both take any SeaORM connection and return the inserted models:
+
+```rust
+use navree::db::{create, create_many};
+
+let acme = create(&CompanyFactory { owner_id }, db.conn()).await?;
+let companies = create_many(&CompanyFactory { owner_id }, db.conn(), 10).await?;
+```
+
+Pass `db.conn()` in tests and seeders, or `&*uow.tx().await?` to insert inside a unit of work.
+
+### Variations
+
+A factory is a plain struct, so its fields are its options. Laravel calls these factory states; here they are builder methods:
+
+```rust
+use navree::db::Factory;
+
+/// Deals of one company at one stage.
+pub struct DealFactory {
+    pub company_id: Uuid,
+    pub owner_id: Uuid,
+    pub stage: Stage,
+}
+
+impl DealFactory {
+    /// Lead deals of `company_id`.
+    pub fn new(company_id: Uuid, owner_id: Uuid) -> Self {
+        Self { company_id, owner_id, stage: Stage::Lead }
+    }
+
+    /// The same deals at `stage`.
+    pub fn stage(self, stage: Stage) -> Self {
+        Self { stage, ..self }
+    }
+}
+
+impl Factory for DealFactory {
+    type Entity = deal::Entity;
+
+    fn definition(&self, n: usize) -> deal::ActiveModel {
+        let now = Utc::now();
+        deal::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            title: Set(format!("Deal {n}")),
+            amount_cents: Set(10_000 * (n as i64 + 1)),
+            stage: Set(self.stage),
+            company_id: Set(self.company_id),
+            owner_id: Set(self.owner_id),
+            created_at: Set(now),
+            updated_at: Set(now),
+        }
+    }
+}
+```
+
+Related records are created parent first, passing the parent's id to the child's factory:
+
+```rust
+let acme = create(&CompanyFactory { owner_id }, db.conn()).await?;
+let won = DealFactory::new(acme.id, owner_id).stage(Stage::Won);
+create_many(&won, db.conn(), 10).await?;
+```
+
+### Unique values
+
+`n` counts from 0 in every `create_many` call, and `create` always uses definition 0. A column derived only from `n` therefore repeats across calls: creating a company after `create_many` gives a second "Company 0". When a column must be unique, include something that is (a `Uuid::now_v7()`, or a counter the factory keeps) or create every record in one `create_many` call.
+
+Navree has no fake-data generator. Derive values from `n` as above, or use a crate such as `fake` in your factories.
+
+### What factories don't do
+
+Factories insert with plain SeaORM: they record no change events and write no audit rows, which is usually what you want for test data. They don't run your services' rules either, so a factory can create records your API would refuse. When a test is about those rules, create the data through the API instead.
+
+There is no `make:factory` generator. Keep factories next to the entity they build, so seeders and the tests of every module can use them.
+
+<LinkCards>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    Factories and seeders inside tests.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    `migrate:fresh --seed` and the other commands.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    `Db::transaction`, which the seeder above writes in.
+  </LinkCard>
+</LinkCards>

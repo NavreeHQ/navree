@@ -41,7 +41,7 @@ const groups: Group[] = [
     title: "Database",
     href: "/docs/database/getting-started/",
     features: [
-      { name: "SQLite and PostgreSQL", text: "SeaORM underneath, SQLite with no setup.", href: "/docs/database/getting-started/" },
+      { name: "SQLite and PostgreSQL", text: "SeaORM underneath: SQLite with no setup, PostgreSQL behind a feature.", href: "/docs/database/getting-started/" },
       { name: "Unit of work", text: "One transaction per request, committed on success.", href: "/docs/database/unit-of-work/" },
       { name: "Migrations and seeders", text: "Schema changes, demo data and model factories.", href: "/docs/database/migrations/" },
       { name: "Pagination", text: "Paginated queries with a standard page shape.", href: "/docs/database/pagination/" },
@@ -54,8 +54,8 @@ const groups: Group[] = [
       { name: "Queues and scheduling", text: "Database-backed jobs with retries, and cron-style tasks.", href: "/docs/digging-deeper/queues/" },
       { name: "Events", text: "A typed event bus with queued listeners.", href: "/docs/digging-deeper/events/" },
       { name: "Mail and notifications", text: "Templated mail, database and real-time notifications.", href: "/docs/digging-deeper/notifications/" },
-      { name: "Real time", text: "A Pusher-protocol WebSocket server: Laravel Echo just works.", href: "/docs/digging-deeper/broadcasting/" },
-      { name: "Cache and storage", text: "Cache stores with tags and locks; disks with signed URLs.", href: "/docs/digging-deeper/cache/" },
+      { name: "Real time", text: "A Pusher-protocol WebSocket server that Laravel Echo connects to.", href: "/docs/digging-deeper/broadcasting/" },
+      { name: "Cache and storage", text: "An in-memory cache with tags and locks; disks with signed URLs.", href: "/docs/digging-deeper/cache/" },
       { name: "OpenAPI", text: "An OpenAPI 3.1 document generated from your routes.", href: "/docs/digging-deeper/openapi/" },
       { name: "Health and metrics", text: "Readiness checks and Prometheus metrics.", href: "/docs/digging-deeper/health-and-metrics/" },
       { name: "The CLI", text: "navree new, generators, and a dev server that restarts on save.", href: "/docs/digging-deeper/cli/" },
@@ -66,8 +66,8 @@ const groups: Group[] = [
     href: "/docs/testing/getting-started/",
     features: [
       { name: "In-process HTTP tests", text: "Boot the app and call it without a network.", href: "/docs/testing/http-tests/" },
-      { name: "A database per test", text: "Each test gets its own temporary SQLite file.", href: "/docs/testing/database-tests/" },
-      { name: "Fakes", text: "Queue, mail, events, the clock and outgoing HTTP.", href: "/docs/testing/fakes/" },
+      { name: "A database per test", text: "A temporary SQLite file for each test that asks for one.", href: "/docs/testing/database-tests/" },
+      { name: "Fakes", text: "The queue, mail, the clock, outgoing HTTP and file storage.", href: "/docs/testing/fakes/" },
     ],
   },
 ];

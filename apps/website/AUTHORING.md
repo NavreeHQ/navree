@@ -126,14 +126,20 @@ Navree::app()
 ```
 
 ```toml
-navree = { version = "0.1", features = ["http", "db"] } # [!code --]
-navree = { version = "0.1", features = ["postgres"] } # [!code ++]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["http", "db"] } # [!code --]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] } # [!code ++]
 tokio = { version = "1", features = ["full"] } # [!code highlight]
 ```
 ````
 
 `[!code highlight]`, `[!code ++]` and `[!code --]` work in any language's
 comment syntax (`//`, `#`, `--`) and are removed from the rendered code.
+
+**Long lines.** Code scrolls sideways. For log lines, error messages, mail
+text and long one-line JSON or headers, add `wrap` after the language
+(` ```text wrap `, ` ```json title="400 Bad Request" wrap `) so long lines
+wrap with a hanging indent instead. Don't use it for code, tables or
+diagrams, whose alignment matters.
 
 **Copying.** Every block has a copy button. So that what readers copy runs:
 
@@ -222,7 +228,7 @@ A numbered procedure. Use it only when the order matters.
 <Step title="Install the CLI">
 
 ```sh
-cargo install navree-cli
+cargo install --git https://github.com/NavreeHQ/navree navree-cli
 ```
 
 </Step>

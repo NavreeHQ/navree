@@ -1,10 +1,269 @@
 ---
 title: "HTTP tests"
-description: "Calling your API in-process with `TestClient` and asserting on responses."
+description: "Call your API in-process with `TestClient`, act as a signed-in user, and assert on statuses, headers, JSON and errors; plus the CRM's test kit pattern."
 ---
 
-This page covers HTTP tests: sending requests with the in-process `TestClient`, acting as a signed-in user, and asserting on status codes, headers and JSON bodies.
+HTTP tests call your API the way a client does and check what comes back. `TestClient` sends each request through your app's full router, in-process: the request-id, CORS, rate-limit, authentication and unit-of-work layers all run, then the route's access checks and your handler. Nothing listens on a port.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-testing` is the reference: run `cargo doc -p navree-testing --open` in the repository.
-</Callout>
+## Making requests
+
+`app.client()` returns a client for a guest. Build a request with the method's name, add a body or headers, and `send` it:
+
+```rust
+use serde_json::json;
+
+let response = client
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": company.id }))
+    .send()
+    .await;
+```
+
+Paths are full paths: the API prefix and version included (`/api/v1/deals`), with an optional query string.
+
+| Method | What it does |
+|---|---|
+| `client.get(path)`, `post`, `put`, `patch`, `delete` | Starts a request with that method. |
+| `client.request(method, path)` | Starts a request with any `http::Method`. |
+| `.json(&value)` | A JSON body, with `Content-Type: application/json`. |
+| `.form(&value)` | A form body (`application/x-www-form-urlencoded`). |
+| `.query(&value)` | Appends form-encoded parameters to the query string: `.query(&[("per_page", "10")])`. |
+| `.header(name, value)` | Sets a header, replacing a default. |
+| `.bearer(token)` | `Authorization: Bearer <token>`. |
+| `.body(bytes)` | A raw body; set its `Content-Type` with `.header`. |
+| `.send().await` | Runs the request and returns a `TestResponse`. |
+
+Every request is sent as a browser-less API client would send it, with a few defaults:
+
+- `Accept: application/json`, and `Origin` set to the first of the app's allowed CORS origins (when it has any). A header you set yourself wins.
+- The client's address is `127.0.0.1`. That is what the per-IP rate limit sees, and its default is 600 requests a minute, so tests that send many requests turn it off with `.config("http.per_ip_rate_limit", serde_json::Value::Null)`.
+- Redirects are returned, not followed.
+- The whole response body is read before `send` returns, so a test can't read an endless stream such as server-sent events.
+
+## Acting as a user
+
+Most routes need a signed-in user. `app.acting_as(principal)` returns a client whose every request is authenticated as `principal`, and `principal(user_id)` builds a plain test user:
+
+```rust
+use navree::testing::principal;
+use uuid::Uuid;
+
+let me = Uuid::now_v7();
+let rep = app.acting_as(principal(me));
+
+rep.get("/api/v1/deals").send().await.assert_status(200);
+```
+
+The request reaches your handler as one from that user: `CurrentPrincipal` holds them, the unit of work's actor is their id, and access rules see them. `principal` gives that user no token restrictions and no session. Roles and permissions aren't part of the principal: your app's [authorization](/docs/security/authorization/) loads them for the user id, as for a real user, so give a test user its roles first.
+
+`client.acting_as(principal)` does the same to an existing client, keeping its cookie jar, and `client.as_guest()` turns it back into a guest.
+
+This works through the `TestAuthenticator`, which `TestApp` installs when your app has no authenticator of its own. It authenticates requests from an acting client, and treats every other request as a guest. A client can't forge it: the principal travels in a request extension, not a header.
+
+### Apps with navree-auth
+
+`AuthModule` brings its own authenticator (JWT bearer tokens), so `TestApp` leaves it in place and `acting_as` panics with an explanation. You have two options.
+
+**Replace the authenticator** with `TestApp::builder().fake_auth()`, or with `TestAuthenticator::install(builder)` for an app built elsewhere (as in [booting your whole app](/docs/testing/getting-started/#booting-your-whole-app)). Then `acting_as` works, and bearer tokens no longer do: a test can't mix the two in one app. `CurrentUser` loads the user's row and answers 401 when there is none, so act as a user that exists:
+
+```rust
+let auth = app.get::<AuthService>().await;
+let ada = auth.create_user("Ada", "ada@example.com", "correct horse battery").await?;
+let client = app.acting_as(principal(ada.id));
+```
+
+**Or sign in for real**, through `POST /api/auth/login`, and send the access token. This tests the whole authentication path:
+
+```rust
+use navree::auth::AuthService;
+
+const PASSWORD: &str = "correct horse battery";
+
+app.get::<AuthService>()
+    .await
+    .create_user("Alice", "alice@example.com", PASSWORD)
+    .await
+    .expect("the user is created");
+let body = app
+    .client()
+    .post("/api/auth/login")
+    .json(&json!({ "email": "alice@example.com", "password": PASSWORD }))
+    .send()
+    .await
+    .assert_status(200)
+    .json_value();
+let access = body["access_token"].as_str().expect("access_token");
+
+app.client()
+    .get("/api/auth/me")
+    .bearer(access)
+    .send()
+    .await
+    .assert_status(200)
+    .assert_json_path("email", json!("alice@example.com"));
+```
+
+Set fast hashing (`hashing.memory_kib = 1024`, `hashing.iterations = 1`) in tests that sign in: Argon2id with production settings is deliberately slow. Access tokens expire after 15 minutes (`auth.jwt.access_ttl_secs`) by the app's clock, which matters once you [move the clock](/docs/testing/fakes/#the-clock).
+
+## Assertions
+
+`send` returns a `TestResponse`. Its assertions take the response and return it, so they chain, and when one fails, it panics with the status and the body (cut at 8 KiB):
+
+```rust
+rep.get("/api/v1/deals")
+    .query(&[("per_page", "10")])
+    .send()
+    .await
+    .assert_status(200)
+    .assert_json_path(
+        "meta",
+        json!({ "current_page": 1, "per_page": 10, "total": 1, "last_page": 1 }),
+    )
+    .assert_json_path("data.0.title", json!("Acme renewal"));
+```
+
+| Assertion | Checks |
+|---|---|
+| `assert_status(201)` | The status code. |
+| `assert_json_path(path, json!(..))` | The JSON value at `path` equals the expected value. |
+| `assert_error(404, "Not Found")` | A Navree error response with that status and message. |
+| `assert_error(404, None)` | The same, without checking the message. |
+| `assert_validation_error("title")` | A 400 validation error with at least one message for the field. |
+
+A JSON path is a dotted path through objects, where a number indexes an array: `"data.0.owner.name"`. The empty path is the whole body. When the path doesn't exist, the failure names the first missing segment.
+
+`assert_error` checks the whole [error format](/docs/basics/errors/): the status, `Content-Type: application/json`, a body with matching `statusCode`, an `error` reason phrase and a `message`, and an `X-Request-Id` header. The expected message matches a string `message`, or one entry of a list of messages:
+
+```rust
+app.acting_as(principal(Uuid::now_v7()))
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "Orphan", "amount_cents": 1, "company_id": Uuid::now_v7() }))
+    .send()
+    .await
+    .assert_error(409, "The change conflicts with a related record.");
+```
+
+`assert_validation_error` checks for a 400 error with at least one message for the field in `errors`. Nested fields have dotted names there, such as `customer.address.city` or `items.0.quantity`. It chains, so one call per field checks several:
+
+```rust
+client
+    .post("/api/v1/posts")
+    .json(&json!({ "title": "Hi", "body": "" }))
+    .send()
+    .await
+    .assert_validation_error("title")
+    .assert_validation_error("body");
+```
+
+`assert_problem` is deprecated (errors no longer use RFC 9457); use `assert_error`.
+
+To look at a response yourself:
+
+| Method | Returns |
+|---|---|
+| `status()` | The `StatusCode`; it compares with a number: `response.status() == 200`. |
+| `header(name)` | The first value of a header, as `Option<&str>`. |
+| `headers()` | Every header. |
+| `json::<T>()` | The body deserialized into `T` (panics, showing the body, if it doesn't fit). |
+| `json_value()` | The body as a `serde_json::Value`. |
+| `text()`, `bytes()` | The raw body. |
+| `set_cookie(name)` | The cookie a `Set-Cookie` header set, with its attributes. |
+
+```rust
+let response = rep
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": company.id }))
+    .send()
+    .await
+    .assert_status(201);
+let id = response.json_value()["id"].as_str().unwrap().to_owned();
+assert_eq!(
+    response.header("location"),
+    Some(format!("/api/v1/deals/{id}").as_str())
+);
+```
+
+## Cookies
+
+Each client has a cookie jar: cookies the responses set are sent back on later requests whose path matches, and clones of a client share the jar. `client.cookie(name)` reads a cookie, `client.set_cookie(name, value)` adds one as if a response had set it, `client.remove_cookie(name)` and `client.clear_cookies()` remove them.
+
+Apps with cookie sessions ([sessions and CSRF](/docs/basics/sessions-and-csrf/)) protect writes with a CSRF token. `client.csrf_cookie().await` fetches the `XSRF-TOKEN` cookie the way a single-page app does, and `.xsrf()` on a request sends it back in the `X-XSRF-TOKEN` header:
+
+```rust
+let client = app.client();
+client.csrf_cookie().await;
+client
+    .post("/api/v1/login")
+    .xsrf()
+    .json(&json!({ "email": "ada@example.com", "password": "secret" }))
+    .send()
+    .await
+    .assert_status(200);
+```
+
+JWT apps with navree-auth don't use either.
+
+## A test kit for your app
+
+When many test files boot the same app, give them one function that does it, with the app's test settings, its seed data and helpers for signing in. The CRM has a crate for this, `crm-testkit`, which every CRM crate uses in its tests:
+
+```rust
+use crm_testkit::{Role, TestCrm};
+
+#[tokio::test]
+async fn reps_list_deals() {
+    let crm = TestCrm::builder().module(DealsModule).build().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    rep.get("/api/v1/deals").send().await.assert_status(200);
+    crm.shutdown().await;
+}
+```
+
+`TestCrm::builder().build()`:
+
+- boots the CRM's platform modules, `CrmCoreModule` and the modules you add, on a temporary SQLite database migrated at boot, with `TestApp::from_builder`;
+- sets hermetic settings: a fresh `app.key`, mail kept in memory, the database queue driver, fast password hashing, no per-IP rate limit, no metrics, and the CRM web app as the CORS origin;
+- installs a [`FixedClock`](/docs/testing/fakes/#the-clock) as the app's `dyn Clock`, starting on Monday 2026-10-26 at 10:00 UTC (`crm.clock()` moves it);
+- seeds the roles and four demo accounts (`Role::Admin`, `Manager`, `Rep1`, `Rep2`).
+
+`crm.login_as(Role::Rep1)` signs in through the real `POST /api/auth/login` and returns a client whose requests carry the access token, so CRM tests run with real JWT authentication. `crm.run_queue()` runs the queued jobs that are due, as a worker would.
+
+A test then reads like a scenario:
+
+```rust
+#[tokio::test]
+async fn soft_deleted_hidden() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    let admin = crm.login_as(Role::Admin).await;
+    let kept = create_company(&rep, json!({ "name": "Kept" })).await;
+    let gone = create_company(&rep, json!({ "name": "Gone" })).await;
+    let path = format!("/api/v1/companies/{}", id_of(&gone));
+
+    tick(&crm);
+    rep.delete(&path).send().await.assert_status(204);
+
+    let page = admin.get("/api/v1/companies").send().await.json_value();
+    assert_eq!(column(&page, "name"), ["Kept"]);
+    admin.get(&path).send().await.assert_error(404, None);
+    // ...
+    crm.shutdown().await;
+}
+```
+
+`crm()`, `create_company`, `id_of`, `column` and `tick` are a few lines each, in the crate's `tests/api/support.rs`. Read `apps/crm-api/crates/crm-testkit/src/lib.rs` for the whole kit; it is about 400 lines and a good template for your own.
+
+<LinkCards>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    Preparing data and asserting on what a request wrote.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    Mail, the queue, the clock and outgoing HTTP.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The error format `assert_error` checks.
+  </LinkCard>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    JWT access and refresh tokens, and `CurrentUser`.
+  </LinkCard>
+</LinkCards>

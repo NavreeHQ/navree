@@ -76,6 +76,12 @@
   border-radius: 14px;
   background: var(--color-ink-1);
 }
+/* A command too long for the box wraps under itself, after the prompt. */
+.terminal-line {
+  padding-left: calc(1ch + 0.75rem);
+  text-indent: calc(-1ch - 0.75rem);
+  overflow-wrap: anywhere;
+}
 .terminal-line::before {
   content: "$" / "";
   margin-right: 0.75rem;

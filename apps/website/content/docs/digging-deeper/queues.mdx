@@ -1,10 +1,461 @@
 ---
 title: "Queues"
-description: "Background jobs with retries, backoff, unique and delayed jobs."
+description: "Background jobs on the database or memory driver: dispatching, delays, unique jobs, retries with backoff, failed jobs, `queue:work` and testing with `QueueFake`."
 ---
 
-This page covers queued jobs: implementing `Job`, registering it in a module, dispatching it now or later, the database and memory drivers, running workers with `queue:work`, retries with backoff, unique jobs, timeouts and failed jobs.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-queue` is the reference: run `cargo doc -p navree-queue --open` in the repository.
+<Badge feature="queue" /> Some work shouldn't make a request wait: sending mail, building an export, calling a slow API. With a queue, the request stores a **job** and answers at once; a **worker** process picks the job up and runs it, retrying it if it fails.
+
+`QueueModule` provides the app's `Queue`. Jobs are stored by a driver:
+
+- **database** (the default): tables `jobs` and `failed_jobs` in your app database. Jobs survive restarts, and every process that uses the database shares them.
+- **memory**: in the process's memory, for tests and single-process development.
+
+The rest of the framework queues through the same module: queued [mail](/docs/digging-deeper/mail/), queued [event listeners](/docs/digging-deeper/events/#queued-listeners), queued [notifications](/docs/digging-deeper/notifications/) and scheduled jobs all become jobs on it.
+
+<Callout type="note" title="Drivers in 0.1">
+
+Redis and [apalis](https://docs.rs/apalis) drivers aren't built yet (see the [roadmap](/docs/prologue/roadmap/)). The database driver's PostgreSQL reservation (`FOR UPDATE SKIP LOCKED`) is written but has never run against a PostgreSQL server: the queue's tests run on SQLite.
+
 </Callout>
+
+## Configuration
+
+Add `QueueModule` once, in your app root. The database driver needs `DatabaseModule`:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(DatabaseModule::from_config())
+    .module(QueueModule::from_config())
+    // ...
+```
+
+The module is global: other modules dispatch jobs without importing it. `from_config()`, and a plain `.module(QueueModule)`, read the `queue` section. Every key has a default:
+
+```toml title="config/app.toml"
+[queue]
+driver = "database"          # or "memory"
+default_queue = "default"    # where jobs with an empty queue name go
+workers = 4                  # jobs one `queue:work` process runs at once
+poll_interval_ms = 1000      # how long an idle worker waits before looking again
+queues = ["high", "default"] # what `queue:work` processes, highest priority first
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `queue.driver` | `database` | `database` or `memory`. |
+| `queue.default_queue` | `default` | The queue of jobs dispatched with an empty queue name, and what workers process when `queues` is empty. Must not be empty. |
+| `queue.workers` | `4` | Concurrent jobs per `queue:work` process. At least 1. |
+| `queue.poll_interval_ms` | `1000` | How long an idle worker waits before polling again. At least 1. |
+| `queue.queues` | `[]` | The queues workers process, in priority order; empty means `default_queue` alone. |
+
+As environment variables: `APP_QUEUE__DRIVER=memory`, `APP_QUEUE__WORKERS=8`, and `queues` as one comma-separated string, `APP_QUEUE__QUEUES=high,default`. An invalid value fails the boot.
+
+To configure the module in code instead, use `for_root`:
+
+```rust
+use navree::queue::{QueueDriver, QueueOptions};
+
+Navree::app().module(QueueModule::for_root(QueueOptions {
+    driver: QueueDriver::Memory,
+    ..QueueOptions::default()
+}))
+```
+
+### The database driver
+
+The module contributes a migration set named `queue` that creates `jobs` and `failed_jobs`; `migrate` runs it with your app's [migrations](/docs/database/migrations/). Workers reserve jobs atomically, so any number of worker processes, on any number of servers, can share one database. On SQLite a reservation is an `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING …`; PostgreSQL adds `FOR UPDATE SKIP LOCKED`.
+
+### The memory driver
+
+The memory driver keeps jobs in the process that dispatched them, and loses them when it exits. A worker started as a separate `queue:work` process has its own, empty memory queue, so with this driver jobs only run in the same process: in tests, or in code that calls [`run_pending`](#running-queued-jobs-in-tests) or `work`. The memory driver otherwise behaves like the database driver.
+
+## Creating jobs
+
+A job is a serializable struct that implements `Job` (from `navree::contracts`). Its value is the job's payload, stored as JSON until a worker runs it:
+
+```rust title="src/modules/contacts/jobs/export.rs"
+use navree::contracts::{BoxError, Job, JobContext};
+use navree::db::Db;
+use navree::mail::{Mailer, TemplateMail};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use uuid::Uuid;
+
+/// Builds a CSV of a company's contacts and mails the link to whoever asked.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExportContacts {
+    pub company_id: Uuid,
+    pub requested_by: String,
+}
+
+impl Job for ExportContacts {
+    const NAME: &'static str = "contacts.export";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let db = ctx.app.get::<Db>().await?;
+        let mailer = ctx.app.get::<Mailer>().await?;
+        let url = build_export(&db, self.company_id).await?;
+        mailer
+            .send(
+                &TemplateMail::new(self.requested_by, "Your export is ready", "mail/export-ready")
+                    .context(json!({ "url": url })),
+            )
+            .await?;
+        Ok(())
+    }
+}
+```
+
+- `NAME` is the job type stored with each queued job. Keep it stable: a worker finds the handler by this name.
+- `handle` consumes the job and gets a `JobContext`: `ctx.app` to resolve services, `ctx.job_id`, and `ctx.attempt` (starting at 1).
+- Keep the payload small and free of secrets: store ids and look records up in `handle`.
+
+A job doesn't run inside a unit of work. When it writes to the database, open a transaction:
+
+```rust
+let db = ctx.app.get::<Db>().await?;
+db.transaction(|uow| async move {
+    let tx = uow.tx().await?;
+    // ... write through `&*tx`
+    Ok(())
+})
+.await?;
+```
+
+The CLI generates a job in a module and registers it there:
+
+```sh
+navree make:job contacts export
+```
+
+### Registering jobs
+
+A worker runs a job with the handler a module registered for its type. Register each job type in a module's `register` hook (the prelude brings `job` into scope):
+
+```rust title="src/modules/contacts/mod.rs"
+#[module(register = Self::wire)]
+pub struct ContactsModule;
+
+impl ContactsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.job::<ExportContacts>().job::<SyncCalendar>();
+    }
+}
+```
+
+Dispatching a type that no module registered fails at once with `QueueError::UnknownJob`. The framework's own jobs register themselves: `mail.send` (`MailModule`), `notify.send` (`NotifyModule`), each queued listener's job (`listen` and `on`) and each scheduled job (`m.schedule`).
+
+### Job options
+
+Override `options` to choose the queue, the retries and the time limit of a job type:
+
+```rust
+use navree::contracts::{Backoff, JobOptions};
+
+impl Job for SyncCalendar {
+    const NAME: &'static str = "activities.sync_calendar";
+
+    fn options() -> JobOptions {
+        JobOptions {
+            queue: "sync".into(),
+            max_attempts: 5,
+            backoff: Backoff::Fixed { secs: 30 },
+            timeout_secs: 60,
+            unique_for_secs: Some(300),
+        }
+    }
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        // ...
+    }
+}
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `queue` | `default` | The queue it waits on. An empty name means `queue.default_queue`. |
+| `max_attempts` | `3` | Attempts before the job moves to the failed jobs. |
+| `backoff` | exponential, 1 s doubling to 300 s | The delay before each retry (see [retries](#retries-and-backoff)). |
+| `timeout_secs` | `120` | The time limit of one attempt. `0` means no limit. |
+| `unique_for_secs` | `None` | Makes the job [unique](#unique-jobs) for this many seconds. |
+
+## Dispatching jobs
+
+Inject `Arc<Queue>` and dispatch a job value. `dispatch` returns the job's id, a UUID v7 string:
+
+```rust title="src/modules/contacts/services/export.rs"
+use navree::queue::{Queue, QueueError};
+
+#[injectable]
+pub struct ExportService {
+    queue: Arc<Queue>,
+}
+
+impl ExportService {
+    pub async fn request(&self, company_id: Uuid, email: &str) -> Result<String, QueueError> {
+        let job = ExportContacts {
+            company_id,
+            requested_by: email.to_owned(),
+        };
+        self.queue.dispatch(job).await
+    }
+}
+```
+
+### Delayed jobs
+
+`later` queues a job that no worker takes before the delay has passed:
+
+```rust
+self.queue.later(job, Duration::from_secs(6 * 3600)).await?;
+```
+
+Time comes from the app's `dyn Clock` when it registers one, so a fixed clock in tests decides when a delayed job becomes due.
+
+### Dispatching from contracts-only code
+
+`QueueModule` also registers the queue as the app's `dyn Dispatcher` (from `navree::contracts`). Code that shouldn't depend on navree-queue, such as a library crate, dispatches through it:
+
+```rust
+use navree::contracts::Dispatcher;
+
+#[injectable]
+pub struct CalendarHooks {
+    dispatcher: Arc<dyn Dispatcher>,
+}
+
+impl CalendarHooks {
+    pub async fn changed(&self, user_id: Uuid) -> Result<(), BoxError> {
+        self.dispatcher.dispatch(SyncCalendar { user_id }).await?;
+        self.dispatcher
+            .dispatch_later(SyncCalendar { user_id }, Duration::from_secs(60))
+            .await?;
+        Ok(())
+    }
+}
+```
+
+`dispatch_later` rounds the delay up to whole seconds; `Queue::later` keeps milliseconds.
+
+### Jobs and transactions
+
+A job dispatched while a [unit of work](/docs/database/unit-of-work/) is open joins it. In a request handler that is the request's unit of work, so:
+
+- the job is queued only if the request commits (its response status is below 400);
+- workers see it only after the commit, so they never read data the request hasn't committed yet.
+
+The same holds inside `Db::transaction`, for `later`, `push` and `dyn Dispatcher`. To join a unit of work explicitly, use `dispatch_in`:
+
+```rust
+self.queue.dispatch_in(&uow, job).await?;
+```
+
+Inside a unit of work, the database driver writes the job's row in its transaction, and the memory driver queues the job after the commit. Outside any unit of work, in a command, a job or a scheduled task, a dispatched job is stored at once.
+
+### Unique jobs
+
+A unique job is queued once while an identical one is waiting. Set `unique_for_secs` in its options: while a job of the same type with the same JSON payload is pending (waiting, delayed or running) and was dispatched less than that many seconds ago, `dispatch` returns the pending job's id instead of queueing another one.
+
+```rust
+let first = queue.dispatch(SyncCalendar { user_id }).await?;
+let again = queue.dispatch(SyncCalendar { user_id }).await?;
+assert_eq!(first, again); // still one job
+```
+
+Once the window has passed, or the pending job has finished, the next dispatch queues a new job. To decide yourself what counts as identical, set the envelope's `unique_key` and push it:
+
+```rust
+use navree::contracts::JobEnvelope;
+
+let mut envelope = JobEnvelope::of(&SyncCalendar { user_id })?;
+envelope.unique_key = Some(format!("calendar:{user_id}"));
+queue.push(envelope).await?;
+```
+
+A job with its own `unique_key` and no `unique_for_secs` is unique for as long as an identical one is pending.
+
+## Running workers
+
+Workers run in their own process: the same binary as your server, started with the `queue:work` command.
+
+```sh
+cargo run -- queue:work
+```
+
+```text
+Processed 12 job attempt(s): 11 succeeded, 1 released for retry, 0 failed.
+```
+
+`navree queue:work` does the same from the CLI, and in production you run the built binary, as in `./crm-api queue:work`. The worker runs until it is stopped, then prints what it did. Its options:
+
+| Option | Meaning |
+|---|---|
+| `--queue high,default` | The queues to process, highest priority first (instead of `queue.queues`). |
+| `--once` | Run at most one job, with one worker, then exit. |
+| `--stop-when-empty` | Exit as soon as no job is available, instead of polling. |
+| `--max-jobs N` | Exit after N attempts, counted over every worker of the process. |
+
+Options also take the `--flag=value` form: `queue:work --queue=mail --max-jobs=500`.
+
+### How a worker runs jobs
+
+A `queue:work` process runs `queue.workers` loops at once (one with `--once`). Each loop takes the next available job from the first queue, in priority order, that has one, and when none is available it waits `queue.poll_interval_ms` before looking again.
+
+- Each attempt runs with the handler registered for the job's type, cut off after the job's `timeout_secs`. An error, a panic and a timeout are all failed attempts.
+- A job whose type has no handler in this binary fails at once, without retries.
+- If a worker dies mid-job (a crash, `kill -9`), the job stays reserved. Once the reservation is older than the job's timeout plus 30 seconds, another worker takes it over as a new attempt. A job without a time limit waits one day.
+
+Every attempt is logged at target `navree::job` with the job type (`name`), `job_id`, `queue`, `attempt`, `duration_ms` and `outcome` (`succeeded`, `released` or `failed`). Payloads are never logged.
+
+### Stopping workers
+
+Ctrl-C, or SIGTERM on Unix, stops a worker gracefully: its loops take no new jobs, every running job finishes, then the app shuts down. A job is never cut off by the shutdown itself, only by its own `timeout_secs`, so give your process manager a stop timeout longer than your longest job's limit.
+
+## Retries and backoff
+
+When an attempt fails and the job has attempts left, it goes back on its queue, available again after its backoff delay:
+
+- `Backoff::Exponential { base_secs, max_secs }` waits `base_secs` after the first failed attempt and doubles the delay after each one, up to `max_secs`. The default, 1 s up to 300 s, retries after 1 s, then 2 s.
+- `Backoff::Fixed { secs }` waits the same time after every failed attempt.
+
+The log line of a released attempt includes `retry_in_secs` and the error. When the last attempt fails, the job moves to the failed jobs with the error of that attempt.
+
+<Callout type="tip" title="Make jobs safe to run twice">
+
+A job can run more than once: it is retried after a failure, and a job that a dead worker had reserved runs again. Write `handle` so that a second run does no harm, for example by checking whether the export or the mail it is about to produce already exists.
+
+</Callout>
+
+## Failed jobs
+
+A job that used up its attempts, or couldn't run at all, is kept in `failed_jobs` until you retry or delete it. Three commands manage them:
+
+```sh
+cargo run -- queue:failed    # list them
+cargo run -- queue:retry 0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  # put one back on its queue
+cargo run -- queue:retry all # put every failed job back
+cargo run -- queue:flush     # delete them all
+```
+
+`queue:failed` prints one line per job: its id, queue, type, attempts, when it failed (UTC) and the first line of its error.
+
+```text wrap
+0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  default  contacts.export  attempts=3  2026-10-26 08:14:02  smtp refused the message
+```
+
+A retried job keeps its id and options, starts its attempts over and runs as soon as a worker is free; it isn't unique any more. `queue:retry` with an id that isn't a failed job fails with "there is no failed job with id …".
+
+The same operations are available in code, for an admin screen for example:
+
+```rust
+for job in queue.failed().await? {
+    println!("{} {} after {} attempts: {}", job.id, job.job_type, job.attempts, job.error);
+}
+queue.retry("all").await?;     // or a job id
+queue.flush_failed().await?;
+let waiting = queue.pending_count("default").await?; // waiting, delayed or running
+```
+
+## Running workers in production
+
+Run one or more worker processes next to the server, from the same build and with the same configuration, so they use the same database. Navree doesn't ship a process manager: use the one your platform has (systemd, supervisord, a Laravel Forge daemon, a container restart policy) and keep the worker running. A systemd unit, for example:
+
+```text title="/etc/systemd/system/crm-queue.service"
+[Unit]
+Description=CRM queue worker
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/crm
+ExecStart=/srv/crm/crm-api queue:work
+Restart=always
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- **Restart workers after every deploy.** A worker keeps running the code it started with. There is no `queue:restart` command yet; restart the processes with your process manager.
+- **Scale by adding processes** or raising `queue.workers`. Workers on several servers can share the database driver.
+- **Dedicate workers to queues.** `queue:work --queue mail` on its own process keeps slow exports from delaying mail.
+- **Recycle long-running workers** with `--max-jobs N` and a process manager that restarts them.
+- **Broadcasts from workers.** A worker doesn't hold the WebSocket connections, so jobs that broadcast (the CRM's notifications) hand their broadcasts to the server through `realtime.relay_url`; see [broadcasting](/docs/digging-deeper/broadcasting/).
+
+The CRM runs one server and one worker in development: `cargo run -p crm-api -- serve` and `cargo run -p crm-api -- queue:work`.
+
+## Testing
+
+### Faking the queue
+
+`QueueFake` records jobs instead of queueing them (Laravel's `Queue::fake()`). Install its queue in place of the app's, then assert on what was dispatched:
+
+```rust title="tests/export.rs"
+use navree::prelude::*;
+use navree::queue::{Queue, QueueFake};
+use navree::testing::TestApp;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn changing_a_calendar_queues_a_sync() {
+    let fake = QueueFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(QueueModule::from_config())
+        .module(ContactsModule)
+        .override_value(Arc::new(fake.queue()))
+        .build()
+        .await;
+
+    let user_id = Uuid::now_v7();
+    app.get::<Queue>()
+        .await
+        .dispatch(SyncCalendar { user_id })
+        .await
+        .unwrap();
+
+    fake.assert_dispatched::<SyncCalendar>(|job| job.user_id == user_id);
+    fake.assert_dispatched_times::<SyncCalendar>(1);
+    fake.assert_not_dispatched::<ExportContacts>();
+    app.shutdown().await.unwrap();
+}
+```
+
+- With `QueueModule` in the app, `override_value(Arc::new(fake.queue()))` replaces the queue, and the module's `dyn Dispatcher` (used by mail, events and notifications) records into the fake too. In an app without `QueueModule`, use `override_value(fake.dispatcher())`.
+- `dispatched::<J>()` returns the recorded jobs of a type, `envelopes()` every recorded envelope (type, payload, options, delay), and `assert_nothing_dispatched()` and `clear()` do what they say.
+- A job passed to `dispatch_in` is recorded when its unit of work commits, and not at all if it rolls back. A plain `dispatch` (or `later`, `push`, `dyn Dispatcher`) is recorded at once, even inside a unit of work that later rolls back, where the real queue would drop it.
+- The fake accepts any job type, registered or not, where the real queue fails with `QueueError::UnknownJob`, and it never runs anything. A test can therefore pass with a job that production refuses: keep one test that dispatches through the real queue.
+
+### Running queued jobs in tests
+
+To test what jobs do, keep a real queue and run it. `run_pending` runs every job that is available now, one at a time, and returns a `WorkStats` (`processed`, `succeeded`, `released`, `failed`). Jobs released for a retry and delayed jobs stay queued.
+
+```rust
+let stats = app.get::<Queue>().await.run_pending().await.unwrap();
+assert_eq!(stats.failed, 0);
+```
+
+`run_pending` processes the worker queues, `queue.queues` or else `default_queue`. Jobs on other queues need `work` with those queues, or the command:
+
+```rust
+app.run_command("queue:work", &["--queue", "sync", "--stop-when-empty"])
+    .await
+    .unwrap();
+```
+
+The CRM's tests do this through `TestCrm::run_queue`, with the database driver and a fixed clock, so delayed jobs run once the test moves the clock past their delay. See [fakes](/docs/testing/fakes/) for the other fakes.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    Queued listeners run as jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    `Mailer::queue` and the `mail.send` job.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Dispatching jobs on a schedule.
+  </LinkCard>
+</LinkCards>

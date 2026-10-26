@@ -1,10 +1,190 @@
 ---
 title: "The crate hierarchy"
-description: "The eight layers of Navree crates and the rules that keep them apart."
+description: "The layers of Navree crates, the rule that a crate depends only on the layers below it, the shared contracts that make that possible, and the test that enforces it."
 ---
 
-This page explains how Navree is split into small crates arranged in eight layers, from the kernel and macros at L0 to the facade and the CLI at L6. It covers the rule that a crate depends only on lower layers, how shared contracts in `navree-contracts` avoid sideways dependencies, and the test that enforces both.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-contracts` is the reference: run `cargo doc -p navree-contracts --open` in the repository.
+Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) to L6 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
+
+This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows nothing about databases, and authentication builds on everything else rather than the other way round. You can read, test or use any crate with only what's below it. Most apps never see the split, because they depend on the facade, but it explains why things are where they are.
+
+## The layers
+
+```text
+L7  apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
+L6  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps)
+L5  navree-auth
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
+L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
+L1  navree-contracts  navree-config
+L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)
+```
+
+| Layer | Crate | What it provides |
+|---|---|---|
+| L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
+| L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
+| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
+| L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
+| L2 | `navree-http` | Axum integration, default Tower layers, NestJS-format errors, controllers, rate limits, trusted proxies |
+| L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
+| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
+| L2 | `navree-events` | Typed event bus with sync and queued listeners |
+| L2 | `navree-view` | MiniJinja templates (mail and other text) |
+| L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
+| L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
+| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
+| L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
+| L3 | `navree-observe` | Health checks, readiness, Prometheus metrics |
+| L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
+| L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
+| L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
+| L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
+| L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF |
+| L4 | `navree-validation` | `Valid<T>` extractors on garde, class-validator style messages, async rules |
+| L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff |
+| L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
+| L4 | `navree-access` | Roles, permissions and CASL-compatible abilities, record checks, SQL list filters |
+| L4 | `navree-schedule` | Cron-style schedules, overlap prevention, single-node runs |
+| L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
+| L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
+| L6 | `navree` | The facade: re-exports every module crate and the macros |
+| L6 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev` |
+
+## The allowed edges
+
+"Lower layers only" is the shape of the rule, but each crate has an explicit list of the Navree crates it may depend on. A layer-4 crate can't reach for any layer-3 crate it fancies; it gets the ones it needs, and adding one is a deliberate change to the list.
+
+| Crate | May depend on |
+|---|---|
+| `navree-kernel`, `navree-macros` | No Navree crate |
+| `navree-contracts` | kernel |
+| `navree-config` | kernel, contracts |
+| `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-cache`, `navree-http-client` | kernel, contracts, config |
+| `navree-db`, `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
+| `navree-mail` | kernel, contracts, config, view |
+| `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
+| `navree-session` | kernel, contracts, config, http, crypto, db |
+| `navree-validation`, `navree-audit` | kernel, contracts, config, http, db |
+| `navree-queue`, `navree-schedule` | kernel, contracts, config, db |
+| `navree-access` | kernel, contracts, config, http, db, cache |
+| `navree-notify` | kernel, contracts, config, http, db, mail |
+| `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
+| `navree` | Every runtime crate and the macros |
+| `navree-cli` | No Navree crate: everything it knows about the framework is in the code it generates |
+
+The lists are what's allowed; some crates use less (`navree-access` doesn't use the cache today, and `navree-auth` doesn't use sessions). `navree-config` may use `navree-contracts`, which sits in the same layer; that's the one edge between crates of one layer.
+
+Two exceptions apply to dev-dependencies, so tests can boot what they need:
+
+- A crate's tests may use any Navree crate in a **lower** layer. That's how every crate from L4 up tests with `navree-testing` (L3), and how navree-notify's tests boot `ViewModule` for `MailModule`.
+- `navree-macros` may dev-depend on any runtime crate, because its tests expand the macros against the crates the generated code calls.
+
+The framework's own crates implement `Module`, `Injectable` and `Controller` by hand instead of using the macros. The macros sit at L0 with no runtime dependencies, and the generated code names whichever crates the user's crate depends on.
+
+## Cross-cutting needs: `navree-contracts`
+
+Some needs cut across modules. The HTTP pipeline records refused requests in the audit trail; notifications broadcast to WebSocket channels; the database layer hands jobs to the queue after a commit. Letting `navree-http` depend on `navree-audit` would point up the hierarchy.
+
+Instead, the shared shape lives in `navree-contracts` (L1) as a trait. One module implements it and registers it as a `dyn Trait` provider; the others resolve it, usually as optional:
+
+| Contract | Implemented by | Used by |
+|---|---|---|
+| `AuditSink`, `AuditEntry`, `AuditKind` | navree-audit | navree-http (route audit actions, security events), navree-access (denials), navree-auth, navree-session (CSRF failures) |
+| `Broadcaster` | navree-realtime | navree-notify, navree-access, navree-auth (ending a user's subscriptions) |
+| `EventSink` | navree-events | Modules that publish events by name |
+| `Dispatcher`, `Job`, `JobRegistration`, `JobOptions` | navree-queue | navree-events (queued listeners), navree-mail (queued mail), navree-notify, navree-schedule |
+| `HealthCheck`, `HealthStatus` | navree-db, navree-cache, navree-storage (as multi-bindings) | navree-observe (readiness) |
+| `SessionStore`, `SessionRecord` | navree-session's memory and database stores | The session layer |
+| `Principal`, `AuthState`, `AuthVia` | navree-auth (through navree-http's `Authenticator`) | Every module that needs the current user |
+| `Clock` | `SystemClock`, `FixedClock` (tests), registered by your app | Modules that need "now" and tests that fix it |
+
+Two plain types live there too: `RequestId`, which the HTTP pipeline creates for each request and which logs and audit entries carry, and `Secret<T>`, the wrapper configuration structs use for keys and passwords so they never show up in logs.
+
+Your own code can use the contracts the same way. This function audits an export when the app has an audit trail, and does nothing otherwise:
+
+```rust
+use navree::contracts::{AuditEntry, AuditKind, AuditSink};
+use navree::prelude::*;
+use uuid::Uuid;
+
+pub async fn record_export(ctx: &AppContext, user: Uuid) -> Result<(), BoxError> {
+    if let Some(audit) = ctx.try_get::<dyn AuditSink>().await {
+        let entry = AuditEntry::new(AuditKind::Custom, "contacts.exported").actor(user);
+        audit.record(entry).await?;
+    }
+    Ok(())
+}
+```
+
+And a service that must broadcast can inject the contract instead of the realtime module's types:
+
+```rust
+use navree::contracts::Broadcaster;
+
+#[injectable]
+pub struct DealBroadcasts {
+    broadcaster: Arc<dyn Broadcaster>,
+}
+
+impl DealBroadcasts {
+    pub async fn updated(&self, deal: serde_json::Value) -> Result<(), BoxError> {
+        self.broadcaster
+            .broadcast(
+                vec!["private-crm.deals".to_owned()],
+                "deal.updated".to_owned(),
+                serde_json::json!({ "deal": deal }),
+            )
+            .await
+    }
+}
+```
+
+Two seams aren't in `navree-contracts` because they need HTTP types: `Authenticator` and `RouteAuthorizer` live in `navree-http`. navree-auth implements the first and navree-access the second, and the pipeline resolves both as `dyn` providers.
+
+## The dependency-graph test
+
+`crates/navree/tests/dependency_graph.rs` encodes the table above, one row per workspace crate. Run it on its own:
+
+```sh
+cargo test -p navree --test dependency_graph
+```
+
+It reads the workspace with `cargo metadata` and checks that:
+
+- every dependency edge between workspace crates (normal, dev and build) is allowed;
+- every workspace crate has a row, and every row is a workspace crate;
+- the table itself never points upwards and has no cycles;
+- `Cargo.lock` contains none of `aws-lc-sys`, `aws-lc-rs`, `aws-lc-fips-sys`, `openssl`, `openssl-sys`, `native-tls` or `cmake`: TLS is rustls with the `ring` provider everywhere, so building needs no C toolchain beyond what SQLite uses.
+
+A forbidden edge fails with a message that says what the crate may use instead:
+
+```text wrap
+crate hierarchy violations (spec §3):
+  navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-kernel, navree-contracts, navree-config]
+```
+
+The CRM is in the table too: `crm-core` at L7, `crm-testkit` at L8, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L9 and the `crm-api` binary at L10. They may depend only on the `navree` facade and the CRM crates below them.
+
+Two more tests in `crates/navree/tests/facade.rs` keep the facade's [features](/docs/architecture/facade-and-features/) in step with the hierarchy.
+
+<Callout type="note" title="Adding a crate to the workspace">
+
+Give it a row in `HIERARCHY` in `dependency_graph.rs`, with its layer and the crates it may use, before you add dependencies. A workspace crate without a row fails the test.
+
 </Callout>
+
+## Applying the idea to your app
+
+The same discipline works for an application. The CRM's feature crates all build on `crm-core`, which holds the shared entities, migrations, abilities and platform setup, and none of them depends on another feature crate. When two features need to cooperate, they do it through something lower down: an event, a trait in the shared crate, or a service the shared crate exports. Inside a single crate, [modules](/docs/architecture/modules/) give you the same structure: a feature imports only what it uses, and the boot fails when it reaches for something it didn't import.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/facade-and-features/" title="The facade and features">
+    One dependency, one Cargo feature per module.
+  </LinkCard>
+  <LinkCard href="/docs/prologue/contributing/" title="Contributing">
+    Working on the framework itself.
+  </LinkCard>
+</LinkCards>

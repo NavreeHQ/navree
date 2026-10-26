@@ -15,13 +15,15 @@ export const site = {
   /** Where this site lives inside the repository. */
   websiteDir: "apps/website",
   license: "MIT OR Apache-2.0",
+  // The crates aren't on crates.io yet, so installs come from git. After the
+  // first release: `cargo install navree-cli` and `cargo add navree`.
   install: {
     /** Installs the `navree` command-line tool. */
-    cli: "cargo install navree-cli",
+    cli: "cargo install --git https://github.com/NavreeHQ/navree navree-cli",
     /** Creates a new application. */
     newApp: "navree new blog",
     /** Adds the framework to an existing Cargo project. */
-    crate: "cargo add navree",
+    crate: "cargo add --git https://github.com/NavreeHQ/navree navree",
   },
   /** The minimum supported Rust version. */
   rustVersion: "1.95",

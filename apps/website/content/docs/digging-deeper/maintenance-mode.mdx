@@ -1,10 +1,148 @@
 ---
 title: "Maintenance mode"
-description: "Taking an application down for maintenance, and back up."
+description: "Answer every request with a 503 while you deploy or migrate, with `down` and `up`, a retry hint, a message and paths that stay up."
 ---
 
-This page shows how to put an application into maintenance mode with the `down` command and bring it back with `up`, and what clients receive while it is down.
+<Badge feature="http" /> During a risky deployment or a long migration, you may want the API to refuse requests cleanly instead of failing halfway. In maintenance mode, every request gets a `503 Service Unavailable` in the usual error format, with an optional message and `Retry-After` hint, while health probes keep answering. It is part of `HttpModule`, so every app with an HTTP server has it.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-http` is the reference: run `cargo doc -p navree-http --open` in the repository.
+## Going down and coming back up
+
+Two commands toggle it. Run them through the `navree` CLI, or directly with your app's binary:
+
+```sh
+navree down --retry 60 --message "Upgrading the database. Back in a minute."
+```
+
+```text
+The application is in maintenance mode (storage/framework/down).
+```
+
+```sh
+navree up
+```
+
+```text
+The application is up.
+```
+
+| Option of `down` | What it does |
+|---|---|
+| `--retry SECS` | Sends `Retry-After: SECS` with every 503, so well-behaved clients wait before retrying. |
+| `--message TEXT` | Replaces the default message, `The application is down for maintenance.` |
+
+Both options also accept the `--retry=60` form. Like every app command, `down` and `up` boot the app first, so they need a working configuration; see [Console commands and the CLI](/docs/digging-deeper/cli/).
+
+## How it works
+
+`down` writes a small JSON file, `storage/framework/down` by default (relative to the working directory), and `up` deletes it:
+
+```json title="storage/framework/down"
+{
+  "time": 1793002477,
+  "retry": 60,
+  "message": "Upgrading the database. Back in a minute."
+}
+```
+
+While the file exists, the app is down. Every running server checks it at most once per second, so `navree down` in one terminal takes effect in a running `serve` within a second, without a restart. The file is the whole state: you can also create it by hand or from a deployment script. A file that exists but can't be read or parsed still means "down", with the default message.
+
+Change its location with `http.maintenance_file`:
+
+```toml title="config/app.toml"
+[http]
+maintenance_file = "/var/run/crm/down"
+```
+
+The file is local to each server. When you run several instances, run `down` on each of them, or point `http.maintenance_file` at a volume they share.
+
+## What clients see
+
+Every request, except the [excepted paths](#paths-that-stay-up), gets a `503` in the [NestJS error format](/docs/basics/errors/), with your message:
+
+```http
+HTTP/1.1 503 Service Unavailable
+retry-after: 60
+content-type: application/json
+x-request-id: 01a177469d297760b4efb91b0ac2e32a
+
+{"statusCode":503,"message":"Upgrading the database. Back in a minute.","error":"Service Unavailable"}
+```
+
+The response still goes through the outer layers of the [request pipeline](/docs/basics/middleware/): it carries an `X-Request-Id`, the security headers and, for allowed origins, the CORS headers, so a browser app can read the message and show it. Maintenance mode answers before the per-IP rate limit, authentication and your routes, so nothing of your app runs.
+
+## Paths that stay up
+
+Some requests should keep working: your orchestrator's probes, so it doesn't restart instances that are only in maintenance, and the metrics scrape. `http.maintenance_except` lists the request paths maintenance mode lets through. The default is:
+
+```toml title="config/app.toml"
+[http]
+maintenance_except = ["/health/live", "/health/ready", "/metrics"]
+```
+
+Paths are matched exactly against the request path, with no prefix, wildcard or trailing-slash matching, and the list you set replaces the default, so keep the probes in it when you add your own. From the environment, use a comma-separated list: `APP_HTTP__MAINTENANCE_EXCEPT=/health/live,/health/ready,/metrics,/api/status`.
+
+<Callout type="note" title="No IP allow list, secret or custom page">
+
+Laravel's `down` can let some IP addresses through, set a secret bypass URL, render a page or redirect. Navree's has none of these: the only way through is a path in `http.maintenance_except`.
+
 </Callout>
+
+## What keeps running
+
+Maintenance mode only gates HTTP requests to the app. Everything else keeps going:
+
+- **Queue workers and the scheduler** (`queue:work`, `schedule:work`) don't read the file. They keep processing jobs and running tasks, so stop them yourself if a job could touch what you are changing.
+- **WebSockets**: new real-time connections are refused with the `503`, but connections opened before `down` stay open. The relay endpoint that workers use to broadcast (`/apps/{app_id}/events`) is refused too, so workers' broadcasts fail until `up`; add it to `http.maintenance_except` if your workers keep running. See [Real-time broadcasting](/docs/digging-deeper/broadcasting/#broadcasting-from-workers).
+- **Temporary file URLs** (`/storage/...`) are refused like any other path.
+
+## A deployment with maintenance mode
+
+```sh
+navree down --retry 120 --message "Deploying a new version."
+# stop the workers (systemd, your process manager, ...)
+navree migrate
+# swap the binary and restart `serve`
+navree up
+# start the workers again
+```
+
+`down` writes to the working directory of the command, so run it where `serve` runs, or set `http.maintenance_file` to an absolute path in both. See [Deployment](/docs/getting-started/deployment/) for the rest of the process.
+
+## Testing
+
+`run_command` runs `down` and `up` against a test app. Point the maintenance file at a temporary directory (here with the [tempfile](https://docs.rs/tempfile) crate) so tests don't share it:
+
+```rust title="tests/maintenance.rs"
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn the_api_answers_503_while_down() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = TestApp::builder()
+        .config("http.maintenance_file", dir.path().join("down").to_string_lossy().into_owned())
+        .module(DealsModule) // any module with routes
+        .build()
+        .await;
+
+    app.run_command("down", &["--retry", "30"]).await.unwrap();
+    let response = app.client().get("/api/v1/deals").send().await.assert_status(503);
+    assert_eq!(response.header("retry-after"), Some("30"));
+
+    app.run_command("up", &[]).await.unwrap();
+    app.shutdown().await.unwrap();
+}
+```
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
+    The probes that stay up.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="Console commands and the CLI">
+    Running app commands with `navree`.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running Navree in production.
+  </LinkCard>
+</LinkCards>

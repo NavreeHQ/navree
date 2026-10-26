@@ -1,10 +1,632 @@
 ---
 title: "Validation"
-description: "Validated extractors on garde, with field-level error messages."
+description: "Validate request bodies and query strings with `Valid<Json<T>>` on garde, with class-validator style messages and `unique` / `exists` database rules."
 ---
 
-This page shows how to validate input with `Valid<Json<T>>` and `Valid<Query<T>>`: declaring rules with garde, the error format your clients receive, custom messages, and async rules such as `unique` and `exists` that check the database.
+Navree validates input with extractors. You describe the rules on a DTO with [garde](https://docs.rs/garde), take `Valid<Json<T>>` or `Valid<Query<T>>` in your handler, and the handler only runs when the input passes. When it doesn't, the client gets a 400 in the NestJS format, with one message per broken rule, written the way class-validator writes them.
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-validation` is the reference: run `cargo doc -p navree-validation --open` in the repository.
+Validation lives in the `navree-validation` crate (the `validation` feature of the `navree` facade, on by default). `Valid` and `ValidAsync` are in the prelude.
+
+## A first example
+
+### Defining the rules
+
+A DTO is a struct that derives `serde::Deserialize` and `garde::Validate`. Every field gets a `#[garde(...)]` attribute with its rules, or `#[garde(skip)]` when it has none:
+
+```rust title="src/contacts/dto.rs"
+use garde::Validate;
+use navree::validation::rules;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateContact {
+    #[garde(length(chars, min = 1, max = 100))]
+    pub first_name: String,
+    #[garde(length(chars, min = 1, max = 100))]
+    pub last_name: String,
+    #[garde(email)]
+    pub email: String,
+    #[garde(range(min = 16, max = 120))]
+    pub age: Option<u8>,
+    #[garde(length(max = 10), inner(length(min = 1, max = 30)))]
+    pub tags: Vec<String>,
+    #[garde(custom(rules::one_of(&["lead", "customer", "churned"])))]
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ContactFilters {
+    #[garde(length(min = 2))]
+    pub search: Option<String>,
+    #[garde(range(min = 1, max = 100))]
+    pub per_page: Option<u32>,
+}
+```
+
+garde's derive refers to `::garde`, so your app depends on `garde` directly. Apps created with `navree new` already do:
+
+```toml title="Cargo.toml"
+[dependencies]
+garde = { version = "0.23", features = ["derive", "email"] }
+```
+
+Add garde's `url`, `regex` or other features when you use the rules that need them.
+
+### Using the extractor
+
+Wrap the usual Axum extractor in `Valid`. The pattern `Valid(Json(input))` hands you the validated value:
+
+```rust title="src/contacts/controller.rs"
+use navree::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Debug, Serialize)]
+pub struct ContactView {
+    pub name: String,
+}
+
+#[injectable]
+pub struct ContactsController;
+
+#[controller("/contacts", version = "1")]
+#[authenticated]
+impl ContactsController {
+    #[get("/")]
+    async fn index(&self, Valid(Query(filters)): Valid<Query<ContactFilters>>) -> Json<Vec<String>> {
+        Json(filters.search.into_iter().collect())
+    }
+
+    #[post("/")]
+    async fn store(&self, Valid(Json(input)): Valid<Json<CreateContact>>) -> Created<ContactView> {
+        let id = Uuid::now_v7();
+        let name = format!("{} {}", input.first_name, input.last_name);
+        Created(format!("/api/v1/contacts/{id}"), ContactView { name })
+    }
+}
+```
+
+### What the client receives
+
+Send a body that breaks several rules:
+
+```json title="POST /api/v1/contacts"
+{
+  "first_name": "",
+  "last_name": "Lovelace",
+  "email": "ada@",
+  "age": 12,
+  "tags": ["vip", ""],
+  "status": "prospect"
+}
+```
+
+The handler doesn't run. The client gets this response (formatted here):
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "age must not be less than 16",
+    "email must be a valid email address",
+    "first_name must be longer than or equal to 1 characters",
+    "status must be one of the following values: lead, customer, churned",
+    "tags.1 must be longer than or equal to 1 characters"
+  ],
+  "error": "Bad Request",
+  "errors": {
+    "age": ["age must not be less than 16"],
+    "email": ["email must be a valid email address"],
+    "first_name": ["first_name must be longer than or equal to 1 characters"],
+    "status": ["status must be one of the following values: lead, customer, churned"],
+    "tags.1": ["tags.1 must be longer than or equal to 1 characters"]
+  }
+}
+```
+
+The [error response format](#error-responses) section below explains each member.
+
+## The extractors
+
+| Extractor | Reads | Root name for whole-input errors |
+|---|---|---|
+| `Valid<Json<T>>` | a JSON body (`application/json` or any `application/*+json`) | `body` |
+| `Valid<Query<T>>` | the query string | `query` |
+| `Valid<Form<T>>` | an `application/x-www-form-urlencoded` body, or the query string for `GET` and `HEAD` | `body` (`query` for `GET` and `HEAD`) |
+| `ValidAsync<Json<T>>`, `ValidAsync<Query<T>>`, `ValidAsync<Form<T>>` | the same, then the [database rules](#database-rules) | as above |
+
+`T` must implement `serde::de::DeserializeOwned` and `garde::Validate<Context = ()>`. Each extractor works in two steps:
+
+1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error.
+2. **Validate.** garde runs every rule of `T` and reports every failure at once.
+
+Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than `http.body_limit_bytes` is a 413. See [errors](/docs/basics/errors/) for those.
+
+`Form` is Axum's: import it with `use navree::axum::extract::Form;`.
+
+## Available rules
+
+### garde's rules
+
+Every garde rule works. These are the ones you'll use most, with the message Navree renders for a field called `name`:
+
+| Rule | Checks | Message |
+|---|---|---|
+| `length(min = 2, max = 50)` | string length (bytes) | `name must be longer than or equal to 2 characters`, `name must be shorter than or equal to 50 characters` |
+| `length(chars, min = 2)` | string length in characters | as above |
+| `length(min = 1, max = 10)` on a list | number of items | `name must contain at least 1 elements`, `name must contain no more than 10 elements` |
+| `range(min = 1, max = 100)` | numbers | `name must not be less than 1`, `name must not be greater than 100` |
+| `required` | an `Option` is `Some` | `name should not be empty` |
+| `email` | an email address | `name must be a valid email address` |
+| `url` | a URL (garde feature `url`) | `name must be a URL address` |
+| `pattern(r"^[A-Z]{3}$")` | a regular expression (garde feature `regex`) | `name must match ^[A-Z]{3}$ regular expression` |
+| `ascii`, `alphanumeric` | character classes | `name must contain only ASCII characters`, `name must contain only letters and numbers` |
+| `contains("x")`, `prefix("x")`, `suffix("x")` | substrings | `name must contain a x string`, `name must start with x`, `name must end with x` |
+| `ip`, `ipv4`, `ipv6` | IP addresses | `name must be an ip address`, `name must be an IPv4 address`, `name must be an IPv6 address` |
+| `matches(other_field)` | equals another field | `name must match other_field` |
+| `dive`, `inner(...)` | nested structs, list items | see [nested data](#validating-nested-data) |
+| `custom(f)` | your own function | see [custom rules](#custom-rules) |
+| `skip` | nothing | |
+
+<Callout type="tip" title="Count characters, not bytes">
+
+garde's plain `length` counts the bytes of a string, so `"Zoë"` has length 4. Write `length(chars, max = 255)` when you mean characters, as the CRM does.
+
 </Callout>
+
+Rules on an `Option<T>` only run when the value is `Some`; `required` is the rule that demands one. `#[garde(skip)]` is required on fields without rules, unless you put `#[garde(allow_unvalidated)]` on the struct.
+
+### Navree's extra rules
+
+`navree::validation::rules` adds rules garde lacks. Use them with `custom(...)`; they accept `String`, `&str`, `Cow<str>` and `Option`s of them, and `None` passes:
+
+```rust
+use navree::validation::confirmed;
+use navree::validation::rules;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Register {
+    #[garde(length(min = 8), custom(confirmed(&self.password_confirmation)))]
+    pub password: String,
+    #[garde(skip)]
+    pub password_confirmation: String,
+    #[garde(custom(rules::uuid))]
+    pub team_id: String,
+    #[garde(custom(rules::date_ymd))]
+    pub starts_on: Option<String>,
+}
+```
+
+| Rule | Checks | Message |
+|---|---|---|
+| `confirmed(&self.x_confirmation)` | the field equals its confirmation; the error goes on the field itself | `password confirmation does not match` |
+| `rules::uuid` | a hyphenated UUID | `team_id must be a UUID` |
+| `rules::date_ymd` | a real date written exactly `YYYY-MM-DD` | `starts_on must be a valid date in the format YYYY-MM-DD` |
+| `rules::one_of(&["a", "b"])` | one of the listed strings | `status must be one of the following values: a, b` |
+
+### Rules serde checks for you
+
+Typed fields are checked while deserializing, before any garde rule runs. A `Uuid` field rejects `"nope"`, an enum rejects unknown variants, and so on:
+
+| Input problem | Message |
+|---|---|
+| a required field is missing, or `null` | `title should not be empty` |
+| a string where a number is expected | `count must be an integer number`, `ratio must be a number` |
+| a number where a string is expected | `title must be a string` |
+| not `true` or `false` | `active must be a boolean value` |
+| not a list, not an object | `labels must be an array`, `address must be an object` |
+| not a UUID | `owner_id must be a UUID` |
+| an unknown enum variant | `stage must be one of the following values: lead, won` |
+| an unknown field, with `#[serde(deny_unknown_fields)]` | `property extra should not exist` |
+
+So an enum is often all the validation a field needs:
+
+```rust
+#[derive(Debug, Deserialize, Validate)]
+pub struct NewSubscription {
+    #[garde(skip)]
+    pub plan: Plan, // "starter", "team" or "enterprise"
+    #[garde(range(min = 1))]
+    pub seats: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Plan {
+    Starter,
+    Team,
+    Enterprise,
+}
+```
+
+### Required fields
+
+serde stops at the first problem, so deserialization errors come **one at a time and before the garde rules**. A `CreateContact` body with only `first_name` and `email` is missing three fields, but gets only:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["last_name should not be empty"],
+  "error": "Bad Request",
+  "errors": { "last_name": ["last_name should not be empty"] }
+}
+```
+
+When you want every missing field reported at once, make the fields `Option`s and use garde's `required` rule. The CRM's deal DTO does this (`not_blank` is one of its own [custom rules](#custom-rules), which rejects a whitespace-only title):
+
+```rust title="crm-deals/src/dto.rs"
+#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+pub struct CreateDeal {
+    #[garde(required, custom(not_blank), length(max = 255))]
+    pub title: Option<String>,
+    #[garde(required)]
+    pub company_id: Option<Uuid>,
+    #[garde(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    pub amount_cents: Option<i64>,
+    // ...
+}
+```
+
+An empty body `{}` now reports all three fields:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "amount_cents should not be empty",
+    "company_id should not be empty",
+    "title should not be empty"
+  ],
+  "error": "Bad Request",
+  "errors": {
+    "amount_cents": ["amount_cents should not be empty"],
+    "company_id": ["company_id should not be empty"],
+    "title": ["title should not be empty"]
+  }
+}
+```
+
+## Error responses
+
+Every validation failure is a `400 Bad Request` with `Content-Type: application/json`:
+
+- `statusCode` is `400` and `error` is `"Bad Request"`.
+- `message` is a list of **every** message, ordered by field path (alphabetically), then in the order the rules failed.
+- `errors` maps each field path to its messages. Nested fields use dots and list indexes: `customer.address.city`, `items.1.quantity`.
+- The request id is in the `X-Request-Id` header, not the body.
+
+Problems with the input as a whole use the root name. A malformed JSON body gives:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["body must be a valid JSON string"],
+  "error": "Bad Request",
+  "errors": { "body": ["body must be a valid JSON string"] }
+}
+```
+
+Query strings work the same way. `GET /api/v1/contacts?search=a&per_page=500` gives:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "per_page must not be greater than 100",
+    "search must be longer than or equal to 2 characters"
+  ],
+  "error": "Bad Request",
+  "errors": {
+    "per_page": ["per_page must not be greater than 100"],
+    "search": ["search must be longer than or equal to 2 characters"]
+  }
+}
+```
+
+The same format is used for every 400 with field errors, including the ones you [build yourself](#validating-by-hand) and the ones navree-auth returns. The [errors page](/docs/basics/errors/) describes the error format as a whole.
+
+## Custom messages
+
+The built-in messages follow class-validator: the field's path, then the rule, with no capital letter and no full stop. You can replace any of them, for every field or for one field, and you can give fields display names.
+
+### Overriding messages
+
+Message templates are keyed by rule (`required`, `min.string`) or by field and rule (`email.unique`). A field-specific template wins over a rule template, which wins over the built-in one:
+
+```rust title="src/app.rs"
+use std::collections::BTreeMap;
+
+use navree::validation::ValidationOptions;
+
+let options = ValidationOptions {
+    messages: BTreeMap::from([
+        ("required".to_owned(), "Please fill in :attribute.".to_owned()),
+        ("email.unique".to_owned(), "This e-mail is already registered.".to_owned()),
+    ]),
+    attributes: BTreeMap::from([("first_name".to_owned(), "first name".to_owned())]),
+};
+let app = Navree::app().module(ValidationModule::with_options(options));
+```
+
+With these options a missing `first_name` reads `Please fill in first name.`.
+
+### From configuration
+
+`ValidationModule::from_config()`, or a plain `.module(ValidationModule)`, reads the `validation` section, so you can keep messages out of your code:
+
+```toml title="config/app.toml"
+[validation.messages]
+required = ":Attribute is required."
+"email.unique" = "This e-mail is already registered."
+
+# Nested tables flatten to dotted keys: this sets `min.string`.
+[validation.messages.min]
+string = ":Attribute needs at least :min characters."
+
+[validation.attributes]
+first_name = "first name"
+"address.city" = "city"
+```
+
+`ValidationModule::for_root()` uses the built-in messages and ignores the section. Without `ValidationModule` in the app, the extractors use the built-in messages.
+
+### Placeholders
+
+| Placeholder | Value |
+|---|---|
+| `:attribute` | the field's display name: its path (`first_name`, `items.0.sku`) unless `attributes` names it |
+| `:Attribute` | the same, first letter in upper case |
+| `:min`, `:max` | the rule's bounds |
+| `:other` | the other field of `matches` (shown by its display name) |
+| `:values` | the allowed values (`in`), or the prefix or suffix |
+| `:format`, `:pattern`, `:value` | the date format, the regular expression, the `contains` text |
+
+Placeholders the rule doesn't fill are left as they are.
+
+### Message keys
+
+These are the keys you can override, with their built-in templates:
+
+| Key | Template |
+|---|---|
+| `required` | `:attribute should not be empty` |
+| `min.string`, `max.string` | `:attribute must be longer than or equal to :min characters`, `:attribute must be shorter than or equal to :max characters` |
+| `min.array`, `max.array` | `:attribute must contain at least :min elements`, `:attribute must contain no more than :max elements` |
+| `min.numeric`, `max.numeric` | `:attribute must not be less than :min`, `:attribute must not be greater than :max` |
+| `email`, `url`, `ip`, `ipv4`, `ipv6`, `phone`, `credit_card` | `:attribute must be a valid email address`, `:attribute must be a URL address`, ... |
+| `regex` | `:attribute must match :pattern regular expression` |
+| `alpha_num`, `ascii` | `:attribute must contain only letters and numbers`, `:attribute must contain only ASCII characters` |
+| `contains`, `starts_with`, `ends_with` | `:attribute must contain a :value string`, `:attribute must start with :values`, `:attribute must end with :values` |
+| `same`, `confirmed` | `:attribute must match :other`, `:attribute confirmation does not match` |
+| `in` | `:attribute must be one of the following values: :values` |
+| `uuid`, `date_format`, `date` | `:attribute must be a UUID`, `:attribute must be a valid date in the format :format`, `:attribute must be a valid ISO 8601 date string` |
+| `string`, `integer`, `numeric`, `boolean`, `array`, `object`, `json` | `:attribute must be a string`, `:attribute must be an integer number`, ... |
+| `prohibited` | `property :attribute should not exist` |
+| `unique`, `exists` | `:attribute has already been taken`, `:attribute does not exist` |
+| `invalid` | `:attribute is invalid` (used for any rule without a template) |
+
+The full table is `navree::validation::DEFAULT_MESSAGES`.
+
+<Callout type="note">
+
+Messages are English, and there is one table per app: Navree has no per-request locale yet. An i18n module is on the [roadmap](/docs/prologue/roadmap/).
+
+</Callout>
+
+## Custom rules
+
+A garde `custom` rule is a function taking the value and garde's context. Return `rule_error` with a rule key to get a message from the table, so it can be overridden like a built-in one. Or return `garde::Error::new` with your own text, which may use `:attribute`:
+
+```rust title="src/teams/rules.rs"
+use navree::validation::rule_error;
+
+pub fn even(value: &u32, _ctx: &()) -> garde::Result {
+    if value.is_multiple_of(2) {
+        Ok(())
+    } else {
+        Err(rule_error("even", &[("value", value)]))
+    }
+}
+
+pub fn not_blank(value: &str, _ctx: &()) -> garde::Result {
+    if value.trim().is_empty() {
+        Err(garde::Error::new(":attribute must not be blank"))
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Teams {
+    #[garde(custom(even))]
+    pub size: u32,
+    #[garde(custom(not_blank))]
+    pub name: String,
+}
+```
+
+`even` has no built-in template, so it renders the `invalid` one (`size is invalid`) until you add a message for the key `even`, for example `even = ":value is not an even number."` under `[validation.messages]`.
+
+<Callout type="note">
+
+The extractors need `Validate<Context = ()>`, so garde's `#[garde(context(...))]` isn't supported. Rules that need outside data, such as the database, are [async rules](#database-rules).
+
+</Callout>
+
+## Database rules
+
+Some rules need the database: an email must not be taken yet, a `company_id` must point at a real company. Implement `AsyncRules` on the DTO and take `ValidAsync<...>` instead of `Valid<...>`:
+
+```rust title="src/users/dto.rs"
+use navree::validation::{AsyncRule, AsyncRules};
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateUser {
+    #[garde(email)]
+    pub email: String,
+    #[garde(skip)]
+    pub team_id: Option<Uuid>,
+}
+
+impl AsyncRules for UpdateUser {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        vec![
+            AsyncRule::unique("email", "users", "email", self.email.clone(), None)
+                .ignore_path_param("id"),
+            AsyncRule::exists("team_id", "teams", "id", self.team_id),
+        ]
+    }
+}
+```
+
+```rust title="src/users/controller.rs"
+#[controller("/users", version = "1")]
+#[authenticated]
+impl UsersController {
+    #[patch("/{id}")]
+    async fn update(
+        &self,
+        uow: Uow,
+        Path(id): Path<Uuid>,
+        ValidAsync(Json(input)): ValidAsync<Json<UpdateUser>>,
+    ) -> Result<Json<UserResource>> {
+        // `input` passed the garde rules, then both database rules.
+        // ...
+    }
+}
+```
+
+A failed rule is a field error like any other: `email has already been taken`, `team_id does not exist`.
+
+- `AsyncRule::unique(field, table, column, value, ignore_id)` passes when no row of `table` has `value` in `column`. When `ignore_id` is `Some(id)`, the row whose `id` column equals it doesn't count, which is what an update needs.
+- `.ignore_path_param("id")` does the same with the route's `{id}` parameter, when it is a UUID. An explicit `ignore_id` wins.
+- `AsyncRule::exists(field, table, column, value)` passes when some row has `value` in `column`.
+- A `None` value passes without a query, like Laravel's rules on a nullable field. Combine with `required` to demand a value.
+- Bind values with the column's type: a `Uuid` for UUID columns, a `String` for text.
+
+How they run:
+
+- Only after every garde rule passes, so no query runs for input that is already invalid.
+- Inside the request's [unit of work](/docs/database/unit-of-work/), as `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1` with bound values. The app needs `DatabaseModule`; without it, a rule that has a value to check answers 500.
+- Table and column names must match `[a-z_][a-z0-9_]*`. Anything else fails with a 500 before any SQL runs, so a name can never inject SQL. Never build them from input.
+
+Outside a request, check a rule yourself with `rule.passes(conn).await`, which returns `Result<bool, RuleError>`.
+
+<Callout type="warning" title="No extra conditions">
+
+A rule compares one column with one value. It can't add conditions such as `deleted_at IS NULL`, so `exists` accepts a soft-deleted row. Check such cases in your service, as the CRM does for deleted companies.
+
+</Callout>
+
+## Validating nested data
+
+Mark a field holding another struct, or a list of structs, with `dive`. Use `inner(...)` to apply rules to each item of a list of plain values:
+
+```rust title="src/orders/dto.rs"
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateOrder {
+    #[garde(dive)]
+    pub customer: Customer,
+    #[garde(length(min = 1), dive)]
+    pub items: Vec<OrderItem>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Customer {
+    #[garde(email)]
+    pub email: String,
+    #[garde(dive)]
+    pub address: Address,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Address {
+    #[garde(length(min = 1))]
+    pub city: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct OrderItem {
+    #[garde(length(min = 1))]
+    pub sku: String,
+    #[garde(range(min = 1, max = 99))]
+    pub quantity: u32,
+}
+```
+
+Errors name the full path, with list indexes:
+
+```json title="400 Bad Request (errors)"
+{
+  "customer.address.city": ["customer.address.city must be longer than or equal to 1 characters"],
+  "items.1.quantity": ["items.1.quantity must not be less than 1"],
+  "items.1.sku": ["items.1.sku must be longer than or equal to 1 characters"]
+}
+```
+
+serde reports nested type errors at their path too: `"quantity": "two"` in the first item gives `items.0.quantity must be an integer number`.
+
+To override a nested field's message or name, use its full dotted path: `"customer.address.city" = "city"` under `[validation.attributes]`. List items have their index in the path, so an override for one specific index rarely makes sense; override the rule instead.
+
+## Validating by hand
+
+Some checks only make sense in a service: a date range, a rule that depends on the stored record. Collect them in `ValidationErrors` and return them as the same 400:
+
+```rust
+use navree::validation::ValidationErrors;
+
+pub fn check_dates(starts_on: &str, ends_on: &str) -> Result<()> {
+    let mut errors = ValidationErrors::new();
+    if ends_on < starts_on {
+        errors.add("ends_on", "ends_on must be after starts_on");
+    }
+    if !errors.is_empty() {
+        return Err(errors.into_app_error());
+    }
+    Ok(())
+}
+```
+
+- `add(field, message)` drops duplicates; `merge(other)` adds another set.
+- `ValidationErrors` converts into `AppError` (`.into_app_error()` or `?`) and implements `IntoResponse`.
+- To reuse the app's templates, inject `Arc<Messages>` (exported by `ValidationModule`) and call `messages.render("company_id", "exists", &[])`. The CRM does this to report a soft-deleted company as `company_id does not exist`.
+- `AppError::validation(map)` builds the same response from a `BTreeMap<String, Vec<String>>`.
+
+Calling garde's `input.validate()` yourself works anywhere, but it returns garde's own report and messages. Navree's messages come from the extractors.
+
+## Testing
+
+`TestResponse` has assertions for this format. `assert_validation_error(field)` checks for a 400 with at least one message for the field, and `assert_error(400, message)` checks that the `message` list contains that exact message:
+
+```rust title="tests/contacts.rs"
+client
+    .post("/api/v1/contacts")
+    .json(&json!({
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "email": "nope",
+        "tags": [],
+        "status": "lead"
+    }))
+    .send()
+    .await
+    .assert_validation_error("email")
+    .assert_error(400, "email must be a valid email address");
+```
+
+See [HTTP tests](/docs/testing/http-tests/) for the test client.
+
+<LinkCards>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The NestJS error format, `AppError` and mapping your own errors.
+  </LinkCard>
+  <LinkCard href="/docs/basics/requests/" title="Requests and extractors">
+    Path parameters, query strings, bodies and the current user.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    The per-request transaction async rules run in.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/openapi/" title="OpenAPI">
+    Describe your DTOs in the generated API document.
+  </LinkCard>
+</LinkCards>

@@ -34,7 +34,9 @@ export function getHighlighter(): Promise<Highlighter> {
 /**
  * Reads the fence's meta string: ```rust title="src/main.rs" {3-5}
  * puts the title and the language on the `<pre>` for the code block
- * component (`{3-5}` is handled by `transformerMetaHighlight`).
+ * component (`{3-5}` is handled by `transformerMetaHighlight`). The word
+ * `wrap` (```text wrap) wraps long lines instead of scrolling them: for
+ * log lines, error messages and mail text, not for code or diagrams.
  */
 const metaTransformer: ShikiTransformer = {
   name: "navree:meta",
@@ -42,6 +44,7 @@ const metaTransformer: ShikiTransformer = {
     const raw = String((this.options.meta as { __raw?: string } | undefined)?.__raw ?? "");
     const title = /(?:title|filename)="([^"]+)"/.exec(raw)?.[1];
     if (title) node.properties["data-title"] = title;
+    if (/(?:^|\s)wrap(?:\s|$)/.test(raw.replace(/"[^"]*"/g, ""))) node.properties["data-wrap"] = "";
     node.properties["data-language"] = this.options.lang;
   },
 };

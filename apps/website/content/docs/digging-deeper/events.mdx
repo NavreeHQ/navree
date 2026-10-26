@@ -1,10 +1,413 @@
 ---
 title: "Events"
-description: "A typed event bus with synchronous and queued listeners."
+description: "A typed, in-process event bus: events, sync and queued listeners, emitting, ordering, transactions and errors."
 ---
 
-This page explains the event bus: defining events, registering listeners in a module, synchronous listeners and queued ones that run on a worker, and how events dispatched inside a unit of work wait for it to commit.
+## Introduction
 
-<Callout type="note" title="This page is being written">
-The summary above says what this page will cover. Until then, the API documentation of `navree-events` is the reference: run `cargo doc -p navree-events --open` in the repository.
+<Badge feature="events" /> Events let one part of your app say that something happened without knowing who cares. When a deal is won, the deals service emits `DealWon`; a listener mails the owner, another updates the dashboard. The service doesn't depend on either of them, and you can add a third listener without touching it.
+
+`EventsModule` provides the app's `EventBus`. An event is a plain serializable value with a stable name. A listener is a provider that handles one or more event types, either:
+
+- **synchronously**, while `emit` runs, or
+- **queued**: `emit` hands the event to the [queue](/docs/digging-deeper/queues/) as a job, and a worker runs the listener later.
+
+The bus is in-process. It doesn't send events to other processes or services; queued listeners reach workers through the queue's storage.
+
+## Registering the module
+
+Add `EventsModule` once, in your app root. It has no options and is global, so feature modules subscribe listeners and inject the bus without importing it:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())
+    .module(QueueModule::from_config()) // runs queued listeners
+    // ...
+```
+
+Queued listeners need a job dispatcher, which `QueueModule` provides. In an app without one they run inline during `emit`, and the bus logs a warning once.
+
+## Defining events
+
+An event is a struct that implements `Event`. It must be `Clone`, `Serialize` and `Deserialize`, and it has a `NAME`. These are the CRM's two deal events, from `crm-deals/src/events.rs`:
+
+```rust title="crm-deals/src/events.rs"
+use navree::events::Event;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// A deal was given to an owner by someone else: created for them or
+/// reassigned to them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealAssigned {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub assigned_by: Uuid,
+}
+
+impl Event for DealAssigned {
+    const NAME: &'static str = "deal.assigned";
+}
+
+/// A deal moved to `won` (or was created as won).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub won_by: Uuid,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+```
+
+The name matters beyond the type:
+
+- it names the event for [JSON subscribers](#json-subscribers-and-eventsink);
+- it is part of the job name of every queued listener of the event, so don't rename it while such jobs may be waiting in the queue.
+
+Queued listeners receive the event as JSON stored in the queue, so keep events small and free of secrets: ids rather than whole records, never passwords or tokens.
+
+The CLI generates an event in a module:
+
+```sh
+navree make:event deals deal_won
+```
+
+It writes `src/modules/deals/events/deal_won.rs` with an event named `deals.deal_won`.
+
+## Defining listeners
+
+A listener implements `Listener<E>` for the event type it handles. It is a [provider](/docs/architecture/providers/), so it gets its dependencies injected. This one keeps a count of each owner's wins in the [cache](/docs/digging-deeper/cache/):
+
+```rust title="src/modules/deals/listeners/count_wins.rs"
+use navree::BoxFuture;
+use navree::cache::Cache;
+use navree::events::Listener;
+use navree::prelude::*;
+
+use crate::events::DealWon;
+
+#[injectable]
+pub struct CountWins {
+    cache: Arc<Cache>,
+}
+
+impl Listener<DealWon> for CountWins {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DealWon,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let key = format!("dashboard:wins:{}", event.owner_id);
+            self.cache.increment(&key, 1).await?;
+            Ok(())
+        })
+    }
+}
+```
+
+`handle` gets the event and the app's `AppContext`, and returns a boxed future; wrap the body in `Box::pin(async move { ... })`.
+
+### Queued listeners
+
+Return `true` from `queued` to run the listener on a queue worker instead of during `emit`. One type may implement `Listener` for several events. The CRM's `NotifyDealOwner` handles both deal events and sends the owner a [notification](/docs/digging-deeper/notifications/):
+
+```rust title="crm-deals/src/notification.rs"
+#[injectable]
+pub struct NotifyDealOwner {
+    notifier: Arc<Notifier>,
+    auth: Arc<AuthService>,
+    config: Arc<Config>,
+}
+
+impl Listener<DealAssigned> for NotifyDealOwner {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DealAssigned,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let assigner = self.auth.find_user(event.assigned_by).await?;
+            let message = match assigner {
+                Some(user) => format!("{} assigned you “{}”", user.name, event.title),
+                None => format!("“{}” is now yours", event.title),
+            };
+            self.notify::<Assigned>(
+                event.owner_id,
+                event.deal_id,
+                &event.title,
+                "Deal assigned to you",
+                message,
+            )
+            .await
+        })
+    }
+
+    fn queued(&self) -> bool {
+        true
+    }
+}
+
+impl Listener<DealWon> for NotifyDealOwner {
+    // ... the same for DealWon, also queued
+}
+```
+
+The CLI generates a listener, subscribed to one of the module's events when you name it:
+
+```sh
+navree make:listener deals notify_owner --event deal_won
+```
+
+## Registering listeners
+
+Subscribe listeners in a module's `register` hook with the `ModuleBuilderEventsExt` methods (the prelude brings them in):
+
+- `m.listen::<E, L>()` registers `L` as a provider of the module and subscribes it to `E`;
+- `m.on::<E, L>()` subscribes a provider the module can already see (its own, one exported by a module it imports, or a global one) to another event.
+
+This is the CRM's `DealsModule`:
+
+```rust title="crm-deals/src/lib.rs"
+#[module(
+    imports = [CrmCoreModule],
+    providers = [DealService],
+    controllers = [DealsController],
+    exports = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    /// The owner notifications (a queued listener of both events) and
+    /// their mail template.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>()
+            .templates(notification::TEMPLATES);
+    }
+}
+```
+
+`NotifyDealOwner` is registered once, by `listen`, and subscribed to the second event with `on`. Calling `listen` twice for the same listener in one module registers the provider twice, which fails the boot. The boot also fails, naming the module and the listener, when:
+
+- a module subscribes a listener it can't see;
+- a module subscribes the same listener to the same event twice.
+
+## Emitting events
+
+Inject `Arc<EventBus>` and call `emit`. The CRM's `DealService` emits after it has written a change:
+
+```rust title="crm-deals/src/service.rs"
+#[injectable]
+pub struct DealService {
+    clock: Arc<dyn Clock>,
+    events: Arc<EventBus>,
+    broadcaster: Arc<dyn Broadcaster>,
+}
+
+impl DealService {
+    async fn changed(
+        &self,
+        uow: &Uow,
+        me: Uuid,
+        before: Option<&deal::Model>,
+        after: deal::Model,
+    ) -> Result<DealResource> {
+        // ...
+        let won =
+            after.stage == Stage::Won && before.is_none_or(|before| before.stage != Stage::Won);
+        if won {
+            self.events
+                .emit(DealWon {
+                    deal_id: after.id,
+                    title: after.title.clone(),
+                    owner_id: after.owner_id,
+                    amount_cents: after.amount_cents,
+                    currency: after.currency.clone(),
+                    won_by: me,
+                })
+                .await?;
+        }
+        // ...
+    }
+}
+```
+
+`emit` returns once every sync listener has run and every queued listener's job has been dispatched.
+
+Don't emit from a provider's constructor: listeners are resolved when an event is delivered, and one that depends on the provider being built would wait for it forever. Emit from methods, handlers, commands, jobs and lifecycle hooks.
+
+### Order
+
+Delivery is sequential, inside the task that calls `emit`:
+
+1. Listeners run in module dependency order: the listeners of imported modules come first.
+2. Within a module, they run in the order they were subscribed.
+
+A listener may emit further events; those are delivered completely before the outer `emit` moves on to its next listener. Each `emit` is its own scope for request-scoped listeners: a listener with `Scope::Request` is built once per emitted event.
+
+### Events and transactions
+
+Inside a request handler, the request has a [unit of work](/docs/database/unit-of-work/) that commits when the response status is below 400 and rolls back otherwise. Sync and queued listeners relate to it differently:
+
+- **Sync listeners run at once**, inside the request and before it commits. Their database work runs in the same task, where `Uow::current()` is the request's unit of work. Anything they do outside the database, such as calling an API or sending mail, has happened even if the request fails later.
+- **Queued listeners join the transaction.** Their jobs are written with the request's unit of work, so they are queued only if the request commits, and workers see them only after the commit.
+
+That is why the CRM sends its notifications from a queued listener: the deal, its audit rows and the jobs of its events commit together, and a failed change notifies nobody. Put side effects that must not happen for a failed request in queued listeners.
+
+## Handling errors
+
+A failing listener never stops the others. Each failure is logged at `error` level with target `navree::events` (event, listener, module and error). Once every listener has run, `emit` returns `EventsError::ListenersFailed`, boxed as a `BoxError`, with every failure in delivery order. Failing to dispatch a queued listener's job counts as a failure too.
+
+```rust
+use navree::events::EventsError;
+
+if let Err(error) = events.emit(event).await {
+    if let Some(EventsError::ListenersFailed { failures, .. }) = error.downcast_ref() {
+        for failure in failures {
+            tracing::warn!(
+                listener = failure.listener,
+                module = failure.module,
+                error = %failure.error,
+                "listener failed"
+            );
+        }
+    }
+}
+```
+
+In a handler, `?` on `emit` turns a listener failure into a 500, so the request's unit of work rolls back, queued listeners' jobs included. Catch the error, as above, if a sync listener's failure shouldn't fail the request.
+
+Two more errors can come back from the bus:
+
+- `EventsError::ShutDown`: the app has shut down (or was dropped), and the bus no longer delivers.
+- `EventsError::InvalidPayload`: a JSON payload [published by name](#json-subscribers-and-eventsink) doesn't deserialize into the event type.
+
+### Failures of queued listeners
+
+A queued listener's failure surfaces on the worker, not in `emit`. Its job is retried like any [job](/docs/digging-deeper/queues/#retries-and-backoff), with the default `JobOptions`: queue `default`, 3 attempts, exponential backoff from 1 second capped at 5 minutes, and a 120-second timeout per attempt. These options can't be changed per listener in 0.1; when a listener needs other settings, have it dispatch a job of its own with them.
+
+## Queued listener jobs
+
+Each subscription registers a job with the queue, named `events.listener.<event name>.<listener type>`, for example `events.listener.deal.won.crm_deals::notification::NotifyDealOwner`. `listener_job_name::<E, L>()` returns it. The job's payload is the event as JSON. When it runs, it deserializes the event and resolves the listener (in a fresh request scope) from the first module that subscribed it.
+
+<Callout type="warning" title="Moving a queued listener renames its jobs">
+
+The job name contains the listener's full type path. If you rename or move a queued listener's type, jobs queued under the old name have no handler: a worker moves them to the failed jobs. Let the queue drain before you deploy such a change, or retry the failed jobs after it.
+
 </Callout>
+
+## JSON subscribers and `EventSink`
+
+Besides typed listeners, the bus delivers events by name, as JSON. Use this for bridges such as webhooks or broadcasting, where the code doesn't know the event types.
+
+`subscribe_json(name)` returns a Tokio broadcast receiver of every event with that name emitted from then on:
+
+```rust
+let mut won = events.subscribe_json("deal.won");
+tokio::spawn(async move {
+    while let Ok(payload) = won.recv().await {
+        println!("deal won: {}", payload["title"]);
+    }
+});
+```
+
+Each subscriber buffers 256 events; one that falls further behind gets `RecvError::Lagged` and skips the oldest. Dropping the receiver unsubscribes.
+
+The other direction is `dyn EventSink`, from `navree::contracts`. The module exports the bus under that trait too, so crates that only depend on the contracts can publish events by name:
+
+```rust
+use navree::contracts::EventSink;
+use serde_json::json;
+
+sink.publish(
+    "deal.won",
+    json!({
+        "deal_id": deal_id,
+        "title": "Acme renewal",
+        "owner_id": owner_id,
+        "amount_cents": 1_200_000,
+        "currency": "USD",
+        "won_by": owner_id,
+    }),
+)
+.await?;
+```
+
+The payload is deserialized into every event type that has listeners under that name, sent to the JSON subscribers, then delivered to those listeners as by `emit`. If it doesn't deserialize, nothing is delivered and you get `EventsError::InvalidPayload`. A name without typed listeners only reaches JSON subscribers.
+
+## Testing
+
+Sync listeners run during `emit`, so emit the event and assert on the effect. For queued listeners, you can check that the job was dispatched with the [queue fake](/docs/digging-deeper/queues/#testing): install `QueueFake` in place of the queue and look for the listener's job name.
+
+```rust title="tests/deal_events.rs"
+use navree::cache::Cache;
+use navree::events::{EventBus, listener_job_name};
+use navree::prelude::*;
+use navree::queue::QueueFake;
+use navree::testing::TestApp;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn winning_a_deal_counts_it_and_queues_the_owner_notification() {
+    let fake = QueueFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(CacheModule::from_config())
+        .module(QueueModule::from_config())
+        .module(EventsModule::for_root())
+        .module(DealsModule)
+        .override_value(Arc::new(fake.queue()))
+        .build()
+        .await;
+
+    let owner = Uuid::now_v7();
+    let won = DealWon {
+        deal_id: Uuid::now_v7(),
+        title: "Acme renewal".into(),
+        owner_id: owner,
+        amount_cents: 1_200_000,
+        currency: "USD".into(),
+        won_by: owner,
+    };
+    app.get::<EventBus>().await.emit(won).await.unwrap();
+
+    // The queued listener was dispatched, not run.
+    let job = listener_job_name::<DealWon, NotifyDealOwner>();
+    assert!(fake.envelopes().iter().any(|e| e.job_type == job));
+    // The sync listener ran.
+    let wins: Option<i64> = app
+        .get::<Cache>()
+        .await
+        .get(&format!("dashboard:wins:{owner}"))
+        .await
+        .unwrap();
+    assert_eq!(wins, Some(1));
+    app.shutdown().await.unwrap();
+}
+```
+
+To test what a queued listener does, keep the real queue and run it: the CRM's tests change a deal over HTTP, then run every pending job with `crm.run_queue()` (which calls `Queue::run_pending`) and assert on the notifications and mail that result. See `crm-deals/tests/deals/notifications.rs` and [fakes](/docs/testing/fakes/).
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Workers, retries and failed jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    What the CRM's `NotifyDealOwner` sends.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    When a request's writes commit.
+  </LinkCard>
+</LinkCards>

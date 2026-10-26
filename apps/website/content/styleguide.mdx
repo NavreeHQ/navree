@@ -39,7 +39,7 @@ impl DealsController {
 Without a title, the bar shows the language:
 
 ```sh
-cargo install navree-cli
+cargo install --git https://github.com/NavreeHQ/navree navree-cli
 navree new blog && cd blog
 navree dev
 ```
@@ -48,8 +48,8 @@ Notation comments mark lines in place, which is handy for changes:
 
 ```toml title="Cargo.toml"
 [dependencies]
-navree = { version = "0.1", default-features = false, features = ["http", "db"] } # [!code --]
-navree = { version = "0.1", features = ["postgres"] } # [!code ++]
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["http", "db"] } # [!code --]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] } # [!code ++]
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -105,7 +105,7 @@ url = "sqlite://storage/app.db?mode=rwc"
 Turn on the `postgres` feature, then point `database.url` at your server.
 
 ```sh
-cargo add navree --features postgres
+cargo add --git https://github.com/NavreeHQ/navree navree --features postgres
 ```
 
 </Tab>
@@ -117,7 +117,7 @@ cargo add navree --features postgres
 <Step title="Install the CLI">
 
 ```sh
-cargo install navree-cli
+cargo install --git https://github.com/NavreeHQ/navree navree-cli
 ```
 
 </Step>
