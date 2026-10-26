@@ -1324,12 +1324,14 @@ impl Submission {
     }
 }
 
-/// Reads a urlencoded or multipart form, storing uploads of `fields`' file
-/// fields on their disks.
+/// Reads a urlencoded or multipart form. With `uploads` (the create and
+/// edit forms, after their ability checks), files sent for the resource's
+/// file fields are stored on their disks; any other file is ignored.
 async fn submission(
     cx: &Cx,
     info: &ResourceInfo,
     request: Request,
+    uploads: bool,
 ) -> Result<Submission, AppError> {
     let multipart = request
         .headers()
@@ -1357,7 +1359,10 @@ async fn submission(
         let name = field.name().unwrap_or_default().to_owned();
         let file_field = info
             .field(&name)
-            .filter(|f| matches!(f.kind, FieldKind::File { .. }));
+            .filter(|f| uploads && matches!(f.kind, FieldKind::File { .. }));
+        if file_field.is_none() && field.file_name().is_some() {
+            continue;
+        }
         match file_field {
             Some(spec) => {
                 if field.file_name().is_none_or(str::is_empty) {
@@ -1565,7 +1570,12 @@ async fn create_record(
 ) -> Result<Response, AppError> {
     let resource = resource(&panel.cx, &slug)?.clone();
     let info = resource.info();
-    let submission = submission(&panel.cx, info, request).await?;
+    // Checked before reading the form, so no upload is stored for a user
+    // who may not create (the record's own rules are checked on save).
+    if !panel.cx.can(CREATE, info.subject, None) {
+        return Err(AppError::forbidden());
+    }
+    let submission = submission(&panel.cx, info, request, true).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
     let fields = form_fields_of(info, true);
@@ -1674,7 +1684,12 @@ async fn update_record(
     )
     .await?
     .remove(0);
-    let submission = submission(&panel.cx, info, request).await?;
+    // Checked before reading the form, so no upload is stored for a user
+    // who may not change the record.
+    if !item.can.update {
+        return Err(AppError::forbidden());
+    }
+    let submission = submission(&panel.cx, info, request, true).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
     let fields: Vec<&Field> = form_fields_of(info, false)
@@ -1718,7 +1733,7 @@ pub(crate) async fn destroy(
     let result = async {
         let resource = resource(cx, &slug)?;
         let info = resource.info();
-        let submission = submission(cx, info, request).await?;
+        let submission = submission(cx, info, request, false).await?;
         let base = cx.core.options.base();
         let list_url = format!("{base}/resources/{}", info.slug);
         if submission.meta.get("confirmed").map(String::as_str) != Some("1") {
@@ -1854,7 +1869,7 @@ async fn action_run(
 ) -> Result<Response, AppError> {
     let resource = resource(&panel.cx, &slug)?.clone();
     let info = resource.info();
-    let submission = submission(&panel.cx, info, request).await?;
+    let submission = submission(&panel.cx, info, request, false).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
     let base = frame.base().to_owned();

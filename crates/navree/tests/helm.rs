@@ -2,8 +2,6 @@
 //! through the facade: resources written with `#[injectable]` and the
 //! prelude, registered with `m.resource::<R>()`, and the page's test.
 
-use std::sync::Arc;
-
 use navree::BoxFuture;
 use navree::helm::{
     Action, ActionResult, Field, Filter, FormData, HelmPage, Metric, Resource, SaveContext,
@@ -623,5 +621,4 @@ async fn the_docs_resource_serves_its_screens() {
         .assert_status(200)
         .text();
     assert!(html.contains("<p>Priya: Pipeline board</p>"), "{html}");
-    let _ = Arc::new(());
 }

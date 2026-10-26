@@ -13,7 +13,7 @@
 {%- endmacro %}
 
 {% macro metric_card(metric, range_links) %}
-<article class="card metric metric-{{ metric.kind }}" aria-label="{{ metric.label }}">
+<article class="card metric metric-kind-{{ metric.kind }}" aria-label="{{ metric.label }}">
   <header class="metric-head">
     <h3 class="metric-label">{{ metric.label }}</h3>
     {% if metric.range and range_links %}
@@ -110,7 +110,7 @@
     <tr>
       {% if selectable %}<td class="select-col"><input type="checkbox" name="ids" value="{{ row.id }}" aria-label="Select {{ row.title }}"></td>{% endif %}
       {% for cell in row.cells %}
-      <td data-label="{{ cell.label }}">{% if loop.first %}<a href="{{ row.url }}" class="row-link">{{ display(cell.display) }}</a>{% else %}{{ display(cell.display) }}{% endif %}</td>
+      <td data-label="{{ cell.label }}"{% if loop.first %} class="primary"{% endif %}>{% if loop.first %}<a href="{{ row.url }}" class="row-link">{{ display(cell.display) }}</a>{% else %}{{ display(cell.display) }}{% endif %}</td>
       {% endfor %}
       <td class="open-col"><a href="{{ row.url }}" class="btn btn-ghost btn-sm" aria-label="Open {{ row.title }}">Open</a></td>
     </tr>
