@@ -109,6 +109,7 @@ navree list                                 # every command of the app
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
+| Tools, resources or prompts for Claude, ChatGPT, Cursor and other MCP clients (`#[mcp_server]`, `/mcp`, `mcp:serve`) | `navree-mcp` |
 
 ## Common mistakes
 
