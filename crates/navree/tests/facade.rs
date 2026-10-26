@@ -59,6 +59,17 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
 }
 
+/// Opt-in ecosystem crates are re-exported whole behind their feature
+/// (`cargo test -p navree --features oauth --test facade`).
+#[cfg(feature = "oauth")]
+#[test]
+fn opt_in_crates_are_reexported_with_their_feature() {
+    assert!(same::<navree::oauth::OAuthServerModule, OAuthServerModule>());
+    assert!(same::<navree::oauth::OAuthToken, OAuthToken>());
+    let (verifier, challenge) = navree::oauth::testing::pkce_pair();
+    assert_eq!(navree::oauth::pkce_challenge(&verifier), challenge);
+}
+
 /// The kernel names an app's `main` and root module use most.
 #[test]
 fn kernel_essentials_sit_at_the_root() {
@@ -365,8 +376,8 @@ fn module_features_turn_on_only_the_features_of_their_navree_dependencies() {
 
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries an app turns on by
-/// name (`features = ["social"]`).
-const OPT_IN: &[&str] = &["dock", "social"];
+/// name (`features = ["social"]`, `features = ["oauth"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth"];
 
 #[test]
 fn full_is_the_default_and_turns_on_every_module() {

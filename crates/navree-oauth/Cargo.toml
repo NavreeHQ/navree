@@ -1,0 +1,50 @@
+[package]
+name = "navree-oauth"
+description = "Navree OAuthServerModule: an OAuth 2.1 authorization server and OpenID Connect provider with scopes mapped to permissions, consent, device codes and personal access tokens."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+# Ed25519 (EdDSA) ID token signatures, in pure Rust.
+ed25519-dalek = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+moka = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+navree-testing = { workspace = true }
+# Workspace-limited clients pin their tokens with `PinnedWorkspace`.
+navree-workspace = { workspace = true }
+rand = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+navree-api = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

@@ -111,6 +111,18 @@ social = [
     "db",
     "auth",
 ]
+## L6 (opt-in, not in `full`)
+## OAuth 2.1 authorization server and OpenID Connect provider.
+oauth = [
+    "dep:navree-oauth",
+    "access",
+    "auth",
+    "crypto",
+    "db",
+    "http",
+    "testing",
+    "workspace",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -128,6 +140,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
+navree-oauth = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }

@@ -1,7 +1,6 @@
 ---
 title: "OAuth server"
 description: "Issue access tokens to third-party apps with OAuth 2.1 and OpenID Connect: authorization code with PKCE, client credentials, device code and refresh grants, scopes mapped to permissions, consent and personal access tokens."
-status: "planned"
 ---
 
 ## Introduction
@@ -15,11 +14,11 @@ What you get:
 - **Consent,** shown by your own front end, remembered per user and client.
 - **OpenID Connect:** `openid`, `profile` and `email` scopes, ID tokens signed with Ed25519, `/oauth/userinfo`, discovery and a JWKS endpoint.
 - **Personal access tokens** that users create in their settings.
-- **Revocation and introspection** (RFC 7009 and RFC 7662), so other services can check a token.
+- **Revocation and introspection** (RFC 7009 and RFC 7662), so other services can check a token, and optional **dynamic client registration** (RFC 7591).
 
 ## Installation
 
-Turn on the `oauth` feature of the `navree` facade:
+Turn on the `oauth` feature of the `navree` facade. It is opt-in: the default `full` feature doesn't include it.
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -40,7 +39,7 @@ Navree::app()
     // ...
 ```
 
-The module contributes the migration set `oauth` (after `auth`), which creates `oauth_clients`, `oauth_authorizations`, `oauth_codes`, `oauth_access_tokens`, `oauth_refresh_tokens`, `oauth_device_codes` and `personal_access_tokens`. It also registers an authentication strategy, `oauth`, that runs after the JWT strategy.
+The module contributes the migration set `oauth` (after `auth`), which creates `oauth_clients`, `oauth_authorizations`, `oauth_authorization_requests`, `oauth_codes`, `oauth_access_tokens`, `oauth_refresh_tokens`, `oauth_device_codes` and `personal_access_tokens`. It also registers an authentication strategy, `oauth`, that runs after the JWT strategy. `OAuthServerModule` and `OAuthToken` are in the prelude with the feature; everything else is under `navree::oauth`.
 
 ## Configuration
 
@@ -65,9 +64,9 @@ description = "Read your contacts and companies"
 permissions = ["contacts.read", "companies.read"]
 ```
 
-`openid`, `profile`, `email` and `offline_access` are built in. A scope's `permissions` use the same strings as [roles and permissions](/docs/security/authorization/): `deals.read`, `deals.*`, or `*` for everything the user may do.
+`openid`, `profile`, `email` and `offline_access` are built in, grant no permissions and can't be redefined. A scope's `permissions` use the same strings as [roles and permissions](/docs/security/authorization/): `deals.read`, `deals.*`, or `*` for everything the user may do.
 
-Every key comes from the environment with the `APP_` prefix: `APP_OAUTH__CONSENT_URL`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`. `OAuthServerModule::for_root(OAuthOptions { .. })` takes the options in code. A scope without a description, a permission string that doesn't parse or a `consent_url` that isn't absolute fails the boot.
+Every key comes from the environment with the `APP_` prefix: `APP_OAUTH__CONSENT_URL`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`. `OAuthServerModule::for_root(OAuthOptions { .. })` takes the options in code, with `.scope(name, ScopeOptions::new(description, permissions))` to add scopes. A scope without a description, a permission string that doesn't parse, a `consent_url` that isn't absolute or a signing key that doesn't parse fails the boot. Without `oauth.issuer` and `app.url`, the issuer is `http://localhost` and the boot logs a warning.
 
 ### Signing keys
 
@@ -81,7 +80,7 @@ navree oauth:keys
 APP_OAUTH__SIGNING_KEY=ed25519:MC4CAQAwBQYDK2VwBCIEIGq4m...
 ```
 
-Put the line in `.env`. When you rotate it, move the old value to `oauth.previous_signing_keys` for a day, so ID tokens issued before the rotation still verify.
+Put the line in `.env`. The value is a base64 PKCS#8 Ed25519 key (a raw 32-byte seed after `ed25519:` works too). When you rotate it, move the old value to `oauth.previous_signing_keys` for a day, so ID tokens issued before the rotation still verify. Each key's `kid` is its RFC 7638 thumbprint.
 
 ## Clients
 
@@ -102,17 +101,20 @@ Store the secret now: it is shown once.
 
 | Option | Meaning |
 |---|---|
-| `--redirect-uri <uri>` | An allowed redirect URI; repeat it for several. Matched exactly, except the port of `http://127.0.0.1` and `http://[::1]` for native apps. |
+| `--redirect-uri <uri>` | An allowed redirect URI; repeat it for several. `https`, `http` on `127.0.0.1`, `[::1]` or `localhost`, or a reverse-domain scheme for native apps (`com.acme.crm:/callback`). Matched exactly, except the port of `http://127.0.0.1` and `http://[::1]`. |
 | `--scopes a,b` | The scopes the client may ask for |
 | `--public` | A public client (mobile, single-page or desktop app): no secret, PKCE only |
-| `--grant client_credentials` | A machine-to-machine client; needs `--owner` |
+| `--grant client_credentials` | A machine-to-machine client; needs `--owner` and isn't public |
 | `--owner <email>` | The user a client credentials client acts as |
 | `--device` | Allows the device authorization grant |
 | `--trusted` | A first-party client: no consent screen |
 | `--workspace <slug>` | Limits the client's tokens to one [workspace](/docs/workspaces/introduction/) |
 | `--introspect` | Lets the client call `POST /oauth/introspect`, for your own resource servers |
+| `--logo-url <url>`, `--website <url>` | Shown on the consent page |
 
-`oauth:clients` lists clients, `oauth:client:secret <id>` rotates a secret and `oauth:client:revoke <id>` revokes a client and every token it holds. The `OAuthClients` service does the same from code, which is how you build a developer portal where users register their own apps:
+A client with redirect URIs uses the authorization code grant; `--grant`, `--device` and `--introspect` alone make clients that don't (a client credentials client, a CLI that only uses the device grant, a resource server that only introspects).
+
+`oauth:clients` lists clients, `oauth:client:secret <id>` rotates a secret (the old one stops working at once) and `oauth:client:revoke <id>` revokes a client and every token it holds. The `OAuthClients` service does the same from code (`create`, `find`, `list`, `owned_by`, `rotate_secret`, `revoke`), which is how you build a developer portal where users register their own apps:
 
 ```rust
 use navree::oauth::{NewClient, OAuthClients};
@@ -129,26 +131,28 @@ let created = clients
 // created.client.id, and created.secret (shown once)
 ```
 
+`NewClient::public(name)` makes a public client; `.client_credentials()`, `.device()`, `.trusted()`, `.introspect()`, `.workspace(id)`, `.logo_url(..)` and `.website(..)` match the command's options. An invalid client is an `OAuthError::Invalid` naming the field, which answers 400 with `errors.<field>` when returned from a handler.
+
 ## The authorization code flow
 
 This is the flow for any app that acts for a signed-in user. Navree is API-first, so the consent screen is a page of **your** front end, and the API does the protocol:
 
-1. The client sends the browser to `GET /oauth/authorize` with `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state` and a PKCE `code_challenge` (`code_challenge_method=S256`).
+1. The client sends the browser to `GET /oauth/authorize` with `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state` and a PKCE `code_challenge` (`code_challenge_method=S256`), and with `nonce` for OpenID Connect.
 2. Navree checks the request and redirects the browser to `oauth.consent_url?request=<id>`. A request that can't be checked (unknown client, a `redirect_uri` that isn't registered) gets a 400 page and never redirects.
 3. Your consent page signs the user in if needed, then reads the request with the user's token: `GET /api/oauth/requests/{id}`.
 4. The user approves or denies. Your page calls `POST /api/oauth/requests/{id}/approve` (or `/deny`) and sends the browser to the `redirect_to` it gets back.
 5. The client exchanges the code at `POST /oauth/token` with its `code_verifier`, and gets an access token, a refresh token (with `offline_access`) and, with `openid`, an ID token.
 
-The consent page needs two calls. The request:
+Without `scope`, the request asks for every scope the client may use; without `redirect_uri`, the client must have exactly one. The consent page needs two calls. The request:
 
 ```http
-GET /api/oauth/requests/0199c1d4-0a51-7c0e-a8f3-5b9c2d4e6f70 HTTP/1.1
+GET /api/oauth/requests/2f6e1c9a-8d4b-4f7e-9a3c-5b1d2e4f6a70 HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
 ```json
 {
-  "id": "0199c1d4-0a51-7c0e-a8f3-5b9c2d4e6f70",
+  "id": "2f6e1c9a-8d4b-4f7e-9a3c-5b1d2e4f6a70",
   "client": { "id": "0199c1d2-...", "name": "Zapier", "logo_url": null, "website": "https://zapier.com" },
   "scopes": [
     { "name": "deals:read", "description": "Read your deals" },
@@ -162,13 +166,15 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 And the decision:
 
 ```http
-POST /api/oauth/requests/0199c1d4-0a51-7c0e-a8f3-5b9c2d4e6f70/approve HTTP/1.1
+POST /api/oauth/requests/2f6e1c9a-8d4b-4f7e-9a3c-5b1d2e4f6a70/approve HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
 ```json wrap
-{ "redirect_to": "https://zapier.com/dashboard/auth/oauth/return/AcmeCRMCLIAPI/?code=nvc_8fQ2...&state=af0ifjsldkj" }
+{ "redirect_to": "https://zapier.com/dashboard/auth/oauth/return/AcmeCRMCLIAPI/?code=nvc_8fQ2...&state=af0ifjsldkj&iss=https%3A%2F%2Fapi.acme.test" }
 ```
+
+The redirect carries `iss` (RFC 9207), so clients can tell authorization servers apart. A denial redirects with `error=access_denied` and the `state`. An unknown or already decided request is a 404, an expired one a 410. These routes need a first-party sign-in: a request made with an OAuth token or a personal access token gets a 403, so a token can never approve more access for itself.
 
 An approval is remembered in `oauth_authorizations`. When the same client later asks for scopes the user already approved, `already_approved` is `true` and your page can approve at once. Trusted clients (`--trusted`) skip the page: `GET /oauth/authorize` sends the browser straight to the consent page with `already_approved: true`, which approves without showing anything. Authorization requests expire after `oauth.request_ttl_secs` (10 minutes), codes after 60 seconds, and a code works once: presenting it again revokes every token issued from it.
 
@@ -192,15 +198,15 @@ grant_type=authorization_code&code=nvc_8fQ2...&redirect_uri=https%3A%2F%2Fzapier
 }
 ```
 
-Confidential clients authenticate with HTTP Basic (`client_secret_basic`) or `client_id` and `client_secret` in the body (`client_secret_post`). Public clients send only `client_id`; PKCE is what protects them.
+Confidential clients authenticate with HTTP Basic (`client_secret_basic`) or `client_id` and `client_secret` in the body (`client_secret_post`), not both. Public clients send only `client_id`; PKCE is what protects them. Token responses carry `Cache-Control: no-store`.
 
 ## Calling your API with an OAuth token
 
 The client sends the access token as a bearer token. Navree's `oauth` strategy recognizes it by its `nva_` prefix (the JWT strategy leaves it alone), looks up its digest and authenticates the request as the user who approved it:
 
 - `CurrentUser` and `CurrentPrincipal` give that user, and the unit of work's actor and [audit entries](/docs/security/audit-log/) name them.
-- `Principal::token_abilities` holds the permissions of the token's scopes, so the user's abilities are narrowed to them. A token with `deals:read` from a sales rep reads what that rep can read, and a `#[can(Update, Deal)]` route answers 403.
-- `X-Workspace` and the other [workspace resolvers](/docs/workspaces/resolution/) work as for a first-party request. A client created with `--workspace` is pinned to that workspace.
+- `Principal::token_abilities` holds the permissions of the token's scopes, so the user's abilities are narrowed to them. A token with `deals:read` from a sales rep reads what that rep can read, and a `#[can(Update, Deal)]` route answers 403. A scope never adds to what the user may do.
+- `X-Workspace` and the other [workspace resolvers](/docs/workspaces/resolution/) work as for a first-party request. A client created with `--workspace` is pinned to that workspace: a request that names no workspace gets that one, and a request that names another gets a 403.
 
 When a handler needs to know more about the token, take `OAuthToken`:
 
@@ -219,14 +225,16 @@ async fn export(&self, token: Option<OAuthToken>, CurrentUser(user): CurrentUser
 }
 ```
 
-`OAuthToken` has `client_id`, `client_name`, `scopes`, `grant` and `user_id`. `Option<OAuthToken>` is `None` for requests that didn't use an OAuth token or a personal access token.
+`OAuthToken` has `token_id`, `client_id` (`None` for a personal access token), `client_name` (the personal access token's name for those), `scopes`, `grant` (a `Grant`: `AuthorizationCode`, `ClientCredentials`, `DeviceCode`, `RefreshToken` or `PersonalAccessToken`), `user_id`, `workspace_id` and `expires_at`, and the methods `has_scope`, `require_scope` and `is_personal`. `Option<OAuthToken>` is `None` for requests that didn't use an OAuth token or a personal access token; a plain `OAuthToken` argument answers 401 for them.
 
 | Request | Response |
 |---|---|
 | An unknown, expired or revoked token | 401 `Invalid token`, with `WWW-Authenticate: Bearer error="invalid_token"` |
 | A valid token without the needed permission | 403 `Forbidden`, with `WWW-Authenticate: Bearer error="insufficient_scope", scope="deals:write"` |
 
-Token lookups are cached for `oauth.token_cache_secs` (10 seconds) on each instance, so a revoked token stops working everywhere within that time, and at once on the instance that revoked it.
+The `scope` of that challenge lists the scopes that would allow the route. When the token's scopes allow it and the user's own permissions don't, the 403 has no challenge: another token wouldn't help.
+
+Token lookups are cached for `oauth.token_cache_secs` (10 seconds) on each instance, so a revoked token stops working everywhere within that time, and at once on the instance that revoked it. `0` turns the cache off.
 
 ## The other grants
 
@@ -242,7 +250,7 @@ Authorization: Basic MDE5OWMxZTUtMmQ0YS03YjEwLThlNmYtM2M1YTdiOWQxZTIwOm52Y3NfV2Q
 grant_type=client_credentials&scope=deals:read
 ```
 
-The token acts as the client's **owner** (`--owner` when you create it), narrowed to the requested scopes; `OAuthToken::grant` is `Grant::ClientCredentials`. Give integrations a dedicated user with only the roles they need, and they show up under that name in the audit log. Client credentials tokens have no refresh token: ask for a new one when it expires.
+The token acts as the client's **owner** (`--owner` when you create it), narrowed to the requested scopes (all the client's scopes when `scope` is absent); `OAuthToken::grant` is `Grant::ClientCredentials`. Give integrations a dedicated user with only the roles they need, and they show up under that name in the audit log. Client credentials tokens have no refresh token and no ID token: ask for a new one when it expires.
 
 ### Device authorization
 
@@ -266,11 +274,11 @@ client_id=0199c1e9-...&scope=deals:read offline_access
 }
 ```
 
-The device shows the code; the user opens `verification_uri` on their phone, signs in, and your page calls `GET /api/oauth/device/{user_code}` (the client and scopes, for the consent) and `POST /api/oauth/device/{user_code}/approve`. Meanwhile the device polls `POST /oauth/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code` and gets `authorization_pending` until the user approves, `slow_down` if it polls faster than `interval`, and then the tokens.
+The device shows the code; the user opens `verification_uri` on their phone, signs in, and your page calls `GET /api/oauth/device/{user_code}` (the client and scopes, for the consent) and `POST /api/oauth/device/{user_code}/approve` (or `/deny`), which answer 204. User codes are case-insensitive and the dash is optional; these routes allow 20 calls a minute per user. Meanwhile the device polls `POST /oauth/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code` and gets `authorization_pending` until the user approves, `slow_down` if it polls faster than `interval` (which then grows by 5 seconds), `access_denied` after a denial, `expired_token` once the code expires, and then the tokens, once. Without `oauth.device_url` the endpoint answers 503 `temporarily_unavailable`.
 
 ### Refresh tokens
 
-Ask for `offline_access` to get a refresh token. It works like navree-auth's: valid for `oauth.refresh_token_ttl_secs` (30 days, sliding), single use, and rotated on every refresh. A refresh token that comes back after it was used revokes its whole family and writes an `oauth.refresh_reuse_detected` audit entry.
+Ask for `offline_access` to get a refresh token. It works like navree-auth's: valid for `oauth.refresh_token_ttl_secs` (30 days, sliding), single use, and rotated on every refresh. A refresh token that comes back after it was used revokes its whole family, with the access tokens issued from it, and writes an `oauth.refresh_reuse_detected` audit entry.
 
 ```http
 POST /oauth/token HTTP/1.1
@@ -279,11 +287,11 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=refresh_token&refresh_token=nvr_Hn2Kd8Lw4Qp0...&client_id=0199c1d2-...
 ```
 
-A refresh may ask for fewer scopes than the original grant, never more.
+A refresh may ask for fewer scopes than the original grant, never more. The new refresh token keeps the original grant, so a later refresh can ask for the other scopes again.
 
 ## OpenID Connect
 
-With the `openid` scope, the token response includes an `id_token`, an EdDSA-signed JWT with `iss`, `sub` (the user's id), `aud` (the client id), `exp`, `iat`, `nonce` when the request sent one, and the claims of the other scopes: `name` with `profile`, `email` and `email_verified` with `email`. `GET /oauth/userinfo` returns the same claims for an access token.
+With the `openid` scope, the token response includes an `id_token`, an EdDSA-signed JWT with `iss`, `sub` (the user's id), `aud` (the client id), `exp` (when the access token expires), `iat`, `nonce` when the request sent one, and the claims of the other scopes: `name` with `profile`, `email` and `email_verified` with `email`. `GET /oauth/userinfo` (or `POST`) returns the same claims for an access token with `openid`; without it the answer is 403 `insufficient_scope`.
 
 Discovery documents let client libraries configure themselves from your issuer URL:
 
@@ -292,6 +300,8 @@ Discovery documents let client libraries configure themselves from your issuer U
 | `GET /.well-known/openid-configuration` | OpenID Connect discovery |
 | `GET /.well-known/oauth-authorization-server` | OAuth 2.0 authorization server metadata (RFC 8414) |
 | `GET /oauth/jwks` | The public keys that verify ID tokens |
+
+Both documents carry the same metadata: every endpoint, the supported scopes, grants (`authorization_code`, `client_credentials`, `refresh_token`, the device code grant), `code_challenge_methods_supported: ["S256"]`, the client authentication methods and `id_token_signing_alg_values_supported: ["EdDSA"]`.
 
 ## Personal access tokens
 
@@ -312,13 +322,14 @@ Content-Type: application/json
   "scopes": ["deals:read"],
   "token": "nvp_Vx7Lq2Ws9Ek4Rd1Tf6Yg3Uh8Ij5Ok0Pl2Az7Sx4C",
   "expires_at": "2027-01-24T08:00:00Z",
-  "last_used_at": null
+  "last_used_at": null,
+  "created_at": "2026-10-26T08:00:00Z"
 }
 ```
 
-`token` appears in this response only. `GET /api/oauth/personal-access-tokens` lists the user's tokens without it, and `DELETE /api/oauth/personal-access-tokens/{id}` revokes one. A personal access token authenticates exactly like an OAuth access token, as its user, narrowed to its scopes. `oauth.personal_access_tokens.max_days` caps the lifetime (default 365; `0` allows tokens that never expire).
+`token` appears in this response only. `GET /api/oauth/personal-access-tokens` lists the user's tokens without it (`{ "data": [...] }`, with `last_used_at` updated at most once a minute), and `DELETE /api/oauth/personal-access-tokens/{id}` revokes one. A personal access token authenticates exactly like an OAuth access token, as its user, narrowed to its scopes; its scopes are the app's (`oauth.scopes`), not the built-in OpenID ones. `oauth.personal_access_tokens.max_days` caps the lifetime (default 365; `0` allows tokens that never expire), and a token created without `expires_in_days` gets the longest lifetime allowed. Like the consent routes, these routes need a first-party sign-in; a user may create 10 tokens a minute, and `oauth.personal_access_tokens.enabled = false` unmounts the routes.
 
-From code, `PersonalAccessTokens` creates tokens for seeders, CLIs and tests:
+From code, `PersonalAccessTokens` creates tokens for seeders, CLIs and tests (and has `list` and `revoke`):
 
 ```rust
 use navree::oauth::PersonalAccessTokens;
@@ -332,48 +343,61 @@ println!("{}", created.token); // nvp_...
 
 ## Managing authorizations
 
-Users see and revoke the apps they authorized at `GET /api/oauth/authorizations` and `DELETE /api/oauth/authorizations/{client_id}`, which revokes every token that client holds for them. Clients revoke their own tokens at `POST /oauth/revoke` (RFC 7009), and resource servers, such as your other [microservices](/docs/microservices/introduction/), check a token at `POST /oauth/introspect` (RFC 7662), authenticating as a client created with `--introspect`.
+Users see the apps they authorized at `GET /api/oauth/authorizations` (`{ "data": [{ "client", "scopes", "created_at", "updated_at" }] }`) and revoke one with `DELETE /api/oauth/authorizations/{client_id}`, which forgets the approval and revokes every token that client holds for them. Clients revoke their own tokens at `POST /oauth/revoke` (RFC 7009; revoking a refresh token also revokes the access tokens of its grant, and the answer is 200 even for unknown tokens), and resource servers, such as your other [microservices](/docs/microservices/introduction/), check a token at `POST /oauth/introspect` (RFC 7662), authenticating as a confidential client created with `--introspect`. Introspection answers `{ "active": false }` for anything that isn't a live token, and otherwise `active`, `scope`, `sub`, `username` (the email), `client_id`, `aud`, `iss`, `iat`, `exp` and `token_type`, for access tokens, refresh tokens and personal access tokens.
+
+## Dynamic client registration
+
+With `oauth.dynamic_registration = true`, clients register themselves at `POST /oauth/register` (RFC 7591), and the discovery documents list `registration_endpoint`. [MCP clients](/docs/ai/mcp-servers/) rely on it.
+
+```http
+POST /oauth/register HTTP/1.1
+Content-Type: application/json
+
+{ "client_name": "Claude", "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"], "token_endpoint_auth_method": "none" }
+```
+
+The answer is 201 with `client_id` (and `client_secret` with `client_secret_expires_at: 0` unless `token_endpoint_auth_method` is `none`), `client_name`, `redirect_uris`, `grant_types`, `token_endpoint_auth_method` and `scope`. A registered client may ask for the scopes it names in `scope` (every scope when absent), uses the authorization code grant and may add the device grant; it is never trusted, never introspects and never uses client credentials. Invalid metadata answers 400 `invalid_client_metadata` or `invalid_redirect_uri`. Registration is off by default; turn it on only when you want any app to be able to ask your users for access.
 
 ## Errors
 
-The protocol endpoints (`/oauth/token`, `/oauth/revoke`, `/oauth/introspect` and `/oauth/device_authorization`) answer errors in the OAuth format, because OAuth client libraries read it:
+The protocol endpoints (`/oauth/token`, `/oauth/revoke`, `/oauth/introspect`, `/oauth/device_authorization` and `/oauth/register`) answer errors in the OAuth format, because OAuth client libraries read it:
 
 ```json
 { "error": "invalid_grant", "error_description": "The authorization code has expired" }
 ```
 
-`GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error` and `state` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error" }`.
+Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate: Basic` when the client used HTTP Basic), a missing flow page is 503 `temporarily_unavailable`, and everything else is a 400. `GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error`, `error_description`, `state` and `iss` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error" }`, and `OAuthError` returned from your own handlers renders in it too.
 
 ## Audit entries
 
 | Action | When |
 |---|---|
 | `oauth.client_created`, `oauth.client_revoked` | A client was created or revoked |
-| `oauth.authorized`, `oauth.denied` | A user approved or denied a client; `metadata.scopes` |
+| `oauth.authorized`, `oauth.denied` | A user approved or denied a client; `metadata.scopes`, `metadata.client_id`, `metadata.grant` |
 | `oauth.revoked` | A user revoked a client's access |
 | `oauth.refresh_reuse_detected` | A used refresh token came back; its family was revoked |
 | `oauth.pat_created`, `oauth.pat_revoked` | A personal access token was created or revoked |
 
-Requests made with OAuth tokens are audited like any other request, with `metadata.client_id` added.
+The entries go to the `dyn AuditSink` ([`AuditModule`](/docs/security/audit-log/)) when the app has one. Requests made with OAuth tokens are audited like any other request, under the token's user.
 
 ## Testing
 
 Personal access tokens are the shortest way to call a route with a scoped token:
 
-```rust title="apps/crm-api/tests/oauth_scopes.rs"
-use crm_testkit::{Role, TestCrm};
+```rust title="tests/oauth_scopes.rs"
 use navree::db::Db;
 use navree::oauth::PersonalAccessTokens;
+use navree::testing::TestApp;
 use serde_json::json;
 
 #[tokio::test]
 async fn a_read_only_token_cannot_change_deals() {
-    let crm = TestCrm::builder().app(crm_api::app).build().await;
-    let rep = crm.user_id(Role::Rep1);
+    let app = TestApp::from_builder(my_app::app(test_sources())).await;
+    let rep = seeded_rep(&app).await; // a user with deals.read and deals.create
 
-    let db = crm.get::<Db>().await;
+    let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    let created = crm
+    let created = app
         .get::<PersonalAccessTokens>()
         .await
         .create(&uow, rep, "test", ["deals:read"], None)
@@ -381,24 +405,24 @@ async fn a_read_only_token_cannot_change_deals() {
         .unwrap();
     uow.commit().await.unwrap();
 
-    crm.client()
+    app.client()
         .get("/api/v1/deals")
         .bearer(&created.token)
         .send()
         .await
         .assert_status(200);
 
-    crm.client()
+    app.client()
         .post("/api/v1/deals")
         .bearer(&created.token)
-        .json(&json!({ "title": "Lovelace renewal", "company_id": "0199c1d2-..." }))
+        .json(&json!({ "title": "Lovelace renewal" }))
         .send()
         .await
         .assert_error(403, None);
 }
 ```
 
-To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pair()`, which returns a verifier and its S256 challenge, and `authorize(&client, client_id, user_token, scopes)`, which walks the authorize, approve and token steps with a `TestClient` and returns the token response. Override `dyn Clock` with a `FixedClock` to test expiry.
+To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pair()`, which returns a verifier and its S256 challenge, and `authorize(&client, client_id, user_token, scopes)`, which walks the authorize, approve and token steps with a `TestClient` for a client with one redirect URI and returns the `TokenResponse`. `AuthorizeFlow::new(client_id)` runs the same flow with options: `.secret(..)` for a confidential client, `.redirect_uri(..)`, `.nonce(..)`, and `.oauth_path(..)` and `.api_prefix(..)` for apps that moved them. Override `dyn Clock` with a `FixedClock` to test expiry.
 
 ## Reference
 
@@ -410,15 +434,16 @@ To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pa
 | `oauth.device_url` | none | Your front end's device page; required for the device grant |
 | `oauth.scopes.<name>.description` | none | Shown on the consent page |
 | `oauth.scopes.<name>.permissions` | `[]` | The permissions the scope grants |
-| `oauth.access_token_ttl_secs` | `3600` | Access token lifetime |
+| `oauth.access_token_ttl_secs` | `3600` | Access token (and ID token) lifetime |
 | `oauth.refresh_token_ttl_secs` | `2592000` | Refresh token lifetime (30 days, sliding) |
 | `oauth.request_ttl_secs` | `600` | Authorization request and device code lifetime |
 | `oauth.code_ttl_secs` | `60` | Authorization code lifetime |
-| `oauth.token_cache_secs` | `10` | Token lookup cache per instance |
+| `oauth.token_cache_secs` | `10` | Token lookup cache per instance; `0` = off |
 | `oauth.signing_key` | derived from `app.key` | The Ed25519 key of ID tokens |
 | `oauth.previous_signing_keys` | `[]` | Older keys still published in the JWKS |
 | `oauth.personal_access_tokens.enabled` | `true` | Mounts the personal access token routes |
 | `oauth.personal_access_tokens.max_days` | `365` | Longest lifetime; `0` = no limit |
+| `oauth.dynamic_registration` | `false` | Mounts `POST {oauth.path}/register` (RFC 7591) |
 
 | Command | What it does |
 |---|---|
@@ -427,7 +452,21 @@ To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pa
 | `oauth:client:secret <id>` | Rotates a confidential client's secret |
 | `oauth:client:revoke <id>` | Revokes a client and its tokens |
 | `oauth:keys` | Generates an Ed25519 signing key |
-| `oauth:prune [--days N]` | Deletes expired codes, requests and tokens older than N days (default 7) |
+| `oauth:prune [--days N]` | Deletes expired requests, codes and device codes, and expired or revoked tokens, older than N days (default 7) |
+
+| Route | |
+|---|---|
+| `GET /oauth/authorize` | Starts the authorization code flow |
+| `POST /oauth/token` | The token endpoint |
+| `POST /oauth/device_authorization` | Starts the device flow |
+| `POST /oauth/revoke`, `POST /oauth/introspect` | Revocation and introspection |
+| `GET`, `POST /oauth/userinfo` | OpenID Connect claims |
+| `GET /oauth/jwks` | The signing keys |
+| `POST /oauth/register` | Dynamic client registration (when on) |
+| `GET /api/oauth/requests/{id}`, `POST .../approve`, `POST .../deny` | The consent page |
+| `GET /api/oauth/device/{user_code}`, `POST .../approve`, `POST .../deny` | The device page |
+| `GET`, `POST /api/oauth/personal-access-tokens`, `DELETE .../{id}` | Personal access tokens |
+| `GET /api/oauth/authorizations`, `DELETE .../{client_id}` | Authorized apps |
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
