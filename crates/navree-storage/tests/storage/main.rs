@@ -4,6 +4,7 @@
 
 mod support;
 
+mod cloud;
 mod conformance;
 mod disk;
 mod drivers;
