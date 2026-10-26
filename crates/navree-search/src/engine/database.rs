@@ -21,7 +21,7 @@ use crate::migration::{DOCUMENTS_TABLE, FTS_TABLE};
 use crate::options::PostgresOptions;
 use crate::settings::WORKSPACE_FIELD;
 use crate::sql::Sql;
-use crate::text::{QueryTerms, field_text, highlight};
+use crate::text::{QueryTerms, Term, field_text, highlight};
 use crate::{Document, IndexSettings, SearchError};
 
 /// Full-text search in the app's database (see the module docs).
@@ -173,23 +173,38 @@ pub(crate) fn tsquery(terms: &QueryTerms) -> String {
     terms
         .terms
         .iter()
-        .map(|term| {
-            let mut alternatives = vec![if term.prefix {
-                format!("{}:*", term.word)
-            } else {
-                term.word.clone()
-            }];
-            for synonym in &term.synonyms {
-                alternatives.push(synonym.join(" <-> "));
-            }
-            if alternatives.len() == 1 {
-                alternatives.remove(0)
-            } else {
-                format!("({})", alternatives.join(" | "))
-            }
-        })
+        .map(term_tsquery)
         .collect::<Vec<_>>()
         .join(" & ")
+}
+
+/// [`tsquery`] with the words joined with `|`: what ranking uses when a
+/// word may match by trigrams alone.
+pub(crate) fn tsquery_any(terms: &QueryTerms) -> String {
+    terms
+        .terms
+        .iter()
+        .map(term_tsquery)
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+/// The `to_tsquery` text of one word: the word (a prefix when it is the
+/// last one), or one of its synonyms.
+fn term_tsquery(term: &Term) -> String {
+    let mut alternatives = vec![if term.prefix {
+        format!("{}:*", term.word)
+    } else {
+        term.word.clone()
+    }];
+    for synonym in &term.synonyms {
+        alternatives.push(synonym.join(" <-> "));
+    }
+    if alternatives.len() == 1 {
+        alternatives.remove(0)
+    } else {
+        format!("({})", alternatives.join(" | "))
+    }
 }
 
 impl SearchEngine for DatabaseEngine {
@@ -522,36 +537,15 @@ fn build_from(
     text: &str,
 ) {
     if terms.is_empty() {
-        select.push(&format!("0.0 AS rank FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
+        let rank = if postgres { "0.0::float8" } else { "0.0" };
+        select.push(&format!("{rank} AS rank FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
         select.bind(index);
         count.push(&format!("FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
         count.bind(index);
         return;
     }
     if postgres {
-        let query = tsquery(terms);
-        let language = options.language.clone();
-        for (sql, is_select) in [(select, true), (count, false)] {
-            if is_select {
-                sql.push("ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery(");
-                sql.bind(language.clone()).push("::regconfig, ").bind(query.clone());
-                sql.push("), 32)");
-                if options.trigram {
-                    sql.push(" + 0.5 * word_similarity(").bind(text.to_owned());
-                    sql.push(", d.content)");
-                }
-                sql.push(" AS rank ");
-            }
-            sql.push(&format!("FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
-            sql.bind(index);
-            sql.push(" AND (d.search_vector @@ to_tsquery(");
-            sql.bind(language.clone()).push("::regconfig, ").bind(query.clone());
-            sql.push(")");
-            if options.trigram {
-                sql.push(" OR ").bind(text.to_owned()).push(" <% d.content");
-            }
-            sql.push(")");
-        }
+        postgres_from(select, count, index, terms, options, text);
         return;
     }
     let matching = fts5_query(terms);
@@ -568,6 +562,52 @@ fn build_from(
         sql.bind(matching.clone());
         sql.push(&format!(" AND {FTS_TABLE}.index_name = "));
         sql.bind(index);
+    }
+}
+
+/// [`build_from`] on PostgreSQL. Every word must match the `tsvector`
+/// (one `to_tsquery` with the words joined by `&`). With `trigram`, each
+/// word may instead match the text by trigrams (`word <% content`), so a
+/// misspelled word still finds its record while the other words keep
+/// narrowing the results; the rank then adds the query's
+/// `word_similarity` to the `ts_rank` of any of the words. The rank is a
+/// `float8`.
+fn postgres_from(
+    select: &mut Sql,
+    count: &mut Sql,
+    index: &str,
+    terms: &QueryTerms,
+    options: &PostgresOptions,
+    text: &str,
+) {
+    let language = options.language.clone();
+    let rank_query = if options.trigram {
+        tsquery_any(terms)
+    } else {
+        tsquery(terms)
+    };
+    select.push("(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery(");
+    select.bind(language.clone()).push("::regconfig, ").bind(rank_query);
+    select.push("), 32)");
+    if options.trigram {
+        select.push(" + 0.5 * word_similarity(").bind(text.to_owned());
+        select.push(", d.content)");
+    }
+    select.push(")::float8 AS rank ");
+    for sql in [select, count] {
+        sql.push(&format!("FROM {DOCUMENTS_TABLE} d WHERE d.index_name = "));
+        sql.bind(index);
+        if !options.trigram {
+            sql.push(" AND d.search_vector @@ to_tsquery(");
+            sql.bind(language.clone()).push("::regconfig, ").bind(tsquery(terms));
+            sql.push(")");
+            continue;
+        }
+        for term in &terms.terms {
+            sql.push(" AND (d.search_vector @@ to_tsquery(");
+            sql.bind(language.clone()).push("::regconfig, ").bind(term_tsquery(term));
+            sql.push(") OR ").bind(term.word.clone()).push(" <% d.content)");
+        }
     }
 }
 
@@ -607,6 +647,47 @@ mod tests {
     fn tsqueries_join_words_and_synonyms() {
         assert_eq!(tsquery(&terms("ada lov")), "ada & lov:*");
         assert_eq!(tsquery(&terms("acme ")), "(acme | acme <-> corp)");
+    }
+
+    fn postgres_sql(text: &str, trigram: bool) -> (String, String) {
+        let (mut select, mut count) = (Sql::new(DbBackend::Postgres), Sql::new(DbBackend::Postgres));
+        let options = PostgresOptions {
+            trigram,
+            ..PostgresOptions::default()
+        };
+        build_from(&mut select, &mut count, "crm_deals", &terms(text), true, &options, text);
+        (select.text().to_owned(), count.text().to_owned())
+    }
+
+    #[test]
+    fn postgres_queries_match_every_word_and_rank_as_float8() {
+        let (select, count) = postgres_sql("ada lov", false);
+        assert_eq!(
+            select,
+            "(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery($1::regconfig, $2), 32))::float8 AS rank \
+             FROM search_documents d WHERE d.index_name = $3 AND d.search_vector @@ to_tsquery($4::regconfig, $5)"
+        );
+        assert_eq!(
+            count,
+            "FROM search_documents d WHERE d.index_name = $1 AND d.search_vector @@ to_tsquery($2::regconfig, $3)"
+        );
+        let (select, _) = postgres_sql("", false);
+        assert_eq!(select, "0.0::float8 AS rank FROM search_documents d WHERE d.index_name = $1");
+    }
+
+    #[test]
+    fn postgres_trigrams_let_each_word_match_on_its_own() {
+        let (select, count) = postgres_sql("ada lovlace", true);
+        assert_eq!(
+            select,
+            "(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery($1::regconfig, $2), 32) \
+             + 0.5 * word_similarity($3, d.content))::float8 AS rank \
+             FROM search_documents d WHERE d.index_name = $4 \
+             AND (d.search_vector @@ to_tsquery($5::regconfig, $6) OR $7 <% d.content) \
+             AND (d.search_vector @@ to_tsquery($8::regconfig, $9) OR $10 <% d.content)"
+        );
+        assert!(count.starts_with("FROM search_documents d WHERE d.index_name = $1 AND ("), "{count}");
+        assert_eq!(tsquery_any(&terms("ada lovlace")), "ada | lovlace:*");
     }
 
     #[test]

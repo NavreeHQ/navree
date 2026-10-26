@@ -317,25 +317,9 @@ async fn tantivy_engine_conforms() {
     .await;
 }
 
-/// The server URL from `var`, or `None` after printing the skip notice
-/// (`NAVREE_TEST_REQUIRE_SERVICES=1` makes a missing service a failure).
-fn service(var: &str, test: &str) -> Option<String> {
-    match std::env::var(var) {
-        Ok(url) if !url.is_empty() => Some(url),
-        _ => {
-            assert!(
-                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
-                "{test} needs {var}"
-            );
-            println!("SKIPPED {test}: set {var}");
-            None
-        }
-    }
-}
-
 #[tokio::test]
 async fn meilisearch_server_conforms() {
-    let Some(url) = service("NAVREE_TEST_MEILISEARCH_URL", "meilisearch_server_conforms") else {
+    let Some(url) = support::service("NAVREE_TEST_MEILISEARCH_URL", "meilisearch_server_conforms") else {
         return;
     };
     let key = std::env::var("NAVREE_TEST_MEILISEARCH_KEY").ok();
@@ -354,7 +338,7 @@ async fn meilisearch_server_conforms() {
 
 #[tokio::test]
 async fn typesense_server_conforms() {
-    let Some(url) = service("NAVREE_TEST_TYPESENSE_URL", "typesense_server_conforms") else {
+    let Some(url) = support::service("NAVREE_TEST_TYPESENSE_URL", "typesense_server_conforms") else {
         return;
     };
     let key = std::env::var("NAVREE_TEST_TYPESENSE_KEY").unwrap_or_default();
