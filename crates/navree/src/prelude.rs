@@ -89,6 +89,8 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 
 #[cfg(feature = "flags")]
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
+#[cfg(feature = "graphql")]
+pub use navree_graphql::{GraphqlModule, ModuleBuilderGraphqlExt as _};
 
 #[cfg(feature = "billing")]
 pub use navree_billing::BillingModule;

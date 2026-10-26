@@ -33,6 +33,11 @@ impl Errors {
         }
     }
 
+    /// Whether an error was recorded.
+    pub(crate) fn has_errors(&self) -> bool {
+        self.0.is_some()
+    }
+
     /// `Err` with every recorded error, or `Ok` when there were none.
     pub(crate) fn finish(self) -> syn::Result<()> {
         self.0.map_or(Ok(()), Err)

@@ -114,6 +114,7 @@ navree list                                 # every command of the app
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
 | Receiving requests, queries, jobs, mail or log lines in your own code; tracing with OpenTelemetry; trace ids; asserting on events or spans in tests | `navree-telemetry` |
+| A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |
 
 ## Common mistakes
 

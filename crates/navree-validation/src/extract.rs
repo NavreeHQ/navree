@@ -326,6 +326,39 @@ pub(crate) async fn messages(ctx: Option<&AppContext>) -> Arc<Messages> {
     }
 }
 
+/// Runs the garde rules of `value` outside an extractor (a GraphQL
+/// argument, a message payload) and renders the failures with `messages`,
+/// as the extractors do: fields are dotted paths (`items.0.sku`), a rule on
+/// the value as a whole is reported under `root`, and `input`, the value as
+/// JSON when it is at hand, picks the `array` variant of the length
+/// messages.
+///
+/// ```
+/// use garde::Validate;
+/// use navree_validation::{Messages, validate};
+///
+/// #[derive(Validate)]
+/// struct MoveDeal {
+///     #[garde(range(min = 0))]
+///     position: i64,
+/// }
+///
+/// let errors = validate(&MoveDeal { position: -1 }, None, &Messages::default(), "input")
+///     .unwrap_err();
+/// assert_eq!(
+///     errors.get("position"),
+///     Some(&["position must not be less than 0".to_owned()][..])
+/// );
+/// ```
+pub fn validate<T: Validate<Context = ()>>(
+    value: &T,
+    input: Option<&Value>,
+    messages: &Messages,
+    root: &str,
+) -> Result<(), crate::ValidationErrors> {
+    check(value).map_err(|failures| failure::render(&failures, messages, input, root))
+}
+
 /// Runs the garde rules of `value`.
 pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Failure>> {
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)

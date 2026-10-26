@@ -84,6 +84,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
 | `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
+| `navree::graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: [GraphQL](/docs/microservices/graphql/) with `#[resolver]` (in `navree::graphql`), dataloaders and subscriptions |
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
 
 The facade's root also has:
@@ -111,9 +112,10 @@ The facade's root also has:
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
 | Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
+| GraphQL (with `graphql`) | `GraphqlModule` |
 | Billing (`billing`) | `BillingModule` |
 
-It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)` and `m.schedule(..)` work without naming the traits.
+It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()` work without naming the traits.
 
 Three details to know:
 
@@ -123,7 +125,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `billing`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `billing`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -148,6 +150,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
+| `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 

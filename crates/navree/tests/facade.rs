@@ -236,8 +236,8 @@ struct Features {
 /// Features left out of `full` on purpose: development tools an app's
 /// runtime never needs (`dock`), and ecosystem libraries and packages an app
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
-/// `features = ["flags"]`, `features = ["billing"]`).
-const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "billing"];
+/// `features = ["flags"]`, `features = ["graphql"]`, `features = ["billing"]`).
+const OPT_IN: &[&str] = &["dock", "social", "oauth", "flags", "graphql", "billing"];
 
 /// Always compiled into the facade (not behind a feature).
 const ALWAYS: [&str; 4] = [
