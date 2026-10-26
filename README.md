@@ -108,7 +108,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  packages built on other packages
-L6  navree-social  navree-webhooks  navree-oauth (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-oauth  navree-grpc (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -150,6 +150,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
+| L6 | `navree-grpc` | gRPC on tonic: `#[grpc_service]` services in modules with DI, guards, access rules and the unit of work; gRPC-Web, Connect, health, reflection, named client channels (facade feature `grpc`, opt-in) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 
