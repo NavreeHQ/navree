@@ -3,17 +3,22 @@
 //! variables, repositories, pagination, migrations and `migrate:fresh`.
 //! `tests/mysql` runs the same paths against a real server.
 
+use std::sync::Arc;
+
 use navree_db::{
-    ChangeOp, CursorQuery, Db, PageMeta, PageQuery, Repo, cursor_paginate, cursor_paginate_desc,
+    ChangeOp, CursorQuery, DatabaseModule, Db, DbOptions, MigrationSet, Migrator,
+    ModuleBuilderDbExt, PageMeta, PageQuery, Repo, cursor_paginate, cursor_paginate_desc,
     paginate,
 };
+use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use sea_orm::{
     ActiveValue::Set, ConnectionTrait, DbBackend, DbErr, EntityTrait, IntoActiveModel, IntoMockRow,
     MockDatabase, MockExecResult, MockRow, QueryOrder, Value,
 };
+use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use uuid::Uuid;
 
-use crate::fixtures::note;
+use crate::fixtures::{CreateTable, note};
 
 /// The actor the scripted units of work run for.
 const ACTOR: Uuid = Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_0001);
@@ -444,6 +449,228 @@ async fn cursor_pages_filter_and_order_on_the_key() {
             ),
         ]
     );
+}
+
+// --- Migrations ----------------------------------------------------------------
+
+/// Owns `users`; with `transactional`, its migration asks for a transaction.
+struct UsersModule {
+    transactional: Option<bool>,
+}
+
+impl Module for UsersModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.migrations(MigrationSet::new("users").migration(Transactional {
+            inner: CreateTable {
+                name: "m0001_create_users",
+                table: "users",
+                references: None,
+            },
+            transactional: self.transactional,
+        }));
+    }
+}
+
+/// A migration that overrides `use_transaction`.
+struct Transactional<M> {
+    inner: M,
+    transactional: Option<bool>,
+}
+
+impl<M: MigrationName> MigrationName for Transactional<M> {
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+}
+
+#[sea_orm_migration::async_trait::async_trait]
+impl<M: MigrationTrait> MigrationTrait for Transactional<M> {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        self.inner.up(manager).await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        self.inner.down(manager).await
+    }
+
+    fn use_transaction(&self) -> Option<bool> {
+        self.transactional
+    }
+}
+
+/// An app whose `Db` is `db` (a scripted connection).
+async fn app_on(db: Db, transactional: Option<bool>) -> App {
+    Navree::app()
+        .module(DatabaseModule::for_root(DbOptions::default()))
+        .module(UsersModule { transactional })
+        .override_value(Arc::new(db))
+        .boot()
+        .await
+        .expect("boots")
+}
+
+/// A `navree_migrations` row.
+fn applied_row(module: &str, name: &str, batch: i64) -> MockRow {
+    std::collections::BTreeMap::from([
+        ("module", Value::from(module)),
+        ("name", Value::from(name)),
+        ("batch", Value::BigInt(Some(batch))),
+        ("applied_at", Value::from(chrono::Utc::now())),
+    ])
+    .into_mock_row()
+}
+
+const CREATE_MIGRATIONS_TABLE: &str = "CREATE TABLE IF NOT EXISTS `navree_migrations` ( \
+     `module` varchar(255) NOT NULL, `name` varchar(255) NOT NULL, \
+     `batch` bigint NOT NULL, `applied_at` datetime NOT NULL, \
+     PRIMARY KEY (`module`, `name`) )";
+
+const SELECT_APPLIED: &str =
+    "SELECT `module`, `name`, `batch`, `applied_at` FROM `navree_migrations`";
+
+const INSERT_APPLIED: &str = "INSERT INTO `navree_migrations` \
+     (`module`, `name`, `batch`, `applied_at`) VALUES (?, ?, ?, ?)";
+
+/// MySQL commits DDL implicitly, so a migration runs outside a
+/// transaction unless it asks for one; `applied_at` is a `DATETIME` (UTC,
+/// no 2038 limit).
+#[tokio::test]
+async fn migrations_run_outside_a_transaction_on_mysql() {
+    let db = scripted(3, vec![vec![]]);
+    let app = app_on(db.clone(), None).await;
+    let applied = Migrator::up(app.ctx()).await.expect("migrates");
+    assert_eq!(applied, ["users/m0001_create_users"]);
+    let log = sent_raw(&db);
+    let sql: Vec<&str> = log.iter().map(|(sql, _)| sql.as_str()).collect();
+    assert_eq!(
+        sql,
+        [
+            CREATE_MIGRATIONS_TABLE,
+            SELECT_APPLIED,
+            "CREATE TABLE `users` ( `id` binary(16) NOT NULL PRIMARY KEY, `title` varchar(255) NOT NULL UNIQUE )",
+            INSERT_APPLIED,
+        ]
+    );
+    assert_eq!(
+        log[3].1[..3],
+        [
+            Value::from("users"),
+            Value::from("m0001_create_users"),
+            Value::BigInt(Some(1))
+        ]
+    );
+}
+
+/// A migration that asks for a transaction gets one, with its
+/// `navree_migrations` row (for data migrations; DDL still commits).
+#[tokio::test]
+async fn a_migration_can_ask_for_a_transaction_on_mysql() {
+    let db = scripted(3, vec![vec![]]);
+    let app = app_on(db.clone(), Some(true)).await;
+    Migrator::up(app.ctx()).await.expect("migrates");
+    let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    assert_eq!(sql[2..], ["BEGIN", sql[3].as_str(), INSERT_APPLIED, "COMMIT"]);
+    assert!(sql[3].starts_with("CREATE TABLE `users`"), "{}", sql[3]);
+}
+
+#[tokio::test]
+async fn rollback_reverts_the_last_batch_on_mysql() {
+    let db = scripted(
+        3,
+        vec![vec![applied_row("users", "m0001_create_users", 1)]],
+    );
+    let app = app_on(db.clone(), None).await;
+    let reverted = Migrator::rollback(app.ctx()).await.expect("rolls back");
+    assert_eq!(reverted, ["users/m0001_create_users"]);
+    let log = sent_raw(&db);
+    let sql: Vec<&str> = log.iter().map(|(sql, _)| sql.as_str()).collect();
+    assert_eq!(
+        sql,
+        [
+            CREATE_MIGRATIONS_TABLE,
+            SELECT_APPLIED,
+            "DROP TABLE `users`",
+            "DELETE FROM `navree_migrations` WHERE `module` = ? AND `name` = ?",
+        ]
+    );
+    assert_eq!(
+        log[3].1,
+        [Value::from("users"), Value::from("m0001_create_users")]
+    );
+}
+
+/// `migrate:fresh` drops every base table in one statement, on one
+/// connection with foreign key checks off, and turns them back on before
+/// the connection returns to the pool.
+#[tokio::test]
+async fn fresh_drops_every_table_with_foreign_key_checks_off() {
+    let table = |name: &str| {
+        std::collections::BTreeMap::from([("name", Value::from(name))]).into_mock_row()
+    };
+    let db = scripted(
+        7,
+        vec![
+            vec![table("navree_migrations"), table("role`s"), table("users")],
+            vec![],
+        ],
+    );
+    let app = app_on(db.clone(), None).await;
+    let applied = Migrator::fresh(app.ctx()).await.expect("fresh");
+    assert_eq!(applied, ["users/m0001_create_users"]);
+    let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    assert_eq!(
+        sql[..6],
+        [
+            "SELECT CAST(table_name AS CHAR) AS name FROM information_schema.tables \
+             WHERE table_schema = DATABASE() AND table_type IN ('BASE TABLE', 'SYSTEM VERSIONED') \
+             ORDER BY table_name",
+            "BEGIN",
+            "SET FOREIGN_KEY_CHECKS = 0",
+            "DROP TABLE IF EXISTS `navree_migrations`, `role``s`, `users`",
+            "SET FOREIGN_KEY_CHECKS = 1",
+            "COMMIT",
+        ]
+    );
+    assert_eq!(sql[6], CREATE_MIGRATIONS_TABLE, "then migrates again");
+}
+
+/// A failed drop still turns foreign key checks back on.
+#[tokio::test]
+async fn fresh_turns_foreign_key_checks_back_on_when_the_drop_fails() {
+    let mut mock = MockDatabase::new(DbBackend::MySql)
+        .append_query_results([vec![
+            std::collections::BTreeMap::from([("name", Value::from("users"))]).into_mock_row(),
+        ]])
+        .append_exec_results([MockExecResult::default()])
+        .append_exec_errors([DbErr::Custom("lock wait timeout".to_owned())]);
+    mock = mock.append_exec_results([MockExecResult::default()]);
+    let db = Db::from_connection(mock.into_connection());
+    let app = app_on(db.clone(), None).await;
+    let error = Migrator::fresh(app.ctx()).await.unwrap_err().to_string();
+    assert!(error.contains("lock wait timeout"), "{error}");
+    let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    assert_eq!(
+        sql[1..],
+        [
+            "BEGIN",
+            "SET FOREIGN_KEY_CHECKS = 0",
+            "DROP TABLE IF EXISTS `users`",
+            "SET FOREIGN_KEY_CHECKS = 1",
+            "ROLLBACK",
+        ]
+    );
+}
+
+/// An empty database has nothing to drop.
+#[tokio::test]
+async fn fresh_on_an_empty_mysql_database_only_migrates() {
+    let db = scripted(3, vec![vec![], vec![]]);
+    let app = app_on(db.clone(), None).await;
+    Migrator::fresh(app.ctx()).await.expect("fresh");
+    let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    assert!(sql[0].starts_with("SELECT CAST(table_name AS CHAR)"), "{}", sql[0]);
+    assert_eq!(sql[1], CREATE_MIGRATIONS_TABLE);
+    assert!(!sql.iter().any(|sql| sql.contains("FOREIGN_KEY_CHECKS")));
 }
 
 #[tokio::test]
