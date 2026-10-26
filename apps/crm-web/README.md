@@ -1,7 +1,7 @@
 # Navree CRM web
 
 The Next.js 16 front end for Navree CRM (`apps/crm-api`). It talks to the API contract in
-`docs/superpowers/specs/2026-10-25-keel-framework-design.md` §7 and runs standalone against an in-browser mock of it.
+`docs/superpowers/specs/2026-10-25-navree-framework-design.md` §7 and runs standalone against an in-browser mock of it.
 
 ## Run
 

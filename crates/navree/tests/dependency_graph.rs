@@ -2,7 +2,7 @@
 //!
 //! Every `navree*` dependency edge in the workspace (normal, dev and build) must be
 //! allowed by [`HIERARCHY`], which encodes the "Allowed runtime dependency edges"
-//! table of `docs/superpowers/specs/2026-10-25-keel-framework-design.md`.
+//! table of `docs/superpowers/specs/2026-10-25-navree-framework-design.md`.
 //!
 //! Two exceptions, both for dev-dependencies only:
 //! - A dev-dependency may point at any navree crate in a lower layer (spec §3),

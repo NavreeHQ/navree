@@ -5,9 +5,7 @@ builder's calls (marked).
 
 ## 1. Decisions the user made
 
-- **Name: Navree.** It is a blend of two names that matter to the user. The
-  framework was built as Keel and was briefly called Navis (navis.sh), until
-  the user required a .com domain. The user bought **navree.com** on Cloudflare
+- **Name: Navree.** It is a blend of two names that matter to the user. The user bought **navree.com** on Cloudflare
   on 2026-10-26, and the site will be deployed there. crates.io `navree` and
   `navree-*` were free, and so was the npm name. The GitHub name `navree` is
   taken, so the user created the **NavreeHQ** organisation; the repository is
@@ -22,31 +20,11 @@ builder's calls (marked).
   - complete documentation that covers everything;
   - a benchmark section transparent enough that sceptical readers accept it.
 
-## 2. The rename (Keel → Navis → Navree)
+## 2. One name everywhere
 
-The first pass renamed Keel to Navis (commit deb4fa4). The second pass applies the same mapping from the Navis names to Navree (`navis` → `navree`, `Navis` → `Navree`, `NAVIS` → `NAVREE`), including `apps/website`, and the domain changes from navis.sh to navree.com. The table shows the end state.
-
-The mapping is mechanical and total:
-
-| Area | Old | New |
-|---|---|---|
-| Crate names and directories | `keel-*` | `navree-*` (`crates/navree-http`, …) |
-| Facade | `keel` | `navree` |
-| CLI binary and package | `keel` | `navree` |
-| Paths | `keel::`, `::keel::` | `navree::`, `::navree::` |
-| Type and prose names | `Keel` | `Navree` |
-| Constants | `KEEL_` | `NAVREE_` |
-
-That covers env vars like `NAVREE_API_URL`, cookies like `navree_at`/`navree_rt`, the default JWT issuer (`"navree"`), the realtime key (`navree-crm-key`), and PostgreSQL `set_config` names (`navree.actor`). Proc-macro output must emit `::navree::`. Trybuild `.stderr` files and insta snapshots are updated by re-running their tests, not by hand-editing.
-
-Builder's calls:
-- **Historical documents are not rewritten.** `docs/prd/`, `docs/superpowers/specs|plans|notes` from 2026-10-25 describe the build under its working name. The README gets one line: "Navree was developed under the working name Keel."
-- **Unchanged:** the repository directory, the git branch name and the T3 project.
-- **Benchmark.** Its JWT issuer becomes `"navree"` (`bench/tools/fixtures.mjs`, `run.mjs`), and any implementation that hard-codes `"keel"` reads `JWT_ISSUER` instead. `bench/frameworks/keel` becomes `bench/frameworks/navree` (image `bench-navree`). Results files are renamed and relabelled (`navree.json`, label "Navree"): the numbers stay valid because the measured code is the same, and the method notes say it was measured under the working name. Every implementation's smoke run (`node bench/run.mjs --smoke --only <name>`) must still pass conformance.
-- **Done means:**
-  - `cargo test --workspace`, clippy (`-D warnings`) and `cargo fmt --check` are green;
-  - crm-web's lint, typecheck, Vitest and build are green;
-  - `git grep -i keel` outside the historical documents and this design returns only deliberate mentions (the "formerly Keel" line).
+Crates, the CLI, configuration, environment variables (`NAVREE_`), cookies, the JWT issuer,
+the docs, the CRM and the benchmark all say Navree (`navree-*`, `navree::`), so the
+documentation and the code match.
 
 ## 3. The website (`apps/website`)
 
@@ -59,7 +37,7 @@ Builder's calls on how it gets made:
   - off-white body text with WCAG AA contrast;
   - system UI sans with a monospace for code.
   
-  New logo and favicon: a simple hull/keel mark that works at 16 px.
+  New logo and favicon: a simple hull/navree mark that works at 16 px.
 - **Configuration.** All site-wide strings live in one `site.config.ts`: the name, tagline, `repoUrl` and the install command. The repository is `https://github.com/NavreeHQ/navree`.
 
 ### Pages
@@ -116,7 +94,7 @@ The sections follow Laravel's docs. Every page is written from the actual code a
   - No git submodules.
   - No `illuminate/*`-style read-only split repositories. crates.io publishes each crate directly from the monorepo, so Packagist's one-repository-per-package rule doesn't apply.
 - **Private until launch.** The repository flips to public once the docs and site are finished and the user has reviewed them.
-  - Only the `main` branch is pushed; local `keel/framework` is pushed as `main`.
+  - Only the `main` branch is pushed; local `navree/framework` is pushed as `main`.
   - T3's local `refs/t3/*` checkpoints are never pushed.
   - Before every push, check the history with gitleaks; the three known findings are test values.
 - **Licence.** `MIT OR Apache-2.0`, in `LICENSE-MIT` and `LICENSE-APACHE`, copyright Amritpal Singh and the Navree contributors.

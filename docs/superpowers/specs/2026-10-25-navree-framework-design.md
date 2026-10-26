@@ -1,10 +1,10 @@
-# Keel framework + Keel CRM — build design
+# Navree framework + Navree CRM — build design
 
-Date: 2026-10-25 · Source PRD: `docs/prd/keel-prd.md` (read it; this document only records the decisions layered on top of it).
+Date: 2026-10-25 · Source PRD: `docs/prd/navree-prd.md` (read it; this document only records the decisions layered on top of it).
 
 ## 1. Intent
 
-Build Keel, the Laravel-class, NestJS-structured Rust framework described in the PRD, as small crates ("building blocks") assembled bottom-up with test-driven development. Then prove it by building a small CRM on top: a Keel API (`apps/crm-api`) and a Next.js front end (`apps/crm-web`).
+Build Navree, the Laravel-class, NestJS-structured Rust framework described in the PRD, as small crates ("building blocks") assembled bottom-up with test-driven development. Then prove it by building a small CRM on top: a Navree API (`apps/crm-api`) and a Next.js front end (`apps/crm-web`).
 
 "Done" means `cargo test --workspace` is green, `cargo clippy --workspace --all-targets -- -D warnings` is clean, the CRM API's integration tests pass, and Playwright end-to-end tests drive the CRM web app against the real CRM API.
 
@@ -12,57 +12,57 @@ Build Keel, the Laravel-class, NestJS-structured Rust framework described in the
 
 The PRD is a 60-engineer-month plan with 70 parity rows. This build covers the PRD's Phase 0 and Phase 1, plus the Phase 2 modules the CRM needs.
 
-**In scope (crates):** keel (facade), keel-kernel, keel-contracts, keel-macros, keel-config, keel-log, keel-crypto, keel-http, keel-validation, keel-db, keel-session, keel-auth, keel-access, keel-audit, keel-cache, keel-events, keel-queue, keel-schedule, keel-view, keel-mail, keel-notify, keel-storage, keel-http-client, keel-api, keel-observe, keel-realtime, keel-testing, keel-cli.
+**In scope (crates):** navree (facade), navree-kernel, navree-contracts, navree-macros, navree-config, navree-log, navree-crypto, navree-http, navree-validation, navree-db, navree-session, navree-auth, navree-access, navree-audit, navree-cache, navree-events, navree-queue, navree-schedule, navree-view, navree-mail, navree-notify, navree-storage, navree-http-client, navree-api, navree-observe, navree-realtime, navree-testing, navree-cli.
 
 **Deferred, with the reason:**
 
 | Deferred | Why |
 |---|---|
-| keel-redis and every Redis driver | No Redis server on the build machine, so nothing could be tested. Every module exposes a driver trait so a Redis driver can be added without API changes |
+| navree-redis and every Redis driver | No Redis server on the build machine, so nothing could be tested. Every module exposes a driver trait so a Redis driver can be added without API changes |
 | apalis queue driver | Native database driver plus memory driver cover the PRD's fallback; apalis can be a later driver |
 | Passkeys (webauthn-rs), social login, OAuth2 server | webauthn-rs needs OpenSSL on Windows; the other two are Phase 3–4 in the PRD |
-| keel-i18n, keel-flags, keel-billing, keel-ai, keel-grpc, keel-transport, keel-export, keel-search, keel-admin, keel-graphql | Phase 2–4 modules with external services; not needed by the CRM |
+| navree-i18n, navree-flags, navree-billing, navree-ai, navree-grpc, navree-transport, navree-export, navree-search, navree-admin, navree-graphql | Phase 2–4 modules with external services; not needed by the CRM |
 | Nuxt kit, Teams, multi-tenancy, OpenTelemetry/Sentry, request inspector | Phase 2–3 |
 | PostgreSQL-only behaviour verified by tests | No PostgreSQL on the build machine. Code paths for PostgreSQL are written behind `DbBackend` checks (FOR UPDATE, SKIP LOCKED, advisory locks), but tests run on SQLite. SQLite is the PRD's "development and tests" database |
 
 ## 3. The hierarchy (what depends on what)
 
-Eight layers. A crate may depend only on crates in lower layers (dev-dependencies included). Runtime dependencies must also match the table below. A **dev-dependency** may point at any keel crate in a lower layer (for example keel-view as a dev-dependency of keel-notify or keel-auth, so tests can boot MailModule, which needs ViewModule); the dependency-graph test encodes both rules. `crates/keel/tests/dependency_graph.rs` enforces the allowed edges below on every test run.
+Eight layers. A crate may depend only on crates in lower layers (dev-dependencies included). Runtime dependencies must also match the table below. A **dev-dependency** may point at any navree crate in a lower layer (for example navree-view as a dev-dependency of navree-notify or navree-auth, so tests can boot MailModule, which needs ViewModule); the dependency-graph test encodes both rules. `crates/navree/tests/dependency_graph.rs` enforces the allowed edges below on every test run.
 
 ```
-L7  apps/crm-api (Keel app)                   apps/crm-web (Next.js 16)
-L6  keel (facade: re-exports + prelude)       keel-cli (binary `keel`; no runtime keel deps)
-L5  keel-auth
-L4  keel-session  keel-validation  keel-queue  keel-audit  keel-access  keel-schedule  keel-notify
-L3  keel-db  keel-testing  keel-observe  keel-api  keel-mail  keel-realtime  keel-storage
-L2  keel-http  keel-log  keel-crypto  keel-events  keel-view  keel-cache  keel-http-client
-L1  keel-contracts  keel-config
-L0  keel-kernel                                keel-macros (proc-macro; no runtime keel deps)
+L7  apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
+L6  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps)
+L5  navree-auth
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
+L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
+L1  navree-contracts  navree-config
+L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)
 ```
 
 ### Allowed runtime dependency edges (besides external crates)
 
 | Crate | May depend on |
 |---|---|
-| keel-kernel | — |
-| keel-macros | — (proc-macro) |
-| keel-contracts | kernel |
-| keel-config | kernel, contracts |
-| keel-log, keel-crypto, keel-events, keel-view, keel-cache, keel-http-client | kernel, contracts, config |
-| keel-http | kernel, contracts, config |
-| keel-db, keel-testing, keel-observe, keel-api | kernel, contracts, config, http |
-| keel-mail | kernel, contracts, config, view |
-| keel-realtime, keel-storage | kernel, contracts, config, http, crypto |
-| keel-session | kernel, contracts, config, http, crypto, db |
-| keel-validation, keel-audit | kernel, contracts, config, http, db |
-| keel-queue, keel-schedule | kernel, contracts, config, db |
-| keel-access | kernel, contracts, config, http, db, cache |
-| keel-notify | kernel, contracts, config, http, db, mail |
-| keel-auth | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access (only for `impl Subject for user::Entity`) |
-| keel | every keel-* runtime crate + keel-macros |
-| keel-cli | — |
+| navree-kernel | — |
+| navree-macros | — (proc-macro) |
+| navree-contracts | kernel |
+| navree-config | kernel, contracts |
+| navree-log, navree-crypto, navree-events, navree-view, navree-cache, navree-http-client | kernel, contracts, config |
+| navree-http | kernel, contracts, config |
+| navree-db, navree-testing, navree-observe, navree-api | kernel, contracts, config, http |
+| navree-mail | kernel, contracts, config, view |
+| navree-realtime, navree-storage | kernel, contracts, config, http, crypto |
+| navree-session | kernel, contracts, config, http, crypto, db |
+| navree-validation, navree-audit | kernel, contracts, config, http, db |
+| navree-queue, navree-schedule | kernel, contracts, config, db |
+| navree-access | kernel, contracts, config, http, db, cache |
+| navree-notify | kernel, contracts, config, http, db, mail |
+| navree-auth | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access (only for `impl Subject for user::Entity`) |
+| navree | every navree-* runtime crate + navree-macros |
+| navree-cli | — |
 
-Cross-cutting needs go through `keel-contracts` (PRD: AuditSink, EventSink, Broadcaster, SessionStore, HealthCheck), extended here with `Principal`, `AuthState`, `Secret<T>`, `RequestId`, `Clock`, and the job contract (`Job`, `JobOptions`, `Dispatcher`, `JobRegistration`) so mail, events, schedule and notify can queue work without depending on keel-queue.
+Cross-cutting needs go through `navree-contracts` (PRD: AuditSink, EventSink, Broadcaster, SessionStore, HealthCheck), extended here with `Principal`, `AuthState`, `Secret<T>`, `RequestId`, `Clock`, and the job contract (`Job`, `JobOptions`, `Dispatcher`, `JobRegistration`) so mail, events, schedule and notify can queue work without depending on navree-queue.
 
 ### Build waves (what runs in parallel)
 
@@ -78,7 +78,7 @@ Cross-cutting needs go through `keel-contracts` (PRD: AuditSink, EventSink, Broa
 | W7 Ship | crm-web integration + Playwright E2E, security review, PRD-conformance review, fixer | W6 |
 | (parallel from W0) | crm-web build against the API contract in §7 | contract only |
 
-Every wave ends with an integrator agent: full workspace test + clippy + dependency-graph test, fixes cross-crate breakage, then commits the wave on branch `keel/framework`.
+Every wave ends with an integrator agent: full workspace test + clippy + dependency-graph test, fixes cross-crate breakage, then commits the wave on branch `navree/framework`.
 
 ## 4. Global technical decisions
 
@@ -86,20 +86,20 @@ Every wave ends with an integrator agent: full workspace test + clippy + depende
 - Versions: use the PRD's versions (they match crates.io on 2026-10-25: axum 0.8.9, tower-http 0.7.1, sea-orm 2.0.4, garde 0.23.0, croner 4.0.2, utoipa 6.0.0, minijinja 3.0.3, …). All external versions live in root `[workspace.dependencies]`; crates use `dep = { workspace = true }`.
 - TLS: rustls with the `ring` provider wherever a crate offers the choice (aws-lc-sys may need cmake/NASM on Windows).
 - Time: `chrono` (SeaORM's `with-chrono`). IDs: UUID v7 (`uuid` with `v7`, `serde`).
-- Errors: `thiserror` per crate; `keel_kernel::BoxError` across boundaries; HTTP errors are `keel_http::AppError` rendered in the NestJS error format (see §10).
+- Errors: `thiserror` per crate; `navree_kernel::BoxError` across boundaries; HTTP errors are `navree_http::AppError` rendered in the NestJS error format (see §10).
 - Database: SeaORM 2.0 with `sqlx-sqlite` (tests and dev) and `sqlx-postgres` behind a `postgres` feature. Tests use a fresh temporary SQLite **file** per test (in-memory SQLite gives every pool connection its own database).
-- Configuration: `.env` + TOML files + environment variables. Keys are nested with `__`, prefix `APP_` (e.g. `APP_DATABASE__URL` → `database.url`). Keel's own `.env` parser never calls `std::env::set_var` (unsafe in edition 2024); `.env` entries are fed to config-rs as a source.
-- Framework crates do **not** use keel-macros; they hand-write `impl Module` / `impl Injectable` / `impl Controller` (the PRD's escape hatch). Apps and the facade's tests use the macros. This lets every crate build before the macros exist.
-- Every configurable module offers `for_root(options)` and `from_config()` (reads its section from `keel_config::Config` at boot, like NestJS `forRootAsync`).
-- Request pipeline, outermost first: request ID → tracing → CORS → panic catcher → timeout → security headers → compression (skipped for `text/event-stream`) → maintenance mode → per-IP rate limit → body limit → **[Session slot]** (keel-session: session + CSRF) → **[AuthContext slot]** (keel-http calls the registered `Authenticator`, inserts `AuthState`) → **[Uow slot]** (keel-db: lazy unit of work, commit on status < 400, rollback otherwise, run to completion in a spawned task) → router → per-route layers: require authentication (unless public) → per-user throttle → custom guards → `RouteAuthorizer` (keel-access) → audit action → handler.
-- Deny by default: a route with no `#[public]`, `#[roles]`, `#[permissions]` or `#[can]` is a compile error in `#[controller]` and a boot error in keel-http for hand-registered routes.
+- Configuration: `.env` + TOML files + environment variables. Keys are nested with `__`, prefix `APP_` (e.g. `APP_DATABASE__URL` → `database.url`). Navree's own `.env` parser never calls `std::env::set_var` (unsafe in edition 2024); `.env` entries are fed to config-rs as a source.
+- Framework crates do **not** use navree-macros; they hand-write `impl Module` / `impl Injectable` / `impl Controller` (the PRD's escape hatch). Apps and the facade's tests use the macros. This lets every crate build before the macros exist.
+- Every configurable module offers `for_root(options)` and `from_config()` (reads its section from `navree_config::Config` at boot, like NestJS `forRootAsync`).
+- Request pipeline, outermost first: request ID → tracing → CORS → panic catcher → timeout → security headers → compression (skipped for `text/event-stream`) → maintenance mode → per-IP rate limit → body limit → **[Session slot]** (navree-session: session + CSRF) → **[AuthContext slot]** (navree-http calls the registered `Authenticator`, inserts `AuthState`) → **[Uow slot]** (navree-db: lazy unit of work, commit on status < 400, rollback otherwise, run to completion in a spawned task) → router → per-route layers: require authentication (unless public) → per-user throttle → custom guards → `RouteAuthorizer` (navree-access) → audit action → handler.
+- Deny by default: a route with no `#[public]`, `#[roles]`, `#[permissions]` or `#[can]` is a compile error in `#[controller]` and a boot error in navree-http for hand-registered routes.
 - Logging on by default; secrets redacted (`Secret<T>`, configured key names).
 
 ## 5. Build environment conventions (every agent)
 
-- Windows 11, Git Bash for shell commands. Repo root: `C:\Users\bopar\.t3\projects\keel`.
+- Windows 11, Git Bash for shell commands. Repo root: `C:\Users\bopar\.t3\projects\navree`.
 - `.cargo/config.toml` sets `rustc-wrapper = "sccache"`, so dependency builds are shared through sccache.
-- **Each agent uses its own target directory** to avoid Cargo's build-directory lock: prefix every cargo command with `CARGO_TARGET_DIR=target/agents/<agent-label>`, e.g. `CARGO_TARGET_DIR=target/agents/http cargo test -p keel-http`.
+- **Each agent uses its own target directory** to avoid Cargo's build-directory lock: prefix every cargo command with `CARGO_TARGET_DIR=target/agents/<agent-label>`, e.g. `CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http`.
 - Only edit files inside the crate(s) your task owns. Never edit another crate's source; if you need a change there, describe it in your final report. Root `Cargo.toml` edits are limited to adding a missing external crate to `[workspace.dependencies]` (re-read the file immediately before editing; others may be editing too).
 - TDD: write the failing test, run it and see it fail for the expected reason, write the minimal code, see it pass, refactor. Unit tests inline under `#[cfg(test)]`; integration tests under `crates/<crate>/tests/`.
 - Before reporting done: `cargo test -p <crate>`, `cargo clippy -p <crate> --all-targets -- -D warnings`, `cargo fmt -p <crate>` all clean.
@@ -115,13 +115,13 @@ Every wave ends with an integrator agent: full workspace test + clippy + depende
 
 **Real-time:** deal changes broadcast on `private-crm.deals` (event `deal.updated`) so open boards refresh.
 
-**Demo data (`db:seed`):** admin@keel.test, manager@keel.test, rep1@keel.test, rep2@keel.test, all with password `password123`; ~20 companies, ~50 contacts, ~30 deals across stages, ~60 activities.
+**Demo data (`db:seed`):** admin@navree.test, manager@navree.test, rep1@navree.test, rep2@navree.test, all with password `password123`; ~20 companies, ~50 contacts, ~30 deals across stages, ~60 activities.
 
 ## 7. CRM API contract (crm-web builds against this; crm-api must match it)
 
 Conventions: JSON; UUID ids; RFC 3339 UTC timestamps; money as integer `amount_cents` + `currency`. Every resource carries `"__type"` (`"Company" | "Contact" | "Deal" | "Activity" | "User"`) for CASL. Lists return `{ "data": [...], "meta": { "current_page", "per_page", "total", "last_page" } }` with `page` (default 1) and `per_page` (default 15, max 100) query params. Errors use the NestJS format: `{ "statusCode", "message" (string or string[]), "error" (reason phrase) }`, content type `application/json`; validation failures are 400 with `message: string[]` plus `errors: { "field": ["message"] }`; statuses 400, 401, 403, 404, 409, 429; the request id is in the `X-Request-Id` response header.
 
-Auth is NestJS-style JWT (see §10). The browser never holds tokens: crm-web's Next.js server is a backend-for-frontend (BFF). Its route handlers forward `/api/*` and `/broadcasting/*` to the Keel API (`KEEL_API_URL`, default `http://127.0.0.1:8080`) with `Authorization: Bearer <access token>` taken from an httpOnly cookie; `POST /api/auth/login` through the BFF stores the access and refresh tokens in httpOnly cookies and returns only `{user}`; on a 401 the BFF calls `POST /api/auth/refresh` once, updates the cookies and retries; logout revokes the refresh token and clears the cookies. The BFF rejects non-GET requests whose `Origin` is not its own (CSRF defence for the cookie hop).
+Auth is NestJS-style JWT (see §10). The browser never holds tokens: crm-web's Next.js server is a backend-for-frontend (BFF). Its route handlers forward `/api/*` and `/broadcasting/*` to the Navree API (`NAVREE_API_URL`, default `http://127.0.0.1:8080`) with `Authorization: Bearer <access token>` taken from an httpOnly cookie; `POST /api/auth/login` through the BFF stores the access and refresh tokens in httpOnly cookies and returns only `{user}`; on a 401 the BFF calls `POST /api/auth/refresh` once, updates the cookies and retries; logout revokes the refresh token and clears the cookies. The BFF rejects non-GET requests whose `Origin` is not its own (CSRF defence for the cookie hop).
 
 | Method & path | Body / query | Response |
 |---|---|---|
@@ -170,7 +170,7 @@ Resource shapes:
 
 CASL subjects and actions used by the UI: `Company`, `Contact`, `Deal`, `Activity`, `User` with `read`, `create`, `update`, `delete`, `manage`, plus `move` on `Deal` and `export` on `Contact`. Conditions use `owner_id` and `stage`.
 
-Real-time: Pusher protocol served by the CRM API on `ws://127.0.0.1:8080/app/keel-crm-key`; private channels authorise via `POST /broadcasting/auth` (through the BFF, which adds the bearer token). Channels: `private-crm.deals` (event `deal.updated`, data `{deal: Deal}`), `private-users.{id}` (event `notification.created`).
+Real-time: Pusher protocol served by the CRM API on `ws://127.0.0.1:8080/app/navree-crm-key`; private channels authorise via `POST /broadcasting/auth` (through the BFF, which adds the bearer token). Channels: `private-crm.deals` (event `deal.updated`, data `{deal: Deal}`), `private-users.{id}` (event `notification.created`).
 
 ## 8. What is left to the builders
 
@@ -194,6 +194,6 @@ These are binding for crm-api as well:
 
 The user decided that auth and the API follow the NestJS approach, not Laravel Sanctum. Everything else (pagination shape, Pusher-protocol real-time, queues, scheduler, events) stays as designed.
 
-1. **Auth = NestJS-style JWT** (plan Task 28/30): stateless JWT access tokens (HS256, 15 min) and opaque rotating refresh tokens (30 days, SHA-256 at rest, reuse detection revokes the token family); Passport-style `Strategy` trait with a built-in JWT strategy; global guard with `#[public]` opt-out (already keel-http's deny-by-default); `CurrentUser` extractor. Routes: `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`. No Sanctum CSRF-cookie endpoint, no personal access tokens, no session login. keel-session remains an optional module that the CRM does not import.
+1. **Auth = NestJS-style JWT** (plan Task 28/30): stateless JWT access tokens (HS256, 15 min) and opaque rotating refresh tokens (30 days, SHA-256 at rest, reuse detection revokes the token family); Passport-style `Strategy` trait with a built-in JWT strategy; global guard with `#[public]` opt-out (already navree-http's deny-by-default); `CurrentUser` extractor. Routes: `POST /api/auth/register|login|refresh|logout`, `GET /api/auth/me`. No Sanctum CSRF-cookie endpoint, no personal access tokens, no session login. navree-session remains an optional module that the CRM does not import.
 2. **Web token storage = Next.js server (BFF)**, as described in §7: tokens live in httpOnly cookies on the Next.js side and are forwarded as `Authorization: Bearer`.
-3. **Error format = NestJS**: every error body is `{"statusCode": 404, "message": "Not Found", "error": "Not Found"}` (`message` may be a custom string); validation failures are `400` with `{"statusCode": 400, "message": ["email must be a valid email address", ...], "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}`; 500 bodies never leak internals (`"Internal server error"`); content type `application/json`; the request id stays in the `X-Request-Id` header. keel-session's CSRF failure becomes 403 `"Invalid CSRF token"`. 422 and 419 are no longer used.
+3. **Error format = NestJS**: every error body is `{"statusCode": 404, "message": "Not Found", "error": "Not Found"}` (`message` may be a custom string); validation failures are `400` with `{"statusCode": 400, "message": ["email must be a valid email address", ...], "error": "Bad Request", "errors": {"email": ["email must be a valid email address"]}}`; 500 bodies never leak internals (`"Internal server error"`); content type `application/json`; the request id stays in the `X-Request-Id` header. navree-session's CSRF failure becomes 403 `"Invalid CSRF token"`. 422 and 419 are no longer used.

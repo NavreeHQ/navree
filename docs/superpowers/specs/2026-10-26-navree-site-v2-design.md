@@ -274,7 +274,7 @@ when you start; check the manifest, and look at each image before using it.
 | `tool-logbook` | 1:1 | black logbook with green ribbon | Logbook |
 | `tool-dock` | 1:1 | container grid, one lit green | Dock |
 | `tool-navigator` | 1:1 | black compass with green needle | Navigator |
-| `hero-hull` | 21:9 | keel of a black hull over water | homepage hero or OG |
+| `hero-hull` | 21:9 | bow of a black hull over water | homepage hero or OG |
 | `hero-archipelago` | 21:9 | modular islands linked by light | /architecture/ |
 | `hero-constellation` | 21:9 | star route across the sky | /ai/ |
 | `hero-wake` | 21:9 | hull leaving a green wake | /performance/ |

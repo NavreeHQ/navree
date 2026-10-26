@@ -49,8 +49,6 @@ navree dev              # http://127.0.0.1:8080/api/docs
 The docs are also published for AI agents as
 [`llms.txt`](https://navree.com/llms.txt) and as Markdown, page by page.
 
-Navree was developed under the working name Keel and briefly called Navis.
-
 ## The ecosystem
 
 Everything a production backend needs beyond the framework is first-party,
@@ -86,11 +84,11 @@ CRM built on top of them and the website:
 
 Documents:
 
-- Product requirements: [`docs/prd/keel-prd.md`](docs/prd/keel-prd.md)
+- Product requirements: [`docs/prd/navree-prd.md`](docs/prd/navree-prd.md)
 - Build design (crate hierarchy, decisions, CRM API contract):
-  [`docs/superpowers/specs/2026-10-25-keel-framework-design.md`](docs/superpowers/specs/2026-10-25-keel-framework-design.md)
+  [`docs/superpowers/specs/2026-10-25-navree-framework-design.md`](docs/superpowers/specs/2026-10-25-navree-framework-design.md)
 - Implementation plan:
-  [`docs/superpowers/plans/2026-10-25-keel-framework.md`](docs/superpowers/plans/2026-10-25-keel-framework.md)
+  [`docs/superpowers/plans/2026-10-25-navree-framework.md`](docs/superpowers/plans/2026-10-25-navree-framework.md)
 - Framework notes and known open issues:
   [`docs/superpowers/notes/`](docs/superpowers/notes/)
 

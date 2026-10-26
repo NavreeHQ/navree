@@ -1,9 +1,8 @@
 # Brief for the Navree documentation writers
 
 You write some of the pages of the Navree documentation (navree.com/docs).
-Navree is the Rust web framework in this repository; it was built under the
-working name Keel and briefly called Navis, so you may still meet those
-names in the 2026-10-25 history notes. Always write **Navree** and `navree::`.
+Navree is the Rust web framework in this repository. Always write **Navree**
+and `navree::`.
 
 ## Read first
 1. `apps/website/AUTHORING.md`: page layout, front-matter, the MDX components, code-block conventions and the voice.
