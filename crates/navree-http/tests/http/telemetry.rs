@@ -44,7 +44,10 @@ async fn every_request_is_reported_with_route_status_user_and_request_id() {
     .await;
 
     let response = app
-        .send(get_with("/api/deals/42?expand=owner", &[("x-user-id", ALICE)]))
+        .send(get_with(
+            "/api/deals/42?expand=owner",
+            &[("x-user-id", ALICE)],
+        ))
         .await;
     assert_eq!(response.status, 200);
     app.get("/api/unknown").await;
@@ -115,7 +118,10 @@ async fn an_incoming_traceparent_is_continued() {
     let response = app
         .send(get_with(
             "/api/trace",
-            &[("traceparent", &traceparent), ("tracestate", "congo=t61rcWkgMzE")],
+            &[
+                ("traceparent", &traceparent),
+                ("tracestate", "congo=t61rcWkgMzE"),
+            ],
         ))
         .await;
     assert_eq!(response.text(), TRACE);

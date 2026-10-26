@@ -17,8 +17,8 @@ fn no_env(_: &str) -> Option<String> {
 
 #[test]
 fn defaults_record_spans_but_export_nothing() {
-    let options = TracingOptions::from_config_with_env(&config(ConfigSources::new()), no_env)
-        .expect("valid");
+    let options =
+        TracingOptions::from_config_with_env(&config(ConfigSources::new()), no_env).expect("valid");
     assert!(options.enabled);
     assert_eq!(options.endpoint, None);
     assert_eq!(options.protocol, OtlpProtocol::Grpc);
@@ -108,7 +108,11 @@ fn otel_variables_fill_what_the_section_leaves_out() {
         .set("observe.tracing.endpoint", "http://section:4317")
         .set("observe.tracing.service_name", "from-section");
     let options = TracingOptions::from_config_with_env(&config(sources), env).unwrap();
-    assert_eq!(options.endpoint.as_deref(), Some("http://section:4317"), "the section wins");
+    assert_eq!(
+        options.endpoint.as_deref(),
+        Some("http://section:4317"),
+        "the section wins"
+    );
     assert_eq!(options.service_name.as_deref(), Some("from-section"));
 }
 
@@ -127,18 +131,39 @@ fn the_service_name_falls_back_to_the_app_name() {
 #[test]
 fn invalid_values_name_their_key() {
     for (key, value, expected) in [
-        ("observe.tracing.sample_ratio", json!(2.0), "observe.tracing.sample_ratio"),
-        ("observe.tracing.protocol", json!("carrier-pigeon"), "observe.tracing"),
-        ("observe.tracing.timeout_ms", json!(0), "observe.tracing.timeout_ms"),
-        ("observe.tracing.max_queue_size", json!(0), "observe.tracing.max_queue_size"),
-        ("observe.tracing.endpoint", json!("collector:4317"), "observe.tracing.endpoint"),
+        (
+            "observe.tracing.sample_ratio",
+            json!(2.0),
+            "observe.tracing.sample_ratio",
+        ),
+        (
+            "observe.tracing.protocol",
+            json!("carrier-pigeon"),
+            "observe.tracing",
+        ),
+        (
+            "observe.tracing.timeout_ms",
+            json!(0),
+            "observe.tracing.timeout_ms",
+        ),
+        (
+            "observe.tracing.max_queue_size",
+            json!(0),
+            "observe.tracing.max_queue_size",
+        ),
+        (
+            "observe.tracing.endpoint",
+            json!("collector:4317"),
+            "observe.tracing.endpoint",
+        ),
     ] {
         let sources = ConfigSources::new().set(key, value);
         let error = TracingOptions::from_config_with_env(&config(sources), no_env).unwrap_err();
         assert!(error.contains(expected), "{key}: {error}");
     }
     let env = |name: &str| (name == "OTEL_EXPORTER_OTLP_PROTOCOL").then(|| "http/json".to_owned());
-    let error = TracingOptions::from_config_with_env(&config(ConfigSources::new()), env).unwrap_err();
+    let error =
+        TracingOptions::from_config_with_env(&config(ConfigSources::new()), env).unwrap_err();
     assert!(error.contains("OTEL_EXPORTER_OTLP_PROTOCOL"), "{error}");
 }
 

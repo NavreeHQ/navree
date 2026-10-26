@@ -107,8 +107,10 @@ fn decode_hex(text: &str, out: &mut [u8]) -> Result<(), InvalidId> {
     if digits.len() != out.len() * 2 {
         return Err(InvalidId);
     }
-    for (byte, pair) in out.iter_mut().zip(digits.chunks_exact(2)) {
-        *byte = (nibble(pair[0])? << 4) | nibble(pair[1])?;
+    // The length check above leaves no remainder.
+    let (pairs, _) = digits.as_chunks::<2>();
+    for (byte, [high, low]) in out.iter_mut().zip(pairs) {
+        *byte = (nibble(*high)? << 4) | nibble(*low)?;
     }
     Ok(())
 }

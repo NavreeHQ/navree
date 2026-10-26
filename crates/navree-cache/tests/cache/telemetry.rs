@@ -10,8 +10,12 @@ use navree_telemetry::{CacheOperation, Telemetry, TelemetryRecorder};
 fn recorded_cache(prefix: &str) -> (Cache, TelemetryRecorder) {
     let recorder = TelemetryRecorder::new();
     let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
-    let cache = Cache::new(Arc::new(MemoryStore::new()), prefix, Duration::from_secs(60))
-        .with_telemetry(telemetry, "memory");
+    let cache = Cache::new(
+        Arc::new(MemoryStore::new()),
+        prefix,
+        Duration::from_secs(60),
+    )
+    .with_telemetry(telemetry, "memory");
     (cache, recorder)
 }
 
@@ -26,13 +30,26 @@ fn operations(recorder: &TelemetryRecorder) -> Vec<(CacheOperation, String)> {
 #[tokio::test]
 async fn reads_writes_and_forgets_are_reported_with_the_callers_key() {
     let (cache, recorder) = recorded_cache("app:");
-    cache.put("stats", &1, Duration::from_secs(60)).await.unwrap();
+    cache
+        .put("stats", &1, Duration::from_secs(60))
+        .await
+        .unwrap();
     assert_eq!(cache.get::<u32>("stats").await.unwrap(), Some(1));
     assert_eq!(cache.get::<u32>("missing").await.unwrap(), None);
     assert!(cache.has("stats").await.unwrap());
     cache.forget("stats").await.unwrap();
-    assert!(cache.add("fresh", &2, Duration::from_secs(60)).await.unwrap());
-    assert!(!cache.add("fresh", &3, Duration::from_secs(60)).await.unwrap());
+    assert!(
+        cache
+            .add("fresh", &2, Duration::from_secs(60))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !cache
+            .add("fresh", &3, Duration::from_secs(60))
+            .await
+            .unwrap()
+    );
     cache.increment("hits", 1).await.unwrap();
 
     use CacheOperation::{Forget, Hit, Miss, Write};
@@ -55,8 +72,14 @@ async fn reads_writes_and_forgets_are_reported_with_the_callers_key() {
 async fn remember_reports_one_miss_and_a_write_then_hits() {
     let (cache, recorder) = recorded_cache("");
     let ttl = Duration::from_secs(60);
-    let first: u32 = cache.remember("total", ttl, || async { Ok(42) }).await.unwrap();
-    let second: u32 = cache.remember("total", ttl, || async { Ok(0) }).await.unwrap();
+    let first: u32 = cache
+        .remember("total", ttl, || async { Ok(42) })
+        .await
+        .unwrap();
+    let second: u32 = cache
+        .remember("total", ttl, || async { Ok(0) })
+        .await
+        .unwrap();
     assert_eq!((first, second), (42, 42));
     use CacheOperation::{Hit, Miss, Write};
     assert_eq!(
@@ -100,7 +123,10 @@ async fn flexible_and_pull_are_reported() {
 async fn tagged_calls_are_reported() {
     let (cache, recorder) = recorded_cache("");
     let users = cache.tags(&["users"]);
-    users.put("u:1", &"Ada", Duration::from_secs(60)).await.unwrap();
+    users
+        .put("u:1", &"Ada", Duration::from_secs(60))
+        .await
+        .unwrap();
     let _: Option<String> = users.get("u:1").await.unwrap();
     users.forget("u:1").await.unwrap();
     use CacheOperation::{Forget, Hit, Write};

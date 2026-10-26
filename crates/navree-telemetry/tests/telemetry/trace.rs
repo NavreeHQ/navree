@@ -29,7 +29,12 @@ fn invalid_ids_are_refused() {
     ] {
         assert!(bad.parse::<TraceId>().is_err(), "{bad:?} must be refused");
     }
-    for bad in ["", "00f067aa0ba902b", "0000000000000000", "00F067AA0BA902B7"] {
+    for bad in [
+        "",
+        "00f067aa0ba902b",
+        "0000000000000000",
+        "00F067AA0BA902B7",
+    ] {
         assert!(bad.parse::<SpanId>().is_err(), "{bad:?} must be refused");
     }
     assert_eq!(TraceId::from_bytes([0; 16]), None);
@@ -50,8 +55,15 @@ fn an_incoming_traceparent_is_continued_with_a_new_span() {
     let header = format!("00-{TRACE}-{PARENT}-01");
     let context = TraceContext::continue_from(&header, Some("congo=t61rcWkgMzE")).expect("valid");
     assert_eq!(context.trace_id.to_string(), TRACE);
-    assert_eq!(context.parent_span_id.map(|id| id.to_string()).as_deref(), Some(PARENT));
-    assert_ne!(context.span_id.to_string(), PARENT, "the server span is a new span");
+    assert_eq!(
+        context.parent_span_id.map(|id| id.to_string()).as_deref(),
+        Some(PARENT)
+    );
+    assert_ne!(
+        context.span_id.to_string(),
+        PARENT,
+        "the server span is a new span"
+    );
     assert!(context.sampled);
     assert_eq!(context.trace_state.as_deref(), Some("congo=t61rcWkgMzE"));
     assert_eq!(
@@ -75,13 +87,13 @@ fn malformed_traceparent_headers_are_ignored() {
     for bad in [
         String::new(),
         "garbage".to_owned(),
-        format!("00-{TRACE}-{PARENT}"),                     // no flags
-        format!("00-{TRACE}-{PARENT}-1"),                   // short flags
-        format!("ff-{TRACE}-{PARENT}-01"),                  // version ff is invalid
-        format!("0-{TRACE}-{PARENT}-01"),                   // short version
+        format!("00-{TRACE}-{PARENT}"),    // no flags
+        format!("00-{TRACE}-{PARENT}-1"),  // short flags
+        format!("ff-{TRACE}-{PARENT}-01"), // version ff is invalid
+        format!("0-{TRACE}-{PARENT}-01"),  // short version
         format!("00-00000000000000000000000000000000-{PARENT}-01"), // zero trace id
-        format!("00-{TRACE}-0000000000000000-01"),          // zero parent id
-        format!("00-{TRACE}-{PARENT}-01-extra"),            // version 00 has exactly 4 fields
+        format!("00-{TRACE}-0000000000000000-01"), // zero parent id
+        format!("00-{TRACE}-{PARENT}-01-extra"), // version 00 has exactly 4 fields
         format!("00-{}-{PARENT}-01", TRACE.to_uppercase()), // uppercase
     ] {
         assert!(
@@ -93,9 +105,11 @@ fn malformed_traceparent_headers_are_ignored() {
 
 #[test]
 fn a_future_version_is_read_by_its_first_four_fields() {
-    let context =
-        TraceContext::continue_from(&format!("01-{TRACE}-{PARENT}-01-what-the-future-holds"), None)
-            .expect("higher versions are parsed as version 00");
+    let context = TraceContext::continue_from(
+        &format!("01-{TRACE}-{PARENT}-01-what-the-future-holds"),
+        None,
+    )
+    .expect("higher versions are parsed as version 00");
     assert_eq!(context.trace_id.to_string(), TRACE);
 }
 
@@ -105,7 +119,8 @@ fn an_overlong_tracestate_is_dropped() {
     let context =
         TraceContext::continue_from(&format!("00-{TRACE}-{PARENT}-01"), Some(&long)).unwrap();
     assert_eq!(context.trace_state, None);
-    let empty = TraceContext::continue_from(&format!("00-{TRACE}-{PARENT}-01"), Some("  ")).unwrap();
+    let empty =
+        TraceContext::continue_from(&format!("00-{TRACE}-{PARENT}-01"), Some("  ")).unwrap();
     assert_eq!(empty.trace_state, None);
 }
 
@@ -145,7 +160,11 @@ fn sampling_is_decided_by_the_trace_id() {
     let id = TraceId::random();
     assert!(sample_trace(id, 1.0));
     assert!(!sample_trace(id, 0.0));
-    assert_eq!(sample_trace(id, 0.5), sample_trace(id, 0.5), "deterministic");
+    assert_eq!(
+        sample_trace(id, 0.5),
+        sample_trace(id, 0.5),
+        "deterministic"
+    );
     // Out-of-range ratios are clamped.
     assert!(sample_trace(id, 7.0));
     assert!(!sample_trace(id, -1.0));
@@ -238,11 +257,9 @@ mod policy {
         let env = |name: &str| (name == "OTEL_TRACES_SAMPLER_ARG").then(|| "0.5".to_owned());
         let policy = TracePolicy::from_settings(settings(&[]), env).unwrap();
         assert_eq!(policy.sample_ratio, 0.5);
-        let policy = TracePolicy::from_settings(
-            settings(&[("observe.tracing.sample_ratio", "0.1")]),
-            env,
-        )
-        .unwrap();
+        let policy =
+            TracePolicy::from_settings(settings(&[("observe.tracing.sample_ratio", "0.1")]), env)
+                .unwrap();
         assert_eq!(policy.sample_ratio, 0.1, "the section wins");
     }
 

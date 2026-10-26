@@ -244,17 +244,15 @@ impl Queue {
         match execute(registration, job.payload.clone(), job_ctx, limit).await {
             Ok(()) => {
                 self.inner.store.complete(&job.id).await?;
-                self.inner
-                    .telemetry
-                    .emit_with(EventKind::JobProcessed, || {
-                        TelemetryEvent::JobProcessed(JobProcessed {
-                            queue: job.queue.clone(),
-                            job_type: job.job_type.clone(),
-                            job_id: job.id.clone(),
-                            attempt: job.attempts,
-                            duration: started.elapsed(),
-                        })
-                    });
+                self.inner.telemetry.emit_with(EventKind::JobProcessed, || {
+                    TelemetryEvent::JobProcessed(JobProcessed {
+                        queue: job.queue.clone(),
+                        job_type: job.job_type.clone(),
+                        job_id: job.id.clone(),
+                        attempt: job.attempts,
+                        duration: started.elapsed(),
+                    })
+                });
                 tracing::info!(
                     target: "navree::job",
                     name = %job.job_type,

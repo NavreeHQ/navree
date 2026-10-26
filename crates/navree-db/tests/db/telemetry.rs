@@ -57,7 +57,11 @@ async fn every_statement_is_reported_without_bound_values() {
         .expect("the query is reported");
     assert!(!answer.failed);
     assert_eq!(answer.rows, None);
-    assert!(answer.connection.starts_with("sqlite://"), "{}", answer.connection);
+    assert!(
+        answer.connection.starts_with("sqlite://"),
+        "{}",
+        answer.connection
+    );
     assert!(
         queries.iter().all(|q| !q.sql.contains("secret-binding")),
         "{queries:?}"
@@ -139,14 +143,20 @@ async fn queries_in_a_request_carry_its_request_id() {
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
-    let request_id = response.headers()["x-request-id"].to_str().unwrap().to_owned();
+    let request_id = response.headers()["x-request-id"]
+        .to_str()
+        .unwrap()
+        .to_owned();
 
     let query = recorder
         .of_kind(EventKind::QueryExecuted)
         .into_iter()
         .find(|record| matches!(&record.event, navree_telemetry::TelemetryEvent::QueryExecuted(q) if q.sql == "SELECT 42"))
         .expect("the handler's query");
-    assert_eq!(query.context.request_id.as_deref(), Some(request_id.as_str()));
+    assert_eq!(
+        query.context.request_id.as_deref(),
+        Some(request_id.as_str())
+    );
     assert!(query.context.trace.is_some());
     app.shutdown().await.unwrap();
 }

@@ -27,7 +27,10 @@ async fn a_scope_makes_its_context_current() {
     assert_eq!(seen.0.as_deref(), Some("req-1"));
     assert_eq!(seen.1, Some(trace.span_id));
     assert_eq!(seen.2, Some(trace.trace_id));
-    assert!(TelemetryContext::current().is_none(), "gone after the scope");
+    assert!(
+        TelemetryContext::current().is_none(),
+        "gone after the scope"
+    );
 }
 
 #[tokio::test]
@@ -93,8 +96,7 @@ async fn spawned_tasks_inherit_the_context_through_propagate() {
 #[test]
 fn sync_scopes_work_without_a_runtime() {
     let context = TelemetryContext::new(Telemetry::disabled()).with_request_id("sync");
-    let id = context.sync_scope(|| {
-        TelemetryContext::current().and_then(|c| c.request_id().map(str::to_owned))
-    });
+    let id = context
+        .sync_scope(|| TelemetryContext::current().and_then(|c| c.request_id().map(str::to_owned)));
     assert_eq!(id.as_deref(), Some("sync"));
 }

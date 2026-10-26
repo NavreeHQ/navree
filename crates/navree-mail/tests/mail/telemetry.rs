@@ -59,7 +59,10 @@ async fn queued_mail_sent_at_once_is_reported() {
     let (mailer, recorder) = recorded_mailer();
     let mail = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
         .context(json!({ "name": "Ada" }));
-    mailer.queue(&mail).await.expect("sent without a dispatcher");
+    mailer
+        .queue(&mail)
+        .await
+        .expect("sent without a dispatcher");
     assert_eq!(recorder.mails().len(), 1);
 }
 
@@ -76,7 +79,12 @@ async fn the_module_mailer_reports_to_the_app() {
         .unwrap();
     let mailer = app.ctx().get::<Mailer>().await.unwrap();
     mailer
-        .send_message(Message::new().to("ada@example.com").subject("Hi").text("Hello"))
+        .send_message(
+            Message::new()
+                .to("ada@example.com")
+                .subject("Hi")
+                .text("Hello"),
+        )
         .await
         .unwrap();
     assert_eq!(recorder.mails()[0].transport, "array");

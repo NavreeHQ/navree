@@ -37,7 +37,11 @@ async fn runs_are_reported_with_their_outcome() {
 
     let mut runs = recorder.scheduled_tasks();
     runs.sort_by(|a, b| a.task.cmp(&b.task));
-    assert_eq!(runs.len(), 2, "tasks that are not due are not reported: {runs:?}");
+    assert_eq!(
+        runs.len(),
+        2,
+        "tasks that are not due are not reported: {runs:?}"
+    );
     assert_eq!(runs[0].task, "report");
     assert_eq!(runs[0].error, None);
     assert_eq!(runs[0].tick, at("2026-10-25T04:00:00Z"));

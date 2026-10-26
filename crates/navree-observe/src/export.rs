@@ -199,9 +199,7 @@ async fn send(exporter: &dyn SpanExport, batch: &mut Vec<RecordedSpan>, timeout:
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use navree_telemetry::{
-        EventContext, JobProcessed, TelemetryEvent, TraceContext,
-    };
+    use navree_telemetry::{EventContext, JobProcessed, TelemetryEvent, TraceContext};
     use tokio::sync::oneshot;
 
     use super::*;
@@ -278,7 +276,11 @@ mod tests {
         for _ in 0..5 {
             sink.record(&job(true));
         }
-        assert_eq!(sink.dropped(), 3, "the task never ran, so the queue filled up");
+        assert_eq!(
+            sink.dropped(),
+            3,
+            "the task never ran, so the queue filled up"
+        );
     }
 
     #[tokio::test]

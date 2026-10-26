@@ -130,7 +130,11 @@ impl TracingOptions {
         env: impl Fn(&str) -> Option<String>,
     ) -> Result<TracingOptions, String> {
         let mut options: TracingOptions = config.typed().map_err(|error| error.to_string())?;
-        let unset = |key: &str| config.get_string(&format!("observe.tracing.{key}")).is_none();
+        let unset = |key: &str| {
+            config
+                .get_string(&format!("observe.tracing.{key}"))
+                .is_none()
+        };
         let env = |name: &str| env(name).filter(|value| !value.trim().is_empty());
         if unset("endpoint")
             && let Some(endpoint) = env("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -164,10 +168,9 @@ impl TracingOptions {
         if unset("sample_ratio")
             && let Some(ratio) = env("OTEL_TRACES_SAMPLER_ARG")
         {
-            options.sample_ratio = ratio
-                .trim()
-                .parse()
-                .map_err(|_| format!("OTEL_TRACES_SAMPLER_ARG must be a number from 0 to 1, got `{ratio}`"))?;
+            options.sample_ratio = ratio.trim().parse().map_err(|_| {
+                format!("OTEL_TRACES_SAMPLER_ARG must be a number from 0 to 1, got `{ratio}`")
+            })?;
         }
         if options.service_name.is_none() {
             options.service_name = env("OTEL_SERVICE_NAME")
@@ -216,7 +219,9 @@ impl TracingOptions {
         match self.protocol {
             OtlpProtocol::Grpc => Some(endpoint.to_owned()),
             OtlpProtocol::Http => {
-                let after_scheme = endpoint.split_once("://").map_or(endpoint, |(_, rest)| rest);
+                let after_scheme = endpoint
+                    .split_once("://")
+                    .map_or(endpoint, |(_, rest)| rest);
                 if after_scheme.contains('/') {
                     Some(endpoint.to_owned())
                 } else {

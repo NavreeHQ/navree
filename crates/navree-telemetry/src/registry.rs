@@ -180,8 +180,8 @@ impl Telemetry {
         if !self.enabled(event.kind()) {
             return;
         }
-        let context = TelemetryContext::with_current(TelemetryContext::event_context)
-            .unwrap_or_default();
+        let context =
+            TelemetryContext::with_current(TelemetryContext::event_context).unwrap_or_default();
         self.deliver(TelemetryRecord {
             at: Utc::now(),
             context,

@@ -61,9 +61,7 @@ fn emit_with_does_not_build_events_nobody_wants() {
 
     let recorder = TelemetryRecorder::new();
     let telemetry = Telemetry::with_sinks(vec![Arc::new(QueriesOnly::default())]);
-    telemetry.emit_with(EventKind::Cache, || {
-        panic!("no sink wants cache events")
-    });
+    telemetry.emit_with(EventKind::Cache, || panic!("no sink wants cache events"));
     let built = AtomicUsize::new(0);
     telemetry.emit_with(EventKind::QueryExecuted, || {
         built.fetch_add(1, Ordering::SeqCst);
@@ -83,7 +81,10 @@ fn events_reach_every_interested_sink() {
     ]);
     assert!(telemetry.is_active());
     assert!(telemetry.enabled(EventKind::QueryExecuted));
-    assert!(telemetry.enabled(EventKind::Cache), "the recorder wants everything");
+    assert!(
+        telemetry.enabled(EventKind::Cache),
+        "the recorder wants everything"
+    );
 
     telemetry.emit(query("SELECT 1"));
     telemetry.emit(cache_hit("stats"));
@@ -113,8 +114,16 @@ fn interest_sets_combine() {
     assert!(more.contains(EventKind::MailSent));
     assert!(Interest::ALL.contains(EventKind::Log));
     assert!(!Interest::NONE.contains(EventKind::Log));
-    assert!(Interest::ALL.without(EventKind::Log).contains(EventKind::Cache));
-    assert!(!Interest::ALL.without(EventKind::Log).contains(EventKind::Log));
+    assert!(
+        Interest::ALL
+            .without(EventKind::Log)
+            .contains(EventKind::Cache)
+    );
+    assert!(
+        !Interest::ALL
+            .without(EventKind::Log)
+            .contains(EventKind::Log)
+    );
     assert_eq!(jobs.union(Interest::only([EventKind::MailSent])), more);
     assert!(Interest::NONE.is_empty());
 }

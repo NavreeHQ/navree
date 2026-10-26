@@ -154,7 +154,10 @@ async fn server_errors_mark_the_span_and_client_errors_do_not() {
     assert_eq!(s.get("/api/deals/7/broken", None).await, 500);
     assert_eq!(s.get("/api/deals/7/missing", None).await, 404);
     let broken = s.spans.find("GET /api/deals/{id}/broken");
-    assert!(matches!(broken.status, SpanStatus::Error { .. }), "{broken:?}");
+    assert!(
+        matches!(broken.status, SpanStatus::Error { .. }),
+        "{broken:?}"
+    );
     let missing = s.spans.find("GET /api/deals/{id}/missing");
     assert_eq!(missing.status, SpanStatus::Unset);
     s.app.shutdown().await.unwrap();
@@ -170,7 +173,10 @@ async fn an_outgoing_call_is_a_client_span_under_the_request() {
     assert_eq!(call.kind, SpanKind::Client);
     assert_eq!(call.trace_id, request.trace_id);
     assert_eq!(call.parent_span_id, Some(request.span_id));
-    assert_eq!(call.attributes["server.address"], json!("rates.example.com"));
+    assert_eq!(
+        call.attributes["server.address"],
+        json!("rates.example.com")
+    );
     assert_eq!(
         call.attributes["url.full"],
         json!("https://rates.example.com/v1/eur"),

@@ -11,7 +11,7 @@ use navree_telemetry::{EventKind, TelemetryContext, TelemetryRecorder};
 use navree_testing::TestApp;
 use serde::{Deserialize, Serialize};
 
-use crate::support::{AlwaysFails, Journal, JobsModule, Record, options, start};
+use crate::support::{AlwaysFails, JobsModule, Journal, Record, options, start};
 
 /// Records the current job id and trace id as its label.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -115,10 +115,17 @@ async fn failed_attempts_are_reported_until_the_job_fails() {
     let failed = s.recorder.jobs_failed();
     assert_eq!(failed.len(), 3, "{failed:?}");
     assert!(failed[0].will_retry && failed[1].will_retry);
-    assert!(!failed[2].will_retry, "the last attempt moves it to the failed jobs");
+    assert!(
+        !failed[2].will_retry,
+        "the last attempt moves it to the failed jobs"
+    );
     assert_eq!(failed[0].attempt, 1);
     assert_eq!(failed[2].attempt, 3);
-    assert!(failed[0].error.contains("boom on attempt 1"), "{}", failed[0].error);
+    assert!(
+        failed[0].error.contains("boom on attempt 1"),
+        "{}",
+        failed[0].error
+    );
     assert_eq!(failed[0].job_type, "test.always_fails");
     s.app.shutdown().await.unwrap();
 }
