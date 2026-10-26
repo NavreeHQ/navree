@@ -21,7 +21,9 @@
 //! - [`Messages`] holds the templates ([`DEFAULT_MESSAGES`] plus overrides by
 //!   rule, by `field.rule` and attribute names). [`ValidationModule`]
 //!   (global) provides them from [`ValidationOptions`] or the `validation`
-//!   config section; without the module the defaults apply.
+//!   config section; without the module the defaults apply. A
+//!   [`MessageTranslator`] in the app (navree-i18n registers one) renders
+//!   the messages in the request's language instead.
 //!
 //! ```
 //! use garde::Validate;
@@ -76,7 +78,7 @@ pub use async_rules::{AsyncRule, AsyncRules, RuleError};
 pub use errors::ValidationErrors;
 pub use extract::{Valid, ValidAsync};
 pub use failure::rule_error;
-pub use messages::{DEFAULT_MESSAGES, Messages};
+pub use messages::{DEFAULT_MESSAGES, MessageTranslator, Messages};
 pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};
 pub use rules::confirmed;
 
