@@ -1,6 +1,6 @@
 [package]
 name = "navree-crypto"
-description = "Navree CryptoModule: AES-256-GCM Encrypter with key rotation, Argon2id Hasher and token helpers."
+description = "Navree CryptoModule: AES-256-GCM Encrypter with key rotation, Argon2id Hasher, token helpers and JOSE helpers (JWS, JWK, PKCS#8 on ring)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -20,6 +20,9 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
 rand = { workspace = true }
+# `jose`: Ed25519, ECDSA and RSA signatures (already in the tree through
+# rustls).
+ring = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
