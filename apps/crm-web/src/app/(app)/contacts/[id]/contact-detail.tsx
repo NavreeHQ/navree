@@ -67,14 +67,14 @@ export function ContactDetail({ id }: { id: string }) {
             {p.title ? <MetaItem icon={BriefcaseIcon}>{p.title}</MetaItem> : null}
             {p.company ? (
               <MetaItem icon={Building2Icon}>
-                <Link href={`/companies/${p.company.id}`} className="hover:text-foreground hover:underline">
+                <Link href={`/companies/${p.company.id}`} className="transition-colors hover:text-fg hover:underline">
                   {p.company.name}
                 </Link>
               </MetaItem>
             ) : null}
             {p.email ? (
               <MetaItem icon={MailIcon}>
-                <a href={`mailto:${p.email}`} className="hover:text-foreground hover:underline">
+                <a href={`mailto:${p.email}`} className="transition-colors hover:text-fg hover:underline">
                   {p.email}
                 </a>
               </MetaItem>
@@ -125,7 +125,7 @@ export function ContactDetail({ id }: { id: string }) {
           </>
         }
       />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Panel title="Activity" className="min-w-0">
           <RecordActivity subjectType="contact" subjectId={p.id} />
         </Panel>
@@ -140,7 +140,7 @@ export function ContactDetail({ id }: { id: string }) {
               </DetailRow>
               <DetailRow label="Company">
                 {p.company ? (
-                  <Link href={`/companies/${p.company.id}`} className="text-primary hover:underline">
+                  <Link href={`/companies/${p.company.id}`} className="record-link">
                     {p.company.name}
                   </Link>
                 ) : null}

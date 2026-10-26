@@ -12,6 +12,6 @@ export type NotificationData = { title?: string; message?: string; url?: string;
  */
 export type NotificationCreatedPayload = NotificationData | Partial<AppNotification>;
 
-/** Pusher channel names (Echo adds the `private-` prefix itself). */
+/** Channel names without the protocol's `private-` prefix (the pusher-js wrapper adds it). */
 export const DEALS_CHANNEL = "crm.deals";
 export const userChannel = (userId: string) => `users.${userId}`;

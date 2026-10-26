@@ -1,10 +1,9 @@
 "use client";
 
 import { useAbility } from "@casl/react";
-import { LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { LogOutIcon, SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,8 +11,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,7 +30,6 @@ export function UserMenu({ user }: { user: User }) {
   const router = useRouter();
   const ability = useAbility<AppAbility>();
   const logout = useLogout();
-  const { theme, setTheme } = useTheme();
 
   const signOut = () => {
     logout.mutate(
@@ -50,18 +46,25 @@ export function UserMenu({ user }: { user: User }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-9 gap-2 px-1.5" aria-label={`Account menu for ${user.name}`}>
+        <Button
+          variant="ghost"
+          className="h-9 gap-2.5 rounded-full py-0 pr-1 pl-1 md:pr-3"
+          aria-label={`Account menu for ${user.name}`}
+        >
           <UserAvatar name={user.name} id={user.id} size="md" />
           <span className="hidden flex-col items-start leading-tight md:flex">
-            <span className="text-sm font-medium">{user.name}</span>
-            <span className="text-xs font-normal text-muted-foreground">{roleLabel(user.roles)}</span>
+            <span className="text-[0.8125rem] font-medium text-fg">{user.name}</span>
+            <span className="text-xs font-normal text-fg-3">{roleLabel(user.roles)}</span>
           </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium text-foreground">{user.name}</span>
-          <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+        <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2">
+          <UserAvatar name={user.name} id={user.id} size="md" />
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate text-sm font-medium text-fg">{user.name}</span>
+            <span className="truncate text-xs font-normal text-fg-3">{user.email}</span>
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
@@ -72,22 +75,6 @@ export function UserMenu({ user }: { user: User }) {
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Appearance</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
-          <DropdownMenuRadioItem value="light">
-            <SunIcon />
-            Light
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">
-            <MoonIcon />
-            Dark
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="system">
-            <MonitorIcon />
-            Match system
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={signOut} disabled={logout.isPending}>

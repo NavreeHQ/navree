@@ -251,6 +251,37 @@ async fn error_responses_reference_http_error_schema() {
 }
 
 #[test]
+fn route_extensions_become_members_of_the_operation() {
+    use navree_api::{ApiOptions, openapi_document};
+    use navree_http::RouteMeta;
+
+    let mut flagged = RouteMeta {
+        method: "GET".to_owned(),
+        full_path: "/api/v1/deals/forecast".to_owned(),
+        ..RouteMeta::default()
+    };
+    flagged.access.authenticated = true;
+    flagged
+        .extensions
+        .insert("x-navree-flag".to_owned(), json!("new-pipeline"));
+    let plain = RouteMeta {
+        method: "GET".to_owned(),
+        full_path: "/api/v1/deals".to_owned(),
+        ..RouteMeta::default()
+    };
+
+    let doc = openapi_document(&[flagged, plain], &ApiOptions::default()).unwrap();
+    let forecast = &doc["paths"]["/api/v1/deals/forecast"]["get"];
+    assert_eq!(forecast["x-navree-flag"], "new-pipeline");
+    assert!(forecast["responses"].is_object(), "the rest is unchanged");
+    assert!(
+        doc["paths"]["/api/v1/deals"]["get"]
+            .get("x-navree-flag")
+            .is_none()
+    );
+}
+
+#[test]
 fn http_error_describes_the_rendered_error_body() {
     use std::collections::BTreeMap;
 

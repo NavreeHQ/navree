@@ -36,6 +36,7 @@ enum Kind {
     Audit,
     Name,
     Api,
+    RequiresFlag,
 }
 
 impl Kind {
@@ -72,6 +73,7 @@ impl Kind {
             "audit" => Kind::Audit,
             "name" => Kind::Name,
             "api" => Kind::Api,
+            "requires_flag" => Kind::RequiresFlag,
             _ => return None,
         })
     }
@@ -271,6 +273,67 @@ impl Throttle {
     }
 }
 
+/// `#[requires_flag(NewPipeline)]` / `#[requires_flag(NewPipeline, status = 403)]`.
+pub(crate) struct RequiresFlag {
+    /// The flag type.
+    pub(crate) flag: Box<Type>,
+    /// The status while the flag is off: 404 (the default) or 403.
+    pub(crate) status: u16,
+    /// Where it was written.
+    pub(crate) at: At,
+}
+
+impl RequiresFlag {
+    fn parse_args(attr: &Attribute) -> syn::Result<Self> {
+        let at = At::of(attr);
+        let expected = || {
+            at.error(
+                "expected #[requires_flag(NewPipeline)] or \
+                 #[requires_flag(NewPipeline, status = 403)]",
+            )
+        };
+        if !matches!(attr.meta, Meta::List(_)) {
+            return Err(expected());
+        }
+        let (flag, status) = attr.parse_args_with(|input: ParseStream| {
+            let flag: Type = input.parse().map_err(|_| expected())?;
+            let mut status = 404;
+            if input.parse::<Option<Token![,]>>()?.is_some() && !input.is_empty() {
+                let key: Ident = input.parse().map_err(|_| expected())?;
+                if key != "status" {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("unknown #[requires_flag] key `{key}`: expected `status = 403`"),
+                    ));
+                }
+                input.parse::<Token![=]>().map_err(|_| expected())?;
+                let value: LitInt = input.parse().map_err(|_| expected())?;
+                status = match value.base10_parse::<u16>() {
+                    Ok(status @ (403 | 404)) => status,
+                    _ => {
+                        return Err(syn::Error::new(
+                            value.span(),
+                            "a route behind a flag answers 404 (the default, as if it did not \
+                             exist) or 403 while the flag is off",
+                        ));
+                    }
+                };
+                input.parse::<Option<Token![,]>>()?;
+            }
+            if input.is_empty() {
+                Ok((flag, status))
+            } else {
+                Err(expected())
+            }
+        })?;
+        Ok(RequiresFlag {
+            flag: Box::new(flag),
+            status,
+            at,
+        })
+    }
+}
+
 /// A duration literal (`"500ms"`, `"5s"`, `"1m"`, `"1h"`) in milliseconds;
 /// the error points at the literal.
 fn duration_millis(value: &LitStr) -> syn::Result<u64> {
@@ -418,6 +481,8 @@ pub(crate) struct RouteAttrs {
     /// `#[name("deals.show")]`.
     pub(crate) name: Option<LitStr>,
     pub(crate) api: Option<Api>,
+    /// `#[requires_flag(F)]`.
+    pub(crate) requires_flag: Option<RequiresFlag>,
     /// The first helper attribute (not a route attribute), for "only
     /// applies to routes" errors.
     pub(crate) first_helper: Option<(String, At)>,
@@ -506,6 +571,7 @@ impl RouteAttrs {
                 self.access.can = Some((can, at));
             }
             Kind::Api => self.api = Some(Api::parse_args(attr)?),
+            Kind::RequiresFlag => self.requires_flag = Some(RequiresFlag::parse_args(attr)?),
             Kind::Throttle => self.throttle = Some(Throttle::parse_args(attr)?),
             Kind::Timeout => {
                 let value: LitStr = attr

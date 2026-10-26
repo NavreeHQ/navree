@@ -13,6 +13,7 @@ import { RecordCombobox, UserSelect, type PickedRecord } from "@/components/reco
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { CompanyRef, Deal, DealInput, DealStage } from "@/lib/api/types";
 import { DEAL_STAGES, MAX_AMOUNT_CENTS } from "@/lib/api/types";
@@ -82,11 +83,14 @@ export function DealFormDialog({
   company,
   defaultStage,
   trigger,
+  openOnCreateIntent,
 }: {
   deal?: Deal;
   company?: CompanyRef;
   defaultStage?: DealStage;
   trigger: ReactNode;
+  /** Open when the command menu asks for a new deal (set on one dialog per screen). */
+  openOnCreateIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -101,6 +105,7 @@ export function DealFormDialog({
     if (next) form.reset({ ...toValues(deal, company), ...(defaultStage && !deal ? { stage: defaultStage } : {}) });
     setOpen(next);
   };
+  useCreateIntent(openOnCreateIntent && !deal ? "deal" : undefined, () => onOpenChange(true));
 
   const onSubmit = form.handleSubmit((values) => {
     const body: DealInput = {

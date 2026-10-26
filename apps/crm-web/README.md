@@ -90,6 +90,21 @@ The specs (`e2e/*.spec.ts`) run one at a time against that shared database, in a
 UTC). `E2E_BASE_URL=http://localhost:3000 E2E_REAL_API=1 pnpm e2e` runs them against servers you started yourself
 (seeded with `crm-demo`).
 
+## Design
+
+The CRM uses navree.com's design system (`apps/website/DESIGN.md`): dark only, ink surfaces, one green
+(`#3dff8f`) for the primary action, focus, the current page and the figure that matters. The tokens in
+`src/app/globals.css` are the site's, mapped onto shadcn/ui's semantic names (`accent` stays green, so the primitives in
+`src/components/ui` use `ink-2`/`ink-3` for hover and highlighted surfaces). Fonts are self-hosted from Fontsource
+packages through `next/font/local` (`src/app/fonts.ts`): Mona Sans for titles and big figures, Geist for the UI,
+Monaspace Neon for eyebrows, table headings and ids. `cn` (`src/lib/utils.ts`) knows the custom type scale.
+
+- Ctrl/Cmd K opens the command menu: jump to a screen, create a deal, company, contact or task, sign out, or search
+  companies, contacts and deals.
+- Every list hides secondary columns on small screens; the app has no horizontal page scroll at 390 px.
+- `pnpm screenshots [baseURL] [outDir]` signs in as the `crm-demo` admin and captures every screen, dialog, empty,
+  error and loading state at 1440 and 390 px into `screenshots/` (git-ignored) for design review.
+
 ## Layout
 
 - `src/lib/bff/`: the BFF (`bff.ts`, framework-free and unit-tested) and its instance (`server.ts`).
@@ -98,8 +113,9 @@ UTC). `E2E_BASE_URL=http://localhost:3000 E2E_REAL_API=1 pnpm e2e` runs them aga
   list endpoints' query parameters, which navree-api cannot document yet), `client.ts` (openapi-fetch, same-origin,
   401/403 hooks), `errors.ts` (Navree error bodies), `form-errors.ts` (400 `errors` to form fields).
 - `src/lib/casl/`: one `createMongoAbility` for the app, rules from `GET /api/me/abilities`, `__type` subject detection.
-- `src/lib/realtime/`: a Pusher-protocol client, Echo on pusher-js (`private-crm.deals`, `private-users.{id}`), optional; channel auth
-  goes through the BFF's `/broadcasting/auth`.
+- `src/lib/realtime/`: real time over the Pusher protocol, optional. `pusher.ts` is a small typed wrapper over pusher-js
+  (`listen`, `leave`, `disconnect`; it adds the `private-` prefix) for `private-crm.deals` and `private-users.{id}`;
+  channel authorization goes through the BFF's `/broadcasting/auth`. `mock-bus.ts` stands in for it with the mock API.
 - `src/features/*`: TanStack Query hooks and feature components per resource.
 - `src/app/(app)/*`: screens behind sign-in; `src/app/login`.
 - `src/mocks/`: MSW handlers, seed data and CASL rules mirroring crm-api.

@@ -31,8 +31,8 @@ export function SortableHead({
         type="button"
         onClick={() => onSort(active && !desc ? `-${field}` : field)}
         className={cn(
-          "-ml-1 inline-flex items-center gap-1 rounded px-1 py-0.5 hover:text-foreground focus-visible:outline-2",
-          active ? "text-foreground" : "",
+          "-ml-1 inline-flex items-center gap-1 rounded px-1 py-0.5 uppercase transition-colors hover:text-fg focus-visible:outline-2",
+          active ? "text-fg-1" : "",
         )}
       >
         {label}
@@ -42,14 +42,19 @@ export function SortableHead({
   );
 }
 
-export function SkeletonRows({ columns, rows = 8 }: { columns: number; rows?: number }) {
+/**
+ * Placeholder rows while a list loads. `columns` is a count, or one class name
+ * per column so cells hide at the same breakpoints as the real ones.
+ */
+export function SkeletonRows({ columns, rows = 8 }: { columns: number | string[]; rows?: number }) {
+  const cells = typeof columns === "number" ? Array.from({ length: columns }, () => "") : columns;
   return (
     <>
       {Array.from({ length: rows }, (_, r) => (
         <TableRow key={r} className="hover:bg-transparent">
-          {Array.from({ length: columns }, (_, c) => (
-            <TableCell key={c} className="py-3">
-              <Skeleton className={cn("h-4", c === 0 ? "w-40" : "w-20")} />
+          {cells.map((className, c) => (
+            <TableCell key={c} className={cn("py-3.5", c === 0 && "pl-4", className)}>
+              <Skeleton className={cn("h-3.5", c === 0 ? "w-40" : "w-20")} style={{ opacity: 1 - r * 0.09 }} />
             </TableCell>
           ))}
         </TableRow>
@@ -123,5 +128,5 @@ export function PastEndNotice({ noun, total, onFirstPage }: { noun: string; tota
 
 /** The bordered surface that holds a filter bar, table and pagination. */
 export function TablePanel({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>{children}</div>;
+  return <div className={cn("surface overflow-hidden", className)}>{children}</div>;
 }

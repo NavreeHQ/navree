@@ -1,32 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans } from "next/font/google";
+import { fontVariables } from "./fonts";
 import { Providers } from "./providers";
 import "./globals.css";
-
-// One family throughout; the width axis gives condensed headings and figures.
-const instrument = Instrument_Sans({
-  variable: "--font-instrument",
-  subsets: ["latin"],
-  axes: ["wdth"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: { default: "Navree CRM", template: "%s | Navree CRM" },
   description: "Pipeline, accounts and follow-ups for the Navree sales team.",
 };
 
+// Dark only, like navree.com.
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3f5f6" },
-    { media: "(prefers-color-scheme: dark)", color: "#0c181d" },
-  ],
+  themeColor: "#040605",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${instrument.variable} h-full`} suppressHydrationWarning>
+    <html lang="en" className={`dark ${fontVariables} h-full`}>
       <body className="min-h-full">
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
         <Providers>{children}</Providers>
       </body>
     </html>

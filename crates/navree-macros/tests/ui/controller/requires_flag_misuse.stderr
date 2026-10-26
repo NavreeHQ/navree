@@ -1,0 +1,41 @@
+error: #[requires_flag] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard] and #[throttle] apply to every route
+ --> tests/ui/controller/requires_flag_misuse.rs:8:1
+  |
+8 | #[requires_flag(NewPipeline)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a route behind a flag answers 404 (the default, as if it did not exist) or 403 while the flag is off
+  --> tests/ui/controller/requires_flag_misuse.rs:11:43
+   |
+11 |     #[requires_flag(NewPipeline, status = 500)]
+   |                                           ^^^
+
+error: unknown #[requires_flag] key `code`: expected `status = 403`
+  --> tests/ui/controller/requires_flag_misuse.rs:17:34
+   |
+17 |     #[requires_flag(NewPipeline, code = 403)]
+   |                                  ^^^^
+
+error: expected #[requires_flag(NewPipeline)] or #[requires_flag(NewPipeline, status = 403)]
+  --> tests/ui/controller/requires_flag_misuse.rs:23:5
+   |
+23 |     #[requires_flag]
+   |     ^^^^^^^^^^^^^^^^
+
+error: duplicate #[requires_flag]
+  --> tests/ui/controller/requires_flag_misuse.rs:30:5
+   |
+30 |     #[requires_flag(DealExport)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: #[requires_flag] only applies to routes: `helper` has no route attribute (#[get], #[post], #[put], #[patch] or #[delete])
+  --> tests/ui/controller/requires_flag_misuse.rs:35:5
+   |
+35 |     #[requires_flag(NewPipeline)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: this attribute needs the `navree` crate (or `navree-flags`) in the [dependencies] of your Cargo.toml
+  --> tests/ui/controller/requires_flag_misuse.rs:29:5
+   |
+29 |     #[requires_flag(NewPipeline)]
+   |     ^

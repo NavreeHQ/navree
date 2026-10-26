@@ -3,9 +3,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// Muted sea-glass tints so teammates are told apart without loud colours.
-const TINTS = ["#d7e7ec", "#dfe6d7", "#e9e0d2", "#dcdcea", "#e7d9dd", "#d6e4e0"];
-const DARK_TINTS = ["#1f3a44", "#2b3a2a", "#3b3326", "#2d2d43", "#3d2a31", "#21403a"];
+// Ink with a faint tint each, so teammates are told apart without loud colours.
+const TINTS = ["#17251f", "#1f2619", "#29241c", "#1a2229", "#271d23", "#162625"];
 
 function tintIndex(seed: string): number {
   let hash = 0;
@@ -34,10 +33,10 @@ export function UserAvatar({
     >
       <AvatarFallback
         className={cn(
-          "bg-(--tint) font-semibold text-foreground/80 dark:bg-(--tint-dark)",
+          "border border-line-2 bg-(--tint) font-semibold text-fg-1",
           size === "xs" ? "text-[9px]" : size === "sm" ? "text-[10px]" : "text-xs",
         )}
-        style={{ "--tint": TINTS[index], "--tint-dark": DARK_TINTS[index] } as React.CSSProperties}
+        style={{ "--tint": TINTS[index] } as React.CSSProperties}
       >
         {initials(name)}
       </AvatarFallback>
@@ -52,10 +51,26 @@ export function UserAvatar({
   );
 }
 
-export function OwnerCell({ owner }: { owner: { id: string; name: string } | null | undefined }) {
-  if (!owner) return <span className="text-muted-foreground">Unassigned</span>;
+/** A rounded-square monogram for a company (people get round avatars). */
+export function CompanyMonogram({ name, className }: { name: string; className?: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-(--tint) font-display text-xs font-semibold text-fg-1",
+        className,
+      )}
+      style={{ "--tint": TINTS[tintIndex(name)] } as React.CSSProperties}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+export function OwnerCell({ owner }: { owner: { id: string; name: string } | null | undefined }) {
+  if (!owner) return <span className="text-fg-3">Unassigned</span>;
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2 text-fg-1">
       <UserAvatar name={owner.name} id={owner.id} size="xs" />
       <span className="truncate">{owner.name}</span>
     </span>

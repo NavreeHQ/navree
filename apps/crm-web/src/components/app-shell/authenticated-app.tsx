@@ -1,15 +1,15 @@
 "use client";
 
 import { useAbility } from "@casl/react";
-import { MoonIcon, RefreshCwIcon, SunIcon, UnplugIcon } from "lucide-react";
-import { useTheme } from "next-themes";
+import { RefreshCwIcon, UnplugIcon } from "lucide-react";
+import Link from "next/link";
 import { useLayoutEffect, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { CommandSearch } from "@/components/app-shell/command-search";
 import { NotificationsBell } from "@/components/app-shell/notifications-bell";
 import { RealtimeBridge } from "@/components/app-shell/realtime-bridge";
 import { UserMenu } from "@/components/app-shell/user-menu";
-import { NavreeMark } from "@/components/brand";
+import { NavreeMark, NavreeWordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -19,31 +19,17 @@ import { isApiError } from "@/lib/api/errors";
 import type { User } from "@/lib/api/types";
 import type { AppAbility } from "@/lib/casl/ability";
 
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const dark = resolvedTheme === "dark";
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      onClick={() => setTheme(dark ? "light" : "dark")}
-    >
-      <SunIcon className="hidden dark:block" />
-      <MoonIcon className="dark:hidden" />
-    </Button>
-  );
-}
-
 function TopBar({ user }: { user: User }) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:px-6">
-      <SidebarTrigger className="-ml-1" />
+    <header className="sticky top-0 z-20 flex h-(--header-h) shrink-0 items-center gap-2 border-b bg-ink-0/80 px-3 backdrop-blur-md supports-[backdrop-filter]:bg-ink-0/70 sm:gap-3 sm:px-4 lg:px-6">
+      <SidebarTrigger className="text-fg-2" />
+      <Link href="/" aria-label="Navree CRM home" className="rounded-md md:hidden">
+        <NavreeMark className="size-6" />
+      </Link>
       <div className="flex min-w-0 flex-1">
         <CommandSearch />
       </div>
       <div className="flex items-center gap-1">
-        <ThemeToggle />
         <NotificationsBell />
         <UserMenu user={user} />
       </div>
@@ -54,20 +40,24 @@ function TopBar({ user }: { user: User }) {
 function ShellSkeleton() {
   return (
     <div className="flex min-h-svh" aria-busy="true" aria-label="Loading Navree CRM">
-      <div className="hidden w-64 shrink-0 flex-col gap-3 bg-sidebar p-4 md:flex">
-        <NavreeMark className="text-sidebar-primary" />
-        <div className="mt-4 flex flex-col gap-2.5">
+      <div className="hidden w-64 shrink-0 flex-col gap-3 border-r bg-sidebar p-4 md:flex">
+        <NavreeWordmark />
+        <div className="mt-6 flex flex-col gap-3">
           {Array.from({ length: 5 }, (_, i) => (
-            <Skeleton key={i} className="h-5 w-3/4 bg-sidebar-accent" />
+            <Skeleton key={i} className="h-5 bg-ink-2" style={{ width: `${78 - i * 7}%` }} />
           ))}
         </div>
       </div>
       <div className="flex flex-1 flex-col">
-        <div className="h-14 border-b" />
-        <div className="flex flex-col gap-4 p-6 lg:px-8">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-72" />
-          <Skeleton className="mt-4 h-64 w-full" />
+        <div className="h-(--header-h) border-b" />
+        <div className="flex flex-col gap-4 px-4 py-8 lg:px-8">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="mt-4 h-28 w-full rounded-xl" />
+          <div className="grid gap-4 lg:grid-cols-5">
+            <Skeleton className="h-72 rounded-xl lg:col-span-3" />
+            <Skeleton className="h-72 rounded-xl lg:col-span-2" />
+          </div>
         </div>
       </div>
     </div>
@@ -76,8 +66,9 @@ function ShellSkeleton() {
 
 function ApiUnavailable({ onRetry, detail }: { onRetry: () => void; detail?: string }) {
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Empty className="max-w-md border">
+    <div className="flex min-h-svh flex-col items-center justify-center gap-8 p-6">
+      <NavreeWordmark />
+      <Empty className="surface max-w-md border-solid p-8">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <UnplugIcon />
@@ -134,7 +125,11 @@ export function AuthenticatedApp({ children }: { children: ReactNode }) {
       <SidebarInset className="min-w-0 bg-background">
         <TopBar user={user.data} />
         {/* SidebarInset is the <main> landmark. */}
-        <div id="content" className="flex min-w-0 flex-1 flex-col px-4 py-6 lg:px-8">
+        <div
+          id="content"
+          tabIndex={-1}
+          className="flex min-w-0 flex-1 flex-col px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8"
+        >
           {children}
         </div>
       </SidebarInset>
