@@ -1,0 +1,18 @@
+# harbor: unpack {{ release }} on {{ server.name }}
+cd {{ base }}/releases
+rm -rf {{ release }}.partial
+mkdir {{ release }}.partial
+tar -xzf {{ release }}.tar.gz -C {{ release }}.partial
+rm -f {{ release }}.tar.gz
+if [ -f {{ release }}.partial/frontend.tar.gz ]; then
+	mkdir {{ release }}.partial/frontend
+	tar -xzf {{ release }}.partial/frontend.tar.gz -C {{ release }}.partial/frontend
+	rm -f {{ release }}.partial/frontend.tar.gz
+fi
+{% for dir in shared %}
+mkdir -p ../shared/{{ dir }}
+rm -rf {{ release }}.partial/{{ dir }}
+ln -s ../../shared/{{ dir }} {{ release }}.partial/{{ dir }}
+{% endfor %}
+rm -rf {{ release }}
+mv {{ release }}.partial {{ release }}

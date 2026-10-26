@@ -52,6 +52,9 @@ const HIERARCHY: &[Rule] = &[
     // no navree dependencies; the CLI uses it and the facade re-exports it
     // behind the opt-in `dock` feature.
     rule("navree-dock", 0, &[]),
+    // Harbor: servers and deployments. A tool crate for the CLI (and the
+    // facade's opt-in `harbor` feature) that builds on no navree crate.
+    rule("navree-harbor", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -119,8 +122,9 @@ const HIERARCHY: &[Rule] = &[
     // L7: packages built on other packages (none yet).
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
-    // The CLI uses no runtime crate; navree-dock runs `navree dock`.
-    rule("navree-cli", 8, &["navree-dock"]),
+    // The CLI uses no runtime crate; navree-dock runs `navree dock` and
+    // navree-harbor runs Harbor's commands.
+    rule("navree-cli", 8, &["navree-dock", "navree-harbor"]),
     // L9 and up (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -145,13 +149,14 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 7) plus navree-macros and navree-dock:
-/// what the facade may re-export and what navree-macros tests may
-/// dev-depend on.
+/// Every runtime crate (layers 0 to 7) plus navree-macros and the tool
+/// crates navree-dock and navree-harbor: what the facade may re-export and
+/// what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
     "navree-dock",
+    "navree-harbor",
     "navree-contracts",
     "navree-config",
     "navree-http",
@@ -577,7 +582,7 @@ fn navree_macros_may_dev_depend_on_runtime_crates_only() {
 }
 
 #[test]
-fn navree_cli_depends_on_navree_dock_only() {
+fn navree_cli_depends_on_the_tool_crates_only() {
     let found = violations(&[edge("navree-cli", "navree-kernel", Kind::Normal)]);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(
@@ -585,6 +590,19 @@ fn navree_cli_depends_on_navree_dock_only() {
         Vec::<String>::new()
     );
     let found = violations(&[edge("navree-dock", "navree-config", Kind::Normal)]);
+    assert_eq!(found.len(), 1, "{found:?}");
+}
+
+#[test]
+fn navree_cli_uses_harbor_which_uses_no_navree_crate() {
+    assert_eq!(
+        violations(&[
+            edge("navree-cli", "navree-harbor", Kind::Normal),
+            edge("navree", "navree-harbor", Kind::Normal),
+        ]),
+        Vec::<String>::new()
+    );
+    let found = violations(&[edge("navree-harbor", "navree-crypto", Kind::Normal)]);
     assert_eq!(found.len(), 1, "{found:?}");
 }
 

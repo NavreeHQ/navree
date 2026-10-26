@@ -1,0 +1,38 @@
+{# Small configuration files, one per `name`. #}
+{% if name == "sshd" %}
+# Written by navree harbor:provision.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+{% elif name == "fail2ban" %}
+# Written by navree harbor:provision.
+[sshd]
+enabled = true
+port = {{ ssh_port }}
+backend = systemd
+{% elif name == "journald" %}
+# Written by navree harbor:provision.
+[Journal]
+SystemMaxUse=1G
+{% elif name == "auto-upgrades" %}
+// Written by navree harbor:provision: security updates install every day.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+{% elif name == "postgres" %}
+# Written by navree harbor:provision.
+listen_addresses = '{{ postgres.listen }}'
+password_encryption = scram-sha-256
+{% elif name == "pg_hba" %}
+# harbor:start (written by navree harbor:provision)
+{% for client in postgres.clients %}
+{{ client.kind }} {{ database }} {{ database }} {{ client.address }}/{{ client.bits }} scram-sha-256
+{% endfor %}
+# harbor:end
+{% elif name == "redis" %}
+# Written by navree harbor:provision.
+bind {{ redis.bind }}
+protected-mode yes
+requirepass {{ redis.password }}
+maxmemory {{ redis.maxmemory_mb }}mb
+maxmemory-policy allkeys-lru
+{% endif %}

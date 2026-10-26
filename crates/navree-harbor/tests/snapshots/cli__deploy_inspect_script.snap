@@ -1,0 +1,32 @@
+---
+source: crates/navree-harbor/tests/cli.rs
+expression: "ssh[0].stdin_text()"
+---
+set -euo pipefail
+# harbor: inspect on app-1
+echo "arch=$(uname -m)"
+echo "glibc=$(getconf GNU_LIBC_VERSION 2> /dev/null | awk '{print $2}')"
+if [ ! -d /srv/crm-api/releases ]; then
+	echo "provisioned=no"
+	exit 0
+fi
+echo "provisioned=yes"
+cd /srv/crm-api
+echo "live=$(cat .harbor-live 2> /dev/null || true)"
+for link in current blue green; do
+	if [ -L "$link" ]; then
+		echo "$link=$(basename "$(readlink "$link")")"
+	fi
+done
+for dir in releases/*/; do
+	[ -d "$dir" ] || continue
+	id="$(basename "$dir")"
+	case "$id" in *.partial) continue ;; esac
+	commit=""
+	subject=""
+	if [ -f "$dir.harbor-release" ]; then
+		commit="$(sed -n 's/^commit=//p' "$dir.harbor-release")"
+		subject="$(sed -n 's/^subject=//p' "$dir.harbor-release")"
+	fi
+	printf 'release=%s\t%s\t%s\n' "$id" "$commit" "$subject"
+done

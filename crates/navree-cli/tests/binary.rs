@@ -227,3 +227,47 @@ fn dock_add_env_and_remove_need_no_container_runtime() {
         stderr(&output)
     );
 }
+
+#[test]
+fn harbor_commands_run_in_the_cli_not_in_the_app() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = dir.path();
+    std::fs::write(
+        app.join("Cargo.toml"),
+        "[package]\nname = \"shop\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_navree"))
+            .args(args)
+            .current_dir(app)
+            .env_remove("NAVREE_HARBOR_ENV")
+            .env_remove("NAVREE_HARBOR_KEY")
+            .env_remove("NAVREE_HARBOR_SSH_KEY")
+            .output()
+            .expect("navree runs")
+    };
+
+    let output = run(&["harbor:init"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("created  harbor.toml"),
+        "{}",
+        stdout(&output)
+    );
+    assert!(app.join("harbor.key").is_file());
+
+    let output = run(&["harbor:secrets", "set", "APP_KEY", "--generate"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let output = run(&["harbor:secrets", "list"]);
+    assert_eq!(stdout(&output).trim(), "APP_KEY");
+
+    // A deploy needs the host key that harbor:provision records.
+    let output = run(&["deploy"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("run `navree harbor:provision app-1`"),
+        "{}",
+        stderr(&output)
+    );
+}

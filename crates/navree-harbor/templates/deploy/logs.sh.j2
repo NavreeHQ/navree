@@ -1,0 +1,2 @@
+# harbor: logs of {{ unit }} on {{ server.name }}
+journalctl --unit {{ unit }} --lines {{ lines }} --no-pager --output cat 2>&1 || true

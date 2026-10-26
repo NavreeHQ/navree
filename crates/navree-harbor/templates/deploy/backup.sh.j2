@@ -1,0 +1,3 @@
+# harbor: backup on {{ server.name }}
+sudo -n systemctl start {{ unit }}
+echo "file=$(ls -1t {{ backup_dir }}/*.dump | head -n 1)"
