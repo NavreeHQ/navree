@@ -54,6 +54,7 @@ navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-search = { path = "crates/navree-search", version = "0.1.0" }
+navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
@@ -243,6 +244,11 @@ object_store = { version = "0.14.2", default-features = false, features = ["fs"]
 csv = "1.4.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
+# GraphQL (navree-graphql): no default features (no handlebars, no
+# multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+# Line diffs for `graphql:schema --check` (the version insta already uses).
+similar = "2.7.0"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

@@ -1,5 +1,6 @@
 //! [`AppError`]: every HTTP error, rendered in Navree's JSON error shape.
 
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::fmt;
@@ -362,9 +363,12 @@ impl PendingError {
 pub struct ErrorMapper {
     type_name: &'static str,
     map: Arc<MapFn>,
+    map_any: Arc<MapAnyFn>,
 }
 
 type MapFn = dyn Fn(&(dyn StdError + 'static)) -> Option<AppError> + Send + Sync;
+
+type MapAnyFn = dyn Fn(&(dyn Any + Send + Sync)) -> Option<AppError> + Send + Sync;
 
 impl ErrorMapper {
     /// A mapper for errors of type `E`; returning `None` keeps the 500.
@@ -372,15 +376,23 @@ impl ErrorMapper {
         Self {
             type_name: std::any::type_name::<E>(),
             map: Arc::new(move |error| error.downcast_ref::<E>().and_then(f)),
+            map_any: Arc::new(move |error| error.downcast_ref::<E>().and_then(f)),
         }
     }
 
-    /// Applies the first matching mapper to `error`'s source chain.
-    pub(crate) fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
-        let mut next: Option<&(dyn StdError + 'static)> = error
+    /// Applies the first matching mapper to `error`'s source chain (what the
+    /// pipeline does with a 500 that has a source).
+    pub fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
+        error
             .source
             .as_deref()
-            .map(|e| e as &(dyn StdError + 'static));
+            .and_then(|source| Self::apply_to(mappers, source))
+    }
+
+    /// Applies the first matching mapper to `error` and then to its source
+    /// chain.
+    pub fn apply_to(mappers: &[ErrorMapper], error: &(dyn StdError + 'static)) -> Option<AppError> {
+        let mut next = Some(error);
         while let Some(cause) = next {
             for mapper in mappers {
                 if let Some(mapped) = (mapper.map)(cause) {
@@ -390,6 +402,12 @@ impl ErrorMapper {
             next = cause.source();
         }
         None
+    }
+
+    /// Applies the first mapper whose error type `error` is, for errors held
+    /// as `dyn Any` (a GraphQL resolver error keeps its source that way).
+    pub fn apply_any(mappers: &[ErrorMapper], error: &(dyn Any + Send + Sync)) -> Option<AppError> {
+        mappers.iter().find_map(|mapper| (mapper.map_any)(error))
     }
 }
 
@@ -414,6 +432,59 @@ mod tests {
             "AppError is {} bytes",
             std::mem::size_of::<AppError>()
         );
+    }
+
+    #[derive(Debug)]
+    struct Taken;
+
+    impl fmt::Display for Taken {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("taken")
+        }
+    }
+
+    impl StdError for Taken {}
+
+    #[derive(Debug)]
+    struct Wrapped(Taken);
+
+    impl fmt::Display for Wrapped {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("wrapped")
+        }
+    }
+
+    impl StdError for Wrapped {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            Some(&self.0)
+        }
+    }
+
+    fn mappers() -> Vec<ErrorMapper> {
+        vec![ErrorMapper::new::<Taken>(|_| {
+            Some(AppError::conflict("already taken"))
+        })]
+    }
+
+    #[test]
+    fn mappers_apply_to_a_source_chain() {
+        let mappers = mappers();
+        let mapped = ErrorMapper::apply(&mappers, &AppError::internal(Wrapped(Taken))).unwrap();
+        assert_eq!(mapped.status, StatusCode::CONFLICT);
+        let mapped = ErrorMapper::apply_to(&mappers, &Wrapped(Taken)).unwrap();
+        assert_eq!(mapped.detail.as_deref(), Some("already taken"));
+        assert!(ErrorMapper::apply(&mappers, &AppError::internal("other")).is_none());
+        assert!(ErrorMapper::apply(&mappers, &AppError::not_found()).is_none());
+    }
+
+    #[test]
+    fn mappers_apply_to_errors_held_as_any() {
+        let mappers = mappers();
+        let held: Arc<dyn Any + Send + Sync> = Arc::new(Taken);
+        let mapped = ErrorMapper::apply_any(&mappers, &*held).unwrap();
+        assert_eq!(mapped.status, StatusCode::CONFLICT);
+        let other: Arc<dyn Any + Send + Sync> = Arc::new(Wrapped(Taken));
+        assert!(ErrorMapper::apply_any(&mappers, &*other).is_none());
     }
 
     #[test]
