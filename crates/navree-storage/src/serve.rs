@@ -12,7 +12,7 @@ use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use navree_contracts::Clock;
-use navree_http::{AppError, Controller, RouteDef};
+use navree_http::{ApiMeta, AppError, Controller, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 
 use crate::path::normalize;
@@ -69,7 +69,17 @@ impl Controller for StorageController {
             )
             // The signature is the authorization.
             .public()
-            .name("storage.temporary_url"),
+            .name("storage.temporary_url")
+            .api(ApiMeta {
+                summary: Some("Download a file from a temporary URL".to_owned()),
+                description: Some(
+                    "Serves the file a signed temporary URL points at; the `expires` and `signature` query parameters are the authorization."
+                        .to_owned(),
+                ),
+                tags: vec!["Storage".to_owned()],
+                responses: vec![403, 404],
+                ..ApiMeta::default()
+            }),
         ]
     }
 }
