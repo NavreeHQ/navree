@@ -42,7 +42,8 @@
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `dock`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver. `axum` is re-exported with `http`. `dock`
+//! navree-db's PostgreSQL driver; `validation-phone` and `validation-html` (both in
+//! `full`) add navree-validation's `Phone` and `SafeHtml`. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
 //! `dock.toml`.
 //!
