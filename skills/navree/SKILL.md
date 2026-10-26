@@ -107,6 +107,7 @@ navree list                                 # every command of the app
 | Any `navree make:*` generator, console commands | `navree-cli-generators` |
 | Shipping to production | `navree-deployment` |
 | Security review before a release | `navree-security-checklist` |
+| Signing a JWT another service verifies, verifying a token against a provider's JWKS, publishing a JWKS, loading a `.p8` or PEM key | `navree-jose` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
