@@ -10,6 +10,7 @@
 //! | `navree new <name> [--ui next\|none] [--navree-path <path>]` | A new app ([`new_app`]) |
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test in a module ([`make::make_item`]) |
+//! | `navree make:resource <module> <Entity> [--path src/modules]` | A Helm admin-panel resource for an entity, registered with its module ([`resource::make_resource`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
@@ -36,5 +37,6 @@ pub mod make;
 pub mod names;
 pub mod new_app;
 pub mod project;
+pub mod resource;
 pub mod scaffold;
 pub mod templates;

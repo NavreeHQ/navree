@@ -37,6 +37,7 @@
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
+//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
@@ -185,6 +186,9 @@ pub mod flags {
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
 }
+// L7: packages built on other packages.
+#[cfg(feature = "helm")]
+pub use navree_helm as helm;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

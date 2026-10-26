@@ -22,6 +22,7 @@ full = [
     "crypto",
     "db",
     "events",
+    "helm",
     "http",
     "http-client",
     "log",
@@ -135,6 +136,20 @@ flags = [
     "workspace",
     "auth",
 ]
+## L7
+## Helm: the admin panel generated from your entities.
+helm = [
+    "dep:navree-helm",
+    "http",
+    "view",
+    "db",
+    "crypto",
+    "storage",
+    "validation",
+    "audit",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -159,6 +174,7 @@ navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
+navree-helm = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
