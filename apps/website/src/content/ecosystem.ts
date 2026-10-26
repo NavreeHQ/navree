@@ -344,7 +344,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-grpc",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features grpc",
     href: "/docs/microservices/grpc/",
-    status: "planned",
+    status: "stable",
     signature: "#[grpc_service]",
   },
   {
