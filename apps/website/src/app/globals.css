@@ -1,0 +1,294 @@
+@import "tailwindcss";
+@import "./prose.css" layer(components);
+@import "./charts.css" layer(components);
+@import "./home.css" layer(components);
+
+/*
+ * Navree design tokens. Dark only.
+ *
+ * Ink: near-black surfaces with a faint sea-green cast, stepping up for
+ * raised elements. One accent, "starboard" green (a ship's green running
+ * light), used sparingly: links, focus, the logo, Navree in charts, the
+ * waterline. Text tokens meet WCAG AA on every ink step (fg-3 is 5.4:1 on
+ * ink-3 at worst).
+ */
+@theme {
+  --color-ink-0: #040605;
+  --color-ink-1: #0a0e0c;
+  --color-ink-2: #111714;
+  --color-ink-3: #16201b;
+  --color-line: #1c2420;
+  --color-line-2: #2a3530;
+  --color-fg: #e9efeb;
+  --color-fg-1: #cfd8d3;
+  --color-fg-2: #a9b5ae;
+  --color-fg-3: #8a968f;
+  --color-accent: #3dff8f;
+  --color-accent-ink: #03130a;
+  --color-amber: #ffbf5e;
+  --color-bar: #5b6862;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --glow: 0 0 18px rgb(61 255 143 / 0.35);
+    --header-h: 3.75rem;
+  }
+
+  html {
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-padding-top: calc(var(--header-h) + 1.5rem);
+    scrollbar-color: var(--color-line-2) var(--color-ink-0);
+  }
+
+  body {
+    min-height: 100dvh;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background: rgb(61 255 143 / 0.28);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings: "calt" 1, "liga" 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* The skip link: first focusable thing on every page. */
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -4rem;
+    z-index: 100;
+    padding: 0.5rem 0.875rem;
+    border-radius: 8px;
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    top: 0.75rem;
+  }
+
+  /* Plain text links inside running copy. */
+  .link {
+    color: var(--color-accent);
+    text-decoration-line: underline;
+    text-decoration-color: rgb(61 255 143 / 0.35);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color 150ms;
+  }
+  .link:hover {
+    text-decoration-color: var(--color-accent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    padding: 0 1.125rem;
+    border-radius: 999px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition:
+      background-color 150ms,
+      border-color 150ms,
+      color 150ms,
+      box-shadow 150ms;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+  .btn-primary:hover {
+    box-shadow: var(--glow);
+  }
+  .btn-secondary {
+    border: 1px solid var(--color-line-2);
+    color: var(--color-fg);
+  }
+  .btn-secondary:hover {
+    border-color: var(--color-fg-3);
+    background: var(--color-ink-2);
+  }
+
+  /* The keycap used for keyboard shortcuts. */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    min-width: 1.375rem;
+    height: 1.375rem;
+    padding: 0 0.3125rem;
+    justify-content: center;
+    border: 1px solid var(--color-line-2);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    color: var(--color-fg-2);
+    background: var(--color-ink-1);
+  }
+
+  .numeric {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .search-dialog {
+    width: min(40rem, calc(100vw - 1.5rem));
+    max-width: none;
+    margin: min(12vh, 7rem) auto auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line-2);
+    border-radius: 16px;
+    background: var(--color-ink-1);
+    color: var(--color-fg);
+    box-shadow:
+      0 30px 80px -20px rgb(0 0 0 / 0.8),
+      0 0 0 1px rgb(61 255 143 / 0.04);
+  }
+  .search-dialog::backdrop {
+    background: rgb(1 3 2 / 0.72);
+    backdrop-filter: blur(3px);
+  }
+  .search-dialog[open] {
+    animation: search-in 160ms var(--ease-out-quint);
+  }
+  @keyframes search-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.99);
+    }
+  }
+  .search-hit {
+    display: block;
+    padding: 0.65rem 0.8rem;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .search-hit[aria-selected="true"] {
+    background: var(--color-ink-3);
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  .search-hit mark {
+    padding: 0 1px;
+    border-radius: 3px;
+    background: rgb(61 255 143 / 0.16);
+    color: var(--color-fg);
+  }
+}
+
+@layer components {
+  .docs-drawer {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(21rem, 86vw);
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-right: 1px solid var(--color-line-2);
+    background: var(--color-ink-1);
+    color: var(--color-fg);
+  }
+  .docs-drawer::backdrop {
+    background: rgb(1 3 2 / 0.7);
+    backdrop-filter: blur(2px);
+  }
+  .docs-drawer[open] {
+    animation: drawer-in 220ms var(--ease-out-quint);
+  }
+  @keyframes drawer-in {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+}
+
+@layer components {
+  /* Inline code outside the docs body (descriptions, cards, tables). */
+  .inline-code {
+    padding: 0.08em 0.36em;
+    border: 1px solid var(--color-line);
+    border-radius: 5px;
+    background: var(--color-ink-2);
+    color: var(--color-fg);
+    font-size: 0.86em;
+  }
+}
+
+@layer components {
+  .pager-link {
+    display: block;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    transition:
+      border-color 150ms,
+      background-color 150ms;
+  }
+  .pager-link:hover {
+    border-color: var(--color-line-2);
+    background: var(--color-ink-1);
+  }
+  .toc-mobile summary::-webkit-details-marker {
+    display: none;
+  }
+  .toc-mobile summary::after {
+    content: "+" / "";
+    float: right;
+    color: var(--color-fg-3);
+  }
+  .toc-mobile[open] summary::after {
+    content: "\2212" / "";
+  }
+}

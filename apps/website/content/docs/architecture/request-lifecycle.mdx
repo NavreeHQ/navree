@@ -1,0 +1,10 @@
+---
+title: "Request lifecycle"
+description: "What happens between a request arriving and the response leaving."
+---
+
+This page follows a request through a Navree application. It starts with the default Tower layers: request context, panic catching, timeouts, security headers, compression, error rendering, maintenance mode, rate limits and body limits. Then come authentication, the unit of work, the route's access check, extractors and your handler, and the response's way back out.
+
+<Callout type="note" title="This page is being written">
+The summary above says what this page will cover. Until then, the API documentation of `navree-http` is the reference: run `cargo doc -p navree-http --open` in the repository.
+</Callout>
