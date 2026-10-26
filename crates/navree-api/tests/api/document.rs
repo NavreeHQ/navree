@@ -222,7 +222,7 @@ async fn error_responses_reference_http_error_schema() {
     assert_eq!(error["type"], "object");
     let mut properties: Vec<&String> = error["properties"].as_object().unwrap().keys().collect();
     properties.sort();
-    assert_eq!(properties, ["error", "errors", "message", "statusCode"]);
+    assert_eq!(properties, ["code", "error", "errors", "message", "statusCode"]);
     let mut required: Vec<&str> = error["required"]
         .as_array()
         .unwrap()
@@ -233,10 +233,18 @@ async fn error_responses_reference_http_error_schema() {
     assert_eq!(
         required,
         ["error", "message", "statusCode"],
-        "errors is optional"
+        "code (http.errors.code = false) and errors are optional"
     );
     assert_eq!(error["properties"]["statusCode"]["type"], "integer");
     assert_eq!(error["properties"]["error"]["type"], "string");
+    let code = &error["properties"]["code"];
+    assert_eq!(code["type"], "string", "a string when present: {code}");
+    assert!(
+        code["description"]
+            .as_str()
+            .is_some_and(|d| d.contains("translation")),
+        "{code}"
+    );
     assert_eq!(
         error["properties"]["message"]["oneOf"],
         json!([
@@ -295,8 +303,22 @@ fn http_error_describes_the_rendered_error_body() {
             status_code: 404,
             message: HttpErrorMessage::One("Not Found".to_owned()),
             error: "Not Found".to_owned(),
+            code: Some("not_found".to_owned()),
             errors: None,
         }
+    );
+
+    // A body rendered with `http.errors.code = false` parses too.
+    let without_code: HttpError = serde_json::from_value(serde_json::json!({
+        "statusCode": 404, "message": "Not Found", "error": "Not Found",
+    }))
+    .unwrap();
+    assert_eq!(without_code.code, None);
+    assert!(
+        serde_json::to_value(&without_code)
+            .unwrap()
+            .get("code")
+            .is_none()
     );
 
     let errors = BTreeMap::from([(
@@ -311,6 +333,7 @@ fn http_error_describes_the_rendered_error_body() {
             status_code: 400,
             message: HttpErrorMessage::Many(vec!["email must be a valid email address".to_owned()]),
             error: "Bad Request".to_owned(),
+            code: Some("validation_failed".to_owned()),
             errors: Some(errors),
         }
     );
