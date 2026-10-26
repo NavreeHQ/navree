@@ -1,6 +1,6 @@
 [package]
 name = "navree-validation"
-description = "Navree ValidationModule: Valid<T> extractors on garde, field-level messages, async unique/exists rules."
+description = "Navree ValidationModule: Valid<T> extractors on garde, field-level messages, async unique/exists rules, international input (phone numbers, sanitized HTML, names and digits in any script, countries, locales)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -389,6 +389,25 @@ async fn country_and_locale_rules_check_strings() {
 }
 
 #[tokio::test]
+async fn an_unknown_default_region_fails_at_boot() {
+    let built = TestApp::builder()
+        .config("validation", json!({ "phone": { "default_region": "UK" } }))
+        .module(ValidationModule::from_config())
+        .module(IntlTestModule)
+        .try_build()
+        .await;
+    let Err(error) = built else {
+        panic!("`UK` is not a country, so the app must not boot");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("`UK` is not an ISO 3166-1 alpha-2 country code"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
 async fn international_messages_come_from_the_message_table() {
     let options = ValidationOptions {
         messages: BTreeMap::from([

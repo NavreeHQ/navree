@@ -1,11 +1,11 @@
 ---
 title: "Validation"
-description: "Validate request bodies and query strings with `Valid<Json<T>>` on garde, with field-level messages and `unique` / `exists` database rules."
+description: "Validate request bodies and query strings with `Valid<Json<T>>` on garde, with field-level messages, `unique` / `exists` database rules, and international input: phone numbers, names and digits in any script, countries, locales and sanitized rich text."
 ---
 
 Navree validates input with extractors. You describe the rules on a DTO with [garde](https://docs.rs/garde), take `Valid<Json<T>>` or `Valid<Query<T>>` in your handler, and the handler only runs when the input passes. When it doesn't, the client gets a 400 [error](/docs/basics/errors/) with one message per broken rule, such as `email must be a valid email address`.
 
-Validation lives in the `navree-validation` crate (the `validation` feature of the `navree` facade, on by default). `Valid` and `ValidAsync` are in the prelude.
+Validation lives in the `navree-validation` crate (the `validation` feature of the `navree` facade, on by default). `Valid` and `ValidAsync` are in the prelude. The [international types](#international-input) `Phone` and `SafeHtml` come with the `validation-phone` and `validation-html` features, also on by default.
 
 ## A first example
 
@@ -203,6 +203,12 @@ pub struct Register {
 | `rules::uuid` | a hyphenated UUID | `team_id must be a UUID` |
 | `rules::date_ymd` | a real date written exactly `YYYY-MM-DD` | `starts_on must be a valid date in the format YYYY-MM-DD` |
 | `rules::one_of(&["a", "b"])` | one of the listed strings | `status must be one of the following values: a, b` |
+| `rules::unicode_name` | a name in any script | `name must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `rules::phone` | a valid phone number (feature `validation-phone`) | `phone must be a valid phone number` |
+| `rules::country` | an ISO 3166-1 alpha-2 country code | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `rules::locale` | a BCP 47 language tag | `locale must be a valid locale` |
+
+The last four are explained under [international input](#international-input).
 
 ### Rules serde checks for you
 
@@ -286,6 +292,298 @@ An empty body `{}` now reports all three fields:
 }
 ```
 
+## International input
+
+People write their names in Arabic and Devanagari, type codes with the digits their keyboard has, and paste phone numbers in every format. navree-validation checks this input and turns it into one canonical form, so your handler compares and stores `+201001234567`, `EG` and `ar-EG`, not whatever was typed.
+
+| Type or rule | Accepts | The handler gets | Message when it fails |
+|---|---|---|---|
+| `rules::unicode_name` | names in any script | the string as sent | `name must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `Folded<String>`, `Folded<u32>`, ... | digits of any script | ASCII digits, then the parsed value | the inner type's (`code must be longer than ...`) |
+| `Phone` | phone numbers as people write them | E.164: `+447400123456` | `phone must be a valid phone number` |
+| `Country` | ISO 3166-1 alpha-2 codes, any case | `GB` | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `Locale` | BCP 47 language tags, any case | `en-GB` | `locale must be a valid locale` |
+| `SafeHtml` | rich text | HTML with only the allowed tags | never fails on a string |
+
+The types do their work while the extractor deserializes. A field typed `Phone` holds a valid number in E.164 form, and a bad number is a field error like a wrong type. `rules::phone`, `rules::country` and `rules::locale` check a `String` field instead and leave it as sent.
+
+```rust title="src/contacts/dto.rs"
+use garde::Validate;
+use navree::validation::{rules, Country, Locale, Phone, SafeHtml};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateContact {
+    #[garde(length(chars, min = 1, max = 100), custom(rules::unicode_name))]
+    pub name: String,
+    #[garde(skip)]
+    pub phone: Phone,
+    #[garde(skip)]
+    pub mobile: Option<Phone>,
+    #[garde(skip)]
+    pub country: Country,
+    #[garde(skip)]
+    pub locale: Option<Locale>,
+    #[garde(length(chars, max = 20_000))]
+    pub notes: SafeHtml,
+}
+```
+
+In an app whose default phone region is Egypt (`validation.phone.default_region = "EG"`), this body:
+
+```json title="POST /api/v1/contacts"
+{
+  "name": "مُحَمَّد عبد الله",
+  "phone": "٠١٠٠ ١٢٣ ٤٥٦٧",
+  "country": "eg",
+  "locale": "ar-eg",
+  "notes": "<p dir=\"rtl\">عميل جديد</p><script>steal()</script>"
+}
+```
+
+reaches the handler as:
+
+```json title="CreateContact"
+{
+  "name": "مُحَمَّد عبد الله",
+  "phone": "+201001234567",
+  "mobile": null,
+  "country": "EG",
+  "locale": "ar-EG",
+  "notes": "<p dir=\"rtl\">عميل جديد</p>"
+}
+```
+
+The messages of these rules come from the [message table](#message-keys) like every other, with the keys `unicode_name`, `phone`, `country` and `locale`, so you can override them and [localization](/docs/packages/localization/) translates them.
+
+### Names in any script
+
+`rules::unicode_name` accepts what names are made of in every script: letters, the combining marks many scripts write vowels and accents with (the Devanagari `ि`, the Arabic `َ`), numbers, spaces, hyphens, apostrophes (`'` and `’`), periods, the middle dot (`l·l`), and the zero-width non-joiner and joiner that Persian and Indic names are written with.
+
+| Passes | Fails |
+|---|---|
+| `Amritpal Singh`, `अमृतपाल सिंह`, `ਅੰਮ੍ਰਿਤਪਾਲ ਸਿੰਘ` | `<script>alert(1)</script>`, `Robert'); DROP TABLE students;--` |
+| `محمد عبد الله`, `مُحَمَّد`, `فاطمه‌زهرا` | `Ada 😀`, `@ada`, a name with a tab in it |
+| `Zoë O’Brien-Smith`, `J. R. R. Tolkien`, `李小龙`, `Louis 14` | `   ` and `١٢٣`, which have no letter |
+
+A name needs at least one letter and at most four combining marks in a row, which keeps stacked "Zalgo" text out. The rule says nothing about length: combine it with `length(chars, ...)`.
+
+### Digits in any script
+
+On Arabic keyboards the digits are `٠١٢٣٤٥٦٧٨٩`, on Persian ones `۰۱۲۳۴۵۶۷۸۹`, on Hindi ones `०१२३४५६७८९`. Wrap a field in `Folded` and its digits are ASCII before any rule sees them:
+
+```rust title="src/auth/dto.rs"
+use navree::validation::Folded;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct VerifyCode {
+    #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    pub code: Folded<String>, // "٦٥٤٣٢١" arrives as "654321"
+    #[garde(range(min = 1, max = 99))]
+    pub quantity: Option<Folded<u32>>, // "٤٢" and 42 are both 42
+}
+```
+
+Without `Folded`, `"٦٥٤٣٢١"` is 12 bytes long and fails both the length and the pattern.
+
+- `Folded<String>` (the default type parameter) keeps the folded text. garde's string rules (`length`, `pattern`, `ascii`, `contains`, ...) and Navree's rules work on it.
+- `Folded<T>` parses the folded text into any `T: FromStr` (`u32`, `i64`, `f64`, `Decimal`) and accepts a JSON number too. `range` works on it, and a value that doesn't parse fails as `T` does (`quantity must be an integer number`).
+- It derefs to the value (`*input.code`) and `into_inner()` hands it over. It serializes as the value.
+- Every Unicode decimal digit folds: Arabic-Indic, Persian, Devanagari, Bengali, Gurmukhi, Thai, fullwidth and the rest. Other characters stay, including look-alikes that aren't decimal digits (`²`, `½`, `Ⅻ`).
+- Query strings and forms fold too: `GET /codes?code=٦٥٤٣٢١` gives `654321`.
+
+`fold_digits(text)` does the same to any string. It returns a `Cow<str>` that borrows `text` when there is nothing to fold.
+
+### Phone numbers
+
+<Badge feature="validation-phone" /> `Phone` holds a valid phone number in E.164 form, `+447400123456`: the form to store and to compare. It reads what people type: spaces, dashes and brackets, `tel:` URIs, an extension (`ext. 12`), and digits in any script.
+
+| Input | Default region | `Phone` |
+|---|---|---|
+| `+44 7400 123456` | any | `+447400123456` |
+| `+٩٧١ ٥٠ ١٢٣ ٤٥٦٧` | any | `+971501234567` |
+| `+९१ ८१२३४ ५६७८९` | any | `+918123456789` |
+| `07400 123456` | `GB` | `+447400123456` |
+| `00 971 50 123 4567` | `GB` | `+971501234567` |
+| `07400 123456` | none | `phone must be a valid phone number` |
+| `+44 12` | any | `phone must be a valid phone number` |
+
+Valid means the number fits its region's numbering plan (country code, length, prefixes), from the metadata of the [phonenumber](https://docs.rs/phonenumber) crate. Nothing checks that the line is in service: send a code to it for that.
+
+| Method | Returns |
+|---|---|
+| `as_str()`, `to_string()`, `String::from(phone)` | `+447400123456` |
+| `country_code()` | `44` |
+| `national_number()` | `7400123456` |
+| `region()` | `Some(Country)` (`GB`); `None` for non-geographic numbers and areas outside ISO 3166-1, such as Kosovo |
+| `international()`, `national()` | `+44 7400 123456`, `07400 123456`, plus ` x12` when there is an extension |
+| `extension()` | `Some("12")` for `ext. 12` |
+
+`Phone` serializes as the E.164 string. E.164 has no room for an extension, so read `extension()` before you store the number if you keep it. Outside a request, `Phone::parse(text, region)` parses with an explicit region and `"+44 7400 123456".parse::<Phone>()` parses international numbers.
+
+To keep a field a `String` and only check it, write `#[garde(custom(rules::phone))]`. It reads numbers without a country code in the same default region.
+
+#### The default region
+
+A number without a country code, such as `07400 123456`, only means something in a region. `Phone` and `rules::phone` take the region from, in order:
+
+1. the app's `RegionSource`, asked for the current request;
+2. the `validation.phone.default_region` setting;
+3. nowhere: the number is invalid.
+
+Numbers written with a country code (`+44 ...`) ignore the region.
+
+```toml title="config/app.toml"
+[validation.phone]
+default_region = "GB"
+```
+
+From the environment: `APP_VALIDATION__PHONE__DEFAULT_REGION=GB`. `ValidationModule::from_config()` reads it, and an unknown code fails the boot. In code, set `ValidationOptions { phone: PhoneOptions { default_region: Country::parse("GB").ok() }, ..ValidationOptions::default() }`.
+
+When the region depends on the request (the workspace's country, the user's, the country your edge proxy detected), implement `RegionSource`. It gets the request head, `&mut Parts`, with its headers and its extensions (the principal and whatever earlier extractors cached), and returns `Option<Country>`. `None` falls back to the configured region.
+
+```rust title="src/contacts/region.rs"
+use navree::axum::http::request::Parts;
+use navree::validation::{Country, RegionSource};
+use navree::BoxFuture;
+use navree::prelude::*;
+
+/// The country the edge proxy reports in `CF-IPCountry`.
+#[injectable]
+pub struct EdgeCountry;
+
+impl RegionSource for EdgeCountry {
+    fn region<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Option<Country>> {
+        let country = parts
+            .headers
+            .get("cf-ipcountry")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|code| Country::parse(code).ok());
+        Box::pin(async move { country })
+    }
+}
+```
+
+Register it from a module with `m.region_source::<EdgeCountry>()`, which makes it the app's `dyn RegionSource` (the method comes from `ModuleBuilderValidationExt`, which the prelude brings):
+
+```rust title="src/contacts/module.rs"
+use navree::prelude::*;
+
+#[module(controllers = [ContactsController], register = Self::wire)]
+pub struct ContactsModule;
+
+impl ContactsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.region_source::<EdgeCountry>();
+    }
+}
+```
+
+The extractors ask the source only when a number needs a region, and at most once per request. Requests without such a number, and every route without a `Phone`, never call it.
+
+### Countries and locales
+
+`Country` is an ISO 3166-1 alpha-2 code: one of the 249 assigned codes, in upper case. `Locale` is a well-formed BCP 47 language tag in canonical case. Both read any case:
+
+| Input | Becomes |
+|---|---|
+| `"gb"`, `"Gb"` | `Country` `GB` |
+| `"uk"`, `"EU"`, `"XK"`, `"GBR"` | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `"en-gb"`, `"EN-GB"` | `Locale` `en-GB` |
+| `"zh-hant-tw"` | `Locale` `zh-Hant-TW` |
+| `"ar-EG-u-nu-arab"` | `Locale` `ar-EG-u-nu-arab` |
+| `"en_GB"`, `"e"`, `"en-"` | `locale must be a valid locale` |
+
+- `Country` has `as_str()`, `Country::parse(code)` and `Country::all()`. Codes that are only reserved (`UK`, `EU`) or user-assigned (`XK`) are not countries here.
+- `Locale` has `as_str()`, `language()` (`zh`), `script()` (`Some("Hant")`), `region()` (`Some("TW")`, or a UN M.49 area such as `419`) and `country()`. It checks the form of a tag, not whether the language exists, and subtags are separated by hyphens only.
+- Both serialize as their canonical string. `rules::country` and `rules::locale` check `String` fields and leave them as sent.
+
+### Rich text
+
+<Badge feature="validation-html" /> `SafeHtml` holds rich text from the client after sanitizing it: the HTML is parsed (with html5ever, which follows the HTML standard's parsing rules) and written back with only the tags, attributes and URL schemes of the app's `HtmlPolicy`. Scripts, event handlers, `style` attributes and `javascript:` or `data:` links never reach your handler, so you can store the value and render it as HTML.
+
+```rust title="src/comments/dto.rs"
+use navree::validation::SafeHtml;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct NewComment {
+    #[garde(length(chars, min = 1, max = 20_000))]
+    pub body: SafeHtml,
+}
+```
+
+With the default policy:
+
+| Input | `SafeHtml` |
+|---|---|
+| `<p>Hello <strong>world</strong></p>` | unchanged |
+| `<p dir="rtl" lang="ar">مرحبا</p>` | unchanged |
+| `<a href="https://example.com">x</a>` | `<a href="https://example.com" rel="noopener noreferrer nofollow">x</a>` |
+| `<script>alert(1)</script><p>after</p>` | `<p>after</p>` |
+| `<img src=x onerror=alert(1)>` | empty |
+| `<a href="javascript:alert(1)">x</a>` | `<a rel="noopener noreferrer nofollow">x</a>` |
+| `<p onclick="steal()" style="color:red">x</p>` | `<p>x</p>` |
+| `<!-- note --><u>hi</u>` | `<u>hi</u>` |
+| `1 < 2 & 3` | `1 &lt; 2 &amp; 3` |
+
+- A tag that isn't allowed is removed and its text kept. `script` and `style` are removed with their content.
+- It never fails on a string, because anything unsafe is removed. Rules measure the sanitized HTML: `length(chars, max = 20_000)` limits what you store, and a body that was only a script fails `min = 1`.
+- It serializes as the sanitized string, derefs to `str`, and `as_str()`, `into_inner()` and `String::from(html)` give it back. `SafeHtml::new(html)` sanitizes with the default policy, `SafeHtml::with_policy(html, &policy)` with another.
+
+#### The HTML policy
+
+The default policy keeps what a rich-text editor produces:
+
+| Key | Default |
+|---|---|
+| `tags` | `a`, `b`, `blockquote`, `br`, `code`, `del`, `em`, `h1` to `h6`, `hr`, `i`, `li`, `ol`, `p`, `pre`, `s`, `span`, `strong`, `sub`, `sup`, `table`, `tbody`, `td`, `th`, `thead`, `tr`, `u`, `ul` |
+| `generic_attributes` | `dir`, `lang`, allowed on every tag, so right-to-left text keeps its direction |
+| `tag_attributes` | `a`: `href`, `title`; `ol`: `start`; `td`: `colspan`, `rowspan`; `th`: `colspan`, `rowspan`, `scope` |
+| `url_schemes` | `http`, `https`, `mailto`, `tel`; relative URLs are kept |
+| `link_rel` | `noopener noreferrer nofollow`, set on every link |
+
+Images aren't in the default: an image in one user's comment loads from any server when another user reads it. Change the policy in the `validation.html` section. A key you set replaces its default:
+
+```toml title="config/app.toml"
+[validation.html]
+tags = ["p", "br", "strong", "em", "a", "ul", "ol", "li", "img"]
+url_schemes = ["https", "mailto"]
+
+[validation.html.tag_attributes]
+a = ["href", "title"]
+img = ["src", "alt"]
+```
+
+In code, `HtmlPolicy` has builders: `HtmlPolicy::default().allow_tags(["img"]).allow_attributes("img", ["src", "alt"])`, `url_schemes([...])`, `link_rel("noopener")`, and `HtmlPolicy::text_only()`, which keeps no tags at all. Pass it as `ValidationOptions { html, ..ValidationOptions::default() }`.
+
+A policy can't allow `script` or `style`, and can't allow a `rel` attribute while `link_rel` is set (set `link_rel = ""` to let links keep their own). `ValidationModule` refuses to boot with such a policy and names the key: ``validation.html.tags: `script` can't be allowed (scripts and styles are always removed)``.
+
+### Outside the extractors
+
+The extractors give `Phone` and `SafeHtml` the request's `InputContext`: its default region and the app's HTML policy. Anywhere else, such as a job deserializing its payload, they use the defaults: no default region and the default policy. To use the app's, inject `Arc<InputContext>` (exported by `ValidationModule`) and deserialize inside its `scope`:
+
+```rust
+let context = ctx.get::<InputContext>().await?;
+let row: ImportRow = context.scope(|| serde_json::from_str(&line))?;
+```
+
+`InputContext::new().with_default_region(..).with_html(..)` builds one by hand, for tests or scripts.
+
+The extractors resolve the context only when a value asks for it: a phone number without a country code, or a `SafeHtml` field. The rest of your routes pay nothing for it.
+
+### In the OpenAPI document
+
+These types don't describe themselves to utoipa. Mark such a field with the schema of what it serializes as:
+
+```rust
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct CreateContact {
+    #[garde(skip)]
+    #[schema(value_type = String)]
+    pub phone: Phone,
+}
+```
+
 ## Error responses
 
 Every validation failure is a `400 Bad Request` with `Content-Type: application/json`:
@@ -344,11 +642,12 @@ let options = ValidationOptions {
         ("email.unique".to_owned(), "This e-mail is already registered.".to_owned()),
     ]),
     attributes: BTreeMap::from([("first_name".to_owned(), "first name".to_owned())]),
+    ..ValidationOptions::default()
 };
 let app = Navree::app().module(ValidationModule::with_options(options));
 ```
 
-With these options a missing `first_name` reads `Please fill in first name.`.
+With these options a missing `first_name` reads `Please fill in first name.`. `ValidationOptions` also holds the [default phone region](#the-default-region) (`phone`) and the [HTML policy](#the-html-policy) (`html`), so start from `..ValidationOptions::default()`.
 
 ### From configuration
 
@@ -368,7 +667,9 @@ first_name = "first name"
 "address.city" = "city"
 ```
 
-`ValidationModule::for_root()` uses the built-in messages and ignores the section. Without `ValidationModule` in the app, the extractors use the built-in messages.
+The same section holds `[validation.phone]` and `[validation.html]`, described under [international input](#international-input).
+
+`ValidationModule::for_root()` uses the built-in messages and ignores the section. Without `ValidationModule` in the app, the extractors use the built-in messages, no default phone region and the default HTML policy.
 
 ### Placeholders
 
@@ -400,6 +701,8 @@ These are the keys you can override, with their built-in templates:
 | `same`, `confirmed` | `:attribute must match :other`, `:attribute confirmation does not match` |
 | `in` | `:attribute must be one of the following values: :values` |
 | `uuid`, `date_format`, `date` | `:attribute must be a UUID`, `:attribute must be a valid date in the format :format`, `:attribute must be a valid ISO 8601 date string` |
+| `unicode_name` | `:attribute must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `country`, `locale` | `:attribute must be a valid ISO 3166-1 alpha-2 country code`, `:attribute must be a valid locale` |
 | `string`, `integer`, `numeric`, `boolean`, `array`, `object`, `json` | `:attribute must be a string`, `:attribute must be an integer number`, ... |
 | `prohibited` | `property :attribute should not exist` |
 | `unique`, `exists` | `:attribute has already been taken`, `:attribute does not exist` |
@@ -409,7 +712,7 @@ The full table is `navree::validation::DEFAULT_MESSAGES`.
 
 <Callout type="note">
 
-The built-in messages are English, with one table per app. [Localization](/docs/packages/localization/) translates them per request, in the locale of the user, the workspace or `Accept-Language`.
+The built-in messages are English, with one table per app. [Localization](/docs/packages/localization/) translates them per request, in the locale of the user, the workspace or `Accept-Language`, the international keys (`phone`, `country`, `locale`, `unicode_name`) included.
 
 </Callout>
 
