@@ -10,14 +10,14 @@ mod support;
 
 use navree_access::{ActionMarker, Subject};
 use navree_config::ConfigSection;
+use navree_contracts::Job;
 use navree_helm::{
-    Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData, HELM_SUBJECT,
-    Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange, ModelOf,
-    ModuleBuilderHelmExt, PageContext, Resource, SESSION_COOKIE, SaveContext, VIEW,
+    Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
+    HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
+    ModelOf, ModuleBuilderHelmExt, PageContext, Resource, SESSION_COOKIE, SaveContext, VIEW,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
-use navree_contracts::Job;
 use sea_orm::{ColumnTrait, QueryFilter, Select};
 use serde_json::json;
 
@@ -126,10 +126,18 @@ impl Resource for EveryItem {
             Metric::value("Largest")
                 .max(deal::Column::AmountCents)
                 .over(deal::Column::CreatedAt),
-            Metric::trend("By day").count().by_day(deal::Column::CreatedAt, 30),
-            Metric::trend("By week").count().by_week(deal::Column::CreatedAt, 12),
-            Metric::trend("By month").count().by_month(deal::Column::CreatedAt, 12),
-            Metric::partition("By stage").count().group_by(deal::Column::Stage),
+            Metric::trend("By day")
+                .count()
+                .by_day(deal::Column::CreatedAt, 30),
+            Metric::trend("By week")
+                .count()
+                .by_week(deal::Column::CreatedAt, 12),
+            Metric::trend("By month")
+                .count()
+                .by_month(deal::Column::CreatedAt, 12),
+            Metric::partition("By stage")
+                .count()
+                .group_by(deal::Column::Stage),
         ]
     }
 
@@ -235,7 +243,10 @@ fn the_documented_api_exists() {
     for name in ["7", "30", "90", "month", "year"] {
         assert_eq!(MetricRange::parse(name).unwrap().as_str(), name);
     }
-    assert_eq!(Metric::<deal::Entity>::value("Open pipeline").slug(), "open-pipeline");
+    assert_eq!(
+        Metric::<deal::Entity>::value("Open pipeline").slug(),
+        "open-pipeline"
+    );
 
     // Queued actions are `helm.action` jobs.
     assert_eq!(HelmActionJob::NAME, "helm.action");

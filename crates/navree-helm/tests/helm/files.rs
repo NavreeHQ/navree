@@ -214,7 +214,10 @@ async fn uploads_are_stored_on_the_field_disk_and_linked() {
     let response = upload(
         &admin,
         "/admin/resources/documents",
-        multipart(&[("name", "Contract")], Some(("scan", "scan.png", &png(48)))),
+        multipart(
+            &[("name", "Contract")],
+            Some(("scan", "scan.png", &png(48))),
+        ),
     )
     .await
     .assert_status(303);
