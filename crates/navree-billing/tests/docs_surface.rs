@@ -11,9 +11,8 @@ use std::collections::BTreeSet;
 use navree_auth::{CurrentUser, User};
 use navree_billing::{
     Billable, Billing, BillingError, BillingFake, BillingModule, BillingOptions, Checkout,
-    CheckoutUrl,
-    FakeCheckout, Interval, Invoice, InvoicePaid, PaymentFailed, Proration, Subscribed,
-    Subscription, SubscriptionCanceled, SubscriptionCreated, SubscriptionStatus,
+    CheckoutUrl, FakeCheckout, Interval, Invoice, InvoicePaid, PaymentFailed, Proration,
+    Subscribed, Subscription, SubscriptionCanceled, SubscriptionCreated, SubscriptionStatus,
     SubscriptionUpdated, TrialEnding,
 };
 use navree_events::Event;
@@ -299,7 +298,10 @@ fn the_names_the_page_mentions_in_passing() {
         quantity: 3,
         trial_days: Some(14),
     };
-    assert_eq!(CheckoutUrl::from(checkout).url, "https://checkout.stripe.com/c/pay/cs_1");
+    assert_eq!(
+        CheckoutUrl::from(checkout).url,
+        "https://checkout.stripe.com/c/pay/cs_1"
+    );
 
     // The errors the page names, with their statuses.
     for (error, status) in [

@@ -114,7 +114,9 @@ async fn stripe_accepts_every_request_the_client_sends() {
 
     accepted(
         "a checkout for a customer, with a promotion code",
-        stripe.create_checkout(&checkout(Some(customer.clone()))).await,
+        stripe
+            .create_checkout(&checkout(Some(customer.clone())))
+            .await,
     );
     let mut by_email = checkout(None);
     by_email.coupon = Some("LAUNCH".into());
@@ -131,7 +133,11 @@ async fn stripe_accepts_every_request_the_client_sends() {
         stripe.create_checkout(&open).await,
     );
 
-    for proration in [Proration::NextInvoice, Proration::InvoiceNow, Proration::None] {
+    for proration in [
+        Proration::NextInvoice,
+        Proration::InvoiceNow,
+        Proration::None,
+    ] {
         accepted(
             "a swap",
             stripe
