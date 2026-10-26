@@ -1,0 +1,50 @@
+[package]
+name = "navree-billing"
+description = "Navree BillingModule: subscriptions, trials, seats, metered usage, invoices and the customer portal for users or workspaces, with Stripe or Paddle and verified webhooks processed on the queue."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-schedule = { workspace = true }
+navree-workspace = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+form_urlencoded = { workspace = true }
+navree-access = { workspace = true }
+navree-crypto = { workspace = true }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }
