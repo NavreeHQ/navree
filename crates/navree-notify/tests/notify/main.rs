@@ -7,4 +7,5 @@ mod http;
 mod module;
 mod queue;
 mod rendering;
+mod telemetry;
 mod uow;

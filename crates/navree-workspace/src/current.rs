@@ -14,6 +14,7 @@ use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::{AppError, Guard, RouteMeta};
 use navree_kernel::{AppContext, BoxFuture};
+use navree_telemetry::TelemetryContext;
 use sea_orm::{
     ColumnTrait, ColumnType, DbErr, IntoActiveModel, Iterable, PrimaryKeyToColumn, QueryFilter,
     Select, Value,
@@ -244,6 +245,11 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         resolver,
     }));
     parts.extensions.insert(current.clone());
+    // The request's telemetry (`RequestHandled.workspace_id`, and the
+    // context of every event the request emits from now on).
+    if let Some(telemetry) = parts.extensions.get::<TelemetryContext>() {
+        telemetry.set_workspace_id(current.id());
+    }
     // navree-access's route authorizer and its `Abilities`, `CurrentAccess`
     // and `Accessible` extractors read this before computing global access.
     parts.extensions.insert(access);

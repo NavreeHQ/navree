@@ -14,6 +14,7 @@ workspace = true
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 navree-view = { workspace = true }
 lettre = { workspace = true }
 serde = { workspace = true }
