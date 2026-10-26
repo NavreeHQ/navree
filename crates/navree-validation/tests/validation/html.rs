@@ -230,10 +230,7 @@ async fn the_policy_comes_from_the_validation_html_section() {
         .build()
         .await;
     for (input, output) in [
-        (
-            "<p dir=\"rtl\"><strong>x</strong></p>",
-            "<p>x</p>",
-        ),
+        ("<p dir=\"rtl\"><strong>x</strong></p>", "<p>x</p>"),
         (
             "<a href=\"https://a.example\">a</a><a href=\"http://b.example\">b</a>",
             "<a href=\"https://a.example\">a</a><a>b</a>",
@@ -260,14 +257,15 @@ async fn an_unsafe_policy_fails_at_boot() {
             "validation.html.tag_attributes",
         ),
     ] {
-        let error = TestApp::builder()
+        let built = TestApp::builder()
             .config("validation", json!({ "html": html }))
             .module(ValidationModule::from_config())
             .module(HtmlTestModule)
             .try_build()
-            .await
-            .err()
-            .expect("an unsafe policy must not boot");
+            .await;
+        let Err(error) = built else {
+            panic!("an unsafe policy must not boot: {key}");
+        };
         assert!(error.to_string().contains(key), "{key}: {error}");
     }
 }

@@ -222,7 +222,10 @@ impl<'de> Deserialize<'de> for Phone {
                 match Phone::parse_in_context(text) {
                     Ok(Some(phone)) => Ok(phone),
                     // The extractor resolves the region and runs again.
-                    Ok(None) => Err(serde_error("phone", "the default region is not resolved yet")),
+                    Ok(None) => Err(serde_error(
+                        "phone",
+                        "the default region is not resolved yet",
+                    )),
                     Err(invalid) => Err(serde_error("phone", invalid)),
                 }
             }
@@ -266,12 +269,16 @@ mod tests {
             "+447400123456"
         );
         assert_eq!(
-            Phone::parse("٠١٠٠ ١٢٣ ٤٥٦٧", region("EG")).unwrap().as_str(),
+            Phone::parse("٠١٠٠ ١٢٣ ٤٥٦٧", region("EG"))
+                .unwrap()
+                .as_str(),
             "+201001234567"
         );
         // The international prefix dialled from the region.
         assert_eq!(
-            Phone::parse("00 971 50 123 4567", region("GB")).unwrap().as_str(),
+            Phone::parse("00 971 50 123 4567", region("GB"))
+                .unwrap()
+                .as_str(),
             "+971501234567"
         );
         assert!(Phone::parse("07400 123456", None).is_err());
@@ -283,11 +290,27 @@ mod tests {
     fn invalid_input_is_an_error_not_a_panic() {
         let long = "1".repeat(300);
         for input in [
-            "", "+", "++44", "hello", "+44 12", "+999 1234 5678", "+0", "tel:", "ext. 12",
-            "+44 7400 123456 789 012", "+1 (((((", "+४४", &long, "\u{0}", "+44\u{202e}7400123456",
+            "",
+            "+",
+            "++44",
+            "hello",
+            "+44 12",
+            "+999 1234 5678",
+            "+0",
+            "tel:",
+            "ext. 12",
+            "+44 7400 123456 789 012",
+            "+1 (((((",
+            "+४४",
+            &long,
+            "\u{0}",
+            "+44\u{202e}7400123456",
         ] {
             let error = Phone::parse(input, region("GB")).unwrap_err();
-            assert_eq!(error.to_string(), format!("`{input}` is not a valid phone number"));
+            assert_eq!(
+                error.to_string(),
+                format!("`{input}` is not a valid phone number")
+            );
         }
     }
 
@@ -302,7 +325,10 @@ mod tests {
         // The formats for people show the extension; E.164 can't.
         assert_eq!(phone.international(), "+44 7400 123456 x12");
         assert_eq!(phone.national(), "07400 123456 x12");
-        assert_eq!(format!("{phone} {phone:?}"), "+447400123456 Phone(+447400123456 ext. 12)");
+        assert_eq!(
+            format!("{phone} {phone:?}"),
+            "+447400123456 Phone(+447400123456 ext. 12)"
+        );
         assert_ne!(phone, Phone::parse("+447400123456", None).unwrap());
         assert_eq!(String::from(phone.clone()), "+447400123456");
         assert_eq!(phone.into_string(), "+447400123456");
@@ -315,7 +341,9 @@ mod tests {
 
         let error = serde_json::from_str::<Phone>(r#""07400 123456""#).unwrap_err();
         assert!(
-            error.to_string().starts_with("`07400 123456` is not a valid phone number"),
+            error
+                .to_string()
+                .starts_with("`07400 123456` is not a valid phone number"),
             "{error}"
         );
         let gb = InputContext::new().with_default_region(region("GB"));

@@ -139,6 +139,7 @@ fn defaults() -> &'static InputContext {
 }
 
 /// Where the current thread is.
+#[cfg_attr(not(any(feature = "phone", feature = "html")), allow(dead_code))]
 enum State {
     /// Neither in an extractor nor in a scope: the defaults apply.
     Outside,
@@ -170,7 +171,8 @@ fn enter(state: State) -> Restore {
 
 /// The context in effect: the scope's, the defaults outside any, or `None`
 /// in an extractor that has not resolved it yet (the caller fails; the
-/// extractor runs again with the context).
+/// extractor runs again with the context). Read by `Phone` and `SafeHtml`.
+#[cfg_attr(not(any(feature = "phone", feature = "html")), allow(dead_code))]
 pub(crate) fn current() -> Option<InputContext> {
     STATE.with(|state| match &mut *state.borrow_mut() {
         State::Outside => Some(defaults().clone()),

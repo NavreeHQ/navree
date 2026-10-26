@@ -4,9 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use navree_config::Config;
-use navree_kernel::{
-    Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -304,10 +302,7 @@ mod tests {
         assert_eq!(options.phone.default_region, Country::parse("GB").ok());
         assert_eq!(options.html.tags, ["p".to_owned()].into());
         assert_eq!(options.html.link_rel, "");
-        assert_eq!(
-            options.html.url_schemes,
-            HtmlPolicy::default().url_schemes
-        );
+        assert_eq!(options.html.url_schemes, HtmlPolicy::default().url_schemes);
         let context = InputContext::from_options(&options).unwrap();
         assert_eq!(context.default_region(), options.phone.default_region);
         assert_eq!(context.html(), &options.html);

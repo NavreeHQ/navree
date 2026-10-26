@@ -264,7 +264,9 @@ mod tests {
             assert!(!is_unicode_name(name), "{name:?}");
         }
         // Four marks in a row are fine; the count restarts after a letter.
-        assert!(is_unicode_name("a\u{0300}\u{0301}\u{0302}\u{0303}b\u{0300}"));
+        assert!(is_unicode_name(
+            "a\u{0300}\u{0301}\u{0302}\u{0303}b\u{0300}"
+        ));
         assert!(unicode_name(&None::<String>, &()).is_ok());
         assert!(unicode_name("Ada 2", &()).is_ok());
     }

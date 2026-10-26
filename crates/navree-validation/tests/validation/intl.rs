@@ -299,7 +299,12 @@ async fn countries_and_locales_are_normalized() {
         ("AE", json!("ar-AE"), "AE", json!("ar-AE")),
         ("In", json!("hi-Deva-IN"), "IN", json!("hi-Deva-IN")),
         ("tw", json!("ZH-hant-tw"), "TW", json!("zh-Hant-TW")),
-        ("eg", json!("ar-EG-u-nu-arab"), "EG", json!("ar-EG-u-nu-arab")),
+        (
+            "eg",
+            json!("ar-EG-u-nu-arab"),
+            "EG",
+            json!("ar-EG-u-nu-arab"),
+        ),
         ("us", json!(null), "US", json!(null)),
     ] {
         app.client()
