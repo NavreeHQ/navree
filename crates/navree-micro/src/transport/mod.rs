@@ -12,6 +12,7 @@ use tokio::sync::mpsc;
 
 use crate::{DeadLetter, Envelope, MicroError};
 
+pub(crate) mod broker;
 pub(crate) mod memory;
 pub(crate) mod tcp;
 

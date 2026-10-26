@@ -11,6 +11,10 @@ mod transports;
 mod nats;
 #[cfg(feature = "nats")]
 mod nats_server;
+#[cfg(feature = "mqtt")]
+mod mqtt;
+#[cfg(feature = "mqtt")]
+mod mqtt_server;
 #[cfg(feature = "redis")]
 mod redis;
 #[cfg(feature = "redis")]
