@@ -46,6 +46,13 @@ pub(crate) const SEARCH: RuntimeCrate = RuntimeCrate {
     facade_module: "search",
 };
 
+/// navree-graphql: `GraphqlResolver`, async-graphql and the field runtime
+/// (`#[resolver]`).
+pub(crate) const GRAPHQL: RuntimeCrate = RuntimeCrate {
+    package: "navree-graphql",
+    facade_module: "graphql",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

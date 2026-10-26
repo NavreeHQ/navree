@@ -43,7 +43,7 @@ mod service;
 mod store;
 mod subject;
 
-pub use authorizer::AccessAuthorizer;
+pub use authorizer::{AccessAuthorizer, FieldCheck};
 pub use context::{AbilityCtx, AccessUser};
 pub use engine::{
     ALL, Ability, ActionMarker, CREATE, Cond, Conditions, Create, DELETE, DefaultColumns, Delete,
