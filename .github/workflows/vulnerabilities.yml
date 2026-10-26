@@ -1,0 +1,28 @@
+# Scans every lockfile in the repository (Rust, npm/pnpm, Python, PHP, Ruby,
+# Go, .NET, Maven) against OSV, which includes the GitHub, RustSec and Go
+# advisory databases and the OpenSSF list of malicious packages. Runs on every
+# push and pull request, and weekly so newly published advisories show up even
+# when nothing changes here.
+name: Vulnerabilities
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scanner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan lockfiles with OSV-Scanner
+        run: |
+          docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:latest \
+            scan source --recursive --format table /src
