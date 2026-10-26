@@ -229,24 +229,70 @@ async fn the_path_comes_from_the_configuration() {
     let routes = route_table(app.ctx()).await.unwrap();
     let mcp_routes: Vec<String> = routes
         .iter()
-        .filter(|route| route.name.as_deref() == Some("mcp"))
+        .filter(|route| {
+            route
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("mcp."))
+        })
         .map(|route| {
             format!(
-                "{} {} {}",
+                "{} {} {} {}",
                 route.method,
                 route.full_path,
-                route.access.describe()
+                route.access.describe(),
+                route.name.as_deref().unwrap_or_default(),
             )
         })
         .collect();
     assert_eq!(
         mcp_routes,
         [
-            "POST /ai/mcp auth",
-            "GET /ai/mcp auth",
-            "DELETE /ai/mcp auth"
+            "POST /ai/mcp auth mcp.message",
+            "GET /ai/mcp auth mcp.stream",
+            "DELETE /ai/mcp auth mcp.close"
         ]
     );
+}
+
+#[tokio::test]
+async fn every_route_has_its_own_name_and_api_summary() {
+    let app = builder()
+        .config("mcp.auth", "oauth")
+        .config("app.url", "https://crm.example.com")
+        .build()
+        .await;
+    let routes = route_table(app.ctx()).await.unwrap();
+    let mcp_routes: Vec<_> = routes
+        .iter()
+        .filter(|route| {
+            route
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("mcp."))
+        })
+        .collect();
+    let mut names: Vec<&str> = mcp_routes
+        .iter()
+        .filter_map(|route| route.name.as_deref())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        [
+            "mcp.close",
+            "mcp.message",
+            "mcp.metadata",
+            "mcp.metadata.endpoint",
+            "mcp.stream"
+        ],
+        "operation ids must be unique"
+    );
+    for route in mcp_routes {
+        let api = route.api.as_ref().expect("OpenAPI metadata");
+        assert_eq!(api.tags, ["MCP"], "{}", route.full_path);
+        assert!(api.summary.is_some(), "{}", route.full_path);
+    }
 }
 
 #[tokio::test]

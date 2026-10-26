@@ -332,3 +332,24 @@ async fn the_endpoint_needs_a_token() {
         response.header("www-authenticate")
     );
 }
+
+#[tokio::test]
+async fn the_openapi_document_lists_the_endpoint_once_per_method() {
+    let crm = crm().await;
+    let doc = crm
+        .client()
+        .get("/api/openapi.json")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    for (method, operation_id) in [
+        ("post", "mcp.message"),
+        ("get", "mcp.stream"),
+        ("delete", "mcp.close"),
+    ] {
+        let operation = &doc["paths"]["/mcp"][method];
+        assert_eq!(operation["operationId"], operation_id, "{operation}");
+        assert_eq!(operation["tags"], json!(["MCP"]), "{operation}");
+    }
+}
