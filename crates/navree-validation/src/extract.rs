@@ -3,20 +3,39 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+use axum::RequestExt;
 use axum::extract::{Form, FromRequest, FromRequestParts, Query, RawPathParams, Request};
 use bytes::Bytes;
 use garde::Validate;
 use http::header::CONTENT_TYPE;
 use http::request::Parts;
 use http::{HeaderMap, Method, StatusCode};
+use http_body_util::BodyExt;
 use navree_db::Uow;
 use navree_http::{AppError, Json};
 use navree_kernel::AppContext;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use crate::context;
 use crate::failure::{self, Failure};
-use crate::{AsyncRule, AsyncRules, Messages};
+use crate::{AsyncRule, AsyncRules, InputContext, Messages};
+
+/// Runs `$f` (deserializing or validating) in `$context` (a [`Context`]):
+/// first as is, and again with the resolved context when a value asked for
+/// it. A macro, so no closure (and no borrow it holds) lives across the
+/// `await`.
+macro_rules! in_context {
+    ($context:expr, $parts:expr, $f:expr) => {
+        match $context.attempt($f) {
+            Some(result) => result,
+            None => {
+                $context.resolve($parts).await;
+                $context.resolved($f)
+            }
+        }
+    };
+}
 
 /// Validated input: `Valid<Json<T>>`, `Valid<Query<T>>` or `Valid<Form<T>>`
 /// deserializes `T`, then runs its garde rules.
@@ -88,13 +107,22 @@ where
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
-        let (value, input) = match json_body::<T, S>(req, state).await? {
-            Ok(parsed) => parsed,
+        let (mut parts, input) = match json_body(req).await? {
+            Ok(read) => read,
             Err(invalid) => return Err(invalid.reject(ctx.as_ref()).await),
         };
-        if let Err(failures) = check(&value) {
+        let mut context = Context::new(ctx.as_ref());
+        let value = match in_context!(context, &mut parts, || from_json::<T>(&input)) {
+            Ok(value) => value,
+            Err(failure) => {
+                return Err(Invalid::new(vec![failure], Some(input), "body")
+                    .reject(ctx.as_ref())
+                    .await);
+            }
+        };
+        if let Err(failures) = in_context!(context, &mut parts, || check(&value)) {
             return Err(Invalid::new(failures, Some(input), "body")
                 .reject(ctx.as_ref())
                 .await);
@@ -112,9 +140,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = parts.extensions.get::<AppContext>().cloned();
-        let query = parts.uri.query().unwrap_or_default();
-        let result = urlencoded::<T>(query.as_bytes(), "query")
-            .and_then(|value| check(&value).map(|()| value).map_err(Invalid::query));
+        let result = validate_urlencoded::<T>(ctx.as_ref(), parts, None, ["query", "query"]).await;
         match result {
             Ok(value) => Ok(Valid(Query(value))),
             Err(invalid) => Err(invalid.reject(ctx.as_ref()).await),
@@ -129,16 +155,99 @@ where
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
-        let result = form_body::<T, S>(req, state)
-            .await?
-            .and_then(|value| check(&value).map(|()| value).map_err(Invalid::body));
+        // Rule failures on the form as a whole are on `body`, even when a
+        // `GET` form comes from the query string.
+        let result = match form_body(req).await? {
+            (mut parts, Some(body)) => {
+                validate_urlencoded::<T>(ctx.as_ref(), &mut parts, Some(&body), ["body", "body"])
+                    .await
+            }
+            (mut parts, None) => {
+                validate_urlencoded::<T>(ctx.as_ref(), &mut parts, None, ["query", "body"]).await
+            }
+        };
         match result {
             Ok(value) => Ok(Valid(Form(value))),
             Err(invalid) => Err(invalid.reject(ctx.as_ref()).await),
         }
     }
+}
+
+/// The request's [`InputContext`], resolved the first time a value asks
+/// for it (see [`crate::context`]): input without international types
+/// never resolves it.
+struct Context<'a> {
+    app: Option<&'a AppContext>,
+    resolved: Option<InputContext>,
+}
+
+impl<'a> Context<'a> {
+    fn new(app: Option<&'a AppContext>) -> Self {
+        Self {
+            app,
+            resolved: None,
+        }
+    }
+
+    /// Runs `f` with the resolved context, or without one: `None` when a
+    /// value asked for it (resolve, then run `f` again).
+    fn attempt<R>(&self, f: impl FnOnce() -> R) -> Option<R> {
+        match &self.resolved {
+            Some(context) => Some(context.scope(f)),
+            None => match context::lazily(f) {
+                (result, false) => Some(result),
+                (_, true) => None,
+            },
+        }
+    }
+
+    /// Resolves the context from the app and the request head.
+    async fn resolve(&mut self, parts: &mut Parts) {
+        if self.resolved.is_none() {
+            self.resolved = Some(InputContext::for_request(self.app, parts).await);
+        }
+    }
+
+    /// Runs `f` with the resolved context.
+    fn resolved<R>(&self, f: impl FnOnce() -> R) -> R {
+        match &self.resolved {
+            Some(context) => context.scope(f),
+            None => f(),
+        }
+    }
+}
+
+/// Deserializes and validates URL-encoded pairs: `body`, or the query
+/// string of `parts` when there is none. `roots` name whole-input errors
+/// of deserializing and of the rules.
+async fn validate_urlencoded<T>(
+    app: Option<&AppContext>,
+    parts: &mut Parts,
+    body: Option<&[u8]>,
+    [root, rules_root]: [&'static str; 2],
+) -> Result<T, Invalid>
+where
+    T: DeserializeOwned + Validate<Context = ()>,
+{
+    let mut context = Context::new(app);
+    let query = parts.uri.query().unwrap_or_default();
+    let input = body.unwrap_or(query.as_bytes());
+    let value = match context.attempt(|| urlencoded::<T>(input)) {
+        Some(value) => value,
+        None => {
+            // Resolving the context needs the request head, so the input is
+            // copied, only in this case.
+            let input = input.to_owned();
+            context.resolve(parts).await;
+            context.resolved(|| urlencoded::<T>(&input))
+        }
+    };
+    let value = value.map_err(|failure| Invalid::new(vec![failure], None, root))?;
+    in_context!(context, parts, || check(&value))
+        .map_err(|failures| Invalid::new(failures, None, rules_root))?;
+    Ok(value)
 }
 
 /// Validated input with database rules: like [`Valid`], then, once the
@@ -304,10 +413,6 @@ impl Invalid {
         Self::new(failures, None, "body")
     }
 
-    fn query(failures: Vec<Failure>) -> Self {
-        Self::new(failures, None, "query")
-    }
-
     /// The 400 error, with the app's messages.
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
         let messages = messages(ctx).await;
@@ -331,50 +436,37 @@ pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Fail
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)
 }
 
-/// Reads and deserializes a JSON body. The outer error is an HTTP failure
-/// (415, 413); the inner one a validation failure.
-async fn json_body<T, S>(req: Request, state: &S) -> Result<Result<(T, Value), Invalid>, AppError>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
+/// Reads a JSON body as a JSON value, keeping the request head. The outer
+/// error is an HTTP failure (415, 413); the inner one a validation failure
+/// (malformed JSON).
+async fn json_body(req: Request) -> Result<Result<(Parts, Value), Invalid>, AppError> {
     if !is_json(req.headers()) {
         return Err(AppError::from_status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
             .with_detail("Expected request with `Content-Type: application/json`"));
     }
-    let bytes = Bytes::from_request(req, state)
-        .await
-        .map_err(|rejection| rejected(rejection.status(), rejection.body_text()))?;
-    let input: Value = match serde_json::from_slice(&bytes) {
-        Ok(input) => input,
-        Err(_) => {
-            return Ok(Err(Invalid::new(
-                vec![Failure::keyed("", "json")],
-                None,
-                "body",
-            )));
-        }
-    };
-    match serde_path_to_error::deserialize::<_, T>(&input) {
-        Ok(value) => Ok(Ok((value, input))),
-        Err(error) => {
-            let failure = failure::from_serde(error.path(), &error.inner().to_string());
-            Ok(Err(Invalid::new(vec![failure], Some(input), "body")))
-        }
+    let (parts, bytes) = read_body(req).await?;
+    match serde_json::from_slice(&bytes) {
+        Ok(input) => Ok(Ok((parts, input))),
+        Err(_) => Ok(Err(Invalid::new(
+            vec![Failure::keyed("", "json")],
+            None,
+            "body",
+        ))),
     }
 }
 
-/// Reads and deserializes a form: from the query string for `GET` and
-/// `HEAD` (like Axum's `Form`), else from an
+/// Deserializes `T` from a JSON value, reporting serde errors at their path.
+fn from_json<T: DeserializeOwned>(input: &Value) -> Result<T, Failure> {
+    failure::encoding(|| serde_path_to_error::deserialize::<_, T>(input))
+        .map_err(|error| failure::from_serde(error.path(), &error.inner().to_string()))
+}
+
+/// Reads a form, keeping the request head: `None` for `GET` and `HEAD`,
+/// whose form is the query string (like Axum's `Form`), else the
 /// `application/x-www-form-urlencoded` body.
-async fn form_body<T, S>(req: Request, state: &S) -> Result<Result<T, Invalid>, AppError>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
+async fn form_body(req: Request) -> Result<(Parts, Option<Bytes>), AppError> {
     if req.method() == Method::GET || req.method() == Method::HEAD {
-        let query = req.uri().query().unwrap_or_default();
-        return Ok(urlencoded(query.as_bytes(), "query"));
+        return Ok((req.into_parts().0, None));
     }
     if !has_content_type(req.headers(), "application/x-www-form-urlencoded") {
         return Err(
@@ -383,19 +475,43 @@ where
             ),
         );
     }
-    let bytes = Bytes::from_request(req, state)
-        .await
-        .map_err(|rejection| rejected(rejection.status(), rejection.body_text()))?;
-    Ok(urlencoded(&bytes, "body"))
+    let (parts, bytes) = read_body(req).await?;
+    Ok((parts, Some(bytes)))
+}
+
+/// Buffers the body within the route's body limit, keeping the request
+/// head (a region source may need it after the body is read). Failures
+/// read like Axum's `Bytes` rejections.
+async fn read_body(req: Request) -> Result<(Parts, Bytes), AppError> {
+    let (parts, body) = req.with_limited_body().into_parts();
+    match body.collect().await {
+        Ok(collected) => Ok((parts, collected.to_bytes())),
+        Err(error) => {
+            let too_large = std::iter::successors(
+                Some(&error as &(dyn std::error::Error + 'static)),
+                |error| error.source(),
+            )
+            .any(|error| error.is::<http_body_util::LengthLimitError>());
+            Err(if too_large {
+                rejected(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "Failed to buffer the request body: length limit exceeded".to_owned(),
+                )
+            } else {
+                rejected(
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to buffer the request body: {error}"),
+                )
+            })
+        }
+    }
 }
 
 /// Deserializes URL-encoded pairs, reporting serde errors at their path.
-fn urlencoded<T: DeserializeOwned>(input: &[u8], root: &'static str) -> Result<T, Invalid> {
+fn urlencoded<T: DeserializeOwned>(input: &[u8]) -> Result<T, Failure> {
     let deserializer = serde_urlencoded::Deserializer::new(form_urlencoded::parse(input));
-    serde_path_to_error::deserialize(deserializer).map_err(|error| {
-        let failure = failure::from_serde(error.path(), &error.inner().to_string());
-        Invalid::new(vec![failure], None, root)
-    })
+    failure::encoding(|| serde_path_to_error::deserialize(deserializer))
+        .map_err(|error| failure::from_serde(error.path(), &error.inner().to_string()))
 }
 
 /// Whether the content type (without parameters) is `expected`.

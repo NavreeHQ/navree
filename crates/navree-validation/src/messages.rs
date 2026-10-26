@@ -24,6 +24,10 @@ pub const DEFAULT_MESSAGES: &[(&str, &str)] = &[
     ("boolean", ":attribute must be a boolean value"),
     ("confirmed", ":attribute confirmation does not match"),
     ("contains", ":attribute must contain a :value string"),
+    (
+        "country",
+        ":attribute must be a valid ISO 3166-1 alpha-2 country code",
+    ),
     ("credit_card", ":attribute must be a credit card"),
     ("date", ":attribute must be a valid ISO 8601 date string"),
     (
@@ -43,6 +47,7 @@ pub const DEFAULT_MESSAGES: &[(&str, &str)] = &[
     ("ipv4", ":attribute must be an IPv4 address"),
     ("ipv6", ":attribute must be an IPv6 address"),
     ("json", ":attribute must be a valid JSON string"),
+    ("locale", ":attribute must be a valid locale"),
     (
         "max.array",
         ":attribute must contain no more than :max elements",
@@ -70,6 +75,10 @@ pub const DEFAULT_MESSAGES: &[(&str, &str)] = &[
     ("same", ":attribute must match :other"),
     ("starts_with", ":attribute must start with :values"),
     ("string", ":attribute must be a string"),
+    (
+        "unicode_name",
+        ":attribute must contain only letters, numbers, spaces, hyphens, apostrophes and periods",
+    ),
     ("unique", ":attribute has already been taken"),
     ("url", ":attribute must be a URL address"),
     ("uuid", ":attribute must be a UUID"),
