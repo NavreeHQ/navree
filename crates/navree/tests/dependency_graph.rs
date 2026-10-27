@@ -152,7 +152,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-access", "navree-http-client",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
-    // module needs no navree-auth (a sibling at L5).
+    // module needs no navree-auth (a sibling at L5). The nightly demo
+    // reset is a navree-schedule task.
     rule("navree-workspace", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
@@ -161,6 +162,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-testing",
         // Workspace time zones and countries, and its `dyn ZoneSource`.
         "navree-time",
+        // The nightly reset of demo workspaces.
+        "navree-schedule",
     ]),
     // Redis: the shared connections and the Redis drivers of the cache,
     // the queue, sessions and the real-time backplane (ecosystem build
