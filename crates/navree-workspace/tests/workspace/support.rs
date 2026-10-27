@@ -16,8 +16,10 @@ use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_view::{ViewModule, ViewOptions};
 use navree_workspace::{
-    Invitations, Members, ModuleBuilderWorkspaceExt, NewWorkspace, Workspace, WorkspaceModule,
-    WorkspaceScoped, Workspaces,
+    AccessRequests, Invitations, Members, ModuleBuilderWorkspaceExt, NewOrganization,
+    NewPartition, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Partition,
+    PartitionScoped, PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped,
+    WorkspaceSelector, Workspaces,
 };
 use sea_orm::sea_query::{ColumnDef, Query, Table};
 use sea_orm::{ConnectionTrait, DbErr};
@@ -97,6 +99,69 @@ impl MigrationTrait for CreateDeals {
     }
 }
 
+/// `contacts(id, workspace_id, partition_id, name)`: a table owned by
+/// workspaces and sliced by partitions.
+struct CreateContacts;
+
+impl MigrationName for CreateContacts {
+    fn name(&self) -> &str {
+        "m20261026_000003_create_contacts"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for CreateContacts {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table("contacts")
+                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
+                    .col(ColumnDef::new("workspace_id").uuid().not_null())
+                    .col(ColumnDef::new("partition_id").uuid().null())
+                    .col(ColumnDef::new("name").string().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table("contacts").to_owned())
+            .await
+    }
+}
+
+/// The `contacts` entity.
+pub mod contact {
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[sea_orm(table_name = "contacts")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+        pub partition_id: Option<Uuid>,
+        pub name: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+impl Subject for contact::Entity {
+    const SUBJECT: &'static str = "Contact";
+    const PERMISSION_PREFIX: &'static str = "contacts";
+}
+
+impl WorkspaceScoped for contact::Entity {}
+
+impl PartitionScoped for contact::Entity {}
+
 /// The `deals` entity.
 pub mod deal {
     use sea_orm::entity::prelude::*;
@@ -134,9 +199,11 @@ impl Module for FixturesModule {
             .migrations(
                 MigrationSet::new("deals")
                     .after(["workspace"])
-                    .migration(CreateDeals),
+                    .migration(CreateDeals)
+                    .migration(CreateContacts),
             )
             .import(AccessModule::for_feature::<deal::Entity>())
+            .import(AccessModule::for_feature::<contact::Entity>())
             .workspace_scoped::<deal::Entity>();
     }
 }
@@ -192,6 +259,22 @@ pub fn builder() -> TestAppBuilder {
         .module(WorkspaceModule::from_config())
 }
 
+/// [`builder`] with organizations and partitions on, and an app-defined
+/// organization role `partner` that gives the workspace role `viewer`.
+pub fn org_builder() -> TestAppBuilder {
+    builder()
+        .config("workspace.organizations.enabled", true)
+        .config("workspace.partitions.enabled", true)
+        .config(
+            "workspace.organizations.roles.partner.permissions",
+            serde_json::json!(["organization.read", "reports.read"]),
+        )
+        .config(
+            "workspace.organizations.roles.partner.workspace_role",
+            "viewer",
+        )
+}
+
 /// A booted test app with its clock.
 pub struct World {
     pub app: TestApp,
@@ -226,6 +309,78 @@ impl World {
 
     pub async fn invitations(&self) -> Arc<Invitations> {
         self.app.get::<Invitations>().await
+    }
+
+    pub async fn organizations(&self) -> Arc<Organizations> {
+        self.app.get::<Organizations>().await
+    }
+
+    pub async fn org_members(&self) -> Arc<OrgMembers> {
+        self.app.get::<OrgMembers>().await
+    }
+
+    pub async fn access_requests(&self) -> Arc<AccessRequests> {
+        self.app.get::<AccessRequests>().await
+    }
+
+    pub async fn partitions(&self) -> Arc<Partitions> {
+        self.app.get::<Partitions>().await
+    }
+
+    /// Creates organization `name` owned by `owner`.
+    pub async fn organization(&self, owner: Uuid, name: &str) -> Organization {
+        let organizations = self.organizations().await;
+        let name = name.to_owned();
+        self.work(|uow| async move {
+            organizations
+                .create(&uow, owner, NewOrganization::named(name))
+                .await
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Attaches `workspace` to `org`.
+    pub async fn attach(&self, org: Uuid, workspace: Uuid) {
+        let organizations = self.organizations().await;
+        self.work(|uow| async move { organizations.attach(&uow, org, workspace).await })
+            .await
+            .unwrap();
+    }
+
+    /// Gives `user` organization role `role` in `org`, reaching `workspaces`.
+    pub async fn grant(&self, org: Uuid, user: Uuid, role: &str, workspaces: WorkspaceSelector) {
+        let members = self.org_members().await;
+        let role = OrgRole::parse(role);
+        self.work(|uow| async move { members.grant(&uow, org, user, role, workspaces).await })
+            .await
+            .unwrap();
+    }
+
+    /// Creates partition `name` in `workspace`.
+    pub async fn partition(&self, workspace: Uuid, name: &str) -> Partition {
+        let partitions = self.partitions().await;
+        let name = name.to_owned();
+        self.work(|uow| async move {
+            partitions
+                .create(&uow, workspace, NewPartition::named(name))
+                .await
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Limits `user` in `workspace` to `partitions`.
+    pub async fn limit_partitions(
+        &self,
+        workspace: Uuid,
+        user: Uuid,
+        partitions: PartitionSelector,
+    ) {
+        let service = self.partitions().await;
+        self.work(|uow| async move { service.grant(&uow, workspace, user, partitions).await })
+            .await
+            .unwrap();
     }
 
     /// Inserts a user into `users`.

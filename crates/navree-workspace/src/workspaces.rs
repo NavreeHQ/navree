@@ -1,5 +1,6 @@
 //! [`Workspaces`]: create, rename, list, transfer and delete workspaces.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -11,9 +12,11 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Member, Workspace, member, workspace};
+use crate::entity::{Member, Workspace, member, organization_member, workspace};
 use crate::events::{MemberAdded, OwnershipTransferred, WorkspaceCreated, WorkspaceDeleted};
-use crate::{WorkspaceError, WorkspaceRole};
+use crate::grants::{org_grant, org_selector, reached};
+use crate::org_role::SCOPE_ALL;
+use crate::{OrgRole, WorkspaceError, WorkspaceRole};
 
 /// The longest workspace name, in characters.
 pub const MAX_NAME_LEN: usize = 100;
@@ -54,6 +57,38 @@ pub struct Membership {
     pub workspace: Workspace,
     /// The user's role in it.
     pub role: WorkspaceRole,
+    /// How the user has it: a membership, or a grant of the workspace's
+    /// organization.
+    pub granted_by: GrantedBy,
+}
+
+/// How a user may enter a workspace: as one of its members, or through the
+/// organization the workspace belongs to (organizations on).
+///
+/// In JSON it is `"membership"` or
+/// `{"organization": {"organization_id": "..", "role": "admin"}}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GrantedBy {
+    /// A row of `workspace_members`.
+    Membership,
+    /// A membership of the workspace's organization whose role maps to a
+    /// workspace role and whose workspaces include this one.
+    Organization {
+        /// The organization.
+        organization_id: Uuid,
+        /// The organization role that gives the workspace role.
+        role: OrgRole,
+    },
+}
+
+/// A user admitted to a workspace: the membership (built from the
+/// organization membership for organization grants), the role and how.
+#[derive(Clone, Debug)]
+pub(crate) struct Admission {
+    pub(crate) member: Member,
+    pub(crate) role: WorkspaceRole,
+    pub(crate) granted_by: GrantedBy,
 }
 
 /// Creates, renames, lists, transfers and deletes workspaces. Provided and
@@ -109,6 +144,7 @@ impl Workspaces {
                 name: Set(name.clone()),
                 slug: Set(slug.clone()),
                 owner_id: Set(owner),
+                organization_id: Set(None),
                 created_at: Set(now),
                 updated_at: Set(now),
             },
@@ -121,6 +157,7 @@ impl Workspaces {
                 workspace_id: Set(id),
                 user_id: Set(owner),
                 role: Set(WorkspaceRole::Owner.as_str().to_owned()),
+                partition_scope: Set(SCOPE_ALL.to_owned()),
                 created_at: Set(now),
                 updated_at: Set(now),
             },
@@ -166,23 +203,117 @@ impl Workspaces {
         Ok(Repo::<workspace::Entity>::update(uow, row).await?)
     }
 
-    /// The workspaces `user` belongs to, with their role in each, by name.
+    /// The workspaces `user` may enter, with their role in each, by name:
+    /// the ones they belong to and, with organizations on, the ones their
+    /// organization memberships reach (a membership of the workspace wins
+    /// over an organization grant).
     pub async fn for_user(&self, user: Uuid) -> Result<Vec<Membership>, WorkspaceError> {
+        let conn = self.core.db.reader().await;
         let rows = member::Entity::find()
             .filter(member::Column::UserId.eq(user))
             .find_also_related(workspace::Entity)
             .order_by_asc(workspace::Column::Name)
-            .all(&self.core.db.reader().await)
+            .all(&conn)
             .await?;
-        Ok(rows
+        let mut memberships: Vec<Membership> = rows
             .into_iter()
             .filter_map(|(membership, workspace)| {
                 workspace.map(|workspace| Membership {
                     role: membership.role(),
                     workspace,
+                    granted_by: GrantedBy::Membership,
                 })
             })
-            .collect())
+            .collect();
+        if !self.core.config.organizations.enabled {
+            return Ok(memberships);
+        }
+        let mut seen: HashSet<Uuid> = memberships.iter().map(|m| m.workspace.id).collect();
+        let org_memberships = organization_member::Entity::find()
+            .filter(organization_member::Column::UserId.eq(user))
+            .all(&conn)
+            .await?;
+        for org_member in org_memberships {
+            let role = org_member.role();
+            let Some(mapped) = self.core.org_roles.workspace_role(&role).cloned() else {
+                continue;
+            };
+            let selector = org_selector(&conn, &org_member).await?;
+            for workspace in reached(&conn, org_member.organization_id, &selector).await? {
+                if seen.insert(workspace.id) {
+                    memberships.push(Membership {
+                        workspace,
+                        role: mapped.clone(),
+                        granted_by: GrantedBy::Organization {
+                            organization_id: org_member.organization_id,
+                            role: role.clone(),
+                        },
+                    });
+                }
+            }
+        }
+        memberships.sort_by(|a, b| {
+            (&a.workspace.name, a.workspace.id).cmp(&(&b.workspace.name, b.workspace.id))
+        });
+        Ok(memberships)
+    }
+
+    /// The role `user` has in workspace `id` and how: their membership,
+    /// else (with organizations on) a grant of the workspace's
+    /// organization. `None` when they may not enter it;
+    /// [`WorkspaceError::WorkspaceNotFound`] for an unknown workspace.
+    pub async fn role_of(
+        &self,
+        id: Uuid,
+        user: Uuid,
+    ) -> Result<Option<(WorkspaceRole, GrantedBy)>, WorkspaceError> {
+        let workspace = self
+            .core
+            .workspace_in(&self.core.db.reader().await, id)
+            .await?;
+        Ok(self
+            .admission(&workspace, user)
+            .await?
+            .map(|admission| (admission.role, admission.granted_by)))
+    }
+
+    /// How `user` enters `workspace`, if they may.
+    pub(crate) async fn admission(
+        &self,
+        workspace: &Workspace,
+        user: Uuid,
+    ) -> Result<Option<Admission>, WorkspaceError> {
+        let conn = self.core.db.reader().await;
+        if let Some(member) = self.core.member_in(&conn, workspace.id, user).await? {
+            return Ok(Some(Admission {
+                role: member.role(),
+                member,
+                granted_by: GrantedBy::Membership,
+            }));
+        }
+        if !self.core.config.organizations.enabled {
+            return Ok(None);
+        }
+        let Some(grant) = org_grant(&self.core, &conn, workspace, user).await? else {
+            return Ok(None);
+        };
+        let member = Member {
+            id: grant.member.id,
+            workspace_id: workspace.id,
+            user_id: user,
+            role: grant.workspace_role.as_str().to_owned(),
+            partition_scope: SCOPE_ALL.to_owned(),
+            created_at: grant.member.created_at,
+            updated_at: grant.member.updated_at,
+        };
+        Ok(Some(Admission {
+            member,
+            role: grant.workspace_role,
+            granted_by: GrantedBy::Organization {
+                organization_id: grant.member.organization_id,
+                role: grant.role,
+            },
+        }))
     }
 
     /// The workspace with `id`.
@@ -324,8 +455,8 @@ pub(crate) async fn set_role(
     Ok(Repo::<member::Entity>::update(uow, row).await?)
 }
 
-/// A trimmed, checked workspace name.
-fn check_name(name: &str) -> Result<String, WorkspaceError> {
+/// A trimmed, checked name (of a workspace, organization or partition).
+pub(crate) fn check_name(name: &str) -> Result<String, WorkspaceError> {
     let name = name.trim();
     if name.is_empty() {
         return Err(WorkspaceError::invalid("name", "name should not be empty"));
@@ -363,6 +494,11 @@ pub(crate) fn check_slug(slug: &str) -> Result<(), WorkspaceError> {
 /// A slug derived from `name`: lower-case ASCII letters and digits, other
 /// runs as one hyphen, at most 48 bytes; `workspace` when nothing is left.
 pub fn slugify(name: &str) -> String {
+    slugify_or(name, "workspace")
+}
+
+/// [`slugify`] with `fallback` when nothing is left.
+pub(crate) fn slugify_or(name: &str, fallback: &str) -> String {
     let mut slug = String::new();
     for c in name.chars().flat_map(char::to_lowercase) {
         if c.is_ascii_lowercase() || c.is_ascii_digit() {
@@ -376,7 +512,7 @@ pub fn slugify(name: &str) -> String {
     }
     let slug = slug.trim_end_matches('-').to_owned();
     if slug.is_empty() || Uuid::parse_str(&slug).is_ok() {
-        "workspace".to_owned()
+        fallback.to_owned()
     } else {
         slug
     }

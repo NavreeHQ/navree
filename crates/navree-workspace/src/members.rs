@@ -117,6 +117,7 @@ impl Members {
                 workspace_id: Set(workspace),
                 user_id: Set(user),
                 role: Set(role.as_str().to_owned()),
+                partition_scope: Set(crate::org_role::SCOPE_ALL.to_owned()),
                 created_at: Set(now),
                 updated_at: Set(now),
             },
