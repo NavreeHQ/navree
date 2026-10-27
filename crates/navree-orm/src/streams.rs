@@ -6,7 +6,7 @@
 //! | [`chunk`](crate::Builder::chunk), [`each`](crate::Builder::each), [`chunk_map`](crate::Builder::chunk_map) | a page per call (`LIMIT`/`OFFSET`), in the query's order (the key's when it has none) | only while a page is read | yes, but rows that stop matching shift later pages: use the `_by_id` forms | per page |
 //! | [`chunk_by_id`](crate::Builder::chunk_by_id), [`each_by_id`](crate::Builder::each_by_id), [`chunk_by_column`](crate::Builder::chunk_by_column) | a page after the last key (`WHERE key > last ORDER BY key`) | only while a page is read | yes, safely | per page |
 //! | [`lazy`](crate::Builder::lazy), [`lazy_by_id`](crate::Builder::lazy_by_id), [`lazy_by_column`](crate::Builder::lazy_by_column) | the same pages, as a [`Stream`] of records | only while a page is read | yes | per page |
-//! | [`cursor`](crate::Builder::cursor), [`cursor`](crate::cursor) (raw SQL) | one query, row by row as the database sends them | for as long as the stream lives | not through the same transaction (refused with an error) | none |
+//! | [`cursor`](crate::Builder::cursor), [`cursor()`] (raw SQL) | one query, row by row as the database sends them | for as long as the stream lives | not through the same transaction (refused with an error) | none |
 //!
 //! Memory stays constant: a chunk or a lazy stream keeps one page, a cursor
 //! one row (the driver reads the rest from the socket as the stream is

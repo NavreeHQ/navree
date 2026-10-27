@@ -55,9 +55,8 @@ proc-macro crate of navree-orm (`COMPANION_MACROS` in
 `crates/navree/tests/facade.rs`).
 
 Features of navree-orm: `postgres` (navree-db's PostgreSQL driver),
-`mysql` (SeaORM's MySQL driver; once navree-db has its own `mysql` feature,
-this one forwards to it). SQL for every dialect is generated without any
-feature.
+`mysql` (navree-db's MySQL and MariaDB driver). SQL for every dialect is
+generated without any feature.
 
 ### Paths in generated code
 
@@ -322,8 +321,9 @@ return `Self`; terminal methods take the executor first.
   `order_by_vector_distance`; pgvector, MariaDB vectors).
 - Sources: `from_as(alias)` and `TableBuilder::from_sub(query, alias)`,
   `Builder::from_sub(query)` (a model read from a derived table named
-  like its table), `from_function("generate_series(?, ?) AS n", ..)` and
-  `from_raw(sql, values)` (a table function or raw source).
+  like its table), `from_function(Expr::func("generate_series", ..), "n")`
+  and `from_raw("generate_series(?, ?) AS n", values)` (a table function
+  written by hand).
 - JSON and pattern conditions: `where_json_overlaps` /
   `where_json_doesnt_overlap`, `where_json_contains_key` /
   `where_json_doesnt_contain_key` (with `or_` forms), the column helpers

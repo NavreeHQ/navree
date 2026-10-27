@@ -529,8 +529,10 @@ impl TableBuilder {
     }
 
     /// Inserts `rows`, skipping the ones that conflict with a unique index;
-    /// returns how many were inserted. See the [module docs](self) for
-    /// what each database skips.
+    /// returns how many were inserted. PostgreSQL and SQLite skip only the
+    /// rows that conflict on a unique index (`ON CONFLICT DO NOTHING`, `OR
+    /// IGNORE`); MySQL's `INSERT IGNORE` also turns other errors, such as a
+    /// value too long for its column, into warnings.
     pub async fn insert_or_ignore<E, R, C, V>(
         self,
         exec: &E,

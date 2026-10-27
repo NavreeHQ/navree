@@ -14,10 +14,18 @@
 //!   `last`. [`TableBuilder`] queries tables without a model.
 //! - **Records** ([`Record`]) carry dirty tracking, extras and loaded
 //!   relations; saving inserts or updates, with lifecycle [`hooks`].
+//! - **Streams and bulk writes**: chunks, lazy streams and cursors
+//!   ([`streams`]), raw statements ([`raw()`]), multi-row inserts,
+//!   insert-or-ignore, upserts and the other writes without events
+//!   ([`Builder::insert`], [`TableBuilder::upsert`], ...).
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
 //!   change events (the audit trail), exactly like navree-db's repositories.
+//!   Models and queries can live on named connections
+//!   (`#[model(connection = "..")]`, `on_connection`, [`using_connection`])
+//!   and read from the writer when replicas exist (`use_write`,
+//!   [`using_writer`]); see [`Route`].
 //!
 //! ```
 //! use chrono::{DateTime, Utc};

@@ -12,7 +12,23 @@
 //!   it, see [`MySqlOptions`]). It registers the `database` health check
 //!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,
 //!   `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `migrate:status`,
-//!   `schema:dump` and `db:seed`.
+//!   `schema:dump`, `db:seed`, `db:monitor` and `db`.
+//! - Connections: read replicas (`read_urls`, with `sticky` reads after a
+//!   unit of work writes and [`Db::using_writer`]), named connections
+//!   (`[database.connections.<name>]`, opened on first use through
+//!   [`DbConnections`] and [`Db::connection`]), a direct connection past a
+//!   transaction-mode pooler (`direct_url`, [`Db::direct`]; migrations run
+//!   on it), PostgreSQL session settings ([`PostgresOptions`]) and SQLite
+//!   pragmas ([`SqliteOptions`]). [`Db::pool_stats`],
+//!   [`Db::open_connections`] and the server facts report; the
+//!   [`ConnectionEstablished`] and [`DatabaseBusy`] events go through the
+//!   app's `dyn EventSink`.
+//! - Watching statements: [`QueryLog::capture`] returns what a future ran,
+//!   [`Db::on_query`] listens to every statement,
+//!   [`Db::before_executing`] and [`Db::before_starting_transaction`] run
+//!   hooks, [`Db::when_querying_for_longer_than`] reacts to slow units of
+//!   work, and every unit of work counts its statements
+//!   ([`Uow::query_stats`]).
 //! - [`Uow`] is the unit of work: one per HTTP request (opened by the
 //!   module's [`LayerSlot::Uow`](navree_http::LayerSlot::Uow) layer, taken as
 //!   an extractor), job run or command ([`Db::uow`]). Its transaction opens
