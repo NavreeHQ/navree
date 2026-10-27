@@ -260,6 +260,14 @@ impl SocialError {
     }
 }
 
+/// The module's ORM reads fail as database errors ([`SocialError::Db`]),
+/// like its SeaORM writes.
+impl From<navree_orm::OrmError> for SocialError {
+    fn from(error: navree_orm::OrmError) -> Self {
+        SocialError::Db(error.into())
+    }
+}
+
 impl From<serde_json::Error> for SocialError {
     fn from(error: serde_json::Error) -> Self {
         SocialError::Other(Box::new(error))

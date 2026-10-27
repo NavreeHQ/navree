@@ -7,14 +7,14 @@ use std::time::Duration;
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_orm::Model as _;
 use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{PersonalAccessToken, personal_access_token};
+use crate::entity::PersonalAccessToken;
 use crate::error::OAuthError;
 use crate::scope::{is_built_in, join_scopes};
 use crate::token::{PERSONAL_ACCESS_TOKEN_PREFIX, digest, new_token};
@@ -181,19 +181,18 @@ impl PersonalAccessTokens {
                 .unwrap_or(DateTime::<Utc>::MAX_UTC)
         });
         let token = new_token(PERSONAL_ACCESS_TOKEN_PREFIX);
-        let record = personal_access_token::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            user_id: Set(user_id),
-            name: Set(name.to_owned()),
-            token_hash: Set(digest(&token)),
-            scopes: Set(join_scopes(&list)),
-            expires_at: Set(expires_at),
-            last_used_at: Set(None),
-            revoked_at: Set(None),
-            created_at: Set(now),
-        }
-        .insert(&*uow.tx().await?)
-        .await?;
+        let record = PersonalAccessToken {
+            id: Uuid::now_v7(),
+            user_id,
+            name: name.to_owned(),
+            token_hash: digest(&token),
+            scopes: join_scopes(&list),
+            expires_at,
+            last_used_at: None,
+            revoked_at: None,
+            created_at: now,
+        };
+        PersonalAccessToken::insert(&*uow.tx().await?, [record.clone()]).await?;
         let entry = AuditEntry::new(AuditKind::Auth, "oauth.pat_created")
             .actor(user_id)
             .subject("PersonalAccessToken", record.id.to_string())
@@ -204,27 +203,26 @@ impl PersonalAccessTokens {
 
     /// `user_id`'s tokens that are not revoked, newest first.
     pub async fn list(&self, user_id: Uuid) -> Result<Vec<PersonalAccessToken>, OAuthError> {
-        Ok(personal_access_token::Entity::find()
-            .filter(personal_access_token::Column::UserId.eq(user_id))
-            .filter(personal_access_token::Column::RevokedAt.is_null())
-            .order_by_desc(personal_access_token::Column::CreatedAt)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(PersonalAccessToken::query()
+            .where_(PersonalAccessToken::USER_ID.eq(user_id))
+            .where_null(PersonalAccessToken::REVOKED_AT)
+            .order_by_desc(PersonalAccessToken::CREATED_AT)
+            .get(&self.core.db)
+            .await?
+            .into_models())
     }
 
     /// Revokes `user_id`'s token `id` (404 for someone else's or an
     /// unknown one). Audited as `oauth.pat_revoked`.
     pub async fn revoke(&self, uow: &Uow, user_id: Uuid, id: Uuid) -> Result<(), OAuthError> {
         let tx = uow.tx().await?;
-        let record = personal_access_token::Entity::find_by_id(id)
-            .one(&*tx)
+        let mut record = PersonalAccessToken::find(&*tx, id)
             .await?
             .filter(|record| record.user_id == user_id && record.revoked_at.is_none())
             .ok_or(OAuthError::NotFound("Personal access token not found."))?;
         let hash = record.token_hash.clone();
-        let mut active: personal_access_token::ActiveModel = record.clone().into();
-        active.revoked_at = Set(Some(self.core.now()));
-        active.update(&*tx).await?;
+        record.revoked_at = Some(self.core.now());
+        record.save(&*tx).await?;
         drop(tx);
         let core = self.core.clone();
         uow.after_commit(move || Box::pin(async move { core.forget([hash]).await }));
@@ -240,13 +238,12 @@ impl PersonalAccessTokens {
     /// request transaction).
     pub(crate) async fn touch(&self, id: Uuid) {
         let now = self.core.now();
-        let result = personal_access_token::Entity::update_many()
-            .col_expr(
-                personal_access_token::Column::LastUsedAt,
-                sea_orm::sea_query::Expr::value(now),
+        let result = PersonalAccessToken::query()
+            .where_key(id)
+            .update(
+                self.core.db.conn(),
+                [PersonalAccessToken::LAST_USED_AT.set(now)],
             )
-            .filter(personal_access_token::Column::Id.eq(id))
-            .exec(self.core.db.conn())
             .await;
         if let Err(error) = result {
             tracing::debug!(target: "navree::oauth", %error, "could not record a personal access token's last use");

@@ -96,16 +96,16 @@ The task is named after the job's `NAME`. `m.schedule` registers the job type wi
 ```rust
 use chrono::{TimeDelta, Utc};
 use navree::db::Db;
-use navree::notify::notifications;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use navree::notify::notifications::Model as Stored;
+use navree::orm::Model as _;
 
 m.schedule(|s| {
     s.task("notifications.prune", |ctx| async move {
         let db = ctx.get::<Db>().await?;
         let cutoff = Utc::now() - TimeDelta::days(90);
-        notifications::Entity::delete_many()
-            .filter(notifications::Column::ReadAt.lt(cutoff))
-            .exec(db.conn())
+        Stored::query()
+            .where_(Stored::READ_AT.lt(cutoff))
+            .delete(&*db)
             .await?;
         Ok(())
     })

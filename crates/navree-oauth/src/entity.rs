@@ -1,6 +1,7 @@
-//! The OAuth server's tables as SeaORM entities. Scopes, grants and
-//! redirect URIs are stored space-separated; tokens, codes and secrets as
-//! SHA-256 digests.
+//! The OAuth server's tables: navree-orm models (`Client::query()`, typed
+//! columns such as `Client::OWNER_ID`), and SeaORM entities for code built
+//! on SeaORM's query API. Scopes, grants and redirect URIs are stored
+//! space-separated; tokens, codes and secrets as SHA-256 digests.
 //!
 //! - `oauth_clients(id, name, secret_hash, redirect_uris, scopes, grants,
 //!   owner_id, trusted, introspect, workspace_id, logo_url, website,
@@ -33,8 +34,9 @@ pub mod client {
 
     /// A registered client. `secret_hash` is `None` for public clients and
     /// never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_clients")]
+    #[model(table = "oauth_clients")]
     pub struct Model {
         /// The client id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -84,8 +86,9 @@ pub mod authorization {
     use serde::Serialize;
 
     /// A remembered approval.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_authorizations")]
+    #[model(table = "oauth_authorizations")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -116,8 +119,9 @@ pub mod authorization_request {
     use serde::Serialize;
 
     /// A pending (or decided) authorization request.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_authorization_requests")]
+    #[model(table = "oauth_authorization_requests")]
     pub struct Model {
         /// The id (random, UUID v4): the `request` parameter of the
         /// consent page.
@@ -158,8 +162,9 @@ pub mod code {
     use serde::Serialize;
 
     /// An authorization code.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_codes")]
+    #[model(table = "oauth_codes")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -201,8 +206,9 @@ pub mod access_token {
     use serde::Serialize;
 
     /// An access token.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_access_tokens")]
+    #[model(table = "oauth_access_tokens")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -248,8 +254,9 @@ pub mod refresh_token {
     use serde::Serialize;
 
     /// A refresh token.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_refresh_tokens")]
+    #[model(table = "oauth_refresh_tokens")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -295,8 +302,9 @@ pub mod device_code {
     use serde::Serialize;
 
     /// A device authorization.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "oauth_device_codes")]
+    #[model(table = "oauth_device_codes")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -341,8 +349,9 @@ pub mod personal_access_token {
     use serde::Serialize;
 
     /// A personal access token (never with its secret).
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "personal_access_tokens")]
+    #[model(table = "personal_access_tokens")]
     pub struct Model {
         /// The id.
         #[sea_orm(primary_key, auto_increment = false)]

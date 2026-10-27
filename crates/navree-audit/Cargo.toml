@@ -18,6 +18,8 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The audit trail as models (`AuditRecord`), written and listed through the ORM.
+navree-orm = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }

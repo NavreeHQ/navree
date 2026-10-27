@@ -20,10 +20,10 @@ use std::time::Duration;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_db::Uow;
+use navree_orm::Model as _;
 use qrcode2::QrCode;
 use qrcode2::render::svg;
-use sea_orm::sea_query::Expr;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set, Unchanged};
+use sea_orm::{Set, Unchanged};
 use serde::Serialize;
 use serde_json::json;
 use totp_rs::{Builder, Secret, Totp};
@@ -514,14 +514,18 @@ impl AuthService {
         self.write(Some(user_id), |uow: Uow| async move {
             let tx = uow.tx().await?;
             // Only if nobody changed the codes meanwhile: each code works once.
-            let result = user::Entity::update_many()
-                .col_expr(user::Column::TwoFactorRecoveryCodes, Expr::value(remaining))
-                .col_expr(user::Column::UpdatedAt, Expr::value(now))
-                .filter(user::Column::Id.eq(user_id))
-                .filter(user::Column::TwoFactorRecoveryCodes.eq(stored))
-                .exec(&*tx)
+            let claimed = User::query()
+                .where_key(user_id)
+                .where_(User::TWO_FACTOR_RECOVERY_CODES.eq(stored))
+                .update(
+                    &*tx,
+                    [
+                        User::TWO_FACTOR_RECOVERY_CODES.set(remaining),
+                        User::UPDATED_AT.set(now),
+                    ],
+                )
                 .await?;
-            Ok(result.rows_affected == 1)
+            Ok(claimed == 1)
         })
         .await
     }

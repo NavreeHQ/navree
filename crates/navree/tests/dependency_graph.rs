@@ -111,16 +111,22 @@ const HIERARCHY: &[Rule] = &[
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
-    rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
+    // The audit trail is a navree-orm model (`AuditRecord`), written and
+    // listed through the ORM (same layer; the ORM never depends on audit).
+    rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-orm"]),
     // Queue: operations mount routes with an SSE stream (http), authorize
     // the private channel `operations.{id}` (realtime) and schedule their
     // watchdog (schedule, same layer; schedule never depends on queue).
-    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule"]),
+    // Failed jobs are navree-orm models (same layer; the ORM never depends
+    // on the queue: it dispatches through navree-contracts).
+    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule", "navree-orm"]),
     // Schedule: `in_zone` and `per_workspace_local` evaluate cron
     // expressions on local clocks (navree-time).
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
-    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
+    // Stored notifications are navree-orm models, written by the database
+    // channel through the ORM (same layer; the ORM never depends on notify).
+    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail", "navree-orm"]),
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).
@@ -146,10 +152,11 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L5
     // Token exchange fetches trusted issuers' key sets with navree-http-client.
+    // The auth tables are navree-orm models.
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
-        "navree-access", "navree-http-client",
+        "navree-access", "navree-http-client", "navree-orm",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5). The nightly demo
@@ -164,6 +171,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-time",
         // The nightly reset of demo workspaces.
         "navree-schedule",
+        // The workspace tables are navree-orm models.
+        "navree-orm",
     ]),
     // Redis: the shared connections and the Redis drivers of the cache,
     // the queue, sessions and the real-time backplane (ecosystem build
@@ -183,36 +192,38 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
-    // issues their tokens.
+    // issues their tokens. Linked accounts are navree-orm models.
     rule("navree-social", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
-        "navree-auth",
+        "navree-auth", "navree-orm",
     ]),
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the
-    // database, routes scoped to the request's workspace.
+    // database, routes scoped to the request's workspace. The webhook tables
+    // are navree-orm models.
     rule("navree-webhooks", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
-        "navree-workspace",
+        "navree-workspace", "navree-orm",
     ]),
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access
-    // permissions, workspace-limited clients.
+    // permissions, workspace-limited clients. The OAuth tables are
+    // navree-orm models.
     rule("navree-oauth", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
-        "navree-db", "navree-access", "navree-auth", "navree-workspace",
+        "navree-db", "navree-access", "navree-auth", "navree-workspace", "navree-orm",
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
     ]),
     // Feature flags: user ids come from the request's `Principal`; navree-auth
     // only gives `From<&User> for FlagScope` (the crate's default `auth`
-    // feature).
+    // feature). The flags table is a navree-orm model.
     rule("navree-flags", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
-        "navree-workspace",
+        "navree-workspace", "navree-orm",
     ]),
     // Settings: typed settings stored per scope (global, organization,
     // workspace, user) with inheritance; patches validated with
@@ -317,11 +328,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-http-client", "navree-db", "navree-queue", "navree-access", "navree-workspace",
     ]),
     // Billing: Stripe and Paddle over navree-http-client, billables from
-    // navree-auth (users) and navree-workspace (workspaces).
+    // navree-auth (users) and navree-workspace (workspaces). The billing
+    // tables are navree-orm models.
     rule("navree-billing", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-schedule",
-        "navree-access", "navree-auth", "navree-workspace",
+        "navree-access", "navree-auth", "navree-workspace", "navree-orm",
     ]),
     // Lighthouse: a telemetry sink storing issues, occurrences, samples and
     // aggregates in the app's database; alerts by mail (navree-mail) and
@@ -329,11 +341,12 @@ const HIERARCHY: &[Rule] = &[
     // pruned on the schedule; a server-rendered dashboard (navree-view)
     // signed in through navree-auth, with an encrypted cookie
     // (navree-crypto), behind navree-access abilities; with its `mcp`
-    // feature, tools, a resource and a prompt on navree-mcp's server.
+    // feature, tools, a resource and a prompt on navree-mcp's server. Its
+    // tables are navree-orm models.
     rule("navree-lighthouse", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
-        "navree-schedule", "navree-access", "navree-auth", "navree-mcp",
+        "navree-schedule", "navree-access", "navree-auth", "navree-mcp", "navree-orm",
     ]),
     // Logbook: a telemetry sink and a data-change observer (navree-db), an
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in
