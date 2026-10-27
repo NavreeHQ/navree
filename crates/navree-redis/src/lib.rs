@@ -8,7 +8,8 @@
 //! - [`RedisModule`] is global. Configure it with [`RedisModule::for_root`]
 //!   or [`RedisModule::from_config`] (section `redis`, [`RedisOptions`]:
 //!   `url`, `prefix`, `connect_timeout_ms`, `response_timeout_ms` and
-//!   `connections.<name>.url`). It provides [`Redis`]: lazily opened,
+//!   `connections.<name>.url`; `url` falls back to `REDIS_URL`, which
+//!   `navree dock` and Harbor set). It provides [`Redis`]: lazily opened,
 //!   reconnecting [`RedisConnection`]s (a multiplexed connection manager
 //!   per server, plus dedicated and pub/sub connections), and registers
 //!   the `redis` readiness check.
@@ -72,7 +73,7 @@ pub use connection::{Redis, RedisConnection};
 pub use error::RedisError;
 pub use limiter::{RateLimit, RateLimiter};
 pub use module::{DRIVER, RedisModule};
-pub use options::{DEFAULT_CONNECTION, RedisConnectionOptions, RedisOptions};
+pub use options::{DEFAULT_CONNECTION, RedisConnectionOptions, RedisOptions, URL_ENV};
 pub use queue::RedisQueueStore;
 pub use session::RedisSessionStore;
 

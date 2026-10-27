@@ -8,11 +8,12 @@
 use std::time::Duration;
 
 use navree::cache::{CacheOptions, CacheStoreKind};
+use navree::config::Config;
 use navree::prelude::*;
 use navree::queue::{Queue, QueueDriver, QueueOptions};
 use navree::realtime::{Backplane, BackplaneKind, MemoryBackplane, Realtime, RealtimeOptions};
 use navree::redis::redis::AsyncCommands;
-use navree::redis::{RateLimit, RateLimiter, Redis, RedisOptions};
+use navree::redis::{RateLimit, RateLimiter, Redis, RedisOptions, URL_ENV};
 use navree::session::{SessionOptions, SessionStoreKind};
 use navree::testing::TestApp;
 use serde_json::{Value, json};
@@ -50,6 +51,23 @@ async fn the_installation_example_selects_the_redis_drivers() {
     let options = app.ctx().get::<CacheOptions>().await.unwrap();
     assert_eq!(options.store, CacheStoreKind::Redis);
     app.shutdown().await.unwrap();
+}
+
+#[test]
+fn redis_url_fills_in_when_the_configuration_leaves_the_url_out() {
+    // What Dock and Harbor set: REDIS_URL, read when `redis.url` is unset.
+    let env = |name: &str| (name == URL_ENV).then(|| "redis://127.0.0.1:6380".to_owned());
+    let unset = Config::load(&ConfigSources::new()).unwrap();
+    let options = RedisOptions::from_config_with_env(&unset, env).unwrap();
+    assert_eq!(options.url, "redis://127.0.0.1:6380");
+
+    // A configured url (config/app.toml or APP_REDIS__URL) wins.
+    let set = Config::load(
+        &ConfigSources::new().env_vars("APP_", [("APP_REDIS__URL", "redis://cache.internal:6379")]),
+    )
+    .unwrap();
+    let options = RedisOptions::from_config_with_env(&set, env).unwrap();
+    assert_eq!(options.url, "redis://cache.internal:6379");
 }
 
 #[tokio::test]

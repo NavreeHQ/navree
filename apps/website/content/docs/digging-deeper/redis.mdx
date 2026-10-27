@@ -79,6 +79,8 @@ response_timeout_ms = 5000
 
 Environment variables override the file: `APP_REDIS__URL=rediss://default:secret@cache.internal:6380/0`, `APP_REDIS__PREFIX=crm:`. Put the URL, with its password, in the environment rather than in `config/app.toml`. Invalid options fail the boot; the messages name the key and never repeat a URL. `Debug` output of the options masks passwords.
 
+When neither `config/app.toml` nor `APP_REDIS__URL` sets `redis.url`, the module reads the `REDIS_URL` environment variable instead. [Dock](/docs/tools/dock/) sets it for the commands you run through `navree`, and [Harbor](/docs/tools/harbor/) keeps it in your app's secrets on the server, so an app that leaves `url` out of `[redis]` connects to their Redis without a setting of its own. A blank `REDIS_URL` is ignored, and an invalid one fails the boot with `REDIS_URL is not a Redis URL`. `RedisOptions::from_config(&config)` resolves the options the same way, for code that reads them outside the module; `RedisModule::for_root` never reads the environment.
+
 To configure the module in code instead, use `for_root`:
 
 ```rust

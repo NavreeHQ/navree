@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures_util::future::join_all;
 use navree_cache::{CacheStore, LockStore};
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::Config;
 use navree_contracts::{BoxFuture, Clock, HealthCheck, HealthStatus, SessionStore};
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 use navree_queue::QueueStore;
@@ -49,7 +49,9 @@ pub const DRIVER: &str = "redis";
 ///
 /// Used plainly (`.module(RedisModule)`) or through
 /// [`from_config`](RedisModule::from_config), it reads the `redis`
-/// configuration section, so the app must include `ConfigModule`. Invalid
+/// configuration section ([`RedisOptions::from_config`]: `redis.url` falls
+/// back to the `REDIS_URL` environment variable), so the app must include
+/// `ConfigModule`. Invalid
 /// options fail the boot; an unreachable server does not (connections
 /// open on first use).
 #[derive(Clone, Copy, Debug, Default)]
@@ -106,7 +108,13 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
                 Ok(Arc::new(options))
             }
         })),
-        None => m.config::<RedisOptions>(),
+        None => m.factory(
+            Factory::<RedisOptions>::new(|r: Resolver| async move {
+                let config = r.get::<Config>().await?;
+                Ok(Arc::new(RedisOptions::from_config(&config)?))
+            })
+            .deps(vec![ProviderKey::of::<Config>()]),
+        ),
     };
     let redis_key = ProviderKey::of::<Redis>();
     m.exports::<RedisOptions>()
