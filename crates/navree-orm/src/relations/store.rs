@@ -14,11 +14,15 @@ use crate::exec::Target;
 use crate::model::Model;
 use crate::record::Record;
 use crate::relations::any::AnyRecord;
+use crate::value::Value;
 
 type AnyValue = dyn Any + Send + Sync;
 
 /// Saves a loaded value and the records it holds (`Record::push`).
 type PushFn = for<'a, 'b> fn(&'a mut AnyValue, &'a Target<'b>) -> BoxFuture<'a, Result<bool>>;
+
+/// Reads a column of a loaded value that is one row.
+type ColumnFn = fn(&AnyValue, &str) -> Option<Value>;
 
 pub(crate) mod sealed {
     /// Only the ORM's relation values are relation values.
@@ -39,6 +43,14 @@ pub trait RelationValue: Clone + Serialize + Send + Sync + 'static + sealed::Sea
     /// Saves the records the value holds, and theirs (`Record::push`).
     #[doc(hidden)]
     fn push_on<'a, 'b>(&'a mut self, target: &'a Target<'b>) -> BoxFuture<'a, Result<bool>>;
+
+    /// Column `column` of a value that is one row (a pivot, or the record
+    /// of a typed pivot model); `None` for other values.
+    #[doc(hidden)]
+    fn column(&self, column: &str) -> Option<Value> {
+        let _ = column;
+        None
+    }
 }
 
 impl<R: Model> sealed::Sealed for Option<Record<R>> {}
@@ -59,6 +71,10 @@ impl<R: Model> sealed::Sealed for Record<R> {}
 impl<R: Model> RelationValue for Record<R> {
     fn push_on<'a, 'b>(&'a mut self, target: &'a Target<'b>) -> BoxFuture<'a, Result<bool>> {
         crate::relations::lazy::push_record(self, target)
+    }
+
+    fn column(&self, column: &str) -> Option<Value> {
+        self.model.value(column).ok().flatten()
     }
 }
 
@@ -91,13 +107,33 @@ impl RelationValue for Option<AnyRecord> {
 }
 
 /// A loaded relation: the value, how to clone it, how to serialize it and,
-/// for relation values, how to save the records it holds.
+/// for relation values, how to save the records it holds and read a
+/// column of a one-row value.
 struct Slot {
     name: Cow<'static, str>,
     value: Box<AnyValue>,
     clone: fn(&AnyValue) -> Box<AnyValue>,
     to_json: fn(&AnyValue) -> Result<serde_json::Value, serde_json::Error>,
     push: Option<PushFn>,
+    column: Option<ColumnFn>,
+}
+
+impl Slot {
+    /// A copy of the slot.
+    fn duplicate(&self) -> Slot {
+        Slot {
+            name: self.name.clone(),
+            value: (self.clone)(&*self.value),
+            clone: self.clone,
+            to_json: self.to_json,
+            push: self.push,
+            column: self.column,
+        }
+    }
+}
+
+fn column_of<V: RelationValue>(value: &AnyValue, column: &str) -> Option<Value> {
+    value.downcast_ref::<V>()?.column(column)
 }
 
 fn clone_value<T: Clone + Send + Sync + 'static>(value: &AnyValue) -> Box<AnyValue> {
@@ -177,6 +213,7 @@ impl Relations {
             clone: clone_value::<T>,
             to_json: value_to_json::<T>,
             push: None,
+            column: None,
         });
     }
 
@@ -189,7 +226,15 @@ impl Relations {
             clone: clone_value::<V>,
             to_json: value_to_json::<V>,
             push: Some(push_value::<V>),
+            column: Some(column_of::<V>),
         });
+    }
+
+    /// Column `column` of relation `name`, when it holds one row (a pivot,
+    /// or a typed pivot model's record).
+    pub(crate) fn column(&self, name: &str, column: &str) -> Option<Value> {
+        let slot = self.slots.iter().find(|slot| slot.name == name)?;
+        (slot.column?)(&*slot.value, column)
     }
 
     /// Relation `name`, when it is loaded as a `T`.
@@ -262,13 +307,7 @@ impl Relations {
     /// relations.
     pub(crate) fn copy_from(&mut self, other: &Relations, name: &str) {
         if let Some(slot) = other.slots.iter().find(|slot| slot.name == name) {
-            self.put(Slot {
-                name: slot.name.clone(),
-                value: (slot.clone)(&*slot.value),
-                clone: slot.clone,
-                to_json: slot.to_json,
-                push: slot.push,
-            });
+            self.put(slot.duplicate());
         }
     }
 
@@ -294,17 +333,7 @@ impl Relations {
 impl Clone for Relations {
     fn clone(&self) -> Self {
         Relations {
-            slots: self
-                .slots
-                .iter()
-                .map(|slot| Slot {
-                    name: slot.name.clone(),
-                    value: (slot.clone)(&*slot.value),
-                    clone: slot.clone,
-                    to_json: slot.to_json,
-                    push: slot.push,
-                })
-                .collect(),
+            slots: self.slots.iter().map(Slot::duplicate).collect(),
         }
     }
 }

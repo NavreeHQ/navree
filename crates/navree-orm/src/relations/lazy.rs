@@ -848,11 +848,19 @@ impl<M: Model> Record<M> {
         self.relations.get::<Record<P>>("pivot")
     }
 
-    /// Column `column` of the pivot row (under `pivot`) read as `T`: from a
-    /// [`Pivot`], or a typed pivot record's columns.
+    /// Column `column` of the pivot row the record was loaded with (under
+    /// `pivot`) read as `T`: from a [`Pivot`], or a typed pivot record's
+    /// columns. `None` when there is no pivot or no such column.
     pub fn pivot_value<T: Field>(&self, column: &str) -> Result<Option<T>> {
-        match self.pivot() {
-            Some(pivot) => pivot.value(column),
+        match self.relations.column("pivot", column) {
+            Some(value) => T::from_value(value).map(Some).map_err(|error| {
+                crate::row::decode_error(
+                    format!("the pivot of {}", M::meta().name()),
+                    column,
+                    T::type_name(),
+                    &error,
+                )
+            }),
             None => Ok(None),
         }
     }

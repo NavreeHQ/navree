@@ -171,7 +171,7 @@ impl HasKeys<'_> {
             aliased,
             |query, _| {
                 let query = match one_of_many {
-                    Some(one) => one.apply(query, self.name, &group_by, Vec::new()),
+                    Some(one) => one.apply(query, self.name, &group_by, Vec::new(), &|query| query),
                     None => query,
                 };
                 match morph {
@@ -229,7 +229,7 @@ impl HasKeys<'_> {
         let query = prepare_query(query, node, table, &[self.foreign_key])?;
         let conditions = self.eager_conditions::<P, R>(target, &keys);
         let query = match one_of_many {
-            Some(one) => one.apply(query, self.name, &self.group_by::<R>(), conditions),
+            Some(one) => one.apply(query, self.name, &self.group_by::<R>(), conditions, &|query| query),
             None => constrain(query, conditions),
         };
         let query = limit_per_parent(query, Expr::Column(qualified(table, self.foreign_key)));
@@ -1053,7 +1053,7 @@ impl<P: Model, R: Model> HasOne<P, R> {
         let name = self.core.name.clone();
         let finish = inverse_finisher(&self.inverse, &parent);
         let query = match &self.one_of_many {
-            Some(one) => one.apply(self.core.query, &name, &group_by, conditions),
+            Some(one) => one.apply(self.core.query, &name, &group_by, conditions, &|query| query),
             None => constrain(self.core.query, conditions),
         };
         Ok(Bound::new(query).finishing(finish))

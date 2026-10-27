@@ -153,7 +153,7 @@ impl ThroughDef {
             |query, alias| {
                 let query = self.joined(query, if through_aliased { alias } else { None });
                 match one_of_many {
-                    Some(one) => one.apply(query, relation, &group_by, Vec::new()),
+                    Some(one) => one.apply(query, relation, &group_by, Vec::new(), &|query| self.joined(query, None)),
                     None => query,
                 }
             },
@@ -191,7 +191,7 @@ impl ThroughDef {
         let first = qualified(self.through.table(), &self.first_key);
         let conditions = vec![in_keys_on(target, first.clone(), &keys)];
         let query = match one_of_many {
-            Some(one) => one.apply(query, relation, std::slice::from_ref(&first), conditions),
+            Some(one) => one.apply(query, relation, std::slice::from_ref(&first), conditions, &|query| self.joined(query, None)),
             None => constrain(query, conditions),
         };
         let query = limit_per_parent(query, Expr::Column(first));
@@ -325,6 +325,7 @@ macro_rules! through_methods {
                     &self.core.name,
                     &[qualified(self.def.through.table(), &self.def.first_key)],
                     conditions,
+                    &|query| self.def.joined(query, None),
                 ),
                 None => constrain(query, conditions),
             };

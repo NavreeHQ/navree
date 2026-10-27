@@ -80,13 +80,16 @@ impl<R: Model> OneOfMany<R> {
 
     /// `query` joined with the grouped subqueries that pick one record of
     /// each group (`group_by`: the foreign key, and the morph type);
-    /// `constraints` go into the innermost subquery.
+    /// `constraints` go into the innermost subquery. `joins` adds what each
+    /// subquery needs to reach the grouping columns (a through relation's
+    /// intermediate table).
     pub(crate) fn apply(
         &self,
         query: Builder<R>,
         relation: &str,
         group_by: &[ColumnRef],
         constraints: Vec<Where>,
+        joins: &dyn Fn(Builder<R>) -> Builder<R>,
     ) -> Builder<R> {
         let table = R::meta().table();
         let alias = self.alias(relation);
@@ -96,8 +99,9 @@ impl<R: Model> OneOfMany<R> {
             if let Some((_, columns)) = &previous {
                 accumulated.extend(columns.iter().cloned());
             }
-            let mut sub = Builder::<R>::new();
-            sub.removed = query.removed.clone();
+            let mut base = Builder::<R>::new();
+            base.removed = query.removed.clone();
+            let mut sub = joins(base);
             sub.ir.columns = group_by
                 .iter()
                 .map(|column| SelectItem {

@@ -447,9 +447,9 @@ impl Activity {
     }
 }
 
-/// A label on deals.
+/// A label on deals; touches the deals it is attached to.
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
-#[model(timestamps(created_at = false))]
+#[model(timestamps(created_at = false), touches = ["deals"])]
 pub struct Tag {
     pub id: i64,
     pub name: String,

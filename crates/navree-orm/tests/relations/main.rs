@@ -10,4 +10,7 @@ mod aggregates;
 mod definitions;
 mod eager;
 mod existence;
+mod one_of_many;
+mod pivots;
 mod querying;
+mod through;
