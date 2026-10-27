@@ -4,7 +4,7 @@
 //! cooperate without depending on each other: [`Secret`], [`RequestId`],
 //! [`Principal`] and [`AuthState`], the audit, event, broadcast, health and
 //! session sinks, the job contract ([`Job`], [`Dispatcher`],
-//! [`JobRegistration`]) and [`Clock`].
+//! [`JobRegistration`]), [`Clock`] and the zone sources ([`ZoneSource`]).
 //!
 //! A module that needs, say, auditing resolves `Arc<dyn AuditSink>` (usually
 //! with `AppContext::try_get`) instead of depending on navree-audit.
@@ -20,6 +20,7 @@ mod principal;
 mod request_id;
 mod secret;
 mod session;
+mod zone;
 
 pub use audit::{AuditEntry, AuditKind, AuditSink};
 pub use broadcast::Broadcaster;
@@ -35,3 +36,4 @@ pub use principal::{AuthState, AuthVia, Principal};
 pub use request_id::RequestId;
 pub use secret::Secret;
 pub use session::{SessionRecord, SessionStore};
+pub use zone::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
