@@ -30,6 +30,8 @@ navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`, re-exported.
+navree-macros = { workspace = true }
 # `workflows:tick`, every minute in apps with `ScheduleModule`.
 navree-schedule = { workspace = true }
 # Routes act on the request's workspace (`InWorkspace`).
@@ -46,7 +48,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-access = { workspace = true }
-navree-macros = { workspace = true }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

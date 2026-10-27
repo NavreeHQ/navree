@@ -15,9 +15,9 @@ use navree_events::{Event, EventBus, EventsModule};
 use navree_kernel::{BoxError, Module, ModuleBuilder};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_workflows::{
-    Action, AutomationCtx, AutomationTemplate, Automations, Condition, EventMatch,
-    ModuleBuilderWorkflowsExt, StepOptions, Trigger, Workflow, WorkflowCtx, Workflows,
-    WorkflowsError, WorkflowsModule,
+    Action, AutomationCtx, AutomationTemplate, Automations, EventMatch, ModuleBuilderWorkflowsExt,
+    StepOptions, Workflow, WorkflowCtx, Workflows, WorkflowsError, WorkflowsModule, action,
+    condition, trigger, workflow,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -137,28 +137,24 @@ impl Event for TaskCompleted {
 // Workflows
 // ---------------------------------------------------------------------------
 
-/// One step.
+/// One step (with `#[workflow]`; the others implement `Workflow` by hand).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Greet {
     pub name: String,
 }
 
-impl Workflow for Greet {
-    const NAME: &'static str = "greet";
-    const DESCRIPTION: &'static str = "Says hello.";
-    type Output = String;
-
-    async fn run(self, ctx: WorkflowCtx) -> Result<String, BoxError> {
-        let journal = journal(&ctx).await;
-        let name = self.name;
-        let greeting = ctx
-            .step("hello", || async move {
-                journal.record("hello");
-                Ok::<_, BoxError>(format!("Hello, {name}"))
-            })
-            .await?;
-        Ok(greeting)
-    }
+/// Says hello.
+#[workflow]
+pub async fn greet(ctx: WorkflowCtx, input: Greet) -> Result<String, BoxError> {
+    let journal = journal(&ctx).await;
+    let name = input.name;
+    let greeting = ctx
+        .step("hello", || async move {
+            journal.record("hello");
+            Ok::<_, BoxError>(format!("Hello, {name}"))
+        })
+        .await?;
+    Ok(greeting)
 }
 
 /// A welcome, three days of sleep, a nudge; returns the time it woke.
@@ -364,19 +360,13 @@ impl Workflow for UpgradeV1 {
     }
 }
 
-/// Version 2 of `upgrade`; resumes version 1 runs too.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpgradeV2;
 
-impl Workflow for UpgradeV2 {
-    const NAME: &'static str = "upgrade";
-    const VERSION: u32 = 2;
-    const MIN_VERSION: u32 = 1;
-    type Output = String;
-
-    async fn run(self, ctx: WorkflowCtx) -> Result<String, BoxError> {
-        upgrade(ctx, "v2").await
-    }
+/// Version 2 of `upgrade`; resumes version 1 runs too.
+#[workflow(name = "upgrade", version = 2, min_version = 1)]
+pub async fn upgrade_v2(ctx: WorkflowCtx, _input: UpgradeV2) -> Result<String, BoxError> {
+    upgrade(ctx, "v2").await
 }
 
 /// Version 3 of `upgrade`, which no longer resumes version 1 runs.
@@ -417,6 +407,9 @@ async fn upgrade(ctx: WorkflowCtx, code: &'static str) -> Result<String, BoxErro
 // Automation blocks
 // ---------------------------------------------------------------------------
 
+// `#[trigger]`, `#[condition]` and `#[action]` implement most blocks;
+// `Explode` implements `Action` by hand.
+
 /// A deal was won, optionally only above an amount.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DealWonTrigger {
@@ -425,29 +418,18 @@ pub struct DealWonTrigger {
     pub min_amount_cents: Option<i64>,
 }
 
-impl Trigger for DealWonTrigger {
-    const TYPE: &'static str = "deal.won";
-    const LABEL: &'static str = "Deal won";
-    const DESCRIPTION: &'static str = "A deal moved to won.";
-    const SUBJECT: Option<&'static str> = Some("owner_id");
-    type Event = DealWon;
-
-    fn matches(&self, event: &DealWon) -> bool {
-        self.min_amount_cents
-            .is_none_or(|min| event.amount_cents >= min)
-    }
+/// A deal moved to won.
+#[trigger(type = "deal.won", label = "Deal won", subject = "owner_id")]
+pub fn deal_won(config: &DealWonTrigger, event: &DealWon) -> bool {
+    config
+        .min_amount_cents
+        .is_none_or(|min| event.amount_cents >= min)
 }
 
 /// A task was completed (no workspace field in the event).
+#[trigger(type = "task.completed", event = TaskCompleted, subject = "owner_id", workspace = false)]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TaskCompletedTrigger {}
-
-impl Trigger for TaskCompletedTrigger {
-    const TYPE: &'static str = "task.completed";
-    const SUBJECT: Option<&'static str> = Some("owner_id");
-    const WORKSPACE: Option<&'static str> = None;
-    type Event = TaskCompleted;
-}
 
 /// Sends a note (to the journal).
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -456,21 +438,18 @@ pub struct SendNote {
     pub template: String,
 }
 
-impl Action for SendNote {
-    const TYPE: &'static str = "note.send";
-    const LABEL: &'static str = "Send a note";
-    type Output = Value;
+/// Notes `template` for the subject in the journal.
+#[action(type = "note.send", label = "Send a note", preview = note_preview)]
+pub async fn send_note(config: SendNote, ctx: AutomationCtx) -> Result<Value, BoxError> {
+    let journal = ctx.app().get::<Journal>().await?;
+    let subject = ctx.subject().unwrap_or("-").to_owned();
+    journal.record(format!("note:{}:{subject}", config.template));
+    Ok(json!({"sent": config.template, "to": subject}))
+}
 
-    async fn run(self, ctx: AutomationCtx) -> Result<Value, BoxError> {
-        let journal = ctx.app().get::<Journal>().await?;
-        let subject = ctx.subject().unwrap_or("-").to_owned();
-        journal.record(format!("note:{}:{subject}", self.template));
-        Ok(json!({"sent": self.template, "to": subject}))
-    }
-
-    fn preview(&self, ctx: &AutomationCtx) -> Value {
-        json!({"would_send": self.template, "to": ctx.subject()})
-    }
+/// What a simulation shows for a note.
+pub fn note_preview(config: &SendNote, ctx: &AutomationCtx) -> Value {
+    json!({"would_send": config.template, "to": ctx.subject()})
 }
 
 /// Fails every time.
@@ -493,13 +472,23 @@ pub struct AmountAtLeast {
     pub cents: i64,
 }
 
-impl Condition for AmountAtLeast {
-    const TYPE: &'static str = "deal.amount_at_least";
+#[condition(type = "deal.amount_at_least")]
+pub async fn amount_at_least(
+    config: &AmountAtLeast,
+    ctx: &AutomationCtx,
+) -> Result<bool, BoxError> {
+    let deal: DealWon = ctx.event_as()?;
+    Ok(deal.amount_cents >= config.cents)
+}
 
-    async fn evaluate(&self, ctx: &AutomationCtx) -> Result<bool, BoxError> {
-        let deal: DealWon = ctx.event_as()?;
-        Ok(deal.amount_cents >= self.cents)
-    }
+/// The event names a workspace (a plain `fn` returning `bool`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct InWorkspace {}
+
+/// The deal belongs to a workspace.
+#[condition(type = "deal.in_workspace", label = "In a workspace")]
+pub fn in_workspace(_config: &InWorkspace, ctx: &AutomationCtx) -> bool {
+    ctx.field("event.workspace_id").is_some_and(|id| !id.is_null())
 }
 
 /// A follow-up for big deals.
@@ -546,6 +535,7 @@ impl Module for FlowsModule {
             .action::<SendNote>()
             .action::<Explode>()
             .condition::<AmountAtLeast>()
+            .condition::<InWorkspace>()
             .automation_template(
                 AutomationTemplate::new("big-deal-follow-up", "Big deal follow-up", follow_up())
                     .description("Thanks the owner, then a call or a survey a day later.")

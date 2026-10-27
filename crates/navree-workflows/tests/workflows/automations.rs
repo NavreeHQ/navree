@@ -76,7 +76,17 @@ async fn the_catalog_lists_blocks_with_their_schemas() {
         .into_iter()
         .map(|b| b.block_type)
         .collect();
-    assert_eq!(conditions, ["deal.amount_at_least", "field"]);
+    assert_eq!(
+        conditions,
+        ["deal.amount_at_least", "deal.in_workspace", "field"]
+    );
+    // `#[condition]` takes the label and the doc comment.
+    let in_workspace = catalog
+        .block(BlockKind::Condition, "deal.in_workspace")
+        .unwrap();
+    assert_eq!(in_workspace.label, "In a workspace");
+    assert_eq!(in_workspace.description, "The deal belongs to a workspace.");
+    assert_eq!(won.description, "A deal moved to won.");
     let actions = catalog.actions();
     assert_eq!(actions.len(), 2);
     assert_eq!(actions[1].block_type, "note.send");
@@ -725,4 +735,68 @@ async fn a_failing_action_fails_the_enrollment() {
         enrollment.error.as_deref(),
         Some("step `boom` failed after 3 attempt(s): the action failed")
     );
+}
+
+#[tokio::test]
+async fn a_plain_fn_condition_branches() {
+    let h = harness(|b| b).await;
+    let automations = h.automations().await;
+    let definition = json!({
+        "trigger": {"type": "deal.won"},
+        "nodes": [
+            {"id": "where", "kind": "condition", "type": "deal.in_workspace",
+             "then": "team", "else": "solo"},
+            {"id": "team", "kind": "action", "type": "note.send", "config": {"template": "team"}},
+            {"id": "solo", "kind": "action", "type": "note.send", "config": {"template": "solo"}}
+        ]
+    });
+    let draft = h
+        .in_uow(|uow| {
+            let automations = automations.clone();
+            async move {
+                automations
+                    .create(&uow, NewAutomation::new("Where", definition))
+                    .await
+                    .unwrap()
+            }
+        })
+        .await;
+    let path = |simulation: navree_workflows::Simulation| -> Vec<(String, String)> {
+        simulation
+            .steps
+            .into_iter()
+            .map(|s| (s.node, s.outcome))
+            .collect()
+    };
+    let mut event = json!({"deal_id": 1, "owner_id": 7, "amount_cents": 1, "workspace_id": null});
+    let solo = automations
+        .simulate(
+            draft.id,
+            SimulateInput {
+                event: event.clone(),
+                ..SimulateInput::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        path(solo),
+        [
+            ("where".to_owned(), "false".to_owned()),
+            ("solo".to_owned(), "would_run".to_owned())
+        ]
+    );
+    event["workspace_id"] = json!(Uuid::now_v7());
+    let team = automations
+        .simulate(
+            draft.id,
+            SimulateInput {
+                event,
+                ..SimulateInput::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(team.steps[0].outcome, "true");
+    assert_eq!(team.steps[1].node, "team");
 }

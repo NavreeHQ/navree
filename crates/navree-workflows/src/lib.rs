@@ -105,3 +105,14 @@ pub use store::{
 pub use workflow::{
     MAX_NAME_LEN, StartOptions, Workflow, WorkflowDefinition, WorkflowRegistry, check_name,
 };
+
+/// `#[workflow]` implements [`Workflow`] from an `async fn`; `#[trigger]`,
+/// `#[condition]` and `#[action]` implement [`Trigger`], [`Condition`]
+/// and [`Action`] from functions (see navree-macros).
+pub use navree_macros::{action, condition, trigger, workflow};
+
+/// What the macros' expansions name; not a public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use serde_json::Value;
+}
