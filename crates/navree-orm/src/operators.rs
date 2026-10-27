@@ -194,7 +194,7 @@ impl Filter {
     ///
     /// let any_tag = Filter::op_raw(col("tags"), "?|", Expr::raw("ARRAY[?, ?]", ["vip", "gold"]));
     /// let sql = any_tag.to_sql(Dialect::Postgres).unwrap();
-    /// assert_eq!(sql.sql, r#""tags" ?| ARRAY[$1, $2]"#);
+    /// assert_eq!(sql.sql, r#""tags" ?| (ARRAY[$1, $2])"#);
     /// assert!(any_tag.to_sql(Dialect::MySql).unwrap_err().to_string().contains("is not an operator MySQL conditions take"));
     /// ```
     pub fn op_raw(left: impl IntoExpr, op: impl Into<String>, right: impl Into<Expr>) -> Filter {
@@ -239,7 +239,7 @@ impl Expr {
     ///
     /// let distance = Expr::vector_distance(Expr::col("embedding"), &[0.5, 1.0]);
     /// let sql = distance.lt(0.3).to_sql(Dialect::Postgres).unwrap();
-    /// assert_eq!(sql.sql, r#"("embedding" <=> CAST($1 AS vector)) < $2"#);
+    /// assert_eq!(sql.sql, r#"(("embedding" <=> CAST($1 AS vector))) < $2"#);
     /// ```
     pub fn vector_distance(expr: impl Into<Expr>, vector: &[f32]) -> Expr {
         Expr::vector_distance_by(expr, vector, VectorMetric::Cosine)
