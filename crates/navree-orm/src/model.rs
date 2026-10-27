@@ -2,6 +2,7 @@
 //! ([`ModelMeta`], [`ColumnMeta`]), keys ([`PrimaryKey`], [`KeyKind`]) and
 //! timestamps ([`Timestamp`]).
 
+use std::borrow::Cow;
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use crate::exec::Executor;
 use crate::hooks::ModelHook;
 use crate::query::Builder;
 use crate::record::Record;
+use crate::relations::{DynRelation, RelationMeta};
 use crate::row::Row;
 use crate::scope::GlobalScope;
 use crate::ulid::Ulid;
@@ -342,6 +344,12 @@ pub struct ModelMeta {
     connection: Option<&'static str>,
     per_page: u64,
     pruning: Option<crate::prune::Pruning>,
+    morph_name: Option<&'static str>,
+    foreign_key: Option<&'static str>,
+    touches: &'static [&'static str],
+    with: &'static [&'static str],
+    with_count: &'static [&'static str],
+    pivot_keys: Option<(&'static str, &'static str)>,
 }
 
 impl ModelMeta {
@@ -360,6 +368,70 @@ impl ModelMeta {
             connection: None,
             per_page: 15,
             pruning: None,
+            morph_name: None,
+            foreign_key: None,
+            touches: &[],
+            with: &[],
+            with_count: &[],
+            pivot_keys: None,
+        }
+    }
+
+    /// The name polymorphic type columns store for the model
+    /// (`#[model(morph_name = "...")]`; the derive writes the snake_case
+    /// type name when none is given).
+    pub const fn morph_name(self, name: &'static str) -> Self {
+        ModelMeta {
+            morph_name: Some(name),
+            ..self
+        }
+    }
+
+    /// The column other models' foreign keys to this model are named by
+    /// default (`company_id`).
+    pub const fn foreign_key(self, column: &'static str) -> Self {
+        ModelMeta {
+            foreign_key: Some(column),
+            ..self
+        }
+    }
+
+    /// The relations whose records are touched (their update timestamp
+    /// set to now) when a record of this model is saved or deleted
+    /// (`#[model(touches = ["company"])]`).
+    pub const fn touches(self, relations: &'static [&'static str]) -> Self {
+        ModelMeta {
+            touches: relations,
+            ..self
+        }
+    }
+
+    /// The relations every query of the model eager loads
+    /// (`#[model(with = ["company"])]`).
+    pub const fn with(self, relations: &'static [&'static str]) -> Self {
+        ModelMeta {
+            with: relations,
+            ..self
+        }
+    }
+
+    /// The relations every query of the model counts
+    /// (`#[model(with_count = ["notes"])]`).
+    pub const fn with_count(self, relations: &'static [&'static str]) -> Self {
+        ModelMeta {
+            with_count: relations,
+            ..self
+        }
+    }
+
+    /// For a pivot model without an `id` column: the pivot columns
+    /// pointing at the two related records. Its rows are identified by
+    /// both (`#[model(pivot(foreign_key = "deal_id", related_key =
+    /// "tag_id"))]`).
+    pub const fn pivot_keys(self, foreign_key: &'static str, related_key: &'static str) -> Self {
+        ModelMeta {
+            pivot_keys: Some((foreign_key, related_key)),
+            ..self
         }
     }
 
@@ -495,6 +567,71 @@ impl ModelMeta {
     pub const fn default_per_page(&self) -> u64 {
         self.per_page
     }
+
+    /// The name polymorphic type columns store for the model: the declared
+    /// one, else the snake_case model name (`DealStage` → `deal_stage`).
+    pub fn morph_type(&self) -> Cow<'static, str> {
+        match self.morph_name {
+            Some(name) => Cow::Borrowed(name),
+            None => Cow::Owned(snake_case(self.name)),
+        }
+    }
+
+    /// The default name of foreign keys to the model: the declared one,
+    /// else the snake_case model name, `_`, and the key column
+    /// (`Company` keyed by `id` → `company_id`).
+    pub fn foreign_key_name(&self) -> Cow<'static, str> {
+        match self.foreign_key {
+            Some(column) => Cow::Borrowed(column),
+            None => Cow::Owned(format!("{}_{}", snake_case(self.name), self.key)),
+        }
+    }
+
+    /// The relations touched when a record is saved or deleted.
+    pub const fn touched_relations(&self) -> &'static [&'static str] {
+        self.touches
+    }
+
+    /// The relations every query eager loads.
+    pub const fn default_with(&self) -> &'static [&'static str] {
+        self.with
+    }
+
+    /// The relations every query counts.
+    pub const fn default_with_count(&self) -> &'static [&'static str] {
+        self.with_count
+    }
+
+    /// The two pivot columns of a pivot model (`#[model(pivot(..))]`):
+    /// `(foreign_key, related_key)`. A pivot model without an `id` column
+    /// is keyed by `related_key`, and its rows are identified by both.
+    pub const fn pivot_key_columns(&self) -> Option<(&'static str, &'static str)> {
+        self.pivot_keys
+    }
+}
+
+/// `DealStage` → `deal_stage`, `HTTPRequest` → `http_request`.
+pub(crate) fn snake_case(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::with_capacity(name.len() + 4);
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() {
+            let previous = i.checked_sub(1).map(|j| chars[j]);
+            let next = chars.get(i + 1).copied();
+            let boundary = match previous {
+                Some(p) if p.is_lowercase() || p.is_ascii_digit() => true,
+                Some(p) if p.is_uppercase() => next.is_some_and(char::is_lowercase),
+                _ => false,
+            };
+            if boundary && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// An ORM model: a plain struct with `#[derive(Model)]`.
@@ -564,14 +701,65 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Vec::new()
     }
 
-    /// A query of the model.
-    fn query() -> Builder<Self> {
-        Builder::new()
+    /// The relation named `name`, for relation paths (`"company.owner"` in
+    /// `with`, `has`, `load`, ...): the ones a `#[relations]` impl block
+    /// declares, then the ones other modules define with
+    /// [`RelationRegistry`](crate::relations::RelationRegistry).
+    /// `#[derive(Model)]` writes this method.
+    fn relation(name: &str) -> Option<DynRelation<Self>> {
+        crate::relations::registry::defined::<Self>(name)
     }
 
-    /// A query of the model with one condition.
+    /// The names of the model's relations (declared, then registered).
+    fn relation_names() -> Vec<Cow<'static, str>> {
+        crate::relations::registry::defined_names::<Self>()
+    }
+
+    /// What relation `name` is: its kind, related model, tables and keys
+    /// (for tooling such as `model:show` and API documentation).
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// use navree_orm::relations::RelationKind;
+    ///
+    /// let company = Deal::relation_meta("company").unwrap();
+    /// assert_eq!(company.kind, RelationKind::BelongsTo);
+    /// assert_eq!(company.related, Some("Company"));
+    /// assert_eq!(company.foreign_key.as_deref(), Some("company_id"));
+    /// assert!(Deal::relation_meta("nope").is_none());
+    /// ```
+    fn relation_meta(name: &str) -> Option<RelationMeta> {
+        Self::relation(name).map(|relation| relation.meta())
+    }
+
+    /// The name polymorphic type columns store for the model
+    /// (`#[model(morph_name = "...")]`, else the snake_case type name).
+    fn morph_name() -> Cow<'static, str> {
+        Self::meta().morph_type()
+    }
+
+    /// The default name of foreign keys to the model (`company_id`): the
+    /// snake_case type name, `_`, the key column.
+    fn foreign_key_name() -> Cow<'static, str> {
+        Self::meta().foreign_key_name()
+    }
+
+    /// The relations touched when a record is saved or deleted
+    /// (`#[model(touches = [..])]`).
+    fn touched_relations() -> &'static [&'static str] {
+        Self::meta().touched_relations()
+    }
+
+    /// A query of the model, with the model's default eager loads and
+    /// relation counts (`#[model(with = [..], with_count = [..])]`).
+    fn query() -> Builder<Self> {
+        Builder::new().with_model_defaults()
+    }
+
+    /// A query of the model with one condition (and the model's default
+    /// eager loads and relation counts, as [`query`](Model::query)).
     fn where_(filter: impl Into<Filter>) -> Builder<Self> {
-        Builder::new().where_(filter)
+        Self::query().where_(filter)
     }
 
     /// Every record.

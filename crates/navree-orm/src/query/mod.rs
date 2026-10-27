@@ -58,6 +58,9 @@ pub struct Builder<M: Model> {
     pub(crate) ir: QueryIr,
     pub(crate) scopes: ScopeChoices,
     pub(crate) scopes_applied: bool,
+    /// The relations the query loads into its records (and its depth in
+    /// existence subqueries); see [`crate::relations`].
+    pub(crate) eager: crate::relations::eager::EagerState,
     _model: PhantomData<fn() -> M>,
 }
 
@@ -68,6 +71,7 @@ impl<M: Model> Builder<M> {
             ir: QueryIr::new(M::meta().table()),
             scopes: ScopeChoices::default(),
             scopes_applied: false,
+            eager: crate::relations::eager::EagerState::default(),
             _model: PhantomData,
         }
     }
@@ -293,6 +297,7 @@ impl<M: Model> Clone for Builder<M> {
             ir: self.ir.clone(),
             scopes: self.scopes.clone(),
             scopes_applied: self.scopes_applied,
+            eager: self.eager.clone(),
             _model: PhantomData,
         }
     }
@@ -300,10 +305,14 @@ impl<M: Model> Clone for Builder<M> {
 
 impl<M: Model> fmt::Debug for Builder<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Builder")
+        let mut debug = f.debug_struct("Builder");
+        debug
             .field("model", &M::meta().name())
-            .field("query", &self.ir)
-            .finish_non_exhaustive()
+            .field("query", &self.ir);
+        if !self.eager.tree.is_empty() {
+            debug.field("with", &self.eager.tree.paths());
+        }
+        debug.finish_non_exhaustive()
     }
 }
 

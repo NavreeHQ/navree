@@ -163,6 +163,27 @@ pub(crate) enum Trashed {
 }
 
 impl ScopeChoices {
+    /// Adds the choices of `other` (a query refined by a caller's closure)
+    /// to these: what either leaves out stays out, and `other`'s choice
+    /// about trashed rows wins when it made one.
+    pub(crate) fn merge(&mut self, other: ScopeChoices) {
+        self.all |= other.all;
+        self.ids.extend(other.ids);
+        self.names.extend(other.names);
+        if let Some(keep) = other.keep {
+            self.keep = Some(match self.keep.take() {
+                Some(mine) => mine
+                    .into_iter()
+                    .filter(|name| keep.contains(name))
+                    .collect(),
+                None => keep,
+            });
+        }
+        if other.trashed != Trashed::Hidden {
+            self.trashed = other.trashed;
+        }
+    }
+
     /// Whether the query leaves `scope` out.
     pub(crate) fn removes<M: Model>(&self, scope: &dyn GlobalScope<M>) -> bool {
         if scope.scope_id() == TypeId::of::<SoftDeletes>() && self.trashed != Trashed::Hidden {

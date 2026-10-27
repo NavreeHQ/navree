@@ -212,6 +212,19 @@ impl Target<'_> {
         }
     }
 
+    /// A transaction of its own for a target on a pool connection (several
+    /// statements that must succeed together); `None` when the target is
+    /// already a transaction (the statements join it) or a document store.
+    pub(crate) async fn begin_transaction(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+        match self {
+            Target::Sql(sql) => match &sql.conn {
+                SqlConn::Pool(conn) => Ok(Some(conn.begin().await?)),
+                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => Ok(None),
+            },
+            Target::Document(_) => Ok(None),
+        }
+    }
+
     /// The same target running on `tx` (a savepoint of its transaction).
     pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
         match self {
@@ -455,6 +468,34 @@ impl Executor for DatabaseTransaction {
             None,
             None,
         )))
+    }
+}
+
+/// A target runs operations where it is (its connection or transaction,
+/// its unit of work), so code holding one can call any method taking an
+/// executor.
+impl Executor for Target<'_> {
+    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
+        Ok(self.reborrow())
+    }
+}
+
+impl Target<'_> {
+    /// The same target, borrowed.
+    pub(crate) fn reborrow(&self) -> Target<'_> {
+        match self {
+            Target::Sql(sql) => Target::Sql(SqlTarget::new(
+                match &sql.conn {
+                    SqlConn::Pool(conn) => SqlConn::Pool(conn),
+                    SqlConn::Transaction(tx) => SqlConn::Transaction(Arc::clone(tx)),
+                    SqlConn::TransactionRef(tx) => SqlConn::TransactionRef(tx),
+                },
+                sql.dialect,
+                sql.uow.clone(),
+                sql.app.clone(),
+            )),
+            Target::Document(document) => Target::Document(document.clone()),
+        }
     }
 }
 

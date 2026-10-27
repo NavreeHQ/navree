@@ -1,0 +1,53 @@
+error: a relation method only describes the relation, so it cannot be async
+  --> tests/ui/relations_misuse.rs:16:5
+   |
+16 |     async fn company(&self) -> BelongsTo<Deal, Company> {
+   |     ^^^^^
+
+error: the relation method `by_kind` takes only `&self` (relations are reached by name too, without arguments)
+  --> tests/ui/relations_misuse.rs:20:23
+   |
+20 |     fn by_kind(&self, kind: &str) -> HasMany<Company, Deal> {
+   |                       ^^^^
+
+error: the relation method `generic` takes no generic parameters
+  --> tests/ui/relations_misuse.rs:25:15
+   |
+25 |     fn generic<T>(&self) -> BelongsTo<Deal, Company> {
+   |               ^
+
+error: a relation method takes `&self`: `fn owned(&self) -> HasMany<Deal, Activity>`
+  --> tests/ui/relations_misuse.rs:29:14
+   |
+29 |     fn owned(self) -> BelongsTo<Deal, Company> {
+   |              ^^^^
+
+error: the relation method `nothing` returns its relation: `fn nothing(&self) -> BelongsTo<Deal, Company>`
+  --> tests/ui/relations_misuse.rs:33:8
+   |
+33 |     fn nothing(&self) {}
+   |        ^^^^^^^
+
+error: a relation method takes `&self`: `fn no_receiver(&self) -> HasMany<Deal, Activity>`
+  --> tests/ui/relations_misuse.rs:35:8
+   |
+35 |     fn no_receiver() -> BelongsTo<Deal, Company> {
+   |        ^^^^^^^^^^^
+
+error: #[relations] goes on the model's own impl block (`impl Deal { ... }`), not on a trait impl
+  --> tests/ui/relations_misuse.rs:45:6
+   |
+45 | impl Named for Company {
+   |      ^^^^^
+
+error: #[relations] takes no arguments: each method names its relation
+  --> tests/ui/relations_misuse.rs:51:25
+   |
+51 | #[navree_orm::relations(deals)]
+   |                         ^^^^^
+
+error: #[relations] found no relation method in this impl block
+  --> tests/ui/relations_misuse.rs:61:6
+   |
+61 | impl Empty {}
+   |      ^^^^^
