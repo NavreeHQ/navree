@@ -49,6 +49,7 @@ conventions, and says which skill to load for each task.
 | [`navree-telemetry`](navree-telemetry/SKILL.md) | Telemetry events and sinks, OpenTelemetry tracing and OTLP export, trace context, `TelemetryRecorder` and `SpanRecorder` in tests |
 | [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
 | [`navree-grpc`](navree-grpc/SKILL.md) | gRPC, gRPC-Web and Connect services in modules, gRPC clients, and their tests |
+| [`navree-mcp`](navree-mcp/SKILL.md) | An MCP server for the product: tools, resources and prompts for AI clients |
 
 ## Installing
 

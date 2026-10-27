@@ -143,6 +143,13 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-testing", "navree-db", "navree-validation",
     ]),
+    // MCP servers: tools, resources and prompts over HTTP and stdio, checked
+    // by navree-access; stdio users are found through navree-auth; sessions
+    // live in navree-cache; `McpTestClient` wraps navree-testing's client.
+    rule("navree-mcp", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
+        "navree-db", "navree-testing", "navree-validation", "navree-access", "navree-auth",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -228,6 +235,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-graphql",
     "navree-grpc",
     "navree-billing",
+    "navree-mcp",
 ];
 
 /// Cargo dependency kind of an edge.
@@ -592,6 +600,10 @@ fn allowed_edges_pass() {
         edge("navree-auth", "navree-access", Kind::Normal),
         edge("navree", "navree-auth", Kind::Normal),
         edge("navree", "navree-macros", Kind::Normal),
+        // L6 ecosystem libraries build on L5 and below; the facade re-exports them.
+        edge("navree-mcp", "navree-auth", Kind::Normal),
+        edge("navree-mcp", "navree-testing", Kind::Normal),
+        edge("navree", "navree-mcp", Kind::Normal),
         edge("crm-api", "navree", Kind::Normal),
         edge("navree-db", "navree-http", Kind::Dev),
     ];

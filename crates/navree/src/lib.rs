@@ -44,12 +44,13 @@
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `dock`, `otel`). A feature also turns on the features of the crates its
-//! crate builds on (`auth` turns on `access`, `db`, `http`, ...). The
-//! `postgres` feature adds navree-db's PostgreSQL driver, and the opt-in
+//! `mcp`, `dock`, `otel`). A feature also turns on the features of the
+//! crates its crate builds on (`auth` turns on `access`, `db`, `http`, ...).
+//! The `postgres` feature adds navree-db's PostgreSQL driver, and the opt-in
 //! `otel` feature adds navree-observe's OTLP span exporter. `search-tantivy`
 //! adds search's embedded Tantivy engine. `axum` is re-exported with `http`.
 //! `dock` is a development tool (`navree dock`), for tools and tests that
@@ -208,6 +209,14 @@ pub mod flags {
     pub use navree_flags::*;
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
+}
+
+/// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
+/// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
+#[cfg(feature = "mcp")]
+pub mod mcp {
+    pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
+    pub use navree_mcp::*;
 }
 
 // L7 (opt-in)

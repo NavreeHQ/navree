@@ -6,7 +6,9 @@
 //! - **pretty or JSON output** on stdout ([`LogFormat`]): readable lines in
 //!   development, one JSON object per line
 //!   (`{"timestamp","level","target","fields","span","spans"}`) in
-//!   production; span fields (request id, user id) travel with every line;
+//!   production; span fields (request id, user id) travel with every line.
+//!   When the app runs a command that speaks a protocol on stdout
+//!   (`CommandSpec::stdio`, such as `mcp:serve`), the lines go to stderr;
 //! - **redaction before writing**: any event or span field whose name
 //!   contains a configured key (`password`, `token`, `authorization`,
 //!   `cookie`, `secret` by default; ASCII case-insensitive) is written as
@@ -66,7 +68,7 @@ pub use capture::CaptureWriter;
 pub use control::LogControl;
 pub use error::LogError;
 pub use install::init_for_tests;
-use install::install;
+use install::{Console, install};
 pub use module::LoggerModule;
 pub use options::{FileLog, LogFormat, LogOptions, Rotation};
 pub use subscriber::build_subscriber;

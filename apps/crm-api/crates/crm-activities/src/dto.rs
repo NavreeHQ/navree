@@ -134,6 +134,6 @@ pub struct ActivityFilter {
 }
 
 /// A string without surrounding whitespace.
-fn trimmed<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+pub(crate) fn trimmed<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     String::deserialize(deserializer).map(|value| value.trim().to_owned())
 }

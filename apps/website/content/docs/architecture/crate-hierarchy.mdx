@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-flags (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-flags  navree-mcp (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -27,7 +27,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
-| L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes |
+| L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
 | L0 | `navree-dock` | [Dock](/docs/tools/dock/): `dock.toml`, local services through `docker compose` or `podman compose`, the app's `.env` settings |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
@@ -58,6 +58,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
+| L6 | `navree-mcp` | [MCP servers](/docs/ai/mcp-servers/): tools, resources and prompts over streamable HTTP and stdio |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
@@ -87,6 +88,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
+| `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
 | `navree` | Every runtime crate and the macros |
