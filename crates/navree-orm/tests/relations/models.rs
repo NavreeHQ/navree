@@ -258,8 +258,19 @@ impl Company {
     }
 }
 
+/// Hides the contacts at `hidden.test`: a global scope.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Visible;
+
+impl GlobalScope<Contact> for Visible {
+    fn apply(&self, query: Builder<Contact>) -> Builder<Contact> {
+        query.where_(Contact::EMAIL.not_like("%@hidden.test"))
+    }
+}
+
 /// A person at a company (eager loads may leave out the email).
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(global_scopes(Visible))]
 pub struct Contact {
     pub id: i64,
     pub company_id: Option<i64>,

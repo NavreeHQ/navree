@@ -744,15 +744,27 @@ impl<M: Model> Record<M> {
     }
 
     /// Loads, onto the record `morph_to` relation `name` holds, the counts
-    /// of the relations `with` lists for its model (with `on`).
+    /// of the relations `with` lists for its model (with `on` or
+    /// `count_on`): `{relation}_count`.
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// use navree_orm::relations::MorphWith;
+    ///
+    /// # async fn demo(db: Db, mut note: Record<Note>) -> Result<()> {
+    /// note.load_morph_count(&db, "notable", MorphWith::new().count_on::<Deal>(["activities"]))
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     pub async fn load_morph_count<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         let spec = AggregateSpec::count();
         load_morph_on(&target, std::slice::from_mut(self), name, &with, Some(&spec)).await
     }
 
-    /// Loads `function` of `column` of the relations `with` lists, onto the
-    /// record `morph_to` relation `name` holds.
+    /// Loads `function` of `column` of the relations `with` lists for its
+    /// model (with `on` or `count_on`), onto the record `morph_to`
+    /// relation `name` holds: `{relation}_{function}_{column}`.
     pub async fn load_morph_aggregate<E: Executor + ?Sized>(
         &mut self,
         exec: &E,
@@ -1049,8 +1061,8 @@ impl<M: Model> Collection<M> {
         load_morph_on(&target, self, name, &with, None).await
     }
 
-    /// Loads the counts of the relations `with` lists (with `on`) onto the
-    /// records `morph_to` relation `name` holds.
+    /// Loads the counts of the relations `with` lists (with `on` or
+    /// `count_on`) onto the records `morph_to` relation `name` holds.
     pub async fn load_morph_count<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         let spec = AggregateSpec::count();
