@@ -3820,6 +3820,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-schema"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "navree-config",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "navree-session"
 version = "0.1.0"
 dependencies = [

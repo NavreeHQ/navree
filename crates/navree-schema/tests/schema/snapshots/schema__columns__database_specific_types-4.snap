@@ -1,0 +1,15 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: sets
+---
+-- postgres
+-- error: PostgreSQL does not support `set` columns (column `channels`): `set` is a MySQL type; use a `jsonb` array or a join table
+
+-- mysql
+CREATE TABLE `profiles` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, `channels` SET('mail', 'sms', 'push') NOT NULL) DEFAULT CHARACTER SET utf8mb4;
+
+-- mariadb
+CREATE TABLE `profiles` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, `channels` SET('mail', 'sms', 'push') NOT NULL) DEFAULT CHARACTER SET utf8mb4;
+
+-- sqlite
+-- error: SQLite does not support `set` columns (column `channels`): `set` is a MySQL type; use a `json` array or a join table

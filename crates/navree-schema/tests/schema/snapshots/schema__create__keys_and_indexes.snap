@@ -1,0 +1,29 @@
+---
+source: crates/navree-schema/tests/schema/create.rs
+expression: sql
+---
+-- postgres
+CREATE TABLE "memberships" ("workspace_id" UUID NOT NULL, "user_id" UUID NOT NULL, "email" VARCHAR(255) NOT NULL, "role" VARCHAR(255) NOT NULL, "nickname" VARCHAR(255) NULL, "bio" TEXT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE NULL, PRIMARY KEY ("workspace_id", "user_id"));
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_workspace_email" UNIQUE ("workspace_id", "email");
+CREATE INDEX "memberships_workspace_id_role_index" ON "memberships" USING BTREE ("workspace_id", "role");
+CREATE INDEX "memberships_deleted_at_index" ON "memberships" ("deleted_at") WHERE deleted_at IS NULL;
+CREATE INDEX "memberships_email_lower_index" ON "memberships" (lower(email));
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_email_unique" UNIQUE ("email");
+CREATE INDEX "memberships_role_index" ON "memberships" ("role");
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_nick" UNIQUE ("nickname");
+
+-- mysql
+-- error: MySQL does not support partial indexes (index `memberships_deleted_at_index`): index every row, or add a generated column holding the condition and index it
+
+-- mariadb
+-- error: MySQL does not support partial indexes (index `memberships_deleted_at_index`): index every row, or add a generated column holding the condition and index it
+
+-- sqlite
+CREATE TABLE "memberships" ("workspace_id" VARCHAR NOT NULL, "user_id" VARCHAR NOT NULL, "email" VARCHAR NOT NULL, "role" VARCHAR NOT NULL, "nickname" VARCHAR, "bio" TEXT, "deleted_at" DATETIME, PRIMARY KEY ("workspace_id", "user_id"));
+CREATE UNIQUE INDEX "memberships_workspace_email" ON "memberships" ("workspace_id", "email");
+CREATE INDEX "memberships_workspace_id_role_index" ON "memberships" ("workspace_id", "role");
+CREATE INDEX "memberships_deleted_at_index" ON "memberships" ("deleted_at") WHERE deleted_at IS NULL;
+CREATE INDEX "memberships_email_lower_index" ON "memberships" (lower(email));
+CREATE UNIQUE INDEX "memberships_email_unique" ON "memberships" ("email");
+CREATE INDEX "memberships_role_index" ON "memberships" ("role");
+CREATE UNIQUE INDEX "memberships_nick" ON "memberships" ("nickname");
