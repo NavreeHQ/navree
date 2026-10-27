@@ -22,10 +22,16 @@ use crate::{
 
 /// The queue module. Global; provides and exports [`Queue`] (also as the
 /// app's `dyn Dispatcher`, so mail, events, notifications and schedules
-/// queue through it) and [`QueueOptions`]; contributes the `queue`
-/// migrations (tables `jobs` and `failed_jobs`); registers the commands
+/// queue through it, and as the `dyn JobMonitor` behind
+/// `ctx.progress(..)`), [`Operations`] and [`QueueOptions`]; contributes
+/// the `queue` migrations (tables `jobs`, `failed_jobs`, `job_batches` and
+/// `operations`), the [`OperationsController`] routes, the private channel
+/// `operations.{id}` and the scheduled task `queue.watchdog` (every
+/// minute, in apps with `ScheduleModule`); registers the commands
 /// `queue:work [--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]`,
-/// `queue:failed`, `queue:retry <id|all>` and `queue:flush`.
+/// `queue:failed`, `queue:retry <id|all>`, `queue:flush`,
+/// `queue:batches [--limit N]`, `queue:watchdog` and
+/// `queue:prune [--hours N]`.
 ///
 /// Workers run the handler of every
 /// [`JobRegistration`](navree_contracts::JobRegistration) contributed by the

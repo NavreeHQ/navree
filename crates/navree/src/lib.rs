@@ -27,7 +27,7 @@
 //! | `storage` | navree-storage | `storage` | `StorageModule`: disks and uploads |
 //! | `session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 //! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
-//! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
+//! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues, batches, operations |
 //! | `audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
 //! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
