@@ -23,6 +23,7 @@ pub use filters::{HasWheres, WhereGroup};
 pub use join::JoinClause;
 pub use table::{TableBuilder, table};
 
+use crate::attributes::extras::ExtraCasts;
 use crate::column::{Filter, IntoQuery};
 use crate::error::Result;
 use crate::ir::{ColumnRef, Expr, InValues, QueryIr, SelectItem, Where, WhereClause};
@@ -59,6 +60,8 @@ pub struct Builder<M: Model> {
     pub(crate) ir: QueryIr,
     pub(crate) removed: RemovedScopes,
     pub(crate) scopes_applied: bool,
+    /// Query-time casts of extra columns (`with_casts`).
+    pub(crate) extra_casts: ExtraCasts,
     _model: PhantomData<fn() -> M>,
 }
 
@@ -69,6 +72,7 @@ impl<M: Model> Builder<M> {
             ir: QueryIr::new(M::meta().table()),
             removed: RemovedScopes::default(),
             scopes_applied: false,
+            extra_casts: ExtraCasts::default(),
             _model: PhantomData,
         }
     }
@@ -283,6 +287,7 @@ impl<M: Model> Clone for Builder<M> {
             ir: self.ir.clone(),
             removed: self.removed.clone(),
             scopes_applied: self.scopes_applied,
+            extra_casts: self.extra_casts.clone(),
             _model: PhantomData,
         }
     }

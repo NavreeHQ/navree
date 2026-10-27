@@ -7,9 +7,11 @@ use std::future::Future;
 use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
+use navree_kernel::BoxFuture;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::attributes::{Accessor, CastContext};
 use crate::collection::Collection;
 use crate::column::{Assignment, Filter};
 use crate::error::Result;
@@ -20,7 +22,7 @@ use crate::record::Record;
 use crate::row::Row;
 use crate::scope::GlobalScope;
 use crate::ulid::Ulid;
-use crate::value::{Field, Value};
+use crate::value::{Field, FieldKind, Value};
 
 /// How a model's key gets its value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -244,19 +246,28 @@ impl<T: Timestamp> Timestamp for Option<T> {
     }
 }
 
+/// The OpenAPI schema of a column or appended value, as JSON Schema
+/// (`#[model(schema = Type)]` gives `Type`'s).
+pub type SchemaJson = fn() -> serde_json::Value;
+
 /// One column of a model, as `#[derive(Model)]` describes it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct ColumnMeta {
     name: &'static str,
     field: &'static str,
     rust_type: &'static str,
     nullable: bool,
     cast: Option<&'static str>,
+    serialized: Option<&'static str>,
+    kind: FieldKind,
+    serde_custom: bool,
+    mutator: bool,
+    schema: Option<SchemaJson>,
 }
 
 impl ColumnMeta {
     /// Column `name`, stored from struct field `field` of Rust type
-    /// `rust_type`.
+    /// `rust_type`, serialized under the field's name.
     pub const fn new(name: &'static str, field: &'static str, rust_type: &'static str) -> Self {
         ColumnMeta {
             name,
@@ -264,6 +275,11 @@ impl ColumnMeta {
             rust_type,
             nullable: false,
             cast: None,
+            serialized: Some(field),
+            kind: FieldKind::Any,
+            serde_custom: false,
+            mutator: false,
+            schema: None,
         }
     }
 
@@ -279,6 +295,47 @@ impl ColumnMeta {
     pub const fn cast(self, cast: &'static str) -> Self {
         ColumnMeta {
             cast: Some(cast),
+            ..self
+        }
+    }
+
+    /// The key the field has in serialized records (serde's name for it);
+    /// `None` when serde never writes it.
+    pub const fn serialized_as(self, key: Option<&'static str>) -> Self {
+        ColumnMeta {
+            serialized: key,
+            ..self
+        }
+    }
+
+    /// What the field's values are in serialized records (from the field
+    /// type's [`Field::KIND`] or its cast's
+    /// [`Cast::KIND`](crate::cast::Cast::KIND)).
+    pub const fn kind(self, kind: FieldKind) -> Self {
+        ColumnMeta { kind, ..self }
+    }
+
+    /// Serde writes the field its own way (`serialize_with`, `with`,
+    /// `flatten`): serialized records keep what serde writes.
+    pub const fn serde_custom(self) -> Self {
+        ColumnMeta {
+            serde_custom: true,
+            ..self
+        }
+    }
+
+    /// The field has a mutator (`#[model(set_with = ..)]`).
+    pub const fn mutator(self) -> Self {
+        ColumnMeta {
+            mutator: true,
+            ..self
+        }
+    }
+
+    /// The column's OpenAPI schema (`#[model(schema = Type)]`).
+    pub const fn schema(self, schema: SchemaJson) -> Self {
+        ColumnMeta {
+            schema: Some(schema),
             ..self
         }
     }
@@ -307,7 +364,67 @@ impl ColumnMeta {
     pub const fn cast_name(&self) -> Option<&'static str> {
         self.cast
     }
+
+    /// The key the field has in serialized records; `None` when serde
+    /// never writes it (`#[serde(skip)]`).
+    pub const fn serialized_name(&self) -> Option<&'static str> {
+        self.serialized
+    }
+
+    /// What the field's values are in serialized records.
+    pub const fn field_kind(&self) -> FieldKind {
+        self.kind
+    }
+
+    /// Whether the field is a date-time that serialized records write in
+    /// the model's date format (no serde customization).
+    pub const fn is_date_time(&self) -> bool {
+        matches!(self.kind, FieldKind::DateTime) && !self.serde_custom
+    }
+
+    /// Whether the column holds JSON (a `serde_json::Value` field or a JSON
+    /// cast): fill keys may reach into it (`"meta->status"`).
+    pub const fn is_json(&self) -> bool {
+        matches!(self.kind, FieldKind::Json)
+    }
+
+    /// Whether serde writes the field its own way.
+    pub const fn has_custom_serde(&self) -> bool {
+        self.serde_custom
+    }
+
+    /// Whether the field has a mutator (`#[model(set_with = ..)]`).
+    pub const fn has_mutator(&self) -> bool {
+        self.mutator
+    }
+
+    /// The column's OpenAPI schema override, if any.
+    pub const fn schema_override(&self) -> Option<SchemaJson> {
+        self.schema
+    }
 }
+
+impl PartialEq for ColumnMeta {
+    fn eq(&self, other: &Self) -> bool {
+        let same_schema = match (self.schema, other.schema) {
+            (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        self.name == other.name
+            && self.field == other.field
+            && self.rust_type == other.rust_type
+            && self.nullable == other.nullable
+            && self.cast == other.cast
+            && self.serialized == other.serialized
+            && self.kind == other.kind
+            && self.serde_custom == other.serde_custom
+            && self.mutator == other.mutator
+            && same_schema
+    }
+}
+
+impl Eq for ColumnMeta {}
 
 /// What `#[derive(Model)]` knows about a model: its name, table, key,
 /// columns, timestamps, soft-delete column, connection and page size.
@@ -341,11 +458,27 @@ pub struct ModelMeta {
     deleted_at: Option<&'static str>,
     connection: Option<&'static str>,
     per_page: u64,
+    fillable: &'static [&'static str],
+    guarded: Option<&'static [&'static str]>,
+    unguarded: bool,
+    hidden: &'static [&'static str],
+    visible: &'static [&'static str],
+    appends: &'static [&'static str],
+    encrypter: Option<&'static str>,
+    cast_context: bool,
+    date_serializer: Option<DateSerializer>,
 }
+
+/// How a model writes its date-times in serialized records
+/// (`#[model(serialize_dates_with = path)]`): the instant, with the offset
+/// the field had (UTC for `DateTime<Utc>` and `NaiveDateTime` fields), to
+/// any JSON value.
+pub type DateSerializer = fn(&DateTime<FixedOffset>) -> serde_json::Value;
 
 impl ModelMeta {
     /// Model `name` stored in `table`, keyed by an auto-incrementing `id`,
-    /// 15 records per page.
+    /// 15 records per page, totally guarded (no column is fillable), with
+    /// nothing hidden and nothing appended.
     pub const fn new(name: &'static str, table: &'static str) -> Self {
         ModelMeta {
             name,
@@ -358,6 +491,97 @@ impl ModelMeta {
             deleted_at: None,
             connection: None,
             per_page: 15,
+            fillable: &[],
+            guarded: None,
+            unguarded: false,
+            hidden: &[],
+            visible: &[],
+            appends: &[],
+            encrypter: None,
+            cast_context: false,
+            date_serializer: None,
+        }
+    }
+
+    /// The columns `fill` may set (`#[model(fillable(..))]`); JSON paths
+    /// into a JSON column are written `"meta->status"`.
+    pub const fn fillable(self, columns: &'static [&'static str]) -> Self {
+        ModelMeta {
+            fillable: columns,
+            ..self
+        }
+    }
+
+    /// The columns `fill` may not set (`#[model(guarded(..))]`); every other
+    /// column becomes fillable. An empty list guards nothing.
+    pub const fn guarded(self, columns: &'static [&'static str]) -> Self {
+        ModelMeta {
+            guarded: Some(columns),
+            ..self
+        }
+    }
+
+    /// Mass assignment is never guarded for this model
+    /// (`#[model(unguarded)]`).
+    pub const fn unguarded(self) -> Self {
+        ModelMeta {
+            unguarded: true,
+            ..self
+        }
+    }
+
+    /// The names left out of serialized records (`#[model(hidden(..))]` and
+    /// fields marked `#[model(hidden)]`).
+    pub const fn hidden(self, names: &'static [&'static str]) -> Self {
+        ModelMeta {
+            hidden: names,
+            ..self
+        }
+    }
+
+    /// The only names serialized records keep (`#[model(visible(..))]`);
+    /// empty keeps every name.
+    pub const fn visible(self, names: &'static [&'static str]) -> Self {
+        ModelMeta {
+            visible: names,
+            ..self
+        }
+    }
+
+    /// The accessors appended to serialized records
+    /// (`#[model(appends(..))]`).
+    pub const fn appends(self, names: &'static [&'static str]) -> Self {
+        ModelMeta {
+            appends: names,
+            ..self
+        }
+    }
+
+    /// The named `Encrypter` the model's encrypted casts use
+    /// (`#[model(encrypter = "...")]`).
+    pub const fn encrypter(self, name: &'static str) -> Self {
+        ModelMeta {
+            encrypter: Some(name),
+            ..self
+        }
+    }
+
+    /// Whether a cast of the model needs a
+    /// [`CastContext`](crate::attributes::CastContext) (resolved from the
+    /// app before records are read or written).
+    pub const fn cast_context(self, needed: bool) -> Self {
+        ModelMeta {
+            cast_context: needed,
+            ..self
+        }
+    }
+
+    /// How serialized records write the model's date-times
+    /// (`#[model(serialize_dates_with = path)]`).
+    pub const fn serialize_dates_with(self, serializer: DateSerializer) -> Self {
+        ModelMeta {
+            date_serializer: Some(serializer),
+            ..self
         }
     }
 
@@ -479,6 +703,65 @@ impl ModelMeta {
     pub const fn default_per_page(&self) -> u64 {
         self.per_page
     }
+
+    /// The fillable columns, as declared.
+    pub const fn fillable_columns(&self) -> &'static [&'static str] {
+        self.fillable
+    }
+
+    /// The guarded columns, as declared: `None` when the model declares no
+    /// guarded list (then every column is guarded unless it is fillable).
+    pub const fn guarded_columns(&self) -> Option<&'static [&'static str]> {
+        self.guarded
+    }
+
+    /// Whether the model is never guarded (`#[model(unguarded)]`).
+    pub const fn is_unguarded(&self) -> bool {
+        self.unguarded
+    }
+
+    /// The names hidden in serialized records.
+    pub const fn hidden_names(&self) -> &'static [&'static str] {
+        self.hidden
+    }
+
+    /// The only names serialized records keep; empty keeps every name.
+    pub const fn visible_names(&self) -> &'static [&'static str] {
+        self.visible
+    }
+
+    /// The accessors appended to serialized records.
+    pub const fn appended_names(&self) -> &'static [&'static str] {
+        self.appends
+    }
+
+    /// The named `Encrypter` the model's encrypted casts use, if it names
+    /// one.
+    pub const fn encrypter_name(&self) -> Option<&'static str> {
+        self.encrypter
+    }
+
+    /// Whether a cast of the model needs a cast context.
+    pub const fn uses_cast_context(&self) -> bool {
+        self.cast_context
+    }
+
+    /// How serialized records write the model's date-times, when the model
+    /// overrides the default (RFC 3339, UTC, microseconds).
+    pub const fn date_serializer(&self) -> Option<DateSerializer> {
+        self.date_serializer
+    }
+
+    /// The column whose field is `field` (its first column, for a field
+    /// stored across several columns).
+    pub fn column_of_field(&self, field: &str) -> Option<&'static ColumnMeta> {
+        self.columns.iter().find(|column| column.field == field)
+    }
+
+    /// The column called `name`, or the column of the field called `name`.
+    pub fn column_named(&self, name: &str) -> Option<&'static ColumnMeta> {
+        self.column(name).or_else(|| self.column_of_field(name))
+    }
 }
 
 /// An ORM model: a plain struct with `#[derive(Model)]`.
@@ -548,6 +831,116 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Vec::new()
     }
 
+    // ---------------------------------------------------------------------
+    // Attributes (the derive writes these from the field types, casts and
+    // `#[model(..)]` attributes)
+    // ---------------------------------------------------------------------
+
+    /// Sets `column` from untyped input, the way mass assignment does: the
+    /// value is converted to the field's type (through its cast's
+    /// [`from_json`](crate::cast::Cast::from_json)), then assigned through
+    /// the field's mutator (`#[model(set_with = ..)]`) when it has one.
+    /// Unknown columns are errors.
+    ///
+    /// Unlike [`set_value`](Model::set_value), which takes the *stored*
+    /// form (what the database holds: a ciphertext, an enum's name), this
+    /// takes the *plain* form a user sends (the secret, the enum's name).
+    fn set_attribute(&mut self, column: &str, input: serde_json::Value) -> Result<()> {
+        self.set_value(column, crate::value::json_to_value(input))
+    }
+
+    /// The columns whose values differ between `self` and `original`
+    /// (dirty tracking), compared as stored: floats within a small
+    /// tolerance, decimals numerically, date-times by instant, JSON
+    /// structurally, cast fields by their cast's
+    /// [`same`](crate::cast::Cast::same).
+    fn changed_columns(&self, original: &Self) -> Result<Vec<&'static str>> {
+        let now = self.values()?;
+        let then = original.values()?;
+        Ok(now
+            .into_iter()
+            .zip(then)
+            .filter(|((_, a), (_, b))| !crate::value::same_value(a, b))
+            .map(|((column, _), _)| column)
+            .collect())
+    }
+
+    /// The JSON value of JSON column `column` (a `serde_json::Value` field
+    /// or a JSON cast), for edits by path; `None` when the model has no
+    /// such JSON column.
+    fn json_attribute(&self, column: &str) -> Result<Option<serde_json::Value>> {
+        let _ = column;
+        Ok(None)
+    }
+
+    /// The accessors of the model (`#[accessor]` methods in an
+    /// `#[accessors]` impl block), which serialized records can append.
+    fn accessors() -> &'static [Accessor<Self>] {
+        &[]
+    }
+
+    /// The columns `fill` may set, as declared (`#[model(fillable(..))]`).
+    fn fillable() -> &'static [&'static str] {
+        Self::meta().fillable_columns()
+    }
+
+    /// The columns `fill` may not set, as declared (`#[model(guarded(..))]`);
+    /// `None` when the model declares none (every column not fillable is
+    /// guarded).
+    fn guarded() -> Option<&'static [&'static str]> {
+        Self::meta().guarded_columns()
+    }
+
+    /// Whether `fill` may set `column` (or the JSON path `column->path`).
+    fn is_fillable(column: &str) -> bool {
+        crate::attributes::fill::is_fillable(Self::meta(), column, false)
+    }
+
+    /// Whether `column` is guarded against mass assignment.
+    fn is_guarded(column: &str) -> bool {
+        crate::attributes::fill::is_guarded(Self::meta(), column, false)
+    }
+
+    /// Whether the model declares neither fillable nor guarded columns, so
+    /// every `fill` is refused (`force_fill` still works).
+    fn totally_guarded() -> bool {
+        crate::attributes::fill::totally_guarded(Self::meta(), false)
+    }
+
+    /// Runs the casts' asynchronous preparation before the record is
+    /// written (the hashed cast hashes plain values here).
+    #[doc(hidden)]
+    fn prepare_for_write<'a>(&'a mut self, context: &'a CastContext) -> BoxFuture<'a, Result<()>> {
+        let _ = context;
+        Box::pin(std::future::ready(Ok(())))
+    }
+
+    /// The values casts write into serialized records themselves
+    /// ([`Cast::serialize`](crate::cast::Cast::serialize)), by serialized
+    /// key.
+    #[doc(hidden)]
+    fn serialized_overrides(&self) -> Result<Vec<(&'static str, serde_json::Value)>> {
+        Ok(Vec::new())
+    }
+
+    /// The cast columns of `row` whose stored values should be rewritten
+    /// ([`Cast::is_stale`](crate::cast::Cast::is_stale)).
+    #[doc(hidden)]
+    fn stale_columns(row: &Row) -> Vec<&'static str> {
+        let _ = row;
+        Vec::new()
+    }
+
+    /// Adds (or subtracts) `amount`, given in the stored form, to cast
+    /// column `column` in memory, through the cast's
+    /// [`increment`](crate::cast::Cast::increment) and
+    /// [`decrement`](crate::cast::Cast::decrement).
+    #[doc(hidden)]
+    fn increment_cast(&mut self, column: &str, amount: Value, decrement: bool) -> Result<()> {
+        let _ = (amount, decrement);
+        Err(derive_support::not_a_cast_column::<Self>(column))
+    }
+
     /// A query of the model.
     fn query() -> Builder<Self> {
         Builder::new()
@@ -604,6 +997,41 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
             record.save(exec).await?;
             Ok(record)
         }
+    }
+
+    /// Inserts a record built from the model's defaults and filled with
+    /// untyped `attributes` (guarded: only fillable columns are set; see
+    /// [`Record::fill`]).
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow, body: navree_orm::attributes::Attributes) -> Result<()> {
+    /// let tag = Tag::create_from(&uow, body).await?;
+    /// # Ok(()) }
+    /// ```
+    fn create_from<E: Executor + ?Sized>(
+        exec: &E,
+        attributes: impl Into<crate::attributes::Attributes>,
+    ) -> impl Future<Output = Result<Record<Self>>> + Send
+    where
+        Self: Default,
+    {
+        let attributes = attributes.into();
+        Self::query().create_from(exec, attributes)
+    }
+
+    /// Inserts a record built from the model's defaults with every key of
+    /// `attributes` set, ignoring the model's guards (see
+    /// [`Record::force_fill`]).
+    fn force_create<E: Executor + ?Sized>(
+        exec: &E,
+        attributes: impl Into<crate::attributes::Attributes>,
+    ) -> impl Future<Output = Result<Record<Self>>> + Send
+    where
+        Self: Default,
+    {
+        let attributes = attributes.into();
+        Self::query().force_create(exec, attributes)
     }
 
     /// Deletes the records with these keys one by one (so each one's
@@ -692,11 +1120,14 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
 pub mod derive_support {
     use std::borrow::Cow;
 
-    use crate::cast::Cast;
+    use serde::Serialize;
+
+    use crate::attributes::CastContext;
+    use crate::cast::{Cast, CastError, MultiColumnCast, StoredColumns};
     use crate::error::OrmError;
     use crate::model::Model;
     use crate::row::{Row, decode_error};
-    use crate::value::{Field, FieldError, Value};
+    use crate::value::{Field, FieldError, Value, same_value};
 
     fn cast_error<M: Model>(column: &str, message: impl Into<String>) -> OrmError {
         OrmError::Cast {
@@ -745,10 +1176,22 @@ pub mod derive_support {
         }
     }
 
+    /// `C::get_with` with the current cast context.
+    fn get<M: Model, C: Cast<T>, T>(column: &str, stored: C::Stored) -> Result<T, OrmError> {
+        CastContext::with_current(|context| C::get_with(stored, context))
+            .map_err(|error| cast_error::<M>(column, error.to_string()))
+    }
+
+    /// `C::set_with` with the current cast context.
+    fn set<M: Model, C: Cast<T>, T>(column: &str, value: &T) -> Result<C::Stored, OrmError> {
+        CastContext::with_current(|context| C::set_with(value, context))
+            .map_err(|error| cast_error::<M>(column, error.to_string()))
+    }
+
     /// Reads cast column `column` through cast `C`.
     pub fn read_cast<M: Model, C: Cast<T>, T>(row: &Row, column: &str) -> Result<T, OrmError> {
         let stored = read::<M, C::Stored>(row, column)?;
-        C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
+        get::<M, C, T>(column, stored)
     }
 
     /// Reads nullable cast column `column` through cast `C`.
@@ -757,9 +1200,7 @@ pub mod derive_support {
         column: &str,
     ) -> Result<Option<T>, OrmError> {
         match read::<M, Option<C::Stored>>(row, column)? {
-            Some(stored) => C::get(stored)
-                .map(Some)
-                .map_err(|error| cast_error::<M>(column, error.to_string())),
+            Some(stored) => get::<M, C, T>(column, stored).map(Some),
             None => Ok(None),
         }
     }
@@ -790,9 +1231,7 @@ pub mod derive_support {
 
     /// The stored value of a cast field.
     pub fn write_cast<M: Model, C: Cast<T>, T>(column: &str, value: &T) -> Result<Value, OrmError> {
-        C::set(value)
-            .map(|stored| stored.to_value())
-            .map_err(|error| cast_error::<M>(column, error.to_string()))
+        set::<M, C, T>(column, value).map(|stored| stored.to_value())
     }
 
     /// The stored value of a nullable cast field.
@@ -802,7 +1241,7 @@ pub mod derive_support {
     ) -> Result<Value, OrmError> {
         match value {
             Some(value) => write_cast::<M, C, T>(column, value),
-            None => Ok(<C::Stored as Field>::null()),
+            None => Ok(CastContext::with_current(C::null_with)),
         }
     }
 
@@ -818,7 +1257,7 @@ pub mod derive_support {
         value: Value,
     ) -> Result<T, OrmError> {
         let stored = convert::<M, C::Stored>(column, value)?;
-        C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
+        get::<M, C, T>(column, stored)
     }
 
     /// Converts a stored value into a nullable cast field.
@@ -827,10 +1266,337 @@ pub mod derive_support {
         value: Value,
     ) -> Result<Option<T>, OrmError> {
         match convert::<M, Option<C::Stored>>(column, value)? {
-            Some(stored) => C::get(stored)
-                .map(Some)
-                .map_err(|error| cast_error::<M>(column, error.to_string())),
+            Some(stored) => get::<M, C, T>(column, stored).map(Some),
             None => Ok(None),
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Untyped input (mass assignment)
+    // ---------------------------------------------------------------------
+
+    fn input_error<M: Model>(column: &str, expected: Cow<'static, str>, message: String) -> OrmError {
+        OrmError::Decode {
+            model: Cow::Borrowed(M::meta().name()),
+            column: column.to_owned(),
+            expected,
+            message,
+        }
+    }
+
+    /// Converts untyped input into a field.
+    pub fn input<M: Model, T: Field>(column: &str, input: serde_json::Value) -> Result<T, OrmError> {
+        T::from_json(input).map_err(|error| {
+            input_error::<M>(column, T::type_name(), match error {
+                FieldError::Null => "the input is null (make the field an Option)".to_owned(),
+                other => other.to_string(),
+            })
+        })
+    }
+
+    /// Converts untyped input into a cast field.
+    pub fn input_cast<M: Model, C: Cast<T>, T>(
+        column: &str,
+        input: serde_json::Value,
+    ) -> Result<T, OrmError> {
+        if input.is_null() {
+            return Err(input_error::<M>(
+                column,
+                Cow::Borrowed(short_type_name::<T>()),
+                "the input is null (make the field an Option)".to_owned(),
+            ));
+        }
+        CastContext::with_current(|context| C::from_json(input, context))
+            .map_err(|error| cast_error::<M>(column, error.to_string()))
+    }
+
+    /// Converts untyped input into a nullable cast field (`null` is `None`).
+    pub fn input_cast_option<M: Model, C: Cast<T>, T>(
+        column: &str,
+        input: serde_json::Value,
+    ) -> Result<Option<T>, OrmError> {
+        if input.is_null() {
+            return Ok(None);
+        }
+        input_cast::<M, C, T>(column, input).map(Some)
+    }
+
+    /// `T`'s name without its module path, for messages.
+    fn short_type_name<T>() -> &'static str {
+        let full = std::any::type_name::<T>();
+        let base = full.split('<').next().unwrap_or(full);
+        base.rsplit("::").next().unwrap_or(base)
+    }
+
+    // ---------------------------------------------------------------------
+    // Dirty tracking
+    // ---------------------------------------------------------------------
+
+    /// Whether two field values are stored as the same thing.
+    pub fn same_field<T: Field>(a: &T, b: &T) -> bool {
+        same_value(&a.to_value(), &b.to_value())
+    }
+
+    /// Whether two cast field values are stored as the same thing.
+    pub fn same_cast<C: Cast<T>, T>(a: &T, b: &T) -> bool {
+        CastContext::with_current(|context| C::same(a, b, context))
+    }
+
+    /// Whether two nullable cast field values are stored as the same thing.
+    pub fn same_cast_option<C: Cast<T>, T>(a: &Option<T>, b: &Option<T>) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => same_cast::<C, T>(a, b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether cast column `column` of `row` holds a value to rewrite.
+    pub fn stale_cast<C: Cast<T>, T>(row: &Row, column: &str) -> bool {
+        CastContext::with_current(|context| C::is_stale(row, column, context))
+    }
+
+    // ---------------------------------------------------------------------
+    // Preparation, serialization, increments
+    // ---------------------------------------------------------------------
+
+    /// Runs cast `C`'s preparation of a field before a write.
+    pub async fn prepare_cast<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &mut T,
+        context: &CastContext,
+    ) -> Result<(), OrmError> {
+        C::prepare(value, context)
+            .await
+            .map_err(|error| cast_error::<M>(column, error.to_string()))
+    }
+
+    /// Runs cast `C`'s preparation of a nullable field before a write.
+    pub async fn prepare_cast_option<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &mut Option<T>,
+        context: &CastContext,
+    ) -> Result<(), OrmError> {
+        match value {
+            Some(value) => prepare_cast::<M, C, T>(column, value, context).await,
+            None => Ok(()),
+        }
+    }
+
+    /// What cast `C` writes for a field in serialized records, if it
+    /// decides it.
+    pub fn serialize_cast<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &T,
+    ) -> Result<Option<serde_json::Value>, OrmError> {
+        C::serialize(value)
+            .transpose()
+            .map_err(|error| serialize_error::<M>(column, error.to_string()))
+    }
+
+    /// What cast `C` writes for a nullable field in serialized records, if
+    /// it decides it (`None` stays `null`).
+    pub fn serialize_cast_option<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &Option<T>,
+    ) -> Result<Option<serde_json::Value>, OrmError> {
+        match value {
+            Some(value) => serialize_cast::<M, C, T>(column, value),
+            None => Ok(None),
+        }
+    }
+
+    fn serialize_error<M: Model>(column: &str, message: String) -> OrmError {
+        OrmError::Serialize {
+            model: Cow::Borrowed(M::meta().name()),
+            column: Some(column.to_owned()),
+            message,
+        }
+    }
+
+    /// A field as JSON (JSON columns edited by path).
+    pub fn json_of<M: Model, T: Serialize>(
+        column: &str,
+        value: &T,
+    ) -> Result<serde_json::Value, OrmError> {
+        serde_json::to_value(value).map_err(|error| serialize_error::<M>(column, error.to_string()))
+    }
+
+    /// Adds or subtracts `amount` (stored form) to a cast field through
+    /// `C::increment` / `C::decrement`.
+    pub fn increment_cast<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &mut T,
+        amount: Value,
+        decrement: bool,
+    ) -> Result<(), OrmError> {
+        let amount = convert_cast::<M, C, T>(column, amount)?;
+        let next = if decrement {
+            C::decrement(value, &amount)
+        } else {
+            C::increment(value, &amount)
+        };
+        *value = next.map_err(|error| cast_error::<M>(column, error.to_string()))?;
+        Ok(())
+    }
+
+    /// Like [`increment_cast`] for a nullable field: a `None` stays `None`
+    /// (the database's `NULL + amount` is `NULL` too).
+    pub fn increment_cast_option<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: &mut Option<T>,
+        amount: Value,
+        decrement: bool,
+    ) -> Result<(), OrmError> {
+        match value {
+            Some(value) => increment_cast::<M, C, T>(column, value, amount, decrement),
+            None => Ok(()),
+        }
+    }
+
+    /// The error for a column that has no cast to increment through.
+    pub fn not_a_cast_column<M: Model>(column: &str) -> OrmError {
+        OrmError::InvalidQuery(format!(
+            "`{column}` of {} is not a cast column: increment it with Record::increment",
+            M::meta().name()
+        ))
+    }
+
+    // ---------------------------------------------------------------------
+    // Fields stored across several columns
+    // ---------------------------------------------------------------------
+
+    /// Builds a field from its stored columns through cast `C`.
+    pub fn read_multi<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        stored: C::Stored,
+    ) -> Result<T, OrmError> {
+        CastContext::with_current(|context| C::get_with(stored, context))
+            .map_err(|error| cast_error::<M>(field, error.to_string()))
+    }
+
+    /// The stored columns of a field through cast `C`.
+    pub fn write_multi<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        value: &T,
+    ) -> Result<C::Stored, OrmError> {
+        CastContext::with_current(|context| C::set_with(value, context))
+            .map_err(|error| cast_error::<M>(field, error.to_string()))
+    }
+
+    /// The stored columns of a nullable field (`None` is NULL in each).
+    pub fn write_multi_option<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        value: &Option<T>,
+    ) -> Result<Vec<Value>, OrmError> {
+        match value {
+            Some(value) => write_multi::<M, C, T>(field, value).map(|stored| stored.to_values()),
+            None => Ok(C::Stored::nulls()),
+        }
+    }
+
+    /// The stored columns of a field as values.
+    pub fn multi_values<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        value: &T,
+    ) -> Result<Vec<Value>, OrmError> {
+        write_multi::<M, C, T>(field, value).map(|stored| stored.to_values())
+    }
+
+    fn multi_error<M: Model, C: MultiColumnCast<T>, T>(
+        row: &Row,
+        columns: &[&str],
+        (index, error): (usize, FieldError),
+    ) -> OrmError {
+        let column = columns.get(index).copied().unwrap_or("?");
+        field_error::<M>(row, column, C::Stored::type_name(index), &error)
+    }
+
+    /// Reads a field stored across `columns` of `row`.
+    pub fn read_multi_row<M: Model, C: MultiColumnCast<T>, T>(
+        row: &Row,
+        field: &str,
+        columns: &[&str],
+    ) -> Result<T, OrmError> {
+        let stored = C::Stored::from_row(row, columns)
+            .map_err(|error| multi_error::<M, C, T>(row, columns, error))?;
+        read_multi::<M, C, T>(field, stored)
+    }
+
+    /// Reads a nullable field stored across `columns` of `row`: `None` when
+    /// every column is NULL.
+    pub fn read_multi_row_option<M: Model, C: MultiColumnCast<T>, T>(
+        row: &Row,
+        field: &str,
+        columns: &[&str],
+    ) -> Result<Option<T>, OrmError> {
+        match C::Stored::from_row_option(row, columns)
+            .map_err(|error| multi_error::<M, C, T>(row, columns, error))?
+        {
+            Some(stored) => read_multi::<M, C, T>(field, stored).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// The field after replacing stored column `index` with `value`.
+    pub fn replace_multi<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        current: &T,
+        column: &str,
+        index: usize,
+        value: Value,
+    ) -> Result<T, OrmError> {
+        let mut values = write_multi::<M, C, T>(field, current)?.to_values();
+        values[index] = value;
+        let stored = C::Stored::from_values(values).map_err(|(index, error)| {
+            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+        })?;
+        read_multi::<M, C, T>(field, stored)
+    }
+
+    /// A nullable field after replacing stored column `index` with
+    /// `value`: a `None` field takes NULLs in its other columns, and
+    /// becomes `None` again when every column is NULL.
+    pub fn replace_multi_option<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        current: &Option<T>,
+        column: &str,
+        index: usize,
+        value: Value,
+    ) -> Result<Option<T>, OrmError> {
+        let mut values = write_multi_option::<M, C, T>(field, current)?;
+        values[index] = value;
+        if values.iter().all(crate::value::is_null) {
+            return Ok(None);
+        }
+        let stored = C::Stored::from_values(values).map_err(|(index, error)| {
+            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+        })?;
+        read_multi::<M, C, T>(field, stored).map(Some)
+    }
+
+    /// The stored columns of a multi-column field that differ between `a`
+    /// and `b` (by index); every column when either cannot be encoded.
+    pub fn changed_multi<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        a: &T,
+        b: &T,
+    ) -> Vec<usize> {
+        match (multi_values::<M, C, T>(field, a), multi_values::<M, C, T>(field, b)) {
+            (Ok(a), Ok(b)) => (0..a.len()).filter(|&i| !same_value(&a[i], &b[i])).collect(),
+            _ => (0..C::Stored::COUNT).collect(),
+        }
+    }
+
+    /// Like [`changed_multi`] for a nullable field.
+    pub fn changed_multi_option<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        a: &Option<T>,
+        b: &Option<T>,
+    ) -> Vec<usize> {
+        match (write_multi_option::<M, C, T>(field, a), write_multi_option::<M, C, T>(field, b)) {
+            (Ok(a), Ok(b)) => (0..a.len()).filter(|&i| !same_value(&a[i], &b[i])).collect(),
+            _ => (0..C::Stored::COUNT).collect(),
         }
     }
 
@@ -845,5 +1611,10 @@ pub mod derive_support {
             "`{column}` is not a timestamp column of {}",
             M::meta().name()
         ))
+    }
+
+    /// An accessor's value as JSON.
+    pub fn accessor_json<T: Serialize>(value: &T) -> Result<serde_json::Value, CastError> {
+        serde_json::to_value(value).map_err(|error| CastError::new(error.to_string()))
     }
 }
