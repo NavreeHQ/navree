@@ -64,6 +64,7 @@ navree-lighthouse = { path = "crates/navree-lighthouse", version = "0.1.0" }
 navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
 navree-logbook = { path = "crates/navree-logbook", version = "0.1.0" }
 navree-micro = { path = "crates/navree-micro", version = "0.1.0" }
+navree-fleet = { path = "crates/navree-fleet", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -307,6 +308,9 @@ object_store = { version = "0.14.2", default-features = false, features = ["fs"]
 csv = "1.4.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
+# The resident memory of the current process (navree-fleet workers recycle
+# themselves above `max_memory_mb`): libc on Unix, windows-sys on Windows.
+memory-stats = "1.2.0"
 # GraphQL (navree-graphql): no default features (no handlebars, no
 # multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }

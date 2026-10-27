@@ -42,6 +42,7 @@ conventions, and says which skill to load for each task.
 | [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level, with organizations above and partitions inside |
 | [`navree-billing`](navree-billing/SKILL.md) | Subscriptions, trials, seats, metered usage, invoices and webhooks with Stripe or Paddle |
 | [`navree-lighthouse`](navree-lighthouse/SKILL.md) | Application monitoring: issues, alerts, the `/_lighthouse` dashboard and its JSON API |
+| [`navree-fleet`](navree-fleet/SKILL.md) | Supervised queue workers (`navree fleet`), balancing, recycling, pause and continue, the `/_fleet` dashboard, metrics and long-wait alerts |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |

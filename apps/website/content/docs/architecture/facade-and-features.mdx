@@ -95,6 +95,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
 | `navree::lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: [application monitoring](/docs/tools/lighthouse/), issues, traces, alerts and the `/_lighthouse` dashboard |
 | `navree::logbook` | navree-logbook | `logbook` | `LogbookModule`: the [local debugging timeline](/docs/tools/logbook/) at `/_logbook`, with filters and request replay |
+| `navree::fleet` | navree-fleet | `fleet` | `FleetModule`: [supervised queue workers](/docs/tools/fleet/), metrics, failed jobs and the `/_fleet` dashboard |
 
 The facade's root also has:
 
@@ -130,6 +131,7 @@ The facade's root also has:
 | Search (`search`) | `SearchModule` |
 | Lighthouse (`lighthouse`) | `LighthouseModule` (and `m.alert_channel::<C>()`) |
 | Redis (`redis`) | `RedisModule` |
+| Fleet (`fleet`) | `FleetModule` |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()`, and with `micro`, `m.message_handlers::<T>()` and `m.forward_event::<E>()`, work without naming the traits.
 
@@ -177,6 +179,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `logbook` | `http`, `view`, `db`, `auth` |
 | `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `testing`, `validation` |
 | `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
+| `fleet` | `http`, `events`, `view`, `db`, `observe`, `queue`, `access` (and `telemetry`) |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the phonenumber crate) |
 | `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized with ammonia) |

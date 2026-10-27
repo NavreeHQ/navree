@@ -1,7 +1,6 @@
 ---
 title: "Fleet"
 description: "A queue dashboard and worker supervisor: auto-balanced workers per queue, throughput, wait times and runtimes, failed jobs, pause and continue, and long-wait alerts."
-status: "planned"
 ---
 
 ## Introduction
@@ -10,11 +9,11 @@ status: "planned"
 
 You describe your workers once, in configuration, as **supervisors**: which queues they work, how many processes they may use and how they balance. Every server runs the same `navree fleet` command with the same configuration, and the dashboard shows all of them together.
 
-Fleet builds on navree-queue's database driver. Its workers are ordinary `queue:work` processes, so jobs, retries, backoff, time limits and failed jobs behave exactly as the [queues](/docs/digging-deeper/queues/) page describes.
+Fleet builds on navree-queue's database driver. Its workers run jobs with the same code as `queue:work`, so jobs, retries, backoff, time limits and failed jobs behave exactly as the [queues](/docs/digging-deeper/queues/) page describes.
 
 ## Installation
 
-The `fleet` feature of the `navree` facade brings the crate `navree-fleet`. It is part of `full`, the default. Add the module after `QueueModule`:
+The `fleet` feature of the `navree` facade brings the crate `navree-fleet`. It is part of `full`, the default, and needs no system library. Add the module after `QueueModule`:
 
 ```rust title="src/app.rs" {7}
 pub fn app(sources: ConfigSources) -> AppBuilder {
@@ -28,9 +27,9 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`FleetModule` is global. It needs `QueueModule` with the `database` driver (the `fleet` command refuses to start on the `memory` driver, whose jobs only exist in one process) and `DatabaseModule`. Its dashboard needs `AuthModule`, `AccessModule` and `CryptoModule`; set `fleet.dashboard = false` in an app without them. With `EventsModule` in the app it emits [long-wait events](#long-wait-alerts), and with [Lighthouse](/docs/tools/lighthouse/) they become alerts.
+`FleetModule` is global and provides the `Fleet` service. It needs `DatabaseModule` and `QueueModule`; the `fleet` command refuses the `memory` queue driver, whose jobs only exist in one process. Its dashboard routes declare access, so with the dashboard on (the default) the app also needs an authenticator (`AuthModule`) and navree-access's route authorizer (`AccessModule`); set `fleet.dashboard = false` in an app without them. With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
 
-The migration set `fleet` creates four tables: `fleet_masters` (the running supervisors and their heartbeats), `fleet_state` (paused supervisors and pending commands), `fleet_jobs` (recently completed jobs) and `fleet_metrics` (per-minute snapshots).
+The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type).
 
 ```sh
 navree migrate
@@ -67,7 +66,7 @@ Fleet started on worker-1 (pid 48211) with 2 supervisors.
   exports  exports: off, 2 processes
 ```
 
-`fleet` is a command of your app's binary, so in production you run `./crm-api fleet`. It starts each worker as a child process running your binary's `queue:work` with the supervisor's queues and limits, and every worker runs up to `queue.workers` jobs at once (4), or the supervisor's `concurrency` when you set it. The process that runs `fleet` is the **master**: it runs no jobs itself, it watches the workers and the queues.
+`fleet` is a command of your app's binary, so in production you run `./crm-api fleet`. The process that runs it is the **master**: it runs no jobs itself, it watches the workers and the queues. It starts each worker as a child process of the same binary running `fleet:work`, a worker with its supervisor's queues and limits, and every worker runs up to `queue.workers` jobs at once (4), or the supervisor's `concurrency` when you set it. The master talks to its workers over their standard input (`pause`, `continue`, `stop`) and reads their reports, lines starting with `@fleet`, from their standard output; anything else a worker prints, such as its logs, the master prints as it is. The master's name is the server's host name.
 
 ### Balancing
 
@@ -79,11 +78,13 @@ Fleet started on worker-1 (pid 48211) with 2 supervisors.
 | `simple` | Splits `max_processes` evenly over the queues, and keeps it that way. |
 | `off` | Runs `max_processes` processes, each working every queue in the order listed: the first queue first, the next when it is empty. |
 
-With `auto`, every `fleet.balance_cooldown_secs` (3 seconds) the master measures each queue's **workload**: its pending jobs times the average runtime of its jobs over the last five minutes, the time the queue would take to clear on one process. It gives each queue a share of `max_processes` in proportion to its workload, and moves each queue towards that share by at most `fleet.balance_max_shift` processes (1) per step, so the supervisor changes shape steadily instead of jumping on every spike.
+With `auto`, every `fleet.balance_cooldown_secs` (3 seconds) the master measures each queue's **workload**: its waiting and running jobs times the average runtime of its jobs over the last five minutes (1 second per job when none ran lately), the time the queue would take to clear on one process. It gives each queue `min_processes`, shares the rest of `max_processes` between the queues in proportion to their workload, never giving a queue more processes than it can keep busy (its waiting and running jobs over the jobs a process runs at once), and moves each queue towards that share by at most `fleet.balance_max_shift` processes (1) per step, so the supervisor changes shape steadily instead of jumping on every spike. Delayed jobs count once they are due.
 
 Take the `default` supervisor above at 09:00, when a newsletter queues 3,000 mails. `mail` grows from one process to six over the next 15 seconds while `default` and `notifications` keep one each. As `mail` drains, its processes return to one, and the spare capacity goes to whichever queue fills up next. A queue that is empty keeps `min_processes`, so the first job on it starts at once.
 
-`min_processes` times the number of queues must not exceed `max_processes`; a supervisor that breaks the rule fails the boot with its name.
+`min_processes` times the number of queues must not exceed `max_processes`, and a `simple` supervisor needs at least one process per queue; a supervisor that breaks a rule fails the boot with its name.
+
+The balancer is a pure function, `navree::fleet::next_allocation(&supervisor, &current, &workload, max_shift)`, next to `target_allocation` (where the supervisor would end up) and `initial_allocation`, so you can check a supervisor's configuration against any workload in a test.
 
 ### Recycling and restarts
 
@@ -92,14 +93,14 @@ Long-running processes accumulate state. Fleet replaces a worker when it reaches
 | Limit | Default | The worker is replaced after |
 |---|---|---|
 | `max_jobs` | `1000` | running this many jobs (`0`: no limit) |
-| `max_memory_mb` | `256` | using more memory than this (`0`: no limit) |
+| `max_memory_mb` | `256` | using more resident memory than this (`0`: no limit) |
 | `max_time_secs` | `3600` | running for this long (`0`: no limit) |
 
-A worker that reaches a limit takes no new job, finishes the ones it is running and exits, and the master starts a fresh one in its place. A worker that exits unexpectedly (a crash, a `kill -9`) is restarted after a delay that grows from 1 second to 60 seconds while it keeps failing; five failures within a minute are logged as an error under `navree::fleet`, which [Lighthouse](/docs/tools/lighthouse/) turns into an issue. A job that a dead worker had reserved runs again once its reservation expires, as on the [queues](/docs/digging-deeper/queues/#how-a-worker-runs-jobs) page.
+A worker that reaches a limit takes no new job, finishes the ones it is running and exits, and the master starts a fresh one in its place at once. A worker that exits unexpectedly (a crash, a `kill -9`) or cannot be started is restarted after a delay that grows from 1 second to 60 seconds while it keeps failing; five failures within a minute are logged as an error under `navree::fleet`. A job that a dead worker had reserved runs again once its reservation expires, as on the [queues](/docs/digging-deeper/queues/#how-a-worker-runs-jobs) page.
 
 ### Stopping
 
-Ctrl-C, or SIGTERM on Unix, stops Fleet gracefully: the master stops starting workers, tells each worker to stop, waits while they finish the jobs they are running, and exits. A job is never cut off by the shutdown, only by its own `timeout_secs`, so give your process manager a stop timeout longer than your longest job's limit.
+Ctrl-C, or SIGTERM on Unix, stops Fleet gracefully: the master stops starting workers, tells each worker to stop, waits while they finish the jobs they are running, and exits. A worker whose master goes away (its standard input closes) stops the same way. A job is never cut off by the shutdown, only by its own `timeout_secs`, so give your process manager a stop timeout longer than your longest job's limit.
 
 ## Running Fleet in production
 
@@ -134,7 +135,7 @@ WantedBy=multi-user.target
 
 `KillMode=mixed` sends the stop signal to the master only, which stops its workers itself.
 
-- **After every deploy, restart Fleet** so its workers run the new code. Harbor does it for you. Elsewhere, restart the unit, or run `navree fleet:terminate`: every master on every server finishes its jobs and exits, and the process manager starts it again from the new release.
+- **After every deploy, restart Fleet** so its workers run the new code. Restart the unit, or run `navree fleet:terminate`: every master on every server finishes its jobs and exits, and the process manager starts it again from the new release. A master started after the `fleet:terminate` keeps running.
 - **Several servers.** Every server runs `fleet` with the same configuration. Each master balances its own processes; the dashboard and `fleet:status` show them all. To give one server more processes, override the limit in its environment: `APP_FLEET__SUPERVISORS__DEFAULT__MAX_PROCESSES=16`.
 - **Dedicated servers.** Give a server only some supervisors with `fleet.only`: `APP_FLEET__ONLY=exports` on a large machine that runs nothing but exports.
 
@@ -149,30 +150,31 @@ navree fleet:continue exports
 navree fleet:continue
 ```
 
-The state is stored in the database, so a pause applies to every server at once and survives restarts and deploys. The dashboard has the same buttons, and the `Fleet` service the same methods:
+The state is stored in the database, so a pause applies to every server at once (each master checks every second) and survives restarts and deploys. The dashboard has the same buttons, and the `Fleet` service the same methods:
 
 ```rust
 use navree::fleet::Fleet;
 
 fleet.pause(Some("exports")).await?;
 fleet.resume(Some("exports")).await?;
+let paused = fleet.paused().await?; // the paused supervisors
 ```
 
 ## The dashboard
 
-The dashboard is a single-page app compiled into the crate and served by your app at `fleet.path` (`/_fleet`), outside the API prefix. It refreshes every few seconds.
+The dashboard is a page served by your app at `fleet.path` (`/_fleet`), outside the API prefix: HTML rendered with navree-view, with its script and styles compiled into the crate and served from `/_fleet/assets/`. It reads the JSON API under `/_fleet/api` and refreshes every 5 seconds.
 
-- **Overview.** A row of figures: Fleet's status (running, paused or inactive when no master has reported for 30 seconds), jobs per minute, jobs in the past hour, failed jobs in the past seven days, and the longest current wait with the queue it is on. Below, the **workload** table: each queue with its pending jobs, its processes, the wait of its oldest job and the time it would take to clear.
-- **Supervisors.** Every master, by server, with its supervisors and their processes. Each process shows its queue, its pid, its memory, the jobs it has run and when it started.
-- **Jobs.** Pending jobs (waiting, delayed and running) and jobs completed in the last hour, with their type, queue, runtime and when they ran. Search by job type or queue, and open a job to see its payload and attempts.
+- **Overview.** A row of figures: Fleet's status (running, paused when every supervisor is paused, or inactive when no master has reported for 30 seconds), jobs per minute, jobs in the past hour, failed jobs in the past seven days, and the longest current wait with the queue it is on. Below, the **workload** table: each queue with its pending jobs, its processes, the wait of its oldest job, the time it would take to clear and its jobs per minute.
+- **Supervisors.** Every master, by server, with its supervisors, a button to pause or continue each, and their processes. Each process shows its queue, its pid, its memory, the jobs it has run and when it started.
+- **Jobs.** Pending jobs (waiting, delayed and running) and job attempts finished within `fleet.trim.recent_minutes` (the last hour), with their type, queue, outcome, runtime and when they ran. Search by job type or queue, and open a pending job to see its payload and attempts.
 - **Failed jobs.** Every job in `failed_jobs`, newest first, with its type, queue, attempts, when it failed and its error. Search by type, queue, error or payload text. Open one to read the full error and the payload, then **Retry** it or **Forget** it. **Retry all** retries every failed job matching the search, so one click puts back every `contacts.export` that failed while the mail server was down.
-- **Metrics.** For each queue and each job type, charts of throughput, average and p95 runtime, and wait time, over the last hour, day or week.
+- **Metrics.** For each queue and each job type, charts of throughput and of average and p95 runtime, and for each queue its wait time, over the last hour (per minute), day (per 15 minutes) or week (per hour).
 
-Payload values whose names contain a fragment of `log.redact` (`password`, `token`, `secret` and the rest) are shown as `[redacted]`.
+Payload values whose names contain a fragment of `log.redact` (`password`, `token`, `secret` and the rest) are shown as `[redacted]`, in the page and in the API.
 
 ### Access
 
-The dashboard signs in with your app's users, with the same sign-in screen, encrypted cookie (scoped to `/_fleet`) and CSRF protection as the [Lighthouse dashboard](/docs/tools/lighthouse/#signing-in-and-access); its JSON API under `/_fleet/api` also accepts a bearer token. Fleet registers the subject `Fleet` with the permission prefix `fleet`:
+The page and its assets are public and hold no data. The page signs in through your app's sign-in route, navree-auth's `POST {http.api_prefix}{auth.routes_prefix}/login` (`/api/auth/login`, two-factor codes included), keeps the access and refresh tokens in the browser tab's session storage, and sends `Authorization: Bearer` to the API; you can also paste an access token. It is served with a strict Content Security Policy (no inline scripts) and `X-Frame-Options: DENY`. Fleet registers the subject `Fleet` with the permission prefix `fleet`, and every API route checks an ability on it:
 
 | Action | Allows | Permission |
 |---|---|---|
@@ -184,9 +186,15 @@ navree access:grant manager fleet.view
 navree access:grant admin fleet.operate
 ```
 
+| Route | Ability |
+|---|---|
+| `GET /_fleet/api/overview`, `/masters`, `/jobs`, `/jobs/{id}`, `/failed`, `/failed/{id}`, `/metrics?period=hour\|day\|week` | `view` |
+| `POST /_fleet/api/failed/{id}/retry`, `POST /_fleet/api/failed/retry?search=`, `DELETE /_fleet/api/failed/{id}` | `operate` |
+| `POST /_fleet/api/pause`, `POST /_fleet/api/continue` (body `{"supervisor": "exports"}`, or none for every supervisor) | `operate` |
+
 ## Metrics
 
-The master takes a snapshot of every queue it supervises every `fleet.snapshot_secs` (60): jobs processed and failed, average and p95 runtime per job type, and the pending count and oldest wait per queue. Workers report each finished job to the master as they go, so the numbers cost one write per snapshot, not one per job. Snapshots are kept for `fleet.trim.metrics_days` (7), completed jobs for `fleet.trim.recent_minutes` (60).
+Workers turn navree-queue's [telemetry](/docs/digging-deeper/health-and-metrics/) job events into finished attempts and report them to their master as they go. The master stores them in one batch per heartbeat (every 3 seconds) in `fleet_jobs`, kept for `fleet.trim.recent_minutes` (60), and every `fleet.snapshot_secs` (60) it stores one snapshot per queue it supervises and per job type that ran: attempts finished and failed, average and p95 runtime, and each queue's pending count and oldest wait. Snapshots are kept for `fleet.trim.metrics_days` (7).
 
 With [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) in the app, `GET /metrics` on your web server includes Fleet's latest numbers, read from the database when Prometheus scrapes, so you don't have to scrape the worker servers:
 
@@ -195,7 +203,7 @@ With [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) in the app, `GE
 | `fleet_queue_pending` | gauge | `queue` |
 | `fleet_queue_wait_seconds` | gauge | `queue` |
 | `fleet_queue_throughput_per_minute` | gauge | `queue` |
-| `fleet_job_runtime_seconds` | gauge (p95) | `job` |
+| `fleet_job_runtime_seconds` | gauge (p95 over the last five minutes) | `job` |
 | `fleet_processes` | gauge | `supervisor`, `queue` |
 | `fleet_failed_jobs` | gauge | |
 
@@ -210,10 +218,7 @@ mail = 30
 exports = 600
 ```
 
-When a queue's oldest available job has waited longer than its threshold, Fleet emits `LongWaitDetected` (event name `fleet.long_wait`), at most once per queue every `fleet.long_wait_cooldown_minutes` (15). Queues without a threshold never raise one.
-
-- With [Lighthouse](/docs/tools/lighthouse/#alerts) in the app, the event becomes a `long_wait` alert on every channel that asks for it, such as Slack.
-- Without Lighthouse, listen to the event yourself:
+When a queue's oldest available job has waited longer than its threshold, a running master emits `LongWaitDetected` (event name `fleet.long_wait`, fields `queue`, `wait_secs` and `threshold_secs`), at most once per queue every `fleet.long_wait_cooldown_minutes` (15) across every master, and logs a warning under `navree::fleet`. Queues without a threshold never raise one. Listen to the event to send it where your team looks:
 
 ```rust title="src/modules/ops/mod.rs"
 use navree::BoxFuture;
@@ -253,7 +258,7 @@ impl OpsModule {
 }
 ```
 
-The dashboard marks the queue in amber while it is over its threshold.
+`Fleet::long_waits()` returns the queues over their threshold right now, and the dashboard marks a queue in amber while it is over its threshold.
 
 ## Failed jobs
 
@@ -263,6 +268,8 @@ Fleet works on the same `failed_jobs` table as the [queue commands](/docs/diggin
 navree fleet:forget 0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23
 ```
 
+The `Fleet` service has the same operations: `failed_jobs(search)`, `failed_job(id)`, `retry(id)`, `retry_all(search)` and `forget(id)`.
+
 ## Configuration
 
 Every key of the `fleet` section is optional except each supervisor's `queues`. From the environment, nested keys use `__` and lists are comma-separated strings: `APP_FLEET__SUPERVISORS__DEFAULT__QUEUES=default,mail`.
@@ -270,11 +277,11 @@ Every key of the `fleet` section is optional except each supervisor's `queues`. 
 | Key | Default | What it does |
 |---|---|---|
 | `fleet.dashboard` | `true` | Mount the dashboard and its API. |
-| `fleet.path` | `/_fleet` | Where the dashboard is served. |
+| `fleet.path` | `/_fleet` | Where the dashboard is served (starts with `/`). |
 | `fleet.balance_cooldown_secs` | `3` | How often `auto` supervisors rebalance. |
 | `fleet.balance_max_shift` | `1` | Processes added or removed per queue per step. |
-| `fleet.snapshot_secs` | `60` | How often the master stores metrics. |
-| `fleet.trim.recent_minutes` | `60` | How long completed jobs are listed. |
+| `fleet.snapshot_secs` | `60` | How often a master stores metrics. |
+| `fleet.trim.recent_minutes` | `60` | How long finished jobs are listed. |
 | `fleet.trim.metrics_days` | `7` | How long metric snapshots are kept. |
 | `fleet.long_wait.<queue>` | none | Seconds a queue's oldest job may wait before a long-wait alert. |
 | `fleet.long_wait_cooldown_minutes` | `15` | Minimum time between two long-wait events for one queue. |
@@ -288,7 +295,7 @@ Every key of the `fleet` section is optional except each supervisor's `queues`. 
 | `fleet.supervisors.<name>.max_memory_mb` | `256` | Memory before a process is recycled. |
 | `fleet.supervisors.<name>.max_time_secs` | `3600` | Lifetime before a process is recycled. |
 
-An app without a `fleet.supervisors` table gets one supervisor, `default`, working `queue.queues` (or `queue.default_queue`) with the defaults above.
+An app without a `fleet.supervisors` table gets one supervisor, `default`, working `queue.queues` (or `queue.default_queue`) with the defaults above, and enough processes for one per queue when `queue.queues` lists more than four.
 
 | Command | What it does |
 |---|---|
@@ -298,13 +305,14 @@ An app without a `fleet.supervisors` table gets one supervisor, `default`, worki
 | `fleet:continue [supervisor]` | Continues one supervisor, or all of them. |
 | `fleet:terminate` | Stops every master gracefully, for its process manager to start again. |
 | `fleet:forget <id>` | Deletes one failed job. |
+| `fleet:work` | One worker process, as the master starts it (`--supervisor`, `--queue`, `--concurrency`, `--max-jobs`, `--max-memory-mb`, `--max-time-secs`, `--heartbeat-ms`, `--paused`); you don't run it yourself. |
 
 ```text title="navree fleet:status"
 Fleet is running.
 
-Master     Status    Supervisors  Processes  Started
-worker-1   running   2            7          2026-10-26 09:15:12
-worker-2   running   1            2          2026-10-26 09:15:40
+Master    Status   Supervisors  Processes  Started
+worker-1  running  2            7          2026-10-26 09:15:12
+worker-2  running  1            2          2026-10-26 09:15:40
 
 Queue          Pending  Oldest wait  Processes  Jobs/min
 default        12       3 s          3          420
@@ -334,6 +342,7 @@ async fn a_mail_waiting_two_minutes_is_a_long_wait() {
     let app = TestApp::builder()
         .temp_database()
         .config("fleet.long_wait.mail", 60)
+        .config("fleet.dashboard", false) // no AccessModule in this test app
         .module(DatabaseModule::from_config())
         .module(QueueModule::from_config())
         .module(FleetModule::from_config())
@@ -354,7 +363,9 @@ async fn a_mail_waiting_two_minutes_is_a_long_wait() {
 }
 ```
 
-`Fleet::workload()` returns each queue's pending count, oldest wait and time to clear, the numbers the balancer works from, so you can check a supervisor's configuration against a workload you build in a test.
+`Fleet::workload()` returns each queue's pending count, oldest wait, average runtime, workload and time to clear, the numbers the balancer works from, so you can check a supervisor's configuration against a workload you build in a test with `next_allocation`.
+
+To test a master itself, run `Master::new(fleet)` (or `Master::from_app(&ctx)`) with another spawner: `navree::fleet::testing::FakeSpawner` starts no process and lets the test read the commands each worker received and make workers report, reach a limit or crash, and `InProcessSpawner` runs real workers as tasks of the test app. `MasterSettings` shortens the master's pace for tests.
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
@@ -363,7 +374,7 @@ async fn a_mail_waiting_two_minutes_is_a_long_wait() {
   <LinkCard href="/docs/tools/harbor/" title="Harbor">
     Servers with Fleet already running.
   </LinkCard>
-  <LinkCard href="/docs/tools/lighthouse/" title="Lighthouse">
-    Alerts for failed jobs and long waits.
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
+    `GET /metrics`, telemetry and readiness checks.
   </LinkCard>
 </LinkCards>

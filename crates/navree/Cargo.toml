@@ -23,6 +23,7 @@ full = [
     "crypto",
     "db",
     "events",
+    "fleet",
     "http",
     "http-client",
     "lighthouse",
@@ -279,6 +280,21 @@ logbook = [
     "db",
     "auth",
 ]
+## L7 (in `full`)
+## Fleet:supervised queue workers with auto-balancing, recycling and
+## graceful restarts, metrics, failed jobs, pause and continue, long-wait
+## alerts and a dashboard at `/_fleet` (pure Rust; no system dependency).
+fleet = [
+    "dep:navree-fleet",
+    "access",
+    "db",
+    "events",
+    "http",
+    "observe",
+    "queue",
+    "telemetry",
+    "view",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -311,6 +327,7 @@ navree-billing = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
 navree-oauth = { workspace = true, optional = true }
 navree-flags = { workspace = true, optional = true }
+navree-fleet = { workspace = true, optional = true }
 navree-grpc = { workspace = true, optional = true }
 navree-search = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }

@@ -38,6 +38,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-lighthouse` | Monitor the app with `LighthouseModule`: issues, reports from code, statuses, alerts and your own channels, the `/_lighthouse` dashboard and its JSON API, pruning, and `LighthouseFake` in tests |
 | `navree-redis` | Share the cache, locks, jobs, sessions, rate limits and WebSocket broadcasts between processes with `RedisModule`, and run Redis commands |
 | `navree-logbook` | The local debugging timeline at `/_logbook`: `LogbookModule`, the filter language, `tag` and `dump`, duplicate-query detection, request replay and `last_request().queries()` in tests |
+| `navree-fleet` | Run queue workers under Fleet: supervisors and balancing, recycling limits, `fleet` in production, pausing, the `/_fleet` dashboard and its abilities, metrics and gauges, long-wait alerts, and `FakeSpawner` tests |
 | `navree-queues-and-scheduling` | Jobs, workers, retries and failed jobs, and cron-style schedules |
 | `navree-events-and-broadcasting` | Events and listeners, and live updates over the Pusher-protocol WebSocket server |
 | `navree-mail-and-notifications` | Mail with templates and transports, and notifications over the database, mail and broadcast channels |

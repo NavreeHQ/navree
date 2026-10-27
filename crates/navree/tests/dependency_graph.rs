@@ -211,6 +211,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-view", "navree-db", "navree-auth",
     ]),
+    // Fleet:supervised queue workers (navree-queue's supervision hooks and
+    // introspection), telemetry job records for metrics, a dashboard page
+    // rendered with navree-view behind navree-access abilities, gauges on
+    // navree-observe's `/metrics`, long-wait events.
+    rule("navree-fleet", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-events", "navree-view", "navree-db", "navree-observe", "navree-queue",
+        "navree-access",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`.
@@ -287,6 +296,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-lighthouse",
     "navree-logbook",
     "navree-micro",
+    "navree-fleet",
 ];
 
 /// Cargo dependency kind of an edge.

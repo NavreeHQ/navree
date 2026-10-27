@@ -1,11 +1,14 @@
 //! `/metrics`: the Prometheus exposition of the process-wide recorder.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use http::StatusCode;
 use navree_config::ConfigSources;
 use navree_contracts::Secret;
-use navree_observe::{ObserveModule, ObserveOptions};
+use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
+use navree_observe::{MetricsCollector, ObserveModule, ObserveOptions};
 use serde_json::json;
 
 use crate::support::{TestApp, TestResponse, app_with, configured_app};
@@ -241,4 +244,76 @@ async fn routes_are_named_public_and_documented() {
     let metrics = routes.iter().find(|r| r.full_path == "/metrics").unwrap();
     assert_eq!(metrics.guards.len(), 1, "the bearer token guard");
     assert_eq!(metrics.api.as_ref().unwrap().responses, [401]);
+}
+
+/// Sets `observe_test_backlog` to how many times it ran.
+struct Backlog(AtomicU64);
+
+impl MetricsCollector for Backlog {
+    fn collect(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let runs = self.0.fetch_add(1, Ordering::SeqCst) + 1;
+            metrics::gauge!("observe_test_backlog").set(runs as f64);
+        })
+    }
+}
+
+/// Never finishes.
+struct Stuck;
+
+impl MetricsCollector for Stuck {
+    fn collect(&self) -> BoxFuture<'_, ()> {
+        Box::pin(std::future::pending())
+    }
+}
+
+/// Registers [`Backlog`] and, with `true`, [`Stuck`].
+struct CollectorsModule(bool);
+
+impl Module for CollectorsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.multi(Factory::<dyn MetricsCollector>::new(|_| async {
+            Ok(Arc::new(Backlog(AtomicU64::new(0))) as Arc<dyn MetricsCollector>)
+        }));
+        if self.0 {
+            m.multi(Factory::<dyn MetricsCollector>::new(|_| async {
+                Ok(Arc::new(Stuck) as Arc<dyn MetricsCollector>)
+            }));
+        }
+    }
+}
+
+/// The value of an unlabelled sample.
+fn sample_value(body: &str, name: &str) -> Option<f64> {
+    body.lines()
+        .find_map(|line| line.strip_prefix(&format!("{name} ")))
+        .and_then(|value| value.trim().parse().ok())
+}
+
+#[tokio::test]
+async fn collectors_refresh_their_metrics_on_every_scrape() {
+    let app =
+        TestApp::boot(app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(false)))
+            .await;
+    let first = app.get("/metrics").await.text();
+    assert_eq!(
+        sample_value(&first, "observe_test_backlog"),
+        Some(1.0),
+        "{first}"
+    );
+    let second = app.get("/metrics").await.text();
+    assert_eq!(
+        sample_value(&second, "observe_test_backlog"),
+        Some(2.0),
+        "{second}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_stuck_collector_does_not_hold_up_the_scrape() {
+    let app =
+        TestApp::boot(app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(true)))
+            .await;
+    let response = app.get("/metrics").await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.text());
 }
