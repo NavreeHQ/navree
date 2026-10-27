@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_column(Deal::UPDATED_AT, \">\", Deal::CREATED_AT))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."updated_at" > "deals"."created_at" AND "deals"."deleted_at" IS NULL
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE `deals`.`updated_at` > `deals`.`created_at` AND `deals`.`deleted_at` IS NULL
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."updated_at" > "deals"."created_at" AND "deals"."deleted_at" IS NULL

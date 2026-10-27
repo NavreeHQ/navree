@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"deals as d\").select([\"d.title as name\", \"d.*\"]))"
+---
+PostgreSQL: SELECT "d"."title" AS "name", "d".* FROM "deals" AS "d"
+MySQL: SELECT `d`.`title` AS `name`, `d`.* FROM `deals` AS `d`
+SQLite: SELECT "d"."title" AS "name", "d".* FROM "deals" AS "d"

@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\ncompile_aggregate(&limited.clone().into_ir(), &distinct_sum, d))"
+---
+PostgreSQL: SELECT SUM(DISTINCT "amount_cents") AS "aggregate" FROM (SELECT * FROM "deals" ORDER BY "title" ASC LIMIT $1) AS "aggregate_table"
+  values: [BigUnsigned(Some(10))]
+MySQL: SELECT SUM(DISTINCT `amount_cents`) AS `aggregate` FROM (SELECT * FROM `deals` ORDER BY `title` ASC LIMIT ?) AS `aggregate_table`
+  values: [BigUnsigned(Some(10))]
+SQLite: SELECT SUM(DISTINCT "amount_cents") AS "aggregate" FROM (SELECT * FROM "deals" ORDER BY "title" ASC LIMIT ?) AS "aggregate_table"
+  values: [BigUnsigned(Some(10))]
