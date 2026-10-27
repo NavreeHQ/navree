@@ -185,6 +185,11 @@ impl User {
         self.has_many(Deal::OWNER_ID)
     }
 
+    /// The accounts the rep owns (a model with default loads and counts).
+    pub fn accounts(&self) -> HasMany<User, Account> {
+        self.has_many(Account::OWNER_ID)
+    }
+
     /// The deals the rep watches, through the typed pivot model.
     pub fn watched(&self) -> BelongsToMany<User, Deal, DealWatcher> {
         self.belongs_to_many("deal_watchers")

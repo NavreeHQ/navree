@@ -206,6 +206,12 @@ pub(crate) struct EagerState {
     pub(crate) tree: EagerTree,
     /// `(relation, alias)` of the counts `#[model(with_count)]` added.
     pub(crate) default_counts: Vec<(String, String)>,
+    /// A relation's query: the model's default counts are added when it
+    /// reads records (adding them up front would resolve relations while
+    /// relations are being defined).
+    pub(crate) pending_default_counts: bool,
+    /// Default counts `without` took off before they were added.
+    pub(crate) skipped_default_counts: Vec<String>,
     /// How many existence subqueries this query is nested in.
     pub(crate) depth: u32,
 }
@@ -287,6 +293,11 @@ impl<M: Model> Builder<M> {
                 self.eager.tree.remove(&path.segments);
                 if path.segments.len() == 1 {
                     self.remove_default_count(&path.segments[0]);
+                    if self.eager.pending_default_counts {
+                        self.eager
+                            .skipped_default_counts
+                            .push(path.segments[0].clone());
+                    }
                 }
                 self
             }
@@ -311,6 +322,7 @@ impl<M: Model> Builder<M> {
     /// default relation counts.
     pub fn without_eager_loads(mut self) -> Self {
         self.eager.tree = EagerTree::default();
+        self.eager.pending_default_counts = false;
         let counts: Vec<String> = self
             .eager
             .default_counts
@@ -352,6 +364,38 @@ impl<M: Model> Builder<M> {
                 .push(((*relation).to_owned(), alias));
         }
         query
+    }
+
+    /// What a relation's query of `M` starts with: the model's default eager
+    /// loads now, its default counts when the query reads records.
+    pub(crate) fn with_relation_defaults(self) -> Self {
+        let meta = M::meta();
+        let mut query = meta
+            .default_with()
+            .iter()
+            .fold(self, |query, path| query.with(*path));
+        query.eager.pending_default_counts = !meta.default_with_count().is_empty();
+        query
+    }
+
+    /// Adds the model's default counts a relation's query left for when it
+    /// reads records (but the ones `without` took off).
+    pub(crate) fn with_pending_default_counts(mut self) -> Self {
+        if !self.eager.pending_default_counts {
+            return self;
+        }
+        self.eager.pending_default_counts = false;
+        let skipped = std::mem::take(&mut self.eager.skipped_default_counts);
+        for relation in M::meta().default_with_count() {
+            if skipped.iter().any(|name| name == relation) {
+                continue;
+            }
+            self = self.with_count(*relation);
+            self.eager
+                .default_counts
+                .push(((*relation).to_owned(), format!("{relation}_count")));
+        }
+        self
     }
 
     /// Removes the default count of `relation` from the select list.

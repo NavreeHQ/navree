@@ -593,7 +593,11 @@ How the pieces fit:
   when every key is NULL). Limits in a constrained load apply per parent
   through `Expr::RowNumber` in a derived table (`navree_row`,
   `navree_table`; MySQL sorts NULLs with an `IS NULL` key).
-  `#[model(with = [..], with_count = [..])]` apply in `Model::query`.
+  `#[model(with = [..], with_count = [..])]` apply in `Model::query` and
+  in every relation query of the model (`Builder::with_relation_defaults`:
+  the eager loads at once, the counts when the query reads records, since
+  adding them earlier would resolve relations while relations are being
+  defined). Cycles among default eager loads never end: avoid them.
 - **Existence and aggregates.** Correlated `EXISTS` (at least one) or
   `COUNT` subqueries, nested by path; the related model's global scopes
   apply; a relation to its own table aliases the inner one `navree_{depth}`
