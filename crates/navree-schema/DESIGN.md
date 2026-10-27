@@ -6,11 +6,11 @@ PostgreSQL (with TimescaleDB), MySQL/MariaDB and SQLite, and run through the
 migrator that `navree-db` owns.
 
 ```rust
-use navree_schema::{Migration, Schema, SchemaResult};
+use navree::schema::prelude::*;
 
-pub struct CreateDeals;
+pub struct Migration;
 
-impl Migration for CreateDeals {
+impl navree::schema::Migration for Migration {
     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
         schema
             .create("deals", |t| {
@@ -39,43 +39,46 @@ from Navree. `navree-db` (L3) depends on it:
 ```
 L4+ framework crates (audit, queue, notify, ...) ──► navree-schema, navree-db
 L3  navree-db ── runs migrations, owns the commands ──► navree-schema
-L2  navree-schema ── builds and compiles schema changes
+L2  navree-schema ── builds, compiles, introspects and dumps schemas
 ```
 
 Why below `navree-db` and not above it:
 
 - **The runner stays in `navree-db`.** Connections, the pool, the unit of
   work, `MigrationSet`, the `navree_migrations` table and the `migrate*`
-  commands are `navree-db`'s. The runner needs to hand schema migrations
-  their context (options, notices) and to register `schema:dump`, so it must
-  see this crate.
+  commands are `navree-db`'s. The runner hands schema migrations their
+  context (options, statements, notices, the pretend reader) and registers
+  `schema:dump`, so it must see this crate.
 - **Framework crates use it for their own tables.** The audit log, job
   history, notification and webhook delivery logs are time-series tables
   that become hypertables on TimescaleDB. Those crates live at L4 and up, so
   the schema builder has to sit below them.
 - **Nothing here needs the pool.** The builder talks to any SeaORM
-  connection, transaction or migration manager through
-  [`SchemaConnection`], so it works inside the unit of work, inside the
-  migrator, and offline (no database at all).
+  connection or transaction through [`SchemaConnection`], so it works inside
+  the unit of work, inside the migrator, and offline (no database at all).
+
+The facade re-exports it as `navree::schema` (feature `schema`, in `full`;
+`db` turns it on). `navree_db::navree_schema` re-exports it too.
 
 ## 2. Module layout
 
 | Module | Contents |
 |---|---|
-| `schema` | [`Schema`]: the async entry point (`create`, `table`, `rename`, `drop`, `drop_if_exists`, introspection, TimescaleDB helpers, raw statements), statement log and notices |
-| `blueprint` | [`Blueprint`]: the table being described: every column type, the helpers (`id`, `timestamps`, `morphs`, ...), indexes, foreign keys, drops and renames, table options |
+| `schema` | [`Schema`]: the async entry point (`create`, `table`, `rename`, `drop`, `drop_if_exists`, introspection, TimescaleDB helpers, `dump`, `load`, raw statements), its statement log and notices, offline and pretending modes |
+| `blueprint` | [`Blueprint`]: the table being described: every column type, the helpers (`id`, `timestamps`, `morphs`, ...), indexes, foreign keys, drops and renames, table options, the time-series engine (`hypertable`) |
 | `column` | [`ColumnDefinition`] (the data) and [`ColumnBuilder`] (the fluent handle every column method returns: modifiers, inline indexes, `constrained`) |
-| `index` | [`IndexDefinition`], [`ForeignKeyDefinition`] and their builders, [`ReferentialAction`] |
+| `index` | [`IndexDefinition`], [`ForeignKeyDefinition`] and their builders, [`ReferentialAction`], the [`Columns`] and [`IndexRef`] argument types |
 | `value` | [`DefaultValue`] and [`Expression`] (raw SQL) |
 | `interval` | [`Interval`]: `"7 days"` parsed once, rendered per database |
 | `target` | [`Dialect`], [`Target`] (dialect, server version, TimescaleDB version), [`Version`] |
-| `grammar` | One compiler per dialect (`postgres`, `mysql`, `sqlite`) plus `timescale`; pure functions from a blueprint and a target to SQL |
+| `grammar` | One compiler per dialect (`postgres`, `mysql`, `sqlite`) plus `timescale`; pure functions from a blueprint, a target and (for SQLite rebuilds and hypertable conversions) the table's current state to statements and notices |
 | `timescale` | [`Hypertable`], [`Compression`], [`ContinuousAggregate`], [`RefreshPolicy`] |
-| `inspect` | Catalog queries per dialect and their results: [`TableInfo`], [`ViewInfo`], [`ColumnInfo`], [`IndexInfo`], [`ForeignKeyInfo`] |
-| `rebuild` | SQLite table rebuilds: the current table state and the twelve-step copy |
-| `migration` | [`Migration`] (the trait migration files implement), [`SchemaMigration`] (the adapter the migrator runs), [`MigrationContext`], the `migration!` and `migrations!` macros |
+| `inspect` | Catalog queries per dialect and their results: [`TableInfo`], [`ViewInfo`], [`ColumnInfo`], [`IndexInfo`], [`ForeignKeyInfo`]; target detection; the states rebuilds and conversions read |
+| `rebuild` | SQLite table rebuilds: the table state, and the small SQL tokenizer that keeps definitions, constraints, indexes and triggers intact |
+| `dump` | Schema dumps read from the catalogs (`dump/sqlite.rs`, `dump/mysql.rs`, `dump/postgres.rs`), [`DumpOptions`] |
+| `script` | [`split_statements`]: an SQL script cut into statements per dialect |
+| `migration` | [`Migration`] (what migration files implement), [`SchemaMigration`] (the adapter the migrator runs), [`MigrationContext`], the [`migration!`] macro |
 | `options` | [`SchemaOptions`]: configuration section `schema` |
-| `dump` | `schema:dump`: the schema of a database as SQL, per dialect, with the migration rows |
 | `error` | [`SchemaError`] |
 
 ## 3. From a blueprint to SQL
@@ -86,28 +89,38 @@ Why below `navree-db` and not above it:
    `create` mode the columns form the `CREATE TABLE`; in `table` (alter)
    mode each column is itself a command, so `t.string("slug")` followed by
    `t.unique(["slug"])` runs in that order.
-2. Fluent indexes (`.unique()`, `.index()`, `.primary()` on a column)
-   become index commands when the blueprint is compiled.
-3. The grammar of the [`Target`] turns the commands into statements. The
-   grammar is a pure function of the blueprint, the target and (for SQLite
-   rebuilds) the current table state, which is what makes every dialect
+2. Indexes declared on columns (`.unique()`, `.index()`, `.primary()`)
+   become index commands when the blueprint is compiled, after the
+   declared commands.
+3. The blueprint is validated (duplicate columns, two primary keys,
+   `virtual_as` with `stored_as`, a foreign key without a table, a decimal
+   scale larger than its precision, modifiers that do not apply to the
+   column's type, ...), each mistake with a message saying how to fix it.
+4. The grammar of the [`Target`] turns the commands into statements and
+   notices. Grammars are pure functions, which is what makes every dialect
    testable without a server.
-4. [`Schema`] executes the statements in order on its connection, logs each
-   one (`schema.statements()`), and collects notices (`schema.notices()`)
-   such as "TimescaleDB is not installed: `events` is a regular table".
+5. [`Schema`] runs the statements in order on its connection, logs each one
+   ([`statements`](Schema::statements), and the migration context when
+   there is one), and reports notices ([`notices`](Schema::notices), the
+   log, the migration context) such as "SQLite does not support
+   TimescaleDB: `events` is a regular table with an index on `occurred_at`".
 
-`Schema::offline(target)` records statements without a database: it is
-the pretend mode for tests, docs and previews, and it is how the snapshot
-tests generate SQL for every dialect.
+`Schema::offline(target)` records statements without a database: previews,
+tests and docs, and the snapshot tests of every dialect.
+`Schema::new(conn).pretending()` reads the real database but records its
+changes instead of running them.
 
 ### Targets
 
 A [`Target`] is detected once per `Schema` from the connection
-(`SELECT version()`, `sqlite_version()`, `pg_extension`), or given:
-`Target::postgres("17").with_timescaledb("2.17")`, `Target::mysql("8.4")`,
-`Target::mariadb("11.4")`, `Target::sqlite("3.46")`. Version checks give
+(`server_version_num`, `pg_extension` and `pg_available_extensions`,
+`shared_preload_libraries` and the role's superuser flag on PostgreSQL;
+`VERSION()` on MySQL and MariaDB; `sqlite_version()`), or given:
+`Target::postgres(17).with_timescaledb((2, 17))`, `Target::mysql((8, 4))`,
+`Target::mariadb((11, 4))`, `Target::sqlite((3, 46))`. Version checks give
 precise errors instead of failing SQL (virtual generated columns need
-PostgreSQL 18, `RENAME COLUMN` needs MySQL 8.0.3 or MariaDB 10.5.2, ...).
+PostgreSQL 18, `NULLS NOT DISTINCT` PostgreSQL 15, `RENAME COLUMN` MySQL
+8.0.3 or MariaDB 10.5.2, expression defaults MySQL 8.0.13, vectors MySQL 9).
 
 ### Types per dialect
 
@@ -127,28 +140,31 @@ PostgreSQL 18, `RENAME COLUMN` needs MySQL 8.0.3 or MariaDB 10.5.2, ...).
 | `date_time_tz(p)` / `timestamp_tz(p)` | `TIMESTAMP(p) WITH TIME ZONE` | `DATETIME(p)` / `TIMESTAMP(p)` | `DATETIME` |
 | `json` / `jsonb` | `JSON` / `JSONB` | `JSON` | `TEXT` |
 | `binary` | `BYTEA` | `BLOB` / `VARBINARY(n)` / `BINARY(n)` | `BLOB` |
-| `enum_(values)` | `VARCHAR(255) CHECK (... IN (...))` | `ENUM(...)` | `VARCHAR CHECK (... IN (...))` |
+| `enumeration(values)` | `VARCHAR(255) CHECK (... IN (...))` | `ENUM(...)` | `VARCHAR CHECK (... IN (...))` |
 | `set(values)` | not supported (error) | `SET(...)` | not supported (error) |
 | `ip_address`, `mac_address` | `INET`, `MACADDR` | `VARCHAR(45)`, `VARCHAR(17)` | `VARCHAR` |
 | `geometry`, `geography` | `GEOMETRY(type, srid)` (PostGIS) | `GEOMETRY`/subtype `SRID n` | `GEOMETRY` |
-| `vector(n)`, `tsvector` | `VECTOR(n)` (pgvector), `TSVECTOR` | `VECTOR(n)` (MySQL 9), error | error |
+| `vector(n)`, `tsvector` | `VECTOR(n)` (pgvector), `TSVECTOR` | `VECTOR(n)` (MySQL 9, MariaDB 11.7), error | error |
 | `year` | `INTEGER` | `YEAR` | `INTEGER` |
 | `raw_column(def)` | as written | as written | as written |
 
-Modifiers: `nullable`, `default`, `use_current`, `use_current_on_update`
-(MySQL), `unsigned` (MySQL), `comment` (PostgreSQL as `COMMENT ON`, MySQL
-inline, ignored by SQLite), `collation`, `charset` (MySQL), `after` /
-`first` (MySQL), `virtual_as` / `stored_as` (generated columns),
-`generated_as` / `always` (identity, PostgreSQL), `starting_value`,
-`invisible` (MySQL), `change` (alter an existing column), `using`
-(PostgreSQL type conversions), `primary`, `unique`, `index`, `fulltext`,
-`spatial_index`.
+Time columns default to six fractional digits (`schema.default_time_precision`).
+
+Modifiers: `nullable`, `not_null`, `default`, `use_current`,
+`use_current_on_update` (MySQL), `on_update` (MySQL), `unsigned` (MySQL),
+`comment` (PostgreSQL as `COMMENT ON`, MySQL inline, ignored by SQLite),
+`collation`, `charset` (MySQL), `after` / `first` (MySQL), `virtual_as` /
+`stored_as` (generated columns), `generated_as` / `generated_as_with` /
+`always` (identity, PostgreSQL), `starting_value`, `invisible` (MySQL),
+`change` (alter an existing column; the definition is complete, so a
+default or `nullable` left out is removed), `using` (PostgreSQL type
+conversions), `primary`, `unique`, `index`, `fulltext`, `spatial_index`,
+`without_*` (drop a column's conventional index with `change`).
 
 Defaults are typed: integers and floats render bare, strings quoted (with
 backslashes escaped on MySQL), booleans as `TRUE`/`FALSE` on PostgreSQL and
-`1`/`0` elsewhere, [`Expression`]s as written. MySQL needs parentheses
-around a default on `TEXT`, `BLOB`, `JSON` and geometry columns (8.0.13+),
-and the grammar adds them.
+`1`/`0` elsewhere, [`Expression`]s as written; MySQL gets parentheses around
+defaults on `TEXT`, `BLOB`, `JSON` and geometry columns (8.0.13+).
 
 Generated index names are `{table}_{columns}_{kind}` (`deals_company_id_foreign`,
 `deals_title_index`), lower-cased with `-` and `.` replaced by `_`. Names
@@ -165,21 +181,22 @@ Everything else is done by rebuilding the table, as SQLite documents:
 - adding a column SQLite refuses to add in place: a stored generated
   column, a `NOT NULL` column without a default, a column whose default is
   an expression (`CURRENT_TIMESTAMP`, `(...)`), a primary key;
-- dropping a column that an index, a primary key or a foreign key uses
-  (and any drop before 3.35).
+- dropping a column that a primary key, a foreign key, a table constraint
+  or an inline `UNIQUE` uses (and any drop before 3.35).
 
 The rebuild reads the table (`pragma_table_xinfo`, `pragma_index_list`,
 `pragma_index_info`, `pragma_foreign_key_list`, `sqlite_master.sql` for
-collations and generated expressions), applies the blueprint's commands to
-that state, then runs: create `__temp__{table}` with the new definition,
-copy the surviving columns, drop the old table, rename the new one (with
-`legacy_alter_table` on, so views and triggers are left alone), recreate
-the indexes. Consecutive commands that need a rebuild share one.
+collations, checks and generated expressions), applies the blueprint's
+commands to that state, then runs: create `__temp__{table}` with the new
+definition, copy the surviving columns, drop the old table, rename the new
+one (with `legacy_alter_table` on, so views and triggers are left alone),
+recreate the indexes and triggers. Consecutive commands that need a rebuild
+share one; a drop that follows a pending rebuild is part of it.
 
 Dropping the old table must not fire foreign-key actions on the tables that
 reference it, and `PRAGMA foreign_keys` has no effect inside a transaction.
-So `navree-db` runs SQLite migrations on a dedicated connection opened with
-foreign keys off, still one transaction per migration, and runs
+So `navree-db` runs SQLite migrations on a connection of their own opened
+with foreign keys off, one transaction per migration, and runs
 `PRAGMA foreign_key_check` before each commit: a migration that leaves a
 dangling reference fails and rolls back. Outside the migrator, a rebuild on
 a connection with foreign keys on that other tables reference is refused
@@ -191,12 +208,17 @@ TimescaleDB is Navree's default database. Developers decide in code which
 tables are hypertables:
 
 ```rust
-schema.create_hypertable("events", "occurred_at", |t| {
-    t.uuid_primary();
-    t.foreign_uuid("workspace_id");
-    t.timestamp_tz("occurred_at");
-    t.jsonb("payload");
-}).await?;
+schema
+    .create_hypertable("events", "occurred_at", |t| {
+        t.uuid_primary();
+        t.foreign_uuid("workspace_id");
+        t.timestamp_tz("occurred_at");
+        t.jsonb("payload");
+        let events = t.hypertable("occurred_at");
+        events.chunk_interval("1 day").retain_for("90 days");
+        events.compress().segment_by(["workspace_id"]).after("7 days");
+    })
+    .await?;
 
 let mut audit = Hypertable::on("created_at");
 audit.chunk_interval("1 day").partition_by("workspace_id", 4).migrate_data();
@@ -205,51 +227,61 @@ audit.retain_for("365 days");
 schema.convert_to_hypertable("audit_logs", &audit).await?;
 ```
 
-or `t.hypertable("occurred_at")` inside `create` and `table`, which returns
-the same [`Hypertable`] builder.
+A [`Hypertable`] and its [`Compression`] are configured in place (`&mut`
+setters returning `&mut Self`, like the blueprint they belong to);
+`&mut Hypertable` converts into a `Hypertable`, so a one-expression chain
+can be passed as it is built. `t.hypertable(...)` works inside `create` and
+`table` (where it converts the table); naming the time column of a
+hypertable already declared returns it.
 
 - **Detection and the extension.** The target knows the installed
-  TimescaleDB version (`pg_extension`). When the extension is available
-  but not installed, `schema.timescaledb = "auto"` (the default) runs
-  `CREATE EXTENSION IF NOT EXISTS timescaledb` when the server preloads the
-  library and the role may create it; otherwise the table falls back (see
-  engines). `"require"` turns every fallback into an error; `"off"` never
-  uses TimescaleDB.
-- **Hypertables.** `create_hypertable(table, by_range(time, interval),
-  if_not_exists, migrate_data)` and `add_dimension(table, by_hash(column,
-  n))` on TimescaleDB 2.13 and later; the older `create_hypertable(table,
-  time, partitioning_column, number_partitions, chunk_time_interval)` form
-  before. Integer time columns take integer chunk intervals.
+  TimescaleDB version. When the extension is available but not installed
+  (the server preloads the library and the role is a superuser),
+  `schema.timescaledb = "auto"` (the default) runs `CREATE EXTENSION IF NOT
+  EXISTS timescaledb` before the first hypertable, if
+  `schema.create_extensions` allows it. `"require"` turns the fallback on
+  PostgreSQL into an error (other databases still fall back, so tests on
+  SQLite run the same migrations); `"off"` never uses TimescaleDB.
+- **Hypertables.** `create_hypertable(table, by_range(time, interval))` and
+  `add_dimension(table, by_hash(column, n))` on TimescaleDB 2.13 and
+  later; the positional form before. Integer time columns take integer
+  chunk intervals, temporal ones intervals; a mismatch is an error.
+  Converting an existing table adds `if_not_exists => TRUE`, and a table
+  with rows needs `.migrate_data()`.
 - **Primary keys and unique indexes.** TimescaleDB enforces uniqueness per
   chunk, so every primary key and unique index must include the time column
   and the space-partition column. In `create`, a primary key that misses
   them is widened to `(id, time[, partition])` (the default
-  [`KeyStrategy::Extend`]); with `KeyStrategy::Reject` it is an error. When
-  converting an existing table, the helper reads its keys: it rebuilds the
-  primary key the same way, and stops with an error naming every unique
-  index, and every foreign key of another table that points at the key it
-  would change, together with the fix. The docs recommend time-ordered ids
-  (UUIDv7 or ULID) for time-series tables and show both strategies.
-- **Policies.** `chunk_interval` (`set_chunk_time_interval` for existing
-  tables), `compress()` (`ALTER TABLE ... SET (timescaledb.compress,
+  [`KeyStrategy::Extend`], with a notice) on every database, so one
+  migration gives the same keys everywhere (SQLite's `AUTOINCREMENT` key
+  stays alone, with a notice); with `KeyStrategy::Reject` it is an error. A
+  unique index that misses them is an error on every database. Converting an
+  existing table on TimescaleDB rebuilds the primary key the same way, or
+  stops naming every foreign key of another table that points at it.
+- **Policies.** `chunk_interval` (`set_chunk_interval` for existing
+  tables), compression (`ALTER TABLE ... SET (timescaledb.compress,
   timescaledb.compress_segmentby, timescaledb.compress_orderby)` and
   `add_compression_policy`), `retain_for` (`add_retention_policy`),
-  `reorder_by(index)` (`add_reorder_policy`), each with a `remove_*`
-  counterpart on [`Schema`].
+  `reorder_by(index)` (`add_reorder_policy`), each with its
+  `remove_*_policy` on [`Schema`].
 - **Continuous aggregates.** [`ContinuousAggregate`] takes either SQL or a
-  structured description (source table, `time_bucket(width, column)`,
-  groups, aggregates). On TimescaleDB it is `CREATE MATERIALIZED VIEW ...
-  WITH (timescaledb.continuous) AS ... WITH NO DATA` plus
-  `add_continuous_aggregate_policy` from its [`RefreshPolicy`].
+  structured description (source table, `time_bucket(width, column, alias)`,
+  groups, aggregates, a filter). On TimescaleDB it is `CREATE MATERIALIZED
+  VIEW ... WITH (timescaledb.continuous) AS ... WITH NO DATA` plus
+  `add_continuous_aggregate_policy` from its [`RefreshPolicy`];
+  `refresh_continuous_aggregate` and the policy operations exist on
+  [`Schema`].
 - **Engines: one migration runs everywhere.** A table that declares a
   hypertable gets the right DDL on each database: a hypertable on
-  TimescaleDB; on plain PostgreSQL, MySQL and SQLite a regular table with an
-  index on `(time DESC)` (and `(partition, time DESC)`), MySQL's `ENGINE`
-  option when one is set, and a notice for each feature that needs
-  TimescaleDB (compression, retention, reorder). A continuous aggregate
-  becomes a plain view, always current; the structured form compiles
-  `time_bucket` to `date_bin` on PostgreSQL 14+, and to epoch arithmetic or
-  date formatting on MySQL and SQLite, so the view works there too.
+  TimescaleDB; on plain PostgreSQL, MySQL/MariaDB and SQLite a regular table
+  with indexes on `(time DESC)` and `(partition, time DESC)` (unless an
+  index already starts with them), and a notice naming every policy skipped.
+  MySQL also takes table options (`t.engine("InnoDB")`, charset,
+  collation). A described continuous aggregate becomes a plain view whose
+  bucket compiles to `date_bin` on PostgreSQL 14+ (`date_trunc` for
+  months and years), epoch arithmetic or date formatting on MySQL and
+  SQLite, aligned like `time_bucket` (Monday 2000-01-03); an aggregate given
+  as SQL that calls `time_bucket` is an error there, naming the fix.
 
 ## 6. Migrations
 
@@ -263,102 +295,170 @@ pub trait Migration: Send + Sync + 'static {
 }
 ```
 
-(`async fn` in the impl.) Modules list their migration files with
-`migrations!`, which declares the file modules and returns the module's
-`MigrationSet`, named after the files:
+(written with `async fn` in the impl). A module lists its migration files in
+its `MigrationSet`, each with `migration!(file)`, which names the migration
+after its file:
 
 ```rust
 // src/modules/deals/migrations/mod.rs
-navree::schema::migrations! {
-    module: "deals",
-    after: ["companies"],
-    files: [
-        m20261026_120000_create_deals_table,
-        m20261027_093000_add_stage_to_deals,
-    ],
+use navree::db::MigrationSet;
+use navree::schema::migration;
+
+mod m20261026_120000_create_deals_table;
+mod m20261027_093000_add_stage_to_deals;
+
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("deals")
+        .after(["companies"])
+        .migration(migration!(m20261026_120000_create_deals_table))
+        .migration(migration!(m20261027_093000_add_stage_to_deals))
 }
 ```
 
-`migration!(file)` wraps one file for an existing `MigrationSet` chain, so
-schema migrations and older SeaORM migrations share a set. The adapter,
-[`SchemaMigration`], implements SeaORM's `MigrationTrait`, which is what
-`MigrationSet` (and the workspace module's per-tenant runner) runs, so every
-runner runs schema migrations without changes.
+[`SchemaMigration`], what `migration!` builds, implements SeaORM's
+`MigrationTrait`, which is what `MigrationSet` (and the workspace module's
+per-tenant runner) runs: schema migrations and the framework crates'
+SeaORM migrations share sets and runners.
+
+`navree make:migration <module> <name>` (the CLI) writes a schema
+migration: `create_<table>[_table]` gets a `create`/`drop_if_exists` pair,
+`<change>_to|from|in_<table>[_table]` a `table` pair, anything else an
+empty pair; the file is declared and added to the module's set with
+`migration!`. `navree make:module` and `navree new` write schema migrations
+too.
 
 ### The runner (in navree-db)
 
-`navree-db`'s `Migrator` and commands, extended for this crate:
+`navree_db::Migrator`, and the commands `DatabaseModule` registers:
 
 | Command | Behaviour |
 |---|---|
-| `migrate [--pretend] [--step] [--seed] [--schema-path P]` | Runs pending migrations as one batch (`--step`: one batch each). On a database where nothing has run, loads `database/schema/{driver}-schema.sql` first when it exists |
+| `migrate [--pretend] [--step] [--seed] [--schema-path P] [--force]` | Runs the pending migrations as one batch (`--step`: one batch each). On an empty database (no tables, or only an empty migrations table) it first loads the schema dump, `{schema.dump_path}/{driver}-schema.sql` or `--schema-path`, then runs only the migrations the dump does not record |
 | `migrate:install` | Creates `navree_migrations` |
-| `migrate:rollback [--step N \| --batch N] [--pretend]` | Reverts the last batch, the last N migrations, or one batch |
-| `migrate:reset [--pretend]` | Reverts every migration, newest first |
-| `migrate:refresh [--step N] [--seed]` | Reset (or roll back N), then migrate |
-| `migrate:fresh [--seed] [--step] [--drop-views] [--drop-types] [--schema-path P]` | Drops every table (and views, PostgreSQL types), then migrates |
+| `migrate:rollback [--step N \| --batch N] [--pretend] [--force]` | Reverts the last batch, the last N migrations (across batches), or batch N, newest first |
+| `migrate:reset [--pretend] [--force]` | Reverts every migration, newest first |
+| `migrate:refresh [--step N] [--seed] [--force]` | Reset (or roll back N), then migrate |
+| `migrate:fresh [--seed] [--drop-views] [--drop-types] [--step] [--schema-path P] [--force]` | Drops every table (then views; PostgreSQL types with `--drop-types`, an error elsewhere checked before anything is dropped), then migrates |
 | `migrate:status [--pending]` | Every migration with its batch, or the pending ones |
-| `schema:dump [--path P] [--without-migration-data]` | Writes the schema and the `navree_migrations` rows to `database/schema/{driver}-schema.sql` |
+| `schema:dump [--path P]` | Writes the schema and the `navree_migrations` rows to `{schema.dump_path}/{driver}-schema.sql` |
 
-- **Pretend.** Migrations run against a recording connection (SeaORM's
-  proxy connection): statements are collected and printed, queries are
-  answered by the real database, so `has_table` and SQLite rebuilds see
-  the real schema. Nothing is written, not even the migrations table.
-- **Context.** While a migration runs, the runner sets a task-local
-  [`MigrationContext`] carrying the app's [`SchemaOptions`] and a notice
-  sink; schema migrations read it, and the commands print the notices.
-- **SQLite.** Migrations run on a dedicated connection with foreign keys
-  off and `PRAGMA foreign_key_check` before each commit (section 4).
-- **Squashing.** `schema:dump` writes plain SQL: SQLite from
-  `sqlite_master`, MySQL from `SHOW CREATE TABLE` / `SHOW CREATE VIEW`,
-  PostgreSQL from `pg_dump --schema-only` (TimescaleDB's internal schemas
-  excluded, the extension, hypertables, dimensions, compression settings,
-  policies and continuous aggregates re-created from
-  `timescaledb_information`), followed by the migration rows as `INSERT`s.
-  Migration files stay in the code (they are compiled in); recorded ones are
-  skipped.
+- **Context.** Each migration runs inside a [`MigrationContext`]: its
+  `Schema` uses the app's [`SchemaOptions`] (section `schema`), and the
+  statements it runs and the notices it reports land in the
+  `MigrationReport` the commands print.
+- **Pretend.** Nothing runs, not even the migrations table. Schema
+  migrations read the real database through the context's reader (so
+  SQLite rebuilds and hypertable conversions plan against the real tables)
+  and record what they would change; SeaORM migrations run on a connection
+  that keeps every statement and answers no reads (a SeaORM migration that
+  reads fails with that explanation). A migration that depends on an
+  earlier pending one's tables cannot be planned and says so.
+- **Transactions.** A migration runs in a transaction where DDL is
+  transactional (PostgreSQL, SQLite; on MySQL when it asks), with its
+  `navree_migrations` row in the same transaction, so a failure leaves
+  nothing behind. `within_transaction() == false` opts out (`CREATE INDEX
+  CONCURRENTLY`, refreshing a continuous aggregate).
+- **SQLite.** Migrations run on a connection of their own with foreign keys
+  off, and `PRAGMA foreign_key_check` must pass before each commit
+  (section 4). In-memory databases use the pool.
+- **Production.** `migrate:rollback`, `migrate:reset`, `migrate:refresh` and
+  `migrate:fresh` refuse to run when the configuration's `env` (or
+  `app.env`) is `production`, unless `--force` is given.
+- **Dumps.** `schema:dump` reads the catalogs; no client tool is needed
+  (section 7). The dump loads in one transaction (on MySQL, on one pinned
+  connection). Migration files stay in the code (they are compiled in);
+  the ones the dump records are skipped.
 
-`navree make:migration <module> <name>` (the CLI) writes a schema migration
-from a template (`create_<table>_table` gets a `create`/`drop_if_exists`
-pair, `add_<x>_to_<table>` a `table` pair) and adds it to the module's
-`migrations!` list.
+## 7. Schema dumps
 
-## 7. Errors
+[`Schema::dump`] writes the structure of the database as an SQL script,
+read from its catalogs:
+
+- **SQLite**: the `CREATE` statements in `sqlite_master` (tables, indexes,
+  views, triggers), without SQLite's own and virtual-table shadow tables.
+- **MySQL / MariaDB**: `SHOW CREATE TABLE` (without the `AUTO_INCREMENT=n`
+  counter), routines and triggers (without definers, between
+  `DELIMITER ;;` and `DELIMITER ;`), views (without definers and default
+  options) after the views they read, all between `SET
+  FOREIGN_KEY_CHECKS=0` and `=1`.
+- **PostgreSQL**: from the catalogs of the schemas on the search path,
+  skipping every object an extension owns: schemas, extensions, enum,
+  range, domain and composite types, functions and procedures
+  (`pg_get_functiondef`), sequences and their owners, tables (identity
+  options, generated columns, collations, partitions, `UNLOGGED`, storage
+  options), keys and checks (`pg_get_constraintdef`), indexes
+  (`pg_get_indexdef`), foreign keys, views and materialized views in
+  dependency order, triggers, row-level security (enabled, forced,
+  policies) and comments. `SET LOCAL check_function_bodies = false` lets
+  functions come before the tables they read.
+- **TimescaleDB**: hypertables re-created with `create_hypertable(...,
+  create_default_indexes => FALSE)` (the dump has every index) and
+  `add_dimension`, integer-now functions, compression settings, continuous
+  aggregates (not as plain views) in dependency order, and the compression,
+  retention, reorder and refresh policies from `timescaledb_information`;
+  the app's own jobs are listed in a comment.
+- **Data**: the rows of [`DumpOptions::data`] tables as `INSERT`s, each
+  value written as a literal by the database itself.
+
+[`split_statements`] cuts a script into statements the way each database's
+client does (strings, quoted identifiers, comments, PostgreSQL dollar quotes
+and `BEGIN ATOMIC` bodies, SQLite trigger bodies, MySQL `DELIMITER`), and
+[`Schema::load`] runs them. A dump loaded into an empty database and dumped
+again gives the same script; the real-server tests check it on every
+database.
+
+## 8. Errors
 
 [`SchemaError`] says what failed, where, and how to fix it:
 
 - `Database { statement, source }`: the statement that failed and the
   driver's error;
-- `Unsupported { dialect, feature, hint }`: e.g. "`set` columns are a MySQL
-  type; use `enum_` or a `json` column";
-- `Definition { table, message }`: an invalid blueprint (two primary keys,
-  `virtual_as` and `stored_as` together, a foreign key without a table);
+- `Unsupported { dialect, feature, hint }`: e.g. "SQLite does not support
+  vector columns (column `embedding`): store embeddings in a `binary`
+  column, or use PostgreSQL with pgvector";
+- `Definition { table, message }`: an invalid blueprint;
 - `Hypertable { table, message }`: a key that cannot include the time
-  column, a missing time column, TimescaleDB required but absent;
+  column, a missing or non-time time column, TimescaleDB required but
+  absent, rows without `migrate_data`;
 - `Interval { input }`: an interval that does not parse;
-- `Offline { operation }`: an operation that needs a live database.
+- `Offline { operation }`: an operation that needs a live database;
+- `Missing { message }`: a table, column or index that does not exist;
+- `Dump { message }`: a dump that could not be read or written.
 
 Inside the migrator it converts to `DbErr::Migration` with the same text.
 
-## 8. Testing
+## 9. Testing
 
-- **Snapshots per dialect** (`insta`): every column type, modifier, index,
-  foreign key, alteration and TimescaleDB statement compiled for
-  PostgreSQL, TimescaleDB, MySQL, MariaDB and SQLite.
-- **SQLite end to end**: create, alter (including every rebuild case, with
-  data surviving and foreign keys intact), introspection, and full
-  migrator runs through a booted app: batches, steps, rollback, reset,
-  refresh, fresh, status, pretend, dump and load.
-- **Real servers**, gated by `NAVREE_TEST_POSTGRES_URL` (TimescaleDB),
-  `NAVREE_TEST_MYSQL_URL`: the same scenarios against live databases,
-  skipped when the variables are unset.
+- **Snapshots per dialect** (`tests/schema/`, `insta`): every column type,
+  modifier, index, foreign key, alteration, TimescaleDB statement and
+  fallback compiled for PostgreSQL, TimescaleDB, MySQL, MariaDB and SQLite.
+- **SQLite end to end** (`tests/schema/sqlite.rs`): create, alter (every
+  rebuild case, with rows, triggers, partial indexes and `AUTOINCREMENT`
+  surviving), introspection, pretending, hypertable and aggregate
+  fallbacks, dumps loaded and dumped again.
+- **Real servers** (`tests/servers/`, features `postgres` and `mysql`,
+  variables `NAVREE_TEST_POSTGRES_URL` and `NAVREE_TEST_MYSQL_URL`): DDL,
+  alterations with rows, introspection, hypertables with dimensions,
+  compression, policies and continuous aggregates, conversions, fallbacks,
+  and dump round trips, each test in a database of its own; skipped with a
+  notice when the variable is unset.
+- **The runner** (`navree-db`'s `tests/db/schema_migrations.rs`): schema and
+  SeaORM migrations in one set, steps, batches, rollbacks, reset, refresh,
+  pretend, SQLite rebuilds of referenced tables, the foreign-key check,
+  options from configuration, dumps loaded into empty databases, and every
+  command with its option errors and the production guard.
 
-## 9. Extension points
+## 10. Extension points
 
-- The ORM's query builder adds `time_bucket`, `first` and `last`; it can
+- **Document databases.** The blueprint is public data
+  ([`Blueprint::columns`], [`Blueprint::commands`],
+  [`Blueprint::hypertable_definition`], the [`Hypertable`] getters), so a
+  document driver (the ORM's MongoDB crate) can compile it into collection
+  commands: a time-series collection for a hypertable (time field,
+  granularity from the chunk interval, TTL from retention), a JSON-schema
+  validator from the columns, indexes from the index commands.
+- **The query builder.** The ORM's `time_bucket`, `first` and `last` can
   reuse [`Interval`] and [`Target`].
-- A document driver (MongoDB) can compile a [`Blueprint`] (its columns are
-  public data) into collection commands: a time-series collection for a
-  hypertable, a JSON-schema validator from the columns, TTL from retention.
-- Framework crates move their tables to schema migrations in the adoption
-  phase; their existing SeaORM migrations keep running meanwhile.
+- **Framework tables.** Framework crates move their tables to schema
+  migrations (and their time-series tables to hypertables) in the adoption
+  phase; their SeaORM migrations keep running meanwhile.

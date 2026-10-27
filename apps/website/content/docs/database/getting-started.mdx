@@ -7,7 +7,7 @@ Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), wh
 
 - a connection pool configured from the `database` section of your configuration;
 - a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds;
-- [migrations](/docs/database/migrations/) owned by modules, with `migrate`, `migrate:rollback` and `migrate:fresh` commands;
+- [migrations](/docs/database/migrations/) owned by modules and written with the [schema builder](/docs/database/schema-builder/) (with [TimescaleDB hypertables](/docs/database/timescaledb/)), with `migrate`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh` and `schema:dump` commands;
 - [seeders and factories](/docs/database/seeding-and-factories/);
 - [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
 - [repository helpers](/docs/database/entities-and-repositories/) that record every change for the [audit log](/docs/security/audit-log/).
@@ -82,7 +82,7 @@ The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` 
 - the unit-of-work layer of the request pipeline and the `Uow` extractor;
 - the mapping of database errors to error responses ([below](#database-errors));
 - the `database` health check, which pings the pool (served by `GET /health/ready` when the app has `ObserveModule`, see [health and metrics](/docs/digging-deeper/health-and-metrics/));
-- the commands `migrate`, `migrate:status`, `migrate:rollback`, `migrate:fresh` and `db:seed`;
+- the commands `migrate`, `migrate:install`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `schema:dump` and `db:seed`;
 - closing the pool when the app shuts down, so SQLite checkpoints its write-ahead log.
 
 ## SQLite
@@ -133,7 +133,9 @@ On PostgreSQL, Navree behaves differently in a few places:
 
 The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
 
-These PostgreSQL paths are written but have not yet run against a real server: migrations (that app's schema comes from an SQL script), `migrate:fresh` and `migrate:rollback`, `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
+Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MySQL 8.4) in the opt-in real-server tests of navree-schema and navree-db: the schema builder's statements, hypertables with their policies and continuous aggregates, migrations written with the schema builder and with SeaORM, `--pretend`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh`, and schema dumps loaded into empty databases.
+
+These PostgreSQL paths are written but have not yet run against a real server: `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
 
 </Callout>
 
