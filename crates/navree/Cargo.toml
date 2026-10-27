@@ -257,6 +257,7 @@ integrations = [
     "db",
     "schedule",
     "workspace",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,

@@ -5,6 +5,7 @@
 //! servers are configured.
 
 mod api_key;
+mod audit;
 mod clients;
 mod connect;
 mod health;
