@@ -132,7 +132,7 @@ export const navreeTheme: ThemeRegistration = {
 };
 
 /** The languages loaded at build time. Anything else renders as plain text. */
-export const languages = ["rust", "toml", "shellscript", "typescript", "tsx", "json", "sql", "http", "html", "jinja", "yaml", "dotenv"] as const;
+export const languages = ["rust", "toml", "shellscript", "typescript", "tsx", "json", "sql", "http", "html", "css", "jinja", "yaml", "dotenv"] as const;
 
 /** Aliases authors may use in fences. */
 export const languageAliases: Record<string, string> = {

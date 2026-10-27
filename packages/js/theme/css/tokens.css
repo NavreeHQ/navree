@@ -1,0 +1,30 @@
+/*
+ * @navree/theme/tokens.css: navree.com's color tokens as plain CSS custom
+ * properties, for pages without Tailwind (emails rendered in a browser,
+ * server-rendered tools, charts). The same names and values as theme.css.
+ */
+:root {
+  color-scheme: dark;
+  --color-ink-0: #040605;
+  --color-ink-1: #0a0e0c;
+  --color-ink-2: #111714;
+  --color-ink-3: #16201b;
+  --color-line: #1c2420;
+  --color-line-2: #2a3530;
+  --color-fg: #e9efeb;
+  --color-fg-1: #cfd8d3;
+  --color-fg-2: #a9b5ae;
+  --color-fg-3: #8a968f;
+  --color-accent: #3dff8f;
+  --color-accent-ink: #03130a;
+  --color-amber: #ffbf5e;
+  --color-danger: #ff6b6b;
+  --color-bar: #5b6862;
+  --font-sans:
+    var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  --radius-control: 4px;
+  --radius-surface: 6px;
+}

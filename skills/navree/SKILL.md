@@ -104,6 +104,8 @@ navree list                                 # every command of the app
 | Uploads, downloads, disks, signed links | `navree-storage` |
 | Caching, locks, calling third-party APIs | `navree-cache-and-http-client` |
 | API docs, OpenAPI document, TypeScript clients | `navree-openapi` |
+| A Next.js web front end: sign-in through a BFF, server components, list screens, real time, the dark theme | `navree-frontend-next` |
+| A Nuxt or Vue web front end on the `@navree/nuxt` module | `navree-frontend-nuxt` |
 | Settings, environment variables, APP_KEY, config sections | `navree-config` |
 | Writing or fixing tests, fakes | `navree-testing` |
 | Any `navree make:*` generator, console commands | `navree-cli-generators` |

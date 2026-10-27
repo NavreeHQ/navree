@@ -34,6 +34,8 @@ conventions, and says which skill to load for each task.
 | [`navree-storage`](navree-storage/SKILL.md) | Disks (local, S3, Google Cloud Storage, Azure), uploads, direct browser uploads, signed links and disk sync |
 | [`navree-cache-and-http-client`](navree-cache-and-http-client/SKILL.md) | The cache, locks, and outgoing HTTP with retries and an SSRF guard |
 | [`navree-openapi`](navree-openapi/SKILL.md) | The OpenAPI 3.1 document, schemas and typed clients |
+| [`navree-frontend-next`](navree-frontend-next/SKILL.md) | A Next.js front end with `@navree/next`, `@navree/client` and `@navree/theme`: the BFF, sign-in, server components, list screens, real time |
+| [`navree-frontend-nuxt`](navree-frontend-nuxt/SKILL.md) | A Nuxt front end with the `@navree/nuxt` module: the BFF as Nitro routes, the session gate, composables, list screens |
 | [`navree-config`](navree-config/SKILL.md) | `.env`, `config/app.toml`, `APP_*` variables, the app key, typed sections |
 | [`navree-testing`](navree-testing/SKILL.md) | `TestApp`, HTTP tests, database tests and fakes |
 | [`navree-cli-generators`](navree-cli-generators/SKILL.md) | The `navree` CLI, every `make:*` generator and console commands |

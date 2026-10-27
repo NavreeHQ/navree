@@ -1,0 +1,169 @@
+---
+title: "Data tables"
+description: "Lists driven by list queries: filters, sort, search and paging in the URL, sorted and paged on the server, rendered by `DataTable` (React) or `<NavreeDataTable>` (Vue) on TanStack Table."
+---
+
+A list screen has the same parts in every app: a table of one page of records, sortable headings, a search box, filters and the page buttons, all kept in the URL so a reload, the back button and a shared link show the same list. With Navree the server does the sorting, filtering and paging (the list endpoint reads a [list query](/docs/frontend/typed-client/#list-queries)), so the table only renders the page it gets and turns clicks into the next list query. `@navree/next` and `@navree/nuxt` ship that table on [TanStack Table](https://tanstack.com/table), styled with [the theme](/docs/frontend/theming/).
+
+## The URL is the state
+
+`useListQuery(defaults)` reads the list query from the current URL and writes changes back with `router.replace`, keeping the page's other parameters:
+
+| Member | What it does |
+|---|---|
+| `query` | The `ListQuery` in the URL, over `defaults`. |
+| `setQuery(next)` | Replaces the list query (a value, or a function of the current one). |
+| `setFilter(field, value)` | Sets one filter, or removes it with `undefined`, and goes back to page 1. |
+| `setSearch(text)` | Sets the search (an empty string removes it) and goes back to page 1. |
+| `toggleSort(field, {multi})` | Ascending, descending, off; other fields are dropped unless `multi`. |
+| `setPage(n)` | Moves to page `n` (page 1 is left out of the URL). |
+
+Values equal to `defaults` stay out of the URL, so `useListQuery({ per_page: 25 })` keeps `?per_page=25` from every link.
+
+```text
+/deals?tab=open&filter[stage]=won&filter[created_at][gte]=2026-10-01&sort=-amount_cents&search=acme&page=2
+```
+
+In Next.js the hook uses `next/navigation`, so the component must sit under a `<Suspense>` boundary (Next.js requires one around `useSearchParams` in pages that are rendered ahead of time). In Nuxt it uses vue-router's route query, and its setters return the navigation's promise.
+
+## Next.js
+
+```tsx title="web/src/app/(app)/deals/deals-table.tsx"
+"use client";
+
+import { unwrap } from "@navree/client";
+import { DataTable, useListQuery, type NavreeColumnMeta } from "@navree/next";
+import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api/client";
+import { deals as keys } from "@/lib/api/keys";
+import type { Deal } from "@/lib/api/types";
+
+const columns: ColumnDef<Deal, any>[] = [
+  { accessorKey: "title", header: "Deal", meta: { sortField: "title" } satisfies NavreeColumnMeta },
+  { accessorKey: "stage", header: "Stage", cell: ({ row }) => <StageBadge stage={row.original.stage} /> },
+  {
+    accessorKey: "amount_cents",
+    header: "Amount",
+    cell: ({ getValue }) => <Money cents={getValue<number>()} />,
+    meta: { sortField: "amount_cents", align: "end", className: "hidden md:table-cell" } satisfies NavreeColumnMeta,
+  },
+];
+
+export function DealsTable() {
+  const router = useRouter();
+  const { query, setQuery } = useListQuery({ per_page: 25 });
+  const { data, isPending } = useQuery({
+    queryKey: keys.list(query),
+    queryFn: () => unwrap(api.GET("/api/v1/deals", { params: { query } })),
+    placeholderData: (previous) => previous,
+  });
+
+  return (
+    <DataTable<Deal>
+      columns={columns}
+      data={data?.data}
+      meta={data?.meta}
+      query={query}
+      onQueryChange={setQuery}
+      loading={isPending}
+      getRowId={(deal) => deal.id}
+      onRowClick={(deal) => router.push(`/deals/${deal.id}`)}
+      empty="No deals match these filters."
+    />
+  );
+}
+```
+
+`DataTable` props:
+
+| Prop | Meaning |
+|---|---|
+| `columns` | TanStack column definitions; `meta` takes `NavreeColumnMeta`. |
+| `data`, `meta` | The page's rows and `meta` (`current_page`, `per_page`, `total`, `last_page`). |
+| `query`, `onQueryChange` | The current list query, and what to do with the next one (`setQuery` from `useListQuery`). |
+| `loading`, `loadingRows` | Placeholder rows instead of the data (5 by default). |
+| `empty` | What an empty page shows (default: the `empty` label). |
+| `onRowClick(row)` | Makes rows clickable. |
+| `getRowId(row)` | Row keys (and `data-row-id` on each row). |
+| `labels` | `previous`, `next`, `empty`, `loading`, `pagination`, and `range(from, to, total)`. |
+| `className` | Classes on the outer surface. |
+
+`NavreeColumnMeta`:
+
+| Field | Meaning |
+|---|---|
+| `sortField` | The list-query field the column sorts by; the heading becomes a button only when it is set. |
+| `align` | `start` (default), `center` or `end` (amounts and counts). |
+| `className` | Classes for the column's heading and cells, such as `hidden md:table-cell` to drop a column on phones. |
+
+A heading click sends `sort` and drops `page` and `cursor`; shift-click adds the column to the sort. Each heading carries `aria-sort`. The page buttons send `page`. The pagination bar shows "26–50 of 60" and hides when the list is empty. `Pagination` is exported on its own for card grids and boards.
+
+### Your own markup
+
+`useDataTable(options)` is the same table without markup: TanStack Table's instance with manual sorting and paging, plus `toggleColumnSort(header, multi)`, `columnSort(header)` and `goToPage(n)`. Use it to render the table with your own shadcn/ui `Table` components.
+
+## Nuxt
+
+```html title="web/app/pages/deals/index.vue"
+<script setup lang="ts">
+import type { ColumnDef } from "@tanstack/vue-table";
+import type { Deal, paths } from "~/lib/api/types";
+
+const api = useNavreeClient<paths>();
+const list = useListQuery({ per_page: 25 });
+const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api/v1/deals", { params: { query: list.query.value } })), {
+  watch: [list.query],
+});
+
+const columns: ColumnDef<Deal, any>[] = [
+  { accessorKey: "title", header: "Deal", meta: { sortField: "title" } },
+  { accessorKey: "amount_cents", header: "Amount", meta: { sortField: "amount_cents", align: "end" } },
+];
+</script>
+
+<template>
+  <input :value="list.query.value.search ?? ''" placeholder="Search" @input="list.setSearch(($event.target as HTMLInputElement).value)" />
+  <NavreeDataTable
+    :columns="columns"
+    :data="data?.data"
+    :meta="data?.meta"
+    :query="list.query.value"
+    :loading="pending"
+    clickable
+    @update:query="list.setQuery"
+    @row-click="(deal) => navigateTo(`/deals/${deal.id}`)"
+  >
+    <template #empty>No deals match these filters.</template>
+  </NavreeDataTable>
+</template>
+```
+
+`<NavreeDataTable>` takes the same props as the React table (`columns`, `data`, `meta`, `query`, `loading`, `loadingRows`, `labels`, `getRowId`, plus `clickable`), emits `update:query` and `row-click`, and has an `empty` slot. Its markup carries shadcn-vue's `data-slot` attributes (`table`, `table-header`, `table-row`, `table-head`, `table-body`, `table-cell`), so it sits next to shadcn-vue components. `useDataTable` from `@navree/nuxt/vue` is the table without markup, for your own shadcn-vue `Table`.
+
+## Filters and facets
+
+Filters are list-query filters, so a filter control is a call to `setFilter`:
+
+```tsx
+<Select value={(query.filter?.stage as string) ?? ""} onValueChange={(stage) => setFilter("stage", stage || undefined)}>
+  ...
+</Select>
+<DateRange onChange={({ from, to }) => setFilter("created_at", { gte: from, lt: to })} />
+```
+
+When the endpoint reports facets in `meta.facets`, `facetCounts(meta, "stage")` from `@navree/client` gives `[{value, count, label?}]` for a filter's options, whether the API sends a map of counts or a list.
+
+## Right to left
+
+The table uses logical properties (`text-start`, `text-end`, `px-3`), so in a page with `dir="rtl"` its columns, alignment and pagination mirror without extra classes. Pass `labels` from your translations, including `range`, to format the numbers for the locale:
+
+```ts
+const labels = {
+  previous: t("table.previous"),
+  next: t("table.next"),
+  empty: t("table.empty"),
+  range: (from: number, to: number, total: number) => t("table.range", { from, to, total }),
+};
+```

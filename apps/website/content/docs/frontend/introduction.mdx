@@ -1,0 +1,92 @@
+---
+title: "Front end"
+description: "Five npm packages for web front ends on a Navree API: a typed client, the backend-for-frontend, Next.js and Nuxt integrations, and navree.com's dark theme."
+---
+
+A Navree API is a bearer-token JSON API with an OpenAPI document, Navree's error shape, list queries, real-time channels over the Pusher protocol and operations you follow over server-sent events. A web front end needs the same pieces every time: a client typed from the document, a server that keeps the tokens out of the browser, sign-in with refresh and two-factor, abilities, live updates, data tables and a theme. The `@navree/*` packages are those pieces, tested once, so every front end on Navree works the same way.
+
+<Diagram name="backend-for-frontend" />
+
+## The packages
+
+| Package | What it gives you | Runs in |
+|---|---|---|
+| `@navree/client` | `createNavreeClient<paths>()` on openapi-fetch and the schema `navree openapi:client` generates; `NavreeError` with the error `code`; `listQuery()`; page helpers; query keys; `followOperation`; text direction and error-code translation. Abilities (`@navree/client/abilities`) and real time (`@navree/client/realtime`) are separate entry points. | Browser, server, any JavaScript runtime |
+| `@navree/bff` | The backend-for-frontend on web-standard `Request` and `Response`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the `Origin` check, a streaming proxy, `ensureSession` for server rendering. | Node.js 20 and later |
+| `@navree/next` | Route handlers, `auth()` and `client()` for server components, the proxy that guards pages and refreshes tokens, `useListQuery`, `DataTable`, `useOperation`, workspaces, form errors; `AbilityProvider` and `<Can>`, `RealtimeProvider` and `useChannel`. | Next.js 15 and 16 |
+| `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>`. | Nuxt 3.13 and 4 |
+| `@navree/theme` | navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, the self-hosted fonts, and the tokens as data. | Any CSS pipeline |
+
+The framework packages depend on `@navree/client` and `@navree/bff`, so a Next.js app installs `@navree/next`, `@navree/client` and `@navree/theme`, and a Nuxt app `@navree/nuxt`, `@navree/client` and `@navree/theme`. Optional features keep their libraries optional: CASL and pusher-js are only needed when you import the abilities or real-time entry points.
+
+## Installing
+
+The packages live in `packages/js/` of the Navree repository, a pnpm workspace. Build them once, then add them to your front end from the checkout:
+
+```sh
+cd navree/packages/js
+pnpm install
+pnpm build
+```
+
+```json title="web/package.json"
+{
+  "dependencies": {
+    "@navree/client": "link:../../navree/packages/js/client",
+    "@navree/next": "link:../../navree/packages/js/next",
+    "@navree/theme": "link:../../navree/packages/js/theme"
+  }
+}
+```
+
+Then generate the typed client's schema from your app:
+
+```sh
+navree openapi:client
+```
+
+```text
+  run      cargo run --quiet -- openapi:export web/src/lib/api/openapi.json
+  run      npx --yes openapi-typescript@7 web/src/lib/api/openapi.json --output web/src/lib/api/schema.d.ts
+  wrote    web/src/lib/api/openapi.json
+  wrote    web/src/lib/api/schema.d.ts
+```
+
+## How a request travels
+
+The browser never holds a token. It calls its own origin, and the app's server (Next.js route handlers, or Nitro in Nuxt) forwards each call to the API with `Authorization: Bearer`:
+
+| Step | Who | What happens |
+|---|---|---|
+| 1 | Browser | `POST /api/auth/login` with the email and password, same origin. |
+| 2 | BFF | Calls the API's `POST /api/auth/login`, keeps the access token in `navree_at` and the refresh token in `navree_rt` (both httpOnly), returns only `{user}`. |
+| 3 | Browser | `GET /api/v1/deals?filter[stage]=won` through the typed client, with `X-Workspace: acme`. |
+| 4 | BFF | Forwards it with the bearer token. On a 401 it refreshes once (shared by every request holding the same refresh token), sets the new cookies and retries. |
+| 5 | Server rendering | `auth()` (Next.js) or `getNavreeSession(event)` (Nuxt) calls the API with the token from the cookie; the proxy or session gate has already refreshed an expired one. |
+| 6 | Browser | pusher-js connects to the API's WebSocket server; private channels are signed by `POST /broadcasting/auth` through the BFF. |
+
+## The pages in this section
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/typed-client/" title="The typed client">
+    `navree openapi:client`, cookie and bearer modes, workspaces, errors with codes, list queries, pages and operations.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/auth-and-bff/" title="Auth and the BFF">
+    Token cookies, refresh, two-factor, CSRF, server-side sessions and the test helpers.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/nextjs/" title="Next.js">
+    Route handlers, `auth()`, the proxy, abilities, real time and operations in React.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/nuxt/" title="Nuxt">
+    The module, its options and its composables.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    Lists driven by list queries, in the URL, with sorting and paging on the server.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The dark theme for Tailwind CSS 4, shadcn/ui and shadcn-vue, and the fonts.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Right-to-left layouts and error messages translated by code.
+  </LinkCard>
+</LinkCards>

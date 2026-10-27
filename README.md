@@ -79,6 +79,8 @@ CRM built on top of them and the website:
 - `apps/crm-api`: the Navree CRM API, a Navree application.
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
+- `packages/js`: the front-end npm packages (`@navree/client`, `@navree/bff`,
+  `@navree/next`, `@navree/nuxt`, `@navree/theme`), a pnpm workspace.
 - `apps/website`: navree.com and the documentation (Next.js, MDX).
   [`apps/website/AUTHORING.md`](apps/website/AUTHORING.md) is the guide for
   writing docs pages.
@@ -180,7 +182,17 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L7 | `navree-fleet` | Fleet: a supervisor of queue worker processes (`fleet`) with auto-balancing, recycling and graceful restarts; throughput, wait and runtime metrics; failed jobs; pause and continue; long-wait alerts; a dashboard at `/_fleet` (facade feature `fleet`, in `full`) |
 | L7 | `navree-helm` | Helm: the admin panel at `/admin` generated from your entities (resources with fields, filters, search, actions and metrics), checked against your access rules, audited, server-rendered with an embedded stylesheet and script, plus its JSON API |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new` (with the starter kits: `--kit saas`, `api` or `micro`), `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install` |
+| L8 | `navree-cli` | The `navree` binary: `navree new` (with the starter kits: `--kit saas`, `api` or `micro`), `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install`, `navree openapi:client` |
+
+The front-end packages are npm packages in `packages/js/` (a pnpm workspace):
+
+| Package | What it does |
+|---|---|
+| `@navree/client` | A typed client on openapi-fetch and the schema `navree openapi:client` generates: cookie or bearer mode, `X-Workspace`, request ids, `NavreeError` with the error `code`, list queries, page helpers, query keys, operations over SSE, locale helpers; abilities (`@casl/ability`) and real time (`pusher-js`) as separate entry points |
+| `@navree/bff` | The backend-for-frontend on web-standard `Request` and `Response`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the Origin check, a streaming proxy, `ensureSession` for server rendering, test helpers (`fakeNavree`, `serveFakeNavree`) |
+| `@navree/next` | Next.js: route handlers, `auth()` and `client()` for server components, the proxy, `DataTable` and `useListQuery`, `useOperation`, workspaces, form errors; `AbilityProvider`/`Can`, `RealtimeProvider`/`useChannel` |
+| `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>` |
+| `@navree/theme` | navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts, the tokens as data, a shadcn registry theme |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
@@ -236,6 +248,15 @@ pnpm lint        # ESLint
 pnpm typecheck   # tsc --noEmit
 pnpm test        # Vitest: BFF route handlers, API client, CASL, audit actions, mock API
 pnpm build       # production build
+```
+
+### Front-end packages (packages/js)
+
+```sh
+cd packages/js
+pnpm install
+pnpm check       # build, typecheck and Vitest for every package
+pnpm smoke       # builds a Next.js and a Nuxt app on the packages and checks the running servers
 ```
 
 ### End to end (Playwright, the whole system)
@@ -346,6 +367,7 @@ The build covers the PRD's foundation and the modules the CRM needs (spec
 | `apps/crm-api` | The CRM API, a Navree application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
 | `apps/website` | navree.com and the documentation |
+| `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
 | `skills/` | The agent skills, one `SKILL.md` per directory |
 | `bench/` | The performance harness behind navree.com/performance |
 | `docs/` | PRD, build design, implementation plan, notes |

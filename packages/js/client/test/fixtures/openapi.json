@@ -1,0 +1,122 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Acme API", "version": "1.0.0" },
+  "paths": {
+    "/api/auth/me": {
+      "get": {
+        "summary": "The signed-in user",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HttpError" } } } }
+        }
+      }
+    },
+    "/api/v1/deals": {
+      "get": {
+        "summary": "List deals",
+        "parameters": [
+          { "name": "search", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "sort", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "required": false, "schema": { "type": "integer" } },
+          { "name": "per_page", "in": "query", "required": false, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DealPage" } } } },
+          "400": { "description": "Bad Request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HttpError" } } } }
+        }
+      },
+      "post": {
+        "summary": "Create a deal",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DealInput" } } }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Deal" } } } },
+          "400": { "description": "Bad Request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HttpError" } } } }
+        }
+      }
+    },
+    "/api/v1/deals/{id}": {
+      "get": {
+        "summary": "One deal",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Deal" } } } },
+          "404": { "description": "Not Found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HttpError" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Delete a deal",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "204": { "description": "No Content" },
+          "404": { "description": "Not Found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HttpError" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HttpError": {
+        "type": "object",
+        "required": ["statusCode", "message", "error", "code"],
+        "properties": {
+          "statusCode": { "type": "integer" },
+          "message": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+          "error": { "type": "string" },
+          "code": { "type": "string" },
+          "errors": { "type": ["object", "null"], "additionalProperties": { "type": "array", "items": { "type": "string" } } }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": ["__type", "id", "name", "email"],
+        "properties": {
+          "__type": { "type": "string", "const": "User" },
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "email": { "type": "string" }
+        }
+      },
+      "Deal": {
+        "type": "object",
+        "required": ["__type", "id", "title", "stage", "amount_cents"],
+        "properties": {
+          "__type": { "type": "string", "const": "Deal" },
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "stage": { "type": "string", "enum": ["lead", "qualified", "won", "lost"] },
+          "amount_cents": { "type": "integer" },
+          "owner_id": { "type": ["string", "null"] }
+        }
+      },
+      "DealInput": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string" },
+          "stage": { "type": "string", "enum": ["lead", "qualified", "won", "lost"] },
+          "amount_cents": { "type": "integer" }
+        }
+      },
+      "DealPage": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Deal" } },
+          "meta": {
+            "type": "object",
+            "required": ["current_page", "per_page", "total", "last_page"],
+            "properties": {
+              "current_page": { "type": "integer" },
+              "per_page": { "type": "integer" },
+              "total": { "type": "integer" },
+              "last_page": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
