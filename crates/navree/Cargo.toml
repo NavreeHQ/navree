@@ -193,7 +193,7 @@ dock = ["dep:navree-dock"]
 ## Opt-in, not in `full`: Navigator's library (the MCP server for coding
 ## agents behind `navree mcp`, its tools, and the embedded agent skills of
 ## `navree skills:install`), for tools and tests. The CLI does not need it.
-navigator = ["dep:navree-navigator"]
+navigator = ["dep:navree-navigator", "dock"]
 ## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
 ## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
 otel = ["observe", "navree-observe/otel"]
