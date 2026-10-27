@@ -49,8 +49,9 @@ async fn the_migration_creates_schedule_runs() {
         .await;
     let status = Migrator::status(app.ctx()).await.unwrap();
     let ours: Vec<_> = status.iter().filter(|m| m.module == "schedule").collect();
-    assert_eq!(ours.len(), 1, "{status:?}");
-    assert!(ours[0].applied);
+    // The table, then its conversion to a TimescaleDB hypertable.
+    assert_eq!(ours.len(), 2, "{status:?}");
+    assert!(ours.iter().all(|m| m.applied));
     assert_eq!(RUNS_TABLE, "schedule_runs");
 }
 
