@@ -105,7 +105,10 @@ impl Controller for HelmController {
             view(RouteDef::on(Method::GET, at("/pages/{page}"), ui::custom_page).name("helm.page")),
             // The Settings screens (feature `settings`).
             #[cfg(feature = "settings")]
-            view(RouteDef::on(Method::GET, at("/settings"), ui::settings::index).name("helm.settings")),
+            view(
+                RouteDef::on(Method::GET, at("/settings"), ui::settings::index)
+                    .name("helm.settings"),
+            ),
             #[cfg(feature = "settings")]
             view(
                 RouteDef::on(Method::GET, at("/settings/{key}"), ui::settings::show)

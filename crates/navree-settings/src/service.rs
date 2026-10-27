@@ -20,9 +20,8 @@ use crate::fake::FakeState;
 use crate::registry::RegisteredSettings;
 use crate::resolve::{Layer, merge};
 use crate::{
-    Resolved, ResolvedSettings, Scope, ScopeKind, ScopeTarget, SettingsChanged,
-    SettingsDefinition, SettingsError, SettingsGroup, SettingsOptions, SettingsRegistry,
-    SettingsStore, StoredSetting,
+    Resolved, ResolvedSettings, Scope, ScopeKind, ScopeTarget, SettingsChanged, SettingsDefinition,
+    SettingsError, SettingsGroup, SettingsOptions, SettingsRegistry, SettingsStore, StoredSetting,
 };
 
 /// Resolves and changes settings. Inject `Arc<Settings>` (SettingsModule is
@@ -363,7 +362,10 @@ impl Engine {
             None => {
                 let cache = self.cache_with_ttl();
                 if let Some((cache, _)) = &cache {
-                    match cache.get::<Option<Uuid>>(&organization_key(workspace)).await {
+                    match cache
+                        .get::<Option<Uuid>>(&organization_key(workspace))
+                        .await
+                    {
                         Ok(Some(found)) => return Ok(found),
                         Ok(None) => {}
                         Err(error) => {
@@ -641,7 +643,10 @@ impl Engine {
             .definition
             .validate(&Value::Object(merged), &messages)
             .map_err(SettingsError::Invalid)?;
-        let mut values = row.as_ref().map(|row| row.values.clone()).unwrap_or_default();
+        let mut values = row
+            .as_ref()
+            .map(|row| row.values.clone())
+            .unwrap_or_default();
         let (mut old, mut new) = (Map::new(), Map::new());
         let mut fields = Vec::new();
         for field in patch.keys() {

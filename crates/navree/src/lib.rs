@@ -209,13 +209,13 @@ pub use navree_workspace as workspace;
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
-#[cfg(feature = "webhooks")]
-pub use navree_webhooks as webhooks;
 /// Typed settings with inheritance (the `settings` feature): navree-settings
 /// re-exported whole, `#[derive(Settings)]` included
 /// (`use navree::settings::{Settings, Scope};`).
 #[cfg(feature = "settings")]
 pub use navree_settings as settings;
+#[cfg(feature = "webhooks")]
+pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
 #[cfg(feature = "grpc")]

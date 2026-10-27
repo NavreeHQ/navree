@@ -174,9 +174,7 @@ impl Selection {
 /// most general one it allows.
 fn level_of(entry: &RegisteredSettings, selection: &Selection) -> Result<ScopeKind, AppError> {
     let level = match &selection.level {
-        Some(raw) => raw
-            .parse::<ScopeKind>()
-            .map_err(AppError::bad_request)?,
+        Some(raw) => raw.parse::<ScopeKind>().map_err(AppError::bad_request)?,
         None => entry
             .definition
             .levels()
@@ -193,15 +191,10 @@ fn level_of(entry: &RegisteredSettings, selection: &Selection) -> Result<ScopeKi
 }
 
 /// The scope a level and target name, with a label for the target.
-async fn scope_of(
-    cx: &Cx,
-    level: ScopeKind,
-    target: &str,
-) -> Result<(Scope, String), AppError> {
+async fn scope_of(cx: &Cx, level: ScopeKind, target: &str) -> Result<(Scope, String), AppError> {
     let as_id = || {
-        Uuid::parse_str(target).map_err(|_| {
-            AppError::bad_request(format!("`{target}` is not an id."))
-        })
+        Uuid::parse_str(target)
+            .map_err(|_| AppError::bad_request(format!("`{target}` is not an id.")))
     };
     match level {
         ScopeKind::Global => Ok((Scope::global(), "Everyone".to_owned())),
@@ -231,7 +224,10 @@ async fn scope_of(
 
 /// `entry` and the service, checked for the user: 404 without
 /// `SettingsModule` or for an unknown key, 403 without the permission.
-async fn entry_for(cx: &Cx, key: &str) -> Result<(Arc<Settings>, Arc<RegisteredSettings>), AppError> {
+async fn entry_for(
+    cx: &Cx,
+    key: &str,
+) -> Result<(Arc<Settings>, Arc<RegisteredSettings>), AppError> {
     let settings = service(cx).await.ok_or_else(AppError::not_found)?;
     let entry = settings
         .registry()
@@ -675,7 +671,10 @@ mod tests {
 
     #[test]
     fn sources_read_as_sentences() {
-        assert_eq!(source_text(Source::Default, ScopeKind::Workspace), "Default value");
+        assert_eq!(
+            source_text(Source::Default, ScopeKind::Workspace),
+            "Default value"
+        );
         assert_eq!(
             source_text(Source::Workspace, ScopeKind::Workspace),
             "Set at this level"

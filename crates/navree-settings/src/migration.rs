@@ -41,12 +41,7 @@ impl MigrationTrait for CreateSettingsTable {
                             .not_null(),
                     )
                     .col(ColumnDef::new("updated_by").uuid().null())
-                    .primary_key(
-                        Index::create()
-                            .col("key")
-                            .col("scope_type")
-                            .col("scope_id"),
-                    )
+                    .primary_key(Index::create().col("key").col("scope_type").col("scope_id"))
                     .to_owned(),
             )
             .await?;

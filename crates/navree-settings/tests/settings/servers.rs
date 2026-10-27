@@ -60,8 +60,14 @@ mod real {
         world.attach(holding.id, acme.id).await;
         for (scope, patch) in [
             (Scope::global(), json!({"page_size": 50})),
-            (Scope::organization(holding.id), json!({"show_leaderboard": true})),
-            (Scope::workspace(acme.id), json!({"welcome_text": "Hi Acme"})),
+            (
+                Scope::organization(holding.id),
+                json!({"show_leaderboard": true}),
+            ),
+            (
+                Scope::workspace(acme.id),
+                json!({"welcome_text": "Hi Acme"}),
+            ),
         ] {
             let settings = settings.clone();
             world
@@ -76,7 +82,10 @@ mod real {
             .await
             .unwrap();
         assert_eq!(portal.page_size, 50);
-        assert_eq!(portal.source("show_leaderboard"), Some(Source::Organization));
+        assert_eq!(
+            portal.source("show_leaderboard"),
+            Some(Source::Organization)
+        );
         assert_eq!(portal.welcome_text, "Hi Acme");
         assert_eq!(portal.overridden, ["welcome_text"]);
         world.app.shutdown().await.unwrap();

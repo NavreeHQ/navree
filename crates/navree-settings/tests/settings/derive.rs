@@ -38,8 +38,14 @@ fn the_derive_writes_the_documented_constants() {
     assert_eq!(PortalSettings::PERMISSION, None);
     assert_eq!(PortalSettings::READ_PERMISSION, None);
 
-    assert_eq!(NotificationSettings::SCOPES, [ScopeKind::Global, ScopeKind::Workspace]);
-    assert_eq!(NotificationSettings::PERMISSION, Some("notifications.manage"));
+    assert_eq!(
+        NotificationSettings::SCOPES,
+        [ScopeKind::Global, ScopeKind::Workspace]
+    );
+    assert_eq!(
+        NotificationSettings::PERMISSION,
+        Some("notifications.manage")
+    );
 }
 
 #[test]

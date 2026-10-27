@@ -142,11 +142,7 @@ impl SettingsFake {
     ///
     /// When `T` is not a valid settings type, or another type uses its key.
     pub fn register<T: SettingsGroup>(self) -> Self {
-        if let Err(error) = self
-            .settings
-            .registry()
-            .of(&SettingsDefinition::of::<T>())
-        {
+        if let Err(error) = self.settings.registry().of(&SettingsDefinition::of::<T>()) {
             panic!("SettingsFake::register: {error}");
         }
         self

@@ -157,7 +157,8 @@ impl SettingsRegistry {
                 definition.type_name,
             ));
         }
-        let entry = Arc::new(RegisteredSettings::new(*definition).map_err(SettingsError::Definition)?);
+        let entry =
+            Arc::new(RegisteredSettings::new(*definition).map_err(SettingsError::Definition)?);
         self.entries
             .write()
             .unwrap_or_else(PoisonError::into_inner)

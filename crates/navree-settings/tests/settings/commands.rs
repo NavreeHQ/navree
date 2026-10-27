@@ -14,12 +14,20 @@ async fn set_show_and_inherit_at_every_level() {
     world.attach(holding.id, acme.id).await;
     let app = &world.app;
 
-    app.run_command("settings:set", &["portal", "page_size=50", "welcome_text=Hello there"])
-        .await
-        .unwrap();
     app.run_command(
         "settings:set",
-        &["portal", "show_leaderboard=true", "--organization", "holding"],
+        &["portal", "page_size=50", "welcome_text=Hello there"],
+    )
+    .await
+    .unwrap();
+    app.run_command(
+        "settings:set",
+        &[
+            "portal",
+            "show_leaderboard=true",
+            "--organization",
+            "holding",
+        ],
     )
     .await
     .unwrap();
@@ -32,7 +40,14 @@ async fn set_show_and_inherit_at_every_level() {
     let ada_arg = ada.to_string();
     app.run_command(
         "settings:set",
-        &["portal", "page_size=10", "--user", &ada_arg, "--workspace", "acme"],
+        &[
+            "portal",
+            "page_size=10",
+            "--user",
+            &ada_arg,
+            "--workspace",
+            "acme",
+        ],
     )
     .await
     .unwrap();
@@ -78,9 +93,12 @@ async fn set_show_and_inherit_at_every_level() {
         .await
         .unwrap();
 
-    app.run_command("settings:inherit", &["portal", "welcome_text", "--workspace", "acme"])
-        .await
-        .unwrap();
+    app.run_command(
+        "settings:inherit",
+        &["portal", "welcome_text", "--workspace", "acme"],
+    )
+    .await
+    .unwrap();
     let workspace = settings
         .resolve::<PortalSettings>(Scope::workspace(acme.id))
         .await
@@ -99,9 +117,12 @@ async fn set_show_and_inherit_at_every_level() {
     app.run_command("settings:list", &[]).await.unwrap();
 
     // User-only settings by user id.
-    app.run_command("settings:set", &["view-preferences", "theme=dark", "--user", &ada_arg])
-        .await
-        .unwrap();
+    app.run_command(
+        "settings:set",
+        &["view-preferences", "theme=dark", "--user", &ada_arg],
+    )
+    .await
+    .unwrap();
     assert_eq!(
         settings
             .get::<ViewPreferences>(Scope::user(ada))
@@ -123,9 +144,7 @@ async fn mistakes_are_errors_naming_the_problem() {
     let app = &world.app;
     let error = |result: Result<(), navree_kernel::BoxError>| result.unwrap_err().to_string();
 
-    assert!(
-        error(app.run_command("settings:show", &[]).await).contains("name the settings")
-    );
+    assert!(error(app.run_command("settings:show", &[]).await).contains("name the settings"));
     assert_eq!(
         error(app.run_command("settings:show", &["nope"]).await),
         "unknown settings `nope`"
@@ -166,8 +185,16 @@ async fn mistakes_are_errors_naming_the_problem() {
     assert!(invalid.contains("page_size"), "{invalid}");
     assert!(
         error(
-            app.run_command("settings:set", &["notifications", "daily_digest=true", "--organization", "holding"])
-                .await
+            app.run_command(
+                "settings:set",
+                &[
+                    "notifications",
+                    "daily_digest=true",
+                    "--organization",
+                    "holding"
+                ]
+            )
+            .await
         )
         .contains("cannot be stored at the organization level")
     );
@@ -183,7 +210,6 @@ async fn mistakes_are_errors_naming_the_problem() {
         .contains("not both")
     );
     assert!(
-        error(app.run_command("settings:list", &["portal"]).await)
-            .contains("unexpected argument")
+        error(app.run_command("settings:list", &["portal"]).await).contains("unexpected argument")
     );
 }

@@ -129,9 +129,10 @@ async fn scope_of(ctx: &AppContext, args: &ScopeArgs) -> Result<Scope, BoxError>
         None => Scope::global(),
     };
     if let Some(identifier) = &args.workspace {
-        let workspaces = ctx.try_get::<Workspaces>().await.ok_or(
-            "--workspace needs WorkspaceModule in the app (to find the workspace)",
-        )?;
+        let workspaces = ctx
+            .try_get::<Workspaces>()
+            .await
+            .ok_or("--workspace needs WorkspaceModule in the app (to find the workspace)")?;
         let workspace = workspaces.resolve(identifier).await?;
         scope = scope
             .in_workspace(workspace.id)
@@ -203,7 +204,9 @@ async fn show(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
         return Err(format!("settings:show: unexpected argument `{arg}`").into());
     }
     let settings = ctx.get::<Settings>().await?;
-    let scope = settings.complete(scope_of(&ctx, &parsed.scope).await?).await?;
+    let scope = settings
+        .complete(scope_of(&ctx, &parsed.scope).await?)
+        .await?;
     let resolved = settings.resolve_key(&parsed.key, scope).await?;
     Ok(render_show(&parsed.key, &scope, &resolved))
 }
@@ -257,7 +260,9 @@ async fn set(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
     }
     let patch = patch_of("settings:set", &parsed.rest)?;
     let settings = ctx.get::<Settings>().await?;
-    let scope = settings.complete(scope_of(&ctx, &parsed.scope).await?).await?;
+    let scope = settings
+        .complete(scope_of(&ctx, &parsed.scope).await?)
+        .await?;
     let key = parsed.key.clone();
     let resolved = in_unit_of_work(&ctx, |uow| async move {
         settings.update_key(&uow, &key, scope, patch).await
@@ -276,7 +281,9 @@ async fn inherit(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError>
         return Err("settings:inherit: name the fields or pass --all, not both".into());
     }
     let settings = ctx.get::<Settings>().await?;
-    let scope = settings.complete(scope_of(&ctx, &parsed.scope).await?).await?;
+    let scope = settings
+        .complete(scope_of(&ctx, &parsed.scope).await?)
+        .await?;
     let (key, fields, all) = (parsed.key.clone(), parsed.rest.clone(), parsed.all);
     let resolved = in_unit_of_work(&ctx, |uow| async move {
         if all {
@@ -348,8 +355,11 @@ mod tests {
         assert_eq!(parsed.scope.user, Some(user));
         assert!(!parsed.all);
 
-        let all = parse("settings:inherit", &args(&["portal", "--all", "--organization=holding"]))
-            .unwrap();
+        let all = parse(
+            "settings:inherit",
+            &args(&["portal", "--all", "--organization=holding"]),
+        )
+        .unwrap();
         assert!(all.all);
         assert_eq!(all.scope.organization.as_deref(), Some("holding"));
 
@@ -358,7 +368,10 @@ mod tests {
             (vec!["--workspace", "acme"], "name the settings"),
             (vec!["portal", "--workspace"], "`--workspace` needs a value"),
             (vec!["portal", "--user", "ada"], "is not a user id"),
-            (vec!["portal", "--team", "x"], "unexpected argument `--team`"),
+            (
+                vec!["portal", "--team", "x"],
+                "unexpected argument `--team`",
+            ),
         ] {
             let error = parse("settings:show", &args(&bad)).unwrap_err();
             assert!(error.contains(message), "{bad:?}: {error}");
@@ -409,7 +422,11 @@ mod tests {
             overridden: vec!["welcome_text".to_owned()],
         };
         let id = Uuid::nil();
-        let out = render_show("portal", &Scope::workspace(id).in_organization(None), &resolved);
+        let out = render_show(
+            "portal",
+            &Scope::workspace(id).in_organization(None),
+            &resolved,
+        );
         assert_eq!(
             out,
             format!(
