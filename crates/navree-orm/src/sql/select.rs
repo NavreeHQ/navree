@@ -7,7 +7,8 @@ use sea_query::{
 use super::{Compiler, Dialect, Statement, build};
 use crate::error::OrmError;
 use crate::ir::{
-    Aggregate, ColumnRef, Direction, Distinct, Expr, JoinKind, Lock, Nulls, Order, QueryIr,
+    Aggregate, ColumnRef, Direction, Distinct, Expr, JoinKind, LockMode, LockWait, Nulls, Order,
+    QueryIr,
 };
 
 /// The SQL of a read query.
@@ -21,7 +22,19 @@ use crate::ir::{
 /// ```
 pub fn compile_select(query: &QueryIr, dialect: Dialect) -> Result<Statement, OrmError> {
     let select = Compiler::new(dialect).select(query)?;
-    Ok(build(&select, dialect))
+    let mut statement = build(&select, dialect);
+    if dialect == Dialect::MySql
+        && let Some(lock) = query.lock
+        && matches!(lock.mode, LockMode::Share | LockMode::KeyShare)
+        && lock.wait != LockWait::Wait
+    {
+        // MySQL 8 takes NOWAIT and SKIP LOCKED after `FOR SHARE` only.
+        const LEGACY: &str = " LOCK IN SHARE MODE";
+        if let Some(at) = statement.sql.rfind(LEGACY) {
+            statement.sql.replace_range(at..at + LEGACY.len(), " FOR SHARE");
+        }
+    }
+    Ok(statement)
 }
 
 /// The SQL of an aggregate over a query's rows, in a column named
@@ -326,12 +339,21 @@ impl Compiler {
             // SQLite has no row locks: its write transactions are serialised
             // (navree-db begins them IMMEDIATE).
             if self.dialect != Dialect::Sqlite {
-                match lock {
-                    Lock::Update => {
-                        select.lock(sea_query::LockType::Update);
+                let kind = match (self.dialect, lock.mode) {
+                    (Dialect::Postgres, LockMode::NoKeyUpdate) => sea_query::LockType::NoKeyUpdate,
+                    (Dialect::Postgres, LockMode::KeyShare) => sea_query::LockType::KeyShare,
+                    (_, LockMode::Share | LockMode::KeyShare) => sea_query::LockType::Share,
+                    _ => sea_query::LockType::Update,
+                };
+                match lock.wait {
+                    LockWait::Wait => {
+                        select.lock(kind);
                     }
-                    Lock::Share => {
-                        select.lock_shared();
+                    LockWait::NoWait => {
+                        select.lock_with_behavior(kind, sea_query::LockBehavior::Nowait);
+                    }
+                    LockWait::SkipLocked => {
+                        select.lock_with_behavior(kind, sea_query::LockBehavior::SkipLocked);
                     }
                 }
             }

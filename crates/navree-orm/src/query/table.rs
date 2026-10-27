@@ -142,7 +142,7 @@ impl TableBuilder {
 
     /// The query's rows.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Vec<Row>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target(crate::query::read_access(&self.ir)).await?;
         target.fetch(&self.ir).await
     }
 
@@ -172,7 +172,7 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target(crate::query::read_access(&self.ir)).await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -194,7 +194,7 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target(crate::query::read_access(&self.ir)).await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -223,7 +223,7 @@ impl TableBuilder {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target(crate::query::read_access(&self.ir)).await?;
         let name = self.table_name();
         let items = vec![
             SelectItem {

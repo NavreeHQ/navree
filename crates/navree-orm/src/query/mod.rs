@@ -255,6 +255,18 @@ impl<M: Model> Builder<M> {
     }
 }
 
+/// Where a read of `query` runs: a locking read where the executor writes
+/// (`&Db` joins the task's unit of work, beginning its transaction, since
+/// a lock outside a transaction ends with the statement); others where it
+/// reads.
+pub(crate) fn read_access(query: &QueryIr) -> crate::exec::Access {
+    if query.lock.is_some() {
+        crate::exec::Access::Write
+    } else {
+        crate::exec::Access::Read
+    }
+}
+
 /// The model's key column, qualified by its table.
 pub(crate) fn key_expr<M: Model>() -> Expr {
     let meta = M::meta();

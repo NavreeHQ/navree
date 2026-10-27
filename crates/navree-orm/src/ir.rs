@@ -869,14 +869,68 @@ impl Order {
     }
 }
 
-/// A row lock.
+/// A row lock on the rows a query reads, held until its transaction ends:
+/// a [`LockMode`] and what to do about rows another transaction holds
+/// ([`LockWait`]).
+///
+/// | | PostgreSQL | MySQL | SQLite |
+/// |---|---|---|---|
+/// | [`Update`](LockMode::Update) | `FOR UPDATE` | `FOR UPDATE` | none |
+/// | [`NoKeyUpdate`](LockMode::NoKeyUpdate) | `FOR NO KEY UPDATE` | `FOR UPDATE` | none |
+/// | [`Share`](LockMode::Share) | `FOR SHARE` | `LOCK IN SHARE MODE` (`FOR SHARE` with `NOWAIT` or `SKIP LOCKED`) | none |
+/// | [`KeyShare`](LockMode::KeyShare) | `FOR KEY SHARE` | as `Share` | none |
+///
+/// SQLite has no row locks: its write transactions are serialised
+/// (navree-db begins them `IMMEDIATE`), so the clause is dropped there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Lock {
+    /// What the lock keeps other transactions from doing.
+    pub mode: LockMode,
+    /// What happens to rows another transaction has locked.
+    pub wait: LockWait,
+}
+
+impl Lock {
+    /// A lock of `mode` that waits for rows other transactions hold.
+    pub const fn new(mode: LockMode) -> Self {
+        Lock {
+            mode,
+            wait: LockWait::Wait,
+        }
+    }
+}
+
+/// What a row lock keeps other transactions from doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum Lock {
-    /// `FOR UPDATE`.
+pub enum LockMode {
+    /// Changing or locking the rows (`FOR UPDATE`): read them, then update
+    /// them in the same transaction.
     Update,
-    /// `FOR SHARE` (`LOCK IN SHARE MODE` on MySQL).
+    /// Like [`Update`](LockMode::Update), without blocking `KeyShare`
+    /// locks (foreign keys pointing at the rows); for updates that leave
+    /// the key alone (`FOR NO KEY UPDATE`, PostgreSQL; `FOR UPDATE`
+    /// elsewhere).
+    NoKeyUpdate,
+    /// Changing the rows; other shared locks are allowed (`FOR SHARE`).
     Share,
+    /// Deleting the rows or changing their key (`FOR KEY SHARE`,
+    /// PostgreSQL; a shared lock elsewhere).
+    KeyShare,
+}
+
+/// What a locking read does with rows another transaction has locked.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LockWait {
+    /// Wait until they are released (the database's lock timeout applies).
+    #[default]
+    Wait,
+    /// Fail at once (`NOWAIT`) with the database's lock error.
+    NoWait,
+    /// Leave them out of the result (`SKIP LOCKED`): workers claiming jobs
+    /// or outbox entries never wait for each other.
+    SkipLocked,
 }
 
 /// A `UNION`.

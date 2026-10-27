@@ -357,6 +357,34 @@ pub(crate) async fn refresh<M: Model>(target: &Target<'_>, record: &mut Record<M
     Ok(())
 }
 
+/// Reloads `record`'s columns and locks its row for update until the
+/// transaction ends.
+pub(crate) async fn refresh_for_update<M: Model>(
+    target: &Target<'_>,
+    record: &mut Record<M>,
+) -> Result<()> {
+    if !record.exists {
+        return Err(Record::<M>::not_persisted("lock"));
+    }
+    let fresh = Builder::<M>::new()
+        .without_global_scopes()
+        .where_key(stored_key(record))
+        .limit(1)
+        .lock_for_update()
+        .fetch(target)
+        .await?
+        .into_vec()
+        .into_iter()
+        .next()
+        .ok_or_else(|| {
+            OrmError::not_found(M::meta().name(), vec![stored_key(record).to_key_string()])
+        })?;
+    record.model = fresh.model;
+    record.extras = fresh.extras;
+    record.sync_original();
+    Ok(())
+}
+
 /// `record` as stored now.
 pub(crate) async fn fresh<M: Model>(
     target: &Target<'_>,

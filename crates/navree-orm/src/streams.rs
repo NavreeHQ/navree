@@ -461,9 +461,10 @@ impl<Q: Paged> Walk<Q> {
             self.done = true;
             return Ok(None);
         }
-        let query = self.next_query(limit)?;
+        let mut query = self.next_query(limit)?;
+        let access = crate::query::read_access(query.query_mut());
         let items = {
-            let target = exec.target(Access::Read).await?;
+            let target = exec.target(access).await?;
             query.fetch_page(&target).await?
         };
         let count = items.len() as u64;
@@ -854,7 +855,7 @@ impl<M: Model> Builder<M> {
     pub fn cursor<'e, E: Executor + ?Sized>(self, exec: &'e E) -> RowStream<'e, Result<Record<M>>> {
         RowStream::try_generate(move |mut out| async move {
             let outcome = async {
-                let target = exec.target(Access::Read).await?;
+                let target = exec.target(crate::query::read_access(&self.ir)).await?;
                 let ir = self.into_ir();
                 let mut rows = target.stream(&ir).await?;
                 let ctx = target.context();
@@ -1058,7 +1059,7 @@ impl TableBuilder {
     pub fn cursor<'e, E: Executor + ?Sized>(self, exec: &'e E) -> RowStream<'e, Result<Row>> {
         RowStream::try_generate(move |mut out| async move {
             let outcome = async {
-                let target = exec.target(Access::Read).await?;
+                let target = exec.target(crate::query::read_access(self.ir())).await?;
                 let ir = self.into_ir();
                 let mut rows = target.stream(&ir).await?;
                 while let Some(row) = rows.next().await {

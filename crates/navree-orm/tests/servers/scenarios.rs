@@ -637,6 +637,69 @@ pub async fn unit_of_work(db: Db, server: Server) {
     assert_eq!(Company::query().count(&db).await.unwrap(), 1);
 }
 
+/// Row locks between two units of work: `SKIP LOCKED` leaves the held row
+/// out, `NOWAIT` fails at once, shared locks wait for none of the free
+/// rows, and the holder's change commits.
+pub async fn locks(db: Db) {
+    use navree_orm::{LockMode, OrmError};
+
+    let mut ids = Vec::new();
+    for name in ["A", "B", "C"] {
+        let company = Company::create(
+            &db,
+            Company {
+                name: name.into(),
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
+        ids.push(company.id);
+    }
+    let holder = db.uow(None, None).await;
+    assert!(holder.lock_for_update());
+    let mut held = Company::find_or_fail(&holder, ids[0]).await.unwrap();
+    held.refresh_for_update(&holder).await.unwrap();
+
+    let other = db.uow(None, None).await;
+    let free: Vec<i64> = Company::query()
+        .order_by(Company::ID)
+        .lock_for_update()
+        .skip_locked()
+        .pluck(&other, Company::ID)
+        .await
+        .unwrap();
+    assert_eq!(free, ids[1..]);
+    let busy = Company::query()
+        .where_key(ids[0])
+        .lock(LockMode::NoKeyUpdate)
+        .no_wait()
+        .get(&other)
+        .await
+        .unwrap_err();
+    assert!(matches!(busy, OrmError::Db(_)), "{busy}");
+    other.rollback().await.unwrap();
+
+    let reader = db.uow(None, None).await;
+    let shared: Vec<i64> = Company::query()
+        .order_by(Company::ID)
+        .shared_lock()
+        .skip_locked()
+        .pluck(&reader, Company::ID)
+        .await
+        .unwrap();
+    assert_eq!(shared, ids[1..], "the row held for update is skipped");
+    reader.rollback().await.unwrap();
+
+    held.name = "Held".into();
+    held.save(&holder).await.unwrap();
+    holder.commit().await.unwrap();
+    assert_eq!(
+        Company::find_or_fail(&db, ids[0]).await.unwrap().name,
+        "Held"
+    );
+}
+
 /// Bulk writes: inserts split under the bind limit, insert-or-ignore,
 /// upserts, keys read back, JSON path updates, `UPDATE … FROM`, joined
 /// table writes, truncation and `save_or_ignore`.
