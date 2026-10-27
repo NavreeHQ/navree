@@ -5222,6 +5222,7 @@ dependencies = [
  "navree-testing",
  "navree-workspace",
  "quick-xml",
+ "ring",
  "sea-orm",
  "sea-orm-migration",
  "serde",
