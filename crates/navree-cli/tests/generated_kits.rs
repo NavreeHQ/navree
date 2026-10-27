@@ -29,7 +29,7 @@ use std::process::Command;
 use navree_cli::clock::Timestamp;
 use navree_cli::kits::Kit;
 use navree_cli::names::AppName;
-use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 
 /// The workspace root. `std::path::absolute`, not `canonicalize`, which
 /// gives verbatim `\\?\C:\..` paths on Windows.
@@ -90,6 +90,7 @@ fn generate(kit: Kit, name: &str) -> (tempfile::TempDir, PathBuf) {
         name: AppName::parse(name).unwrap(),
         ui: Ui::None,
         kit: Some(kit),
+        database: Database::default(),
         navree: NavreeSource::Path(facade),
     };
     let root = create_app(parent.path(), &app, Timestamp::now()).unwrap();

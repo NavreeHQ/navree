@@ -20,4 +20,5 @@ mod migrations;
 mod paginate;
 mod repo;
 mod text;
+mod time_series;
 mod uow;

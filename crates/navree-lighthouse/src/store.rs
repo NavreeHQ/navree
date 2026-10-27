@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_db::Db;
+use navree_db::{Db, prune_time_series};
 use sea_orm::sea_query::{Expr, OnConflict, Query};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
@@ -21,6 +21,7 @@ use crate::alert::AlertKind;
 use crate::engine::{Batch, Hit, Labels, NewSample, Span};
 use crate::entity::{aggregate, alert, issue, occurrence, sample};
 use crate::histogram::Histogram;
+use crate::migration::{AGGREGATES_TABLE, OCCURRENCES_TABLE, SAMPLES_TABLE};
 use crate::model::{Issue, IssueKind, IssueStatus, Level};
 use crate::options::{LighthouseOptions, Period};
 
@@ -1581,27 +1582,18 @@ impl LighthouseStore {
 
     /// Deletes samples, occurrences, aggregates and alerts older than
     /// `days`, per-minute aggregates older than two days, and resolved or
-    /// ignored issues with no occurrence left. Open issues are kept.
+    /// ignored issues with no occurrence left. Open issues are kept. On
+    /// TimescaleDB, where samples, occurrences and aggregates are
+    /// hypertables, the days entirely before the cutoff go as whole chunks
+    /// (see [`prune_time_series`]).
     pub async fn prune(&self, days: u32) -> Result<PruneSummary, LighthouseError> {
         let now = Utc::now();
         let cutoff = now - TimeDelta::days(i64::from(days.max(1)));
         let conn = self.db.conn();
-        let samples = sample::Entity::delete_many()
-            .filter(sample::Column::At.lt(cutoff))
-            .exec(conn)
-            .await?
-            .rows_affected;
-        let occurrences = occurrence::Entity::delete_many()
-            .filter(occurrence::Column::At.lt(cutoff))
-            .exec(conn)
-            .await?
-            .rows_affected;
+        let samples = prune_time_series(conn, SAMPLES_TABLE, "at", cutoff).await?;
+        let occurrences = prune_time_series(conn, OCCURRENCES_TABLE, "at", cutoff).await?;
         let minute_cutoff = cutoff.max(now - TimeDelta::days(2));
-        let aggregates = aggregate::Entity::delete_many()
-            .filter(aggregate::Column::Bucket.lt(cutoff))
-            .exec(conn)
-            .await?
-            .rows_affected
+        let aggregates = prune_time_series(conn, AGGREGATES_TABLE, "bucket", cutoff).await?
             + aggregate::Entity::delete_many()
                 .filter(aggregate::Column::Resolution.eq(MINUTE))
                 .filter(aggregate::Column::Bucket.lt(minute_cutoff))

@@ -105,7 +105,7 @@ fn the_services_table() {
     assert_eq!(
         images,
         [
-            "postgres:17",
+            "timescale/timescaledb:2.31.0-pg17",
             "redis:7",
             "axllent/mailpit:v1.31",
             "getmeili/meilisearch:v1.55",
@@ -113,8 +113,37 @@ fn the_services_table() {
             "nats:2.14"
         ]
     );
+    // The TimescaleDB image has pgvector too; plain PostgreSQL switches to
+    // pgvector's image.
     let vector = parse("[services.postgres]\nextensions = [\"vector\"]\n");
-    assert_eq!(vector.services[0].image, "pgvector/pgvector:pg17");
+    assert_eq!(
+        vector.services[0].image,
+        "timescale/timescaledb:2.31.0-pg17"
+    );
+    let plain = parse("[services.postgres]\ntimescaledb = false\n");
+    assert_eq!(plain.services[0].image, "postgres:17");
+    let plain_vector =
+        parse("[services.postgres]\ntimescaledb = false\nextensions = [\"vector\"]\n");
+    assert_eq!(plain_vector.services[0].image, "pgvector/pgvector:pg17");
+}
+
+/// "PostgreSQL and TimescaleDB": the page's plain PostgreSQL and own-image
+/// examples.
+#[test]
+fn the_postgres_examples() {
+    let plain = parse("[services.postgres]\ntimescaledb = false\nversion = \"16\"\n");
+    assert_eq!(plain.services[0].image, "postgres:16");
+    let pg18 = parse("[services.postgres]\nversion = \"18\"\n");
+    assert_eq!(pg18.services[0].image, "timescale/timescaledb:2.31.0-pg18");
+    let postgis = parse("[services.postgres]\nimage = \"postgis/postgis:17-3.5\"\n");
+    assert!(matches!(
+        postgis.services[0].options,
+        ServiceOptions::Postgres {
+            timescaledb: false,
+            ..
+        }
+    ));
+    assert!(postgis.services[0].setup().is_empty());
 }
 
 /// "Service settings": every documented default.
@@ -130,6 +159,7 @@ fn the_service_settings_defaults() {
             user: "navree".into(),
             password: "navree".into(),
             extensions: vec![],
+            timescaledb: true,
         }
     );
     assert_eq!(
@@ -257,15 +287,15 @@ fn the_getting_started_output() {
     let lines: Vec<&str> = printed.lines().collect();
     assert_eq!(lines[0], "Starting crm-api services with docker");
     assert!(
-        lines[1].starts_with("  postgres  postgres:17 "),
+        lines[1].starts_with(
+            "  postgres  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432  ready in "
+        ),
         "{printed}"
     );
     assert!(
-        lines[1].contains("  127.0.0.1:5432  ready in "),
-        "{printed}"
-    );
-    assert!(
-        lines[2].starts_with("  mailpit   axllent/mailpit:v1.31  127.0.0.1:1025  ready in "),
+        lines[2].starts_with(
+            "  mailpit   axllent/mailpit:v1.31              127.0.0.1:1025  ready in "
+        ),
         "{printed}"
     );
     assert_eq!(lines[3], "Mailpit's inbox: http://127.0.0.1:8025");
@@ -282,17 +312,17 @@ fn the_status_output() {
     let file = parse(
         "[services.postgres]\n[services.redis]\n[services.mailpit]\n[services.meilisearch]\n",
     );
-    let ps = "crm-api-postgres|running|postgres:17|127.0.0.1:5432->5432/tcp\n\
+    let ps = "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n\
               crm-api-redis|running|redis:7|127.0.0.1:6379->6379/tcp\n\
               crm-api-mailpit|running|axllent/mailpit:v1.31|127.0.0.1:1025->1025/tcp, 127.0.0.1:8025->8025/tcp\n";
     let exec = FakeExecutor::new().respond("ps --all", CmdOutput::ok(ps));
     let dock = Dock::new(dir.path(), file, exec).unwrap();
     assert_eq!(
         status_table(&dock.status().unwrap()),
-        "Service      State    Image                  Address\n\
-         postgres     running  postgres:17            127.0.0.1:5432\n\
-         redis        running  redis:7                127.0.0.1:6379\n\
-         mailpit      running  axllent/mailpit:v1.31  127.0.0.1:1025, 127.0.0.1:8025\n\
+        "Service      State    Image                              Address\n\
+         postgres     running  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432\n\
+         redis        running  redis:7                            127.0.0.1:6379\n\
+         mailpit      running  axllent/mailpit:v1.31              127.0.0.1:1025, 127.0.0.1:8025\n\
          meilisearch  stopped\n"
     );
 }

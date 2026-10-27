@@ -1,6 +1,6 @@
 ---
 name: navree-new-app
-description: "Creates and runs a new Navree app: installing the navree CLI, `navree new` and its options, the starter kits (`--kit saas|api|micro`: a multi-tenant SaaS with a Next.js front end, the same API alone, or a microservice workspace), APP_KEY, `navree dev`, the generated files, the first feature module and adding Navree to an existing Cargo package. Use when the user wants to start a Navree project, scaffold a Rust API, a SaaS or a microservice with Navree, run a fresh app or kit, or asks what `navree new` generated."
+description: "Creates and runs a new Navree app: installing the navree CLI, `navree new` and its options (`--database`, TimescaleDB by default), the starter kits (`--kit saas|api|micro`: a multi-tenant SaaS with a Next.js front end, the same API alone, or a microservice workspace), starting the database with `navree dock up`, APP_KEY, `navree dev`, the generated files, the first feature module and adding Navree to an existing Cargo package. Use when the user wants to start a Navree project, scaffold a Rust API, a SaaS or a microservice with Navree, run a fresh app or kit, or asks what `navree new` generated."
 ---
 
 # Create and run a Navree app
@@ -10,9 +10,12 @@ description: "Creates and runs a new Navree app: installing the navree CLI, `nav
 - Rust 1.95 or newer (edition 2024), from rustup.
 - A C compiler for the Rust toolchain: SQLite is compiled from source. On
   Windows that means the MSVC build tools.
+- Docker or Podman: `navree dock up` runs the app's database, TimescaleDB
+  (not needed with `--database sqlite`).
 - Optional: `rustfmt` (generators format their output with it), Node.js
   20.9+ for the `--ui next` front end.
-- No OpenSSL, CMake or database server: TLS is rustls and new apps use SQLite.
+- No OpenSSL, CMake or installed database server: TLS is rustls, and Dock
+  runs the database in a container.
 
 ## 1. Install the CLI
 
@@ -27,8 +30,9 @@ navree --version
 ## 2. Create the app
 
 ```sh
-navree new blog                                  # API only
+navree new blog                                  # API only, on TimescaleDB
 navree new shop --ui next                        # plus a Next.js front end in web/
+navree new blog --database sqlite                # a SQLite file, nothing to install
 navree new blog --navree-path ~/code/navree      # depend on that checkout
 ```
 
@@ -42,6 +46,12 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
 - `navree new` doesn't run Cargo or `git init`. The app is its own Cargo
   workspace (remove `[workspace]` from its `Cargo.toml` to join an
   enclosing one).
+- `--database` picks the database: `timescaledb` (the default: PostgreSQL
+  with hypertables), `postgres`, `mysql` (also MariaDB) or `sqlite`. It sets
+  `database.url`, the `navree` dependency's driver feature (`postgres` or
+  `mysql`; SQLite is built in) and, for TimescaleDB and PostgreSQL, a
+  `dock.toml` whose `postgres` service serves that very URL
+  (`postgres://navree:navree@127.0.0.1:5432/<crate_name>`).
 
 ### Or start from a starter kit
 
@@ -57,7 +67,7 @@ shape:
 ```sh
 navree new acme --kit saas
 cd acme
-navree dock up                 # PostgreSQL and Mailpit (micro: PostgreSQL and NATS)
+navree dock up                 # TimescaleDB and Mailpit (micro: TimescaleDB and NATS)
 navree key:generate            # then set APP_KEY in .env
 navree migrate:fresh --seed    # saas/api: tables and the `demo` workspace (micro: navree migrate)
 pnpm --dir web install         # saas only: the web app's packages
@@ -73,6 +83,9 @@ navree dev                     # API on :8080, web app on :3000
   `demo`.
 - `--ui next` only goes with `--kit saas` (where it changes nothing);
   with `api` or `micro` it is an error.
+- The kits run on TimescaleDB (the default) or, with `--database postgres`,
+  plain PostgreSQL (`timescaledb = false` in `dock.toml`); `mysql` and
+  `sqlite` are for the minimal app.
 - The kit is recorded in `Cargo.toml`: `[package.metadata.navree] kit`
   and `kit_version` (`[workspace.metadata.navree]` for `micro`). Compare
   with a fresh `navree new acme-latest --kit saas` to adopt template fixes.
@@ -81,12 +94,16 @@ navree dev                     # API on :8080, web app on :3000
   `src/modules/projects/`; micro handlers copy
   `crates/<service>/src/modules/invoices/handlers.rs`).
 
-## 3. Set the application key and run
+## 3. Start the database, set the application key and run
 
 ```sh
 cd blog
+navree dock up               # TimescaleDB on 127.0.0.1:5432 (Docker or Podman)
 navree key:generate          # prints base64:... ; boots the app, so the first run compiles everything
 ```
+
+Every app command boots the app, which connects to the database: start it
+first.
 
 Paste the key into `.env` as `APP_KEY=base64:...`. Without it, tokens and
 signed URLs use a random key per process (every restart signs everyone out)
@@ -108,14 +125,15 @@ Options: `--no-web`, `--debounce-ms 300`, and serve arguments after `--`
 ```text
 AGENTS.md / CLAUDE.md   conventions for coding agents (CLAUDE.md imports AGENTS.md)
 .env, .env.example      APP_KEY, http addr, database url, log level, mail settings
-config/app.toml         http, database (migrate_on_boot = true), log, mail, queue, auth, api
+config/app.toml         http, database (migrate_on_boot = true), schema (timescaledb = "auto"), log, mail, queue, auth, api
+dock.toml               [services.postgres]: TimescaleDB for `navree dock up`
 src/main.rs             <crate>::app(ConfigSources::defaults()).run()
 src/lib.rs              pub mod abilities; pub mod modules; pub use app::app;
 src/app.rs              every platform module configured once; `// navree:modules`
 src/abilities.rs        ability rules; `// navree:policies`
 src/modules/users/      a profile at GET/PUT /api/v1/profile on top of AuthModule
-tests/app.rs            boots the whole app on a temporary database
-storage/                runtime data (SQLite file, logs, uploads)
+tests/app.rs            boots the whole app on a temporary SQLite database
+storage/                runtime data (logs, uploads; the database with --database sqlite)
 web/                    with --ui next: Next.js with a backend-for-frontend
 ```
 
@@ -199,7 +217,11 @@ cargo test --workspace && navree micro:patterns                   # micro, at th
   `config/app.toml` sets those keys and `.env` only fills missing ones. Edit
   the TOML file or use a real environment variable.
 - Every app command boots the app, so `key:generate`, `migrate` and
-  `routes` need a working configuration and database.
+  `routes` need a working configuration and a running database: run
+  `navree dock up` first ("cannot connect to postgres://navree:***@127.0.0.1:5432/..."
+  means it isn't running).
+- Tests don't need Dock: `TestApp` gives each test its own SQLite file, and
+  the same migrations run there (hypertables become regular tables).
 - Leaving `migrate_on_boot = true` in production: turn it off with
   `APP_DATABASE__MIGRATE_ON_BOOT=false` and run `migrate` as a deploy step.
 - Kits keep the database URL out of `config/app.toml`, so `.env` (Dock's

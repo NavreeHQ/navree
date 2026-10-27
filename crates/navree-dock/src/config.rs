@@ -7,7 +7,10 @@ use toml::Value;
 
 use crate::error::DockError;
 use crate::runtime::RuntimeChoice;
-use crate::service::{HOST, Port, Service, ServiceOptions, ServiceSpec};
+use crate::service::{
+    self, HOST, POSTGRES_VERSION, Port, Service, ServiceOptions, ServiceSpec, TIMESCALEDB_IMAGE,
+    TIMESCALEDB_POSTGRES_VERSIONS, TIMESCALEDB_VERSION,
+};
 use crate::template;
 
 /// The file's name, next to the app's `Cargo.toml`.
@@ -446,11 +449,19 @@ fn build(
             if let Some(bad) = extensions.iter().find(|e| !is_identifier(e, 63)) {
                 return Err(format!("`extensions` has an invalid name: \"{bad}\""));
             }
+            // TimescaleDB is the default database; an image of your own
+            // runs it only when it is a TimescaleDB image, unless the file
+            // says otherwise.
+            let timescaledb = keys.bool(
+                "timescaledb",
+                image.as_deref().is_none_or(service::has_timescaledb),
+            )?;
             let options = ServiceOptions::Postgres {
                 database,
                 user: keys.credential("user", "navree")?,
                 password: keys.credential("password", "navree")?,
                 extensions,
+                timescaledb,
             };
             (options, vec![main])
         }
@@ -538,27 +549,67 @@ fn resolve_image(
     if let Some(image) = image {
         return match version {
             None => Ok(image),
-            Some(_) if crate::service::image_tag(&image).is_some() || image.contains('@') => Err(
+            Some(_) if service::image_tag(&image).is_some() || image.contains('@') => Err(
                 "`image` already has a tag; set the tag in `image` or in `version`, not both"
                     .into(),
             ),
             Some(version) => Ok(format!("{image}:{version}")),
         };
     }
+    if let ServiceOptions::Postgres {
+        extensions,
+        timescaledb,
+        ..
+    } = options
+    {
+        return postgres_image(version, extensions, *timescaledb);
+    }
     let (repository, default_tag) = service.default_image();
     let tag = version.unwrap_or_else(|| default_tag.to_owned());
-    if let ServiceOptions::Postgres { extensions, .. } = options
-        && extensions.iter().any(|e| e == "vector")
-    {
-        let major: String = tag.chars().take_while(char::is_ascii_digit).collect();
+    Ok(format!("{repository}:{tag}"))
+}
+
+/// PostgreSQL's image for `version`: TimescaleDB's for that major version
+/// (it has pgvector too), or, without TimescaleDB, `postgres` (or
+/// `pgvector/pgvector` with the `vector` extension).
+fn postgres_image(
+    version: Option<String>,
+    extensions: &[String],
+    timescaledb: bool,
+) -> Result<String, String> {
+    let version = version.unwrap_or_else(|| POSTGRES_VERSION.to_owned());
+    if timescaledb {
+        let supported = TIMESCALEDB_POSTGRES_VERSIONS.map(|major| major.to_string());
+        return match version.parse::<u32>() {
+            Ok(major) if TIMESCALEDB_POSTGRES_VERSIONS.contains(&major) => Ok(format!(
+                "{TIMESCALEDB_IMAGE}:{}",
+                service::timescaledb_tag(major)
+            )),
+            _ => Err(format!(
+                "with TimescaleDB, `version` is the PostgreSQL major version: {} (the versions TimescaleDB {TIMESCALEDB_VERSION} runs on), not \"{version}\"; set `timescaledb = false` for plain PostgreSQL {version}",
+                join_or(&supported)
+            )),
+        };
+    }
+    if extensions.iter().any(|e| e == "vector") {
+        let major: String = version.chars().take_while(char::is_ascii_digit).collect();
         if major.is_empty() {
             return Err(format!(
-                "with the `vector` extension, `version` must start with the PostgreSQL major version, not \"{tag}\""
+                "with the `vector` extension, `version` must start with the PostgreSQL major version, not \"{version}\""
             ));
         }
         return Ok(format!("pgvector/pgvector:pg{major}"));
     }
-    Ok(format!("{repository}:{tag}"))
+    Ok(format!("postgres:{version}"))
+}
+
+/// `a, b or c`.
+fn join_or(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} or {last}", init.join(", ")),
+    }
 }
 
 /// The settings the app gets: the service's `env` table rendered, or its
@@ -708,7 +759,7 @@ mod tests {
             ]
         );
         let postgres = file.service("postgres").unwrap();
-        assert_eq!(postgres.image, "postgres:17");
+        assert_eq!(postgres.image, "timescale/timescaledb:2.31.0-pg17");
         assert_eq!(postgres.container, "crm-api-postgres");
         assert_eq!(postgres.volume, "crm-api-postgres-data");
         assert_eq!(
@@ -799,9 +850,100 @@ mod tests {
     }
 
     #[test]
+    fn postgres_runs_timescaledb_by_default() {
+        let file = parse("[services.postgres]\n");
+        let postgres = &file.services[0];
+        assert_eq!(postgres.image, "timescale/timescaledb:2.31.0-pg17");
+        assert_eq!(
+            postgres.options,
+            ServiceOptions::Postgres {
+                database: "crm_api".into(),
+                user: "navree".into(),
+                password: "navree".into(),
+                extensions: vec![],
+                timescaledb: true,
+            }
+        );
+        assert_eq!(postgres.data_path(), "/var/lib/postgresql/data");
+        // `version` is the PostgreSQL major version under TimescaleDB.
+        let pg16 = parse("[services.postgres]\nversion = \"16\"\n");
+        assert_eq!(pg16.services[0].image, "timescale/timescaledb:2.31.0-pg16");
+        let pg18 = parse("[services.postgres]\nversion = \"18\"\n");
+        assert_eq!(pg18.services[0].image, "timescale/timescaledb:2.31.0-pg18");
+        assert_eq!(pg18.services[0].data_path(), "/var/lib/postgresql");
+        // The TimescaleDB image has pgvector too.
+        let vector = parse("[services.postgres]\nextensions = [\"vector\"]\n");
+        assert_eq!(
+            vector.services[0].image,
+            "timescale/timescaledb:2.31.0-pg17"
+        );
+        assert_eq!(
+            error("[services.postgres]\nversion = \"15\"\n"),
+            "dock.toml: [services.postgres]: with TimescaleDB, `version` is the PostgreSQL major version: 16, 17 or 18 (the versions TimescaleDB 2.31.0 runs on), not \"15\"; set `timescaledb = false` for plain PostgreSQL 15"
+        );
+        assert!(
+            error("[services.postgres]\nversion = \"17.6\"\n")
+                .contains("`version` is the PostgreSQL major version"),
+        );
+        assert!(
+            error("[services.postgres]\ntimescaledb = \"yes\"\n")
+                .contains("`timescaledb` must be true or false")
+        );
+    }
+
+    #[test]
+    fn plain_postgres_is_an_option() {
+        let file = parse("[services.postgres]\ntimescaledb = false\n");
+        let postgres = &file.services[0];
+        assert_eq!(postgres.image, "postgres:17");
+        assert!(matches!(
+            postgres.options,
+            ServiceOptions::Postgres {
+                timescaledb: false,
+                ..
+            }
+        ));
+        let tagged = parse("[services.postgres]\ntimescaledb = false\nversion = \"16.4-alpine\"\n");
+        assert_eq!(tagged.services[0].image, "postgres:16.4-alpine");
+        assert_eq!(
+            parse("[services.postgres]\ntimescaledb = false\nversion = \"15\"\n").services[0].image,
+            "postgres:15"
+        );
+        // An image of your own runs as named; TimescaleDB is on for
+        // TimescaleDB images only, unless the file says otherwise.
+        let postgis = parse("[services.postgres]\nimage = \"postgis/postgis:17-3.5\"\n");
+        assert_eq!(postgis.services[0].image, "postgis/postgis:17-3.5");
+        assert!(matches!(
+            postgis.services[0].options,
+            ServiceOptions::Postgres {
+                timescaledb: false,
+                ..
+            }
+        ));
+        let ha = parse("[services.postgres]\nimage = \"timescale/timescaledb-ha:pg17\"\n");
+        assert!(matches!(
+            ha.services[0].options,
+            ServiceOptions::Postgres {
+                timescaledb: true,
+                ..
+            }
+        ));
+        let declared = parse(
+            "[services.postgres]\nimage = \"registry.example.com/db:17\"\ntimescaledb = true\n",
+        );
+        assert!(matches!(
+            declared.services[0].options,
+            ServiceOptions::Postgres {
+                timescaledb: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn postgres_settings_and_the_vector_image() {
         let file = parse(
-            "[services.postgres]\nversion = \"16\"\ndatabase = \"crm\"\nuser = \"crm\"\npassword = \"s3cret\"\nport = 5433\nextensions = [\"vector\", \"pg_trgm\"]\n",
+            "[services.postgres]\ntimescaledb = false\nversion = \"16\"\ndatabase = \"crm\"\nuser = \"crm\"\npassword = \"s3cret\"\nport = 5433\nextensions = [\"vector\", \"pg_trgm\"]\n",
         );
         let postgres = &file.services[0];
         assert_eq!(postgres.image, "pgvector/pgvector:pg16");
@@ -811,11 +953,11 @@ mod tests {
             "postgres://crm:s3cret@127.0.0.1:5433/crm"
         );
         assert_eq!(postgres.data_path(), "/var/lib/postgresql/data");
-        let latest = parse("[services.postgres]\nversion = \"18\"\n");
+        let latest = parse("[services.postgres]\ntimescaledb = false\nversion = \"18\"\n");
         assert_eq!(latest.services[0].image, "postgres:18");
         assert_eq!(latest.services[0].data_path(), "/var/lib/postgresql");
         assert!(
-            error("[services.postgres]\nversion = \"latest\"\nextensions = [\"vector\"]\n")
+            error("[services.postgres]\ntimescaledb = false\nversion = \"latest\"\nextensions = [\"vector\"]\n")
                 .contains("must start with the PostgreSQL major version")
         );
         assert!(

@@ -6,10 +6,29 @@ addr = "127.0.0.1:8080"
 api_prefix = "/api"
 
 [database]
-url = "sqlite://storage/{{ crate_name }}.db?mode=rwc"
+{% if database == "timescaledb" %}
+# TimescaleDB (PostgreSQL with time-series hypertables): `navree dock up`
+# runs it on this machine. Production sets APP_DATABASE__URL instead.
+{% elif database == "postgres" %}
+# PostgreSQL: `navree dock up` runs it on this machine. Production sets
+# APP_DATABASE__URL instead.
+{% elif database == "mysql" %}
+# MySQL or MariaDB (`mariadb://` works too). Production sets
+# APP_DATABASE__URL instead.
+{% endif %}
+url = "{{ database_url }}"
 # Run pending migrations at boot (handy in development; use `navree migrate`
 # in deployments).
 migrate_on_boot = true
+{% if database == "timescaledb" %}
+
+[schema]
+# Hypertables (`schema.create_hypertable(...)` in migrations) use TimescaleDB
+# when the database has it, and are regular tables elsewhere (tests run on
+# SQLite). Production sets APP_SCHEMA__TIMESCALEDB=require, so a database
+# without TimescaleDB stops the migration instead.
+timescaledb = "auto"
+{% endif %}
 
 [log]
 level = "info"

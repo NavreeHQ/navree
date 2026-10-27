@@ -15,7 +15,7 @@ jobs:
       # The same service dock.toml starts locally. The tests need no broker:
       # they run on MicroFake's in-memory transport.
       postgres:
-        image: postgres:17
+        image: {{ postgres_image }}
         env:
           POSTGRES_USER: navree
           POSTGRES_PASSWORD: navree

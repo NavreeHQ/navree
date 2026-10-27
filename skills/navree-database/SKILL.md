@@ -1,14 +1,17 @@
 ---
 name: navree-database
-description: "Works with the database in a Navree app: SeaORM entities with UUID v7 keys, `Repo` writes with change events, the per-request unit of work (`Uow`), transactions in jobs and commands, module-owned migrations, seeders, factories, offset and cursor pagination, soft deletes, SQLite, PostgreSQL and MySQL/MariaDB. Use when adding a table, entity, column, migration, query, seeder, factory or paginated list, writing data outside a request, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
+description: "Works with the database in a Navree app: SeaORM entities with UUID v7 keys, `Repo` writes with change events, the per-request unit of work (`Uow`), transactions in jobs and commands, module-owned migrations, seeders, factories, offset and cursor pagination, soft deletes, TimescaleDB (the default) and its hypertables, PostgreSQL, MySQL/MariaDB and SQLite. Use when adding a table, entity, column, migration, query, seeder, factory or paginated list, writing data outside a request, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
 ---
 
 # The database
 
-Navree uses SeaORM 2 on SQLx. SQLite is the default (compiled in, no server);
-PostgreSQL is the `postgres` feature of `navree`, MySQL and MariaDB the
-`mysql` feature (`mysql://` or `mariadb://` URLs; MySQL 8's default
-accounts sign in over TLS). What Navree adds: a
+Navree uses SeaORM 2 on SQLx. TimescaleDB (PostgreSQL with hypertables for
+time series) is the default database: `navree new` writes its URL and turns
+on the `postgres` feature of `navree`, and `navree dock up` runs it. Plain
+PostgreSQL uses the same feature; MySQL and MariaDB the `mysql` feature
+(`mysql://` or `mariadb://` URLs; MySQL 8's default accounts sign in over
+TLS); SQLite is compiled in (tests, `navree new --database sqlite`, and the
+fallback when `database.url` is unset). What Navree adds: a
 connection pool from the `database` section, a **unit of work** per request
 (one lazy transaction, committed when the response status is below 400),
 `Repo<E>` writes that record **change events** (the audit log), module-owned
@@ -213,7 +216,7 @@ Column::Id, conn, CursorQuery)` returns `CursorPage<T>` (`{data, next_cursor}`).
 
 ```toml
 [database]
-url = "sqlite://storage/app.db?mode=rwc"   # or postgres://... (`postgres`), mysql://... (`mysql`)
+url = "postgres://navree:navree@127.0.0.1:5432/my_app"  # TimescaleDB (`postgres`); mysql://... (`mysql`); sqlite://storage/app.db?mode=rwc
 max_connections = 10
 migrate_on_boot = false                    # a new app sets true for development
 slow_query_ms = 200
@@ -238,6 +241,18 @@ Override in production with `APP_DATABASE__URL` (an environment variable,
 not `.env`, since `config/app.toml` sets it). `Arc<Db>` is injectable
 anywhere (`DatabaseModule` is global).
 
+## Time series
+
+Navree's own time-series tables are hypertables on TimescaleDB, converted
+by their modules' migrations: `audit_logs`, `webhook_deliveries`,
+`webhook_attempts`, `fleet_jobs`, `fleet_metrics`, `schedule_runs`,
+`lighthouse_samples`, `lighthouse_occurrences`, `lighthouse_aggregates`.
+Their primary keys include the time column there, so nothing may reference
+them by `id` alone. Prune old rows with
+`navree::db::prune_time_series(conn, table, time_column, cutoff)`: whole
+chunks go on a hypertable, one `DELETE` elsewhere. See
+`references/timescaledb.md`.
+
 ## Common mistakes
 
 - Forgetting `m.migrations(..)` in the module's `wire`, or the set's
@@ -250,6 +265,11 @@ anywhere (`DatabaseModule` is global).
 - Soft deletes are manual: a `deleted_at` column, filter every list, return
   404 for deleted rows, and check it in `#[can(.., from = "id")]` handlers.
 - Expecting `exists` validation or record checks to skip soft-deleted rows.
+- Running app commands (`migrate`, `key:generate`) before `navree dock up`:
+  the app can't connect to TimescaleDB.
+- A foreign key to a hypertable's `id`: its key is `(id, time)`, so the
+  conversion stops. Reference a regular table (the endpoint, the device)
+  and delete the dependent rows when pruning.
 
 ## Docs
 

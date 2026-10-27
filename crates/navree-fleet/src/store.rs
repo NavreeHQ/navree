@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_db::Db;
+use navree_db::{Db, prune_time_series};
 use navree_queue::AttemptOutcome;
 use sea_orm::{ConnectionTrait, DbBackend, QueryResult, Statement, Value};
 use uuid::Uuid;
@@ -339,12 +339,10 @@ impl FleetStore {
         Ok(found)
     }
 
+    /// Deletes the jobs that finished before `before` (Unix milliseconds):
+    /// whole chunks on TimescaleDB.
     pub(crate) async fn delete_jobs_before(&self, before: i64) -> Result<u64, FleetError> {
-        self.execute(
-            &format!("DELETE FROM {JOBS_TABLE} WHERE finished_at < ?"),
-            vec![before.into()],
-        )
-        .await
+        Ok(prune_time_series(self.db.conn(), JOBS_TABLE, "finished_at", before).await?)
     }
 
     // ------------------------------------------------------------- metrics
@@ -415,12 +413,10 @@ impl FleetStore {
         Ok(found)
     }
 
+    /// Deletes the snapshots taken before `before` (Unix milliseconds):
+    /// whole chunks on TimescaleDB.
     pub(crate) async fn delete_metrics_before(&self, before: i64) -> Result<u64, FleetError> {
-        self.execute(
-            &format!("DELETE FROM {METRICS_TABLE} WHERE at < ?"),
-            vec![before.into()],
-        )
-        .await
+        Ok(prune_time_series(self.db.conn(), METRICS_TABLE, "at", before).await?)
     }
 }
 

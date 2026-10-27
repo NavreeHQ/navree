@@ -20,7 +20,7 @@
 use serde::Serialize;
 
 use crate::clock::Timestamp;
-use crate::new_app::NewApp;
+use crate::new_app::{Database, NewApp};
 use crate::scaffold::FileSet;
 use crate::templates::{TemplateError, render};
 
@@ -119,6 +119,12 @@ pub struct KitContext {
     pub contracts_package: String,
     /// The contracts crate's crate name (`billing_contracts`; micro).
     pub contracts_crate: String,
+    /// `TimescaleDB` or `PostgreSQL`: what `[services.postgres]` runs.
+    pub database_name: &'static str,
+    /// The image of the CI workflow's database service, the one Dock runs
+    /// locally (`timescale/timescaledb:2.31.0-pg17`, or `postgres:17` with
+    /// `--database postgres`).
+    pub postgres_image: String,
 }
 
 impl KitContext {
@@ -126,6 +132,7 @@ impl KitContext {
     pub fn new(app: &NewApp, kit: Kit, now: Timestamp) -> Self {
         let package = app.name.package().to_owned();
         let crate_name = app.name.crate_name();
+        let timescale = app.database != Database::Postgres;
         KitContext {
             kit: kit.name(),
             kit_version: KIT_VERSION,
@@ -142,6 +149,21 @@ impl KitContext {
             migration_prefix: now.migration_prefix(),
             contracts_package: format!("{package}-contracts"),
             contracts_crate: format!("{crate_name}_contracts"),
+            database_name: if timescale {
+                "TimescaleDB"
+            } else {
+                "PostgreSQL"
+            },
+            postgres_image: if timescale {
+                format!(
+                    "{}:{}-pg{}",
+                    navree_dock::TIMESCALEDB_IMAGE,
+                    navree_dock::TIMESCALEDB_VERSION,
+                    navree_dock::POSTGRES_VERSION
+                )
+            } else {
+                format!("postgres:{}", navree_dock::POSTGRES_VERSION)
+            },
             package,
             crate_name,
         }
@@ -199,7 +221,16 @@ pub fn kit_files(app: &NewApp, kit: Kit, now: Timestamp) -> Result<FileSet, Temp
                 contents.to_owned()
             };
             // Embedded files keep the checkout's line endings; apps get LF.
-            files.add(target, contents.replace("\r\n", "\n"));
+            let mut contents = contents.replace("\r\n", "\n");
+            // Dock's `postgres` service runs TimescaleDB unless told otherwise.
+            if target == "dock.toml" && app.database == Database::Postgres {
+                contents = contents.replacen(
+                    "[services.postgres]\n",
+                    "[services.postgres]\ntimescaledb = false\n",
+                    1,
+                );
+            }
+            files.add(target, contents);
         }
     }
     if let Some(env) = files.get(".env.example").map(str::to_owned) {
@@ -242,6 +273,7 @@ mod tests {
             name: AppName::parse("acme").unwrap(),
             ui: Ui::None,
             kit: Some(Kit::Saas),
+            database: Database::default(),
             navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
         };
         KitContext::new(&app, Kit::Saas, Timestamp::from_unix(1_792_938_605))

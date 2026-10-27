@@ -34,7 +34,8 @@ use crate::{ChangeObserver, Db, DbOptions, Seeder};
 /// # fn main() -> Result<(), navree_kernel::BoxError> {
 /// Navree::app()
 ///     .module(DatabaseModule::for_root(DbOptions {
-///         url: "sqlite://storage/app.db?mode=rwc".into(),
+///         // TimescaleDB, as `navree dock up` runs it (the `postgres` feature).
+///         url: "postgres://navree:navree@127.0.0.1:5432/my_app".into(),
 ///         ..DbOptions::default()
 ///     }))
 ///     .run()

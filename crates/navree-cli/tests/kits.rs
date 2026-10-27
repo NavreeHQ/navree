@@ -8,7 +8,7 @@ use std::process::Command;
 use navree_cli::clock::Timestamp;
 use navree_cli::kits::{KIT_VERSION, Kit};
 use navree_cli::names::AppName;
-use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app, created_message};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app, created_message};
 
 fn now() -> Timestamp {
     Timestamp::from_unix(1_792_938_605)
@@ -19,6 +19,7 @@ fn app(name: &str, kit: Kit) -> NewApp {
         name: AppName::parse(name).unwrap(),
         ui: Ui::None,
         kit: Some(kit),
+        database: Database::default(),
         navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
     }
 }
@@ -518,7 +519,7 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     assert!(message.starts_with(&format!("Created acme in {} (kit: saas)\n", root.display())));
     for line in [
         "  cd acme\n",
-        "  navree dock up                 # PostgreSQL and Mailpit\n",
+        "  navree dock up                 # TimescaleDB and Mailpit\n",
         "  navree key:generate            # then set APP_KEY in .env\n",
         "  navree migrate:fresh --seed    # tables and a demo workspace\n",
         "  navree dev                     # API on :8080, web app on :3000\n",
@@ -527,7 +528,7 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     }
     let micro = created_message(&app("billing", Kit::Micro), &root);
     assert!(micro.contains("(kit: micro)"));
-    assert!(micro.contains("# PostgreSQL and NATS"));
+    assert!(micro.contains("# TimescaleDB and NATS"));
     let api = created_message(&app("acme", Kit::Api), &root);
     assert!(api.contains("(kit: api)"));
     assert!(!api.contains("pnpm"));
@@ -562,6 +563,62 @@ fn ui_next_goes_with_the_saas_kit_only() {
         .unwrap_err();
         assert!(error.to_string().contains("has no front end"), "{error}");
         assert!(!dir.path().join("acme").exists());
+    }
+}
+
+/// The kits run on TimescaleDB (Dock's default) or plain PostgreSQL; MySQL
+/// and SQLite go with the minimal app.
+#[test]
+fn kits_run_on_timescaledb_or_postgres() {
+    let (_dir, timescale) = generate("acme", Kit::Api);
+    let dock = std::fs::read_to_string(timescale.join("dock.toml")).unwrap();
+    assert!(dock.contains("[services.postgres]\n"), "{dock}");
+    assert!(!dock.contains("timescaledb = false"), "{dock}");
+    // CI runs the database Dock runs locally.
+    let ci = read(&timescale, ".github/workflows/ci.yml");
+    assert!(
+        ci.contains("image: timescale/timescaledb:2.31.0-pg17\n"),
+        "{ci}"
+    );
+    assert!(read(&timescale, "README.md").contains("# TimescaleDB and Mailpit"));
+
+    for kit in [Kit::Saas, Kit::Api, Kit::Micro] {
+        let dir = tempfile::tempdir().unwrap();
+        let postgres = NewApp {
+            database: Database::Postgres,
+            ..app("acme", kit)
+        };
+        let root = create_app(dir.path(), &postgres, now()).unwrap();
+        let dock = std::fs::read_to_string(root.join("dock.toml")).unwrap();
+        assert!(
+            dock.contains("[services.postgres]\ntimescaledb = false\n"),
+            "{kit}: {dock}"
+        );
+        let file = navree_dock::DockFile::parse(&dock, "acme").unwrap();
+        assert!(!file.env().is_empty(), "{kit}");
+        let ci = read(&root, ".github/workflows/ci.yml");
+        assert!(ci.contains("image: postgres:17\n"), "{kit}: {ci}");
+        assert!(
+            read(&root, "README.md").contains("# PostgreSQL and "),
+            "{kit}"
+        );
+        let message = created_message(&postgres, &root);
+        assert!(message.contains("# PostgreSQL and "), "{kit}: {message}");
+
+        for database in [Database::Mysql, Database::Sqlite] {
+            let dir = tempfile::tempdir().unwrap();
+            let error = create_app(
+                dir.path(),
+                &NewApp {
+                    database,
+                    ..app("acme", kit)
+                },
+                now(),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("runs on PostgreSQL"), "{error}");
+            assert!(!dir.path().join("acme").exists());
+        }
     }
 }
 

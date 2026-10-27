@@ -20,7 +20,7 @@ Kits are generated code, not a framework layer. There is no kit runtime and noth
 ## Requirements
 
 - Rust (the stable toolchain) and the [Navree CLI](/docs/getting-started/installation/).
-- Docker or Podman, for the local services that [Dock](/docs/tools/dock/) starts: PostgreSQL and Mailpit for `saas` and `api`, PostgreSQL and NATS for `micro`.
+- Docker or Podman, for the local services that [Dock](/docs/tools/dock/) starts: [TimescaleDB](/docs/database/timescaledb/) and Mailpit for `saas` and `api`, TimescaleDB and NATS for `micro`.
 - For the `saas` kit, Node.js 22 or newer and pnpm.
 
 ## Creating an app
@@ -34,7 +34,7 @@ Created acme in /home/ada/code/acme (kit: saas)
 
 Next steps:
   cd acme
-  navree dock up                 # PostgreSQL and Mailpit
+  navree dock up                 # TimescaleDB and Mailpit
   navree key:generate            # then set APP_KEY in .env
   navree migrate:fresh --seed    # tables and a demo workspace
   pnpm --dir web install         # the web app's packages
@@ -44,7 +44,7 @@ Next steps:
 <Steps>
 <Step title="Start the local services">
 
-`navree dock up` reads `dock.toml` and starts PostgreSQL and Mailpit in containers. `navree new` already wrote their settings into `.env`, between the `# dock:start` and `# dock:end` markers: `APP_DATABASE__URL` points at the database and `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
+`navree dock up` reads `dock.toml` and starts TimescaleDB (PostgreSQL with hypertables, Navree's default database) and Mailpit in containers. `navree new` already wrote their settings into `.env`, between the `# dock:start` and `# dock:end` markers: `APP_DATABASE__URL` points at the database and `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
 
 </Step>
 <Step title="Set the application key">
@@ -64,7 +64,7 @@ Next steps:
 </Step>
 </Steps>
 
-`navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout. A kit brings its own front end or none: `--kit saas --ui next` is the same as `--kit saas`, and `--ui next` with `api` or `micro` is an error. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing. When `rustfmt` is installed, the generated Rust is formatted with it.
+`navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout, and `--database postgres` runs plain PostgreSQL instead of TimescaleDB (`timescaledb = false` in `dock.toml`; the kits run on PostgreSQL, so `mysql` and `sqlite` are for the minimal app). A kit brings its own front end or none: `--kit saas --ui next` is the same as `--kit saas`, and `--ui next` with `api` or `micro` is an error. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing. When `rustfmt` is installed, the generated Rust is formatted with it.
 
 ## The SaaS kit
 
@@ -157,7 +157,7 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
   AGENTS.md                 # conventions for coding agents
   CLAUDE.md                 # imports AGENTS.md
   Cargo.toml
-  dock.toml                 # local services: PostgreSQL, Mailpit
+  dock.toml                 # local services: TimescaleDB, Mailpit
   harbor.toml               # servers and deploys
   openapi.json              # the API contract, checked in CI
   .env                      # this machine's settings (git-ignored)
@@ -246,7 +246,7 @@ Use it for mobile apps, public APIs, or a front end you build in another stack. 
   AGENTS.md
   CLAUDE.md
   Cargo.toml                # the workspace; default-members = the service
-  dock.toml                 # PostgreSQL and NATS
+  dock.toml                 # TimescaleDB and NATS
   harbor.toml
   .env.example
   .github/
@@ -323,7 +323,7 @@ The service also serves `/health/live`, `/health/ready` (with a `micro` check th
 ## Every kit includes
 
 - **`AGENTS.md` and `CLAUDE.md`**, so a coding agent knows the project's layout, commands and conventions from its first prompt. They point at the [agent skills](/docs/ai/agent-skills/) for Navree's common tasks (`navree skills:install` copies them into the project; or `npx skills add NavreeHQ/navree`).
-- **`dock.toml`** for [Dock](/docs/tools/dock/): `navree dock up` starts the services the kit needs, and `.env` already holds their settings. The CI workflow runs the same PostgreSQL version as a service container.
+- **`dock.toml`** for [Dock](/docs/tools/dock/): `navree dock up` starts the services the kit needs, and `.env` already holds their settings. The CI workflow runs the same database image as a service container.
 - **`harbor.toml`** for [Harbor](/docs/tools/harbor/): `navree harbor:provision` prepares a server and `navree deploy` ships a release with a health check on `/health/ready`. In the SaaS kit, its `[frontend]` section deploys `web/` in the same release as the API, so a page and the API it calls always come from the same build.
 - **A CI workflow** in `.github/workflows/ci.yml`: formatting, clippy, `check` (the module graph), the migrations on PostgreSQL and the Rust tests; for `saas` and `api`, the OpenAPI drift check; for `micro`, `micro:patterns`; for `saas`, the web app's lint, type check, unit tests and build, and the Playwright journeys against the real API.
 - **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue, billing and the message broker. The SaaS kit's BFF and API client have unit tests (Vitest) against a scripted API, and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member, upgrading a plan through the fake checkout, and what members and viewers may do.

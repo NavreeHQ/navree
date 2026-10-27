@@ -28,7 +28,7 @@ web/                   the Next.js front end; its server holds the API tokens
 ## Commands
 
 ```sh
-navree dock up                              # PostgreSQL and Mailpit in containers
+navree dock up                              # {{ database_name }} and Mailpit in containers
 navree dev                                  # API on :8080{% if web %}, web app on :3000{% endif %}, rebuild on save
 cargo test                                  # every test; each boots the app on its own SQLite database
 cargo clippy --all-targets -- -D warnings   # must pass

@@ -9,7 +9,7 @@ use std::process::Command;
 use navree_cli::clock::Timestamp;
 use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
 use navree_cli::names::{AppName, Name};
-use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
@@ -38,6 +38,7 @@ fn generated_rust_is_rustfmt_clean() {
         name: AppName::parse("blog").unwrap(),
         ui: Ui::None,
         kit: None,
+        database: Database::default(),
         navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
     };
     let root = create_app(dir.path(), &app, now).unwrap();

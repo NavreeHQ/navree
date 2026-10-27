@@ -9,11 +9,16 @@
 //!   CASCADE, workspace_id, message_id, event_type, payload, status,
 //!   attempts, max_attempts, next_attempt_at, last_status_code, last_error,
 //!   created_at, updated_at)`
-//! - `webhook_attempts(id, delivery_id → webhook_deliveries ON DELETE
-//!   CASCADE, endpoint_id, attempt, status_code, succeeded, response_body,
-//!   error, duration_ms, created_at)`
+//! - `webhook_attempts(id, delivery_id, endpoint_id → webhook_endpoints ON
+//!   DELETE CASCADE, attempt, status_code, succeeded, response_body, error,
+//!   duration_ms, created_at)`
 //! - `webhook_receipts(id, source, message_id, received_at)`, unique per
 //!   (source, message_id)
+//!
+//! Deliveries and attempts are time series: on TimescaleDB they are
+//! hypertables on `created_at`, whose primary keys are `(id, created_at)`.
+//! So no foreign key points at a delivery: an attempt's `delivery_id` is
+//! indexed, and `webhooks:prune` deletes a delivery's attempts with it.
 //!
 //! Secrets are encrypted with the app key when the app has one, and never
 //! serialized. Change endpoints through [`Webhooks`](crate::Webhooks);
@@ -192,22 +197,36 @@ pub mod attempt {
         pub created_at: DateTimeUtc,
     }
 
-    /// An attempt belongs to a delivery.
+    /// An attempt belongs to a delivery and to its endpoint.
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {
-        /// `webhook_deliveries.id`.
+        /// `webhook_deliveries.id` (no foreign key: deliveries are a
+        /// hypertable on TimescaleDB; pruning deletes the attempts).
         #[sea_orm(
             belongs_to = "super::delivery::Entity",
             from = "Column::DeliveryId",
-            to = "super::delivery::Column::Id",
-            on_delete = "Cascade"
+            to = "super::delivery::Column::Id"
         )]
         Delivery,
+        /// `webhook_endpoints.id`.
+        #[sea_orm(
+            belongs_to = "super::endpoint::Entity",
+            from = "Column::EndpointId",
+            to = "super::endpoint::Column::Id",
+            on_delete = "Cascade"
+        )]
+        Endpoint,
     }
 
     impl Related<super::delivery::Entity> for Entity {
         fn to() -> RelationDef {
             Relation::Delivery.def()
+        }
+    }
+
+    impl Related<super::endpoint::Entity> for Entity {
+        fn to() -> RelationDef {
+            Relation::Endpoint.def()
         }
     }
 

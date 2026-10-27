@@ -25,7 +25,7 @@ crates/{{ package }}/tests/        tests that boot the service on MicroFake, wit
 Run them at the workspace root (`cargo run` runs the service there):
 
 ```sh
-navree dock up                                          # PostgreSQL and NATS in containers
+navree dock up                                          # {{ database_name }} and NATS in containers
 navree dev                                              # handlers on NATS, health on :8080, rebuild on save
 cargo test --workspace                                  # every test; no broker needed
 cargo clippy --workspace --all-targets -- -D warnings   # must pass

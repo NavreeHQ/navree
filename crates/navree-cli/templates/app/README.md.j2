@@ -6,13 +6,31 @@ queues and OpenAPI docs.
 
 ## Getting started
 
+{% if database == "timescaledb" %}
+You need Docker or Podman: `navree dock up` runs the database (TimescaleDB,
+PostgreSQL with time-series hypertables) in a container, as `dock.toml`
+describes.
+
+{% elif database == "postgres" %}
+You need Docker or Podman: `navree dock up` runs the database (PostgreSQL)
+in a container, as `dock.toml` describes.
+
+{% endif %}
 ```sh
 cp .env.example .env
+{% if dock %}
+navree dock up               # the database on 127.0.0.1:5432; `navree dock down` stops it
+{% endif %}
 navree key:generate          # paste the key into APP_KEY in .env
 navree dev                   # build, serve on http://127.0.0.1:8080, rebuild on save
 ```
 
 Then open http://127.0.0.1:8080/api/docs for the API reference.
+{% if database == "mysql" %}
+
+The app connects to MySQL (or MariaDB) at `{{ database_url }}`: point
+`database.url` in config/app.toml, or `APP_DATABASE__URL`, at your server.
+{% endif %}
 
 ## Commands
 
@@ -34,6 +52,9 @@ Every command other than `new`, `make:*` and `dev` runs in the app binary
 
 ```text
 config/app.toml        settings (overridden by .env and APP_* variables)
+{% if dock %}
+dock.toml              the local services `navree dock up` runs
+{% endif %}
 src/app.rs             the root module: every module, configured once
 src/abilities.rs       what each user may do
 src/modules/<name>/    feature modules (mod.rs, controller.rs, service.rs,
@@ -50,3 +71,11 @@ web/                   the Next.js front end (`cd web && npm install && npm run 
 ```sh
 cargo test
 ```
+
+{% if database == "timescaledb" %}
+Each test gets a fresh SQLite database, so tests need no server. The same
+migrations run there: hypertables become regular tables with the same keys
+and indexes.
+{% else %}
+Each test gets a fresh SQLite database, so tests need no server.
+{% endif %}

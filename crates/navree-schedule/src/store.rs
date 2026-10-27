@@ -1,6 +1,9 @@
-//! The `schedule_runs` table: its migration and the statements the scheduler runs.
+//! The `schedule_runs` table: its migrations (a TimescaleDB hypertable on
+//! `tick`) and the statements the scheduler runs.
 
 use chrono::{DateTime, Utc};
+use navree_db::navree_schema::{Hypertable, KeyStrategy, Migration, Schema, SchemaResult};
+use navree_db::prune_time_series;
 use sea_orm::sea_query::{ColumnDef, Expr, ExprTrait, Index, OnConflict, Query, Table};
 use sea_orm::{ConnectionTrait, DbErr};
 use sea_orm_migration::async_trait::async_trait;
@@ -146,17 +149,50 @@ pub(crate) async fn running_elsewhere<C: ConnectionTrait>(
     Ok(false)
 }
 
-/// Deletes the runs of ticks before `before`; returns how many.
-pub(crate) async fn prune<C: ConnectionTrait>(
+/// Deletes the runs of ticks before `before`; returns how many. On
+/// TimescaleDB, where `schedule_runs` is a hypertable, the days entirely
+/// before `before` go as whole chunks.
+pub(crate) async fn prune<C: ConnectionTrait + Send + Sync>(
     conn: &C,
     before: DateTime<Utc>,
 ) -> Result<u64, DbErr> {
-    let result = conn
-        .execute(
-            Query::delete()
-                .from_table(RUNS_TABLE)
-                .and_where(Expr::col("tick").lt(before)),
-        )
-        .await?;
-    Ok(result.rows_affected())
+    prune_time_series(conn, RUNS_TABLE, "tick", before).await
+}
+
+/// How `schedule_runs` is partitioned on TimescaleDB: by `tick`, a day per
+/// chunk (runs are kept a week, [`RUN_RETENTION`](crate::RUN_RETENTION)).
+/// Its primary key, `(task, tick)`, already includes the time column.
+pub(crate) fn hypertable() -> Hypertable {
+    let mut runs = Hypertable::on("tick");
+    runs.chunk_interval("1 day")
+        .keys(KeyStrategy::Extend)
+        .migrate_data();
+    runs
+}
+
+/// Makes `schedule_runs` a hypertable on TimescaleDB; elsewhere it stays a
+/// regular table, given an index on `tick` for pruning, and the migration
+/// reports a notice.
+///
+/// Reverting it keeps the hypertable (and the index): TimescaleDB cannot
+/// turn one back into a plain table in place, and the table works the same
+/// either way. Running it again changes nothing.
+pub(crate) struct ConvertScheduleRunsToHypertable;
+
+impl ConvertScheduleRunsToHypertable {
+    /// The name recorded in `navree_migrations`.
+    pub(crate) const NAME: &'static str = "m20261027_000001_convert_schedule_runs_to_hypertable";
+}
+
+impl Migration for ConvertScheduleRunsToHypertable {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        if schema.is_hypertable(RUNS_TABLE).await? {
+            return Ok(());
+        }
+        schema.convert_to_hypertable(RUNS_TABLE, hypertable()).await
+    }
+
+    async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+        Ok(())
+    }
 }

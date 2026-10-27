@@ -11,11 +11,12 @@ use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, Page, PageQuery, Repo, Uow, paginate};
+use navree_db::{Db, Page, PageQuery, Repo, Uow, paginate, prune_time_series};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
 use navree_kernel::{AppContext, WeakAppContext};
 use sea_orm::ActiveValue::{Set, Unchanged};
+use sea_orm::sea_query::Query;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder,
@@ -29,6 +30,7 @@ use crate::entity::{attempt, delivery, endpoint, receipt};
 use crate::event::{WebhookContext, WebhookTypeRegistration};
 use crate::events::{WebhookDeliveryFailed, WebhookEndpointDisabled};
 use crate::jobs::{Deliver, FanOut, MAX_ATTEMPTS, retry_delay};
+use crate::migration::{ATTEMPTS_TABLE, DELIVERIES_TABLE};
 use crate::signing::{SECRET_PREFIX, generate_secret, standard_key, standard_signature};
 use crate::{
     Attempt, CreatedEndpoint, Delivery, DeliveryStatus, Endpoint, EndpointChanges, EventType,
@@ -597,7 +599,10 @@ impl Webhooks {
 
     /// Deletes deliveries (with their attempts) older than `days`
     /// (default `webhooks.retain_days`) and incoming receipts older than
-    /// `days` (default `webhooks.incoming.receipt_days`).
+    /// `days` (default `webhooks.incoming.receipt_days`). On TimescaleDB,
+    /// where the delivery log is made of hypertables, the days entirely
+    /// before the cutoff go as whole chunks (see
+    /// [`prune_time_series`](navree_db::prune_time_series)).
     pub async fn prune(&self, days: Option<u64>) -> Result<Pruned, WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
@@ -610,11 +615,24 @@ impl Webhooks {
         let receipts_before = cutoff(days.unwrap_or(self.options().incoming.receipt_days));
         self.in_uow(db, |uow| async move {
             let tx = uow.tx().await?;
-            let deliveries = delivery::Entity::delete_many()
-                .filter(delivery::Column::CreatedAt.lt(deliveries_before))
+            // Attempts no older than their delivery: the old ones first (by
+            // whole chunks), then the late retries of the deliveries that
+            // go, then those deliveries.
+            prune_time_series(&*tx, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
+            attempt::Entity::delete_many()
+                .filter(
+                    attempt::Column::DeliveryId.in_subquery(
+                        Query::select()
+                            .column(delivery::Column::Id)
+                            .from(delivery::Entity)
+                            .and_where(delivery::Column::CreatedAt.lt(deliveries_before))
+                            .to_owned(),
+                    ),
+                )
                 .exec(&*tx)
-                .await?
-                .rows_affected;
+                .await?;
+            let deliveries =
+                prune_time_series(&*tx, DELIVERIES_TABLE, "created_at", deliveries_before).await?;
             let receipts = receipt::Entity::delete_many()
                 .filter(receipt::Column::ReceivedAt.lt(receipts_before))
                 .exec(&*tx)

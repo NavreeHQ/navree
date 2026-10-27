@@ -84,10 +84,19 @@ addr = "127.0.0.1:8080"
 api_prefix = "/api"
 
 [database]
-url = "sqlite://storage/planner.db?mode=rwc"
+# TimescaleDB (PostgreSQL with time-series hypertables): `navree dock up`
+# runs it on this machine. Production sets APP_DATABASE__URL instead.
+url = "postgres://navree:navree@127.0.0.1:5432/planner"
 # Run pending migrations at boot (handy in development; use `navree migrate`
 # in deployments).
 migrate_on_boot = true
+
+[schema]
+# Hypertables (`schema.create_hypertable(...)` in migrations) use TimescaleDB
+# when the database has it, and are regular tables elsewhere (tests run on
+# SQLite). Production sets APP_SCHEMA__TIMESCALEDB=require, so a database
+# without TimescaleDB stops the migration instead.
+timescaledb = "auto"
 
 [log]
 level = "info"

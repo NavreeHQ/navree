@@ -13,7 +13,8 @@ use serde::{Deserialize, Deserializer};
 ///
 /// ```toml
 /// [database]
-/// url = "sqlite://storage/app.db?mode=rwc"   # or postgres://, mysql:// or mariadb://user:pass@host/db
+/// url = "postgres://navree:navree@127.0.0.1:5432/my_app"   # TimescaleDB (the default) or PostgreSQL;
+///                                                          # mysql://, mariadb:// or sqlite://storage/app.db?mode=rwc
 /// max_connections = 10
 /// min_connections = 0
 /// connect_timeout_secs = 8
@@ -37,10 +38,14 @@ use serde::{Deserialize, Deserializer};
 /// `database.mysql.strict`, `APP_DATABASE__MYSQL__MODES=A,B` →
 /// `database.mysql.modes`.
 ///
-/// The URL picks the database: `sqlite:` (built in), `postgres://` or
-/// `postgresql://` (the `postgres` feature), `mysql://` or `mariadb://`
-/// (the `mysql` feature; MariaDB speaks MySQL's protocol, so both connect
-/// through the same driver).
+/// The URL picks the database: `postgres://` or `postgresql://` for
+/// TimescaleDB, Navree's default, and plain PostgreSQL (the `postgres`
+/// feature), `mysql://` or `mariadb://` (the `mysql` feature; MariaDB speaks
+/// MySQL's protocol, so both connect through the same driver), or `sqlite:`
+/// (built in). `navree new` writes a TimescaleDB URL, the one Dock's
+/// `postgres` service serves; without any, the default is a SQLite file
+/// (`sqlite://storage/app.db?mode=rwc`), so an app boots with nothing
+/// installed.
 ///
 /// `Debug` masks the password of the URL.
 ///
@@ -57,8 +62,9 @@ use serde::{Deserialize, Deserializer};
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct DbOptions {
-    /// The connection URL (`sqlite://path?mode=rwc`, `postgres://...`,
-    /// `mysql://...` or `mariadb://...`).
+    /// The connection URL (`postgres://...` for TimescaleDB or PostgreSQL,
+    /// `mysql://...`, `mariadb://...` or `sqlite://path?mode=rwc`); default
+    /// `sqlite://storage/app.db?mode=rwc`.
     pub url: String,
     /// The most pooled connections.
     pub max_connections: u32,
