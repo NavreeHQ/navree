@@ -3829,6 +3829,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-db",
  "navree-http",
  "navree-kernel",
  "navree-queue",

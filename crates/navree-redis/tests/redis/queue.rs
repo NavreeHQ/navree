@@ -6,9 +6,11 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{
     BoxError, Clock, FixedClock, Job, JobContext, JobOptions, ModuleBuilderJobsExt,
 };
+use navree_db::{DatabaseModule, Db};
 use navree_kernel::{Module, ModuleBuilder, Navree};
 use navree_queue::{
     NewJob, Queue, QueueDriver, QueueModule, QueueOptions, QueueStore, RetryTarget,
@@ -386,5 +388,67 @@ async fn jobs_dispatched_in_one_process_run_in_another() {
     queue.run_pending().await.unwrap();
     assert_eq!(*runs.0.lock().unwrap(), ["now", "later"]);
     assert_eq!(dispatcher.pending_count("default").await.unwrap(), 0);
+    t.cleanup().await;
+}
+
+#[tokio::test]
+async fn jobs_dispatched_in_a_unit_of_work_are_pushed_after_the_commit() {
+    let Some(t) =
+        TestRedis::connect("jobs_dispatched_in_a_unit_of_work_are_pushed_after_the_commit").await
+    else {
+        return;
+    };
+    let app = Navree::app()
+        .module(ConfigModule::for_root(
+            ConfigSources::new().set("database", json!({ "url": "sqlite::memory:" })),
+        ))
+        .module(DatabaseModule::from_config())
+        .module(RedisModule::for_root(t.options()))
+        .module(QueueModule::for_root(QueueOptions {
+            driver: QueueDriver::Redis,
+            ..QueueOptions::default()
+        }))
+        .module(JobsModule)
+        .override_value(Arc::new(Runs::default()))
+        .boot()
+        .await
+        .unwrap();
+    let queue = app.ctx().get::<Queue>().await.unwrap();
+    let db = app.ctx().get::<Db>().await.unwrap();
+
+    let uow = db.uow(None, None).await;
+    queue
+        .dispatch_in(
+            &uow,
+            Record {
+                label: "rolled back".into(),
+            },
+        )
+        .await
+        .unwrap();
+    uow.rollback().await.unwrap();
+    assert_eq!(queue.pending_count("default").await.unwrap(), 0);
+
+    let uow = db.uow(None, None).await;
+    queue
+        .dispatch_in(
+            &uow,
+            Record {
+                label: "committed".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        queue.pending_count("default").await.unwrap(),
+        0,
+        "not in Redis before the commit"
+    );
+    uow.commit().await.unwrap();
+    assert_eq!(queue.pending_count("default").await.unwrap(), 1);
+    queue.run_pending().await.unwrap();
+    let runs = app.ctx().get::<Runs>().await.unwrap();
+    assert_eq!(*runs.0.lock().unwrap(), ["committed"]);
+    app.shutdown().await.unwrap();
     t.cleanup().await;
 }
