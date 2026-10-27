@@ -2,12 +2,15 @@
 //!
 //! The model trait and its derive (`Model`), `#[scopes]`, records and
 //! collections, the builders and their condition types, executors, errors,
-//! values and the pagination types.
+//! values and the pagination types; the lifecycle's observers, hooks, quiet
+//! and soft-delete methods (`ModelLifecycle`, `SoftDeleting`), the module
+//! and its registrations (`OrmModule`, `ModuleBuilderOrmExt`).
 
-pub use crate::hooks::{Flow, ModelEvent, ModelHook};
+pub use crate::hooks::{Flow, HookKind, ModelEvent, ModelHook};
 pub use crate::{
     Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect, Executor,
-    Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, OrmError, PageRequest, Record,
-    Scoped, SimplePage, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as, scopes,
-    table,
+    Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, ModelLifecycle,
+    ModuleBuilderOrmExt, Observer, OrmError, OrmModule, PageRequest, Record, Scoped, SimplePage,
+    SoftDeleting, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as, scopes, table,
+    without_events,
 };

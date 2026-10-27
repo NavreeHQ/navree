@@ -95,11 +95,14 @@ notify = ["dep:navree-notify", "http", "db", "mail"]
 ## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
 ui = ["dep:navree-ui", "http", "view"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
-## collections and pagination on navree-db's pool and unit of work.
+## collections and pagination on navree-db's pool and unit of work; model
+## events and observers, soft deletes, strict modes and pruning (`OrmModule`).
 orm = [
     "dep:navree-orm",
     "db",
+    "events",
     "http",
+    "telemetry",
 ]
 ## L5
 auth = [
