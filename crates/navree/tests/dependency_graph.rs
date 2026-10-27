@@ -230,11 +230,14 @@ const HIERARCHY: &[Rule] = &[
     // written to a navree-storage disk and handed back through a
     // navree-queue operation) and imports (uploads on a disk, staging
     // tables in navree-db, rows checked with navree-validation, applied in
-    // queue batches); `#[derive(Exportable)]` and `#[derive(Importable)]`
-    // live in navree-macros and are re-exported next to their traits.
+    // queue batches); the routes act in the request's workspace
+    // (navree-workspace); headers translate with navree-i18n (feature
+    // `i18n`); `#[derive(Exportable)]` and `#[derive(Importable)]` live in
+    // navree-macros and are re-exported next to their traits.
     rule("navree-sheets", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
-        "navree-db", "navree-storage", "navree-validation", "navree-queue",
+        "navree-db", "navree-storage", "navree-validation", "navree-queue", "navree-workspace",
+        "navree-i18n",
     ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines

@@ -54,7 +54,7 @@ pub enum SheetsError {
     /// cannot be read.
     #[error("{0}")]
     UnsupportedFile(String),
-    /// The file is larger than `sheets.import.max_upload_bytes`.
+    /// The file is larger than `sheets.imports.max_upload_bytes`.
     #[error("the file is larger than {limit} bytes")]
     FileTooLarge {
         /// The limit in bytes.
@@ -96,7 +96,7 @@ impl SheetsError {
     ///
     /// | Error | Status | `code` |
     /// |---|---|---|
-    /// | `NotFound`, `UnknownImporter` | 404 | `not_found` |
+    /// | `NotFound`, `UnknownImporter`, `UnknownExport`, a missing stored file | 404 | `not_found` |
     /// | `UnsupportedFile` | 400 | `unsupported_file` |
     /// | `FileTooLarge` | 413 | `payload_too_large` |
     /// | `TooManyRows` | 400 | `too_many_rows` |
@@ -107,7 +107,12 @@ impl SheetsError {
     /// | anything else | 500 | `internal_error` |
     pub fn to_app_error(&self) -> AppError {
         match self {
-            SheetsError::NotFound | SheetsError::UnknownImporter(_) => AppError::not_found(),
+            SheetsError::NotFound
+            | SheetsError::UnknownImporter(_)
+            | SheetsError::UnknownExport(_)
+            | SheetsError::Storage(navree_storage::StorageError::NotFound { .. }) => {
+                AppError::not_found()
+            }
             SheetsError::UnsupportedFile(message) => {
                 AppError::bad_request(message.clone()).with_code("unsupported_file")
             }
@@ -148,6 +153,7 @@ mod tests {
     fn refusals_have_their_own_codes() {
         let cases = [
             (SheetsError::NotFound, 404, "not_found"),
+            (SheetsError::UnknownExport("x".into()), 404, "not_found"),
             (
                 SheetsError::UnsupportedFile("x".into()),
                 400,

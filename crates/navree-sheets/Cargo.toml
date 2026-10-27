@@ -12,9 +12,16 @@ workspace = true
 
 [features]
 default = []
+## Export headers translated with navree-i18n's Fluent messages, and
+## queued exports and imports run in the locale of the request that
+## queued them (the facade's `i18n` turns it on).
+i18n = ["dep:navree-i18n"]
 ## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
 ## import tests run on their own fresh PostgreSQL database.
 postgres = ["navree-db/postgres", "navree-queue/postgres"]
+## MySQL for the tests: with `NAVREE_TEST_MYSQL_URL` set, the import
+## tests run on their own fresh MySQL database.
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 # The import routes (multipart uploads) and the `Download` response.
@@ -35,6 +42,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
+navree-i18n = { workspace = true, optional = true }
 navree-kernel = { workspace = true }
 # `#[derive(Exportable)]` and `#[derive(Importable)]`, re-exported.
 navree-macros = { workspace = true }
@@ -44,6 +52,8 @@ navree-queue = { workspace = true }
 navree-storage = { workspace = true }
 # Row messages, digit folding.
 navree-validation = { workspace = true }
+# The request's workspace (`InWorkspace`) on the routes.
+navree-workspace = { workspace = true }
 percent-encoding = { workspace = true }
 # XLSX writing.
 rust_xlsxwriter = { workspace = true }
@@ -59,5 +69,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+navree-access = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }

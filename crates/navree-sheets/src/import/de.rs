@@ -9,8 +9,11 @@
 
 use std::fmt;
 
+#[cfg(test)]
 use garde::Validate;
-use navree_validation::{Messages, ValidationErrors, fold_digits, validate};
+use navree_validation::{MessageTranslator, Messages, fold_digits};
+#[cfg(test)]
+use navree_validation::{ValidationErrors, validate};
 use serde::de::value::{SeqDeserializer, StringDeserializer};
 use serde::de::{self, DeserializeOwned, DeserializeSeed, IntoDeserializer, MapAccess, Visitor};
 
@@ -71,14 +74,28 @@ impl ReadError {
         }
     }
 
-    /// The message, in the app's validation wording.
+    /// The field and its message, in the app's validation wording.
+    #[cfg(test)]
     pub(crate) fn render(&self, messages: &Messages) -> (String, String) {
+        self.render_with(messages, None)
+    }
+
+    /// The field and its message, through the app's message translator
+    /// when it has one (navree-i18n's), else its message table.
+    pub(crate) fn render_with(
+        &self,
+        messages: &Messages,
+        translator: Option<&dyn MessageTranslator>,
+    ) -> (String, String) {
         let field = self.field.clone().unwrap_or_else(|| "row".to_owned());
         let params: Vec<(&str, String)> = match &self.rule {
             Rule::OneOf(values) => vec![("values", values.clone())],
             _ => Vec::new(),
         };
-        let message = messages.render(&field, self.rule.key(), &params);
+        let message = match translator {
+            Some(translator) => translator.message(messages, &field, self.rule.key(), &params),
+            None => messages.render(&field, self.rule.key(), &params),
+        };
         (field, message)
     }
 }
@@ -183,6 +200,7 @@ pub(crate) fn read_row<R: DeserializeOwned>(fields: Vec<(String, Cell)>) -> Resu
 
 /// Reads `fields` into `R` and runs its garde rules; the errors are keyed by
 /// field, in the app's validation wording.
+#[cfg(test)]
 pub(crate) fn check_row<R>(fields: Vec<(String, Cell)>, messages: &Messages) -> Result<R, ValidationErrors>
 where
     R: DeserializeOwned + Validate<Context = ()>,
