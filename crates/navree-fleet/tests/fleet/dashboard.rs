@@ -97,11 +97,25 @@ async fn the_page_and_its_assets_are_public_and_hold_no_data() {
     // navree-view escapes `/` in attributes as `&#x2f;`, which browsers read
     // back as `/`.
     let html = page.text().replace("&#x2f;", "/");
-    let version = env!("CARGO_PKG_VERSION");
-    let script = format!("/_fleet/assets/fleet-{version}.js");
-    let styles = format!("/_fleet/assets/fleet-{version}.css");
-    assert!(html.contains(&script), "{html}");
-    assert!(html.contains(&styles), "{html}");
+    // The assets are named after a fingerprint of their content.
+    let attribute = |name: &str, extension: &str| -> String {
+        let path = html
+            .split(&format!("{name}=\""))
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .find(|value| value.ends_with(extension))
+            .unwrap_or_else(|| panic!("a {extension} asset in {html}"))
+            .to_owned();
+        assert!(path.starts_with("/_fleet/assets/fleet-"), "{path}");
+        assert_eq!(
+            path.len(),
+            "/_fleet/assets/fleet-".len() + 16 + extension.len(),
+            "{path}"
+        );
+        path
+    };
+    let script = attribute("src", ".js");
+    let styles = attribute("href", ".css");
     assert!(html.contains("/_fleet/api"), "{html}");
     assert!(
         html.contains("/api/auth/login"),

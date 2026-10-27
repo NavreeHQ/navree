@@ -37,7 +37,11 @@ fn the_module_service_and_helpers_exist() {
     let _: fn(_) -> _ = InProcessSpawner::new;
     let _ = ProcessSpawner::current_exe();
     let _: fn(_) -> _ = Master::new;
-    let s = Supervisor::resolve("default", &SupervisorOptions::new(["mail"]), &QueueOptions::default());
+    let s = Supervisor::resolve(
+        "default",
+        &SupervisorOptions::new(["mail"]),
+        &QueueOptions::default(),
+    );
     let work = [QueueWorkload::new("mail", 10, 0, 3, 100)];
     let start = initial_allocation(&s);
     let _ = target_allocation(&s, &work);
@@ -48,7 +52,14 @@ fn the_module_service_and_helpers_exist() {
     assert_eq!(FleetSubject::PERMISSION_PREFIX, "fleet");
     assert_eq!((VIEW, OPERATE), ("view", "operate"));
     assert_eq!(
-        [QUEUE_PENDING, QUEUE_WAIT, QUEUE_THROUGHPUT, JOB_RUNTIME, PROCESSES, FAILED_JOBS],
+        [
+            QUEUE_PENDING,
+            QUEUE_WAIT,
+            QUEUE_THROUGHPUT,
+            JOB_RUNTIME,
+            PROCESSES,
+            FAILED_JOBS
+        ],
         [
             "fleet_queue_pending",
             "fleet_queue_wait_seconds",
@@ -101,7 +112,11 @@ fn every_documented_config_key_is_read() {
     assert_eq!(default.balance, Balance::Simple);
     assert_eq!(default.concurrency, Some(2));
     assert_eq!(
-        (default.max_jobs, default.max_memory_mb, default.max_time_secs),
+        (
+            default.max_jobs,
+            default.max_memory_mb,
+            default.max_time_secs
+        ),
         (10, 128, 60)
     );
 }
@@ -137,7 +152,12 @@ fn the_documented_commands_are_registered() {
 async fn the_migrations_create_the_documented_tables() {
     let h = Harness::new(builder()).await;
     let db = h.app.get::<Db>().await;
-    for table in ["fleet_masters", "fleet_state", "fleet_jobs", "fleet_metrics"] {
+    for table in [
+        "fleet_masters",
+        "fleet_state",
+        "fleet_jobs",
+        "fleet_metrics",
+    ] {
         db.conn()
             .execute_raw(Statement::from_string(
                 db.backend(),

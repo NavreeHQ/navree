@@ -108,7 +108,7 @@ let charts = fleet.metrics(MetricsPeriod::Hour).await?;
 
 ## The dashboard
 
-- `GET /_fleet` (page) and `/_fleet/assets/fleet-<version>.{js,css}` are
+- `GET /_fleet` (page) and `/_fleet/assets/fleet-<content hash>.{js,css}` are
   public and hold no data. The page signs in through
   `{http.api_prefix}{auth.routes_prefix}/login` (navree-auth, 2FA too) or
   a pasted token, and calls `/_fleet/api/*` with `Authorization: Bearer`.

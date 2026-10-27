@@ -41,9 +41,26 @@ const PAGE: &str = include_str!("../ui/fleet.html");
 const SCRIPT: &str = include_str!("../ui/fleet.js");
 const STYLES: &str = include_str!("../ui/fleet.css");
 
-/// The assets' file names carry the crate version, so they can be cached
-/// for good.
+/// The crate version, shown in the page.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// FNV-1a of `bytes`, at compile time.
+const fn fingerprint(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut i = 0;
+    while i < bytes.len() {
+        hash ^= bytes[i] as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        i += 1;
+    }
+    hash
+}
+
+/// The assets' file names carry a fingerprint of their content
+/// (`fleet-<16 hex>.js`), so they can be cached for good.
+fn asset_name(content: &str, extension: &str) -> String {
+    format!("fleet-{:016x}.{extension}", fingerprint(content.as_bytes()))
+}
 
 /// The dashboard's page, assets and API.
 pub(crate) struct FleetController {
@@ -86,8 +103,8 @@ impl Injectable for FleetController {
                         "base": base,
                         "api": format!("{base}/api"),
                         "login": login,
-                        "script": format!("{base}/assets/fleet-{VERSION}.js"),
-                        "styles": format!("{base}/assets/fleet-{VERSION}.css"),
+                        "script": format!("{base}/assets/{}", asset_name(SCRIPT, "js")),
+                        "styles": format!("{base}/assets/{}", asset_name(STYLES, "css")),
                         "version": VERSION,
                     }),
                 )
@@ -191,7 +208,7 @@ impl Controller for FleetController {
         routes.push(
             RouteDef::on(
                 Method::GET,
-                format!("!{base}/assets/fleet-{VERSION}.js"),
+                format!("!{base}/assets/{}", asset_name(SCRIPT, "js")),
                 || async { asset(SCRIPT, "text/javascript; charset=utf-8") },
             )
             .public()
@@ -200,7 +217,7 @@ impl Controller for FleetController {
         routes.push(
             RouteDef::on(
                 Method::GET,
-                format!("!{base}/assets/fleet-{VERSION}.css"),
+                format!("!{base}/assets/{}", asset_name(STYLES, "css")),
                 || async { asset(STYLES, "text/css; charset=utf-8") },
             )
             .public()
