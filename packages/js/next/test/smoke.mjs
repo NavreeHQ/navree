@@ -35,7 +35,11 @@ const api = await serveFakeNavree({
 });
 
 const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NAVREE_API_URL: api.url, NAVREE_COOKIE_SECURE: "0" };
-const server = spawn(`"${next}" start "${fixture}" -p ${port} -H 127.0.0.1`, { cwd: root, env, shell: true, stdio: ["ignore", "pipe", "inherit"] });
+// Windows runs next.CMD through a shell; elsewhere the binary runs directly, so kill() stops the server itself.
+const server =
+  process.platform === "win32"
+    ? spawn(`"${next}" start "${fixture}" -p ${port} -H 127.0.0.1`, { cwd: root, env, shell: true, stdio: ["ignore", "pipe", "inherit"] })
+    : spawn(next, ["start", fixture, "-p", String(port), "-H", "127.0.0.1"], { cwd: root, env, stdio: ["ignore", "pipe", "inherit"] });
 
 async function ready() {
   for (let i = 0; i < 200; i++) {
