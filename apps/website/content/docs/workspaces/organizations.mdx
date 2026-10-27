@@ -200,7 +200,7 @@ impl ReportsController {
 | `id()`, `organization()` | The organization (it also dereferences to the row: `org.slug`) |
 | `member()`, `role()` | The user's `OrgMember` row and `OrgRole` |
 | `workspaces()` | Their `WorkspaceSelector` |
-| `workspace_ids()` | The ids of the attached workspaces they reach now, by name |
+| `workspace_ids()` | The ids of the attached workspaces they reach, by name, read once per request |
 | `reaches(workspace)` | Whether they reach that workspace |
 | `permissions()`, `has_permission(p)`, `authorize(p)` | The role's permissions; `authorize` is `Ok(())` or a 403 |
 | `ability()`, `access()`, `can(action, subject)` | Their abilities in the organization |
@@ -303,7 +303,7 @@ An admin limited to some workspaces grants only workspaces they reach and change
 }
 ```
 
-Workspaces in every list now carry `organization_id`. The routes are in the OpenAPI document under the `Organizations` tag.
+Workspaces in every response carry `organization_id` (`null` for a standalone workspace). The routes are in the OpenAPI document under the `Organizations` tag.
 
 ## Events
 
