@@ -1,0 +1,177 @@
+{
+  "ui": "next",
+  "name": "Next.js",
+  "app": "apps/crm-web",
+  "captured": "2026-10-27",
+  "note": "Captured at deviceScaleFactor 2 from the running app against crm-api seeded with crm-demo, signed in as manager@navree.test. src is the 2x file; srcset lists every size.",
+  "images": [
+    {
+      "key": "dashboard",
+      "src": "/images/crm/next/dashboard.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "The Navree CRM dashboard in the Next.js front end: open pipeline, weighted forecast, deals won this month, the pipeline by stage and the manager's tasks",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/dashboard-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/dashboard-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/dashboard.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "pipeline",
+      "src": "/images/crm/next/pipeline.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "The deal pipeline in the Next.js front end: lead, qualified, proposal and negotiation columns of deal cards with amounts, close dates and owners",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/pipeline-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/pipeline-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/pipeline.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "deal",
+      "src": "/images/crm/next/deal.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "A deal page in the Next.js front end: the Northwind Logistics three-year agreement in negotiation, its value, probability and activity timeline",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/deal-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/deal-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/deal.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "contacts",
+      "src": "/images/crm/next/contacts.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "The contacts list in the Next.js front end: names, titles, companies, emails, statuses and owners with search and filters",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/contacts-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/contacts-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/contacts.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "companies",
+      "src": "/images/crm/next/companies.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "The companies list in the Next.js front end: industries, head counts, locations and owners, sorted by name",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/companies-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/companies-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/companies.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "palette",
+      "src": "/images/crm/next/palette.webp",
+      "width": 2880,
+      "height": 1800,
+      "alt": "The command palette in the Next.js front end, searching \"north\" across companies and contacts",
+      "viewport": "desktop",
+      "srcset": [
+        {
+          "src": "/images/crm/next/palette-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/crm/next/palette-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/crm/next/palette.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "phone-dashboard",
+      "src": "/images/crm/next/phone-dashboard.webp",
+      "width": 780,
+      "height": 1688,
+      "alt": "The dashboard of the Next.js front end on a phone",
+      "viewport": "phone",
+      "srcset": [
+        {
+          "src": "/images/crm/next/phone-dashboard-390.webp",
+          "width": 390
+        },
+        {
+          "src": "/images/crm/next/phone-dashboard.webp",
+          "width": 780
+        }
+      ]
+    },
+    {
+      "key": "phone-deal",
+      "src": "/images/crm/next/phone-deal.webp",
+      "width": 780,
+      "height": 1688,
+      "alt": "A deal page of the Next.js front end on a phone",
+      "viewport": "phone",
+      "srcset": [
+        {
+          "src": "/images/crm/next/phone-deal-390.webp",
+          "width": 390
+        },
+        {
+          "src": "/images/crm/next/phone-deal.webp",
+          "width": 780
+        }
+      ]
+    }
+  ]
+}

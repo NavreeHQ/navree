@@ -42,6 +42,7 @@ export const site = {
     { label: "Architecture", href: "/architecture/", match: "/architecture" },
     { label: "AI", href: "/ai/", match: "/ai" },
     { label: "Performance", href: "/performance/", match: "/performance" },
+    { label: "Showcase", href: "/showcase/", match: "/showcase" },
   ],
   /** The "Get started" button in the header. */
   getStarted: "/docs/getting-started/installation/",
