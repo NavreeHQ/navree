@@ -48,6 +48,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 garde = { workspace = true }
+navree-access = { workspace = true }
 navree-macros = { workspace = true }
 navree-mail = { workspace = true }
 navree-testing = { workspace = true }

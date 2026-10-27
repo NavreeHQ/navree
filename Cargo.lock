@@ -4045,6 +4045,7 @@ dependencies = [
  "navree-http",
  "navree-i18n-macros",
  "navree-kernel",
+ "navree-macros",
  "navree-mail",
  "navree-notify",
  "navree-testing",

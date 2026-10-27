@@ -26,7 +26,7 @@ impl Module for Templates {
                 "{{ t(\"deal-won\", owner=owner.name, title=deal.title) }}",
             ),
             (
-                "page.html",
+                "page.txt",
                 "<html lang=\"{{ locale() }}\">{{ t(\"deal-created\", count=count) }} | \
                  {{ \"2026-10-26T14:30:00Z\" | date }} | \
                  {{ \"2026-10-26T14:30:00Z\" | date(\"%d/%m/%Y\") }} | \

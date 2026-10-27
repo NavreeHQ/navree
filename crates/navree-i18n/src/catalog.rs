@@ -2,7 +2,7 @@
 //! locale, with the fallback chains, lenient tag matching, and the
 //! `i18n:check` report.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -218,6 +218,9 @@ impl Catalog {
         let Some(default) = self.bundles.get(&self.default) else {
             return Vec::new();
         };
+        if own_chain(&self.default).iter().any(|tag| tag == locale) {
+            return Vec::new();
+        }
         let own: Vec<&LocaleBundle> = own_chain(locale)
             .iter()
             .filter(|tag| **tag != self.default)
@@ -542,7 +545,7 @@ pub(crate) fn fingerprint(dir: &Path) -> Vec<(PathBuf, u64, Option<std::time::Sy
 
 /// The ids `files` define, per locale directory (for tests and tools).
 #[cfg(test)]
-pub(crate) fn ids(files: &[SourceFile]) -> BTreeSet<String> {
+pub(crate) fn ids(files: &[SourceFile]) -> std::collections::BTreeSet<String> {
     files
         .iter()
         .filter_map(|file| FluentResource::try_new(file.source.clone()).ok())
@@ -778,7 +781,7 @@ mod tests {
         let paths: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
         assert_eq!(paths.len(), 3);
         assert!(paths[0].ends_with("/en/mail/welcome.ftl"), "{paths:?}");
-        assert_eq!(ids(&files), BTreeSet::from(["a".to_owned(), "b".to_owned()]));
+        assert_eq!(ids(&files), std::collections::BTreeSet::from(["a".to_owned(), "b".to_owned()]));
         assert!(read_dir(&dir.path().join("missing")).unwrap().is_empty());
         assert_eq!(fingerprint(dir.path()).len(), 3);
     }

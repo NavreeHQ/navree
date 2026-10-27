@@ -5,6 +5,7 @@
 
 use chrono::NaiveDate;
 use garde::Validate;
+use navree_access::{AccessModule, AccessOptions};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_http::Json;
 use navree_i18n::{I18nModule, Locale, t};
@@ -131,6 +132,7 @@ pub fn with_database() -> TestAppBuilder {
         .temp_database()
         .module(DatabaseModule::from_config())
         .module(UsersModule)
+        .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
 }
 
