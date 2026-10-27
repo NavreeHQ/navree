@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 
+use crate::browser;
 use crate::check::{CheckOptions, run_check};
 use crate::cli::{Cli, Command};
 use crate::clock::Timestamp;
@@ -109,6 +110,18 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let report = navree_navigator::skills::install(&dir)
                 .with_context(|| format!("cannot install the skills into {}", dir.display()))?;
             print_skills(&dir, &report);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::BrowserInstall(args) => {
+            let options = browser::InstallOptions::for_this_machine(
+                args.chrome_version.as_deref(),
+                args.force,
+            )?;
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .context("cannot start the download")?;
+            runtime.block_on(browser::install(&options, &mut std::io::stdout()))?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Forward(words) => {

@@ -54,6 +54,7 @@
 //! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
 //! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `browser` | navree-browser | `browser` (opt-in) | Browser testing: `Browser`, `Page`, `TestServer`, `FrontEnd` over the Chrome DevTools Protocol |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
@@ -63,9 +64,9 @@
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
 //! `mcp`, `ai`, `redis`, `micro` and its transports, `i18n`, `dock`,
-//! `harbor`, `navigator`, `otel`), and the `storage-s3` driver but not
-//! `storage-gcs` or `storage-azure`. A feature also turns on the features of
-//! the crates its crate builds on (`auth` turns on `access`, `db`, `http`,
+//! `harbor`, `navigator`, `browser`, `otel`), and the `storage-s3` driver but
+//! not `storage-gcs` or `storage-azure`. A feature also turns on the features
+//! of the crates its crate builds on (`auth` turns on `access`, `db`, `http`,
 //! ...). SQLite is built in; the `postgres` feature adds navree-db's
 //! PostgreSQL driver and the `mysql` feature its MySQL and MariaDB driver,
 //! and the opt-in `otel` feature adds navree-observe's OTLP span exporter.
@@ -76,7 +77,8 @@
 //! `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has Harbor
 //! built in, and an app turns it on only to read `harbor.toml` or drive
 //! deploys from its own code. `navigator` is the library behind `navree mcp`
-//! and `navree skills:install`, for tools and tests.
+//! and `navree skills:install`, for tools and tests. `browser` is for tests:
+//! turn it on in `[dev-dependencies]`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -274,6 +276,8 @@ pub use navree_logbook as logbook;
 pub use navree_search as search;
 
 // Tools (opt-in)
+#[cfg(feature = "browser")]
+pub use navree_browser as browser;
 #[cfg(feature = "dock")]
 pub use navree_dock as dock;
 #[cfg(feature = "harbor")]
