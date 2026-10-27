@@ -109,13 +109,13 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock and navree-harbor)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros  navree-orm-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel                                navree-macros  navree-orm-macros  navree-i18n-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -123,6 +123,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
+| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, their syntax checked at compile time (used through navree-i18n) |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
 | L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |
@@ -164,6 +165,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L6 | `navree-mcp` | MCP servers: `#[mcp_server]` tools, resources and prompts over streamable HTTP at `/mcp` and stdio (`mcp:serve`), behind the app's authenticators and per-tool access checks (opt-in facade feature `mcp`) |
 | L6 | `navree-ai` | AI SDK: text, typed structured output and SSE streams from Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, failover, token budgets, agents with `#[tool]` methods run as the user, conversation memory, embeddings, vector stores (memory, pgvector, Qdrant) and `AiFake` (facade feature `ai`, opt-in) |
 | L6 | `navree-micro` | Microservices: `#[message_pattern]` and `#[event_pattern]` handlers with the same guards, access, validation and unit of work as routes, `ServiceClient` (`send` with deadlines, `emit`), retries, dead letters, an outbox and an inbox, `MicroFake`; TCP and in-memory transports, NATS, Kafka, RabbitMQ, Redis Streams and MQTT behind features (facade features `micro`, `micro-nats`, ..., opt-in) |
+| L6 | `navree-i18n` | Localization: Fluent files per locale with plurals, variables and fallbacks, `t!`, the request's `Locale` negotiated from the query, the user's and workspace's saved locale, a cookie and `Accept-Language`, ICU4X number, money and date formatting, translated validation messages (seven languages shipped), `t()` in templates, notifications in the recipient's locale, `i18n:check` (facade feature `i18n`, opt-in) |
 | L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
 | L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue (facade feature `search`, opt-in) |
 | L7 | `navree-lighthouse` | Application monitoring inside the app: a telemetry sink grouping exceptions, slow requests and queries, failed jobs and failing outgoing calls into issues, per-minute aggregates and sampled traces in the app's database, alerts (mail, Slack, signed webhooks, your own channels) through the queue, the `/_lighthouse` dashboard and its JSON API, `lighthouse:prune` (facade feature `lighthouse`, in `full`) |

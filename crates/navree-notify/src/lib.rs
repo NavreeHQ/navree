@@ -131,6 +131,7 @@ mod notification;
 pub mod notifications;
 mod notifier;
 mod options;
+mod recipient;
 mod schema;
 mod stored;
 
@@ -143,6 +144,7 @@ pub use notifiable::Notifiable;
 pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};
 pub use options::NotifyOptions;
+pub use recipient::RecipientScope;
 pub use stored::DatabaseNotification;
 
 /// The notifiable type of users: the `/api/notifications` endpoints serve

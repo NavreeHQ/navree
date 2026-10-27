@@ -13,7 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`).
+## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`,
+## `i18n`, `dock`).
 full = [
     "access",
     "api",
@@ -266,6 +267,18 @@ micro-rabbitmq = ["micro", "navree-micro/rabbitmq"]
 micro-redis = ["micro", "navree-micro/redis"]
 ## MQTT 5 for `micro` (rumqttc).
 micro-mqtt = ["micro", "navree-micro/mqtt"]
+## L6 (opt-in, not in `full`: it compiles in ICU4X's locale data)
+## Localization: `I18nModule`, Fluent files, `t!`, the `Locale` extractor,
+## translated validation messages, templates and notifications.
+i18n = [
+    "dep:navree-i18n",
+    "http",
+    "view",
+    "db",
+    "validation",
+    "notify",
+    "workspace",
+]
 ## L7 (in `full`)
 ## Lighthouse: application monitoring inside the app. Issues grouped by
 ## fingerprint, traces, aggregates, alerts and the `/_lighthouse` dashboard.
@@ -371,6 +384,7 @@ navree-helm = { workspace = true, optional = true }
 navree-harbor = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
+navree-i18n = { workspace = true, optional = true }
 navree-lighthouse = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-logbook = { workspace = true, optional = true }
