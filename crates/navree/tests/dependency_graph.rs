@@ -234,11 +234,13 @@ const HIERARCHY: &[Rule] = &[
     // owners from navree-workspace, `integrations:check` on navree-schedule
     // and `ConnectionUnhealthy` on navree-events. The connections table is a
     // navree-orm model. With its `notify` feature, connections give the
-    // tokens of navree-notify's Slack and Teams bot routes.
+    // tokens of navree-notify's Slack and Teams bot routes; with its `mail`
+    // feature, the Microsoft 365 and Gmail mailboxes of connections are
+    // watched and their messages handed to navree-mail's `Inbound`.
     rule("navree-integrations", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-schedule",
-        "navree-workspace", "navree-orm", "navree-notify",
+        "navree-workspace", "navree-orm", "navree-notify", "navree-mail",
     ]),
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access

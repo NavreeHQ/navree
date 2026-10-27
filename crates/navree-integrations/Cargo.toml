@@ -17,6 +17,11 @@ mysql = ["navree-db/mysql"]
 ## Connections as the tokens of navree-notify's Slack and Teams bot routes
 ## (`IntegrationTokens`, registered as `dyn ConnectionTokens`).
 notify = ["dep:navree-notify"]
+## Microsoft 365 and Gmail mailboxes of connections watched for new mail
+## (`MailboxWatches`, the `/api/mail/inbound/graph` and `/gmail` routes,
+## `integrations:mailboxes`), each message received through navree-mail's
+## inbound pipeline.
+mail = ["dep:navree-mail", "navree-mail/inbound"]
 
 [dependencies]
 axum = { workspace = true }
@@ -37,6 +42,8 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# Feature `mail`: watched mailboxes hand their messages to navree-mail's `Inbound`.
+navree-mail = { workspace = true, optional = true }
 # Feature `notify`: `IntegrationTokens` is navree-notify's `dyn ConnectionTokens`.
 navree-notify = { workspace = true, optional = true }
 # `integration_connections` is a navree-orm model.
@@ -58,9 +65,12 @@ uuid = { workspace = true }
 [dev-dependencies]
 navree-access = { workspace = true }
 navree-api = { workspace = true }
-# The `notify` feature's tests (`tests/integrations/notify.rs`).
-navree-integrations = { workspace = true, features = ["notify"] }
+# The `notify` and `mail` features' tests (`tests/integrations/notify.rs`,
+# `tests/integrations/mailboxes.rs`).
+navree-integrations = { workspace = true, features = ["notify", "mail"] }
 navree-testing = { workspace = true }
+# MailModule needs ViewModule (`tests/integrations/mailboxes.rs`).
+navree-view = { workspace = true }
 # The mock providers verify service-account JWTs with `ring` directly, apart
 # from the code under test.
 ring = { workspace = true }

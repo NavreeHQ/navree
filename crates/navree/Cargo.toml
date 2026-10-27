@@ -97,7 +97,7 @@ mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "htt
 ## mailboxes routed by address, signed reply tokens and raw `.eml` files on
 ## a `storage` disk (in `full`). With `integrations` on too, Gmail and
 ## Microsoft 365 mailboxes watched through their connections.
-mail-inbound = ["mail", "storage", "navree-mail/inbound"]
+mail-inbound = ["mail", "storage", "navree-mail/inbound", "navree-integrations?/mail"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
