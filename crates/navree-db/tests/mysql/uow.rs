@@ -149,6 +149,63 @@ async fn a_trigger_stamps_the_actor_into_a_binary_uuid_column() {
     assert_eq!(updated_by().await, "NULL");
 }
 
+/// What the database docs warn about: a deadlock (error 1213) makes MySQL
+/// roll back the victim's whole transaction at once, and what the victim's
+/// unit of work runs after it commits on its own, so the unit of work's
+/// rollback cannot undo it. Errors must end the unit of work.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn after_a_deadlock_the_victims_statements_commit_on_their_own() {
+    let Some(scratch) =
+        Scratch::new("after_a_deadlock_the_victims_statements_commit_on_their_own").await
+    else {
+        return;
+    };
+    let db = scratch.db().await;
+    for sql in [
+        "CREATE TABLE counters (id INT PRIMARY KEY, n INT NOT NULL)",
+        "INSERT INTO counters (id, n) VALUES (1, 0), (2, 0)",
+    ] {
+        db.conn().execute_unprepared(sql).await.unwrap();
+    }
+    let bump = |id: i32| format!("UPDATE counters SET n = n + 1 WHERE id = {id}");
+
+    let first = db.uow(None, None).await;
+    let second = db.uow(None, None).await;
+    let first_tx = first.tx().await.unwrap();
+    let second_tx = second.tx().await.unwrap();
+    first_tx.execute_unprepared(&bump(1)).await.unwrap();
+    second_tx.execute_unprepared(&bump(2)).await.unwrap();
+    // Each now waits for the row the other holds; InnoDB picks a victim.
+    let crossing = tokio::spawn({
+        let first_tx = first_tx.clone();
+        let sql = bump(2);
+        async move { first_tx.execute_unprepared(&sql).await.map(drop) }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let second_result = second_tx.execute_unprepared(&bump(1)).await.map(drop);
+    let first_result = crossing.await.unwrap();
+    let (victim, victim_tx, survivor, survivor_tx, error) = match (first_result, second_result) {
+        (Err(error), Ok(())) => (first, first_tx, second, second_tx, error),
+        (Ok(()), Err(error)) => (second, second_tx, first, first_tx, error),
+        other => panic!("one deadlock victim expected: {other:?}"),
+    };
+    assert!(error.to_string().contains("Deadlock"), "{error}");
+
+    victim_tx
+        .execute_unprepared("INSERT INTO counters (id, n) VALUES (3, 0)")
+        .await
+        .expect("runs, outside any transaction");
+    drop(victim_tx);
+    victim.rollback().await.unwrap();
+    drop(survivor_tx);
+    survivor.commit().await.unwrap();
+    assert_eq!(
+        strings(db.conn(), "SELECT CAST(id AS CHAR) FROM counters ORDER BY id").await,
+        ["1", "2", "3"],
+        "the victim's insert survived its rollback"
+    );
+}
+
 #[tokio::test]
 async fn writes_are_visible_after_commit_and_gone_after_rollback() {
     let Some(scratch) =
