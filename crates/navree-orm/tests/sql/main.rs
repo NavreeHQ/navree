@@ -486,6 +486,117 @@ fn writes() {
 }
 
 #[test]
+fn sources_aliases_derived_tables_and_table_functions() {
+    insta::assert_snapshot!(rows(
+        table("deals").from_as("d").where_(col("d.stage").eq("won"))
+    ));
+    insta::assert_snapshot!(rows(table("ignored").from_raw(
+        "generate_series(?, ?) AS n",
+        [1, 10]
+    )));
+    insta::assert_snapshot!(rows(table("ignored").from_function(
+        Expr::func("json_each", [Expr::val("[1,2]")]),
+        "item"
+    )));
+    insta::assert_snapshot!(rows(table("ignored").from_raw("SELECT 1", [] as [i64; 0])));
+    // A model's rows from a derived table named like its table.
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .from_sub(
+                Deal::query()
+                    .where_(Deal::STAGE.eq(Stage::Won))
+                    .union_all(Deal::query().where_(Deal::AMOUNT_CENTS.gt(100)))
+            )
+            .order_by(Deal::TITLE)
+    ));
+}
+
+#[test]
+fn sub_joins_and_lateral_joins() {
+    let best = || {
+        Deal::query()
+            .select([Deal::COMPANY_ID])
+            .select_expr(Expr::max(Deal::AMOUNT_CENTS), "top")
+            .group_by([Deal::COMPANY_ID])
+    };
+    insta::assert_snapshot!(query(Company::query().right_join_sub(
+        best(),
+        "best",
+        "best.company_id",
+        "=",
+        Company::ID
+    )));
+    insta::assert_snapshot!(query(
+        Company::query().cross_join_sub(table("regions").select(["code"]), "r")
+    ));
+    let latest = || {
+        Deal::query()
+            .select([Deal::TITLE.expr()])
+            .where_column(Deal::COMPANY_ID, "=", Company::ID)
+            .order_by_desc(Deal::CREATED_AT)
+            .limit(2)
+    };
+    insta::assert_snapshot!(query(
+        Company::query()
+            .join_lateral(latest(), "latest")
+            .add_select(["latest.title"])
+    ));
+    insta::assert_snapshot!(query(
+        Company::query()
+            .left_join_lateral(latest(), "latest")
+            .add_select(["latest.title"])
+    ));
+}
+
+#[test]
+fn limits_per_group() {
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .latest()
+            .group_limit(2, Deal::COMPANY_ID)
+    ));
+    insta::assert_snapshot!(rows(
+        table("activities")
+            .select(["id", "deal_id"])
+            .order_by_desc("due_at")
+            .skip(1)
+            .take(50)
+            .group_limit(3, "deal_id")
+    ));
+    use navree_orm::ir::{Aggregate, AggregateFunction};
+    use navree_orm::sql::compile_aggregate;
+    let count = Aggregate {
+        function: AggregateFunction::Count,
+        arg: None,
+        distinct: false,
+    };
+    let limited = Deal::query().latest().group_limit(2, Deal::COMPANY_ID);
+    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+        &limited.clone().into_ir(),
+        &count,
+        d
+    )));
+}
+
+#[test]
+fn unions_with_orders_and_limits() {
+    // The orders and limit of a query with unions sort and cut the union;
+    // a part with its own order or limit is a derived table on SQLite.
+    insta::assert_snapshot!(query(
+        Company::query()
+            .where_(Company::COUNTRY.eq("DE"))
+            .union(
+                Company::query()
+                    .where_(Company::COUNTRY.eq("US"))
+                    .order_by(Company::NAME)
+                    .limit(5)
+            )
+            .order_by_desc(Company::NAME)
+            .limit(10)
+    ));
+}
+
+#[test]
 fn lock_modes_and_waits() {
     use navree_orm::LockMode;
     let locked = |q: Builder<Company>| query(q.where_key(1_i64));

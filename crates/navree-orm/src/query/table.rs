@@ -70,6 +70,90 @@ impl TableBuilder {
     filters!();
     clauses!();
 
+    /// Names the query's table `alias` (`FROM deals AS d`); qualify its
+    /// columns with the alias (`d.title`).
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, col, table};
+    ///
+    /// let sql = table("deals").from_as("d").where_(col("d.stage").eq("won")).to_sql(Dialect::Sqlite).unwrap();
+    /// assert_eq!(sql.sql, r#"SELECT * FROM "deals" AS "d" WHERE "d"."stage" = ?"#);
+    /// ```
+    pub fn from_as(mut self, alias: impl Into<Cow<'static, str>>) -> Self {
+        let alias = alias.into();
+        let table = &mut self.ir.table;
+        if table.subquery.is_some() || table.function.is_some() {
+            table.name = alias.clone();
+        }
+        table.alias = Some(alias);
+        self
+    }
+
+    /// Reads the rows of the set-returning function call `call` (an
+    /// [`Expr::func`]) instead of a table, named `alias`: `FROM
+    /// generate_series(..) AS alias`. SQL databases only.
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, Expr, table};
+    ///
+    /// let numbers = table("ignored").from_function(Expr::func("generate_series", [Expr::val(1), Expr::val(3)]), "n");
+    /// assert_eq!(
+    ///     numbers.to_sql(Dialect::Postgres).unwrap().sql,
+    ///     r#"SELECT * FROM generate_series($1, $2) AS "n""#
+    /// );
+    /// ```
+    pub fn from_function(mut self, call: impl Into<Expr>, alias: impl Into<Cow<'static, str>>) -> Self {
+        match call.into() {
+            call @ Expr::Function { .. } => self.ir.table = TableRef::function(call, alias),
+            other => self.ir.errors.push(format!(
+                "from_function takes a function call (Expr::func), not {other:?}"
+            )),
+        }
+        self
+    }
+
+    /// Reads the rows of a table function written as raw SQL, with `?`
+    /// placeholders for `values`: `name(arguments) [AS] alias` (the alias
+    /// defaults to the function's name). For a derived table, use
+    /// [`from_sub`](Self::from_sub).
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, table};
+    ///
+    /// let days = table("ignored").from_raw("generate_series(?::date, ?::date, '1 day') AS day", ["2026-10-01", "2026-10-31"]);
+    /// assert_eq!(
+    ///     days.to_sql(Dialect::Postgres).unwrap().sql,
+    ///     r#"SELECT * FROM generate_series($1::date, $2::date, '1 day') AS "day""#
+    /// );
+    /// ```
+    pub fn from_raw(
+        mut self,
+        sql: impl Into<Cow<'static, str>>,
+        values: impl IntoIterator<Item = impl Into<Value>>,
+    ) -> Self {
+        let sql = sql.into();
+        let values: Vec<Value> = values.into_iter().map(Into::into).collect();
+        match crate::query::clauses::parse_table_function(&sql) {
+            Ok((name, arguments, alias)) => {
+                let args = if arguments.trim().is_empty() && values.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![Expr::Raw {
+                        sql: arguments.into(),
+                        values,
+                    }]
+                };
+                let call = Expr::Function {
+                    name: name.into(),
+                    args,
+                };
+                self.ir.table = TableRef::function(call, alias);
+            }
+            Err(message) => self.ir.errors.push(message),
+        }
+        self
+    }
+
     /// Newest first by `created_at`.
     pub fn latest(self) -> Self {
         self.latest_by("created_at")
@@ -151,13 +235,9 @@ impl TableBuilder {
         Ok(self.limit(1).get(exec).await?.into_iter().next())
     }
 
-    async fn select_rows(
-        mut self,
-        target: &Target<'_>,
-        items: Vec<SelectItem>,
-    ) -> Result<Vec<Row>> {
-        self.ir.columns = items;
-        target.fetch(&self.ir).await
+    async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
+        let query = crate::query::reading_values(self.ir, items, Vec::new());
+        target.fetch(&query).await
     }
 
     fn table_name(&self) -> String {

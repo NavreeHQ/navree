@@ -31,8 +31,8 @@ const KEYS_ALIAS: &str = "navree_keys";
 
 impl<M: Model> Builder<M> {
     /// The rows a mass write touches: the query's conditions, or, for a
-    /// query with joins, groups, a limit or an offset, the keys of the rows
-    /// it selects.
+    /// query with joins, groups, a limit, an offset, a per-group limit or a
+    /// derived table, the keys of the rows it selects.
     pub(crate) fn write_target(self) -> Result<(TableRef, Vec<WhereClause>)> {
         let ir = self.apply_global_scopes().ir;
         ir.check()?;
@@ -44,13 +44,19 @@ impl<M: Model> Builder<M> {
             && ir.unions.is_empty()
             && ir.limit.is_none()
             && ir.offset.is_none()
+            && ir.group_limit.is_none()
+            && ir.table.subquery.is_none()
+            && ir.table.function.is_none()
             && matches!(ir.distinct, Distinct::No);
         if simple {
             return Ok((table, ir.wheres));
         }
         let mut inner = ir;
         inner.columns = vec![SelectItem {
-            expr: key_expr::<M>(),
+            expr: Expr::Column(ColumnRef::new(
+                Some(inner.table.qualifier().to_owned()),
+                meta.key_column(),
+            )),
             alias: None,
         }];
         inner.lock = None;
@@ -58,7 +64,7 @@ impl<M: Model> Builder<M> {
         // unless the derived table is materialized: a LIMIT does that,
         // otherwise DISTINCT (the order is moot without a limit, and DISTINCT
         // would need the ordered columns selected).
-        if inner.limit.is_none() && inner.offset.is_none() {
+        if inner.limit.is_none() && inner.offset.is_none() && inner.group_limit.is_none() {
             inner.orders.clear();
             inner.distinct = Distinct::Yes;
         }

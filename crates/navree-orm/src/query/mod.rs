@@ -147,6 +147,26 @@ impl<M: Model> Builder<M> {
         self
     }
 
+    /// Reads the model's rows from `query` (a derived table) instead of its
+    /// table: `FROM (subquery) AS <the model's table>`. The derived table
+    /// takes the table's name, so typed columns, keys and scopes keep
+    /// working; the subquery must return the model's columns. Useful for a
+    /// union of model queries, or a window over rows before filtering.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// let either = Deal::query()
+    ///     .where_(Deal::STAGE.eq(Stage::Won))
+    ///     .union(Deal::query().where_(Deal::AMOUNT_CENTS.gte(100_000)));
+    /// let sql = Deal::query().from_sub(either).order_by_desc(Deal::AMOUNT_CENTS).limit(10).to_sql(Dialect::Postgres)?;
+    /// assert!(sql.sql.ends_with(r#") AS "deals" ORDER BY "deals"."amount_cents" DESC LIMIT $3"#));
+    /// # Ok::<(), navree_orm::OrmError>(())
+    /// ```
+    pub fn from_sub(mut self, query: impl IntoQuery) -> Self {
+        self.ir.table = crate::ir::TableRef::subquery(query.into_query(), M::meta().table());
+        self
+    }
+
     /// Leaves out global scope `S` for this query.
     pub fn without_global_scope<S: GlobalScope<M>>(mut self) -> Self {
         self.removed.ids.push(std::any::TypeId::of::<S>());
@@ -253,6 +273,53 @@ impl<M: Model> Builder<M> {
         }
         self
     }
+}
+
+/// `query` reading `items` (`value`, `pluck`) instead of its select list.
+/// A query with unions keeps its select list (every part must line up with
+/// the first) and reads `items` from the union as a derived table named
+/// like its table, in the union's order.
+pub(crate) fn reading_values(
+    mut query: QueryIr,
+    items: Vec<SelectItem>,
+    default_columns: Vec<SelectItem>,
+) -> QueryIr {
+    if query.unions.is_empty() {
+        query.columns = items;
+        return query;
+    }
+    let qualifier = query.table.qualifier().to_owned();
+    if query.columns.is_empty() {
+        query.columns = default_columns;
+    }
+    let mut outer = QueryIr::new(qualifier.clone());
+    // The union's order sorts the values; inside, it only picks the rows
+    // under a limit or an offset.
+    outer.orders = query
+        .orders
+        .iter()
+        .map(|order| match order {
+            crate::ir::Order::By {
+                expr: Expr::Column(column),
+                direction,
+                nulls,
+            } => crate::ir::Order::By {
+                expr: Expr::Column(ColumnRef {
+                    table: Some(qualifier.clone().into()),
+                    ..column.clone()
+                }),
+                direction: *direction,
+                nulls: *nulls,
+            },
+            other => other.clone(),
+        })
+        .collect();
+    if query.limit.is_none() && query.offset.is_none() {
+        query.orders.clear();
+    }
+    outer.table = crate::ir::TableRef::subquery(query, qualifier);
+    outer.columns = items;
+    outer
 }
 
 /// Where a read of `query` runs: a locking read where the executor writes

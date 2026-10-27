@@ -7,6 +7,7 @@ mod support;
 mod bulk;
 mod casts;
 mod collection;
+mod compound;
 mod crud;
 mod derive;
 mod dirty;

@@ -637,6 +637,79 @@ pub async fn unit_of_work(db: Db, server: Server) {
     assert_eq!(Company::query().count(&db).await.unwrap(), 1);
 }
 
+/// Compound queries: lateral joins, limits per group, unions with orders
+/// and limits, derived tables and (PostgreSQL) a table function.
+pub async fn compound(db: Db, server: Server) {
+    let (acme, globex) = seed(&db).await;
+    // Each company with its biggest deal, through a lateral join.
+    let biggest = Deal::query()
+        .select([Deal::TITLE.expr()])
+        .where_column(Deal::COMPANY_ID, "=", Company::ID)
+        .order_by_desc(Deal::AMOUNT_CENTS)
+        .limit(1);
+    let rows = Company::query()
+        .join_lateral(biggest, "biggest")
+        .add_select(["biggest.title"])
+        .order_by(Company::ID)
+        .get(&db)
+        .await
+        .unwrap();
+    let pairs: Vec<(i64, String)> = rows
+        .iter()
+        .map(|c| (c.id, c.extra::<String>("title").unwrap().unwrap()))
+        .collect();
+    assert_eq!(
+        pairs,
+        [
+            (acme.id, "Pricing upgrade".to_owned()),
+            (globex.id, "Platform deal".to_owned())
+        ]
+    );
+    // The smallest deal of each company.
+    let mut smallest: Vec<String> = Deal::query()
+        .where_not_null(Deal::COMPANY_ID)
+        .order_by(Deal::AMOUNT_CENTS)
+        .group_limit(1, Deal::COMPANY_ID)
+        .pluck(&db, Deal::TITLE)
+        .await
+        .unwrap();
+    smallest.sort();
+    assert_eq!(smallest, ["Platform deal", "Renewal for Acme"]);
+    // A union sorted and cut as a whole, its second part with its own limit.
+    let titles: Vec<String> = Deal::query()
+        .where_(Deal::STAGE.eq(Stage::Lead))
+        .union(
+            Deal::query()
+                .where_(Deal::AMOUNT_CENTS.gte(25_000))
+                .order_by_desc(Deal::AMOUNT_CENTS)
+                .limit(1),
+        )
+        .order_by(Deal::TITLE)
+        .pluck(&db, Deal::TITLE)
+        .await
+        .unwrap();
+    assert_eq!(titles, ["Platform deal", "Renewal for Acme"]);
+    let from_union: Vec<String> = Deal::query()
+        .from_sub(
+            Deal::query()
+                .where_(Deal::STAGE.eq(Stage::Lead))
+                .union_all(Deal::query().where_(Deal::STAGE.eq(Stage::ClosedLost))),
+        )
+        .order_by_desc(Deal::TITLE)
+        .pluck(&db, Deal::TITLE)
+        .await
+        .unwrap();
+    assert_eq!(from_union, ["Small change", "Renewal for Acme"]);
+    if server == Server::Postgres {
+        let days: Vec<i64> = table("ignored")
+            .from_raw("generate_series(?::int, ?::int) AS day", [1_i64, 3])
+            .pluck(&db, col_as::<i64>("day"))
+            .await
+            .unwrap();
+        assert_eq!(days, [1, 2, 3]);
+    }
+}
+
 /// Row locks between two units of work: `SKIP LOCKED` leaves the held row
 /// out, `NOWAIT` fails at once, shared locks wait for none of the free
 /// rows, and the holder's change commits.
