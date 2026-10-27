@@ -325,7 +325,7 @@ When an event of a published trigger is emitted, every active automation listeni
 | `once` | Only the first time, ever, per subject |
 | `every_time` | On every event |
 
-Events without a subject (a trigger with no `subject`) always enroll. Each enrollment is stored with its run in one transaction, then runs: inline in the emit without a queue, as `workflows.run` jobs with one. Its actions, delays and waits behave as [workflow steps](/docs/packages/workflows/#steps): an action that fails three times fails the enrollment with the action's error. An enrollment's run belongs to the automation's workspace, and its output is every node's output by id.
+Events without a subject (a trigger with no `subject`) always enroll. An event emitted inside a unit of work (a handler's) enrolls once that work commits, and not at all if it rolls back. Each enrollment is stored with its run in one transaction, then runs: inline in the emit without a queue, as `workflows.run` jobs with one. Its actions, delays and waits behave as [workflow steps](/docs/packages/workflows/#steps): an action that fails three times fails the enrollment with the action's error. An enrollment's run belongs to the automation's workspace, and its output is every node's output by id.
 
 `automations.enrollments(id, page)` lists an automation's enrollments with the status of their runs; `enrollment(id)` reads one and `cancel_enrollment(id)` cancels it (409 `enrollment_finished` when it finished). `enroll(id, event_json)` enrolls by hand, in the published version, whatever the status, trigger settings and policy (a "run it for this record now" button); the JSON must be the trigger's event (400 `invalid_automation_event`), and an automation never published is a 409 `automation_not_published`.
 

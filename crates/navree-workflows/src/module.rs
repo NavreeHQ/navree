@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, ModuleBuilderJobsExt, SystemClock};
-use navree_db::{Db, ModuleBuilderDbExt};
+use navree_db::{Db, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
@@ -334,6 +334,26 @@ impl<E: Event> Listener<E> for DeliverToWorkflows<E> {
                 return Ok(());
             };
             let payload = serde_json::to_value(event)?;
+            // Emitted inside a unit of work (a handler's): the event counts
+            // once that work commits, and never if it rolls back. Waits and
+            // automations then see the records the work wrote.
+            if let Some(uow) = Uow::current()
+                && !uow.is_finished().await
+            {
+                uow.after_commit(move || {
+                    Box::pin(async move {
+                        if let Err(error) = workflows.deliver(E::NAME, &payload).await {
+                            tracing::error!(
+                                target: "navree::workflows",
+                                event = E::NAME,
+                                %error,
+                                "cannot deliver an event to workflows and automations"
+                            );
+                        }
+                    })
+                });
+                return Ok(());
+            }
             workflows.deliver(E::NAME, &payload).await?;
             Ok(())
         })
