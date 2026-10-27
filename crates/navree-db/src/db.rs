@@ -290,9 +290,14 @@ fn install_query_log(
     });
 }
 
+/// What SQLx says when a MySQL account's password must go over a
+/// connection without TLS and the `mysql-rsa` feature is off.
+const MYSQL_RSA_DISABLED: &str = "RSA auth backend disabled";
+
 /// A connection error that names the database without its password (the
 /// driver's own message may echo the URL), with the feature to turn on
-/// when the URL's driver is not compiled in.
+/// when the URL's driver is not compiled in, or when a MySQL account needs
+/// the RSA password exchange.
 fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
     let redacted = options.redacted_url();
     let mut message = error
@@ -308,6 +313,13 @@ fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
         }
         Some("mysql" | "mariadb") if !cfg!(feature = "mysql") => {
             " (enable the `mysql` feature of navree-db)"
+        }
+        // The server has no cached hash of the password yet, so the
+        // password itself must travel: over TLS, or RSA-encrypted.
+        Some("mysql" | "mariadb") if message.contains(MYSQL_RSA_DISABLED) => {
+            " (this caching_sha2_password account needs TLS or the RSA exchange: use TLS, \
+             which `ssl-mode=PREFERRED`, the default, picks when the server offers it, \
+             or enable the `mysql-rsa` feature of navree)"
         }
         _ => "",
     };
