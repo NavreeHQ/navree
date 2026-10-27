@@ -57,13 +57,13 @@ pub const MCP_INSTRUCTIONS: &str = "Tools for the Navree CRM. Deals move through
 /// Config, Logger, Crypto, Http, Database, Orm (strict outside
 /// production: a relation loaded record by record, a column a query left
 /// out or an attribute that cannot be filled is an error), Cache, Events,
-/// View, Mail, Queue, Schedule, Validation, Auth (public registration off: accounts are
-/// created by admins), Access ([`abilities::define`], super-admin role
-/// `admin`), Audit, Notify, Realtime (key [`REALTIME_KEY`]; channels
-/// `private-crm.deals` for users who can read deals and
-/// `private-users.{id}` for that user only), Api and Observe; plus the
-/// app's `dyn Clock` ([`SystemClock`]), which CRM services inject for
-/// "now" (`Arc<dyn Clock>`) so tests can fix it.
+/// View, Mail, Queue, Schedule, Validation, Auth (public registration off:
+/// accounts are created by admins), Access ([`abilities::define`],
+/// super-admin role `admin`), Audit, Notify, Realtime (key
+/// [`REALTIME_KEY`]; channels `private-crm.deals` for users who can read
+/// deals and `private-users.{id}` for that user only), Api and Observe;
+/// plus the app's `dyn Clock` ([`SystemClock`]), which CRM services inject
+/// for "now" (`Arc<dyn Clock>`) so tests can fix it.
 ///
 /// The CRM modules come on top: `CrmCoreModule` and the feature modules
 /// (`crm_api::app` adds them all).

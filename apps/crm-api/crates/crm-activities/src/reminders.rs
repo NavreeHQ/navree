@@ -157,7 +157,9 @@ pub struct RemindersSent {
     pub tasks: usize,
 }
 
-/// Sends the reminders; see the [module docs](self).
+/// Sends the daily task reminders: one [`TasksDueToday`] notification to
+/// each user with open tasks due today (UTC), as their assignee or as the
+/// owner of an unassigned task.
 #[injectable]
 pub struct TaskReminders {
     db: Arc<Db>,
