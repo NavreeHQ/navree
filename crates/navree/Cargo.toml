@@ -235,6 +235,7 @@ billing = [
 ]
 ## L6 (ecosystem, opt-in: not in `full`)
 ## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
+## With `lighthouse` on too, Lighthouse's tools, resource and prompt.
 mcp = [
     "dep:navree-mcp",
     "http",
@@ -244,6 +245,7 @@ mcp = [
     "validation",
     "access",
     "auth",
+    "navree-lighthouse?/mcp",
 ]
 ## L6 (opt-in, not in `full`)
 ## Microservices: message and event handlers, `ServiceClient`, the TCP and

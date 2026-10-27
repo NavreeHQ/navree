@@ -223,11 +223,12 @@ const HIERARCHY: &[Rule] = &[
     // over HTTP (navree-http-client), queued as jobs (navree-contracts) and
     // pruned on the schedule; a server-rendered dashboard (navree-view)
     // signed in through navree-auth, with an encrypted cookie
-    // (navree-crypto), behind navree-access abilities.
+    // (navree-crypto), behind navree-access abilities; with its `mcp`
+    // feature, tools, a resource and a prompt on navree-mcp's server.
     rule("navree-lighthouse", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
-        "navree-schedule", "navree-access", "navree-auth",
+        "navree-schedule", "navree-access", "navree-auth", "navree-mcp",
     ]),
     // Logbook: a telemetry sink and a data-change observer (navree-db), an
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in
