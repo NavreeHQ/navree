@@ -10,7 +10,7 @@
 //! | `unique`, `index`, `primary` on other columns | unique and regular indexes; a unique index over nullable fields covers the documents that set them (NULLs do not collide, as in SQL) |
 //! | `fulltext`, `spatial_index` | a text index (with its language), a `2dsphere` index |
 //! | `foreign_id(..).constrained()` | an index on the field, and a notice (MongoDB enforces no references) |
-//! | `hypertable(time)` | a time-series collection: `timeField`, `metaField` from the space partition, `granularity` from the chunk interval, `expireAfterSeconds` from the retention |
+//! | `hypertable(time)` | a time-series collection: `timeField`, `metaField` from the space partition, `granularity` from the chunk interval, `expireAfterSeconds` from the retention (MongoDB takes no validator on it: a notice says so) |
 //! | `table` (alter) | the validator updated (`collMod`), dropped and renamed fields removed or renamed in every document (`$unset`, `$rename`) and in the indexes, indexes created, dropped and renamed |
 //! | `rename`, `drop`, `drop_if_exists`, `has_table`, `has_column` | `renameCollection`, `drop`, `listCollections`, the validator or a document with the field |
 //! | a described continuous aggregate | a view: `$group` by the time bucket and the groups |
@@ -584,7 +584,12 @@ impl MongoSchema {
             }))
             .await?;
         }
-        if validator_changed && !blueprint.extras.without_validator {
+        if validator_changed
+            && !blueprint.extras.without_validator
+            && self.is_time_series(&collection).await?
+        {
+            notices.push(compile::time_series_unchecked(&collection));
+        } else if validator_changed && !blueprint.extras.without_validator {
             let mut command =
                 doc! { "collMod": collection.clone(), "validator": { "$jsonSchema": validator } };
             if let Some(level) = &blueprint.extras.validation_level {
@@ -602,13 +607,24 @@ impl MongoSchema {
     }
 
     /// An `update` command over every matching document (it runs in a
-    /// migration's session).
+    /// migration's session). The documents are moving to the new schema,
+    /// so the validator they are leaving does not check them (the new one
+    /// is set once the change is done). A document the server refuses
+    /// fails the change.
     async fn update_all(&self, collection: &str, filter: Document, update: Document) -> MongoResult {
-        self.run(SchemaCommand::database(doc! {
-            "update": collection,
-            "updates": [{ "q": filter, "u": update, "multi": true }],
-        }))
-        .await?;
+        let reply = self
+            .run(SchemaCommand::database(doc! {
+                "update": collection,
+                "updates": [{ "q": filter, "u": update, "multi": true }],
+                "bypassDocumentValidation": true,
+            }))
+            .await?;
+        if let Some(problem) = reply.as_ref().and_then(write_problem) {
+            return Err(MongoError::schema(
+                collection,
+                format!("updating its documents failed: {problem}"),
+            ));
+        }
         Ok(())
     }
 
@@ -636,6 +652,14 @@ impl MongoSchema {
             .and_then(|options| options.get_document("validator").ok().cloned())
             .and_then(|validator| validator.get_document("$jsonSchema").ok().cloned())
             .unwrap_or_else(|| doc! { "bsonType": "object", "properties": {} }))
+    }
+
+    /// Whether `collection` is a time-series collection.
+    async fn is_time_series(&self, collection: &str) -> MongoResult<bool> {
+        Ok(self
+            .collection_info(collection)
+            .await?
+            .is_some_and(|info| info.get_str("type").ok() == Some("timeseries")))
     }
 
     /// The options `collection` was created with (`timeseries`,
@@ -783,6 +807,30 @@ fn convert_error(collection: &str) -> MongoError {
     )
 }
 
+/// What went wrong in a write command's reply, which reports refused
+/// documents (`writeErrors`) and an unmet write concern
+/// (`writeConcernError`) beside `ok: 1`.
+fn write_problem(reply: &Document) -> Option<String> {
+    let message = |error: &Document| {
+        let text = error.get_str("errmsg").unwrap_or("refused");
+        match error.get("code").and_then(Bson::as_i32) {
+            Some(code) => format!("{text} (code {code})"),
+            None => text.to_owned(),
+        }
+    };
+    if let Ok(errors) = reply.get_array("writeErrors")
+        && let Some(first) = errors.iter().find_map(Bson::as_document)
+    {
+        let more = errors.len() - 1;
+        return Some(if more > 0 {
+            format!("{}, and {more} more", message(first))
+        } else {
+            message(first)
+        });
+    }
+    reply.get_document("writeConcernError").ok().map(message)
+}
+
 /// An index as `listIndexes` gives it, ready for `createIndexes`: without
 /// the version and namespace the server adds.
 fn rebuildable(index: &Document) -> Document {
@@ -852,6 +900,27 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn write_replies_name_what_was_refused() {
+        assert_eq!(write_problem(&doc! { "ok": 1, "n": 2, "nModified": 2 }), None);
+        let refused = doc! {
+            "ok": 1,
+            "writeErrors": [
+                { "index": 0, "code": 121, "errmsg": "Document failed validation" },
+                { "index": 1, "code": 121, "errmsg": "Document failed validation" },
+            ],
+        };
+        assert_eq!(
+            write_problem(&refused).as_deref(),
+            Some("Document failed validation (code 121), and 1 more")
+        );
+        let concern = doc! { "ok": 1, "writeConcernError": { "code": 64, "errmsg": "waiting for replication timed out" } };
+        assert_eq!(
+            write_problem(&concern).as_deref(),
+            Some("waiting for replication timed out (code 64)")
+        );
+    }
 
     #[test]
     fn validators_change_property_by_property() {

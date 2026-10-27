@@ -10,4 +10,5 @@ mod commands;
 mod crud;
 mod module;
 mod queries;
+mod schema;
 mod uow;

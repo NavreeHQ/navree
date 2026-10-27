@@ -686,12 +686,16 @@ pub(crate) fn create(blueprint: &Blueprint, extras: &Extras) -> MongoResult<Plan
     if !extras.without_validator
         && let Some(schema) = json_schema(blueprint, comment, &mut plan.notices)?
     {
-        create.insert("validator", doc! { "$jsonSchema": schema });
-        if let Some(level) = &extras.validation_level {
-            create.insert("validationLevel", level.clone());
-        }
-        if let Some(action) = &extras.validation_action {
-            create.insert("validationAction", action.clone());
+        if hypertable.is_some() {
+            plan.notices.push(time_series_unchecked(collection));
+        } else {
+            create.insert("validator", doc! { "$jsonSchema": schema });
+            if let Some(level) = &extras.validation_level {
+                create.insert("validationLevel", level.clone());
+            }
+            if let Some(action) = &extras.validation_action {
+                create.insert("validationAction", action.clone());
+            }
         }
     }
     let indexes = indexes(blueprint, extras, hypertable.is_some(), &mut plan.notices)?;
@@ -703,6 +707,14 @@ pub(crate) fn create(blueprint: &Blueprint, extras: &Extras) -> MongoResult<Plan
         }));
     }
     Ok(plan)
+}
+
+/// The notice for a time-series collection's fields, which MongoDB does not
+/// check: time-series collections take no validator.
+pub(crate) fn time_series_unchecked(collection: &str) -> String {
+    format!(
+        "MongoDB time-series collections take no validator: the types of `{collection}`'s fields are not checked (the models' casts still are)"
+    )
 }
 
 /// The `create` command of the view a continuous aggregate described with
