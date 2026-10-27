@@ -246,13 +246,21 @@ async fn belongs_to_a_record_or_one_of_several() {
         .unwrap();
     assert_eq!(either.len(), 3);
 
+    // Without a relation named after the model (`user`), the only
+    // belongs-to relation to it (`owner`).
+    let ada = ordered().where_belongs_to(&crm.ada).get(&t.db).await.unwrap();
+    assert_eq!(titles(&ada), ["Renewal", "Platform"]);
+
     // The relation must be a belongs-to to the owner's model.
     let error = ordered()
-        .where_belongs_to(&crm.ada)
+        .where_belongs_to(&crm.vip)
         .get(&t.db)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("`user`"), "{error}");
+    assert!(
+        error.to_string().contains("a belongs_to relation of Deal to Tag"),
+        "{error}"
+    );
     let error = ordered()
         .where_belongs_to_named(&crm.ada, "company")
         .get(&t.db)

@@ -6,6 +6,7 @@
 //! `cargo test -p navree-orm --features postgres,mysql --test servers`
 
 mod models;
+mod relations;
 mod scenarios;
 mod support;
 
@@ -48,6 +49,19 @@ async fn timescaledb_time_buckets() {
         scenarios::time_buckets(db, Server::Postgres)
     })
     .await;
+}
+
+#[tokio::test]
+async fn postgres_relations() {
+    run(Server::Postgres, |db| {
+        relations::relations(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_relations() {
+    run(Server::MySql, |db| relations::relations(db, Server::MySql)).await;
 }
 
 #[tokio::test]
