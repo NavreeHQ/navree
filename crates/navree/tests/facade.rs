@@ -64,6 +64,8 @@ fn every_module_crate_is_reexported_whole() {
     // L7 (opt-in)
     #[cfg(feature = "billing")]
     assert!(same::<navree::billing::BillingModule, BillingModule>());
+    // L7
+    assert!(same::<navree::helm::HelmModule, HelmModule>());
 }
 
 /// Opt-in ecosystem crates are re-exported whole behind their feature

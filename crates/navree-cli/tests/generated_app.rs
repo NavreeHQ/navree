@@ -21,6 +21,7 @@ use navree_cli::clock::Timestamp;
 use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
+use navree_cli::resource::make_resource;
 
 /// The workspace root. `std::path::absolute`, not `canonicalize`, which
 /// gives verbatim `\\?\C:\..` paths on Windows.
@@ -124,6 +125,8 @@ fn navree_new_output_compiles_against_the_workspace() {
         now,
     )
     .unwrap();
+
+    make_resource(&root, "src/modules", &name("posts"), "Post").unwrap();
 
     let ok = cargo(&root, &target, &["test", "--quiet"])
         && cargo(&root, &target, &["run", "--quiet", "--", "check"])

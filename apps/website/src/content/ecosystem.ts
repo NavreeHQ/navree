@@ -165,7 +165,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-helm",
     command: "navree make:resource deals Deal",
     href: "/docs/tools/helm/",
-    status: "planned",
+    status: "stable",
     signature: "impl Resource for DealResource",
     mount: "/admin",
   },
