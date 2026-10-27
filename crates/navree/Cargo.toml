@@ -56,7 +56,8 @@ cache = ["dep:navree-cache", "telemetry"]
 http-client = ["dep:navree-http-client", "telemetry"]
 ## L3
 db = ["dep:navree-db", "http"]
-testing = ["dep:navree-testing", "http"]
+## With `workspace` on too, also `navree::workspace::testing` (isolation suites).
+testing = ["dep:navree-testing", "http", "navree-workspace?/testing"]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
 mail = ["dep:navree-mail", "view", "telemetry"]
@@ -81,8 +82,7 @@ auth = [
     "mail",
     "access",
 ]
-## Workspaces: multi-tenancy with members, roles, invitations and isolation
-## (`navree::workspace::testing` runs isolation suites on navree-testing).
+## Workspaces: multi-tenancy with members, roles, invitations and isolation.
 workspace = [
     "dep:navree-workspace",
     "http",
@@ -91,7 +91,6 @@ workspace = [
     "events",
     "mail",
     "access",
-    "testing",
 ]
 ## L6
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,

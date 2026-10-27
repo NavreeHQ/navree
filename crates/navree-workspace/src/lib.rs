@@ -30,8 +30,8 @@
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), unless
 //!   `workspace.routes` is false.
-//! - **Testing** ([`testing`]). `TestApp::isolation_suite::<M>()` with
-//!   [`testing::IsolationSuiteExt::factory`] sends every route of module
+//! - **Testing** (`testing`, feature `testing`). `TestApp::isolation_suite::<M>()`
+//!   with `testing::IsolationSuiteExt::factory` sends every route of module
 //!   `M` from one workspace against another's records: a 404, not listed,
 //!   never created there.
 //! - **Conformity.** `navree check` runs `workspace.entities` (every entity
@@ -66,6 +66,7 @@
 
 pub mod entity;
 pub mod events;
+#[cfg(feature = "testing")]
 pub mod testing;
 
 mod access;
