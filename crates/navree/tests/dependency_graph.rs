@@ -207,6 +207,17 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
         "navree-workspace", "navree-orm",
     ]),
+    // Integrations: workspace and organization connections to third-party
+    // APIs. Credentials encrypted with navree-crypto (service-account JWTs
+    // signed through its `jose`), token refreshes under navree-cache locks,
+    // provider calls through navree-http-client, connections in navree-db,
+    // owners from navree-workspace, `integrations:check` on navree-schedule
+    // and `ConnectionUnhealthy` on navree-events.
+    rule("navree-integrations", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-schedule",
+        "navree-workspace",
+    ]),
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access
     // permissions, workspace-limited clients. The OAuth tables are
@@ -457,6 +468,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-redis",
     "navree-social",
     "navree-webhooks",
+    "navree-integrations",
     "navree-oauth",
     "navree-flags",
     "navree-settings",

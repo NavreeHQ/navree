@@ -153,6 +153,8 @@ pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 pub use navree_settings::{ModuleBuilderSettingsExt as _, Setting, SettingsModule};
 #[cfg(feature = "sheets")]
 pub use navree_sheets::{ModuleBuilderSheetsExt as _, SheetsModule};
+#[cfg(feature = "integrations")]
+pub use navree_integrations::{IntegrationsModule, ModuleBuilderIntegrationsExt as _};
 
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
