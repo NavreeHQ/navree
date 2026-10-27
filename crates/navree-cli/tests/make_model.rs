@@ -90,7 +90,15 @@ fn a_model_alone_is_declared_and_hints_at_its_migration() {
         read(&root, "src/modules/users/models/mod.rs"),
         "//! ORM models of the users module.\n\npub mod deal;\n"
     );
-    assert!(read(&root, "src/modules/users/mod.rs").contains("pub mod models;"));
+    let module = read(&root, "src/modules/users/mod.rs");
+    assert!(module.contains("pub mod models;"), "{module}");
+    assert!(
+        module.contains(
+            "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        // navree:wire\n"
+        ),
+        "registered for model:show: {module}"
+    );
+    assert!(!module.contains("AccessModule::for_feature::<"), "{module}");
     assert_eq!(
         report.hints,
         ["create its table: navree make:migration users create_deals_table"]
@@ -206,7 +214,7 @@ fn every_companion_refers_to_the_others() {
         "pub mod seeders;",
         "pub mod policies;",
         "pub mod controllers;",
-        "        m.import(navree::access::AccessModule::for_feature::<\n            models::deal::Deal,\n        >());\n",
+        "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        m.import(navree::access::AccessModule::for_feature::<\n            models::deal::Deal,\n        >());\n",
         "        navree::db::ModuleBuilderDbExt::seeder::<seeders::deal::DealSeeder>(m);\n",
         "        navree::http::ModuleBuilderHttpExt::controller::<controllers::deal::DealController>(m);\n",
     ] {

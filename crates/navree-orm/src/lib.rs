@@ -111,6 +111,7 @@ mod record;
 pub mod relations;
 mod row;
 mod scope;
+pub mod show;
 pub mod sql;
 pub mod testing;
 mod ulid;
@@ -139,6 +140,7 @@ pub use query::{
 pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
+pub use show::{ModuleBuilderOrmExt, OrmModule};
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{

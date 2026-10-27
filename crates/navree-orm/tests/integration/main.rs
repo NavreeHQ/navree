@@ -11,5 +11,6 @@ mod binding;
 mod factories_create;
 mod factories_make;
 mod seeding;
+mod show;
 mod validation;
 mod workspaces;

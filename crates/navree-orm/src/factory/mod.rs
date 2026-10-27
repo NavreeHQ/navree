@@ -63,7 +63,7 @@ use navree_kernel::BoxFuture;
 
 pub use context::{Attributes, FactoryContext};
 pub use faker::{FakeNumber, Faker};
-pub use relationships::{BelongsTo, HasMany, Pivot, Relationships};
+pub use relationships::{BelongsTo, HasMany, Pivot, RelationshipInfo, Relationships};
 pub use sequence::{Sequence, SequenceIndex};
 pub use sources::{IntoRecords, LazyFactory, ParentHandle, ParentSource};
 

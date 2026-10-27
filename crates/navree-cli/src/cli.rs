@@ -20,7 +20,7 @@ pub const MODULES_DIR: &str = "src/modules";
     about = "Create Navree apps, generate code and run the dev loop",
     after_help = "Every other command runs in the app binary: `navree <command> [args...]` is \
                   `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, \
-                  queue:work, schedule:run, routes, openapi:export, key:generate, \
+                  model:show, queue:work, schedule:run, routes, openapi:export, key:generate, \
                   <module>:<command>, ...). `navree list` shows the app's commands."
 )]
 pub struct Cli {

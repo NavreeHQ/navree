@@ -44,6 +44,11 @@ pub trait GlobalScope<M: Model>: Send + Sync + 'static {
     fn scope_id(&self) -> TypeId {
         TypeId::of::<Self>()
     }
+
+    /// The scope's name, as `model:show` lists it (its type's).
+    fn name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
 }
 
 /// The built-in global scope of soft-deleting models: rows whose

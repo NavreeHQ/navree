@@ -212,6 +212,11 @@ pub trait ModelHook<M: Model>: Send + Sync + 'static {
         let _ = (event, ctx, record);
         Box::pin(async { Ok(()) })
     }
+
+    /// The hook's name, as `model:show` lists it (its type's).
+    fn name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
 }
 
 /// The hooks of model `M` for one operation: the model's own, then the
