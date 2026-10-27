@@ -7,3 +7,4 @@ mod models;
 mod support;
 
 mod crud;
+mod queries;

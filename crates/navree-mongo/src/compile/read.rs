@@ -105,23 +105,27 @@ pub(crate) fn plan(cx: &mut Cx, scope: &mut Scope<'_>, query: &QueryIr) -> Resul
     };
 
     if !query.unions.is_empty() {
-        let mut distinct = false;
+        // Unions apply left to right: a UNION removes the duplicates of
+        // everything before it, a UNION ALL keeps them.
         for union in &query.unions {
             let mut other_scope = Scope::of(&union.query.table);
             let other = plan(cx, &mut other_scope, &union.query)?;
+            let mut pipeline = other.stages;
+            if let Some(project) = union_names(columns.as_deref(), other.columns.as_deref())? {
+                pipeline.push(doc! { "$project": project });
+            }
             let mut with = doc! { "coll": other.collection };
-            if !other.stages.is_empty() {
-                with.insert("pipeline", other.stages);
+            if !pipeline.is_empty() {
+                with.insert("pipeline", pipeline);
             }
             stages.push(doc! { "$unionWith": with });
-            distinct |= !union.all;
-        }
-        if distinct {
-            stages.push(doc! { "$group": { "_id": "$$ROOT" } });
-            stages.push(doc! { "$replaceWith": "$_id" });
+            if !union.all {
+                stages.push(doc! { "$group": { "_id": "$$ROOT" } });
+                stages.push(doc! { "$replaceWith": "$_id" });
+            }
         }
         let outputs = Scope::of(&TableRef::new("union"));
-        let temps = order(cx, &outputs, &query.orders, None, &mut stages)?;
+        let temps = order(cx, &outputs, &unqualified(&query.orders), None, &mut stages)?;
         page(query, &mut stages);
         if !temps.is_empty() {
             stages.push(doc! { "$unset": temps });
@@ -133,6 +137,34 @@ pub(crate) fn plan(cx: &mut Cx, scope: &mut Scope<'_>, query: &QueryIr) -> Resul
         stages,
         columns,
     })
+}
+
+/// The `$project` giving a union's documents the first query's column
+/// names, by position, as SQL names a union's columns; `None` when the
+/// names already agree or either query selects whole documents.
+fn union_names(first: Option<&[String]>, other: Option<&[String]>) -> Result<Option<Document>, OrmError> {
+    let (Some(first), Some(other)) = (first, other) else {
+        return Ok(None);
+    };
+    if first.len() != other.len() {
+        return Err(invalid(format!(
+            "each query of a UNION selects the same number of columns, not {} and {}",
+            first.len(),
+            other.len()
+        )));
+    }
+    if first == other {
+        return Ok(None);
+    }
+    let mut project: Document = first
+        .iter()
+        .zip(other)
+        .map(|(name, from)| (name.clone(), Bson::String(format!("${from}"))))
+        .collect();
+    if !project.contains_key("_id") {
+        project.insert("_id", 0);
+    }
+    Ok(Some(project))
 }
 
 /// Takes a top-level full-text condition (joined with AND) out of
