@@ -6,6 +6,7 @@
 mod commands;
 mod docs_surface;
 mod incoming;
+mod notify;
 mod orm;
 mod outgoing;
 mod routes;
