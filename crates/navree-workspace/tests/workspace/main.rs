@@ -10,3 +10,4 @@ mod resolution;
 mod routes;
 mod services;
 mod telemetry;
+mod zones;

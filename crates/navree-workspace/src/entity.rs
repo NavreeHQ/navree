@@ -1,6 +1,7 @@
 //! The workspace module's tables as SeaORM entities.
 //!
-//! - `workspaces(id, name, slug UNIQUE, owner_id, created_at, updated_at)`
+//! - `workspaces(id, name, slug UNIQUE, owner_id, timezone, country,
+//!   created_at, updated_at)`
 //! - `workspace_members(id, workspace_id → workspaces ON DELETE CASCADE,
 //!   user_id, role, created_at, updated_at)`, one row per (workspace, user)
 //! - `workspace_invitations(id, workspace_id → workspaces ON DELETE
@@ -36,6 +37,11 @@ pub mod workspace {
         pub slug: String,
         /// The owner: always a member with the `owner` role.
         pub owner_id: Uuid,
+        /// The workspace's IANA time zone (`Asia/Kolkata`), stored
+        /// normalized; `None` to follow the country or the app's default.
+        pub timezone: Option<String>,
+        /// The workspace's ISO 3166-1 alpha-2 country (`IN`), upper-case.
+        pub country: Option<String>,
         /// When the workspace was created.
         pub created_at: DateTimeUtc,
         /// When the workspace last changed.
