@@ -75,13 +75,25 @@ mod tests {
     #[test]
     fn exports_the_document_then_generates_the_schema() {
         let plan = plan(Path::new("web/src/lib/api"), None);
-        assert_eq!(plan.document, Path::new("web/src/lib/api").join("openapi.json"));
-        assert_eq!(plan.schema, Path::new("web/src/lib/api").join("schema.d.ts"));
+        assert_eq!(
+            plan.document,
+            Path::new("web/src/lib/api").join("openapi.json")
+        );
+        assert_eq!(
+            plan.schema,
+            Path::new("web/src/lib/api").join("schema.d.ts")
+        );
         assert_eq!(plan.steps.len(), 2);
         assert_eq!(plan.steps[0].program, "cargo");
         assert_eq!(
             plan.steps[0].args,
-            ["run", "--quiet", "--", "openapi:export", "web/src/lib/api/openapi.json"]
+            [
+                "run",
+                "--quiet",
+                "--",
+                "openapi:export",
+                "web/src/lib/api/openapi.json"
+            ]
         );
         assert!(plan.steps[1].program.starts_with("npx"));
         assert_eq!(
@@ -98,7 +110,10 @@ mod tests {
 
     #[test]
     fn generates_from_a_given_document_without_exporting() {
-        let plan = plan(Path::new("web/app/lib/api"), Some(Path::new("openapi.json")));
+        let plan = plan(
+            Path::new("web/app/lib/api"),
+            Some(Path::new("openapi.json")),
+        );
         assert_eq!(plan.document, Path::new("openapi.json"));
         assert_eq!(plan.steps.len(), 1);
         assert_eq!(

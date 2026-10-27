@@ -71,7 +71,9 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                     .clone()
                     .with_env(env.clone())
                     .run(&root)
-                    .with_context(|| format!("cannot run {} (is it installed and on PATH?)", step.program))?;
+                    .with_context(|| {
+                        format!("cannot run {} (is it installed and on PATH?)", step.program)
+                    })?;
                 if !status.success() {
                     return Ok(status
                         .code()
