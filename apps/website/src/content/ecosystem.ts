@@ -349,6 +349,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "documents.pdf(\"certificates/classic\", &data).await?",
   },
   {
+    slug: "media",
+    name: "Media",
+    kind: "library",
+    category: "capabilities",
+    tagline: "Files on your models, with thumbnails, archives and text",
+    summary:
+      "Attach uploads and remote files to your models in collections that check types and sizes. Generate thumbnails, WebP copies and responsive variants on the queue, unpack zip and SCORM packages safely, extract text from PDF and DOCX, and process video with FFmpeg.",
+    features: ["Collections on any model", "Image conversions and srcset", "Remote files through the SSRF guard", "Zip-slip and size-bomb guards", "Text from PDF, DOCX and HTML", "FFmpeg posters and transcodes"],
+    crate: "navree-media",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features media",
+    href: "/docs/packages/media/",
+    status: "stable",
+    signature: "media.add(&course, \"thumbnail\", source).save(&uow).await?",
+  },
+  {
     slug: "sheets",
     name: "Imports and exports",
     kind: "library",
