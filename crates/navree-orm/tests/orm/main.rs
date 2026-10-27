@@ -28,5 +28,6 @@ mod scopes;
 mod soft_deletes;
 mod streams;
 mod table;
+mod text;
 mod timestamps;
 mod uow;
