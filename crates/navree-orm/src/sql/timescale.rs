@@ -15,7 +15,8 @@ use crate::value::Value;
 /// as Unix seconds.
 const ORIGIN_UNIX_SECONDS: i64 = 946_857_600;
 
-/// TimescaleDB's default bucket origin as text (MySQL emulation).
+/// TimescaleDB's default bucket origin as text (MySQL emulation, cast to
+/// `DATETIME(6)` so buckets are date-times).
 const ORIGIN_TEXT: &str = "2000-01-03 00:00:00";
 
 impl Compiler {
@@ -66,7 +67,7 @@ impl Compiler {
                 Ok(match origin {
                     None => self.custom(
                         &format!(
-                            "TIMESTAMPADD(MICROSECOND, FLOOR(TIMESTAMPDIFF(MICROSECOND, '{ORIGIN_TEXT}', {{}}) / {micros}) * {micros}, '{ORIGIN_TEXT}')"
+                            "TIMESTAMPADD(MICROSECOND, FLOOR(TIMESTAMPDIFF(MICROSECOND, CAST('{ORIGIN_TEXT}' AS DATETIME(6)), {{}}) / {micros}) * {micros}, CAST('{ORIGIN_TEXT}' AS DATETIME(6)))"
                         ),
                         vec![expr],
                     ),

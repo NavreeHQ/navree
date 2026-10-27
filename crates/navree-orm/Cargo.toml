@@ -39,9 +39,17 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+futures = { workspace = true }
 insta = { workspace = true }
 navree-config = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 trybuild = { workspace = true }
+
+# Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL
+# (a TimescaleDB server) or NAVREE_TEST_MYSQL_URL is set:
+# `cargo test -p navree-orm --features postgres,mysql --test servers`.
+[[test]]
+name = "servers"
+required-features = ["postgres", "mysql"]

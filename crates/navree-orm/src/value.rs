@@ -595,10 +595,33 @@ where
         i128::from(v)
     } else if let Ok(v) = sql_get_unsigned(row, column) {
         i128::from(v)
+    } else if let Ok(v) = sql_get::<Decimal>(row, column) {
+        // `SUM` of integers is a NUMERIC on PostgreSQL, a DECIMAL on MySQL.
+        integer(&Value::Decimal(Some(v)))?
+    } else if let Ok(v) = sql_get::<f64>(row, column) {
+        integer(&Value::Double(Some(v)))?
     } else {
         return Err(FieldError::Invalid(first));
     };
     T::try_from(wide).map_err(|_| FieldError::Invalid(format!("{wide} does not fit {name}")))
+}
+
+/// Reads `column` with the driver's decoder for `T`, or, when the column
+/// holds text (SQLite's date-times, an expression MySQL types as text),
+/// parses the text with `parse`.
+fn sql_or_text<T: TryGetable>(
+    row: &QueryResult,
+    column: &str,
+    parse: fn(Value) -> Result<T, FieldError>,
+) -> Result<T, FieldError> {
+    match sql_get::<T>(row, column) {
+        Ok(value) => Ok(value),
+        Err(FieldError::Invalid(first)) => match sql_get::<String>(row, column) {
+            Ok(text) => parse(Value::String(Some(text))),
+            Err(_) => Err(FieldError::Invalid(first)),
+        },
+        Err(other) => Err(other),
+    }
 }
 
 /// MySQL's `BIGINT UNSIGNED` (the only database with unsigned columns).
@@ -755,27 +778,55 @@ impl Field for Uuid {
         Cow::Borrowed("Uuid")
     }
 }
-exact_field!(
+/// `Field` for a type read exactly by the driver, or parsed from text when
+/// the column holds text.
+macro_rules! parsed_field {
+    ($ty:ty, $name:literal, $null:expr, $parse:expr) => {
+        impl Field for $ty {
+            fn to_value(&self) -> Value {
+                Value::from(self.clone())
+            }
+
+            fn null() -> Value {
+                $null
+            }
+
+            fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+                sql_or_text::<$ty>(row, column, $parse)
+            }
+
+            fn from_value(value: Value) -> Result<Self, FieldError> {
+                $parse(value)
+            }
+
+            fn type_name() -> Cow<'static, str> {
+                Cow::Borrowed($name)
+            }
+        }
+    };
+}
+
+parsed_field!(
     serde_json::Value,
     "serde_json::Value",
     Value::Json(None),
     json
 );
-exact_field!(NaiveDate, "NaiveDate", Value::ChronoDate(None), naive_date);
-exact_field!(NaiveTime, "NaiveTime", Value::ChronoTime(None), naive_time);
-exact_field!(
+parsed_field!(NaiveDate, "NaiveDate", Value::ChronoDate(None), naive_date);
+parsed_field!(NaiveTime, "NaiveTime", Value::ChronoTime(None), naive_time);
+parsed_field!(
     NaiveDateTime,
     "NaiveDateTime",
     Value::ChronoDateTime(None),
     naive_date_time
 );
-exact_field!(
+parsed_field!(
     DateTime<Utc>,
     "DateTime<Utc>",
     Value::ChronoDateTimeUtc(None),
     date_time_utc
 );
-exact_field!(
+parsed_field!(
     DateTime<FixedOffset>,
     "DateTime<FixedOffset>",
     Value::ChronoDateTimeWithTimeZone(None),
