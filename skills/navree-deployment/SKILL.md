@@ -48,6 +48,7 @@ APP_MAIL__TRANSPORT=smtps://user:password@smtp.example.com:465
 APP_MAIL__FROM="My App <hello@example.com>"
 APP_OBSERVE__METRICS_TOKEN=a-long-random-string   # /metrics is public otherwise
 # APP_DATABASE__URL=postgres://...          # with the `postgres` feature of navree
+# APP_DATABASE__URL=mysql://...             # with the `mysql` feature (MySQL or MariaDB)
 ```
 
 | Setting | Why |
@@ -162,8 +163,11 @@ Navree checkout into the build stage while the app depends on it by path.
 SQLite (default) suits one server: WAL mode, a 5 s busy timeout; keep
 `storage/` on a persistent disk and back the file up. For several servers
 use PostgreSQL (`features = ["postgres"]` on `navree`, a `postgres://`
-URL); the test suite runs on SQLite, so exercise PostgreSQL-specific paths
-(row locks, the queue's `SKIP LOCKED`) in staging first.
+URL) or MySQL/MariaDB (`features = ["mysql"]`, a `mysql://` URL; TLS is
+used when the server offers it, `ssl-mode=VERIFY_IDENTITY&ssl-ca=...` checks
+the certificate). The modules' test suites run on SQLite (navree-db's own
+paths also run against MySQL 8.4), so exercise database-specific paths (row
+locks, the queue's `SKIP LOCKED`) in staging first.
 
 ## Common mistakes
 

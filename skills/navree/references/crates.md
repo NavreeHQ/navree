@@ -3,8 +3,8 @@
 An app depends on the `navree` crate alone (plus `serde`, `sea-orm`,
 `sea-orm-migration` and `garde` for their derives). Its default `full`
 feature turns every module on; each module is also its own feature.
-`postgres` adds the PostgreSQL driver (SQLite is the default and is
-compiled in).
+`postgres` adds the PostgreSQL driver and `mysql` the MySQL and MariaDB
+driver; SQLite is the default and is compiled in.
 
 | Path | Crate | Feature | Module to add | Config section | What it gives |
 |---|---|---|---|---|---|
