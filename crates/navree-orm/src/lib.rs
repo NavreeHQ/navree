@@ -109,6 +109,7 @@ pub mod relations;
 mod row;
 mod scope;
 pub mod sql;
+pub mod testing;
 mod ulid;
 mod value;
 

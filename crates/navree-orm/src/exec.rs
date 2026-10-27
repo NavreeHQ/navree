@@ -257,7 +257,10 @@ impl Target<'_> {
                     .map(Row::from_sql)
                     .collect())
             }
-            Target::Document(document) => document.driver.find(query).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.find(query).await
+            }
         }
     }
 
@@ -276,7 +279,10 @@ impl Target<'_> {
                     None => Ok(Value::BigInt(None)),
                 }
             }
-            Target::Document(document) => document.driver.aggregate(query, aggregate).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.aggregate(query, aggregate).await
+            }
         }
     }
 
@@ -295,7 +301,10 @@ impl Target<'_> {
                     None => Ok(false),
                 }
             }
-            Target::Document(document) => document.driver.exists(query).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.exists(query).await
+            }
         }
     }
 
@@ -326,7 +335,10 @@ impl Target<'_> {
                     })
                 }
             }
-            Target::Document(document) => document.driver.insert(insert).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.insert(insert).await
+            }
         }
     }
 
@@ -337,7 +349,10 @@ impl Target<'_> {
                 let statement = sql::compile_update(update, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
-            Target::Document(document) => document.driver.update(update).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.update(update).await
+            }
         }
     }
 
@@ -348,7 +363,10 @@ impl Target<'_> {
                 let statement = sql::compile_delete(delete, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
-            Target::Document(document) => document.driver.delete(delete).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.delete(delete).await
+            }
         }
     }
 }
@@ -370,6 +388,7 @@ impl<'a> SqlTarget<'a> {
 
     /// Runs `statement` and returns its rows.
     pub async fn query_all(&self, statement: &Statement) -> Result<Vec<QueryResult>, OrmError> {
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_all_raw(statement).await?,
@@ -380,6 +399,7 @@ impl<'a> SqlTarget<'a> {
 
     /// Runs `statement` and returns its first row.
     pub async fn query_one(&self, statement: &Statement) -> Result<Option<QueryResult>, OrmError> {
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_one_raw(statement).await?,
@@ -390,6 +410,7 @@ impl<'a> SqlTarget<'a> {
 
     /// Runs `statement` for its effect.
     pub async fn execute(&self, statement: &Statement) -> Result<ExecResult, OrmError> {
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.execute_raw(statement).await?,
