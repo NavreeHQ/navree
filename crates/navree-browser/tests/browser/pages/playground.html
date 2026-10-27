@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Playground · Fixture</title>
+    <style>
+      body { font-family: sans-serif; margin: 16px; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+      .zone { display: inline-block; width: 220px; min-height: 120px; border: 1px solid #888; margin: 8px; vertical-align: top; }
+      .card { padding: 8px; margin: 4px; background: #eee; }
+      #overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.2); }
+      #listbox { position: absolute; top: 40px; left: 400px; background: white; border: 1px solid #333; }
+      #spacer { height: 2600px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Playground</h1>
+
+    <section aria-label="Fields">
+      <label for="name">Name</label><input id="name" />
+      <label>Notes <textarea name="notes"></textarea></label>
+      <input aria-label="Search" type="search" />
+      <input placeholder="Email address" type="email" />
+      <input name="city" />
+      <span id="by">Nickname</span><input aria-labelledby="by" />
+      <label for="mail">Mail</label><input id="mail" type="email" value="old@example.test" />
+      <label for="memo">Memo</label><input id="memo" value="Call" />
+      <label for="ro">Read only</label><input id="ro" readonly value="fixed" />
+      <label for="due">Due date</label><input id="due" type="date" />
+      <label for="stage">Stage</label>
+      <select id="stage">
+        <option value="lead">Lead</option>
+        <option value="negotiation">Negotiation</option>
+        <option value="won">Won</option>
+      </select>
+      <output id="stage-out"></output>
+      <label><input type="checkbox" id="summary" /> Send me a summary</label>
+      <output id="summary-out">summary off</output>
+      <button type="button" role="checkbox" aria-checked="false" id="terms">&#10003;</button>
+      <label for="terms">Accept terms</label>
+      <label class="switch"><input type="checkbox" class="sr-only" id="dark" /><span>Dark mode</span></label>
+      <label><input type="radio" name="plan" value="free" checked /> Free</label>
+      <label><input type="radio" name="plan" value="pro" /> Pro</label>
+      <label for="logo">Logo</label><input type="file" id="logo" style="display: none" />
+      <output id="logo-out"></output>
+      <button type="button" role="combobox" id="owner" aria-label="Owner">Pick owner</button>
+      <input aria-label="Quick add" id="quick" />
+      <ul id="quick-list"></ul>
+      <input aria-label="Command" id="command" />
+    </section>
+
+    <section aria-label="Buttons">
+      <button type="button" id="save">Save</button>
+      <button type="button" id="later" disabled>Later</button>
+      <a href="/second?stage=won&amp;page=2">Next page</a>
+      <button type="button" aria-label="Close dialog">&times;</button>
+      <input type="submit" value="Submit form" id="submit" />
+      <button type="button" id="covered">Covered</button>
+      <button type="button" id="log-error">Log error</button>
+      <button type="button" id="move">Move deal</button>
+      <button type="button" id="delete">Delete</button>
+      <button type="button" id="shout" style="text-transform: uppercase">Shout</button>
+      <span style="position: relative; display: inline-block">
+        <button type="button" id="blocked">Blocked</button>
+        <span id="blocker" style="position: absolute; inset: 0; background: rgba(255, 0, 0, 0.2)"></span>
+      </span>
+      <button type="button" id="never" disabled>Never</button>
+      <div id="clicks">0 clicks</div>
+    </section>
+
+    <section aria-label="Cards" data-testid="board">
+      <div class="zone" data-stage="lead" data-testid="column">
+        <div class="card" data-testid="card" id="alpha">Alpha renewal <button type="button">Edit</button></div>
+        <div class="card" data-testid="card">Beta launch <button type="button">Edit</button></div>
+        <div class="card" data-testid="card" hidden>Hidden card</div>
+      </div>
+      <div class="zone" data-stage="won" data-testid="column">
+        <div class="card" data-testid="card">Gamma renewal <button type="button">Edit</button></div>
+      </div>
+      <div class="zone" id="native-from">
+        <div class="card" draggable="true" id="native-card">Native card</div>
+      </div>
+      <div class="zone" id="native-to">Native drop</div>
+    </section>
+
+    <p hidden>Secret text</p>
+    <p style="visibility: hidden">Invisible text</p>
+    <p style="text-transform: uppercase">Shouted words</p>
+    <div id="later-text"></div>
+    <div data-testid="spinner">Loading…</div>
+    <div id="toast" data-testid="toast" hidden></div>
+    <div id="palette" hidden>Command palette</div>
+    <div id="results"></div>
+
+    <div id="spacer"></div>
+    <button type="button" data-testid="load-more">Load more</button>
+
+    <div id="overlay"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const show = (text) => {
+        const toast = $("toast");
+        toast.textContent = text;
+        toast.hidden = false;
+      };
+      setTimeout(() => ($("later-text").textContent = "Loaded later"), 600);
+      setTimeout(() => document.querySelector("[data-testid=spinner]").remove(), 500);
+      setTimeout(() => ($("later").disabled = false), 500);
+      setTimeout(() => $("overlay").remove(), 400);
+
+      let clicks = 0;
+      $("covered").addEventListener("click", () => {
+        clicks += 1;
+        $("clicks").textContent = `${clicks} clicks`;
+      });
+      $("save").addEventListener("click", () => setTimeout(() => show("Saved!"), 300));
+      $("later").addEventListener("click", () => show("Later pressed"));
+      $("submit").addEventListener("click", () => show("Form submitted"));
+      document.querySelector("[aria-label='Close dialog']").addEventListener("click", () => show("Closed"));
+      $("shout").addEventListener("click", () => show("Shouted"));
+      $("stage").addEventListener("change", (e) => ($("stage-out").textContent = `stage ${e.target.value}`));
+      $("summary").addEventListener("change", (e) => ($("summary-out").textContent = e.target.checked ? "summary on" : "summary off"));
+      $("terms").addEventListener("click", (e) => {
+        const on = e.currentTarget.getAttribute("aria-checked") !== "true";
+        e.currentTarget.setAttribute("aria-checked", String(on));
+      });
+      $("logo").addEventListener("change", (e) => ($("logo-out").textContent = e.target.files[0] ? e.target.files[0].name : ""));
+      $("log-error").addEventListener("click", () => console.error("boom from the page"));
+      $("move").addEventListener("click", async () => {
+        const response = await fetch("/api/deals/42/move", { method: "POST" });
+        const body = await response.json();
+        show(`Moved ${body.moved}`);
+      });
+      $("delete").addEventListener("click", () => {
+        if (confirm("Delete it?")) show("Deleted");
+      });
+      document.querySelector("[data-testid=load-more]").addEventListener("click", () => show("More loaded"));
+      for (const edit of document.querySelectorAll("[data-testid=card] button")) {
+        edit.addEventListener("click", (e) => show(`Editing ${e.target.parentElement.firstChild.textContent.trim()}`));
+      }
+
+      // A custom select: a combobox button opening a listbox of options.
+      $("owner").addEventListener("click", () => {
+        if ($("listbox")) return;
+        const list = document.createElement("div");
+        list.id = "listbox";
+        list.setAttribute("role", "listbox");
+        for (const name of ["Ada Lovelace", "Grace Hopper"]) {
+          const option = document.createElement("div");
+          option.setAttribute("role", "option");
+          option.textContent = name;
+          option.addEventListener("click", () => {
+            $("owner").textContent = name;
+            list.remove();
+          });
+          list.append(option);
+        }
+        document.body.append(list);
+      });
+
+      $("quick").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const item = document.createElement("li");
+          item.textContent = e.target.value;
+          $("quick-list").append(item);
+          e.target.value = "";
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+          e.preventDefault();
+          $("palette").hidden = false;
+        }
+        if (e.key === "Escape") $("palette").hidden = true;
+      });
+
+      // Pointer-based drag and drop (like dnd-kit): the card follows the
+      // pointer after a few pixels and lands in the column under it.
+      let dragging = null;
+      document.addEventListener("pointerdown", (e) => {
+        const card = e.target.closest("[data-testid=card]");
+        if (card) dragging = { card, x: e.clientX, y: e.clientY, active: false };
+      });
+      document.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        if (!dragging.active && Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) > 4) {
+          dragging.active = true;
+          dragging.card.style.pointerEvents = "none";
+        }
+        if (dragging.active) {
+          dragging.card.style.transform = `translate(${e.clientX - dragging.x}px, ${e.clientY - dragging.y}px)`;
+        }
+      });
+      document.addEventListener("pointerup", (e) => {
+        if (!dragging) return;
+        const { card, active } = dragging;
+        dragging = null;
+        card.style.transform = "";
+        card.style.pointerEvents = "";
+        if (!active) return;
+        const column = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-stage]");
+        if (column) {
+          column.append(card);
+          show(`Dropped in ${column.dataset.stage}`);
+        }
+      });
+
+      // Native HTML drag and drop.
+      $("native-card").addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", "native-card"));
+      $("native-to").addEventListener("dragover", (e) => e.preventDefault());
+      $("native-to").addEventListener("drop", (e) => {
+        e.preventDefault();
+        const id = e.dataTransfer.getData("text/plain");
+        $("native-to").append($(id));
+        show("Native dropped");
+      });
+    </script>
+  </body>
+</html>

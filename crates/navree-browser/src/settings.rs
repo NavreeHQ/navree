@@ -95,9 +95,9 @@ pub(crate) fn absolute(path: &Path) -> PathBuf {
 }
 
 /// `<cargo target dir>/navree-browser`: the target directory is the
-/// nearest ancestor of the test executable holding Cargo's `CACHEDIR.TAG`
-/// (so `CARGO_TARGET_DIR` and workspaces are followed), else `target` in
-/// the current directory.
+/// nearest ancestor of the test executable holding Cargo's
+/// `.rustc_info.json` or `CACHEDIR.TAG` (so `CARGO_TARGET_DIR` and
+/// workspaces are followed), else `target` in the current directory.
 pub(crate) fn default_artifacts() -> PathBuf {
     let target = std::env::current_exe()
         .ok()
@@ -106,12 +106,20 @@ pub(crate) fn default_artifacts() -> PathBuf {
     target.join("navree-browser")
 }
 
-/// The Cargo target directory containing `exe`.
+/// The Cargo target directory containing `exe`: the nearest ancestor with
+/// Cargo's marker files, else the parent of `<profile>/deps`.
 pub(crate) fn target_dir_of(exe: &Path) -> Option<PathBuf> {
-    exe.ancestors()
-        .skip(1)
-        .find(|dir| dir.join("CACHEDIR.TAG").is_file())
-        .map(Path::to_path_buf)
+    let marked = exe.ancestors().skip(1).find(|dir| {
+        dir.join(".rustc_info.json").is_file() || dir.join("CACHEDIR.TAG").is_file()
+    });
+    if let Some(dir) = marked {
+        return Some(dir.to_path_buf());
+    }
+    let deps = exe.parent()?;
+    if deps.file_name()? != "deps" {
+        return None;
+    }
+    deps.parent()?.parent().map(Path::to_path_buf)
 }
 
 #[cfg(test)]
@@ -178,9 +186,17 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("custom-target");
         std::fs::create_dir_all(target.join("debug/deps")).unwrap();
-        std::fs::write(target.join("CACHEDIR.TAG"), "Signature").unwrap();
+        std::fs::write(target.join(".rustc_info.json"), "{}").unwrap();
         let exe = target.join("debug/deps/browser-1234.exe");
         assert_eq!(target_dir_of(&exe), Some(target));
+
+        // Without marker files: the parent of `<profile>/deps`.
+        let bare = dir.path().join("bare");
+        let exe = bare.join("x86_64-unknown-linux-gnu/debug/deps/browser-1");
+        assert_eq!(
+            target_dir_of(&exe),
+            Some(bare.join("x86_64-unknown-linux-gnu"))
+        );
         assert_eq!(target_dir_of(&dir.path().join("elsewhere/x.exe")), None);
     }
 }
