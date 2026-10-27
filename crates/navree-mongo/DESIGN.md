@@ -71,6 +71,7 @@ aggregation pipeline. A plain `count(*)` is a `countDocuments`.
 | comparisons with a value | the query language (`{"amount": {"$gte": 10}}`), documents and arrays as `$eq` |
 | comparisons between fields or computed values | `$expr` |
 | `LIKE` | an escaped `$regex`: anchored unless the pattern starts or ends with `%`, `i` for case-insensitive, `s` so `.` crosses lines |
+| `contains_ignore_case`, `eq_ignore_case` (`Where::IgnoreCase`) | the text with its wildcards escaped, as a `LIKE` (`%text%`, or the whole value) with `i`: MongoDB's regular expressions fold every letter with case forms and keep accents |
 | date parts | `$dateToString`, `$dayOfMonth`, `$month`, `$year` in UTC |
 | JSON paths, containment, length, keys | dot paths, `$all` and dotted equalities, `$size`, `$exists` |
 | full text | `$text`, first in the pipeline, joined with AND at the top |

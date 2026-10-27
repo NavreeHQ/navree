@@ -2,7 +2,9 @@
 //! validation rules.
 
 use crm_core::ContactStatus;
+use crm_core::models::{Company, Contact, User};
 use garde::Validate;
+use navree::orm::validation::exists;
 use navree::validation::{AsyncRule, AsyncRules};
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -10,7 +12,7 @@ use uuid::Uuid;
 
 use crate::common::{
     MAX_TEXT, blank_as_none, not_blank, nullable, nullable_text, optional_text, present,
-    present_trimmed, trimmed,
+    present_trimmed, set_some, trimmed,
 };
 
 /// The body of `POST /api/v1/contacts`. Text fields are trimmed; blank
@@ -53,11 +55,37 @@ pub struct CreateContact {
     pub owner_id: Option<Uuid>,
 }
 
+impl CreateContact {
+    /// The new contact, owned by `owner_id`.
+    pub fn into_contact(self, owner_id: Uuid) -> Contact {
+        Contact {
+            first_name: self.first_name,
+            last_name: self.last_name,
+            email: self.email,
+            phone: self.phone,
+            title: self.title,
+            status: self.status.unwrap_or_default(),
+            company_id: self.company_id,
+            owner_id,
+            ..Contact::default()
+        }
+    }
+}
+
+/// `company_id` must name a company; a deleted one passes here and gets its
+/// 400 from the service, which tells a deleted company from a new one.
+fn company_exists(company_id: Option<Uuid>) -> AsyncRule {
+    exists(Company::ID, company_id)
+        .field("company_id")
+        .with_trashed()
+        .into()
+}
+
 impl AsyncRules for CreateContact {
     fn async_rules(&self) -> Vec<AsyncRule> {
         vec![
-            AsyncRule::exists("company_id", "companies", "id", self.company_id),
-            AsyncRule::exists("owner_id", "users", "id", self.owner_id),
+            company_exists(self.company_id),
+            exists(User::ID, self.owner_id).field("owner_id").into(),
         ]
     }
 }
@@ -109,11 +137,25 @@ pub struct UpdateContact {
     pub owner_id: Option<Uuid>,
 }
 
+impl UpdateContact {
+    /// Changes the fields sent (not the owner: who may change it is the
+    /// service's call).
+    pub fn apply_to(self, contact: &mut Contact) {
+        set_some(&mut contact.first_name, self.first_name);
+        set_some(&mut contact.last_name, self.last_name);
+        set_some(&mut contact.email, self.email);
+        set_some(&mut contact.phone, self.phone);
+        set_some(&mut contact.title, self.title);
+        set_some(&mut contact.status, self.status);
+        set_some(&mut contact.company_id, self.company_id);
+    }
+}
+
 impl AsyncRules for UpdateContact {
     fn async_rules(&self) -> Vec<AsyncRule> {
         vec![
-            AsyncRule::exists("company_id", "companies", "id", self.company_id.flatten()),
-            AsyncRule::exists("owner_id", "users", "id", self.owner_id),
+            company_exists(self.company_id.flatten()),
+            exists(User::ID, self.owner_id).field("owner_id").into(),
         ]
     }
 }

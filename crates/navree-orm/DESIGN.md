@@ -442,6 +442,19 @@ return `Self`; terminal methods take the executor first.
   language), `.websearch()`/`.phrase()`/`.raw()` modes and `tsvector`
   columns (`FullText::vectors()`); SQLite answers `Unsupported` (query an
   FTS5 table with `where_raw`).
+- Text that ignores letter case beyond ASCII: the column helpers
+  `contains_ignore_case` (search boxes) and `eq_ignore_case`
+  (`Where::IgnoreCase`), with the same results on every database: case
+  ignored for every letter with case forms, accents kept, the text taken
+  literally (no wildcards), NULLs never matching. They compile through
+  navree-db's `contains_ignore_case` / `eq_ignore_case`: a `GLOB` of each
+  letter's case variants on SQLite (whose `LOWER` and `LIKE` fold ASCII
+  only), `LOWER(..)` for ASCII text or a regular expression of case
+  variants for other letters on PostgreSQL (whose `LOWER` folds ASCII only
+  in a database with the `C` locale), lower-cased bytes on MySQL (so the
+  column's collation never ignores accents or keeps case). navree-mongo
+  matches the escaped text as a `$regex` with the `i` option, whose
+  folding is Unicode's.
 - `Builder<M>` adds `where_key`, `where_key_not`, `where_key_in`,
   `where_key_not_in`, `scope`, `without_global_scope::<S>`,
   `without_global_scopes`, `with_trashed`, `latest`/`oldest` (by the
@@ -530,11 +543,12 @@ unions, group_limit, connection, use_writer, timeout, errors }`.
 `connection`, `use_writer` and `timeout` say where and how long the query
 runs (`Route`, timed reads; section 6), not what it selects.
 `Where` covers `Compare`, `Null`, `In` (list or subquery), `Between`,
-`Like`, `DatePart`, `Exists`, `Group`, `JsonContains`, `JsonLength`,
-`FullText`, `Raw`, `Sql` (a sea-query condition) and `Invalid` (a problem
-found while building, reported when the query runs). `Expr` covers
-columns (with JSON paths), values, raw SQL, functions, aggregates,
-arithmetic, subqueries, `TimeBucket`, `First`, `Last` and `All`. The enums
+`Like`, `IgnoreCase`, `DatePart`, `Exists`, `Group`, `JsonContains`,
+`JsonLength`, `FullText`, `Raw`, `Sql` (a sea-query condition) and
+`Invalid` (a problem found while building, reported when the query
+runs). `Expr` covers columns (with JSON paths), values, raw SQL,
+functions, aggregates, arithmetic, subqueries, `TimeBucket`, `First`,
+`Last` and `All`. The enums
 are `#[non_exhaustive]`: a driver answers what it cannot express with
 `OrmError::Unsupported`. Writes are `InsertIr` (with `returning`),
 `UpdateIr` and `DeleteIr`.
@@ -602,7 +616,8 @@ the dialect's query builder; values are always bound. Dialect rules live
 next to the clause: date parts (`CAST`/`EXTRACT`, `DATE()`..., `strftime`),
 case-insensitive LIKE (`ILIKE`, `LOWER() LIKE LOWER()` / MySQL's
 collation, SQLite's LIKE) and case-sensitive LIKE (`LIKE`, `LIKE BINARY`,
-`GLOB`), null-safe equality, regular expressions, XOR, JSON paths
+`GLOB`), text ignoring case beyond ASCII (navree-db's text helpers, above),
+null-safe equality, regular expressions, XOR, JSON paths
 (`->`/`->>`; `json_extract`), JSON containment and length, full text
 (`to_tsvector @@ plainto/phraseto/websearch_to_tsquery` with a validated
 language; `MATCH ... AGAINST` in natural language, expansion or boolean

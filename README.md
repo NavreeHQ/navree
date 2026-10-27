@@ -197,8 +197,8 @@ The front-end packages are npm packages in `packages/js/` (a pnpm workspace):
 | `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>` |
 | `@navree/theme` | navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts, the tokens as data, a shadcn registry theme |
 
-The CRM API is split the same way: `crm-core` (entities, migrations,
-abilities, platform modules), `crm-companies` (companies and contacts),
+The CRM API is split the same way: `crm-core` (models, factories,
+migrations, abilities, platform modules), `crm-companies` (companies and contacts),
 `crm-deals`, `crm-activities` (activities and the dashboard), `crm-users`,
 `crm-testkit` (a booted CRM for feature tests) and the `crm-api` binary.
 
