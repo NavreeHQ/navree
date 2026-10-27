@@ -58,7 +58,15 @@ fn bucket(at: DateTime<Utc>, seconds: i64) -> String {
     ts(at.duration_trunc(TimeDelta::seconds(seconds)).unwrap())
 }
 
-fn issue(id: &str, kind: &str, status: &str, title: &str, culprit: &str, count: i64, last: i64) -> String {
+fn issue(
+    id: &str,
+    kind: &str,
+    status: &str,
+    title: &str,
+    culprit: &str,
+    count: i64,
+    last: i64,
+) -> String {
     let first = ts(hours_ago(last + 48));
     let last = ts(hours_ago(last));
     format!(
@@ -70,8 +78,17 @@ fn issue(id: &str, kind: &str, status: &str, title: &str, culprit: &str, count: 
     )
 }
 
-/// One aggregate row: `durations` recorded into its histogram.
-fn aggregate(resolution: i64, at: DateTime<Utc>, kind: &str, key: &str, process: &str, durations: &[f64], errors: i64, extra: i64) -> String {
+/// One aggregate row: `durations` recorded into its histogram, with
+/// `(errors, extra)`.
+fn aggregate(
+    resolution: i64,
+    at: DateTime<Utc>,
+    kind: &str,
+    key: &str,
+    process: &str,
+    durations: &[f64],
+    (errors, extra): (i64, i64),
+) -> String {
     let mut histogram = Histogram::new();
     for ms in durations {
         histogram.record(*ms);
@@ -84,7 +101,10 @@ fn aggregate(resolution: i64, at: DateTime<Utc>, kind: &str, key: &str, process:
          total_ms, max_ms, histogram) VALUES (X'{id}', {resolution}, '{}', '{kind}', '{}', '{}', '{process}', {}, {errors}, \
          {extra}, {total}, {max}, '{}')",
         bucket(at, resolution),
-        &format!("{:016x}", key.len() * 7919 + key.bytes().map(usize::from).sum::<usize>()),
+        &format!(
+            "{:016x}",
+            key.len() * 7919 + key.bytes().map(usize::from).sum::<usize>()
+        ),
         key.replace('\'', "''"),
         durations.len(),
         histogram.encode(),
@@ -100,9 +120,33 @@ fn rand_id() -> u128 {
 async fn lighthouse_db(fixture: &Fixture, file: &str) {
     write(&fixture.root().join("src/app.rs"), APP_RS);
     let mut statements: Vec<String> = TABLES.iter().map(|s| s.to_string()).collect();
-    statements.push(issue(EXCEPTION, "exception", "open", "Database connection failed", "GET /api/v1/deals/{id}", 12, 1));
-    statements.push(issue(SLOW_QUERY, "slow_query", "open", "Slow query: SELECT * FROM deals", "SELECT * FROM deals WHERE stage = ?", 340, 3));
-    statements.push(issue(FAILED_JOB, "failed_job", "resolved", "SendInvoice failed", "SendInvoice", 2, 30));
+    statements.push(issue(
+        EXCEPTION,
+        "exception",
+        "open",
+        "Database connection failed",
+        "GET /api/v1/deals/{id}",
+        12,
+        1,
+    ));
+    statements.push(issue(
+        SLOW_QUERY,
+        "slow_query",
+        "open",
+        "Slow query: SELECT * FROM deals",
+        "SELECT * FROM deals WHERE stage = ?",
+        340,
+        3,
+    ));
+    statements.push(issue(
+        FAILED_JOB,
+        "failed_job",
+        "resolved",
+        "SendInvoice failed",
+        "SendInvoice",
+        2,
+        30,
+    ));
     for (i, hours) in [(1, 1), (2, 5), (3, 2)] {
         statements.push(format!(
             "INSERT INTO lighthouse_occurrences (id, issue_id, at, level, message, chain, backtrace, request_id, method, \
@@ -124,16 +168,88 @@ async fn lighthouse_db(fixture: &Fixture, file: &str) {
     // one row too old for 24h and per-minute rows for 1h.
     let now = Utc::now();
     let deals: Vec<f64> = (1..=100).map(f64::from).collect();
-    statements.push(aggregate(3600, now, "request", "GET /api/v1/deals", "serve-1", &deals, 2, 0));
-    statements.push(aggregate(3600, hours_ago(3), "request", "GET /api/v1/deals", "serve-2", &deals, 0, 0));
-    statements.push(aggregate(3600, hours_ago(2), "request", "GET /api/v1/companies", "serve-1", &[5.0, 6.0, 7.0, 900.0], 0, 0));
-    statements.push(aggregate(3600, hours_ago(30), "request", "GET /api/v1/old", "serve-1", &[5000.0], 0, 0));
-    statements.push(aggregate(60, now, "request", "GET /api/v1/deals", "serve-1", &[10.0, 20.0], 0, 0));
+    statements.push(aggregate(
+        3600,
+        now,
+        "request",
+        "GET /api/v1/deals",
+        "serve-1",
+        &deals,
+        (2, 0),
+    ));
+    statements.push(aggregate(
+        3600,
+        hours_ago(3),
+        "request",
+        "GET /api/v1/deals",
+        "serve-2",
+        &deals,
+        (0, 0),
+    ));
+    statements.push(aggregate(
+        3600,
+        hours_ago(2),
+        "request",
+        "GET /api/v1/companies",
+        "serve-1",
+        &[5.0, 6.0, 7.0, 900.0],
+        (0, 0),
+    ));
+    statements.push(aggregate(
+        3600,
+        hours_ago(30),
+        "request",
+        "GET /api/v1/old",
+        "serve-1",
+        &[5000.0],
+        (0, 0),
+    ));
+    statements.push(aggregate(
+        60,
+        now,
+        "request",
+        "GET /api/v1/deals",
+        "serve-1",
+        &[10.0, 20.0],
+        (0, 0),
+    ));
     // Queries and jobs.
-    statements.push(aggregate(3600, now, "query", "SELECT * FROM deals WHERE stage = ?", "serve-1", &[300.0, 400.0, 500.0], 0, 0));
-    statements.push(aggregate(3600, now, "query", "SELECT 1", "serve-1", &[0.2; 50], 0, 0));
-    statements.push(aggregate(3600, now, "job", "SendInvoice", "worker-1", &[100.0, 120.0, 140.0, 160.0], 3, 1));
-    statements.push(aggregate(3600, now, "job", "SyncSearch", "worker-1", &[10.0, 12.0], 0, 0));
+    statements.push(aggregate(
+        3600,
+        now,
+        "query",
+        "SELECT * FROM deals WHERE stage = ?",
+        "serve-1",
+        &[300.0, 400.0, 500.0],
+        (0, 0),
+    ));
+    statements.push(aggregate(
+        3600,
+        now,
+        "query",
+        "SELECT 1",
+        "serve-1",
+        &[0.2; 50],
+        (0, 0),
+    ));
+    statements.push(aggregate(
+        3600,
+        now,
+        "job",
+        "SendInvoice",
+        "worker-1",
+        &[100.0, 120.0, 140.0, 160.0],
+        (3, 1),
+    ));
+    statements.push(aggregate(
+        3600,
+        now,
+        "job",
+        "SyncSearch",
+        "worker-1",
+        &[10.0, 12.0],
+        (0, 0),
+    ));
     let refs: Vec<&str> = statements.iter().map(String::as_str).collect();
     sqlite_db(&fixture.root().join(file), &refs).await;
 }
@@ -183,24 +299,63 @@ async fn issues_are_listed_most_recently_seen_first() {
     assert!(issues[0]["last_seen"].as_str().unwrap().contains('T'));
     assert_eq!(issues[1]["id"], hyphenated(SLOW_QUERY));
 
-    let all = call(&navigator, "lighthouse_list_issues", json!({"status": "all", "sort": "count"})).await;
-    let counts: Vec<i64> = all["issues"].as_array().unwrap().iter().map(|i| i["count"].as_i64().unwrap()).collect();
+    let all = call(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"status": "all", "sort": "count"}),
+    )
+    .await;
+    let counts: Vec<i64> = all["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["count"].as_i64().unwrap())
+        .collect();
     assert_eq!(counts, [340, 12, 2]);
 
-    let resolved = call(&navigator, "lighthouse_list_issues", json!({"status": "resolved"})).await;
+    let resolved = call(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"status": "resolved"}),
+    )
+    .await;
     assert_eq!(resolved["issues"][0]["title"], "SendInvoice failed");
 
-    let kind = call(&navigator, "lighthouse_list_issues", json!({"kind": "slow_query"})).await;
+    let kind = call(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"kind": "slow_query"}),
+    )
+    .await;
     assert_eq!(kind["issues"].as_array().unwrap().len(), 1);
 
-    let search = call(&navigator, "lighthouse_list_issues", json!({"search": "CONNECTION", "limit": 1})).await;
+    let search = call(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"search": "CONNECTION", "limit": 1}),
+    )
+    .await;
     assert_eq!(search["issues"].as_array().unwrap().len(), 1);
     assert_eq!(search["issues"][0]["kind"], "exception");
 
-    let quotes = call(&navigator, "lighthouse_list_issues", json!({"search": "it's 100%_"})).await;
-    assert_eq!(quotes["issues"], json!([]), "quotes and wildcards are literal");
+    let quotes = call(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"search": "it's 100%_"}),
+    )
+    .await;
+    assert_eq!(
+        quotes["issues"],
+        json!([]),
+        "quotes and wildcards are literal"
+    );
 
-    let bad = refused(&navigator, "lighthouse_list_issues", json!({"status": "closed"})).await;
+    let bad = refused(
+        &navigator,
+        "lighthouse_list_issues",
+        json!({"status": "closed"}),
+    )
+    .await;
     assert!(bad.contains("invalid arguments"), "{bad}");
 }
 
@@ -215,13 +370,19 @@ async fn one_issue_comes_with_its_latest_occurrences_and_alerts() {
         let issue = &answer["issue"];
         assert_eq!(issue["id"], hyphenated(EXCEPTION));
         assert_eq!(issue["message"], "Database connection failed\nat line 2");
-        assert_eq!(issue["chain"], json!(["Database connection failed", "connection refused"]));
+        assert_eq!(
+            issue["chain"],
+            json!(["Database connection failed", "connection refused"])
+        );
         assert_eq!(issue["location"], "src/deals.rs:42");
         assert_eq!(issue["error_type"], "DbErr");
         assert_eq!(issue["last_release"], "1.4.0");
 
         let occurrences = answer["occurrences"].as_array().unwrap();
-        let requests: Vec<&str> = occurrences.iter().map(|o| o["request_id"].as_str().unwrap()).collect();
+        let requests: Vec<&str> = occurrences
+            .iter()
+            .map(|o| o["request_id"].as_str().unwrap())
+            .collect();
         assert_eq!(requests, ["req-1", "req-3", "req-2"], "newest first");
         assert_eq!(occurrences[0]["status"], 500);
         assert_eq!(occurrences[0]["path"], "/api/v1/deals/1");
@@ -235,9 +396,19 @@ async fn one_issue_comes_with_its_latest_occurrences_and_alerts() {
         assert_eq!(alerts[0]["status"], "delivered");
     }
 
-    let missing = refused(&navigator, "lighthouse_get_issue", json!({"id": hyphenated(&"1".repeat(32))})).await;
+    let missing = refused(
+        &navigator,
+        "lighthouse_get_issue",
+        json!({"id": hyphenated(&"1".repeat(32))}),
+    )
+    .await;
     assert!(missing.contains("no Lighthouse issue"), "{missing}");
-    let invalid = refused(&navigator, "lighthouse_get_issue", json!({"id": "1' OR '1'='1"})).await;
+    let invalid = refused(
+        &navigator,
+        "lighthouse_get_issue",
+        json!({"id": "1' OR '1'='1"}),
+    )
+    .await;
     assert!(invalid.contains("not an issue id"), "{invalid}");
 }
 
@@ -250,8 +421,15 @@ async fn slow_routes_merge_processes_and_hours_slowest_first() {
     let day = call(&navigator, "lighthouse_slow_routes", json!({})).await;
     assert_eq!(day["period"], "24h");
     let routes = day["routes"].as_array().unwrap();
-    let endpoints: Vec<&str> = routes.iter().map(|r| r["endpoint"].as_str().unwrap()).collect();
-    assert_eq!(endpoints, ["GET /api/v1/companies", "GET /api/v1/deals"], "p95 first, the old row left out");
+    let endpoints: Vec<&str> = routes
+        .iter()
+        .map(|r| r["endpoint"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        endpoints,
+        ["GET /api/v1/companies", "GET /api/v1/deals"],
+        "p95 first, the old row left out"
+    );
     let deals = &routes[1];
     assert_eq!(deals["requests"], 200, "both processes and hours");
     assert_eq!(deals["errors"], 2);
@@ -264,16 +442,31 @@ async fn slow_routes_merge_processes_and_hours_slowest_first() {
     assert!((50.0..=62.5).contains(&p50), "{p50}");
     assert!(deals["p99_ms"].as_f64().unwrap() >= p95);
 
-    let hour = call(&navigator, "lighthouse_slow_routes", json!({"period": "1h"})).await;
+    let hour = call(
+        &navigator,
+        "lighthouse_slow_routes",
+        json!({"period": "1h"}),
+    )
+    .await;
     let routes = hour["routes"].as_array().unwrap();
     assert_eq!(routes.len(), 1, "per-minute rows for 1h: {hour}");
     assert_eq!(routes[0]["requests"], 2);
 
-    let week = call(&navigator, "lighthouse_slow_routes", json!({"period": "7d", "limit": 1})).await;
+    let week = call(
+        &navigator,
+        "lighthouse_slow_routes",
+        json!({"period": "7d", "limit": 1}),
+    )
+    .await;
     assert_eq!(week["routes"].as_array().unwrap().len(), 1);
     assert_eq!(week["routes"][0]["endpoint"], "GET /api/v1/old");
 
-    let bad = refused(&navigator, "lighthouse_slow_routes", json!({"period": "2d"})).await;
+    let bad = refused(
+        &navigator,
+        "lighthouse_slow_routes",
+        json!({"period": "2d"}),
+    )
+    .await;
     assert!(bad.contains("invalid arguments"), "{bad}");
 }
 
@@ -299,7 +492,11 @@ async fn slow_queries_by_total_time_and_failed_jobs() {
     assert_eq!(types[0]["attempts"], 4);
     assert_eq!(types[0]["failed_attempts"], 3);
     assert_eq!(types[0]["failed_jobs"], 1);
-    assert_eq!(jobs["issues"], json!([]), "the failed-job issue is resolved");
+    assert_eq!(
+        jobs["issues"],
+        json!([]),
+        "the failed-job issue is resolved"
+    );
 }
 
 #[tokio::test]
@@ -307,7 +504,11 @@ async fn lighthouse_database_url_is_read_when_set() {
     let fixture = Fixture::new(
         "[database]\nurl = \"sqlite://storage/app.db?mode=rwc\"\n[lighthouse]\ndatabase_url = \"sqlite://storage/lighthouse.db\"\n",
     );
-    sqlite_db(&fixture.root().join("storage/app.db"), &["CREATE TABLE deals (id INTEGER PRIMARY KEY)"]).await;
+    sqlite_db(
+        &fixture.root().join("storage/app.db"),
+        &["CREATE TABLE deals (id INTEGER PRIMARY KEY)"],
+    )
+    .await;
     lighthouse_db(&fixture, "storage/lighthouse.db").await;
     let answer = call(&fixture.navigator(), "lighthouse_list_issues", json!({})).await;
     assert_eq!(answer["issues"].as_array().unwrap().len(), 2);
@@ -317,11 +518,17 @@ async fn lighthouse_database_url_is_read_when_set() {
 async fn missing_tables_and_remote_databases_are_explained() {
     let fixture = Fixture::new(APP_TOML);
     write(&fixture.root().join("src/app.rs"), APP_RS);
-    sqlite_db(&fixture.root().join("storage/app.db"), &["CREATE TABLE deals (id INTEGER PRIMARY KEY)"]).await;
+    sqlite_db(
+        &fixture.root().join("storage/app.db"),
+        &["CREATE TABLE deals (id INTEGER PRIMARY KEY)"],
+    )
+    .await;
     let message = refused(&fixture.navigator(), "lighthouse_list_issues", json!({})).await;
     assert!(message.contains("navree migrate"), "{message}");
 
-    let remote = Fixture::new("[lighthouse]\ndatabase_url = \"postgres://monitor:pw@db.example.com/lighthouse\"\n");
+    let remote = Fixture::new(
+        "[lighthouse]\ndatabase_url = \"postgres://monitor:pw@db.example.com/lighthouse\"\n",
+    );
     write(&remote.root().join("src/app.rs"), APP_RS);
     let message = refused(&remote.navigator(), "lighthouse_slow_routes", json!({})).await;
     assert!(message.contains("--allow-remote-database"), "{message}");

@@ -466,8 +466,8 @@ impl Navigator {
             .clone()
             .or_else(|| config.get_string("database.url"))
             .unwrap_or_default();
-        let target = Target::new(&url, &project.root, self.options.allow_remote_database)
-            .map_err(|error| {
+        let target = Target::new(&url, &project.root, self.options.allow_remote_database).map_err(
+            |error| {
                 let message = error.to_string();
                 match (&error, own.is_some()) {
                     (DatabaseError::Remote { .. }, true) => ToolError::new(message.replacen(
@@ -477,7 +477,8 @@ impl Navigator {
                     )),
                     _ => ToolError::new(message),
                 }
-            })?;
+            },
+        )?;
         Ok(LighthouseDb { target })
     }
 

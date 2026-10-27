@@ -82,9 +82,11 @@ async fn the_server_lists_twelve_read_only_tools() {
 
 #[tokio::test]
 async fn an_app_with_lighthouse_gets_its_five_tools() {
-    let fixture = Fixture::new("[app]
+    let fixture = Fixture::new(
+        "[app]
 name = \"crm\"
-");
+",
+    );
     crate::support::write(
         &fixture.root().join("src/app.rs"),
         "Navree::app().module(LighthouseModule::from_config())",
@@ -94,7 +96,10 @@ name = \"crm\"
         .peer_info()
         .and_then(|info| info.instructions.clone())
         .unwrap_or_default();
-    assert!(instructions.contains("lighthouse_list_issues"), "{instructions}");
+    assert!(
+        instructions.contains("lighthouse_list_issues"),
+        "{instructions}"
+    );
     let tools = client.list_all_tools().await.unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
     assert_eq!(names.len(), 17);

@@ -487,7 +487,12 @@ pub(crate) fn issues_sql(driver: Driver, args: &IssuesArgs) -> String {
     if let Some(level) = args.level {
         conditions.push(format!("level = {}", literal(level.as_str())));
     }
-    if let Some(search) = args.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(search) = args
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let escaped = search
             .to_lowercase()
             .replace('\\', "\\\\")
@@ -839,7 +844,10 @@ mod tests {
         assert_eq!(at(Period::Hour), "2026-10-27T09:38:00+00:00");
         assert_eq!(at(Period::Day), "2026-10-26T11:00:00+00:00");
         assert_eq!(at(Period::Week), "2026-10-20T11:00:00+00:00");
-        assert_eq!(time_literal(Period::Day.start(now)), "'2026-10-26T11:00:00+00:00'");
+        assert_eq!(
+            time_literal(Period::Day.start(now)),
+            "'2026-10-26T11:00:00+00:00'"
+        );
     }
 
     #[test]
@@ -868,9 +876,15 @@ mod tests {
         assert_eq!(parse_id("1' OR '1'='1"), None);
         assert_eq!(parse_id("0192f3a4"), None);
         let sql = issue_sql(Driver::Sqlite, "0192f3a4b5c67d8e9f00112233445566");
-        assert!(sql.contains("id = X'0192f3a4b5c67d8e9f00112233445566'"), "{sql}");
+        assert!(
+            sql.contains("id = X'0192f3a4b5c67d8e9f00112233445566'"),
+            "{sql}"
+        );
         let sql = issue_sql(Driver::Postgres, "0192f3a4b5c67d8e9f00112233445566");
-        assert!(sql.contains("id = '0192f3a4-b5c6-7d8e-9f00-112233445566'"), "{sql}");
+        assert!(
+            sql.contains("id = '0192f3a4-b5c6-7d8e-9f00-112233445566'"),
+            "{sql}"
+        );
     }
 
     #[test]
@@ -880,7 +894,10 @@ mod tests {
             ..IssuesArgs::default()
         };
         let sql = issues_sql(Driver::Postgres, &args);
-        assert!(sql.contains(r"LIKE '%it''s 50\%\_off\\%' ESCAPE '\'"), "{sql}");
+        assert!(
+            sql.contains(r"LIKE '%it''s 50\%\_off\\%' ESCAPE '\'"),
+            "{sql}"
+        );
         assert!(sql.contains("status = 'open'"), "{sql}");
         let all = IssuesArgs {
             status: Some(IssueStatus::All),

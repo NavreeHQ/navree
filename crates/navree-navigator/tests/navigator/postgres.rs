@@ -273,7 +273,10 @@ async fn postgres_lighthouse_tools_read_its_tables() {
         json!({"id": "0192f3a4-b5c6-7d8e-9f00-112233445566"}),
     )
     .await;
-    assert_eq!(issue["issue"]["chain"], json!(["Database connection failed"]));
+    assert_eq!(
+        issue["issue"]["chain"],
+        json!(["Database connection failed"])
+    );
     assert_eq!(issue["occurrences"][0]["request_id"], "req-1");
     assert_eq!(issue["occurrences"][0]["context"]["user_agent"], "curl");
 
