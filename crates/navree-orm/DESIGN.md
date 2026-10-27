@@ -171,7 +171,10 @@ attributes are reported alone (no cascade). Trait bounds carry
 methods are the static API: `query`, `where_`, `all`, `find`,
 `find_or_fail`, `find_many`, `create`, `destroy`, `first_or_create`,
 `first_or_new`, `create_or_first`, `update_or_create`, plus
-`global_scopes()` and `hooks()` (both empty unless the derive writes them).
+`global_scopes()` (written by the derive from `#[model(global_scopes(..))]`)
+and `hooks()` (empty in core; the derive writes it for model-level hooks
+such as the relations track's `touches`, while app-wide hooks come from
+the container).
 
 ### Keys
 
@@ -187,9 +190,9 @@ column per model. `Ulid` is stored as its 26-character text.
 `Value` is sea-query's value enum, so the ORM binds exactly as SeaORM does
 (typed NULLs included). `Field` is the trait of Rust types a column holds:
 `to_value`, `null`, `from_sql(&QueryResult, column)` and
-`from_value(Value)`. Implemented for `bool`, the 8- to 64-bit integers, `f32`, `f64`,
-`Decimal`, `String`, `Vec<u8>`, `Uuid`, `Ulid`, `NaiveDate`, `NaiveTime`,
-`NaiveDateTime`, `DateTime<Utc>`, `DateTime<FixedOffset>`,
+`from_value(Value)`. Implemented for `bool`, the 8- to 64-bit integers,
+`f32`, `f64`, `Decimal`, `String`, `Vec<u8>`, `Uuid`, `Ulid`, `NaiveDate`,
+`NaiveTime`, `NaiveDateTime`, `DateTime<Utc>`, `DateTime<FixedOffset>`,
 `serde_json::Value`, `Value` and `Option<T>`. Decoding is exact first, then
 tolerant where databases differ: any integer width (PostgreSQL's decoders
 are strict), exact `NUMERIC`/`DECIMAL` sums read as integers, floats from
