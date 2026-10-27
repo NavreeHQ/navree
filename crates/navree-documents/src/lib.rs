@@ -2,14 +2,19 @@
 //!
 //! `DocumentsModule`: PDF and Word documents from your app's data.
 //!
-//! - **Two PDF engines** behind one service, [`Documents`]:
-//!   [`TypstEngine`] compiles `.typ` templates in process (no external
-//!   program), with bundled Noto fonts for Latin, Greek, Cyrillic, Arabic
-//!   and Devanagari; [`ChromeEngine`] prints `.html` templates (rendered
-//!   with navree-view) in headless Chrome over the DevTools protocol, with
-//!   a small page pool, assets served from the template tree and every
-//!   other origin blocked. `documents.pdf("certificates/classic", &data)`
-//!   picks the engine by the template's file.
+//! - **Two PDF engines** behind one service, [`Documents`], reading the
+//!   same `.html` templates (rendered with navree-view):
+//!   [`NativeEngine`] lays them out in process (no external program),
+//!   with bundled Noto fonts for Latin, Greek, Cyrillic, Arabic, Hebrew
+//!   and Devanagari, and reads a documented subset of HTML;
+//!   [`ChromeEngine`] prints them in headless Chrome over the DevTools
+//!   protocol, with full CSS, a small page pool, assets served from the
+//!   template tree and every other origin blocked.
+//!   `documents.pdf("certificates/classic", &data)` uses
+//!   `documents.engine` (`native` by default) unless the render names one.
+//! - **Built in code**: [`PdfDocument`] lays out headings, paragraphs,
+//!   lists, tables whose header rows repeat, images, rules and page
+//!   breaks, with page-numbered headers and footers.
 //! - **Right to left**: a render's locale sets the language and direction
 //!   in both engines; text extraction ([`Pdf::text`]) returns right-to-left
 //!   text in reading order, so golden-file tests read naturally.
@@ -35,11 +40,14 @@
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), navree_documents::DocumentsError> {
 //! let documents = Documents::new(Templates::from_files([(
-//!     "certificates/classic.typ",
-//!     "#let data = json(\"/data.json\")\n#set text(lang: \"ar\", dir: rtl)\nشهادة إتمام\n\n#data.name",
+//!     "certificates/classic.html",
+//!     "<html lang=\"{{ locale }}\" dir=\"{{ dir }}\"><body>\
+//!      <h1>شهادة إتمام</h1><p>{{ name }}</p></body></html>",
 //! )]));
 //! let pdf = documents
-//!     .pdf("certificates/classic", json!({ "name": "مريم العلي" }))
+//!     .render(&navree_documents::Render::template("certificates/classic")
+//!         .data(json!({ "name": "مريم العلي" }))
+//!         .locale("ar"))
 //!     .await?;
 //! assert_eq!(pdf.text()?, "شهادة إتمام\nمريم العلي");
 //!
@@ -49,7 +57,7 @@
 //! # }
 //! ```
 //!
-//! Crate features: `typst`, `chrome` and `docx` (on by default), and
+//! Crate features: `native`, `chrome` and `docx` (on by default), and
 //! `operations` (off by default; it adds navree-queue and navree-db).
 #![forbid(unsafe_code)]
 
@@ -63,9 +71,11 @@ mod download;
 mod engine;
 mod error;
 mod fake;
-#[cfg(any(feature = "typst", feature = "chrome"))]
+#[cfg(any(feature = "native", feature = "chrome"))]
 mod fonts;
 mod module;
+#[cfg(feature = "native")]
+pub mod native;
 mod options;
 mod pdf;
 mod print;
@@ -74,8 +84,8 @@ mod render;
 mod stamp;
 mod templates;
 mod text;
-#[cfg(feature = "typst")]
-mod typst_engine;
+#[cfg(any(feature = "native", feature = "chrome"))]
+mod views;
 
 #[cfg(feature = "chrome")]
 pub use chrome::{CHROME_ENV, ChromeEngine, DOCUMENT_ORIGIN};
@@ -86,10 +96,12 @@ pub use download::{DOCX_CONTENT_TYPE, Download, PDF_CONTENT_TYPE};
 pub use engine::{EngineKind, PdfEngine};
 pub use error::DocumentsError;
 pub use fake::{DocumentsFake, FakeEngine, QueuedRender};
-#[cfg(any(feature = "typst", feature = "chrome"))]
+#[cfg(any(feature = "native", feature = "chrome"))]
 pub use fonts::FONTS_STYLESHEET;
 pub use module::{DocumentsModule, ModuleBuilderDocumentsExt};
-pub use options::{ChromeOptions, DocumentsOptions, TypstOptions};
+#[cfg(feature = "native")]
+pub use native::{NativeEngine, PdfDocument};
+pub use options::{ChromeOptions, DocumentsOptions, NativeOptions};
 pub use pdf::Pdf;
 pub use print::{Margins, Paper, PrintOptions};
 pub use queue::{
@@ -98,6 +110,4 @@ pub use queue::{
 };
 pub use render::{Render, TemplateSource, is_rtl};
 pub use stamp::{Pages, Position, Stamp};
-pub use templates::{HTML_EXTENSION, TYPST_EXTENSION, Templates};
-#[cfg(feature = "typst")]
-pub use typst_engine::TypstEngine;
+pub use templates::{HTML_EXTENSION, Templates};

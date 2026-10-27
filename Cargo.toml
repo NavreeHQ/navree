@@ -375,11 +375,15 @@ async-trait = "0.1.92"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
-# Documents (navree-documents): the Typst compiler and its PDF exporter, a
-# DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
-typst = "0.15.1"
-typst-pdf = "0.15.1"
-typst-layout = "0.15.1"
+# Documents (navree-documents): the native PDF engine (krilla writes the
+# PDF with subset fonts; harfrust shapes, skrifa reads fonts, unicode-bidi
+# orders, icu_segmenter breaks lines; no `simple-text`, so no rustybuzz),
+# a DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
+krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
+harfrust = "0.15.0"
+skrifa = "0.49.0"
+unicode-bidi = "0.3.18"
+icu_segmenter = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 docx-rs = { version = "0.4.22", default-features = false }
 lopdf = { version = "0.46.0", default-features = false }
 

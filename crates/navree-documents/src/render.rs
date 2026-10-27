@@ -10,11 +10,9 @@ use crate::print::PrintOptions;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum TemplateSource {
-    /// A template by name (`certificates/classic`): `<name>.typ` for
-    /// Typst, `<name>.html` for Chrome.
+    /// A template by name (`certificates/classic`): the file
+    /// `<name>.html`, for either engine.
     Template(String),
-    /// Typst markup given inline.
-    Typst(String),
     /// HTML given inline (printed as it is, not run through a template
     /// engine).
     Html(String),
@@ -30,9 +28,10 @@ pub enum TemplateSource {
 /// let render = Render::template("certificates/classic")
 ///     .data(json!({ "name": "Ada Lovelace", "course": "Analytical Engines" }))
 ///     .locale("ar");
-/// assert_eq!(render.engine, None); // chosen by the template's file
+/// assert_eq!(render.engine, None); // `documents.engine` decides
 ///
 /// let render = Render::html("<h1>Invoice 42</h1>").engine(EngineKind::Chrome);
+/// assert_eq!(render.engine, Some(EngineKind::Chrome));
 /// ```
 ///
 /// A `Render` serializes, so a queued render ([`Documents::queue`](crate::Documents::queue))
@@ -41,8 +40,7 @@ pub enum TemplateSource {
 pub struct Render {
     /// The template.
     pub source: TemplateSource,
-    /// The data the template reads: `json("/data.json")` in Typst, the
-    /// template variables in HTML templates. `null` when not given.
+    /// The data the template reads: its variables. `null` when not given.
     #[serde(default)]
     pub data: Value,
     /// The language of the document (`en`, `ar`, `hi`, `pt-BR`): sets the
@@ -50,12 +48,13 @@ pub struct Render {
     /// Persian and Urdu). `None`: the template's own, or English.
     #[serde(default)]
     pub locale: Option<String>,
-    /// The engine. `None`: picked by the template (`.typ` is Typst,
-    /// `.html` is Chrome; with both, `documents.engine` decides).
+    /// The engine. `None`: `documents.engine` (`native` by default).
     #[serde(default)]
     pub engine: Option<EngineKind>,
-    /// Page settings for Chrome. `None`: `documents.chrome.print`. Typst
-    /// templates set their own pages with `#set page(..)`.
+    /// Page settings: paper, orientation, margins, header and footer.
+    /// `None`: the engine's (`documents.native.print` or
+    /// `documents.chrome.print`). An `@page` rule in the template wins
+    /// while `prefer_css_page_size` is on.
     #[serde(default)]
     pub print: Option<PrintOptions>,
     /// The PDF's title in its metadata. `None`: the template's own.
@@ -81,20 +80,15 @@ impl Render {
     }
 
     /// The template `name` (`certificates/classic`), without or with its
-    /// extension.
+    /// `.html` extension.
     pub fn template(name: impl Into<String>) -> Self {
         Self::new(TemplateSource::Template(name.into()))
     }
 
-    /// Typst markup given inline. Imports and images resolve against the
-    /// template directories.
-    pub fn typst(source: impl Into<String>) -> Self {
-        Self::new(TemplateSource::Typst(source.into()))
-    }
-
-    /// HTML given inline, printed by Chrome.
+    /// HTML given inline, not run through the template engine. Images
+    /// resolve against the template directories.
     pub fn html(html: impl Into<String>) -> Self {
-        Self::new(TemplateSource::Html(html.into())).engine(EngineKind::Chrome)
+        Self::new(TemplateSource::Html(html.into()))
     }
 
     /// The data the template reads (anything `Serialize`).
@@ -121,7 +115,7 @@ impl Render {
         self
     }
 
-    /// Page settings for Chrome.
+    /// Page settings for either engine.
     pub fn print(mut self, print: PrintOptions) -> Self {
         self.print = Some(print);
         self
@@ -138,7 +132,7 @@ impl Render {
     pub fn name(&self) -> &str {
         match &self.source {
             TemplateSource::Template(name) => name,
-            TemplateSource::Typst(_) | TemplateSource::Html(_) => "inline",
+            TemplateSource::Html(_) => "inline",
         }
     }
 
@@ -199,19 +193,19 @@ mod tests {
         let render = Render::template("certificates/classic")
             .data(json!({"name": "Ada"}))
             .locale("hi")
-            .engine(EngineKind::Typst)
+            .engine(EngineKind::Native)
             .title("Certificate");
         let json = serde_json::to_value(&render).unwrap();
         assert_eq!(
             json["source"],
             json!({"kind": "template", "value": "certificates/classic"})
         );
-        assert_eq!(json["engine"], "typst");
+        assert_eq!(json["engine"], "native");
         let back: Render = serde_json::from_value(json).unwrap();
         assert_eq!(back, render);
         assert_eq!(back.name(), "certificates/classic");
         assert_eq!(Render::html("<p>").name(), "inline");
-        assert_eq!(Render::html("<p>").engine, Some(EngineKind::Chrome));
+        assert_eq!(Render::html("<p>").engine, None);
     }
 
     #[test]

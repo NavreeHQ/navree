@@ -7,32 +7,30 @@ use serde::{Deserialize, Serialize};
 use crate::render::Render;
 use crate::{DocumentsError, Pdf};
 
-/// The PDF engines.
+/// The PDF engines. Both print `.html` templates.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineKind {
-    /// Typst templates (`.typ`), compiled in process.
+    /// Laid out in process by the native engine (the HTML subset and
+    /// [`PdfDocument`](crate::PdfDocument)s).
     #[default]
-    Typst,
-    /// HTML templates (`.html`), printed by headless Chrome.
+    Native,
+    /// Printed by headless Chrome (full CSS).
     Chrome,
 }
 
 impl EngineKind {
-    /// `typst` or `chrome`.
+    /// `native` or `chrome`.
     pub fn name(self) -> &'static str {
         match self {
-            EngineKind::Typst => "typst",
+            EngineKind::Native => "native",
             EngineKind::Chrome => "chrome",
         }
     }
 
-    /// The file extension of the engine's templates: `typ` or `html`.
+    /// The file extension of the engine's templates: `html` for both.
     pub fn extension(self) -> &'static str {
-        match self {
-            EngineKind::Typst => crate::templates::TYPST_EXTENSION,
-            EngineKind::Chrome => crate::templates::HTML_EXTENSION,
-        }
+        crate::templates::HTML_EXTENSION
     }
 }
 
@@ -47,16 +45,20 @@ impl std::str::FromStr for EngineKind {
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
-            "typst" => Ok(EngineKind::Typst),
+            "native" => Ok(EngineKind::Native),
             "chrome" => Ok(EngineKind::Chrome),
-            other => Err(format!("unknown PDF engine `{other}` (typst or chrome)")),
+            "typst" => Err(
+                "the typst engine was replaced by `native`: write the template as HTML"
+                    .to_owned(),
+            ),
+            other => Err(format!("unknown PDF engine `{other}` (native or chrome)")),
         }
     }
 }
 
 /// A PDF engine: turns a [`Render`] into a [`Pdf`].
 ///
-/// [`TypstEngine`](crate::TypstEngine) and
+/// [`NativeEngine`](crate::NativeEngine) and
 /// [`ChromeEngine`](crate::ChromeEngine) implement it, and so does the
 /// engine of [`DocumentsFake`](crate::DocumentsFake). Every
 /// implementation passes the same conformance suite: a named template
@@ -64,7 +66,7 @@ impl std::str::FromStr for EngineKind {
 /// renders, an unknown name is [`DocumentsError::TemplateNotFound`]
 /// naming the file tried, data that does not serialize is
 /// [`DocumentsError::Data`], and a render's title lands in the PDF's
-/// metadata. The compiling engines also report a broken template as
+/// metadata. The real engines also report a broken template as
 /// [`DocumentsError::Template`] naming the file.
 pub trait PdfEngine: Send + Sync + 'static {
     /// Which engine this is.
@@ -87,11 +89,14 @@ mod tests {
 
     #[test]
     fn names_and_extensions() {
-        assert_eq!(EngineKind::Typst.name(), "typst");
+        assert_eq!(EngineKind::Native.name(), "native");
+        assert_eq!(EngineKind::Native.extension(), "html");
         assert_eq!(EngineKind::Chrome.extension(), "html");
         assert_eq!("chrome".parse::<EngineKind>(), Ok(EngineKind::Chrome));
+        assert_eq!("native".parse::<EngineKind>(), Ok(EngineKind::Native));
         assert!("wkhtml".parse::<EngineKind>().is_err());
-        assert_eq!(EngineKind::default(), EngineKind::Typst);
+        assert!("typst".parse::<EngineKind>().unwrap_err().contains("native"));
+        assert_eq!(EngineKind::default(), EngineKind::Native);
         assert_eq!(serde_json::to_value(EngineKind::Chrome).unwrap(), "chrome");
     }
 }
