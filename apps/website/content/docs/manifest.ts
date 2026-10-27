@@ -104,7 +104,14 @@ export const sections: DocsSection[] = [
     // Owner: workspace
     slug: "workspaces",
     title: "Workspaces",
-    pages: ["introduction", "resolution", "members-and-roles", "invitations", "isolation"],
+    pages: [
+      "introduction",
+      "resolution",
+      "members-and-roles",
+      "invitations",
+      "isolation",
+      "demo-workspaces",
+    ],
   },
   {
     // Owner: D

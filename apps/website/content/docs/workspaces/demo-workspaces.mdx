@@ -1,0 +1,384 @@
+---
+title: "Demo workspaces"
+description: "Workspaces seeded from fixtures for sales and onboarding, kept read-only or reset every night, and marked with `X-Navree-Demo` for a Live/Demo switch."
+---
+
+A demo workspace shows your product with believable data: the companies, deals and reports a prospect expects to see, without anyone typing them in. Sales walks through it on a call, a new customer explores it before importing their own data, and your front end offers a Live/Demo switch between it and the user's real workspace.
+
+In Navree a demo is an ordinary workspace of kind `demo`. Each module contributes a `DemoSeeder` that fills it from fixtures, and one setting decides what happens to writes: refused (`read_only`), or allowed and wiped every night (`reset`). Responses about a demo carry the `X-Navree-Demo` header, so a front end always knows where it is.
+
+## Setting up
+
+<Badge feature="workspace" /> Demo workspaces are part of `WorkspaceModule`; there is nothing else to add. Three steps make a demo:
+
+<Steps>
+<Step title="Write a seeder per module">
+
+Each module that has demo data implements `DemoSeeder` and registers it with `m.demo_seeder::<CrmDemo>()` (below).
+
+</Step>
+<Step title="Add the fixtures">
+
+JSON files under `fixtures/demo` (`workspace.demo.fixtures`), one per kind of record.
+
+</Step>
+<Step title="Create the demo">
+
+```sh
+navree workspace:demo-create "Acme demo" --owner admin@acme.test --slug demo
+```
+
+</Step>
+</Steps>
+
+The workspace table gains one column for this, `kind` (`live` or `demo`, default `live`), added by the `workspace` migration set.
+
+## Writing a demo seeder
+
+A seeder has a name, the tables it fills and a `seed` method. It receives a `DemoSeed`: the demo workspace, a unit of work already scoped to it, the time, and the fixtures.
+
+```rust title="src/crm/demo.rs"
+use chrono::{DateTime, Utc};
+use navree::BoxFuture;
+use navree::prelude::*;
+use navree::workspace::{DemoSeed, DemoSeeder};
+use sea_orm::ActiveValue::Set;
+use serde::Deserialize;
+use uuid::Uuid;
+
+use super::entity::{Company, company};
+
+/// One company of `fixtures/demo/crm/companies.json`.
+#[derive(Deserialize)]
+struct CompanyFixture {
+    name: String,
+    stage: String,
+    last_contacted_at: DateTime<Utc>,
+}
+
+/// Fills a demo workspace with the CRM's sample companies.
+#[injectable]
+pub struct CrmDemo;
+
+impl DemoSeeder for CrmDemo {
+    fn name(&self) -> &'static str {
+        "crm"
+    }
+
+    // Emptied (the demo's rows only) before a reset seeds again.
+    fn tables(&self) -> &'static [&'static str] {
+        &["companies"]
+    }
+
+    fn seed<'a>(&'a self, demo: &'a DemoSeed) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let companies: Vec<CompanyFixture> = demo.fixture("crm/companies")?;
+            for fixture in companies {
+                WorkspaceRepo::<Company>::insert(
+                    demo.uow(),
+                    demo.id(),
+                    company::ActiveModel {
+                        id: Set(Uuid::now_v7()),
+                        workspace_id: Set(demo.id()),
+                        name: Set(fixture.name),
+                        stage: Set(fixture.stage),
+                        last_contacted_at: Set(fixture.last_contacted_at),
+                    },
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+Register it next to the module's migrations:
+
+```rust title="src/crm/mod.rs" {12}
+#[module(
+    imports = [AccessModule::for_feature::<Company>()],
+    controllers = [CompaniesController],
+    register = Self::wire,
+)]
+pub struct CrmModule;
+
+impl CrmModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(MigrationSet::new("companies").after(["workspace"]).migration(CreateCompanies))
+            .workspace_scoped::<Company>()
+            .demo_seeder::<CrmDemo>();
+    }
+}
+```
+
+Seeders are providers, so they can inject services. They run in module dependency order, then in registration order, so a seeder can rely on the rows of the modules it imports. Names must be unique: two seeders named `crm` fail every seed with an error naming it.
+
+### What a seeder gets
+
+| `DemoSeed::` | Returns |
+|---|---|
+| `workspace()`, `id()` | The demo workspace and its id |
+| `uow()` | The unit of work to write in, scoped to the demo (see below); also the task's `Uow::current()` |
+| `now()` | The time of seeding, from the app's `dyn Clock` |
+| `fixture::<T>(name)` | `<workspace.demo.fixtures>/<name>.json`, placeholders resolved, deserialized |
+| `parse_fixture::<T>(json)` | The same for JSON held in the code (`include_str!`) |
+| `clear_table(table)`, `clear::<E>()` | Deletes the demo's rows from a table; returns the count |
+| `isolation()`, `is_reset()`, `app()` | The isolation strategy, whether a clear came first, the app |
+
+The unit of work follows the [isolation strategy](/docs/workspaces/isolation/). Under row isolation it is a transaction on the app's database that has entered the demo (`navree.workspace` is set on PostgreSQL, so row-level security admits the demo's rows), and you write with `WorkspaceRepo`. Under schema isolation its `search_path` starts with the demo's schema. Under database isolation it is a unit of work on the demo's own database.
+
+Writes through `WorkspaceRepo` and `Repo` are audited like any other. To keep the [audit log](/docs/security/audit-log/) for real activity, insert through the transaction with plain SeaORM instead: `model.insert(&*demo.uow().tx().await?)`.
+
+### Clearing before a reset
+
+A reset clears every seeder's data, in the reverse of the seeding order, then seeds again. The default `clear` runs `clear_table` on each of `tables()`, in the order listed, so list child tables before their parents. `clear_table` deletes the rows whose `workspace_id` is the demo's under row isolation, and every row of the demo's own table under schema and database isolation (the delete names the demo's schema, so a shared table is never touched).
+
+Override `clear` when a table names its workspace column differently or the data lives elsewhere. `clear::<E>()` uses the entity's `WorkspaceScoped::WORKSPACE_COLUMN`:
+
+```rust
+fn clear<'a>(&'a self, demo: &'a DemoSeed) -> BoxFuture<'a, Result<(), BoxError>> {
+    Box::pin(async move {
+        demo.clear::<Company>().await?;
+        Ok(())
+    })
+}
+```
+
+## Fixtures
+
+Fixtures are JSON files under `workspace.demo.fixtures` (default `fixtures/demo`, relative to the working directory). `demo.fixture("crm/companies")` reads `fixtures/demo/crm/companies.json`; names are relative paths without `..`.
+
+```json title="fixtures/demo/crm/companies.json"
+[
+  { "name": "Northwind Logistics", "stage": "customer", "last_contacted_at": "{{ now - 2d }}" },
+  { "name": "Halcyon Health", "stage": "proposal", "last_contacted_at": "{{ now - 5h }}" },
+  { "name": "Brightwater Analytics", "stage": "lead", "last_contacted_at": "{{ now }}" }
+]
+```
+
+A demo seeded with fixed dates looks abandoned a month later. A string that is exactly a placeholder is replaced with a time relative to `demo.now()` before the fixture is deserialized, so a demo reset tonight shows activity from yesterday:
+
+| Placeholder | Becomes |
+|---|---|
+| `{{ now }}` | The seeding time, RFC 3339: `2026-10-27T09:00:00Z` |
+| `{{ now - 2d }}`, `{{ now + 90m }}` | That time moved by minutes (`m`), hours (`h`), days (`d`) or weeks (`w`) |
+| `{{ today }}` | The seeding date: `2026-10-27` |
+| `{{ today + 1w }}` | That date moved by days or weeks |
+
+Spaces inside the braces are optional. Any other string is kept as it is, `Hello {{ name }}` in a template body included, and a malformed `now` or `today` placeholder (`{{ now + 3x }}`) fails the seed with a message that shows it. Fixtures compiled into the binary work the same way: `demo.parse_fixture(include_str!("../../fixtures/demo/crm/companies.json"))`.
+
+## Creating demo workspaces
+
+From the command line, with the owner's id or email address (looked up in `workspace.users_table`):
+
+```sh
+navree workspace:demo-create "Acme demo" --owner admin@acme.test --slug demo
+```
+
+```text
+Created demo workspace demo (seeded by crm).
+```
+
+From code, `DemoWorkspaces` (exported by the module) creates and seeds in one call, in your unit of work:
+
+```rust
+let demos = ctx.get::<DemoWorkspaces>().await?;
+let uow = db.uow(Some(admin_id), None).await;
+let demo = demos.create(&uow, admin_id, NewWorkspace::named("Acme demo")).await?;
+uow.commit().await?;
+assert!(demo.is_demo());
+```
+
+The owner joins as `owner`, as with `Workspaces::create`. Under row and schema isolation the seeders write in `uow`, which stays scoped to the new demo afterwards: use it for this demo only. Under database isolation they write to the demo's database in a unit of work committed before `create` returns. A failing seeder fails the call; roll `uow` back and nothing is left. A regular [seeder](/docs/database/seeding-and-factories/) can call `create` to give every development database a demo.
+
+| `DemoWorkspaces::` | Does |
+|---|---|
+| `create(&uow, owner, NewWorkspace)` | Creates a demo workspace and seeds it |
+| `reset(id)` | Clears and seeds one demo again, in its own transaction; `NotDemo` (409) for a live workspace |
+| `reset_all()` | Resets every demo, by creation |
+| `all()` | Every demo workspace |
+| `seeders()` | The registered seeders' names, in order |
+| `mode()`, `options()` | `workspace.demo.mode` and the whole `workspace.demo` section |
+
+`Workspace::kind()` returns `WorkspaceKind::Live` or `WorkspaceKind::Demo`, and `is_demo()` answers the question directly.
+
+## Read-only demos
+
+`workspace.demo.mode = "read_only"` is the default. A request to a demo workspace that would write (`POST`, `PUT`, `PATCH` or `DELETE`) is refused when the workspace is resolved, before the handler runs:
+
+```json title="403 Forbidden"
+{ "statusCode": 403, "message": "Demo workspaces are read-only.", "error": "Forbidden" }
+```
+
+The error's code is `demo_read_only` (`navree::workspace::DEMO_READ_ONLY`), and the response carries `X-Navree-Demo: read_only`. The refusal applies to every route that resolves the workspace (the `InWorkspace` guard, `CurrentWorkspace` and `WorkspaceUow`), the module's own `/api/workspaces/{workspace}/...` routes included. Routes that don't name a workspace, such as signing in or editing the user's profile, are unaffected.
+
+Two settings open the demo where it should be open:
+
+```toml title="config/app.toml"
+[workspace.demo]
+mode = "read_only"
+editor_roles = ["owner"]                  # these members keep writing
+allow = ["reports.preview", "POST /api/v1/search"]
+```
+
+- `editor_roles` lists the workspace roles that still write: the people who curate the demo.
+- `allow` lists the routes that write nothing lasting, or that a demo should accept anyway: a route name (`RouteDef::name`) or a method and the mounted path, as the route table shows it.
+
+## Reset demos
+
+With `workspace.demo.mode = "reset"`, demo workspaces take writes like any other workspace, so a prospect can create a deal and move it through the pipeline. Every night the demos are cleared and seeded again, and the next visitor finds them as the fixtures describe.
+
+```toml title="config/app.toml"
+[workspace.demo]
+mode = "reset"
+reset_at = "03:00"   # UTC
+```
+
+The nightly reset is the scheduled task `workspace:demo-reset`, which runs when the app has [`ScheduleModule`](/docs/digging-deeper/scheduling/) and a `schedule:work` process. With `WorkspaceModule::from_config()` the task checks every minute whether the app's clock shows `reset_at`; with `for_root` it is scheduled daily at that time. Read-only demos are never reset on the schedule.
+
+Run the command yourself to reset now, or to reset one demo:
+
+```sh
+navree workspace:demo-reset          # every demo workspace
+navree workspace:demo-reset demo     # one, by slug or id
+```
+
+```text
+Reset demo workspace demo (seeded by crm).
+```
+
+Each demo resets in one transaction: the seeders clear in reverse order, then seed in order, then the transaction commits. A failing seeder rolls that demo back and stops the command, so a demo is never left half empty. Naming a live workspace is an error.
+
+## Guests
+
+By default a demo is for its members, like any workspace: add the sales team with `Members::add`. To open demos to every signed-in user, give guests a role:
+
+```toml title="config/app.toml"
+[workspace.demo]
+guest_role = "viewer"
+```
+
+A signed-in user who is not a member then enters any demo workspace with that role (`CurrentWorkspace::is_guest()` is true, and `member()` describes a membership that is stored nowhere), and `GET /api/workspaces` lists the demos for them with that role. Live workspaces still answer 403 to non-members. `owner` can't be the guest role, and a read-only demo refuses a guest's writes as it refuses a member's.
+
+## The Live/Demo switch
+
+Every response about a demo workspace carries `X-Navree-Demo`, with the mode as its value; responses about live workspaces, and responses that name no workspace, don't have it:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Navree-Demo: read_only
+```
+
+The header is in the CORS `Access-Control-Expose-Headers` list, so a front end on another origin reads it. Workspace resources carry the kind, so the switch knows which workspace to offer:
+
+```json
+{
+  "__type": "Workspace",
+  "id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
+  "name": "Acme demo",
+  "slug": "demo",
+  "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "kind": "demo",
+  "role": "viewer",
+  "created_at": "2026-10-26T09:00:00Z",
+  "updated_at": "2026-10-26T09:00:00Z"
+}
+```
+
+A front end keeps both in its state:
+
+```ts title="src/lib/workspace.ts"
+type Workspace = { slug: string; kind: "live" | "demo"; role: string };
+
+export async function api(path: string, workspace: string, init: RequestInit = {}) {
+  const response = await fetch(`/api${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...init.headers, "X-Workspace": workspace },
+  });
+  // "read_only", "reset", or null for a live workspace.
+  demoMode.set(response.headers.get("X-Navree-Demo"));
+  return response;
+}
+
+export function demoOf(workspaces: Workspace[]) {
+  return workspaces.find((w) => w.kind === "demo");
+}
+```
+
+Show a banner while `demoMode` is set, disable the forms when it is `read_only`, and switch by sending the demo's slug in `X-Workspace` instead of the user's own. `CurrentWorkspace::is_demo()` and `demo_mode()` give the same answers on the server.
+
+## Configuration
+
+```toml title="config/app.toml"
+[workspace.demo]
+mode = "read_only"            # read_only | reset
+reset_at = "03:00"            # the nightly reset, 24-hour UTC (mode = "reset")
+# guest_role = "viewer"       # signed-in non-members enter demos with this role
+editor_roles = []             # roles that still write to read-only demos
+allow = []                    # route names or "METHOD /path" left writable
+fixtures = "fixtures/demo"    # where DemoSeed::fixture reads <name>.json
+```
+
+Environment variables follow the usual mapping: `APP_WORKSPACE__DEMO__MODE=reset`, `APP_WORKSPACE__DEMO__GUEST_ROLE=viewer`. `editor_roles` and `allow` also take a comma-separated string (`APP_WORKSPACE__DEMO__EDITOR_ROLES=owner,admin`). Invalid values fail the boot and name the key: a `reset_at` that isn't `HH:MM`, a role that isn't built in or defined under `workspace.roles`, `owner` as the guest role, an `allow` entry that is neither a route name nor `METHOD /path`.
+
+## Events
+
+With `EventsModule` in the app, `DemoWorkspaceSeeded` (`workspace.demo_seeded`) is emitted once a demo's seeding commits, with `workspace_id`, `slug`, `seeders` (the names, in order) and `reset` (`false` when the demo was created, `true` after a reset). Creating a demo also emits `WorkspaceCreated` and `MemberAdded`, as creating any workspace does.
+
+## Testing
+
+Point `workspace.demo.fixtures` at a temporary directory, create the demo through the command or `DemoWorkspaces`, and assert on the header and the refusal:
+
+```rust title="tests/demo.rs"
+#[tokio::test]
+async fn the_create_command_makes_a_read_only_demo() {
+    let dir = fixtures(); // a TempDirGuard holding crm/companies.json
+    let app = TestApp::builder()
+        .temp_database()
+        .config("workspace.users_table", "")
+        .config("workspace.roles.member.permissions", json!(["companies.*"]))
+        .config("workspace.demo.fixtures", dir.path().display().to_string())
+        .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(WorkspaceModule::from_config())
+        .module(CrmModule)
+        .build()
+        .await;
+    let ada = Uuid::now_v7();
+    app.run_command("workspace:demo-create", &["Acme demo", "--owner", &ada.to_string(), "--slug", "demo"])
+        .await
+        .unwrap();
+
+    let client = app.acting_as(principal(ada));
+    let listed = client
+        .get("/api/v1/companies")
+        .header("X-Workspace", "demo")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(listed.header(DEMO_HEADER), Some("read_only"));
+    client
+        .post("/api/v1/companies")
+        .header("X-Workspace", "demo")
+        .send()
+        .await
+        .assert_error(403, "Demo workspaces are read-only.");
+}
+```
+
+To test the nightly reset, override `dyn Clock` with a `FixedClock` set to `reset_at` and call `Scheduler::tick` with the same time.
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
+    Where a demo's rows live: shared tables, a schema or a database.
+  </LinkCard>
+  <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding and factories">
+    Seeders for the data every environment needs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    The scheduler that runs the nightly reset.
+  </LinkCard>
+</LinkCards>
