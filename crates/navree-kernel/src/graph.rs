@@ -215,6 +215,9 @@ pub(crate) struct Graph {
     pub(crate) order: Vec<usize>,
     /// Multi-binding provider indices per provided type, in dependency order.
     multi: HashMap<TypeId, Vec<usize>>,
+    /// The service locator's answer for every key it resolves to exactly
+    /// one provider, built once at boot (see [`Graph::locate`]).
+    located: HashMap<ProviderKey, usize>,
 }
 
 impl Graph {
@@ -250,7 +253,40 @@ impl Graph {
                 }
             }
         }
+        graph.located = graph.locator_map();
         Ok(graph)
+    }
+
+    /// The service locator's answers, decided once: every key with exactly
+    /// one provider, or with several of which exactly one is exported (the
+    /// rule of [`locate_by_scan`](Graph::locate_by_scan)).
+    fn locator_map(&self) -> HashMap<ProviderKey, usize> {
+        let mut candidates: HashMap<&ProviderKey, Vec<usize>> = HashMap::new();
+        for (index, provider) in self.providers.iter().enumerate() {
+            if !provider.def.multi {
+                candidates.entry(&provider.def.key).or_default().push(index);
+            }
+        }
+        candidates
+            .into_iter()
+            .filter_map(|(key, providers)| {
+                let only = match providers.as_slice() {
+                    [only] => *only,
+                    _ => {
+                        let mut exported = providers.iter().copied().filter(|&p| {
+                            self.modules[self.providers[p].module]
+                                .exports
+                                .contains(key)
+                        });
+                        match (exported.next(), exported.next()) {
+                            (Some(only), None) => only,
+                            _ => return None,
+                        }
+                    }
+                };
+                Some((key.clone(), only))
+            })
+            .collect()
     }
 
     /// Replaces every unnamed, non-multi provider of each override's key; an
@@ -279,12 +315,22 @@ impl Graph {
 
     /// Finds the provider of `key` anywhere in the app, ignoring visibility
     /// (for the service locator). Prefers exported providers when several
-    /// modules register the key.
+    /// modules register the key. One map lookup: the answers are decided
+    /// at boot; a key the map lacks is missing or ambiguous, and the scan
+    /// explains which.
     pub(crate) fn locate(
         &self,
         key: &ProviderKey,
         required_by: &str,
     ) -> Result<usize, KernelError> {
+        match self.located.get(key) {
+            Some(&index) => Ok(index),
+            None => self.locate_by_scan(key, required_by),
+        }
+    }
+
+    /// [`locate`](Graph::locate) by scanning every provider.
+    fn locate_by_scan(&self, key: &ProviderKey, required_by: &str) -> Result<usize, KernelError> {
         let candidates: Vec<usize> = (0..self.providers.len())
             .filter(|&p| !self.providers[p].def.multi && self.providers[p].def.key == *key)
             .collect();
@@ -979,5 +1025,104 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
         outside: VisibleMap::new(),
         order: Vec::new(),
         multi: HashMap::new(),
+        located: HashMap::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{Factory, Resolver};
+
+    /// Provides a private `u32` and an unexported `String`.
+    struct Private;
+
+    impl Module for Private {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(1_u32).value(String::from("private"));
+        }
+    }
+
+    /// Exports a `String`, an `i64` and a `u8` named `eight`.
+    struct Exporting;
+
+    impl Module for Exporting {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(String::from("exported"))
+                .exports::<String>()
+                .value(1_i64)
+                .exports::<i64>()
+                .factory(
+                    Factory::<u8>::new(|_: Resolver| async { Ok(Arc::new(8_u8)) }).named("eight"),
+                )
+                .export_key(ProviderKey::named::<u8>("eight"));
+        }
+    }
+
+    /// Exports another `i64`: two modules export one, so the locator cannot pick.
+    struct AlsoExporting;
+
+    impl Module for AlsoExporting {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(2_i64).exports::<i64>();
+        }
+    }
+
+    fn graph() -> Graph {
+        let roots: Vec<Box<dyn Module>> = vec![
+            Box::new(Private),
+            Box::new(Exporting),
+            Box::new(AlsoExporting),
+        ];
+        Graph::build(&roots, &[]).expect("graph builds")
+    }
+
+    #[test]
+    fn the_locator_map_answers_as_a_scan_of_every_provider_does() {
+        let graph = graph();
+        let mut keys: Vec<ProviderKey> = graph
+            .providers
+            .iter()
+            .map(|p| p.def.key.clone())
+            .collect();
+        keys.push(ProviderKey::of::<bool>());
+        keys.push(ProviderKey::named::<u8>("nine"));
+        for key in &keys {
+            let mapped = graph.locate(key, "a test").map_err(|e| e.to_string());
+            let scanned = graph
+                .locate_by_scan(key, "a test")
+                .map_err(|e| e.to_string());
+            assert_eq!(mapped, scanned, "{key}");
+        }
+    }
+
+    #[test]
+    fn only_keys_with_one_answer_are_in_the_locator_map() {
+        let graph = graph();
+        // One provider, private: the locator ignores visibility.
+        assert!(graph.located.contains_key(&ProviderKey::of::<u32>()));
+        // Two providers, one exported: the exported one.
+        let string = graph.located[&ProviderKey::of::<String>()];
+        assert_eq!(
+            graph.modules[graph.providers[string].module].name,
+            "Exporting"
+        );
+        assert!(
+            graph
+                .located
+                .contains_key(&ProviderKey::named::<u8>("eight"))
+        );
+        // Two exported providers: ambiguous, answered by the scan's error.
+        assert!(!graph.located.contains_key(&ProviderKey::of::<i64>()));
+        assert!(matches!(
+            graph.locate(&ProviderKey::of::<i64>(), "a test"),
+            Err(KernelError::AmbiguousProvider { .. })
+        ));
+        assert!(matches!(
+            graph.locate(&ProviderKey::of::<bool>(), "a test"),
+            Err(KernelError::MissingProvider { .. })
+        ));
     }
 }
