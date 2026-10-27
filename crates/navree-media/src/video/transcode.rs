@@ -153,6 +153,8 @@ impl Transcode {
             "-hide_banner".into(),
             "-loglevel".into(),
             "error".into(),
+            "-protocol_whitelist".into(),
+            "file".into(),
             "-i".into(),
             input.display().to_string(),
         ];

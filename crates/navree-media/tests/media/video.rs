@@ -43,6 +43,8 @@ async fn probe_reads_ffprobe_json() {
     assert!(has(&calls[0].args, &["-print_format", "json"]));
     assert!(calls[0].args.contains(&"-show_streams".to_owned()));
     assert_eq!(calls[0].args.last().unwrap(), "in.mp4");
+    // A crafted file cannot make the tools fetch URLs.
+    assert!(has(&calls[0].args, &["-protocol_whitelist", "file"]));
 }
 
 #[tokio::test]
@@ -87,10 +89,13 @@ async fn frames_and_transcodes_run_ffmpeg_with_the_right_arguments() {
     let calls = fake.calls();
     assert_eq!(calls.len(), 2);
     assert_eq!(calls[0].program, "ffmpeg");
-    assert!(has(&calls[0].args, &["-ss", "1.5", "-i", "in.mp4"]));
+    assert!(has(
+        &calls[0].args,
+        &["-ss", "1.5", "-protocol_whitelist", "file", "-i", "in.mp4"]
+    ));
     assert!(has(&calls[0].args, &["-frames:v", "1"]));
     let args = &calls[1].args;
-    assert!(has(args, &["-i", "in.mov"]));
+    assert!(has(args, &["-protocol_whitelist", "file", "-i", "in.mov"]));
     assert!(has(args, &["-c:v", "libx264"]));
     assert!(has(args, &["-crf", "26"]));
     assert!(has(args, &["-vf", "scale=-2:720"]));

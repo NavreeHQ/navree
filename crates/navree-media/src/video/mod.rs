@@ -3,7 +3,9 @@
 //!
 //! The tools run as child processes ([`ProcessRunner`]) with a timeout;
 //! they must be installed on the server (`ffmpeg` and `ffprobe` on the
-//! PATH, or configured in `media.ffmpeg`). Tests use [`FfmpegFake`].
+//! PATH, or configured in `media.ffmpeg`). Inputs are opened with
+//! `-protocol_whitelist file`, so a crafted file (a playlist inside a
+//! container) cannot make FFmpeg fetch URLs. Tests use [`FfmpegFake`].
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -226,6 +228,8 @@ impl Ffmpeg {
             "json",
             "-show_format",
             "-show_streams",
+            "-protocol_whitelist",
+            "file",
         ]
         .iter()
         .map(|arg| (*arg).to_owned())
@@ -248,6 +252,8 @@ impl Ffmpeg {
             "error".into(),
             "-ss".into(),
             format_secs(at_secs),
+            "-protocol_whitelist".into(),
+            "file".into(),
             "-i".into(),
             input.display().to_string(),
             "-frames:v".into(),
