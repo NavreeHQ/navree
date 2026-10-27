@@ -24,8 +24,8 @@
 //!   ([`MongoMigration`]) and records them in a collection.
 //! - **MongoDB's own language** where it says more: filter documents
 //!   ([`MongoFilter`]), pipeline stages after a query ([`MongoQuery`]),
-//!   bulk writes ([`MongoBulkWrites`]), commands shown without running them
-//!   ([`ToMongo`]).
+//!   bulk writes ([`MongoBulkWrites`]), results streamed from cursors
+//!   ([`MongoStream`]), commands shown without running them ([`ToMongo`]).
 //!
 //! ## Models
 //!
@@ -147,6 +147,7 @@ mod native;
 mod object_id;
 mod options;
 pub mod schema;
+mod stream;
 mod uow;
 
 pub use bulk::MongoBulkWrites;
@@ -167,6 +168,7 @@ pub use native::{ModelPipeline, MongoFilter, MongoQuery, RowPipeline, ToMongo};
 pub use object_id::{OBJECT_ID_TYPE, ObjectId, ObjectIdError};
 pub use options::{DEFAULT_CONNECTION, MongoConnectionOptions, MongoOptions};
 pub use schema::{MongoBlueprint, MongoSchema};
+pub use stream::MongoStream;
 pub use uow::{MongoChangeObserver, MongoUow};
 
 /// The official MongoDB driver, for what the module does not wrap.

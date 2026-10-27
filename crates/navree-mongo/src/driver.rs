@@ -6,7 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use bson::{Bson, Document, doc};
-use futures_util::TryStreamExt;
+use futures_util::stream::{self, BoxStream};
+use futures_util::{StreamExt, TryStreamExt};
 use mongodb::options::ReturnDocument;
 use mongodb::{ClientSession, Database};
 use navree_kernel::BoxFuture;
@@ -226,6 +227,71 @@ impl MongoDriver {
             MongoCommand::Aggregate(aggregate) => self.aggregate_documents(aggregate).await,
             other => Err(invalid(format!("{other} does not read documents"))),
         }
+    }
+
+    /// The documents of a read command as its cursor yields them, batch by
+    /// batch, in the session when there is one (the session is locked
+    /// only while a batch is fetched, so other commands can run in it
+    /// between them). The command is reported when the cursor opens; the
+    /// stream ends after its first error.
+    pub(crate) fn stream_documents(
+        self: Arc<Self>,
+        command: MongoCommand,
+    ) -> BoxStream<'static, Result<Document, OrmError>> {
+        // A `find` streams as the pipeline it is equivalent to.
+        let Some(aggregate) = command.clone().into_aggregate() else {
+            let error = invalid(format!("{} does not read documents", command.shape()));
+            return stream::once(async move { Err(error) }).boxed();
+        };
+        let opened = async move {
+            let started = Instant::now();
+            let collection = self.database.collection::<Document>(&aggregate.collection);
+            let action = collection.aggregate(aggregate.pipeline);
+            let opened = match &self.session {
+                None => action.await.map(OpenCursor::Plain),
+                Some(state) => {
+                    let mut session = state.session.lock().await;
+                    action
+                        .session(&mut *session)
+                        .await
+                        .map(|cursor| OpenCursor::Session(cursor, state.clone()))
+                }
+            };
+            let elapsed = started.elapsed();
+            match opened {
+                Ok(open) => {
+                    self.report(&command, elapsed, None, false);
+                    Ok(open)
+                }
+                Err(error) => {
+                    self.note(&error);
+                    self.report(&command, elapsed, None, true);
+                    Err(orm_error(&error))
+                }
+            }
+        };
+        stream::once(opened)
+            .flat_map(|opened| match opened {
+                Err(error) => stream::once(async move { Err(error) }).boxed(),
+                Ok(OpenCursor::Plain(cursor)) => cursor
+                    .map(|document| document.map_err(|error| orm_error(&error)))
+                    .boxed(),
+                Ok(OpenCursor::Session(cursor, state)) => {
+                    stream::unfold(Some((cursor, state)), |open| async move {
+                        let (mut cursor, state) = open?;
+                        let next = {
+                            let mut session = state.session.lock().await;
+                            cursor.next(&mut session).await
+                        };
+                        match next? {
+                            Ok(document) => Some((Ok(document), Some((cursor, state)))),
+                            Err(error) => Some((Err(orm_error(&error)), None)),
+                        }
+                    })
+                    .boxed()
+                }
+            })
+            .boxed()
     }
 
     async fn count_documents(&self, count: &Count) -> Result<u64, OrmError> {
@@ -703,6 +769,13 @@ impl std::fmt::Debug for MongoDriver {
             .field("in_session", &self.session.is_some())
             .finish()
     }
+}
+
+/// An open cursor: the client's, or a session's (read batch by batch with
+/// the session).
+enum OpenCursor {
+    Plain(mongodb::Cursor<Document>),
+    Session(mongodb::SessionCursor<Document>, Arc<SessionState>),
 }
 
 /// The documents an `update` command's reply says it matched or inserted
