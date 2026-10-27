@@ -249,7 +249,7 @@ POST    /webhooks/stripe                                        public  DealsMod
 13 routes
 ```
 
-`routes --json` prints the same routes as JSON, with each route's throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx)` returns the same information as a list of `RouteMeta`.
+`routes --json` prints the same routes as JSON, with each route's handler (`DealsController::index`, recorded by `#[controller]`), throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx)` returns the same information as a list of `RouteMeta`.
 
 ## Writing controllers by hand
 
