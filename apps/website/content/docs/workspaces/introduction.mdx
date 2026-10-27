@@ -149,7 +149,7 @@ The diagram above is the path of every workspace request. Authentication runs fi
 Errors use Navree's JSON shape:
 
 ```json title="403 Forbidden"
-{ "statusCode": 403, "message": "You are not a member of this workspace.", "error": "Forbidden" }
+{ "statusCode": 403, "message": "You are not a member of this workspace.", "error": "Forbidden", "code": "not_a_member" }
 ```
 
 The guard (`InWorkspace::guard()`) resolves the workspace and checks the membership before the route's access checks. The `CurrentWorkspace` extractor does the same on its own when a route has no guard, but extractors run after the route's checks, so use the guard on any route that declares `#[roles]`, `#[permissions]` or `#[can]`.

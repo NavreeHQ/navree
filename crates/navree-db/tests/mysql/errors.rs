@@ -201,6 +201,7 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
             "statusCode": 409,
             "message": "A record with the same unique value already exists.",
             "error": "Conflict",
+            "code": "conflict",
         })
     );
     assert!(
@@ -218,7 +219,7 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(
         body,
-        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"})
     );
     assert_eq!(
         send(&router, post("/api/notes/after")).await.0,

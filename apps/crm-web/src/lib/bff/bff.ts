@@ -307,7 +307,7 @@ export function createBff(options: BffOptions) {
   }
 
   function unreachable(): Response {
-    return errorResponse(502, "The Navree API is unreachable");
+    return errorResponse(502, "api_unreachable", "The Navree API is unreachable");
   }
 
   /**
@@ -315,7 +315,7 @@ export function createBff(options: BffOptions) {
    * the bearer token, refreshing once on a 401.
    */
   async function proxy(request: Request, upstreamPath: string): Promise<Response> {
-    if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
 
     const method = request.method.toUpperCase();
     // Buffered so the request can be replayed after a refresh. API bodies are small JSON documents.
@@ -399,7 +399,7 @@ export function createBff(options: BffOptions) {
 
   /** `POST /api/auth/login`: keeps the tokens, returns `{user}`. */
   async function login(request: Request): Promise<Response> {
-    if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
     let upstream: Response;
     try {
       upstream = await upstreamFetch(`${apiUrl}/api/auth/login`, {
@@ -421,7 +421,8 @@ export function createBff(options: BffOptions) {
       const body = { two_factor_required: true, expires_in: data.expires_in ?? 300 };
       return new Response(JSON.stringify(body), { status: 200, headers });
     }
-    if (!isTokenPair(data)) return errorResponse(502, "Unexpected login response from the API");
+    if (!isTokenPair(data))
+      return errorResponse(502, "unexpected_api_response", "Unexpected login response from the API");
     return signedIn(upstream, data);
   }
 
@@ -430,9 +431,10 @@ export function createBff(options: BffOptions) {
    * sign-in with the challenge token from the cookie, then stores the tokens like `login`.
    */
   async function verifyTwoFactor(request: Request): Promise<Response> {
-    if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
     const challengeToken = readCookie(request, CHALLENGE_COOKIE);
-    if (!challengeToken) return errorResponse(401, "Your sign-in attempt expired. Sign in again.");
+    if (!challengeToken)
+      return errorResponse(401, "two_factor_challenge_expired", "Your sign-in attempt expired. Sign in again.");
 
     let input: Record<string, unknown> = {};
     try {
@@ -458,13 +460,13 @@ export function createBff(options: BffOptions) {
     // A wrong code keeps the challenge cookie, so the person can try again until it expires.
     if (!upstream.ok) return passThrough(upstream);
     const data = (await upstream.json().catch(() => ({}))) as LoginBody;
-    if (!isTokenPair(data)) return errorResponse(502, "Unexpected response from the API");
+    if (!isTokenPair(data)) return errorResponse(502, "unexpected_api_response", "Unexpected response from the API");
     return signedIn(upstream, data, clearChallengeCookie);
   }
 
   /** `POST /api/auth/logout` (`{all?: boolean}`): revokes the refresh token at Navree, clears the cookies. */
   async function logout(request: Request): Promise<Response> {
-    if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
     let all = false;
     try {
       const body = (await request.json()) as { all?: unknown };
@@ -505,13 +507,13 @@ export function createBff(options: BffOptions) {
 
   /** `POST /api/auth/refresh` from the browser: rotates the cookies (204) or ends the session (401). */
   async function refreshSession(request: Request): Promise<Response> {
-    if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
     const tokens = tokensFrom(request);
     const pair = tokens.refresh ? await refresh(tokens.refresh, request) : null;
     const headers = new Headers();
     if (!pair) {
       clearTokenCookies(headers);
-      return errorResponse(401, "Your session has expired", headers);
+      return errorResponse(401, "session_expired", "Your session has expired", headers);
     }
     setTokenCookies(headers, pair);
     return new Response(null, { status: 204, headers });

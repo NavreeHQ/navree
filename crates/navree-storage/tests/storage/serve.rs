@@ -56,6 +56,7 @@ async fn temporary_url_valid_then_expired() {
             "statusCode": 403,
             "message": "The link has expired.",
             "error": "Forbidden",
+            "code": "invalid_signature",
         })
     );
 }

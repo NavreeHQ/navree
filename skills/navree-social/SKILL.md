@@ -85,12 +85,16 @@ client_id = "0oa8f2kq1xYz3AbC4d5e"
 3. Registration on (`social.registration`, default `auth.registration`):
    creates the user (provider name, email, verified when the provider
    verified it, **no password** until a password reset) and links.
-4. Else 409 `An account with this email already exists. Sign in, then
-   connect GitHub in your settings.`; registration off: 403 `Registration
-   is closed`; no email for a new user: 400.
+4. Else 409 `email_taken` (`An account with this email already exists.
+   Sign in, then connect GitHub in your settings.`); registration off: 403
+   `registration_closed`; no email for a new user: 400 `missing_email`.
 
 `allowed_email_domains` (section or provider) admits only verified
-addresses of those domains (403). `two_factor = "require"` (default) gives
+addresses of those domains (403 `sign_in_not_allowed`). Every refusal has
+its own `code` in the error body (`invalid_state`, `provider_refused`,
+`account_already_linked`, `last_sign_in_method`,
+`reauthorization_required`, `provider_unavailable`, ...); front ends
+translate the code, never the message. `two_factor = "require"` (default) gives
 2FA users the login challenge; `"skip"` trusts the provider.
 
 ## Your own routes: the Social service

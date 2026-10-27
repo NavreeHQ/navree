@@ -111,7 +111,7 @@ async fn when_every_model_fails_the_request_is_unavailable() {
     let body = error.to_app_error().body();
     assert_eq!(
         body,
-        json!({ "statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable" })
+        json!({ "statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable" })
     );
 }
 

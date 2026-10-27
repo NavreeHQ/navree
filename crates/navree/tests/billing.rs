@@ -368,5 +368,6 @@ async fn a_workspace_without_a_subscription_gets_a_402() {
         .header("X-Workspace", "acme")
         .send()
         .await
-        .assert_error(402, "This workspace needs an active subscription");
+        .assert_error(402, "This workspace needs an active subscription")
+        .assert_error_code(402, "subscription_required");
 }

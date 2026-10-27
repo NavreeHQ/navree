@@ -252,7 +252,7 @@ cargo run -p crm-api -- serve
 A `GET /api/v1/deals/0199…` now goes to `crm-api`, which sends `deals.get` over NATS. The message carries the user's bearer token, the request id and the trace context. The deals service authenticates the token, checks that the user may read that deal, loads it in a unit of work and replies. If the deal doesn't exist, the 404 comes back to `crm-api`, and `?` hands it to the browser unchanged:
 
 ```json title="404 Not Found"
-{ "statusCode": 404, "message": "Not Found", "error": "Not Found" }
+{ "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
 ```
 
 Every service verifies forwarded tokens with its own `AuthModule`, so they share the signing secret: set the same `APP_AUTH__JWT__SECRET` in each. See [credentials](/docs/microservices/request-response/#credentials-and-access).

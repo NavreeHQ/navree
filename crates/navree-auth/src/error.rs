@@ -17,6 +17,24 @@ use sea_orm::DbErr;
 /// bad tokens → 401, too many login attempts → 429, invalid input or a
 /// taken email → 400 with field errors, database errors as navree-db maps
 /// them, anything else 500.
+///
+/// Each refusal carries its own `code` for front ends to translate:
+///
+/// | Error | Status | `code` |
+/// |---|---|---|
+/// | `InvalidCredentials` | 401 | `invalid_credentials` |
+/// | `TooManyAttempts` | 429 | `too_many_login_attempts` |
+/// | `EmailTaken`, `Invalid` | 400 | `validation_failed` |
+/// | `InvalidToken` | 401 | `invalid_token` |
+/// | `TokenExpired` | 401 | `token_expired` |
+/// | `InvalidRefreshToken`, `RefreshTokenReused` | 401 | `invalid_refresh_token` |
+/// | `UserNotFound` | 404 | `user_not_found` |
+/// | `InvalidResetToken` | 400 | `invalid_reset_token` |
+/// | `InvalidVerificationLink` | 403 | `invalid_verification_link` |
+/// | `TwoFactorRequired` | 401 | `two_factor_required` |
+/// | `TwoFactorAlreadyEnabled` | 409 | `two_factor_already_enabled` |
+/// | `TwoFactorNotEnabled` | 400 | `two_factor_not_enabled` |
+/// | `InvalidTwoFactorCode` | 401 | `invalid_two_factor_code` |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AuthError {
@@ -113,41 +131,52 @@ impl AuthError {
     /// (their details are logged, never sent).
     pub fn to_app_error(&self) -> Option<AppError> {
         match self {
-            AuthError::InvalidCredentials => {
-                Some(AppError::unauthenticated().with_detail("Invalid credentials"))
-            }
+            AuthError::InvalidCredentials => Some(
+                AppError::unauthenticated()
+                    .with_code("invalid_credentials")
+                    .with_detail("Invalid credentials"),
+            ),
             AuthError::TooManyAttempts { retry_after } => Some(
-                AppError::too_many_requests(*retry_after).with_detail(format!(
-                    "Too many login attempts. Please try again in {} seconds.",
-                    retry_after.as_secs().max(1)
-                )),
+                AppError::too_many_requests(*retry_after)
+                    .with_code("too_many_login_attempts")
+                    .with_detail(format!(
+                        "Too many login attempts. Please try again in {} seconds.",
+                        retry_after.as_secs().max(1)
+                    )),
             ),
             AuthError::EmailTaken => Some(validation("email", "email has already been taken")),
             AuthError::Invalid { field, message } => Some(validation(field, message)),
-            AuthError::InvalidToken => Some(bearer_challenge("Invalid token")),
-            AuthError::TokenExpired => Some(bearer_challenge("Token expired")),
-            AuthError::InvalidRefreshToken | AuthError::RefreshTokenReused => {
-                Some(AppError::unauthenticated().with_detail("Invalid refresh token"))
-            }
-            AuthError::UserNotFound => Some(AppError::not_found()),
-            AuthError::InvalidResetToken => Some(AppError::bad_request(
-                "Invalid or expired password reset token",
-            )),
-            AuthError::InvalidVerificationLink => {
-                Some(AppError::forbidden().with_detail("Invalid verification link"))
-            }
-            AuthError::TwoFactorRequired => {
-                Some(AppError::unauthenticated().with_detail("Two-factor authentication required"))
-            }
-            AuthError::TwoFactorAlreadyEnabled => Some(AppError::conflict(
-                "Two-factor authentication is already enabled",
-            )),
-            AuthError::TwoFactorNotEnabled => Some(AppError::bad_request(
-                "Two-factor authentication is not enabled",
-            )),
-            AuthError::InvalidTwoFactorCode => {
-                Some(AppError::unauthenticated().with_detail("Invalid two-factor code"))
-            }
+            AuthError::InvalidToken => Some(bearer_challenge("invalid_token", "Invalid token")),
+            AuthError::TokenExpired => Some(bearer_challenge("token_expired", "Token expired")),
+            AuthError::InvalidRefreshToken | AuthError::RefreshTokenReused => Some(
+                AppError::unauthenticated()
+                    .with_code("invalid_refresh_token")
+                    .with_detail("Invalid refresh token"),
+            ),
+            AuthError::UserNotFound => Some(AppError::not_found().with_code("user_not_found")),
+            AuthError::InvalidResetToken => Some(
+                AppError::bad_request("Invalid or expired password reset token")
+                    .with_code("invalid_reset_token"),
+            ),
+            AuthError::InvalidVerificationLink => Some(
+                AppError::forbidden()
+                    .with_code("invalid_verification_link")
+                    .with_detail("Invalid verification link"),
+            ),
+            AuthError::TwoFactorRequired => Some(AppError::two_factor_required()),
+            AuthError::TwoFactorAlreadyEnabled => Some(
+                AppError::conflict("Two-factor authentication is already enabled")
+                    .with_code("two_factor_already_enabled"),
+            ),
+            AuthError::TwoFactorNotEnabled => Some(
+                AppError::bad_request("Two-factor authentication is not enabled")
+                    .with_code("two_factor_not_enabled"),
+            ),
+            AuthError::InvalidTwoFactorCode => Some(
+                AppError::unauthenticated()
+                    .with_code("invalid_two_factor_code")
+                    .with_detail("Invalid two-factor code"),
+            ),
             AuthError::Db(error) => navree_db::map_db_error(error),
             AuthError::Signing(_)
             | AuthError::Crypto(_)
@@ -170,9 +199,10 @@ impl AuthError {
     }
 }
 
-/// 401 with `message` and an RFC 6750 `WWW-Authenticate` challenge.
-fn bearer_challenge(message: &str) -> AppError {
+/// 401 with `code`, `message` and an RFC 6750 `WWW-Authenticate` challenge.
+fn bearer_challenge(code: &str, message: &str) -> AppError {
     AppError::unauthenticated()
+        .with_code(code)
         .with_detail(message)
         .with_header(
             WWW_AUTHENTICATE,
@@ -205,7 +235,12 @@ mod tests {
         let error = AuthError::InvalidCredentials.into_app_error();
         assert_eq!(
             error.body(),
-            json!({"statusCode": 401, "message": "Invalid credentials", "error": "Unauthorized"})
+            json!({
+                "statusCode": 401,
+                "message": "Invalid credentials",
+                "error": "Unauthorized",
+                "code": "invalid_credentials",
+            })
         );
         let expired = AuthError::TokenExpired.into_app_error();
         assert_eq!(expired.body()["message"], "Token expired");
@@ -298,6 +333,70 @@ mod tests {
         let error = AuthError::TwoFactor("secret=JBSWY3DP".to_owned()).into_app_error();
         assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!error.body().to_string().contains("JBSWY3DP"));
+    }
+
+    /// The code a front end maps to a translation key, per refusal.
+    #[test]
+    fn every_refusal_carries_its_code() {
+        let cases = [
+            (AuthError::InvalidCredentials, 401, "invalid_credentials"),
+            (
+                AuthError::TooManyAttempts {
+                    retry_after: Duration::from_secs(30),
+                },
+                429,
+                "too_many_login_attempts",
+            ),
+            (AuthError::EmailTaken, 400, "validation_failed"),
+            (
+                AuthError::Invalid {
+                    field: "password",
+                    message: "password should not be empty".to_owned(),
+                },
+                400,
+                "validation_failed",
+            ),
+            (AuthError::InvalidToken, 401, "invalid_token"),
+            (AuthError::TokenExpired, 401, "token_expired"),
+            (AuthError::InvalidRefreshToken, 401, "invalid_refresh_token"),
+            (AuthError::RefreshTokenReused, 401, "invalid_refresh_token"),
+            (AuthError::UserNotFound, 404, "user_not_found"),
+            (AuthError::InvalidResetToken, 400, "invalid_reset_token"),
+            (
+                AuthError::InvalidVerificationLink,
+                403,
+                "invalid_verification_link",
+            ),
+            (AuthError::TwoFactorRequired, 401, "two_factor_required"),
+            (
+                AuthError::TwoFactorAlreadyEnabled,
+                409,
+                "two_factor_already_enabled",
+            ),
+            (
+                AuthError::TwoFactorNotEnabled,
+                400,
+                "two_factor_not_enabled",
+            ),
+            (
+                AuthError::InvalidTwoFactorCode,
+                401,
+                "invalid_two_factor_code",
+            ),
+            (AuthError::ShutDown, 500, "internal_error"),
+        ];
+        for (error, status, code) in cases {
+            let what = error.to_string();
+            let error = error.into_app_error();
+            assert_eq!(error.status.as_u16(), status, "{what}");
+            assert_eq!(error.body()["code"], code, "{what}");
+            assert!(navree_http::codes::is_valid(code), "{code}");
+        }
+        assert_eq!(
+            AuthError::TwoFactorRequired.into_app_error().body(),
+            AppError::two_factor_required().body(),
+            "the framework's stable two_factor_required error"
+        );
     }
 
     #[test]

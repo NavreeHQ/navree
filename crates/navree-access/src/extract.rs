@@ -207,8 +207,8 @@ where
     }
 
     /// Checks that the principal may change each of the `changed` fields
-    /// (column names) of this record with action `A`; a 403 naming the
-    /// fields they may not change otherwise.
+    /// (column names) of this record with action `A`; a 403
+    /// `forbidden_fields` naming the fields they may not change otherwise.
     pub fn check_fields(&self, changed: &[&str]) -> Result<(), AppError> {
         let denied: Vec<&str> = changed
             .iter()
@@ -222,10 +222,12 @@ where
         if denied.is_empty() {
             Ok(())
         } else {
-            Err(AppError::forbidden().with_detail(format!(
-                "You may not change these fields: {}.",
-                denied.join(", ")
-            )))
+            Err(AppError::forbidden()
+                .with_code("forbidden_fields")
+                .with_detail(format!(
+                    "You may not change these fields: {}.",
+                    denied.join(", ")
+                )))
         }
     }
 }

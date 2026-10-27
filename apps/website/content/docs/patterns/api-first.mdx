@@ -136,6 +136,7 @@ Required fields are `Option`s with garde's `required` rule rather than plain fie
     "title should not be empty"
   ],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "amount_cents": ["amount_cents should not be empty"],
     "company_id": ["company_id should not be empty"],
@@ -154,7 +155,8 @@ Every error a Navree app sends has the same JSON body: a 404 from a missing rout
 {
   "statusCode": 404,
   "message": "Not Found",
-  "error": "Not Found"
+  "error": "Not Found",
+  "code": "not_found"
 }
 ```
 

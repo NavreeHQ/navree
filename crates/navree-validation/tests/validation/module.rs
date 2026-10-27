@@ -135,6 +135,7 @@ async fn message_lists_every_error_in_field_order() {
                 "tags must contain at least 1 elements",
             ],
             "error": "Bad Request",
+            "code": "validation_failed",
             "errors": {
                 "email": ["email must be a valid email address"],
                 "name": ["name must be longer than or equal to 2 characters"],

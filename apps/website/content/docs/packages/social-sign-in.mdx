@@ -158,15 +158,19 @@ Content-Type: application/json
 
 What can go wrong:
 
-| Answer | When |
-|---|---|
-| 400 `Invalid or expired state` | The state was changed, issued for another provider or another app, has expired, or was used already |
-| 400 `GitHub refused the sign-in: ...` | The provider refused the code (`invalid_grant`, `access_denied`, ...) |
-| 400 `Google sent an invalid ID token` | The ID token's signature, issuer, audience, expiry or nonce is wrong |
-| 403 | Another Google Workspace or Slack workspace, an email outside `allowed_email_domains`, or registration is closed |
-| 409 | The email belongs to a user and linking doesn't apply (see below) |
-| 429 | Too many callbacks from this address (`auth.login_throttle_per_minute`, with `Retry-After`) |
-| 502 | The provider couldn't be reached |
+| Answer | `code` | When |
+|---|---|---|
+| 400 `Invalid or expired state` | `invalid_state` | The state was changed, issued for another provider or another app, has expired, or was used already |
+| 400 `GitHub refused the sign-in: ...` | `provider_refused` | The provider refused the code (`invalid_grant`, `access_denied`, ...) |
+| 400 `Google sent an invalid ID token` | `invalid_id_token` | The ID token's signature, issuer, audience, expiry or nonce is wrong |
+| 400 `GitHub did not share an email address` | `missing_email` | A new user would be created, but the provider shared no email |
+| 403 | `sign_in_not_allowed` | Another Google Workspace or Slack workspace, or an email outside `allowed_email_domains` |
+| 403 `Registration is closed` | `registration_closed` | No matching user, and registration is off |
+| 409 | `email_taken` | The email belongs to a user and linking doesn't apply (see below) |
+| 429 | `too_many_login_attempts` | Too many callbacks from this address (`auth.login_throttle_per_minute`, with `Retry-After`) |
+| 502 | `provider_unavailable` | The provider couldn't be reached |
+
+Every answer carries its `code` in the [error body](/docs/basics/errors/#error-codes), so your sign-in page can tell "registration is closed" from "use your work address" in the user's language.
 
 ## Linking accounts
 
@@ -178,7 +182,7 @@ When someone signs in with a provider, Navree looks for their user in this order
 4. **Otherwise** the callback answers 409, so the person signs in with their password and connects the provider from their settings:
 
 ```json
-{ "statusCode": 409, "message": "An account with this email already exists. Sign in, then connect GitHub in your settings.", "error": "Conflict" }
+{ "statusCode": 409, "message": "An account with this email already exists. Sign in, then connect GitHub in your settings.", "error": "Conflict", "code": "email_taken" }
 ```
 
 With registration off and no matching user, the answer is 403 `Registration is closed`. Restrict who may sign up through a provider with `allowed_email_domains = ["acme.test"]`, per provider or for the whole section: only a verified address in one of those domains may sign in or sign up.
@@ -197,7 +201,7 @@ Signed-in users manage their providers with three routes:
 | `POST /api/auth/social/{provider}/link` | `{code, state}` from a flow started with `GET .../redirect?intent=link`; links the account to the signed-in user (201) |
 | `DELETE /api/auth/social/accounts/{provider}` | Disconnects the provider (204) |
 
-`GET .../redirect?intent=link` needs the user's access token too (401 without it): the state is sealed for that user, so only they can finish the link, and a link state can't sign anyone in. Linking an account that already belongs to another user is a 409, and so is connecting a second account of a provider the user has already connected. Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too, so nobody locks themselves out.
+`GET .../redirect?intent=link` needs the user's access token too (401 without it): the state is sealed for that user, so only they can finish the link, and a link state can't sign anyone in. Linking an account that already belongs to another user is a 409 (`account_already_linked`), and so is connecting a second account of a provider the user has already connected (`provider_already_connected`). Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too (`last_sign_in_method`), so nobody locks themselves out; disconnecting a provider that isn't connected is a 404 (`provider_not_connected`).
 
 ## Using the Social service
 
@@ -294,7 +298,7 @@ let events = http
     .await?;
 ```
 
-When the provider refuses the refresh (the user revoked access) or no refresh token was stored, `token` returns `SocialError::Reauthorize`, and the account stays linked for sign-in. Without stored tokens it returns `SocialError::NoToken`, and for a provider the user hasn't connected, `SocialError::NotLinked`.
+When the provider refuses the refresh (the user revoked access) or no refresh token was stored, `token` returns `SocialError::Reauthorize`, and the account stays linked for sign-in. Without stored tokens it returns `SocialError::NoToken`, and for a provider the user hasn't connected, `SocialError::NotLinked`. Returned from a handler with `?`, they answer 409 `reauthorization_required`, 404 `no_provider_token` and 404 `provider_not_connected`, so the front end can offer "Connect Google again".
 
 ## Your own provider
 

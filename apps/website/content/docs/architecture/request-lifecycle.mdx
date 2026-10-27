@@ -106,7 +106,7 @@ On the way out, this layer writes one log line per request (target `navree::requ
 This layer gives every error the same JSON shape:
 
 ```json
-{ "statusCode": 404, "message": "Not Found", "error": "Not Found" }
+{ "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
 ```
 
 Handlers, extractors, guards and inner layers return `AppError`s; this layer turns them into that JSON. A 500 that carries a source error first goes through the error mappers modules contribute (`DatabaseModule` maps "record not found" to 404 and unique and foreign-key violations to 409, including those the unit of work hits when it commits). Server errors are logged on target `navree::error`, with the request id and the whole error chain; for a 500 the client only sees `"Internal server error"`. Plain-text or empty error responses from Axum or Tower are rewritten into the same format, and Axum's 422 for well-formed JSON of the wrong shape becomes a 400. See [errors](/docs/basics/errors/).

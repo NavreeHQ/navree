@@ -164,6 +164,7 @@ async fn page_query_clamps_per_page() {
             "statusCode": 400,
             "message": ["page must be a positive integer", "per_page must be a positive integer"],
             "error": "Bad Request",
+            "code": "validation_failed",
             "errors": {
                 "page": ["page must be a positive integer"],
                 "per_page": ["per_page must be a positive integer"],

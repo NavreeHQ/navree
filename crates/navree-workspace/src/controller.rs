@@ -289,9 +289,9 @@ fn check_owner_change(
     let touches_owner =
         current == Some(&WorkspaceRole::Owner) || new == Some(&WorkspaceRole::Owner);
     if touches_owner && ws.role() != &WorkspaceRole::Owner {
-        return Err(
-            AppError::forbidden().with_detail("Only an owner can grant or change the owner role.")
-        );
+        return Err(AppError::forbidden()
+            .with_code("owner_role_required")
+            .with_detail("Only an owner can grant or change the owner role."));
     }
     Ok(())
 }

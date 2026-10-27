@@ -225,7 +225,7 @@ impl ExportsController {
 The impl block's guards run first, then the route's, in the order written. A signed-in request to `POST /api/v1/exports` without the header gets (a guest gets the 401 first):
 
 ```json
-{ "statusCode": 400, "message": "This route needs X-Api-Version: 2.", "error": "Bad Request" }
+{ "statusCode": 400, "message": "This route needs X-Api-Version: 2.", "error": "Bad Request", "code": "bad_request" }
 ```
 
 Navree ships one guard: `ValidSignature`, which accepts only URLs signed by the app's `UrlSigner` and not yet expired (a 401 `"Invalid signature."` otherwise). Use it for links in emails and for downloads. When a guard refuses with a 403 and the app has an audit trail, the refusal is recorded as `access.denied`.

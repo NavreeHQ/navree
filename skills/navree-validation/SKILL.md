@@ -89,6 +89,7 @@ async fn store(&self, Valid(Json(input)): Valid<Json<CreateContact>>) -> Created
   "statusCode": 400,
   "message": ["age must not be less than 16", "email must be a valid email address"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "age": ["age must not be less than 16"],
     "email": ["email must be a valid email address"]

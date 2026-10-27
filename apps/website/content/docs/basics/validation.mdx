@@ -254,6 +254,7 @@ serde stops at the first problem, so deserialization errors come **one at a time
   "statusCode": 400,
   "message": ["last_name should not be empty"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": { "last_name": ["last_name should not be empty"] }
 }
 ```
@@ -284,6 +285,7 @@ An empty body `{}` now reports all three fields:
     "title should not be empty"
   ],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "amount_cents": ["amount_cents should not be empty"],
     "company_id": ["company_id should not be empty"],
@@ -602,6 +604,7 @@ Problems with the input as a whole use the root name. A malformed JSON body give
   "statusCode": 400,
   "message": ["body must be a valid JSON string"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": { "body": ["body must be a valid JSON string"] }
 }
 ```
@@ -616,6 +619,7 @@ Query strings work the same way. `GET /api/v1/contacts?search=a&per_page=500` gi
     "search must be longer than or equal to 2 characters"
   ],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "per_page": ["per_page must not be greater than 100"],
     "search": ["search must be longer than or equal to 2 characters"]

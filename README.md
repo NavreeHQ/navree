@@ -24,8 +24,9 @@ AI agent.
   and refuses to start with a missing or private dependency, naming the
   module and the type.
 - **API-first.** Versioned routes, validated input, one JSON error shape
-  (`{ "statusCode", "message", "error" }`) and an OpenAPI 3.1 document
-  generated from your code.
+  (`{ "statusCode", "message", "error", "code" }`, with stable codes a
+  front end translates) and an OpenAPI 3.1 document generated from your
+  code.
 - **Secure by default.** Routes deny until you allow them. Rotating refresh
   tokens, two-factor, Argon2id, encrypted cookies, CSRF, rate limits,
   security headers, an audit log and an SSRF guard ship on.
@@ -303,8 +304,9 @@ The build covers the PRD's foundation and the modules the CRM needs (spec
   module, and the CRM doesn't use it.
 - **The browser never holds tokens.** The Next.js server is a BFF that keeps
   them in httpOnly cookies and forwards `Authorization: Bearer`.
-- **One error shape.** Every error is `{statusCode, message, error}`, with
-  validation failures as 400 plus `errors: {field: [..]}`. Statuses 422 and
+- **One error shape.** Every error is `{statusCode, message, error, code}`,
+  with validation failures as 400 plus `errors: {field: [..]}`; the web app
+  branches on `code`, never on the English message. Statuses 422 and
   419 are not used. The PRD text still mentions problem+json, 422 and 419
   in places; spec §10 overrides it.
 - **PostgreSQL.** The PostgreSQL-only paths (`FOR UPDATE`, `SKIP LOCKED`,

@@ -63,9 +63,9 @@ export function originAllowed(request: Request): boolean {
   }
 }
 
-/** A JSON error in Navree's error shape. */
-export function error(statusCode: number, message: string, reason: string): Response {
-  return Response.json({ statusCode, message, error: reason }, { status: statusCode });
+/** A JSON error in Navree's error shape, with its machine-readable `code`. */
+export function error(statusCode: number, message: string, reason: string, code: string): Response {
+  return Response.json({ statusCode, message, error: reason, code }, { status: statusCode });
 }
 
 /** Calls Navree at `path` (`/api/...`). */
@@ -97,7 +97,7 @@ function refresh(refreshToken: string): Promise<TokenPair | null> {
 
 /** Forwards `request` to the same path at Navree, refreshing the tokens once on a 401. */
 export async function proxy(request: Request): Promise<Response> {
-  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden");
+  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden", "cross_origin_refused");
   const url = new URL(request.url);
   const body = SAFE_METHODS.has(request.method) ? undefined : await request.arrayBuffer();
   const send = (accessToken?: string) => {

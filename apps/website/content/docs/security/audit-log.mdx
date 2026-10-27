@@ -214,6 +214,7 @@ The filters combine with AND. A malformed `actor_id` or an unknown `kind` is a 4
   "statusCode": 400,
   "message": ["actor_id must be a UUID", "kind must be one of the following values: data, auth, access, security, custom"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "actor_id": ["actor_id must be a UUID"],
     "kind": ["kind must be one of the following values: data, auth, access, security, custom"]
