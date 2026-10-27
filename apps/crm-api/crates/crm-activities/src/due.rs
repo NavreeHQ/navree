@@ -3,9 +3,8 @@
 //! reminders all use the same day boundaries.
 
 use chrono::{DateTime, NaiveTime, TimeDelta, Utc};
-use crm_core::ActivityKind;
-use crm_core::entities::activity;
-use sea_orm::{ColumnTrait, Condition};
+use crm_core::models::{Activity, ActivityScopes};
+use navree::orm::Builder;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -43,29 +42,22 @@ pub enum Due {
 }
 
 impl Due {
-    /// The SQL condition on `activities` for `today`.
-    pub fn condition(self, today: Today) -> Condition {
-        let due_at = activity::Column::DueAt;
+    /// `query` restricted to the activities due in this window of `today`.
+    pub fn apply(self, query: Builder<Activity>, today: Today) -> Builder<Activity> {
         match self {
-            Due::Overdue => open_tasks().add(due_at.lt(today.start)),
-            Due::Today => Condition::all()
-                .add(due_at.gte(today.start))
-                .add(due_at.lt(today.end)),
-            Due::Upcoming => Condition::all().add(due_at.gte(today.end)),
+            Due::Overdue => query.open_tasks().where_(Activity::DUE_AT.lt(today.start)),
+            Due::Today => query
+                .where_(Activity::DUE_AT.gte(today.start))
+                .where_(Activity::DUE_AT.lt(today.end)),
+            Due::Upcoming => query.where_(Activity::DUE_AT.gte(today.end)),
         }
     }
-}
-
-/// Tasks that are not completed.
-pub fn open_tasks() -> Condition {
-    Condition::all()
-        .add(activity::Column::Kind.eq(ActivityKind::Task))
-        .add(activity::Column::CompletedAt.is_null())
 }
 
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
+    use navree::orm::{Dialect, Model};
 
     use super::*;
 
@@ -99,5 +91,22 @@ mod tests {
             assert_eq!(serde_json::from_value::<Due>(text.into()).unwrap(), due);
         }
         assert!(serde_json::from_value::<Due>("Today".into()).is_err());
+    }
+
+    #[test]
+    fn overdue_means_open_tasks_due_before_today() {
+        let today = Today::of(at(2026, 10, 26, 10, 0, 0));
+        let sql = Due::Overdue
+            .apply(Activity::query(), today)
+            .to_sql(Dialect::Sqlite)
+            .unwrap()
+            .sql;
+        for condition in [
+            r#""activities"."kind" = ?"#,
+            r#""activities"."completed_at" IS NULL"#,
+            r#""activities"."due_at" < ?"#,
+        ] {
+            assert!(sql.contains(condition), "{condition} in {sql}");
+        }
     }
 }

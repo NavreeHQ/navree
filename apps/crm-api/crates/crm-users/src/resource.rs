@@ -1,15 +1,16 @@
 //! The API's user shapes and the `roles` the auth routes gain.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use crm_core::models::User;
 use navree::BoxFuture;
 use navree::access::AccessService;
-use navree::access::entity::{role, user_role};
-use navree::auth::{USER_SUBJECT, User, UserResourceExtension};
+use navree::api::ApiResource;
+use navree::auth::{USER_SUBJECT, UserResourceExtension};
+use navree::orm::Record;
+use navree::orm::attributes::Resource;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use utoipa::ToSchema;
@@ -39,8 +40,24 @@ pub struct UserView {
 }
 
 impl UserView {
-    /// `user` with `roles`.
-    pub fn new(user: &User, roles: Vec<String>) -> Self {
+    /// The relations a user's view embeds: load them with the records
+    /// (`User::query().with_all(UserView::EMBEDS)`).
+    pub const EMBEDS: [&'static str; 1] = ["roles"];
+}
+
+impl ApiResource for UserView {
+    const TYPE: &'static str = USER_SUBJECT;
+}
+
+impl Resource<User> for UserView {
+    /// `user` with the names of its loaded roles, sorted.
+    fn from_record(user: &Record<User>) -> Self {
+        let mut roles: Vec<String> = user
+            .loaded(User::roles)
+            .map(|roles| roles.iter().map(|role| role.name.clone()).collect())
+            .unwrap_or_default();
+        roles.sort();
+        roles.dedup();
         UserView {
             resource_type: USER_SUBJECT,
             id: user.id,
@@ -91,44 +108,6 @@ pub struct Me {
     pub roles: Vec<String>,
 }
 
-/// The role names of each of `users`, sorted (users without roles map to
-/// an empty list), read through `conn` (a request's transaction sees its
-/// own changes).
-pub async fn roles_by_user<C: ConnectionTrait>(
-    conn: &C,
-    users: &[Uuid],
-) -> Result<HashMap<Uuid, Vec<String>>, DbErr> {
-    let mut roles: HashMap<Uuid, Vec<String>> = users.iter().map(|id| (*id, Vec::new())).collect();
-    if users.is_empty() {
-        return Ok(roles);
-    }
-    let assignments = user_role::Entity::find()
-        .filter(user_role::Column::UserId.is_in(users.iter().copied()))
-        .filter(user_role::Column::TeamId.is_null())
-        .all(conn)
-        .await?;
-    let names: HashMap<Uuid, String> = role::Entity::find()
-        .filter(role::Column::Id.is_in(assignments.iter().map(|a| a.role_id)))
-        .all(conn)
-        .await?
-        .into_iter()
-        .map(|role| (role.id, role.name))
-        .collect();
-    for assignment in assignments {
-        if let Some(name) = names.get(&assignment.role_id) {
-            roles
-                .entry(assignment.user_id)
-                .or_default()
-                .push(name.clone());
-        }
-    }
-    for list in roles.values_mut() {
-        list.sort();
-        list.dedup();
-    }
-    Ok(roles)
-}
-
 /// Adds `roles` to the user resource of navree-auth's routes
 /// (`GET /api/auth/me`, `user` in the login response).
 #[injectable]
@@ -139,7 +118,7 @@ pub struct UserRolesExtension {
 impl UserResourceExtension for UserRolesExtension {
     fn extend<'a>(
         &'a self,
-        user: &'a User,
+        user: &'a navree::auth::User,
         fields: &'a mut Map<String, Value>,
     ) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {

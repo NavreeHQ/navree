@@ -8,22 +8,21 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use crm_core::entities::activity;
+use crm_core::models::{Activity, ActivityScopes, User};
 use crm_core::{NotifiableUser, NotificationData};
-use navree::auth::user;
 use navree::config::Config;
 use navree::contracts::Clock;
 use navree::db::Db;
 use navree::kernel::CommandSpec;
 use navree::mail::TemplateMail;
 use navree::notify::{Channel, Notifiable, Notification, Notifier};
+use navree::orm::Record;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::due::{Due, Today, open_tasks};
+use crate::due::{Due, Today};
 
 /// The command (and scheduled task) name.
 pub const TASK_REMINDERS_COMMAND: &str = "crm:task-reminders";
@@ -158,7 +157,9 @@ pub struct RemindersSent {
     pub tasks: usize,
 }
 
-/// Sends the reminders; see the [module docs](self).
+/// Sends the daily task reminders: one [`TasksDueToday`] notification to
+/// each user with open tasks due today (UTC), as their assignee or as the
+/// owner of an unassigned task.
 #[injectable]
 pub struct TaskReminders {
     db: Arc<Db>,
@@ -177,29 +178,34 @@ impl TaskReminders {
     /// user is attempted; the error names the ones whose notification
     /// failed (on some channel).
     pub async fn send_for(&self, now: DateTime<Utc>) -> Result<RemindersSent, BoxError> {
-        let conn = self.db.conn();
-        let tasks = activity::Entity::find()
-            .filter(open_tasks())
-            .filter(Due::Today.condition(Today::of(now)))
-            .order_by_asc(activity::Column::DueAt)
-            .order_by_asc(activity::Column::Id)
-            .all(conn)
+        let tasks = Due::Today
+            .apply(Activity::query().open_tasks(), Today::of(now))
+            .order_by(Activity::DUE_AT)
+            .order_by(Activity::ID)
+            .with_all(["owner", "assignee"])
+            .get(&*self.db)
             .await?;
-        let mut by_user: BTreeMap<Uuid, Vec<DueTask>> = BTreeMap::new();
-        for task in tasks {
-            let Some(due_at) = task.due_at else { continue };
-            by_user
-                .entry(task.assignee_id.unwrap_or(task.owner_id))
-                .or_default()
+        // One reminder per recipient: the assignee, or the owner of an
+        // unassigned task.
+        let mut reminders: BTreeMap<Uuid, (Record<User>, Vec<DueTask>)> = BTreeMap::new();
+        for task in tasks.iter() {
+            let recipient = match task.assignee_id {
+                Some(_) => task.loaded(Activity::assignee),
+                None => task.loaded(Activity::owner),
+            };
+            let (Some(recipient), Some(due_at)) = (recipient.and_then(Option::as_ref), task.due_at)
+            else {
+                continue;
+            };
+            reminders
+                .entry(recipient.id)
+                .or_insert_with(|| (recipient.clone(), Vec::new()))
+                .1
                 .push(DueTask {
-                    subject: task.subject,
+                    subject: task.subject.clone(),
                     due_at,
                 });
         }
-        let users = user::Entity::find()
-            .filter(user::Column::Id.is_in(by_user.keys().copied()))
-            .all(conn)
-            .await?;
         let link = format!(
             "{}{TASKS_TODAY_URL}",
             self.config
@@ -209,10 +215,7 @@ impl TaskReminders {
         );
         let mut sent = RemindersSent::default();
         let mut failed = Vec::new();
-        for user in users {
-            let Some(tasks) = by_user.remove(&user.id) else {
-                continue;
-            };
+        for (user, tasks) in reminders.into_values() {
             let count = tasks.len();
             let reminder = TasksDueToday {
                 name: user.name.clone(),
@@ -235,7 +238,7 @@ impl TaskReminders {
                         %error,
                         "task reminder failed"
                     );
-                    failed.push(user.email);
+                    failed.push(user.email.clone());
                 }
             }
         }

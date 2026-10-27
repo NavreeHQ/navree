@@ -1,5 +1,5 @@
 //! Helpers shared by the deals tests: a CRM with `DealsModule`, companies
-//! and contacts written straight to the database (their own module is
+//! and contacts made with their model factories (their own module is
 //! another crate), and deals created through the API.
 
 #![allow(dead_code)]
@@ -8,15 +8,14 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use crm_core::entities::{company, contact};
-use crm_core::{ContactStatus, DEAL_UPDATED, DEALS_CHANNEL, REALTIME_KEY};
+use crm_core::models::{Company, Contact};
+use crm_core::{DEAL_UPDATED, DEALS_CHANNEL, REALTIME_KEY};
 use crm_deals::DealsModule;
 use crm_testkit::{CrmClient, TestCrm, WEB_ORIGIN};
 use futures_util::{SinkExt, StreamExt};
-use navree::contracts::Clock;
 use navree::db::Db;
 use navree::http::build_router;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set};
+use navree::orm::Model;
 use serde_json::{Value, json};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
@@ -30,45 +29,29 @@ pub async fn crm() -> TestCrm {
     TestCrm::builder().module(DealsModule).build().await
 }
 
-/// Inserts a company owned by `owner`; returns its id.
+/// Creates a company owned by `owner`; returns its id.
 pub async fn company(crm: &TestCrm, name: &str, owner: Uuid) -> Uuid {
     let db = crm.get::<Db>().await;
-    let now = crm.clock().now();
-    let model = company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set(name.to_owned()),
-        domain: Set(None),
-        industry: Set(None),
-        size: Set(None),
-        phone: Set(None),
-        website: Set(None),
-        city: Set(None),
-        country: Set(None),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(db.conn())
-    .await
-    .expect("the company is inserted");
-    model.id
+    Company::factory()
+        .set(Company::NAME, name)
+        .set(Company::OWNER_ID, owner)
+        .create_one(&*db)
+        .await
+        .expect("the company is created")
+        .id
 }
 
-/// Marks company `id` deleted (soft delete).
+/// Soft-deletes company `id`.
 pub async fn delete_company(crm: &TestCrm, id: Uuid) {
     let db = crm.get::<Db>().await;
-    company::ActiveModel {
-        id: Set(id),
-        deleted_at: Set(Some(crm.clock().now())),
-        ..Default::default()
-    }
-    .update(db.conn())
-    .await
-    .expect("the company is soft-deleted");
+    Company::query()
+        .where_key(id)
+        .delete(&*db)
+        .await
+        .expect("the company is soft-deleted");
 }
 
-/// Inserts a contact owned by `owner`; returns its id.
+/// Creates a contact owned by `owner`, at `company_id`; returns its id.
 pub async fn contact(
     crm: &TestCrm,
     first_name: &str,
@@ -77,25 +60,15 @@ pub async fn contact(
     owner: Uuid,
 ) -> Uuid {
     let db = crm.get::<Db>().await;
-    let now = crm.clock().now();
-    let model = contact::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        first_name: Set(first_name.to_owned()),
-        last_name: Set(last_name.to_owned()),
-        email: Set(None),
-        phone: Set(None),
-        title: Set(None),
-        status: Set(ContactStatus::Lead),
-        company_id: Set(company_id),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(db.conn())
-    .await
-    .expect("the contact is inserted");
-    model.id
+    Contact::factory()
+        .set(Contact::FIRST_NAME, first_name)
+        .set(Contact::LAST_NAME, last_name)
+        .set(Contact::COMPANY_ID, company_id)
+        .set(Contact::OWNER_ID, owner)
+        .create_one(&*db)
+        .await
+        .expect("the contact is created")
+        .id
 }
 
 /// The smallest valid `POST /api/v1/deals` body.

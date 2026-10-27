@@ -15,7 +15,6 @@ chrono = { workspace = true }
 crm-core = { path = "../crm-core" }
 garde = { workspace = true }
 navree = { workspace = true }
-sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 utoipa = { workspace = true }

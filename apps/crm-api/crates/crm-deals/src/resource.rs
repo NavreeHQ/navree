@@ -1,12 +1,12 @@
 //! The API's deal shapes (spec §7): [`DealResource`] and its embeds.
 
-use std::collections::HashMap;
-
 use chrono::{DateTime, NaiveDate, Utc};
-use crm_core::entities::deal;
+use crm_core::models::Deal;
 use crm_core::subjects::DEAL;
 use crm_core::{CompanyRef, ContactRef, OwnerRef, Stage};
-use sea_orm::{ConnectionTrait, DbErr};
+use navree::api::ApiResource;
+use navree::orm::Record;
+use navree::orm::attributes::Resource;
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -60,86 +60,41 @@ pub struct DealResource {
 }
 
 impl DealResource {
-    /// The resources of `deals`, in order, with their embeds read through
-    /// `conn` (one query per kind of embed).
-    pub async fn load_many<C: ConnectionTrait>(
-        conn: &C,
-        deals: Vec<deal::Model>,
-    ) -> Result<Vec<DealResource>, DbErr> {
-        let embeds = Embeds::load(conn, &deals).await?;
-        Ok(deals
-            .into_iter()
-            .map(|deal| embeds.resource(deal))
-            .collect())
-    }
-
-    /// The resource of one deal.
-    pub async fn load<C: ConnectionTrait>(
-        conn: &C,
-        deal: deal::Model,
-    ) -> Result<DealResource, DbErr> {
-        let mut resources = Self::load_many(conn, vec![deal]).await?;
-        Ok(resources.remove(0))
-    }
+    /// The relations a deal's resource embeds: load them with the records
+    /// (`Deal::query().with_all(DealResource::EMBEDS)`), one query each for
+    /// a whole page.
+    pub const EMBEDS: [&'static str; 3] = ["company", "contact", "owner"];
 }
 
-/// The embeds of a set of deals, by id.
-struct Embeds {
-    companies: HashMap<Uuid, CompanyRef>,
-    contacts: HashMap<Uuid, ContactRef>,
-    owners: HashMap<Uuid, OwnerRef>,
+impl ApiResource for DealResource {
+    const TYPE: &'static str = DEAL;
 }
 
-impl Embeds {
-    async fn load<C: ConnectionTrait>(conn: &C, deals: &[deal::Model]) -> Result<Self, DbErr> {
-        Ok(Embeds {
-            companies: CompanyRef::load(conn, deals.iter().map(|deal| deal.company_id)).await?,
-            contacts: ContactRef::load(conn, deals.iter().filter_map(|deal| deal.contact_id))
-                .await?,
-            owners: OwnerRef::load(conn, deals.iter().map(|deal| deal.owner_id)).await?,
-        })
-    }
-
-    fn resource(&self, deal: deal::Model) -> DealResource {
-        // Foreign keys keep the company and the owner; a missing row (never
-        // expected) shows with an empty name rather than failing the page.
-        let company = self
-            .companies
-            .get(&deal.company_id)
-            .cloned()
-            .unwrap_or_else(|| CompanyRef {
-                id: deal.company_id,
-                name: String::new(),
-            });
-        let owner = self
-            .owners
-            .get(&deal.owner_id)
-            .cloned()
-            .unwrap_or_else(|| OwnerRef {
-                id: deal.owner_id,
-                name: String::new(),
-            });
-        let contact = deal
-            .contact_id
-            .and_then(|id| self.contacts.get(&id).cloned());
+impl Resource<Deal> for DealResource {
+    /// `deal` with its loaded company and contact (deleted or not) and
+    /// owner.
+    fn from_record(deal: &Record<Deal>) -> Self {
         DealResource {
             resource_type: DEAL,
             id: deal.id,
-            probability: deal.probability(),
-            title: deal.title,
+            title: deal.title.clone(),
             amount_cents: deal.amount_cents,
-            currency: deal.currency,
+            currency: deal.currency.clone(),
             stage: deal.stage,
+            probability: deal.probability(),
             position: deal.position,
             expected_close_date: deal.expected_close_date,
             closed_at: deal.closed_at,
-            lost_reason: deal.lost_reason,
+            lost_reason: deal.lost_reason.clone(),
             company_id: deal.company_id,
-            company,
+            company: CompanyRef::loaded(deal.loaded(Deal::company), deal.company_id),
             contact_id: deal.contact_id,
-            contact,
+            contact: deal
+                .loaded(Deal::contact)
+                .and_then(Option::as_ref)
+                .map(ContactRef::from),
             owner_id: deal.owner_id,
-            owner,
+            owner: OwnerRef::loaded(deal.loaded(Deal::owner), deal.owner_id),
             created_at: deal.created_at,
             updated_at: deal.updated_at,
         }

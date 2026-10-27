@@ -144,7 +144,7 @@ When the app grows, or several teams work on it, give each feature its own crate
     app.rs              # the root: platform() plus every CRM module
     main.rs
   crates/
-    crm-core/ *         # shared entities, enums, migrations, roles, abilities, platform()
+    crm-core/ *         # shared models, enums, migrations, roles, abilities, platform()
     crm-users/          # UsersModule
     crm-companies/      # CompaniesModule, ContactsModule
     crm-deals/          # DealsModule
@@ -204,7 +204,7 @@ Pick one of three ways, from the most coupled to the least:
 
 1. **Call an exported service.** Import the module and inject what it exports. Use this when you need an answer now, inside the same request and transaction: the deals module checking that a company exists before it saves a deal.
 2. **Emit an event.** The module that changed something emits an event; any module can listen without the emitter knowing. Use this for reactions: notify the owner, update a leaderboard, write to a search index. See [Event-driven](/docs/patterns/event-driven/).
-3. **Read shared entities.** Read-only views across features, such as a dashboard, can query the shared tables directly. The CRM's `DashboardModule` totals deals and tasks through `crm-core`'s entities and imports no feature module.
+3. **Read shared models.** Read-only views across features, such as a dashboard, can query the shared tables directly. The CRM's `DashboardModule` totals deals and tasks through `crm-core`'s models and imports no feature module.
 
 An event keeps the boundary thinnest. This leaderboard module counts every won deal and never imports `DealsModule`:
 

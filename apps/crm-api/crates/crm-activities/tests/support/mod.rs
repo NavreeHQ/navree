@@ -1,18 +1,18 @@
-//! Fixtures for the activities and dashboard tests: CRM records written
-//! straight to the database (companies, contacts and deals belong to other
-//! crates; these tests only need rows to attach activities to and count).
+//! Fixtures for the activities and dashboard tests: CRM records made with
+//! their model factories (companies, contacts and deals belong to other
+//! crates; these tests only need records to attach activities to and
+//! count).
 
 #![allow(dead_code)]
 
 use chrono::{DateTime, TimeZone, Utc};
 use crm_activities::{ActivitiesModule, DashboardModule};
-use crm_core::entities::{activity, company, contact, deal};
-use crm_core::{ActivityKind, ContactStatus, Stage, SubjectType};
+use crm_core::models::{Activity, Company, Contact, Deal};
+use crm_core::{ActivityKind, Stage, SubjectType};
 use crm_testkit::TestCrm;
 use navree::contracts::Clock;
 use navree::db::Db;
-use sea_orm::ActiveModelTrait;
-use sea_orm::ActiveValue::Set;
+use navree::orm::Record;
 use uuid::Uuid;
 
 /// A CRM with the activities and dashboard modules, its clock at `now`.
@@ -50,71 +50,35 @@ async fn db(crm: &TestCrm) -> std::sync::Arc<Db> {
 }
 
 /// A company named `name`, owned by `owner`.
-pub async fn company(crm: &TestCrm, owner: Uuid, name: &str) -> company::Model {
-    let now = crm.clock().now();
-    company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set(name.to_owned()),
-        domain: Set(None),
-        industry: Set(None),
-        size: Set(None),
-        phone: Set(None),
-        website: Set(None),
-        city: Set(None),
-        country: Set(None),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(db(crm).await.conn())
-    .await
-    .expect("company inserted")
+pub async fn company(crm: &TestCrm, owner: Uuid, name: &str) -> Record<Company> {
+    Company::factory()
+        .set(Company::NAME, name)
+        .set(Company::OWNER_ID, owner)
+        .create_one(&*db(crm).await)
+        .await
+        .expect("company created")
 }
 
 /// A soft-deleted company.
-pub async fn deleted_company(crm: &TestCrm, owner: Uuid, name: &str) -> company::Model {
-    let now = crm.clock().now();
-    company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set(name.to_owned()),
-        domain: Set(None),
-        industry: Set(None),
-        size: Set(None),
-        phone: Set(None),
-        website: Set(None),
-        city: Set(None),
-        country: Set(None),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(Some(now)),
-    }
-    .insert(db(crm).await.conn())
-    .await
-    .expect("company inserted")
+pub async fn deleted_company(crm: &TestCrm, owner: Uuid, name: &str) -> Record<Company> {
+    Company::factory()
+        .set(Company::NAME, name)
+        .set(Company::OWNER_ID, owner)
+        .trashed()
+        .create_one(&*db(crm).await)
+        .await
+        .expect("company created")
 }
 
 /// A contact, owned by `owner`.
-pub async fn contact(crm: &TestCrm, owner: Uuid, first: &str, last: &str) -> contact::Model {
-    let now = crm.clock().now();
-    contact::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        first_name: Set(first.to_owned()),
-        last_name: Set(last.to_owned()),
-        email: Set(None),
-        phone: Set(None),
-        title: Set(None),
-        status: Set(ContactStatus::Lead),
-        company_id: Set(None),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(db(crm).await.conn())
-    .await
-    .expect("contact inserted")
+pub async fn contact(crm: &TestCrm, owner: Uuid, first: &str, last: &str) -> Record<Contact> {
+    Contact::factory()
+        .set(Contact::FIRST_NAME, first)
+        .set(Contact::LAST_NAME, last)
+        .set(Contact::OWNER_ID, owner)
+        .create_one(&*db(crm).await)
+        .await
+        .expect("contact created")
 }
 
 /// What a fixture deal looks like.
@@ -160,27 +124,20 @@ impl NewDeal {
 }
 
 /// A deal of `company`, owned by `owner`.
-pub async fn deal(crm: &TestCrm, owner: Uuid, company: Uuid, new: NewDeal) -> deal::Model {
-    let now = crm.clock().now();
-    deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set(new.title.to_owned()),
-        amount_cents: Set(new.amount_cents),
-        currency: Set(new.currency.to_owned()),
-        stage: Set(new.stage),
-        position: Set(0),
-        expected_close_date: Set(None),
-        closed_at: Set(new.closed_at),
-        lost_reason: Set((new.stage == Stage::Lost).then(|| "Budget".to_owned())),
-        company_id: Set(company),
-        contact_id: Set(None),
-        owner_id: Set(owner),
-        created_at: Set(now),
-        updated_at: Set(now),
-    }
-    .insert(db(crm).await.conn())
-    .await
-    .expect("deal inserted")
+pub async fn deal(crm: &TestCrm, owner: Uuid, company: Uuid, new: NewDeal) -> Record<Deal> {
+    let lost_reason = (new.stage == Stage::Lost).then_some("Budget");
+    Deal::factory()
+        .set(Deal::TITLE, new.title)
+        .set(Deal::STAGE, new.stage)
+        .set(Deal::AMOUNT_CENTS, new.amount_cents)
+        .set(Deal::CURRENCY, new.currency)
+        .set(Deal::CLOSED_AT, new.closed_at)
+        .set(Deal::LOST_REASON, lost_reason)
+        .set(Deal::COMPANY_ID, company)
+        .set(Deal::OWNER_ID, owner)
+        .create_one(&*db(crm).await)
+        .await
+        .expect("deal created")
 }
 
 /// What a fixture activity looks like.
@@ -251,24 +208,22 @@ impl NewActivity {
     }
 }
 
-/// An activity written straight to the database.
-pub async fn activity(crm: &TestCrm, new: NewActivity) -> activity::Model {
+/// An activity made with its factory, created (and last changed) at
+/// `new.created_at` or the clock's now.
+pub async fn activity(crm: &TestCrm, new: NewActivity) -> Record<Activity> {
     let created_at = new.created_at.unwrap_or_else(|| crm.clock().now());
-    activity::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        kind: Set(new.kind),
-        subject: Set(new.subject),
-        body: Set(None),
-        due_at: Set(new.due_at),
-        completed_at: Set(new.completed_at),
-        subject_type: Set(new.subject_type),
-        subject_id: Set(new.subject_id),
-        owner_id: Set(new.owner_id),
-        assignee_id: Set(new.assignee_id),
-        created_at: Set(created_at),
-        updated_at: Set(created_at),
-    }
-    .insert(db(crm).await.conn())
-    .await
-    .expect("activity inserted")
+    Activity::factory()
+        .set(Activity::KIND, new.kind)
+        .set(Activity::SUBJECT, new.subject)
+        .set(Activity::DUE_AT, new.due_at)
+        .set(Activity::COMPLETED_AT, new.completed_at)
+        .set(Activity::SUBJECT_TYPE, new.subject_type)
+        .set(Activity::SUBJECT_ID, new.subject_id)
+        .set(Activity::OWNER_ID, new.owner_id)
+        .set(Activity::ASSIGNEE_ID, new.assignee_id)
+        .set(Activity::CREATED_AT, created_at)
+        .set(Activity::UPDATED_AT, created_at)
+        .create_one(&*db(crm).await)
+        .await
+        .expect("activity created")
 }

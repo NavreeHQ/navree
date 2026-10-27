@@ -33,6 +33,7 @@ Typed columns build conditions from values of the column's type:
 | `is_null()`, `is_not_null()` | `IS NULL` |
 | `between(a, b)`, `not_between(..)` | `BETWEEN` |
 | `like(p)` / `not_like` | ignores case (`ILIKE` on PostgreSQL); `like_case_sensitive`, `ilike` |
+| `contains_ignore_case(t)`, `eq_ignore_case(t)` | literal text, case ignored for non-ASCII letters too, accents kept, on every database (search boxes) |
 | `regex`, `regex_case_insensitive`, `not_regex` | `~`, `REGEXP_LIKE`, `REGEXP` |
 | `null_safe_eq(v)`, `is_distinct_from(v)` | `NULL`-safe equality |
 | `eq_column(&other)`, `op_column(op, &other)` | two columns |
