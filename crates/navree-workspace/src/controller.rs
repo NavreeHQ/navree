@@ -246,7 +246,9 @@ fn check_partition_reach(
     if covered {
         Ok(())
     } else {
-        Err(AppError::forbidden().with_detail("You can only grant partitions you see."))
+        Err(AppError::forbidden()
+            .with_code("partition_grant_forbidden")
+            .with_detail("You can only grant partitions you see."))
     }
 }
 
@@ -256,6 +258,7 @@ fn check_partition_manager(scope: &PartitionScope) -> Result<(), AppError> {
         Ok(())
     } else {
         Err(AppError::forbidden()
+            .with_code("partition_manager_required")
             .with_detail("Only members who see every partition can manage partitions."))
     }
 }

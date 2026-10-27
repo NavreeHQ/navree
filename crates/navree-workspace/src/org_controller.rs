@@ -381,7 +381,9 @@ fn check_reach(org: &CurrentOrganization, selector: &WorkspaceSelector) -> Resul
     if covered {
         Ok(())
     } else {
-        Err(AppError::forbidden().with_detail("You can only grant workspaces you reach."))
+        Err(AppError::forbidden()
+            .with_code("workspace_grant_forbidden")
+            .with_detail("You can only grant workspaces you reach."))
     }
 }
 
@@ -609,9 +611,11 @@ impl Controller for OrganizationController {
                 async move {
                     let workspace = workspaces.resolve(input.workspace.trim()).await?;
                     if workspace.owner_id != org.member().user_id {
-                        return Err(AppError::forbidden().with_detail(
-                            "Only the workspace's owner can attach it to an organization.",
-                        ));
+                        return Err(AppError::forbidden()
+                            .with_code("not_the_workspace_owner")
+                            .with_detail(
+                                "Only the workspace's owner can attach it to an organization.",
+                            ));
                     }
                     let attached = organizations.attach(&uow, org.id(), workspace.id).await?;
                     Ok::<_, AppError>(Json(WorkspaceResource::new(

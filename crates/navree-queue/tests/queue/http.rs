@@ -199,7 +199,8 @@ async fn cancel_needs_the_owner_or_the_cancel_permission() {
         .delete(&path)
         .send()
         .await
-        .assert_error(409, "The operation has already finished.");
+        .assert_error(409, "The operation has already finished.")
+        .assert_error_code(409, "operation_finished");
 }
 
 #[tokio::test]
