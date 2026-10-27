@@ -164,14 +164,19 @@ async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
 fn storage_error(error: &StorageError) -> Option<AppError> {
     match error {
         StorageError::NotFound { .. } => Some(AppError::not_found()),
-        StorageError::InvalidPath { .. } => Some(AppError::bad_request("Invalid file path.")),
-        StorageError::Rejected { rejection, .. } => Some(match rejection {
-            UploadRejection::TooLarge { .. } => {
-                AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE)
-                    .with_detail(sentence(rejection))
+        StorageError::InvalidPath { .. } => {
+            Some(AppError::bad_request("Invalid file path.").with_code("invalid_file_path"))
+        }
+        StorageError::Rejected { rejection, .. } => Some(
+            match rejection {
+                UploadRejection::TooLarge { .. } => {
+                    AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE)
+                        .with_detail(sentence(rejection))
+                }
+                _ => AppError::bad_request(sentence(rejection)),
             }
-            _ => AppError::bad_request(sentence(rejection)),
-        }),
+            .with_code(rejection.code()),
+        ),
         _ => None,
     }
 }

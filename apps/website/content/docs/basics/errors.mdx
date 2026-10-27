@@ -257,6 +257,12 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | billing | `payment_provider_error` | 502 | `The payment provider refused the request: ...` |
 | webhooks | `invalid_webhook_signature` | 400 | `Invalid webhook signature` |
 | queue | `operation_finished` | 409 | `The operation has already finished.` |
+| storage | `invalid_file_path` | 400 | `Invalid file path.` |
+| storage | `file_type_not_allowed` | 400 | `The file must be of type: application/pdf, image/* (it is text/html).` |
+| storage | `missing_content_type` | 400 | `Declare the file's content type (allowed: application/pdf, image/*).` |
+| storage | `invalid_content_type` | 400 | ``The declared content type is not a valid `type/subtype`.`` |
+| storage | `empty_file` | 400 | `The file should not be empty.` |
+| storage | `upload_size_mismatch` | 400 | `The upload must be exactly 2048 bytes long.` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 
@@ -396,7 +402,7 @@ Mappers apply to the whole app, whichever module registers them. They only see 5
 
 </Callout>
 
-Navree's own modules register mappers the same way: navree-auth turns its errors into 401s, 403s and 429s (`invalid_credentials`, `token_expired`), navree-access turns an unknown role into a 404 (`role_not_found`), and navree-storage turns a missing file into a 404 and an invalid path into a 400. [The modules' codes](#the-modules-codes) lists them.
+Navree's own modules register mappers the same way: navree-auth turns its errors into 401s, 403s and 429s (`invalid_credentials`, `token_expired`), navree-access turns an unknown role into a 404 (`role_not_found`), and navree-storage turns a missing file into a 404, an invalid path into a 400 (`invalid_file_path`) and a refused upload into a 400 or 413 with the rule it breaks (`file_type_not_allowed`, `payload_too_large`). [The modules' codes](#the-modules-codes) lists them.
 
 ## Database errors
 
