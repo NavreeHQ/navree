@@ -4,10 +4,11 @@
 //! module-owned migrations, seeders, factories and pagination.
 //!
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
-//!   [`Db`] and [`DbOptions`] (section `database`). SQLite is built in (its
-//!   connections use WAL, `busy_timeout = 5000` and `foreign_keys = ON`);
-//!   PostgreSQL is behind the `postgres` feature, MySQL and MariaDB behind
-//!   the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
+//!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
+//!   default database, and plain PostgreSQL are behind the `postgres`
+//!   feature; SQLite is built in (its connections use WAL,
+//!   `busy_timeout = 5000` and `foreign_keys = ON`); MySQL and MariaDB are
+//!   behind the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
 //!   UTC, `utf8mb4` and strict SQL mode over TLS when the server offers
 //!   it, see [`MySqlOptions`]). It registers the `database` health check
 //!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,

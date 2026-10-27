@@ -73,7 +73,7 @@ The facade re-exports it as `navree::schema` (feature `schema`, in `full`;
 | `target` | [`Dialect`], [`Target`] (dialect, server version, TimescaleDB version), [`Version`] |
 | `grammar` | One compiler per dialect (`postgres`, `mysql`, `sqlite`) plus `timescale`; pure functions from a blueprint, a target and (for SQLite rebuilds and hypertable conversions) the table's current state to statements and notices |
 | `timescale` | [`Hypertable`], [`Compression`], [`ContinuousAggregate`], [`RefreshPolicy`] |
-| `inspect` | Catalog queries per dialect and their results: [`TableInfo`], [`ViewInfo`], [`ColumnInfo`], [`IndexInfo`], [`ForeignKeyInfo`]; target detection; the states rebuilds and conversions read |
+| `inspect` | Catalog queries per dialect and their results: [`TableInfo`], [`ViewInfo`], [`ColumnInfo`], [`IndexInfo`], [`ForeignKeyInfo`], [`TimeDimension`] (a hypertable's time column, type and chunk interval); target detection; the states rebuilds and conversions read |
 | `rebuild` | SQLite table rebuilds: the table state, and the small SQL tokenizer that keeps definitions, constraints, indexes and triggers intact |
 | `dump` | Schema dumps read from the catalogs (`dump/sqlite.rs`, `dump/mysql.rs`, `dump/postgres.rs`), [`DumpOptions`] |
 | `script` | [`split_statements`]: an SQL script cut into statements per dialect |
@@ -271,6 +271,14 @@ hypertable already declared returns it.
   `add_continuous_aggregate_policy` from its [`RefreshPolicy`];
   `refresh_continuous_aggregate` and the policy operations exist on
   [`Schema`].
+- **Reading hypertables back.** [`Schema::is_hypertable`] and
+  [`Schema::time_dimension`] (a [`TimeDimension`]: the time column, its
+  type and the chunk interval) read `timescaledb_information`. Without
+  TimescaleDB they answer `false` and `None` with no query beyond the
+  target's detection (none at all on a MySQL or SQLite connection), so a
+  conversion that may run twice checks first, and `navree-db`'s
+  `prune_time_series` drops whole chunks only when the pruned column is the
+  table's time dimension, casting its cutoff to that column's type.
 - **Engines: one migration runs everywhere.** A table that declares a
   hypertable gets the right DDL on each database: a hypertable on
   TimescaleDB; on plain PostgreSQL, MySQL/MariaDB and SQLite a regular table
@@ -461,6 +469,19 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   aggregate.
 - **The query builder.** The ORM's `time_bucket`, `first` and `last` can
   reuse [`Interval`] and [`Target`].
-- **Framework tables.** Framework crates move their tables to schema
-  migrations (and their time-series tables to hypertables) in the adoption
-  phase; their SeaORM migrations keep running meanwhile.
+- **Framework tables.** The framework's time-series tables are
+  hypertables: each module adds a schema migration (a [`SchemaMigration`]
+  in its SeaORM-built set) that converts them with `migrate_data` and
+  `KeyStrategy::Extend`, unless [`Schema::is_hypertable`] says they already
+  are: `audit_logs` (`created_at`, 7 days), `webhook_deliveries` and
+  `webhook_attempts` (`created_at`, 1 day; attempts reference their endpoint
+  instead of their delivery, since a hypertable's key includes its time),
+  `fleet_jobs` and `fleet_metrics` (Unix milliseconds, 1 hour and 1 day),
+  `schedule_runs` (`tick`, 1 day) and Lighthouse's samples, occurrences and
+  aggregates (1 day; also in `lighthouse.database_url`'s database at boot,
+  when it runs TimescaleDB). Their `down` keeps the hypertable, which
+  TimescaleDB cannot turn back into a plain table in place. Their prune
+  commands go through `navree_db::prune_time_series`. The facade's
+  `time_series` suite checks all of it on real TimescaleDB and MySQL
+  servers. Moving the rest of the framework's tables to schema migrations
+  is the adoption phase's; their SeaORM migrations keep running meanwhile.
