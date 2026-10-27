@@ -136,6 +136,38 @@ impl MongoCommand {
         }
     }
 
+    /// A read as an aggregation pipeline (a `find` becomes `$match`,
+    /// `$sort`, `$skip`, `$limit` and `$project` stages); `None` for a
+    /// count or a write.
+    pub fn into_aggregate(self) -> Option<Aggregate> {
+        match self {
+            MongoCommand::Aggregate(aggregate) => Some(aggregate),
+            MongoCommand::Find(find) => {
+                let mut pipeline = Vec::new();
+                if !find.filter.is_empty() {
+                    pipeline.push(bson::doc! { "$match": find.filter });
+                }
+                if let Some(sort) = find.sort {
+                    pipeline.push(bson::doc! { "$sort": sort });
+                }
+                if let Some(skip) = find.skip {
+                    pipeline.push(bson::doc! { "$skip": i64::try_from(skip).unwrap_or(i64::MAX) });
+                }
+                if let Some(limit) = find.limit {
+                    pipeline.push(bson::doc! { "$limit": i64::try_from(limit).unwrap_or(i64::MAX) });
+                }
+                if let Some(projection) = find.projection {
+                    pipeline.push(bson::doc! { "$project": projection });
+                }
+                Some(Aggregate {
+                    collection: find.collection,
+                    pipeline,
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// The command with every value replaced by `?` (keys, operators and
     /// sort directions stay): what telemetry and logs record, so no value
     /// leaves the process.

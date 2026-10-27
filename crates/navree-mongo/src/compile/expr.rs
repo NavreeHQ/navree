@@ -3,7 +3,7 @@
 
 use bson::{Bson, Document, doc};
 use navree_orm::ir::{AggregateFunction, ArithmeticOp, Expr};
-use navree_orm::{OrmError, Value};
+use navree_orm::OrmError;
 
 use super::scope::{Cx, Scope};
 use super::{Pending, subquery};
@@ -354,11 +354,6 @@ pub(crate) fn first_last(first: bool, output: Bson, time_field: &str) -> Accumul
     Accumulator::of(doc! {
         operator: { "sortBy": { time_field: 1 }, "output": output }
     })
-}
-
-/// Whether `value` is a NULL (an SQL value that maps to BSON null).
-pub(crate) fn is_null_value(value: &Value) -> bool {
-    navree_orm::is_null(value)
 }
 
 #[cfg(test)]

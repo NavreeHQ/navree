@@ -33,8 +33,9 @@ use bson::Document;
 use navree_orm::OrmError;
 use navree_orm::ir::{Aggregate, QueryIr};
 
+pub(crate) use expr::time_bucket;
 pub(crate) use read::read_with_columns;
-pub(crate) use write::{Target, delete, insert, target, update_document};
+pub(crate) use write::{Target, insert, target, update_document};
 
 use crate::command::MongoCommand;
 
@@ -78,4 +79,97 @@ pub fn aggregate(query: &QueryIr, aggregate: &Aggregate) -> Result<MongoCommand,
 /// The command telling whether `query` has a document.
 pub fn exists(query: &QueryIr) -> Result<MongoCommand, OrmError> {
     read::exists(query)
+}
+
+/// Whether `query` names columns of a query around it: a correlated
+/// subquery, which runs once per document of that query.
+pub(crate) fn is_correlated(query: &QueryIr) -> bool {
+    names_outside(query, &[])
+}
+
+/// Whether `query` names a table that is neither its own, nor joined, nor
+/// in `known` (the tables of the queries around it that are allowed).
+fn names_outside(query: &QueryIr, known: &[String]) -> bool {
+    use navree_orm::ir::InValues;
+
+    let mut own: Vec<String> = known.to_vec();
+    own.push(query.table.name.to_string());
+    own.push(query.table.qualifier().to_owned());
+    for join in &query.joins {
+        own.push(join.table.name.to_string());
+        own.push(join.table.qualifier().to_owned());
+    }
+    fn expr_outside(expr: &navree_orm::ir::Expr, own: &[String]) -> bool {
+        use navree_orm::ir::Expr;
+        match expr {
+            Expr::Column(column) => column
+                .table
+                .as_deref()
+                .is_some_and(|table| !own.iter().any(|name| name == table)),
+            Expr::Function { args, .. } => args.iter().any(|arg| expr_outside(arg, own)),
+            Expr::Aggregate { arg, .. } => arg.as_deref().is_some_and(|arg| expr_outside(arg, own)),
+            Expr::Arithmetic { left, right, .. } => {
+                expr_outside(left, own) || expr_outside(right, own)
+            }
+            Expr::Subquery(query) => names_outside(query, own),
+            Expr::TimeBucket { expr, origin, .. } => {
+                expr_outside(expr, own) || origin.as_deref().is_some_and(|o| expr_outside(o, own))
+            }
+            Expr::First { value, time } | Expr::Last { value, time } => {
+                expr_outside(value, own) || expr_outside(time, own)
+            }
+            _ => false,
+        }
+    }
+    fn where_outside(filter: &navree_orm::ir::Where, own: &[String]) -> bool {
+        use navree_orm::ir::Where;
+        let column_outside = |column: &navree_orm::ir::ColumnRef| {
+            column
+                .table
+                .as_deref()
+                .is_some_and(|table| !own.iter().any(|name| name == table))
+        };
+        match filter {
+            Where::Compare { left, right, .. } => expr_outside(left, own) || expr_outside(right, own),
+            Where::Null { expr, .. } => expr_outside(expr, own),
+            Where::In { expr, values, .. } => {
+                expr_outside(expr, own)
+                    || match values {
+                        InValues::List(list) => list.iter().any(|item| expr_outside(item, own)),
+                        InValues::Subquery(query) => names_outside(query, own),
+                        _ => false,
+                    }
+            }
+            Where::Between {
+                expr, low, high, ..
+            } => expr_outside(expr, own) || expr_outside(low, own) || expr_outside(high, own),
+            Where::Like { expr, pattern, .. } => expr_outside(expr, own) || expr_outside(pattern, own),
+            Where::DatePart { expr, value, .. } => expr_outside(expr, own) || expr_outside(value, own),
+            Where::Exists { query, .. } => names_outside(query, own),
+            Where::Group(clauses) => clauses.iter().any(|clause| where_outside(&clause.filter, own)),
+            Where::JsonContains { column, .. } | Where::JsonLength { column, .. } => {
+                column_outside(column)
+            }
+            Where::FullText { columns, .. } => columns.iter().any(|column| expr_outside(column, own)),
+            _ => false,
+        }
+    }
+    if let Some(inner) = &query.table.subquery
+        && names_outside(inner, known)
+    {
+        return true;
+    }
+    query.columns.iter().any(|item| expr_outside(&item.expr, &own))
+        || query.wheres.iter().any(|clause| where_outside(&clause.filter, &own))
+        || query.groups.iter().any(|group| expr_outside(group, &own))
+        || query.havings.iter().any(|clause| where_outside(&clause.filter, &own))
+        || query.orders.iter().any(|order| match order {
+            navree_orm::ir::Order::By { expr, .. } => expr_outside(expr, &own),
+            _ => false,
+        })
+        || query
+            .joins
+            .iter()
+            .any(|join| join.on.iter().any(|clause| where_outside(&clause.filter, &own)))
+        || query.unions.iter().any(|union| names_outside(&union.query, known))
 }

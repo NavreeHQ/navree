@@ -151,6 +151,21 @@ impl Blueprint {
         self.creating
     }
 
+    /// Whether the table is created only when it does not exist yet
+    /// ([`if_not_exists`](Blueprint::if_not_exists)).
+    ///
+    /// ```
+    /// use navree_schema::Blueprint;
+    ///
+    /// let mut t = Blueprint::new("deals");
+    /// assert!(!t.creates_if_missing());
+    /// t.if_not_exists();
+    /// assert!(t.creates_if_missing());
+    /// ```
+    pub fn creates_if_missing(&self) -> bool {
+        self.if_not_exists
+    }
+
     /// The columns, in declaration order.
     pub fn columns(&self) -> &[ColumnDefinition] {
         &self.columns

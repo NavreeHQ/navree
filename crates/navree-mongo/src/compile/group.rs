@@ -12,7 +12,7 @@ use navree_orm::ir::{
 
 use super::Pending;
 use super::expr::{self, Accumulator, literal};
-use super::filter::{self, nothing};
+use super::filter;
 use super::like::like_regex;
 use super::read::{default_name, page};
 use super::scope::{Cx, Place, Scope, output_name};
