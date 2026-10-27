@@ -87,18 +87,27 @@ impl Selectable for Expr {
 const VALUE: &str = "value";
 const KEY: &str = "key";
 
-impl<M: Model> Builder<M> {
-    /// Runs the query on `target` and reads its records (running the
-    /// `Retrieved` hooks).
-    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
-        let ir = self.into_ir();
-        let rows = target.fetch(&ir).await?;
+impl Target<'_> {
+    /// Records of model `M` read from `rows`, the way a query reads its
+    /// own: stored records with the model's columns, the other columns as
+    /// [extras](Record::extras), and the `Retrieved` hooks run. For rows a
+    /// driver got outside a builder (a native MongoDB pipeline, say).
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # use navree_orm::{Access, Executor, Row};
+    /// # async fn demo(db: Db, rows: Vec<Row>) -> Result<()> {
+    /// let target = db.target(Access::Read).await?;
+    /// let deals = target.records::<Deal>(&rows).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn records<M: Model>(&self, rows: &[Row]) -> Result<Collection<M>> {
         let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
+        for row in rows {
             records.push(Record::<M>::from_row(row)?);
         }
         if !records.is_empty() {
-            let ctx = target.context();
+            let ctx = self.context();
             let hooks = Hooks::<M>::resolve(&ctx).await?;
             if !hooks.is_empty() {
                 for record in &mut records {
@@ -107,6 +116,16 @@ impl<M: Model> Builder<M> {
             }
         }
         Ok(Collection::from(records))
+    }
+}
+
+impl<M: Model> Builder<M> {
+    /// Runs the query on `target` and reads its records (running the
+    /// `Retrieved` hooks).
+    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
+        let ir = self.into_ir();
+        let rows = target.fetch(&ir).await?;
+        target.records(&rows).await
     }
 
     /// The rows of the query with `items` as its select list (global scopes

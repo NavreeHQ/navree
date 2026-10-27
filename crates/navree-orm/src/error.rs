@@ -1,8 +1,11 @@
 //! [`OrmError`]: what can go wrong in the ORM, and [`Result`].
 
 use std::borrow::Cow;
+use std::fmt;
+use std::sync::Arc;
 
-use sea_orm::DbErr;
+use sea_orm::sqlx::error::{DatabaseError, ErrorKind};
+use sea_orm::{DbErr, RuntimeErr, SqlErr};
 
 /// The result type of ORM operations.
 pub type Result<T, E = OrmError> = std::result::Result<T, E>;
@@ -136,14 +139,49 @@ impl OrmError {
         matches!(self, OrmError::ModelNotFound { .. })
     }
 
+    /// A unique-constraint violation a document store reported (MongoDB's
+    /// duplicate key error). [`is_unique_violation`](Self::is_unique_violation)
+    /// is true for it, so `create_or_first` and friends recover from it,
+    /// and returned from a handler it answers 409 like an SQL database's
+    /// violation: its source is a [`DbErr`] that navree-db maps. `message`
+    /// is the store's own, for the logs; it never reaches a client.
+    ///
+    /// ```
+    /// use navree_orm::OrmError;
+    ///
+    /// let error = OrmError::unique_violation("mongodb", "E11000 duplicate key error collection: app.users");
+    /// assert!(error.is_unique_violation());
+    /// assert!(error.to_string().ends_with("mongodb: E11000 duplicate key error collection: app.users"));
+    /// ```
+    pub fn unique_violation(driver: &'static str, message: impl Into<String>) -> Self {
+        let violation = StoreViolation {
+            driver,
+            message: message.into(),
+        };
+        OrmError::Db(DbErr::Exec(RuntimeErr::SqlxError(Arc::new(
+            sea_orm::sqlx::Error::Database(Box::new(violation)),
+        ))))
+    }
+
     /// Whether the database refused a statement because it violates a
-    /// unique constraint.
+    /// unique constraint: on every SQL database, and for a document store's
+    /// [`unique_violation`](Self::unique_violation).
     pub fn is_unique_violation(&self) -> bool {
-        matches!(
-            self,
-            OrmError::Db(error)
-                if matches!(error.sql_err(), Some(sea_orm::SqlErr::UniqueConstraintViolation(_)))
-        )
+        let OrmError::Db(error) = self else {
+            return false;
+        };
+        if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
+            return true;
+        }
+        // Violations SeaORM does not read by code, classified by the driver
+        // that raised them: a document store's, MySQL's 1859.
+        match error {
+            DbErr::Exec(RuntimeErr::SqlxError(error))
+            | DbErr::Query(RuntimeErr::SqlxError(error)) => error
+                .as_database_error()
+                .is_some_and(|error| matches!(error.kind(), ErrorKind::UniqueViolation)),
+            _ => false,
+        }
     }
 
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
@@ -158,6 +196,45 @@ impl OrmError {
             feature: feature.into(),
             driver: driver.into(),
         }
+    }
+}
+
+/// A document store's unique-constraint violation, in the shape SQLx gives
+/// database errors, so navree-db's error mapping and
+/// [`OrmError::is_unique_violation`] read it like an SQL database's.
+#[derive(Debug)]
+struct StoreViolation {
+    driver: &'static str,
+    message: String,
+}
+
+impl fmt::Display for StoreViolation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.driver, self.message)
+    }
+}
+
+impl std::error::Error for StoreViolation {}
+
+impl DatabaseError for StoreViolation {
+    fn message(&self) -> &str {
+        &self.message
+    }
+
+    fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+        self
+    }
+
+    fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+        self
+    }
+
+    fn kind(&self) -> ErrorKind {
+        ErrorKind::UniqueViolation
     }
 }
 
@@ -196,5 +273,30 @@ mod tests {
         assert!(error.source().unwrap().downcast_ref::<DbErr>().is_some());
         assert!(!error.is_unique_violation());
         assert!(!error.is_not_found());
+    }
+
+    /// A document store's duplicate key is a unique violation, and its
+    /// `DbErr` answers 409 over HTTP like the SQL databases' violations.
+    #[test]
+    fn document_store_duplicates_are_unique_violations() {
+        let error = OrmError::unique_violation(
+            "mongodb",
+            "E11000 duplicate key error collection: app.users index: email_1",
+        );
+        assert!(error.is_unique_violation());
+        assert!(!error.is_not_found());
+        assert!(
+            error
+                .to_string()
+                .ends_with("mongodb: E11000 duplicate key error collection: app.users index: email_1"),
+            "{error}"
+        );
+        let source = error.source().unwrap().downcast_ref::<DbErr>().unwrap();
+        let response = navree_db::map_db_error(source).expect("a violation");
+        assert_eq!(response.status.as_u16(), 409);
+        assert_eq!(
+            response.body()["message"],
+            "A record with the same unique value already exists."
+        );
     }
 }

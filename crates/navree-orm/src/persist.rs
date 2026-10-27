@@ -61,7 +61,8 @@ fn json_object(values: &[(&'static str, Value)]) -> serde_json::Value {
     )
 }
 
-/// Records a change in the unit of work the statement ran in, if any.
+/// Records a change where the target keeps them: the unit of work the
+/// statement ran in, or a document store's recorder.
 fn record_change<M: Model>(
     target: &Target<'_>,
     key: &M::Key,
@@ -69,15 +70,13 @@ fn record_change<M: Model>(
     old: Option<serde_json::Value>,
     new: Option<serde_json::Value>,
 ) {
-    if let Some(uow) = target.uow() {
-        uow.record_change(ChangeEvent {
-            entity: M::meta().table().to_owned(),
-            id: key.to_key_string(),
-            op,
-            old,
-            new,
-        });
-    }
+    target.record_change(ChangeEvent {
+        entity: M::meta().table().to_owned(),
+        id: key.to_key_string(),
+        op,
+        old,
+        new,
+    });
 }
 
 /// Inserts or updates `record`.
