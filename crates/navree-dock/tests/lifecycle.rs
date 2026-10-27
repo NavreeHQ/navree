@@ -105,7 +105,8 @@ fn running_up_again_leaves_running_services_alone() {
 #[test]
 fn a_changed_port_counts_as_a_new_start() {
     let dir = app("[services.postgres]\nport = 5433\n");
-    let ps = "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n";
+    let ps =
+        "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n";
     let dock = dock(
         dir.path(),
         FakeExecutor::new().respond(PS_ALL, CmdOutput::ok(ps)),

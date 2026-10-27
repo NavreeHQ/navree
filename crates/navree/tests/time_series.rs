@@ -251,7 +251,13 @@ INSERT INTO "webhook_attempts" VALUES
             .build()
             .await;
         let db = before.get::<Db>().await;
-        if Schema::new(db.conn()).target().await.unwrap().timescaledb().is_none() {
+        if Schema::new(db.conn())
+            .target()
+            .await
+            .unwrap()
+            .timescaledb()
+            .is_none()
+        {
             eprintln!("TimescaleDB is not available on this server: skipping");
             before.shutdown().await.unwrap();
             scratch.drop().await;
@@ -279,9 +285,23 @@ INSERT INTO "webhook_attempts" VALUES
                 .collect::<Vec<_>>()
         };
         app.run_command("migrate", &["--pretend"]).await.unwrap();
-        assert_eq!(attempt_keys().await, ["webhook_deliveries"], "pretending changes nothing");
-        assert!(!Schema::new(db.conn()).is_hypertable("webhook_attempts").await.unwrap());
-        assert!(!conversions_applied(&db).await.iter().any(|name| name.contains("webhook")));
+        assert_eq!(
+            attempt_keys().await,
+            ["webhook_deliveries"],
+            "pretending changes nothing"
+        );
+        assert!(
+            !Schema::new(db.conn())
+                .is_hypertable("webhook_attempts")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !conversions_applied(&db)
+                .await
+                .iter()
+                .any(|name| name.contains("webhook"))
+        );
 
         app.run_command("migrate", &[]).await.unwrap();
         assert_eq!(conversions_applied(&db).await, CONVERSIONS);
@@ -290,7 +310,10 @@ INSERT INTO "webhook_attempts" VALUES
         for table in ["webhook_deliveries", "webhook_attempts"] {
             assert!(schema.is_hypertable(table).await.unwrap(), "{table}");
         }
-        assert_eq!(number(&db, "SELECT count(*) FROM webhook_deliveries").await, 2);
+        assert_eq!(
+            number(&db, "SELECT count(*) FROM webhook_deliveries").await,
+            2
+        );
         assert_eq!(
             number(
                 &db,
@@ -300,7 +323,14 @@ INSERT INTO "webhook_attempts" VALUES
             2,
             "the rows moved into chunks, links intact"
         );
-        assert_eq!(number(&db, "SELECT count(*) FROM show_chunks('webhook_deliveries')").await, 2);
+        assert_eq!(
+            number(
+                &db,
+                "SELECT count(*) FROM show_chunks('webhook_deliveries')"
+            )
+            .await,
+            2
+        );
         app.shutdown().await.unwrap();
         scratch.drop().await;
     }
