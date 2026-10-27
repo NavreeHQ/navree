@@ -27,7 +27,6 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use navree_crypto::jose::{Algorithm, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256, Sha384, Sha512};
-use subtle::ConstantTimeEq;
 
 use crate::xml::c14n::{self, Method};
 use crate::xml::{Document, NodeId, XmlError, escape};
@@ -293,7 +292,7 @@ pub(crate) fn verify_enveloped(
         Some(signature),
     );
     let actual = digest(digest_method, canonical.as_bytes())?;
-    if !bool::from(actual.ct_eq(&expected_digest)) {
+    if !navree_crypto::constant_time_eq(&actual, &expected_digest) {
         return Err(SignatureError::DigestMismatch);
     }
     Ok(Some(signature))
