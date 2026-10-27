@@ -105,6 +105,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::logbook` | navree-logbook | `logbook` | `LogbookModule`: the [local debugging timeline](/docs/tools/logbook/) at `/_logbook`, with filters and request replay |
 | `navree::fleet` | navree-fleet | `fleet` | `FleetModule`: [supervised queue workers](/docs/tools/fleet/), metrics, failed jobs and the `/_fleet` dashboard |
 | `navree::helm` | navree-helm | `helm` | `HelmModule`: [Helm](/docs/tools/helm/), the admin panel generated from your entities |
+| `navree::workflows` | navree-workflows, plus `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` | `workflows` | `WorkflowsModule`: [durable workflows](/docs/packages/workflows/) and [end-user automations](/docs/packages/automations/) |
 
 The facade's root also has:
 
@@ -145,6 +146,7 @@ The facade's root also has:
 | Redis (`redis`) | `RedisModule` |
 | Fleet (`fleet`) | `FleetModule` |
 | Helm (`helm`) | `HelmModule`, and its builder extension, so `m.resource::<R>()` and `m.helm_page(..)` work |
+| Workflows (`workflows`) | `WorkflowsModule` (and `m.workflow::<W>()`, `m.workflow_event::<E>()`, `m.trigger::<T>()`, `m.condition::<C>()`, `m.action::<A>()` through `ModuleBuilderWorkflowsExt`) |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()`, and with `micro`, `m.message_handlers::<T>()` and `m.forward_event::<E>()`, work without naming the traits.
 
@@ -202,6 +204,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
 | `fleet` | `http`, `events`, `view`, `db`, `observe`, `queue`, `access` (and `telemetry`) |
 | `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth` |
+| `workflows` | `http`, `db`, `events`, `schedule`, `workspace` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 | `mysql` | `db`, and navree-db's MySQL and MariaDB driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the rlibphonenumber crate) |

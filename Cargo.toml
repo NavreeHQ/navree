@@ -80,6 +80,7 @@ navree-time = { path = "crates/navree-time", version = "0.1.0" }
 navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
 navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
+navree-workflows = { path = "crates/navree-workflows", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
