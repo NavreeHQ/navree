@@ -3,6 +3,7 @@
 //! `navree make:migration users <name>` adds one here.
 
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod {{ users_migration }};
 
@@ -11,5 +12,5 @@ mod {{ users_migration }};
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("users")
         .after(["auth"])
-        .migration({{ users_migration }}::Migration)
+        .migration(migration!({{ users_migration }}))
 }

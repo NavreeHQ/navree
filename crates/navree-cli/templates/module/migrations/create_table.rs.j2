@@ -1,66 +1,25 @@
 //! Creates the `{{ table }}` table.
 
-use sea_orm_migration::prelude::*;
+use navree::schema::prelude::*;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-#[async_trait::async_trait]
-impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table({{ table_iden }}::Table)
-                    .col(ColumnDef::new({{ table_iden }}::Id).uuid().not_null().primary_key())
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("{{ table }}", |t| {
+                t.uuid_primary();
 {% if crud %}
-                    .col(ColumnDef::new({{ table_iden }}::OwnerId).uuid().null())
+                t.uuid("owner_id").nullable().index();
 {% endif %}
-                    .col(ColumnDef::new({{ table_iden }}::Name).string().not_null())
-                    .col(
-                        ColumnDef::new({{ table_iden }}::CreatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new({{ table_iden }}::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-{% if crud %}
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_{{ table }}_owner_id")
-                    .table({{ table_iden }}::Table)
-                    .col({{ table_iden }}::OwnerId)
-                    .to_owned(),
-            )
-            .await
-{% else %}
-            .await
-{% endif %}
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table({{ table_iden }}::Table).to_owned())
+                t.string("name");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await
     }
-}
 
-/// The table and column names (`{{ table_iden }}::Table` is `{{ table }}`).
-#[derive(DeriveIden)]
-enum {{ table_iden }} {
-    Table,
-    Id,
-{% if crud %}
-    OwnerId,
-{% endif %}
-    Name,
-    CreatedAt,
-    UpdatedAt,
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("{{ table }}").await
+    }
 }
