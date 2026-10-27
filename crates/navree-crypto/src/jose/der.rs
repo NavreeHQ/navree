@@ -276,7 +276,33 @@ pub(crate) enum PublicKeyInfo<'a> {
 
 /// Reads a SubjectPublicKeyInfo (`PUBLIC KEY`).
 pub(crate) fn public_key_info(der: &[u8]) -> Option<PublicKeyInfo<'_>> {
-    let mut reader = Reader::new(Reader::only(der, SEQUENCE)?);
+    spki_contents(Reader::only(der, SEQUENCE)?)
+}
+
+/// Reads the subjectPublicKeyInfo of an X.509 certificate (`CERTIFICATE`,
+/// RFC 5280 §4.1). Only the key is read: the certificate's signature,
+/// validity and extensions are not checked.
+pub(crate) fn certificate_public_key_info(der: &[u8]) -> Option<PublicKeyInfo<'_>> {
+    let mut certificate = Reader::new(Reader::only(der, SEQUENCE)?);
+    let mut tbs = Reader::new(certificate.expect(SEQUENCE)?);
+    // `version [0] EXPLICIT` is optional (absent in v1 certificates).
+    let (mut tag, _) = tbs.read()?;
+    if tag == CONTEXT_0 {
+        (tag, _) = tbs.read()?;
+    }
+    // serialNumber, then signature, issuer, validity and subject.
+    if tag != INTEGER {
+        return None;
+    }
+    for _ in 0..4 {
+        tbs.expect(SEQUENCE)?;
+    }
+    spki_contents(tbs.expect(SEQUENCE)?)
+}
+
+/// The contents of a SubjectPublicKeyInfo SEQUENCE.
+fn spki_contents(contents: &[u8]) -> Option<PublicKeyInfo<'_>> {
+    let mut reader = Reader::new(contents);
     let mut algorithm = Reader::new(reader.expect(SEQUENCE)?);
     let key = bit_string(reader.expect(BIT_STRING)?)?;
     if !reader.is_empty() {

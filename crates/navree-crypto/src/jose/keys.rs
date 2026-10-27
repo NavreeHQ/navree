@@ -598,12 +598,15 @@ impl VerifyingKey {
     }
 
     /// Reads a PEM public key: `PUBLIC KEY` (SubjectPublicKeyInfo: RSA,
-    /// P-256, P-384 or Ed25519) or `RSA PUBLIC KEY` (PKCS#1).
+    /// P-256, P-384 or Ed25519), `RSA PUBLIC KEY` (PKCS#1) or the public
+    /// key of a `CERTIFICATE` (see
+    /// [`from_certificate_der`](VerifyingKey::from_certificate_der)).
     pub fn from_pem(pem: &str) -> Result<Self, JoseError> {
         let pem = der::decode_pem(pem)?;
         match pem.label.as_deref() {
             Some("PUBLIC KEY") | None => Self::from_spki_der(&pem.der),
             Some("RSA PUBLIC KEY") => Self::from_public_key_info(der::rsa_public_key(&pem.der)),
+            Some("CERTIFICATE") => Self::from_certificate_der(&pem.der),
             Some(_) => Err(JoseError::InvalidKey(
                 "not a PEM public key: read a private key with SigningKey::from_pem",
             )),
@@ -613,6 +616,15 @@ impl VerifyingKey {
     /// Reads a SubjectPublicKeyInfo DER document.
     pub fn from_spki_der(der: &[u8]) -> Result<Self, JoseError> {
         Self::from_public_key_info(der::public_key_info(der))
+    }
+
+    /// Reads the public key of an X.509 certificate (DER), such as the
+    /// signing certificate in a SAML identity provider's metadata. Only
+    /// the key is read: the certificate's own signature, validity dates and
+    /// extensions are not checked, so trust the certificate for where it
+    /// came from (configured metadata), not for what it says.
+    pub fn from_certificate_der(der: &[u8]) -> Result<Self, JoseError> {
+        Self::from_public_key_info(der::certificate_public_key_info(der))
     }
 
     fn from_public_key_info(info: Option<PublicKeyInfo<'_>>) -> Result<Self, JoseError> {

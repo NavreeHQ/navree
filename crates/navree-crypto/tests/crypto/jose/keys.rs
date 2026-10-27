@@ -73,6 +73,38 @@ fn pkcs8_loading_detects_the_key_type() {
     }
 }
 
+/// Certificates made with `openssl req -x509 -key <fixture>` from the RSA
+/// and P-256 fixture keys.
+#[test]
+fn certificates_give_their_public_key() {
+    for (key, cert, alg) in [
+        ("rsa-2048.pem", "rsa-2048.crt", Algorithm::RS256),
+        ("apple-authkey.p8", "apple-authkey.crt", Algorithm::ES256),
+    ] {
+        let signer = SigningKey::from_pem(&fixture(key)).unwrap();
+        let signature = signer.sign(b"signed by the certificate's key").unwrap();
+        let pem = fixture(cert);
+        for verifier in [
+            VerifyingKey::from_pem(&pem).unwrap(),
+            VerifyingKey::from_certificate_der(&der(&pem)).unwrap(),
+        ] {
+            assert_eq!(verifier.to_jwk().unwrap().n, signer.public_jwk().unwrap().n);
+            verifier
+                .verify(alg, b"signed by the certificate's key", &signature)
+                .unwrap();
+            assert!(verifier.verify(alg, b"something else", &signature).is_err());
+        }
+    }
+    // A SubjectPublicKeyInfo is not a certificate, and a truncated
+    // certificate is refused.
+    let v = json_fixture("independent-vectors.json");
+    let spki = der(v["p256"]["public_pem"].as_str().unwrap());
+    assert!(VerifyingKey::from_certificate_der(&spki).is_err());
+    let mut short = der(&fixture("rsa-2048.crt"));
+    short.truncate(200);
+    assert!(VerifyingKey::from_certificate_der(&short).is_err());
+}
+
 #[test]
 fn bad_keys_are_refused_with_a_reason() {
     let v = json_fixture("independent-vectors.json");
