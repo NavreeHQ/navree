@@ -8,4 +8,5 @@ mod alter;
 mod columns;
 mod create;
 mod errors;
+mod sqlite;
 mod timescale;

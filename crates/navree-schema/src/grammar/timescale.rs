@@ -651,11 +651,15 @@ pub(crate) fn plan_convert(
             }
             if !state.referenced_by.is_empty() {
                 return fail(format!(
-                    "its primary key ({}) must widen to ({}), but {} reference{} it: {}. Point those foreign keys at a key that includes {}, or drop them, then convert",
+                    "its primary key ({}) must widen to ({}), but {} {} it: {}. Point those foreign keys at a key that includes {}, or drop them, then convert",
                     columns.join(", "),
                     widened.join(", "),
                     state.referenced_by.len(),
-                    if state.referenced_by.len() == 1 { "s" } else { "" },
+                    if state.referenced_by.len() == 1 {
+                        "foreign key references"
+                    } else {
+                        "foreign keys reference"
+                    },
                     state
                         .referenced_by
                         .iter()
@@ -987,4 +991,218 @@ pub(crate) fn set_chunk_interval_statement(table_name: &str, interval: &str) -> 
         regclass(table_name),
         interval_arg(interval)?
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::options::SchemaOptions;
+    use crate::target::Target;
+
+    fn audit_state() -> KeyState {
+        KeyState {
+            columns: vec![
+                ("id".into(), "uuid".into()),
+                ("workspace_id".into(), "uuid".into()),
+                ("created_at".into(), "timestamptz".into()),
+                ("action".into(), "varchar".into()),
+            ],
+            primary: Some(("audit_logs_pkey".into(), vec!["id".into()])),
+            indexes: vec![vec!["id".into()], vec!["created_at".into()]],
+            ..KeyState::default()
+        }
+    }
+
+    fn convert(
+        target: Target,
+        options: SchemaOptions,
+        hypertable: &Hypertable,
+        state: &KeyState,
+    ) -> SchemaResult<Compiled> {
+        let ctx = Context {
+            target: &target,
+            options: &options,
+            state: None,
+        };
+        plan_convert("audit_logs", hypertable, state, &ctx)
+    }
+
+    fn timescaledb() -> Target {
+        Target::postgres(17).with_timescaledb((2, 17))
+    }
+
+    #[test]
+    fn converting_widens_the_primary_key_then_creates_the_hypertable() {
+        let mut audit = Hypertable::on("created_at");
+        audit.chunk_interval("1 day").partition_by("workspace_id", 4);
+        let compiled = convert(timescaledb(), SchemaOptions::default(), &audit, &audit_state())
+            .unwrap();
+        assert_eq!(
+            compiled.statements,
+            [
+                "ALTER TABLE \"audit_logs\" DROP CONSTRAINT \"audit_logs_pkey\", ADD PRIMARY KEY (\"id\", \"created_at\", \"workspace_id\")",
+                "SELECT create_hypertable('audit_logs', by_range('created_at', INTERVAL '1 day'), if_not_exists => TRUE)",
+                "SELECT add_dimension('audit_logs', by_hash('workspace_id', 4))",
+            ]
+        );
+        assert_eq!(
+            compiled.notices,
+            ["the primary key of `audit_logs` is now (id, created_at, workspace_id), not (id): a hypertable's unique keys must include its partitioning columns"]
+        );
+    }
+
+    #[test]
+    fn a_table_with_rows_needs_migrate_data() {
+        let state = KeyState {
+            has_rows: true,
+            primary: Some(("audit_logs_pkey".into(), vec!["id".into(), "created_at".into()])),
+            ..audit_state()
+        };
+        let error = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &Hypertable::on("created_at"),
+            &state,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "cannot make `audit_logs` a hypertable: the table has rows: call `.migrate_data()` on the hypertable to move them into chunks (it locks the table while it runs)"
+        );
+        let mut audit = Hypertable::on("created_at");
+        audit.migrate_data();
+        let compiled = convert(timescaledb(), SchemaOptions::default(), &audit, &state).unwrap();
+        assert_eq!(
+            compiled.statements,
+            ["SELECT create_hypertable('audit_logs', by_range('created_at'), if_not_exists => TRUE, migrate_data => TRUE)"]
+        );
+        assert!(compiled.notices.is_empty(), "the key already includes the time");
+    }
+
+    #[test]
+    fn keys_that_cannot_change_stop_the_conversion() {
+        let mut audit = Hypertable::on("created_at");
+        audit.keys(KeyStrategy::Reject);
+        let rejected = convert(timescaledb(), SchemaOptions::default(), &audit, &audit_state())
+            .unwrap_err();
+        assert_eq!(
+            rejected.to_string(),
+            "cannot make `audit_logs` a hypertable: its primary key `audit_logs_pkey` (id) lacks created_at: rebuild it as (id, created_at) first (`ALTER TABLE ... DROP CONSTRAINT audit_logs_pkey, ADD PRIMARY KEY (...)`), or let the builder do it (`hypertable_keys = \"extend\"`)"
+        );
+
+        let referenced = KeyState {
+            referenced_by: vec![
+                ("audit_notes_audit_log_id_foreign".into(), "audit_notes".into()),
+                ("exports_audit_log_id_foreign".into(), "exports".into()),
+            ],
+            ..audit_state()
+        };
+        let error = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &Hypertable::on("created_at"),
+            &referenced,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "cannot make `audit_logs` a hypertable: its primary key (id) must widen to (id, created_at), but 2 foreign keys reference it: `audit_notes` (audit_notes_audit_log_id_foreign), `exports` (exports_audit_log_id_foreign). Point those foreign keys at a key that includes created_at, or drop them, then convert"
+        );
+
+        let unique = KeyState {
+            uniques: vec![("audit_logs_request_id_unique".into(), vec!["request_id".into()])],
+            ..audit_state()
+        };
+        let error = convert(
+            Target::sqlite((3, 46)),
+            SchemaOptions::default(),
+            &Hypertable::on("created_at"),
+            &unique,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unique index `audit_logs_request_id_unique` (request_id) does not include created_at"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn databases_without_timescaledb_get_the_missing_indexes() {
+        let mut audit = Hypertable::on("created_at");
+        audit.partition_by("workspace_id", 4).retain_for("1 year");
+        let compiled =
+            convert(Target::mysql((8, 4)), SchemaOptions::default(), &audit, &audit_state())
+                .unwrap();
+        assert_eq!(
+            compiled.statements,
+            ["ALTER TABLE `audit_logs` ADD INDEX `audit_logs_workspace_id_created_at_index`(`workspace_id`, `created_at` DESC)"],
+            "the primary key stays; the time index exists already"
+        );
+        assert_eq!(
+            compiled.notices,
+            ["MySQL does not support TimescaleDB: `audit_logs` is a regular table with an index on `created_at`; its retention (1 year) policy is skipped"]
+        );
+    }
+
+    #[test]
+    fn the_time_column_is_checked_against_the_table() {
+        let error = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &Hypertable::on("happened_at"),
+            &audit_state(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "cannot make `audit_logs` a hypertable: its time column `happened_at` is not a column of the table"
+        );
+        let error = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &Hypertable::on("action"),
+            &audit_state(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "cannot make `audit_logs` a hypertable: time column `action` has type `varchar`; a hypertable is partitioned by a date, timestamp or integer column"
+        );
+    }
+
+    #[test]
+    fn installs_the_extension_first_when_it_can() {
+        let target = Target::postgres(17).with_timescaledb_installable((2, 17));
+        let state = KeyState {
+            primary: Some(("audit_logs_pkey".into(), vec!["id".into(), "created_at".into()])),
+            ..audit_state()
+        };
+        let compiled = convert(
+            target,
+            SchemaOptions::default(),
+            &Hypertable::on("created_at"),
+            &state,
+        )
+        .unwrap();
+        assert_eq!(compiled.statements[0], CREATE_EXTENSION);
+        assert_eq!(compiled.statements.len(), 2);
+    }
+
+    #[test]
+    fn raw_aggregates_are_scanned_for_time_bucket_calls() {
+        assert!(calls_time_bucket("SELECT time_bucket('1 day', at) FROM t"));
+        assert!(calls_time_bucket("SELECT TIME_BUCKET_GAPFILL ('1 day', at) FROM t"));
+        assert!(!calls_time_bucket("SELECT 'time_bucket(' AS label FROM t"));
+        assert!(!calls_time_bucket("SELECT date_trunc('day', at) -- time_bucket(\n FROM t"));
+    }
+
+    #[test]
+    fn regclass_quotes_only_what_needs_it() {
+        assert_eq!(regclass("events"), "'events'");
+        assert_eq!(regclass("analytics.events"), "'analytics.events'");
+        assert_eq!(regclass("Events"), "'\"Events\"'");
+        assert_eq!(regclass("o'brien"), "'\"o''brien\"'");
+    }
 }
