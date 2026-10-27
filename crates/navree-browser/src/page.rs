@@ -72,7 +72,8 @@ impl PageCore {
         } else {
             json!({ "enabled": false })
         };
-        self.call("Emulation.setTouchEmulationEnabled", touch).await?;
+        self.call("Emulation.setTouchEmulationEnabled", touch)
+            .await?;
         let chrome = &self.browser.chrome;
         self.call(
             "Emulation.setUserAgentOverride",
@@ -119,7 +120,10 @@ pub(crate) async fn open(
         )
         .await
         .map_err(|e| refused("Target.attachToTarget", e))?;
-    let session = attached["sessionId"].as_str().unwrap_or_default().to_owned();
+    let session = attached["sessionId"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
     let log = connection.log(&session);
     log.lock().unwrap_or_else(|e| e.into_inner()).main_frame = Some(target_id.clone());
     let timeout = browser.settings.timeout;
@@ -136,7 +140,10 @@ pub(crate) async fn open(
         ("Network.enable", json!({})),
         ("Log.enable", json!({})),
         ("Page.setLifecycleEventsEnabled", json!({ "enabled": true })),
-        ("Emulation.setFocusEmulationEnabled", json!({ "enabled": true })),
+        (
+            "Emulation.setFocusEmulationEnabled",
+            json!({ "enabled": true }),
+        ),
     ];
     let calls = enable.iter().map(|(method, params)| {
         let core = &core;
@@ -281,7 +288,8 @@ impl Scope {
     }
 
     fn args(&self, target: Option<&Target>, extra: Value) -> Value {
-        let mut args = json!({ "chain": self.chain.iter().map(Target::to_json).collect::<Vec<_>>() });
+        let mut args =
+            json!({ "chain": self.chain.iter().map(Target::to_json).collect::<Vec<_>>() });
         if let Some(target) = target {
             args["target"] = target.to_json();
         }
@@ -358,7 +366,7 @@ impl Scope {
         Ok(answer["result"].clone())
     }
 
-/// Calls the page script's `func`. The script is installed once per
+    /// Calls the page script's `func`. The script is installed once per
     /// document (under a symbol on `globalThis`); later calls send only the
     /// call.
     async fn lib(&self, func: &str, args: Value) -> Result<Value, EvalError> {
@@ -513,7 +521,12 @@ impl Scope {
         }
     }
 
-    async fn failure(&self, step: String, reason: String, waited: Option<Duration>) -> BrowserError {
+    async fn failure(
+        &self,
+        step: String,
+        reason: String,
+        waited: Option<Duration>,
+    ) -> BrowserError {
         let url = Some(self.core.log().url.clone()).filter(|u| !u.is_empty());
         let files = self.capture_failure().await;
         BrowserError::Step(Box::new(StepFailure {
@@ -531,9 +544,7 @@ impl Scope {
         let number = artifacts.next_number();
         let alive = self.gone().is_none();
         let mut files = FailureFiles::default();
-        if alive
-            && let Ok(Ok(png)) = tokio::time::timeout(CAPTURE_TIMEOUT, self.png(false)).await
-        {
+        if alive && let Ok(Ok(png)) = tokio::time::timeout(CAPTURE_TIMEOUT, self.png(false)).await {
             files.screenshot = artifacts.write(&format!("{number}-failure.png"), &png).ok();
         }
         if alive
@@ -582,7 +593,8 @@ impl Scope {
         } else {
             "left"
         };
-        let mut params = json!({ "type": kind, "x": x, "y": y, "button": button, "buttons": buttons });
+        let mut params =
+            json!({ "type": kind, "x": x, "y": y, "button": button, "buttons": buttons });
         if kind != "mouseMoved" {
             params["clickCount"] = json!(1);
         }
@@ -725,11 +737,18 @@ impl Scope {
 
     async fn do_type(&self, target: &Target, text: &str, clear: bool) -> Result<(), Fail> {
         let focus = self
-            .ready("focus", self.args(Some(target), json!({ "clear": clear })), target)
+            .ready(
+                "focus",
+                self.args(Some(target), json!({ "clear": clear })),
+                target,
+            )
             .await?;
         if focus["set"] == true {
             let set = self
-                .lib("setValue", self.args(Some(target), json!({ "value": text })))
+                .lib(
+                    "setValue",
+                    self.args(Some(target), json!({ "value": text })),
+                )
                 .await
                 .map_err(once)?;
             return match self.judge(set, Some(target)).map_err(once)? {
@@ -749,7 +768,11 @@ impl Scope {
 
     async fn do_select(&self, target: &Target, option: &str) -> Result<(), Fail> {
         let answer = self
-            .ready("select", self.args(Some(target), json!({ "option": option })), target)
+            .ready(
+                "select",
+                self.args(Some(target), json!({ "option": option })),
+                target,
+            )
             .await?;
         if answer["custom"] != true {
             return Ok(());
@@ -1049,7 +1072,11 @@ impl Scope {
     async fn do_screenshot(&self, name: &str, full_page: bool) -> Result<PathBuf, Fail> {
         let png = self.png(full_page).await?;
         let artifacts = &self.core.browser.artifacts;
-        let file = format!("{}-{}.png", artifacts.next_number(), artifacts::file_stem(name));
+        let file = format!(
+            "{}-{}.png",
+            artifacts.next_number(),
+            artifacts::file_stem(name)
+        );
         artifacts
             .write(&file, &png)
             .map_err(|e| Fail::Now(e.to_string()))
@@ -1686,7 +1713,10 @@ mod tests {
 
     #[test]
     fn url_globs_match_the_path_the_query_or_the_url() {
-        assert!(url_matches("/deals/*", "http://127.0.0.1:3100/deals/0199c1d2"));
+        assert!(url_matches(
+            "/deals/*",
+            "http://127.0.0.1:3100/deals/0199c1d2"
+        ));
         assert!(url_matches(
             "/api/v1/deals/*/move",
             "http://127.0.0.1:3100/api/v1/deals/abc/move"

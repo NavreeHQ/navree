@@ -94,7 +94,8 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     page.click("Deals").await?;
     let card = Target::from("@deal-card").containing("Lovelace renewal");
     page.drag(card, "[data-stage=won]").await?;
-    page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+    page.assert_see_in("[data-stage=won]", "Lovelace renewal")
+        .await?;
     // The board moves the card at once; wait for its API call to finish.
     let moved = page.wait_for_request("/api/v1/deals/*/move").await?;
     assert_eq!(moved.status, Some(200));

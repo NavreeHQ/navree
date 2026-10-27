@@ -152,31 +152,46 @@ impl Controller for FixtureController {
                 }
             })
             .public(),
-            RouteDef::on(Method::POST, "!/login", |Form(form): Form<LoginForm>| async move {
-                if form.email == "rep1@navree.test" && form.password == "password123" {
-                    (
-                        [(SET_COOKIE, "navree_at=token-rep1; HttpOnly; Path=/; SameSite=Lax")],
-                        Redirect::to("/"),
-                    )
-                        .into_response()
-                } else {
-                    Redirect::to("/login?error=1").into_response()
-                }
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/login",
+                |Form(form): Form<LoginForm>| async move {
+                    if form.email == "rep1@navree.test" && form.password == "password123" {
+                        (
+                            [(
+                                SET_COOKIE,
+                                "navree_at=token-rep1; HttpOnly; Path=/; SameSite=Lax",
+                            )],
+                            Redirect::to("/"),
+                        )
+                            .into_response()
+                    } else {
+                        Redirect::to("/login?error=1").into_response()
+                    }
+                },
+            )
             .public(),
-            RouteDef::on(Method::POST, "!/api/deals/{id}/move", |axum::extract::Path(id): axum::extract::Path<String>| async move {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                Json(json!({ "moved": id }))
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/api/deals/{id}/move",
+                |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Json(json!({ "moved": id }))
+                },
+            )
             .public(),
-            RouteDef::on(Method::GET, "!/api/whoami", |headers: HeaderMap| async move {
-                let cookie = headers
-                    .get(COOKIE)
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or_default()
-                    .to_owned();
-                Json(json!({ "cookie": cookie }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "!/api/whoami",
+                |headers: HeaderMap| async move {
+                    let cookie = headers
+                        .get(COOKIE)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default()
+                        .to_owned();
+                    Json(json!({ "cookie": cookie }))
+                },
+            )
             .public(),
         ]
     }
@@ -219,7 +234,9 @@ pub struct Fixture {
 impl Fixture {
     pub async fn start() -> Fixture {
         let app = app().await;
-        let server = TestServer::start(app.ctx()).await.expect("the fixture serves");
+        let server = TestServer::start(app.ctx())
+            .await
+            .expect("the fixture serves");
         Fixture { server, app }
     }
 

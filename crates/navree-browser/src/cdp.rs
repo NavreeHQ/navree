@@ -163,10 +163,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 fn log_of(logs: &Logs, session: &str) -> Arc<Mutex<PageLog>> {
-    lock(logs)
-        .entry(session.to_owned())
-        .or_insert_with(Arc::default)
-        .clone()
+    lock(logs).entry(session.to_owned()).or_default().clone()
 }
 
 /// The connection task: sends commands, routes answers and events.
@@ -211,7 +208,8 @@ async fn run(
         for command in outgoing {
             let id = next_id;
             next_id += 1;
-            let mut message = json!({ "id": id, "method": command.method, "params": command.params });
+            let mut message =
+                json!({ "id": id, "method": command.method, "params": command.params });
             if let Some(session) = command.session {
                 message["sessionId"] = Value::String(session);
             }
@@ -233,7 +231,8 @@ async fn run(
     }
     for log in lock(&logs).values() {
         let mut log = lock(log);
-        log.gone.get_or_insert_with(|| "the browser closed".to_owned());
+        log.gone
+            .get_or_insert_with(|| "the browser closed".to_owned());
     }
     let _ = sink.close().await;
 }
@@ -425,7 +424,8 @@ impl PageLog {
                 if let Some(request) = self.request(&p["requestId"]) {
                     request.done = true;
                     if let Some(status) = request.status.filter(|s| *s >= 400) {
-                        let line = format!("[network] {} {} -> {status}", request.method, request.url);
+                        let line =
+                            format!("[network] {} {} -> {status}", request.method, request.url);
                         self.line(line);
                     }
                 }
@@ -435,7 +435,10 @@ impl PageLog {
                     let error = p["errorText"].as_str().unwrap_or("failed").to_owned();
                     request.done = true;
                     request.failure = Some(error.clone());
-                    let line = format!("[network] {} {} failed: {error}", request.method, request.url);
+                    let line = format!(
+                        "[network] {} {} failed: {error}",
+                        request.method, request.url
+                    );
                     self.line(line);
                 }
             }
@@ -542,7 +545,10 @@ mod tests {
         );
         assert_eq!(
             log.errors,
-            ["console.error: Error: boom", "uncaught TypeError: x is undefined"]
+            [
+                "console.error: Error: boom",
+                "uncaught TypeError: x is undefined"
+            ]
         );
     }
 
@@ -585,7 +591,10 @@ mod tests {
                 "[network] GET http://x/c failed: net::ERR_CONNECTION_REFUSED"
             ]
         );
-        assert!(log.errors.is_empty(), "failed requests are not console errors");
+        assert!(
+            log.errors.is_empty(),
+            "failed requests are not console errors"
+        );
     }
 
     #[test]
@@ -639,7 +648,10 @@ mod tests {
             &json!({ "type": "prompt", "message": "Name?", "defaultPrompt": "Ada" }),
         );
         assert_eq!(answer.unwrap().1["promptText"], "Ada");
-        assert_eq!(log.lines[0], "[dialog] confirm(\"Delete the deal?\") accepted");
+        assert_eq!(
+            log.lines[0],
+            "[dialog] confirm(\"Delete the deal?\") accepted"
+        );
     }
 
     #[test]

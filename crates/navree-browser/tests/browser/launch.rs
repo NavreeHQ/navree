@@ -103,10 +103,6 @@ async fn invalid_builder_values_are_config_errors() {
 async fn a_binary_that_is_not_a_browser_fails_to_launch() {
     // The test executable itself never opens a DevTools port: it exits.
     let me = std::env::current_exe().unwrap();
-    let error = Browser::builder()
-        .chrome(&me)
-        .launch()
-        .await
-        .unwrap_err();
+    let error = Browser::builder().chrome(&me).launch().await.unwrap_err();
     assert!(matches!(error, BrowserError::Launch { .. }), "{error}");
 }

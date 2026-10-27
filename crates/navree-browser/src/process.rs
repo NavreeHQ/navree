@@ -102,7 +102,14 @@ pub(crate) fn chrome_args(
         let shell = path
             .file_name()
             .is_some_and(|name| name.to_string_lossy().contains("headless"));
-        args.push(if shell { "--headless" } else { "--headless=new" }.to_owned());
+        args.push(
+            if shell {
+                "--headless"
+            } else {
+                "--headless=new"
+            }
+            .to_owned(),
+        );
         args.push("--hide-scrollbars".to_owned());
     }
     // Containers and recent Ubuntu runners cannot start Chrome's sandbox;
@@ -133,16 +140,19 @@ pub(crate) fn devtools_url(port_file: Option<&str>, output: &[String]) -> Option
 }
 
 impl Chrome {
-    async fn launch(path: &Path, headless: bool, window: (u32, u32)) -> Result<Chrome, BrowserError> {
+    async fn launch(
+        path: &Path,
+        headless: bool,
+        window: (u32, u32),
+    ) -> Result<Chrome, BrowserError> {
         let launch_error = |reason: String| BrowserError::Launch {
             path: path.to_path_buf(),
             reason,
         };
         let profile =
             std::env::temp_dir().join(format!("navree-browser-{}", uuid::Uuid::new_v4().simple()));
-        std::fs::create_dir_all(&profile).map_err(|e| {
-            BrowserError::io(format!("cannot create {}", profile.display()), e)
-        })?;
+        std::fs::create_dir_all(&profile)
+            .map_err(|e| BrowserError::io(format!("cannot create {}", profile.display()), e))?;
         let mut child = Command::new(path)
             .args(chrome_args(path, headless, window, &profile))
             .stdin(Stdio::null())
@@ -300,7 +310,10 @@ mod tests {
         );
         // A file still being written is not used.
         assert_eq!(devtools_url(Some("52417"), &[]), None);
-        let output = ["".to_owned(), "DevTools listening on ws://127.0.0.1:9222/devtools/browser/x".to_owned()];
+        let output = [
+            "".to_owned(),
+            "DevTools listening on ws://127.0.0.1:9222/devtools/browser/x".to_owned(),
+        ];
         assert_eq!(
             devtools_url(None, &output),
             Some("ws://127.0.0.1:9222/devtools/browser/x".to_owned())

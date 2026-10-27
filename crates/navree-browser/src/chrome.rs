@@ -113,7 +113,10 @@ impl Search<'_> {
             }
         }
         if let Some(cache) = cache_dir(self.os, self.env) {
-            out.push(format!("{} (navree browser:install)", cache.join("chrome").display()));
+            out.push(format!(
+                "{} (navree browser:install)",
+                cache.join("chrome").display()
+            ));
         }
         if let Some(playwright) = self.playwright_dir() {
             out.push(format!("{} (Playwright)", playwright.display()));
@@ -245,9 +248,8 @@ fn chrome_for_testing(dir: &Path, os: Os) -> Vec<PathBuf> {
         Os::Mac => ["chrome-mac-arm64", "chrome-mac-x64"]
             .iter()
             .map(|platform| {
-                dir.join(platform).join(
-                    "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-                )
+                dir.join(platform)
+                    .join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")
             })
             .chain(std::iter::once(
                 dir.join("chrome-mac/Chromium.app/Contents/MacOS/Chromium"),

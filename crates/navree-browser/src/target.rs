@@ -152,10 +152,7 @@ mod tests {
     #[test]
     fn css_selectors_start_with_hash_dot_or_bracket_or_css_prefix() {
         assert_eq!(kind("#deal-title"), ("css".into(), "#deal-title".into()));
-        assert_eq!(
-            kind(".board .card"),
-            ("css".into(), ".board .card".into())
-        );
+        assert_eq!(kind(".board .card"), ("css".into(), ".board .card".into()));
         assert_eq!(kind("[name=email]"), ("css".into(), "[name=email]".into()));
         assert_eq!(kind("css=main h1"), ("css".into(), "main h1".into()));
     }

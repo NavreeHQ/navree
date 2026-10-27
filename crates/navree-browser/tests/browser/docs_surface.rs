@@ -24,12 +24,16 @@ async fn surface(ctx: &AppContext) -> Result<(), BrowserError> {
     let browser: Browser = builder.launch().await?;
     let browser: Browser = Browser::launch().await?;
     let page: Page = browser.visit("http://127.0.0.1:3100/login").await?;
-    let page: Page = browser.visit_with("http://127.0.0.1:3100", Viewport::phone()).await?;
+    let page: Page = browser
+        .visit_with("http://127.0.0.1:3100", Viewport::phone())
+        .await?;
     let page: Page = browser.new_page().await?;
     let _: &str = browser.version();
 
     // Targets.
-    let target: Target = Target::from("@deal-card").containing("Lovelace renewal").nth(0);
+    let target: Target = Target::from("@deal-card")
+        .containing("Lovelace renewal")
+        .nth(0);
 
     // Actions.
     page.type_into("Title", "Lovelace renewal").await?;
@@ -51,7 +55,8 @@ async fn surface(ctx: &AppContext) -> Result<(), BrowserError> {
     // Assertions.
     page.assert_see("Deal saved").await?;
     page.assert_dont_see("Something went wrong").await?;
-    page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+    page.assert_see_in("[data-stage=won]", "Lovelace renewal")
+        .await?;
     page.assert_path_is("/deals").await?;
     page.assert_query_has("stage", "won").await?;
     page.assert_title("Deals · Navree CRM").await?;

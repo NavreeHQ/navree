@@ -22,7 +22,8 @@ fn archive(platform: &str, with_binary: bool) -> Vec<u8> {
         zip.start_file(name, options).unwrap();
         zip.write_all(b"#!/bin/sh\necho chrome\n").unwrap();
     }
-    zip.start_file(format!("{root}/resources.pak"), options).unwrap();
+    zip.start_file(format!("{root}/resources.pak"), options)
+        .unwrap();
     zip.write_all(&[7u8; 4096]).unwrap();
     zip.finish().unwrap().into_inner()
 }
@@ -58,7 +59,12 @@ async fn it_downloads_and_unpacks_into_the_cache_once() {
             .join("chrome/156.0.8078.47/chrome-linux64/chrome")
     );
     assert!(binary.is_file());
-    assert!(cache.path().join("chrome/156.0.8078.47/chrome-linux64/resources.pak").is_file());
+    assert!(
+        cache
+            .path()
+            .join("chrome/156.0.8078.47/chrome-linux64/resources.pak")
+            .is_file()
+    );
     let printed = String::from_utf8(out).unwrap();
     assert!(
         printed.contains("Downloaded Chrome for Testing 156.0.8078.47 (linux64) to "),
@@ -81,7 +87,11 @@ async fn it_downloads_and_unpacks_into_the_cache_once() {
     // Installed: nothing to download.
     let mut out = Vec::new();
     install(&opts, &mut out).await.unwrap();
-    assert!(String::from_utf8(out).unwrap().contains("is already installed"));
+    assert!(
+        String::from_utf8(out)
+            .unwrap()
+            .contains("is already installed")
+    );
 
     // --force downloads again.
     let forced = options(&server, cache.path(), "156.0.8078.47", true);
@@ -101,7 +111,10 @@ async fn a_version_the_server_does_not_have_fails_with_the_url() {
     let opts = options(&server, cache.path(), "1.2.3.4", false);
     let error = install(&opts, &mut Vec::new()).await.unwrap_err();
     let message = format!("{error:#}");
-    assert!(message.contains("/1.2.3.4/linux64/chrome-linux64.zip"), "{message}");
+    assert!(
+        message.contains("/1.2.3.4/linux64/chrome-linux64.zip"),
+        "{message}"
+    );
     assert!(message.contains("404"), "{message}");
     assert!(!cache.path().join("chrome/1.2.3.4").exists());
 }
@@ -121,15 +134,27 @@ async fn a_broken_archive_leaves_nothing_behind() {
         .await;
     let cache = tempfile::tempdir().unwrap();
 
-    let error = install(&options(&server, cache.path(), "9.9.9.9", false), &mut Vec::new())
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("is not a valid archive"), "{error:#}");
+    let error = install(
+        &options(&server, cache.path(), "9.9.9.9", false),
+        &mut Vec::new(),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("is not a valid archive"),
+        "{error:#}"
+    );
 
-    let error = install(&options(&server, cache.path(), "8.8.8.8", false), &mut Vec::new())
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("has no chrome-linux64/ browser"), "{error:#}");
+    let error = install(
+        &options(&server, cache.path(), "8.8.8.8", false),
+        &mut Vec::new(),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("has no chrome-linux64/ browser"),
+        "{error:#}"
+    );
 
     let left: Vec<_> = std::fs::read_dir(cache.path().join("chrome"))
         .unwrap()

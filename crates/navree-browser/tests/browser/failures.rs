@@ -62,18 +62,40 @@ async fn a_failed_step_saves_a_screenshot_the_html_and_the_console_log() {
     }
 
     let message = error.to_string();
-    assert!(message.starts_with("assert_see(\"Deal saved\") failed after"), "{message}");
-    assert!(message.contains("the text is not visible on http://127.0.0.1:"), "{message}");
+    assert!(
+        message.starts_with("assert_see(\"Deal saved\") failed after"),
+        "{message}"
+    );
+    assert!(
+        message.contains("the text is not visible on http://127.0.0.1:"),
+        "{message}"
+    );
     assert!(message.contains("/broken\n  screenshot: "), "{message}");
-    assert!(message.contains("01-failure.png\n  html:       "), "{message}");
-    assert!(message.contains("01-failure.html\n  console:    "), "{message}");
+    assert!(
+        message.contains("01-failure.png\n  html:       "),
+        "{message}"
+    );
+    assert!(
+        message.contains("01-failure.html\n  console:    "),
+        "{message}"
+    );
     assert!(message.ends_with("01-console.log"), "{message}");
-    assert_eq!(format!("{error:?}"), message, "Debug prints the same report");
+    assert_eq!(
+        format!("{error:?}"),
+        message,
+        "Debug prints the same report"
+    );
 
     // The next failure is numbered after it.
     let error = page.press("Nothing here").await.unwrap_err();
     assert!(
-        error.files().unwrap().screenshot.as_ref().unwrap().ends_with("02-failure.png"),
+        error
+            .files()
+            .unwrap()
+            .screenshot
+            .as_ref()
+            .unwrap()
+            .ends_with("02-failure.png"),
         "{error}"
     );
 }
@@ -92,7 +114,11 @@ async fn screenshots_on_purpose_are_numbered_and_named() {
         .unwrap();
     let page = browser.visit(site.url("/tall")).await.unwrap();
     let shot = page.screenshot("board-after-move").await.unwrap();
-    assert!(shot.ends_with("01-board-after-move.png"), "{}", shot.display());
+    assert!(
+        shot.ends_with("01-board-after-move.png"),
+        "{}",
+        shot.display()
+    );
     assert_eq!(png_size(&shot), (1440, 900));
     let full = page.screenshot_full_page("whole page").await.unwrap();
     assert!(full.ends_with("02-whole-page.png"), "{}", full.display());
@@ -106,7 +132,11 @@ async fn failures_go_under_the_default_artifacts_folder() {
     let (browser, site) = browser_or_skip!("failures_go_under_the_default_artifacts_folder");
     let dir = browser.artifacts_dir().to_path_buf();
     assert!(
-        dir.ends_with(Path::new("navree-browser").join("failures").join("failures_go_under_the_default_artifacts_folder")),
+        dir.ends_with(
+            Path::new("navree-browser")
+                .join("failures")
+                .join("failures_go_under_the_default_artifacts_folder")
+        ),
         "{}",
         dir.display()
     );
@@ -116,5 +146,13 @@ async fn failures_go_under_the_default_artifacts_folder() {
         .assert_see("Not here")
         .await
         .unwrap_err();
-    assert!(error.files().unwrap().screenshot.as_ref().unwrap().starts_with(&dir));
+    assert!(
+        error
+            .files()
+            .unwrap()
+            .screenshot
+            .as_ref()
+            .unwrap()
+            .starts_with(&dir)
+    );
 }
