@@ -83,7 +83,8 @@ fn request_id_of(request: &Request) -> Option<RequestId> {
 /// a plain future, so a request pays for one middleware, not one per
 /// layer. Outermost first: the request context; the guard (panic catcher,
 /// timeout, security headers); the checks (error rendering, maintenance
-/// mode, per-IP rate limit). A missing part is skipped.
+/// mode, per-IP rate limit, and authentication when no `Session`-slot
+/// layer comes after them). A missing part is skipped.
 #[derive(Default)]
 pub(crate) struct Stages {
     pub(crate) context: Option<ContextState>,
