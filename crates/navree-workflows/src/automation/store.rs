@@ -22,7 +22,10 @@ use crate::store::{StoreResult, from_millis, statement};
 /// stored. Two drivers ship: [`DatabaseAutomationStore`] (`automations`,
 /// `automation_versions`, `automation_enrollments`) and
 /// [`MemoryAutomationStore`]; both pass the same conformance suite. Writes
-/// take `Option<&Uow>` like [`WorkflowStore`](crate::WorkflowStore)'s.
+/// take `Option<&Uow>` like [`WorkflowStore`](crate::WorkflowStore)'s, and
+/// so do [`get`](AutomationStore::get) and
+/// [`versions`](AutomationStore::versions): given a unit of work they see
+/// its writes before it commits (an update and a publish in one request).
 pub trait AutomationStore: Send + Sync + 'static {
     /// Stores a new automation.
     fn insert<'a>(
@@ -42,8 +45,13 @@ pub trait AutomationStore: Send + Sync + 'static {
     /// when it is unknown.
     fn delete<'a>(&'a self, uow: Option<&'a Uow>, id: Uuid) -> BoxFuture<'a, StoreResult<bool>>;
 
-    /// The automation `id`.
-    fn get(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Option<Automation>>>;
+    /// The automation `id`, as `uow` sees it (its own writes included)
+    /// when given.
+    fn get<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Option<Automation>>>;
 
     /// Automations passing `query`, newest first.
     fn list<'a>(&'a self, query: &'a AutomationQuery)
@@ -67,8 +75,13 @@ pub trait AutomationStore: Send + Sync + 'static {
     fn version(&self, id: Uuid, version: u32)
     -> BoxFuture<'_, StoreResult<Option<AutomationVersion>>>;
 
-    /// Every version of automation `id`, newest first.
-    fn versions(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Vec<AutomationVersion>>>;
+    /// Every version of automation `id`, newest first, as `uow` sees them
+    /// when given.
+    fn versions<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Vec<AutomationVersion>>>;
 
     /// Stores an enrollment.
     fn insert_enrollment<'a>(
@@ -95,18 +108,61 @@ pub trait AutomationStore: Send + Sync + 'static {
 // Memory
 // ---------------------------------------------------------------------------
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct MemoryState {
     automations: HashMap<Uuid, Automation>,
     versions: Vec<AutomationVersion>,
     enrollments: Vec<EnrollmentRecord>,
 }
 
+/// A write waiting for its unit of work to commit. It may run more than
+/// once: on the views of reads through the unit of work, then on the state.
+type Op = Arc<dyn Fn(&mut MemoryState) + Send + Sync>;
+
+/// The writes of one unit of work that has not committed yet.
+struct Pending {
+    id: u64,
+    uow: Uow,
+    ops: Vec<Op>,
+}
+
+#[derive(Default)]
+struct PendingWrites {
+    next_id: u64,
+    entries: Vec<Pending>,
+}
+
 /// Automations in process memory (`workflows.store = "memory"`): lost on
-/// restart. Writes given a unit of work apply once it commits.
+/// restart. Writes given a unit of work apply once it commits (and vanish
+/// when it rolls back); reads given the same unit of work see them before.
 #[derive(Clone, Default)]
 pub struct MemoryAutomationStore {
     state: Arc<Mutex<MemoryState>>,
+    pending: Arc<Mutex<PendingWrites>>,
+}
+
+/// Drops a unit of work's pending writes when its `after_commit` hook is
+/// dropped: after it ran (commit), or unrun (rollback).
+struct PendingGuard {
+    store: MemoryAutomationStore,
+    id: u64,
+}
+
+impl PendingGuard {
+    /// Applies the pending writes to the state (the commit).
+    fn apply(&self) {
+        let ops = self.store.take_pending(self.id);
+        let mut state = self.store.lock();
+        for op in ops {
+            op(&mut state);
+        }
+    }
+}
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        self.store.take_pending(self.id);
+    }
 }
 
 impl MemoryAutomationStore {
@@ -119,18 +175,64 @@ impl MemoryAutomationStore {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn write(&self, uow: Option<&Uow>, apply: impl FnOnce(&mut MemoryState) + Send + 'static) {
-        match uow {
-            Some(uow) => {
-                let store = self.clone();
-                uow.after_commit(move || {
-                    Box::pin(async move {
-                        apply(&mut store.lock());
-                    })
-                });
-            }
-            None => apply(&mut self.lock()),
+    fn pending(&self) -> MutexGuard<'_, PendingWrites> {
+        self.pending.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn take_pending(&self, id: u64) -> Vec<Op> {
+        let mut pending = self.pending();
+        match pending.entries.iter().position(|p| p.id == id) {
+            Some(index) => pending.entries.remove(index).ops,
+            None => Vec::new(),
         }
+    }
+
+    /// Applies `apply` now, or once `uow` commits.
+    fn write(&self, uow: Option<&Uow>, apply: impl Fn(&mut MemoryState) + Send + Sync + 'static) {
+        let Some(uow) = uow else {
+            apply(&mut self.lock());
+            return;
+        };
+        let mut pending = self.pending();
+        if let Some(entry) = pending.entries.iter_mut().find(|p| p.uow.same_as(uow)) {
+            entry.ops.push(Arc::new(apply));
+            return;
+        }
+        pending.next_id += 1;
+        let id = pending.next_id;
+        pending.entries.push(Pending {
+            id,
+            uow: uow.clone(),
+            ops: vec![Arc::new(apply)],
+        });
+        drop(pending);
+        let guard = PendingGuard {
+            store: self.clone(),
+            id,
+        };
+        uow.after_commit(move || {
+            Box::pin(async move {
+                guard.apply();
+            })
+        });
+    }
+
+    /// The state as `uow` sees it: its pending writes applied to a copy.
+    fn view(&self, uow: Option<&Uow>) -> MemoryState {
+        let mut state = self.lock().clone();
+        if let Some(uow) = uow {
+            let ops: Vec<Op> = self
+                .pending()
+                .entries
+                .iter()
+                .filter(|p| p.uow.same_as(uow))
+                .flat_map(|p| p.ops.clone())
+                .collect();
+            for op in ops {
+                op(&mut state);
+            }
+        }
+        state
     }
 }
 
@@ -160,7 +262,7 @@ impl AutomationStore for MemoryAutomationStore {
     ) -> BoxFuture<'a, StoreResult<()>> {
         let automation = automation.clone();
         self.write(uow, move |state| {
-            state.automations.insert(automation.id, automation);
+            state.automations.insert(automation.id, automation.clone());
         });
         ready(())
     }
@@ -170,12 +272,12 @@ impl AutomationStore for MemoryAutomationStore {
         uow: Option<&'a Uow>,
         automation: &'a Automation,
     ) -> BoxFuture<'a, StoreResult<bool>> {
-        let known = self.lock().automations.contains_key(&automation.id);
+        let known = self.view(uow).automations.contains_key(&automation.id);
         if known {
             let automation = automation.clone();
             self.write(uow, move |state| {
                 if let Some(stored) = state.automations.get_mut(&automation.id) {
-                    *stored = automation;
+                    *stored = automation.clone();
                 }
             });
         }
@@ -183,7 +285,7 @@ impl AutomationStore for MemoryAutomationStore {
     }
 
     fn delete<'a>(&'a self, uow: Option<&'a Uow>, id: Uuid) -> BoxFuture<'a, StoreResult<bool>> {
-        let known = self.lock().automations.contains_key(&id);
+        let known = self.view(uow).automations.contains_key(&id);
         if known {
             self.write(uow, move |state| {
                 state.automations.remove(&id);
@@ -194,8 +296,12 @@ impl AutomationStore for MemoryAutomationStore {
         ready(known)
     }
 
-    fn get(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Option<Automation>>> {
-        ready(self.lock().automations.get(&id).cloned())
+    fn get<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Option<Automation>>> {
+        ready(self.view(uow).automations.remove(&id))
     }
 
     fn list<'a>(
@@ -246,7 +352,7 @@ impl AutomationStore for MemoryAutomationStore {
         version: &'a AutomationVersion,
     ) -> BoxFuture<'a, StoreResult<()>> {
         let version = version.clone();
-        self.write(uow, move |state| state.versions.push(version));
+        self.write(uow, move |state| state.versions.push(version.clone()));
         ready(())
     }
 
@@ -264,13 +370,16 @@ impl AutomationStore for MemoryAutomationStore {
         )
     }
 
-    fn versions(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Vec<AutomationVersion>>> {
+    fn versions<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Vec<AutomationVersion>>> {
         let mut versions: Vec<AutomationVersion> = self
-            .lock()
+            .view(uow)
             .versions
-            .iter()
+            .into_iter()
             .filter(|v| v.automation_id == id)
-            .cloned()
             .collect();
         versions.sort_by(|a, b| b.version.cmp(&a.version));
         ready(versions)
@@ -282,7 +391,7 @@ impl AutomationStore for MemoryAutomationStore {
         enrollment: &'a EnrollmentRecord,
     ) -> BoxFuture<'a, StoreResult<()>> {
         let enrollment = enrollment.clone();
-        self.write(uow, move |state| state.enrollments.push(enrollment));
+        self.write(uow, move |state| state.enrollments.push(enrollment.clone()));
         ready(())
     }
 
@@ -361,7 +470,24 @@ impl DatabaseAutomationStore {
     }
 
     async fn all(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<Vec<QueryResult>> {
-        Ok(self.db.conn().query_all_raw(self.stmt(sql, values)).await?)
+        self.all_in(None, sql, values).await
+    }
+
+    /// Reads in `uow`'s transaction when it has one open (to see its
+    /// writes), on the pool otherwise.
+    async fn all_in(
+        &self,
+        uow: Option<&Uow>,
+        sql: &str,
+        values: Vec<SqlValue>,
+    ) -> StoreResult<Vec<QueryResult>> {
+        let stmt = self.stmt(sql, values);
+        if let Some(uow) = uow
+            && let Some(tx) = uow.open_tx().await
+        {
+            return Ok(tx.query_all_raw(stmt).await?);
+        }
+        Ok(self.db.conn().query_all_raw(stmt).await?)
     }
 
     async fn count_of(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<u64> {
@@ -580,10 +706,15 @@ impl AutomationStore for DatabaseAutomationStore {
         })
     }
 
-    fn get(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Option<Automation>>> {
+    fn get<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Option<Automation>>> {
         Box::pin(async move {
             let rows = self
-                .all(
+                .all_in(
+                    uow,
                     &format!("SELECT {AUTOMATION_COLUMNS} FROM {AUTOMATIONS_TABLE} WHERE id = ?"),
                     vec![id.to_string().into()],
                 )
@@ -684,10 +815,15 @@ impl AutomationStore for DatabaseAutomationStore {
         })
     }
 
-    fn versions(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Vec<AutomationVersion>>> {
+    fn versions<'a>(
+        &'a self,
+        uow: Option<&'a Uow>,
+        id: Uuid,
+    ) -> BoxFuture<'a, StoreResult<Vec<AutomationVersion>>> {
         Box::pin(async move {
             let rows = self
-                .all(
+                .all_in(
+                    uow,
                     &format!(
                         "SELECT {VERSION_COLUMNS} FROM {VERSIONS_TABLE} \
                          WHERE automation_id = ? ORDER BY version DESC"
