@@ -70,6 +70,7 @@ fn main() -> ExitCode {
     let runtime = tokio::runtime::Runtime::new().expect("a runtime");
     runtime.block_on(a_master_supervises_real_worker_processes());
     println!("test a_master_supervises_real_worker_processes ... ok");
+    println!("\ntest result: ok. 1 passed; 0 failed");
     ExitCode::SUCCESS
 }
 

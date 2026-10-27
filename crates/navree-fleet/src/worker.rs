@@ -61,6 +61,9 @@ pub(crate) async fn run_worker(
         }
     };
     let recorder = ctx.try_get::<JobRecorder>().await;
+    if let Some(recorder) = &recorder {
+        recorder.arm();
+    }
     let hooks = Arc::new(FleetHooks::default());
     hooks.paused.store(spec.paused, Ordering::SeqCst);
     let stop = CancellationToken::new();

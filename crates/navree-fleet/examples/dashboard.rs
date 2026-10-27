@@ -192,7 +192,7 @@ async fn main() -> Result<(), BoxError> {
                     ms: 50 + (n * 37) % 400,
                 })
                 .await;
-            if n % 3 == 0 {
+            if n.is_multiple_of(3) {
                 for _ in 0..6 {
                     let _ = queue
                         .dispatch(SendDigest {
@@ -202,7 +202,7 @@ async fn main() -> Result<(), BoxError> {
                         .await;
                 }
             }
-            if n % 20 == 0 {
+            if n.is_multiple_of(20) {
                 let _ = queue
                     .dispatch(ExportContacts {
                         contact: format!("contact-{n}"),

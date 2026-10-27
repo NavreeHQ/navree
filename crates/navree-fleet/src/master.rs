@@ -197,10 +197,10 @@ impl Master {
                 None => break,
             }
         }
-        if result.is_ok() {
-            run.flush().await?;
-            run.snapshot().await?;
-        }
+        let flushed = run.flush().await;
+        run.survive("store finished jobs", flushed);
+        let snapped = run.snapshot().await;
+        run.survive("store a metrics snapshot", snapped);
         run.master
             .fleet
             .store()
@@ -320,31 +320,52 @@ impl Run {
                     self.handle(id, report).await;
                 }
                 _ = ticks.tick() => {
+                    // A database error is logged and the step tried again
+                    // on a later tick: the workers keep running meanwhile.
                     if self.stopping {
                         continue;
                     }
-                    self.check_commands().await?;
+                    let commands = self.check_commands().await;
+                    self.survive("read pause and terminate", commands);
                     if self.stopping {
                         continue;
                     }
                     if last_balance.elapsed() >= cooldown {
                         last_balance = Instant::now();
-                        self.balance().await?;
+                        let balanced = self.balance().await;
+                        self.survive("rebalance", balanced);
                     }
                     self.reconcile().await;
                     if last_heartbeat.elapsed() >= settings.heartbeat {
                         last_heartbeat = Instant::now();
-                        self.heartbeat().await?;
-                        self.flush().await?;
-                        self.long_waits().await?;
+                        let beat = self.heartbeat().await;
+                        self.survive("store the heartbeat", beat);
+                        let flushed = self.flush().await;
+                        self.survive("store finished jobs", flushed);
+                        let waits = self.long_waits().await;
+                        self.survive("check long waits", waits);
                     }
                     if last_snapshot.elapsed() >= snapshot_every {
                         last_snapshot = Instant::now();
-                        self.snapshot().await?;
-                        self.master.fleet.trim().await?;
+                        let snapped = self.snapshot().await;
+                        self.survive("store a metrics snapshot", snapped);
+                        let trimmed = self.master.fleet.trim().await;
+                        self.survive("trim old records", trimmed);
                     }
                 }
             }
+        }
+    }
+
+    /// Logs a failed step of the loop.
+    fn survive(&self, what: &str, result: Result<(), FleetError>) {
+        if let Err(error) = result {
+            tracing::error!(
+                target: "navree::fleet",
+                master = %self.master.id,
+                %error,
+                "fleet master cannot {what}; trying again"
+            );
         }
     }
 
@@ -691,7 +712,13 @@ impl Run {
             return Ok(());
         }
         let jobs = std::mem::take(&mut self.unsaved);
-        self.master.fleet.record(Some(&self.master.id), &jobs).await
+        let stored = self.master.fleet.record(Some(&self.master.id), &jobs).await;
+        if stored.is_err() {
+            // Kept for the next try (newest reports after them).
+            let newer = std::mem::replace(&mut self.unsaved, jobs);
+            self.unsaved.extend(newer);
+        }
+        stored
     }
 
     /// Stores one snapshot per supervised queue and per job type that ran.
@@ -707,10 +734,17 @@ impl Run {
         }
         let jobs = std::mem::take(&mut self.window);
         let rows = snapshots(self.master.fleet.now(), &jobs, &statuses);
-        self.master
+        let stored = self
+            .master
             .fleet
             .record_snapshots(Some(&self.master.id), &rows)
-            .await
+            .await;
+        if stored.is_err() {
+            // Counted in the next snapshot instead.
+            let newer = std::mem::replace(&mut self.window, jobs);
+            self.window.extend(newer);
+        }
+        stored
     }
 
     /// Emits `LongWaitDetected` for each queue over its threshold, at most
