@@ -309,7 +309,7 @@ A sign-in that fails half way writes nothing: the user, the identity and the mem
 Navree finds the user of a sign-in in this order:
 
 1. **A linked identity.** An `sso_identities` row for this connection and subject (name id or `sub`) signs in its user, and is updated with the latest email and attributes.
-2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection, a user with that email gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An OpenID Connect token that says `email_verified: false` never links either.
+2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection and the user with that email has verified it (`email_verified_at`), the user gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An account whose address was never verified doesn't link either, so whoever registered `ceo@acme.com` without owning the mailbox doesn't get the CEO's sign-ins; and an OpenID Connect token that says `email_verified: false` never links.
 3. **A new user**, when `provisioning.jit` is on (the default) and the email is in a verified domain. The user gets the profile's name and email, no password, and a verified email. With `allow_unverified_emails: true`, users outside the verified domains are created too, with an unverified email.
 4. **Otherwise** the answer is 409 `email_taken` (the email belongs to someone) or 403 (`unverified_domain`, `sso_provisioning_disabled`).
 

@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
-use navree_auth::{AuthModule, AuthService, ClientMeta, User};
+use navree_auth::{AuthModule, AuthService, ClientMeta, User, user};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_crypto::{CryptoModule, generate_key};
 use navree_db::{DatabaseModule, Db, Uow};
@@ -18,6 +18,7 @@ use navree_sso::{
 };
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_workspace::WorkspaceModule;
+use sea_orm::{ActiveModelTrait, Set, Unchanged};
 use serde_json::Value;
 
 /// The API's public base URL in the tests.
@@ -170,6 +171,19 @@ impl World {
             .create_user(name, email, PASSWORD)
             .await
             .expect("the user is created")
+    }
+
+    /// Creates a user with a password and a verified email (as if they
+    /// followed the verification link).
+    pub async fn create_verified_user(&self, name: &str, email: &str) -> User {
+        let user = self.create_user(name, email).await;
+        let db = self.app.get::<Db>().await;
+        let row = user::ActiveModel {
+            id: Unchanged(user.id),
+            email_verified_at: Set(Some(chrono::Utc::now())),
+            ..Default::default()
+        };
+        row.update(db.conn()).await.expect("the email is verified")
     }
 
     /// An access token for `user`.

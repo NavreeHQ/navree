@@ -72,7 +72,8 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 
 - **Linking.** Identity by (connection, subject) first; then a user with
   the same email only when the email's domain is a *verified domain of
-  this connection* (and OIDC `email_verified` isn't `false`); else create
+  this connection*, the user's own email is verified (`email_verified_at`)
+  and OIDC `email_verified` isn't `false`; else create
   (JIT, `provisioning.jit`) only for verified domains unless
   `allow_unverified_emails`. Otherwise 409 `email_taken` / 403
   `unverified_domain` / 403 `sso_provisioning_disabled`.
