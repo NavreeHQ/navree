@@ -69,16 +69,16 @@ fn finish(mut text: String, encoding: &'static Encoding, lossy: bool) -> Decoded
 /// (delimiters, digits, line breaks), one byte of most pairs is zero.
 fn utf16_without_bom(bytes: &[u8]) -> Option<&'static Encoding> {
     let sample = &bytes[..bytes.len().min(SAMPLE_BYTES)];
-    if sample.len() < 4 || sample.len() % 2 != 0 && sample.len() == bytes.len() {
+    if sample.len() < 4 || !sample.len().is_multiple_of(2) && sample.len() == bytes.len() {
         return None;
     }
     let pairs = sample.len() / 2;
     let (mut even_zero, mut odd_zero) = (0usize, 0usize);
-    for pair in sample.chunks_exact(2) {
-        if pair[0] == 0 {
+    for [first, second] in sample.as_chunks::<2>().0 {
+        if *first == 0 {
             even_zero += 1;
         }
-        if pair[1] == 0 {
+        if *second == 0 {
             odd_zero += 1;
         }
     }
