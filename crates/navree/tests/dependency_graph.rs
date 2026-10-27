@@ -73,6 +73,9 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view"]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
+    // The UI kit of the server-rendered tools: templates through navree-view,
+    // embedded assets served by a navree-http controller.
+    rule("navree-ui", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
@@ -198,6 +201,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-mail",
     "navree-realtime",
     "navree-storage",
+    "navree-ui",
     "navree-session",
     "navree-validation",
     "navree-queue",

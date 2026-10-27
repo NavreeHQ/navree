@@ -3078,6 +3078,7 @@ dependencies = [
  "navree-storage",
  "navree-telemetry",
  "navree-testing",
+ "navree-ui",
  "navree-validation",
  "navree-view",
  "navree-webhooks",
