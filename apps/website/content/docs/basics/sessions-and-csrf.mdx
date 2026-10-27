@@ -1,6 +1,6 @@
 ---
 title: "Sessions and CSRF"
-description: "The optional session module: encrypted session cookies, memory and database stores, CSRF protection for cookie clients, and when to use it instead of bearer tokens."
+description: "The optional session module: encrypted session cookies, memory, database and Redis stores, CSRF protection for cookie clients, and when to use it instead of bearer tokens."
 ---
 
 `SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. Single-page apps use a cookie-to-header handshake: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.
@@ -38,13 +38,13 @@ pub fn app() -> AppBuilder {
 }
 ```
 
-`DatabaseModule` is only needed for the database store. The app needs an application key (`APP_KEY`, from `navree key:generate`). Without one the app boots with a warning, but every request that writes a session fails with a 500.
+`DatabaseModule` is only needed for the database store, and [`RedisModule`](/docs/digging-deeper/redis/) for the Redis store. The app needs an application key (`APP_KEY`, from `navree key:generate`). Without one the app boots with a warning, but every request that writes a session fails with a 500.
 
 ## Configuration
 
 ```toml title="config/app.toml"
 [session]
-store = "database"          # memory (default) or database
+store = "database"          # memory (default), database or redis
 cookie = "navree_session"
 lifetime_minutes = 120      # idle lifetime; activity extends it
 secure = true               # send the cookies over HTTPS only
@@ -158,10 +158,34 @@ set-cookie: XSRF-TOKEN=PONeR2ziCPrjirwcliGhp5dkEkcwsWp5ZW2MhsOG; SameSite=Lax; S
 |---|---|---|
 | `MemoryStore` | `memory` | in the process: fast, but lost on restart and not shared between instances |
 | `DatabaseStore` | `database` | the `sessions` table (`id`, `data` as JSON text, `expires_at`), created by the module's `session` migration set; survives restarts and is shared by every instance |
+| `RedisSessionStore` (`navree::redis`) | `redis` | one Redis key per session that expires with it; shared by every instance, no migration and no pruning. See [the Redis store](#the-redis-store) |
 
-Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). Both stores delete expired sessions on every hundredth save; `prune_expired()` on either store does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
+Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). The memory and database stores delete expired sessions on every hundredth save; `prune_expired()` on either does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
 
-To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`. A Redis store is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
+To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`.
+
+### The Redis store
+
+<Badge feature="redis" /> `session.store = "redis"` keeps each session in Redis, as a JSON string under `<redis.prefix>session:<id>` whose expiry is the session's. Redis removes idle sessions by itself, so there is nothing to prune, and every instance behind your load balancer sees the same sessions. Add [`RedisModule`](/docs/digging-deeper/redis/):
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())
+    .module(HttpModule::from_config())
+    .module(RedisModule::from_config())
+    .module(SessionModule::from_config())
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://127.0.0.1:6379"
+
+[session]
+store = "redis"
+```
+
+In code: `SessionOptions { store: SessionStoreKind::Redis, ..SessionOptions::default() }`. A record whose expiry has passed by the app's clock is never loaded, even if Redis still holds it, and a record saved already expired isn't stored. The store uses the connection `redis.connections.session` when you define one. Sessions can hold sign-ins, so give Redis a `maxmemory-policy` that won't evict them under memory pressure before they expire (see [running Redis](/docs/digging-deeper/redis/#running-redis)).
 
 ## CSRF protection
 

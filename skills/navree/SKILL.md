@@ -116,6 +116,7 @@ navree list                                 # every command of the app
 | Receiving requests, queries, jobs, mail or log lines in your own code; tracing with OpenTelemetry; trace ids; asserting on events or spans in tests | `navree-telemetry` |
 | A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |
 | A gRPC API (tonic services, `.proto` files, gRPC-Web, Connect), calling another gRPC service | `navree-grpc` |
+| Several processes or servers sharing the cache, locks, jobs, sessions, rate limits or WebSocket broadcasts; Redis commands | `navree-redis` |
 
 ## Common mistakes
 

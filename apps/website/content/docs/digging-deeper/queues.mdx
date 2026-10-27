@@ -1,6 +1,6 @@
 ---
 title: "Queues"
-description: "Background jobs on the database or memory driver: dispatching, delays, unique jobs, retries with backoff, failed jobs, `queue:work` and testing with `QueueFake`."
+description: "Background jobs on the database, memory or Redis driver: dispatching, delays, unique jobs, retries with backoff, failed jobs, `queue:work` and testing with `QueueFake`."
 ---
 
 ## Introduction
@@ -11,12 +11,13 @@ description: "Background jobs on the database or memory driver: dispatching, del
 
 - **database** (the default): tables `jobs` and `failed_jobs` in your app database. Jobs survive restarts, and every process that uses the database shares them.
 - **memory**: in the process's memory, for tests and single-process development.
+- **redis**: in Redis, with [`RedisModule`](/docs/digging-deeper/redis/). Every process using the server shares the jobs, without database writes for each one.
 
 The rest of the framework queues through the same module: queued [mail](/docs/digging-deeper/mail/), queued [event listeners](/docs/digging-deeper/events/#queued-listeners), queued [notifications](/docs/digging-deeper/notifications/) and scheduled jobs all become jobs on it.
 
 <Callout type="note" title="Drivers">
 
-More queue backends, Redis among them, are on the [roadmap](/docs/prologue/roadmap/#more-drivers). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`; the queue's tests run on SQLite, so try that path in staging first (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
+Every driver implements the public `QueueStore` trait, so other backends can be added without changes to your jobs (see [writing a driver](#writing-a-driver)). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`; the queue's tests run on SQLite, so try that path in staging first (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
 
 </Callout>
 
@@ -38,7 +39,7 @@ The module is global: other modules dispatch jobs without importing it. `from_co
 
 ```toml title="config/app.toml"
 [queue]
-driver = "database"          # or "memory"
+driver = "database"          # or "memory", "redis"
 default_queue = "default"    # where jobs with an empty queue name go
 workers = 4                  # jobs one `queue:work` process runs at once
 poll_interval_ms = 1000      # how long an idle worker waits before looking again
@@ -47,7 +48,7 @@ queues = ["high", "default"] # what `queue:work` processes, highest priority fir
 
 | Key | Default | Meaning |
 |---|---|---|
-| `queue.driver` | `database` | `database` or `memory`. |
+| `queue.driver` | `database` | `database`, `memory` or `redis` (needs `RedisModule`). |
 | `queue.default_queue` | `default` | The queue of jobs dispatched with an empty queue name, and what workers process when `queues` is empty. Must not be empty. |
 | `queue.workers` | `4` | Concurrent jobs per `queue:work` process. At least 1. |
 | `queue.poll_interval_ms` | `1000` | How long an idle worker waits before polling again. At least 1. |
@@ -73,6 +74,51 @@ The module contributes a migration set named `queue` that creates `jobs` and `fa
 ### The memory driver
 
 The memory driver keeps jobs in the process that dispatched them, and loses them when it exits. A worker started as a separate `queue:work` process has its own, empty memory queue, so with this driver jobs only run in the same process: in tests, or in code that calls [`run_pending`](#running-queued-jobs-in-tests) or `work`. The memory driver otherwise behaves like the database driver.
+
+### The Redis driver
+
+<Badge feature="redis" /> `queue.driver = "redis"` keeps the jobs in Redis. Add [`RedisModule`](/docs/digging-deeper/redis/) to the app; the driver needs no migration (the database driver's tables aren't used):
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(RedisModule::from_config())
+    .module(DatabaseModule::from_config()) // for your own data and units of work
+    .module(QueueModule::from_config())
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://127.0.0.1:6379"
+
+[queue]
+driver = "redis"
+```
+
+In code: `QueueModule::for_root(QueueOptions { driver: QueueDriver::Redis, ..QueueOptions::default() })`. Everything on this page works the same as with the database driver:
+
+- **Storage.** Under `<redis.prefix>queue:`, each job is a hash (the job as JSON, its attempts and its reservation), each queue has a sorted set of waiting and delayed jobs ordered by when they become due, and a sorted set of reserved jobs ordered by when their reservation goes stale. Failed jobs are kept in Redis until `queue:retry` or `queue:flush`.
+- **Atomic reservations.** Each step (reserve, release, fail, finish, retry) is one Lua script, so any number of `queue:work` processes on any number of servers share the queues and never run a job twice at once.
+- **At least once.** A worker that crashes mid-job leaves a reservation that goes stale after the job's timeout plus a grace period (`STALE_RESERVATION_GRACE_SECS`), and another worker runs the job again, as with the database driver. Write handlers that can run twice.
+- **Transactions.** A job dispatched inside a [unit of work](#jobs-and-transactions) is pushed to Redis after the commit, so workers never see a job whose data was rolled back. If the process dies between the commit and the push, the job is lost; the database driver, which writes the job in the transaction, doesn't have that gap.
+- **Times** come from your app's clock, not Redis's, so a delayed job is due when `queue.later` said it would be.
+
+Give the queue a Redis server that keeps its data: turn on the append-only file (`appendonly yes`) and use a `maxmemory-policy` that never evicts keys without an expiry (`noeviction` or `volatile-lru`), or put the queue on a server of its own with `redis.connections.queue` (see [running Redis](/docs/digging-deeper/redis/#running-redis)).
+
+### Writing a driver
+
+A driver implements `navree::queue::QueueStore`: `insert`, `reserve`, `complete`, `release`, `fail`, `failed`, `retry`, `flush_failed` and `pending_count`, on the public `NewJob`, `ReservedJob` and `FailedJob` records. Times are Unix milliseconds from the app's clock, passed in by the queue. The trait's documentation lists the rules every driver keeps: reservation order, atomic reservations, ownership of a reservation, unique jobs and failed jobs.
+
+`queue.driver = "redis"` makes `QueueModule` use the `dyn QueueStore` provider named `redis`, which is how navree-redis plugs its driver in. A driver of your own uses the same slot: register it under that name, in an app without `RedisModule`:
+
+```rust
+use navree::queue::QueueStore;
+
+m.factory(
+    Factory::<dyn QueueStore>::new(|_| async { Ok(Arc::new(MyStore::new()) as Arc<dyn QueueStore>) })
+        .named("redis"),
+);
+```
 
 ## Creating jobs
 
@@ -255,7 +301,7 @@ The same holds inside `Db::transaction`, for `later`, `push` and `dyn Dispatcher
 self.queue.dispatch_in(&uow, job).await?;
 ```
 
-Inside a unit of work, the database driver writes the job's row in its transaction, and the memory driver queues the job after the commit. Outside any unit of work, in a command, a job or a scheduled task, a dispatched job is stored at once.
+Inside a unit of work, the database driver writes the job's row in its transaction, and the memory and Redis drivers queue the job after the commit. Outside any unit of work, in a command, a job or a scheduled task, a dispatched job is stored at once.
 
 ### Unique jobs
 
@@ -381,10 +427,10 @@ WantedBy=multi-user.target
 ```
 
 - **Restart workers after every deploy.** A worker keeps running the code it started with. There is no `queue:restart` command yet; restart the processes with your process manager.
-- **Scale by adding processes** or raising `queue.workers`. Workers on several servers can share the database driver.
+- **Scale by adding processes** or raising `queue.workers`. Workers on several servers can share the database or the Redis driver.
 - **Dedicate workers to queues.** `queue:work --queue mail` on its own process keeps slow exports from delaying mail.
 - **Recycle long-running workers** with `--max-jobs N` and a process manager that restarts them.
-- **Broadcasts from workers.** A worker doesn't hold the WebSocket connections, so jobs that broadcast (the CRM's notifications) hand their broadcasts to the server through `realtime.relay_url`; see [broadcasting](/docs/digging-deeper/broadcasting/).
+- **Broadcasts from workers.** A worker doesn't hold the WebSocket connections, so jobs that broadcast (the CRM's notifications) hand their broadcasts to the server through `realtime.relay_url`, or through the Redis backplane when the app has one; see [broadcasting](/docs/digging-deeper/broadcasting/).
 
 The CRM runs one server and one worker in development: `cargo run -p crm-api -- serve` and `cargo run -p crm-api -- queue:work`.
 

@@ -224,7 +224,9 @@ Test channel authorizers over HTTP:
 - Workers' broadcasts reaching nobody: set `realtime.relay_url` and give
   every process the same `APP_KEY`.
 - Several `serve` processes behind a load balancer: each reaches only its
-  own sockets (there is no shared backplane yet).
+  own sockets unless they share a backplane: `realtime.backplane = "redis"`
+  with `RedisModule` and the same `realtime.secret` everywhere (skill
+  `navree-redis`).
 - Subscribing without the channel prefix: a private channel is
   `private-deals`, a presence channel `presence-deals.42`.
 - Registering a listener twice with `listen` in one module (duplicate

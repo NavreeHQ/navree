@@ -80,6 +80,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
@@ -116,6 +117,7 @@ The facade's root also has:
 | GraphQL (with `graphql`) | `GraphqlModule` |
 | gRPC (`grpc`) | `GrpcModule` |
 | Billing (`billing`) | `BillingModule` |
+| Redis (`redis`) | `RedisModule` |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()` work without naming the traits.
 
@@ -127,7 +129,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `redis`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -154,11 +156,12 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
+| `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `billing`), which you list yourself: `features = ["billing"]`.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `redis`), which you list yourself: `features = ["billing"]`.
 
 <Callout type="note">
 
