@@ -1,0 +1,51 @@
+[package]
+name = "{{ package }}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+# The starter kit this app began from (`navree new {{ package }} --kit {{ kit }}`).
+# Nothing reads it at run time: it tells you which kit to compare with.
+[package.metadata.navree]
+kit = "{{ kit }}"
+kit_version = "{{ kit_version }}"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+# garde's derive names `::garde`, so the app depends on it directly.
+garde = { version = "0.23", features = ["derive", "email", "regex"] }
+# The default features (every core module, Helm, workspaces) plus billing,
+# social sign-in and the PostgreSQL driver.
+navree = {{ navree_dependency }}
+# SeaORM's derives name `::sea_orm` / `::sea_orm_migration`; the database
+# drivers come with navree.
+sea-orm = { version = "2.0.4", default-features = false, features = ["macros", "with-chrono", "with-json", "with-uuid"] }
+sea-orm-migration = { version = "2.0.4", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+# `#[derive(ToSchema)]` on the DTOs, for the OpenAPI document.
+utoipa = { version = "6", features = ["chrono", "uuid"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+# Small debug info: faster links, so `navree dev` restarts sooner.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Password hashing (Argon2id) is unbearably slow unoptimised.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+# The app is its own workspace; remove this table to make it a member of an
+# enclosing one.
+[workspace]

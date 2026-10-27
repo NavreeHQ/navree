@@ -68,6 +68,7 @@ fn navree_new_output_compiles_against_the_workspace() {
     let app = NewApp {
         name: AppName::parse("demo").unwrap(),
         ui: Ui::None,
+        kit: None,
         navree: NavreeSource::Path(facade),
     };
     let root = create_app(parent.path(), &app, now).unwrap();

@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      # The same service dock.toml starts locally.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: navree
+          POSTGRES_PASSWORD: navree
+          POSTGRES_DB: {{ crate_name }}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U navree"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_DATABASE__URL: postgres://navree:navree@127.0.0.1:5432/{{ crate_name }}
+      APP_KEY: base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - name: Module graph
+        run: cargo run --quiet -- check
+      - name: Migrations on PostgreSQL
+        run: cargo run --quiet -- migrate
+      - run: cargo test
+      - name: OpenAPI drift
+        run: |
+          cargo run --quiet -- openapi:export openapi.json
+          git diff --exit-code -- openapi.json
+{% if web %}
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [rust, web]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: navree
+          POSTGRES_PASSWORD: navree
+          POSTGRES_DB: {{ crate_name }}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U navree"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_DATABASE__URL: postgres://navree:navree@127.0.0.1:5432/{{ crate_name }}
+      APP_KEY: base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      APP_MAIL__TRANSPORT: log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: cargo build
+      - run: cargo run --quiet -- migrate:fresh --seed
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm build
+        working-directory: web
+      - name: Playwright journeys against the real API
+        run: pnpm e2e
+        working-directory: web
+{% endif %}

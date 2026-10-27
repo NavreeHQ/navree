@@ -33,8 +33,9 @@ pub struct DevOptions {
 }
 
 /// Directories whose changes need a rebuild (embedded templates live in
-/// `src/`; template files under `resources/` reload without one).
-const WATCHED_DIRS: &[&str] = &["src", "config", "migrations"];
+/// `src/`; template files under `resources/` reload without one; `crates/`
+/// holds the members of a workspace app).
+const WATCHED_DIRS: &[&str] = &["src", "config", "migrations", "crates"];
 
 /// Files at the app root whose changes need a rebuild or a restart.
 const WATCHED_FILES: &[&str] = &["Cargo.toml", ".env", "build.rs"];
@@ -114,18 +115,26 @@ fn node_program(name: &str) -> String {
 }
 
 /// The front end's dev server (`<pm> run dev` in `web/`), chosen by its
-/// lockfile, when the app has `web/package.json`.
+/// lockfile, else by `packageManager` in `package.json` (`"pnpm@10.0.0"`),
+/// else npm, when the app has `web/package.json`.
 pub fn web_invocation(root: &Path) -> Option<Invocation> {
     let web = root.join("web");
-    if !web.join("package.json").is_file() {
-        return None;
-    }
+    let package = std::fs::read_to_string(web.join("package.json")).ok()?;
+    let declared = serde_json::from_str::<serde_json::Value>(&package)
+        .ok()
+        .and_then(|package| {
+            let field = package.get("packageManager")?.as_str()?;
+            let name = field.split('@').next()?;
+            ["pnpm", "yarn", "npm"]
+                .into_iter()
+                .find(|manager| *manager == name)
+        });
     let manager = if web.join("pnpm-lock.yaml").is_file() {
         "pnpm"
     } else if web.join("yarn.lock").is_file() {
         "yarn"
     } else {
-        "npm"
+        declared.unwrap_or("npm")
     };
     Some(Invocation::new(node_program(manager), ["run", "dev"]))
 }
@@ -366,8 +375,49 @@ mod tests {
             web_invocation(dir.path()).map(|i| i.args),
             Some(vec!["run".to_owned(), "dev".to_owned()])
         );
+        assert!(
+            web_invocation(dir.path())
+                .unwrap()
+                .program
+                .starts_with("npm")
+        );
         std::fs::write(web.join("pnpm-lock.yaml"), "").unwrap();
         let pnpm = web_invocation(dir.path()).unwrap();
         assert!(pnpm.program.starts_with("pnpm"), "{pnpm}");
+    }
+
+    /// A fresh starter kit has no lockfile yet: `packageManager` decides.
+    #[test]
+    fn web_dev_server_follows_the_package_manager_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        std::fs::create_dir(&web).unwrap();
+        std::fs::write(
+            web.join("package.json"),
+            r#"{"name":"acme-web","packageManager":"pnpm@11.25.0"}"#,
+        )
+        .unwrap();
+        let pnpm = web_invocation(dir.path()).unwrap();
+        assert!(pnpm.program.starts_with("pnpm"), "{pnpm}");
+        std::fs::write(
+            web.join("package.json"),
+            r#"{"packageManager":"bun@1.2.0"}"#,
+        )
+        .unwrap();
+        let npm = web_invocation(dir.path()).unwrap();
+        assert!(npm.program.starts_with("npm"), "{npm}");
+    }
+
+    #[test]
+    fn workspace_crates_trigger_a_rebuild() {
+        let root = Path::new("/billing");
+        assert!(triggers_rebuild(
+            root,
+            Path::new("/billing/crates/billing/src/app.rs")
+        ));
+        assert!(triggers_rebuild(
+            root,
+            Path::new("/billing/crates/billing-contracts/src/lib.rs")
+        ));
     }
 }

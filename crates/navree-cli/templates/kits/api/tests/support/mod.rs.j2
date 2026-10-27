@@ -1,0 +1,123 @@
+//! Booting the whole app for a test, and the people and workspaces tests
+//! start from.
+
+#![allow(dead_code)]
+
+use navree::auth::User;
+use navree::config::ConfigSources;
+use navree::crypto::generate_key;
+use navree::db::Db;
+use navree::mail::{Mailer, Message};
+use navree::testing::{TempDirGuard, TestApp, TestRequest, temp_sqlite_url};
+use navree::workspace::{Members, NewWorkspace, Workspace, WorkspaceRole, Workspaces};
+use serde_json::{Value, json};
+
+/// The password of every test account.
+pub const PASSWORD: &str = "correct horse battery staple";
+
+/// The committed `config/app.toml` (roles, plans, billing, social), with
+/// hermetic overrides: no `.env`, a fresh SQLite database, mail kept in
+/// memory, fast password hashing and no rate limit.
+pub fn sources() -> (ConfigSources, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .file(concat!(env!("CARGO_MANIFEST_DIR"), "/config/app.toml"))
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("http.per_ip_rate_limit", Value::Null)
+        .set("mail.transport", "array")
+        .set("billing.provider", "fake")
+        .set("observe.metrics", false)
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1);
+    (sources, guard)
+}
+
+/// The booted app on a fresh database.
+pub async fn boot() -> (TestApp, TempDirGuard) {
+    let (sources, guard) = sources();
+    let app = TestApp::from_builder({{ crate_name }}::app(sources)).await;
+    (app, guard)
+}
+
+/// A verified account for `email`, with [`PASSWORD`].
+pub async fn user(app: &TestApp, name: &str, email: &str) -> User {
+    {{ crate_name }}::seed::ensure_account(app.ctx(), name, email, PASSWORD)
+        .await
+        .expect("the account is created")
+}
+
+/// Signs `email` in with the password: the access token.
+pub async fn sign_in(app: &TestApp, email: &str) -> String {
+    let body = app
+        .client()
+        .post("/api/auth/login")
+        .json(&json!({ "email": email, "password": PASSWORD }))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    body["access_token"]
+        .as_str()
+        .expect("an access token")
+        .to_owned()
+}
+
+/// A workspace named `name`, owned by `owner`.
+pub async fn workspace(app: &TestApp, owner: &User, name: &str) -> Workspace {
+    let workspaces = app.get::<Workspaces>().await;
+    in_uow(app, |uow| async move {
+        workspaces
+            .create(&uow, owner.id, NewWorkspace::named(name))
+            .await
+    })
+    .await
+}
+
+/// Adds `user` to `workspace` with `role`.
+pub async fn add_member(app: &TestApp, workspace: &Workspace, user: &User, role: WorkspaceRole) {
+    let members = app.get::<Members>().await;
+    in_uow(app, |uow| async move {
+        members.add(&uow, workspace.id, user.id, role).await
+    })
+    .await;
+}
+
+/// Runs `f` in a unit of work and commits it.
+async fn in_uow<T, E, F, Fut>(app: &TestApp, f: F) -> T
+where
+    F: FnOnce(navree::db::Uow) -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+    E: std::fmt::Debug,
+{
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    let value = f(uow.clone()).await.expect("the work succeeds");
+    uow.commit().await.expect("the unit of work commits");
+    value
+}
+
+/// `request` signed in with `token`, inside workspace `slug`.
+pub fn in_workspace(request: TestRequest, token: &str, slug: &str) -> TestRequest {
+    request.bearer(token).header("x-workspace", slug)
+}
+
+/// Every message the app sent so far.
+pub async fn sent_mail(app: &TestApp) -> Vec<Message> {
+    app.get::<Mailer>()
+        .await
+        .array_transport()
+        .expect("mail.transport = \"array\"")
+        .sent()
+}
+
+/// The first `http(s)://` link in `text`.
+pub fn first_url(text: &str) -> Option<String> {
+    let start = text.find("http://").or_else(|| text.find("https://"))?;
+    Some(
+        text[start..]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '"' && *c != '<')
+            .collect(),
+    )
+}

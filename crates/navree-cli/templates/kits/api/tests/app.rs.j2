@@ -1,0 +1,91 @@
+//! Boots the whole app, as `main` does, on a temporary database.
+
+mod support;
+
+use serde_json::json;
+use support::{boot, in_workspace, sign_in, sources};
+use {{ crate_name }}::seed::{DEMO_MEMBER, DEMO_OWNER, DEMO_WORKSPACE};
+
+#[test]
+fn module_graph_is_valid() {
+    let (sources, _guard) = sources();
+    {{ crate_name }}::app(sources)
+        .validate()
+        .expect("every module's imports and providers line up");
+}
+
+#[tokio::test]
+async fn health_check_is_up() {
+    let (app, _guard) = boot().await;
+    app.client()
+        .get("/health/live")
+        .send()
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn the_openapi_document_describes_every_route() {
+    let (app, _guard) = boot().await;
+    let document = app
+        .client()
+        .get("/api/openapi.json")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    for path in [
+        "/api/auth/register",
+        "/api/auth/login",
+        "/api/workspaces",
+        "/api/billing/checkout",
+        "/api/v1/account/sessions",
+        "/api/v1/account/providers",
+        "/api/v1/settings/workspace",
+        "/api/v1/settings/notifications",
+        "/api/v1/projects",
+        "/api/v1/projects/{id}",
+    ] {
+        assert!(
+            document["paths"].get(path).is_some(),
+            "{path} is missing from the OpenAPI document"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_demo_seeder_creates_the_demo_workspace() {
+    let (app, _guard) = boot().await;
+    app.run_command("db:seed", &["demo"]).await.expect("db:seed");
+    // Seeding twice changes nothing.
+    app.run_command("db:seed", &["demo"]).await.expect("db:seed");
+
+    let owner = sign_in(&app, DEMO_OWNER).await;
+    app.client()
+        .get("/api/workspaces")
+        .bearer(&owner)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data.0.slug", json!(DEMO_WORKSPACE));
+    in_workspace(app.client().get("/api/v1/projects"), &owner, DEMO_WORKSPACE)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(3));
+
+    // The owner is a super admin: the admin panel's API answers them.
+    app.client()
+        .get("/admin/api/resources")
+        .bearer(&owner)
+        .send()
+        .await
+        .assert_status(200);
+    let member = sign_in(&app, DEMO_MEMBER).await;
+    app.client()
+        .get("/admin/api/resources")
+        .bearer(&member)
+        .send()
+        .await
+        .assert_status(403);
+}

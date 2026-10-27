@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+pub use crate::kits::Kit;
 use crate::make::MakeKind;
 pub use crate::new_app::Ui;
 
@@ -125,13 +126,17 @@ impl Command {
     }
 }
 
-/// `navree new <name> [--ui next|none] [--navree-path <path>]`.
+/// `navree new <name> [--kit saas|api|micro] [--ui next|none] [--navree-path <path>]`.
 #[derive(Debug, Args)]
 pub struct NewArgs {
     /// The app (package) name: lower-case letters, digits, `-` and `_`.
     pub name: String,
-    /// The front end to create next to the API.
-    #[arg(long, value_enum, default_value_t = Ui::None)]
+    /// A starter kit: `saas` (API and Next.js front end), `api` (the API
+    /// alone) or `micro` (a microservice); default: the minimal app.
+    #[arg(long, value_enum, value_name = "KIT")]
+    pub kit: Option<Kit>,
+    /// The front end to create next to the API (the minimal app only).
+    #[arg(long, value_enum, default_value_t = Ui::None, conflicts_with = "kit")]
     pub ui: Ui,
     /// A local navree checkout (the repository or its crates/navree) to depend
     /// on; default: the checkout this navree was built from, else the
@@ -300,6 +305,30 @@ mod tests {
             panic!("expected new");
         };
         assert_eq!(args.ui, Ui::None);
+        assert_eq!(args.kit, None);
+    }
+
+    #[test]
+    fn new_with_a_kit() {
+        for (flag, kit) in [("saas", Kit::Saas), ("api", Kit::Api), ("micro", Kit::Micro)] {
+            let Command::New(args) = parse(&["new", "acme", "--kit", flag]) else {
+                panic!("expected new");
+            };
+            assert_eq!(args.kit, Some(kit));
+        }
+        let Command::New(args) = parse(&["new", "acme", "--kit=saas", "--navree-path", ".."])
+        else {
+            panic!("expected new");
+        };
+        assert_eq!(args.kit, Some(Kit::Saas));
+        assert!(args.navree_path.is_some());
+        // A kit brings its own front end (or none).
+        let error =
+            Cli::try_parse_from(["navree", "new", "acme", "--kit", "api", "--ui", "next"])
+                .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+        let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
     #[test]
