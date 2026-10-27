@@ -26,8 +26,10 @@
 //!   the field, with the messages routes use.
 //! - **Errors** keep Navree's JSON error shape in `extensions` (`code`,
 //!   `statusCode`, `error`, `errors`), with each error's HTTP status.
-//! - **Dataloaders** ([`RequestLoader`]) are created per operation, so
-//!   their cache never crosses viewers.
+//! - **Dataloaders**: a [`Loader`] registered by a module gets a
+//!   [`RequestLoader`] per operation, which batches the loads of one tick
+//!   and caches results for that operation only, so they never cross
+//!   viewers.
 //! - **Subscriptions** over WebSockets at `<path>/ws`, fed by the event bus
 //!   through [`EventStream`].
 //! - **Limits and tooling:** depth and complexity limits, introspection and
@@ -92,7 +94,7 @@ pub use async_graphql;
 pub use async_graphql::{Context, Error, Result};
 pub use context::ContextExt;
 pub use events::EventStream;
-pub use loader::{RequestLoader, SharedLoader};
+pub use loader::{Loader, RequestLoader};
 pub use module::{GraphqlModule, ModuleBuilderGraphqlExt};
 pub use options::GraphqlOptions;
 pub use schema::{GraphqlResolver, GraphqlSchema};
