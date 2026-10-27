@@ -292,6 +292,10 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         }
     };
 
+    // Lifecycle: the model's own hooks (observers, typed events, ...).
+    let hook_entries = super::lifecycle::hook_entries(&model.lifecycle, krate);
+    let hooks = super::lifecycle::hooks_fn(ident, &hook_entries, krate);
+
     // Column constants.
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {
         let constant = format_ident!(
@@ -374,6 +378,8 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
             }
 
             #global_scopes
+
+            #hooks
         }
 
         #[automatically_derived]

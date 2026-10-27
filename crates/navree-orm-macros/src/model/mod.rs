@@ -11,6 +11,7 @@ use crate::paths;
 mod container;
 mod expand;
 mod field;
+mod lifecycle;
 mod naming;
 
 pub(crate) use container::KeyType;
@@ -46,6 +47,8 @@ pub(crate) struct Model {
     pub(crate) created_at: Option<String>,
     pub(crate) updated_at: Option<String>,
     pub(crate) deleted_at: Option<String>,
+    /// Observers, typed events, broadcasting and pruning.
+    pub(crate) lifecycle: lifecycle::Lifecycle,
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
@@ -290,6 +293,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             .then(|| attrs.timestamps.updated_at.clone())
             .flatten(),
         deleted_at,
+        lifecycle: attrs.lifecycle,
         connection: attrs.connection,
         per_page: attrs.per_page,
         global_scopes: attrs.global_scopes,

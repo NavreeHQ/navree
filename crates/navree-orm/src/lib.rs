@@ -99,6 +99,7 @@ mod expr;
 pub mod hooks;
 pub mod ir;
 mod model;
+mod module;
 pub mod pagination;
 mod persist;
 pub mod prelude;
@@ -118,10 +119,11 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
-pub use events::without_events;
+pub use events::{Observer, ObserverHook, without_events};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
+pub use module::ModuleBuilderOrmExt;
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
@@ -148,7 +150,7 @@ pub mod __private {
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
     pub use chrono::{DateTime, Utc};
-    pub use std::sync::Arc;
+    pub use std::sync::{Arc, OnceLock};
 }
 
 /// The models the documentation examples use, so every example compiles.
