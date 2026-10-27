@@ -1,4 +1,7 @@
-//! Lighthouse's tables as SeaORM entities (migration set `lighthouse`).
+//! Lighthouse's tables (migration set `lighthouse`): navree-orm models
+//! (`issue::Model::query()`, typed columns such as
+//! `occurrence::Model::ISSUE_ID`), and SeaORM entities for code built on
+//! SeaORM's query API.
 //!
 //! - `lighthouse_issues`: one row per fingerprint, with its status and
 //!   exact count;
@@ -16,8 +19,9 @@ pub mod issue {
     use sea_orm::entity::prelude::*;
 
     /// An issue row.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
     #[sea_orm(table_name = "lighthouse_issues")]
+    #[model(table = "lighthouse_issues")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -88,8 +92,9 @@ pub mod occurrence {
     use sea_orm::entity::prelude::*;
 
     /// A stored occurrence.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
     #[sea_orm(table_name = "lighthouse_occurrences")]
+    #[model(table = "lighthouse_occurrences")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -157,8 +162,9 @@ pub mod sample {
     use sea_orm::entity::prelude::*;
 
     /// A request or job sample with its spans.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
     #[sea_orm(table_name = "lighthouse_samples")]
+    #[model(table = "lighthouse_samples")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -221,8 +227,9 @@ pub mod aggregate {
 
     /// Counts and a latency histogram of one key in one bucket, written by
     /// one process.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
     #[sea_orm(table_name = "lighthouse_aggregates")]
+    #[model(table = "lighthouse_aggregates")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -272,8 +279,9 @@ pub mod alert {
     use sea_orm::entity::prelude::*;
 
     /// One alert through one channel.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
     #[sea_orm(table_name = "lighthouse_alerts")]
+    #[model(table = "lighthouse_alerts")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]

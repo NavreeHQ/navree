@@ -198,11 +198,11 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // Feature flags: user ids come from the request's `Principal`; navree-auth
     // only gives `From<&User> for FlagScope` (the crate's default `auth`
-    // feature).
+    // feature). The flags table is a navree-orm model.
     rule("navree-flags", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
-        "navree-workspace",
+        "navree-workspace", "navree-orm",
     ]),
     // GraphQL: `#[resolver]` fields with route-style access, per-request
     // units of work and dataloaders, subscriptions over WebSockets.
@@ -261,11 +261,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-http-client", "navree-db", "navree-queue", "navree-access", "navree-workspace",
     ]),
     // Billing: Stripe and Paddle over navree-http-client, billables from
-    // navree-auth (users) and navree-workspace (workspaces).
+    // navree-auth (users) and navree-workspace (workspaces). The billing
+    // tables are navree-orm models.
     rule("navree-billing", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-schedule",
-        "navree-access", "navree-auth", "navree-workspace",
+        "navree-access", "navree-auth", "navree-workspace", "navree-orm",
     ]),
     // Lighthouse: a telemetry sink storing issues, occurrences, samples and
     // aggregates in the app's database; alerts by mail (navree-mail) and
@@ -273,11 +274,12 @@ const HIERARCHY: &[Rule] = &[
     // pruned on the schedule; a server-rendered dashboard (navree-view)
     // signed in through navree-auth, with an encrypted cookie
     // (navree-crypto), behind navree-access abilities; with its `mcp`
-    // feature, tools, a resource and a prompt on navree-mcp's server.
+    // feature, tools, a resource and a prompt on navree-mcp's server. Its
+    // tables are navree-orm models.
     rule("navree-lighthouse", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
-        "navree-schedule", "navree-access", "navree-auth", "navree-mcp",
+        "navree-schedule", "navree-access", "navree-auth", "navree-mcp", "navree-orm",
     ]),
     // Logbook: a telemetry sink and a data-change observer (navree-db), an
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in

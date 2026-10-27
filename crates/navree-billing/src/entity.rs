@@ -1,4 +1,7 @@
-//! The billing tables as SeaORM entities (migration set `billing`).
+//! The billing tables (migration set `billing`): navree-orm models
+//! (`subscription::Model::query()`, typed columns such as
+//! `subscription::Model::STATUS`), and SeaORM entities for code built on
+//! SeaORM's query API.
 //!
 //! - `billing_customers(id, billable_type, billable_id, provider,
 //!   provider_customer_id, email, trial_ends_at, created_at, updated_at)`,
@@ -26,8 +29,9 @@ pub mod customer {
     use serde::Serialize;
 
     /// A billable's customer record.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "billing_customers")]
+    #[model(table = "billing_customers")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -75,8 +79,9 @@ pub mod subscription {
     use serde::Serialize;
 
     /// A subscription row.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "subscriptions")]
+    #[model(table = "subscriptions")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -144,8 +149,9 @@ pub mod subscription_item {
     use serde::Serialize;
 
     /// A subscription item.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "subscription_items")]
+    #[model(table = "subscription_items")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -192,8 +198,9 @@ pub mod usage {
     use serde::Serialize;
 
     /// One recorded use.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "billing_usage")]
+    #[model(table = "billing_usage")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -225,8 +232,9 @@ pub mod event {
     use serde::Serialize;
 
     /// A received webhook event.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "billing_events")]
+    #[model(table = "billing_events")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
