@@ -90,9 +90,10 @@ const KEY: &str = "key";
 impl<M: Model> Builder<M> {
     /// Runs the query on `target` and reads its records (running the
     /// `Retrieved` hooks), then loads its eager loads into them.
-    pub(crate) async fn fetch(mut self, target: &Target<'_>) -> Result<Collection<M>> {
-        let eager = self.take_eager();
-        let ir = self.into_ir();
+    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
+        let mut query = self.with_pending_default_counts();
+        let eager = query.take_eager();
+        let ir = query.into_ir();
         let rows = target.fetch(&ir).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {

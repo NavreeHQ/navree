@@ -47,7 +47,9 @@ pub(crate) fn limit_per_parent<R: Model>(query: Builder<R>, partition: Expr) -> 
     if query.ir.limit.is_none() && query.ir.offset.is_none() {
         return query;
     }
-    let mut query = query;
+    // The inner query is the one reading the records: it carries the
+    // model's default counts.
+    let mut query = query.with_pending_default_counts();
     let tree = query.take_eager();
     let limit = query.ir.limit.take();
     let offset = query.ir.offset.take().unwrap_or(0);

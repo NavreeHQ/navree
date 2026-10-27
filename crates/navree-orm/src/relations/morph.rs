@@ -364,7 +364,9 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
                     .map(|(_, value)| self.normalize_key(value.clone(), request.owner_key)),
             );
             let owner_key = request.owner_key.unwrap_or(meta.key_column());
-            let mut query = request.trashed.apply(Builder::<M>::new());
+            let mut query = request
+                .trashed
+                .apply(Builder::<M>::new().with_relation_defaults());
             if let Some(loads) = request.loads {
                 query = loads.apply(query)?;
             }

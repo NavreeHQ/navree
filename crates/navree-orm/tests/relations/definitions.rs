@@ -190,6 +190,52 @@ async fn model_defaults_eager_load_and_count_on_every_query() {
             .eager_loads()
             .eq(&["contacts".to_owned()])
     );
+
+    // Queries through a relation apply them too, eager loaded or not.
+    let accounts = crm.ada.accounts().get(&t.db).await.unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert!(accounts[0].relation_loaded("owner"));
+    assert_eq!(accounts[0].extra::<i64>("contacts_count").unwrap(), Some(2));
+    let users = User::query()
+        .with("accounts")
+        .order_by(User::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    let globex = &users[1].loaded(User::accounts).unwrap()[0];
+    assert_eq!(globex.name, "Globex");
+    assert!(globex.relation_loaded("owner"));
+    assert_eq!(globex.extra::<i64>("contacts_count").unwrap(), Some(1));
+    let limited = User::query()
+        .with_constrained(User::accounts, |q| q.limit(1))
+        .order_by(User::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    let acme = &limited[0].loaded(User::accounts).unwrap()[0];
+    assert_eq!(acme.extra::<i64>("contacts_count").unwrap(), Some(2));
+    // And `without` takes them off there as well.
+    let plain = crm
+        .ada
+        .accounts()
+        .without("owner")
+        .without("contacts")
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!plain.relation_loaded("owner"));
+    assert_eq!(plain.extra::<i64>("contacts_count").unwrap(), None);
+    let bare = crm
+        .bob
+        .accounts()
+        .without_eager_loads()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!bare.relation_loaded("owner"));
+    assert_eq!(bare.extra::<i64>("contacts_count").unwrap(), None);
 }
 
 /// A relation another module adds to `Deal`, with a typed accessor.

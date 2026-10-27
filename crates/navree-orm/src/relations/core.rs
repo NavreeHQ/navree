@@ -29,7 +29,7 @@ impl<P: Model, R: Model> RelationCore<P, R> {
         RelationCore {
             name,
             parent,
-            query: Builder::new(),
+            query: Builder::new().with_relation_defaults(),
         }
     }
 
@@ -389,9 +389,27 @@ macro_rules! relation_query_methods {
             self
         }
 
-        /// Stops eager loading relation `path` of the related records.
+        /// Stops eager loading relation `path` of the related records (a
+        /// default eager load or count of their model too).
         pub fn without(mut self, path: impl $crate::relations::RelationPath<R>) -> Self {
             self.core.query = self.core.query.without(path);
+            self
+        }
+
+        /// Eager loads exactly `paths` of the related records, replacing
+        /// their model's default eager loads and counts.
+        pub fn with_only(
+            mut self,
+            paths: impl IntoIterator<Item = impl $crate::relations::RelationPath<R>>,
+        ) -> Self {
+            self.core.query = self.core.query.with_only(paths);
+            self
+        }
+
+        /// Eager loads nothing into the related records: no default eager
+        /// load or count of their model either.
+        pub fn without_eager_loads(mut self) -> Self {
+            self.core.query = self.core.query.without_eager_loads();
             self
         }
 
