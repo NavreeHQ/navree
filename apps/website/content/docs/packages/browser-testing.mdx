@@ -1,7 +1,6 @@
 ---
 title: "Browser testing"
 description: "Drive a real Chrome from your Rust tests over the Chrome DevTools Protocol: visit pages, fill forms, press buttons and assert on what a user sees, with automatic waiting and a screenshot on every failure."
-status: "planned"
 ---
 
 ## Introduction
@@ -17,9 +16,9 @@ page.assert_path_is("/").await?;
 page.assert_see("Pipeline by stage").await?;
 ```
 
-- It drives Chrome or Chromium over the **Chrome DevTools Protocol**, headless by default. No WebDriver server, no Node.js in your test process.
+- It drives Chrome, Chromium or Edge over the **Chrome DevTools Protocol**, headless by default. No WebDriver server, no Node.js in your test process.
 - Every action and assertion **waits** for the page, up to a timeout, so tests don't need sleeps.
-- A failing step saves a **screenshot**, the page's HTML and its console log, and the panic message says where.
+- A failing step saves a **screenshot**, the page's HTML and its console log, and the error says where.
 - It serves your Navree app from the test, on a real port, and starts your front end against it, so a test owns its data from the database up.
 
 ## Installation
@@ -32,15 +31,24 @@ navree-browser = { git = "https://github.com/NavreeHQ/navree" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-It needs Chrome or Chromium. It uses `NAVREE_BROWSER_CHROME` when set, then looks in the usual install locations. On a machine without either, install a pinned Chrome for Testing build into Navree's cache:
+If your app depends on the `navree` facade, you can turn on its opt-in <Badge feature="browser" /> feature in `[dev-dependencies]` instead and use `navree::browser`. Cargo only builds dev-dependency features for tests, so your app's binary doesn't change:
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["browser"] }
+```
+
+It needs Chrome, Chromium or Edge at test time. It uses `NAVREE_BROWSER_CHROME` when set, then looks, in order, for Chrome and Chromium installed on the machine, Chrome for Testing in Navree's cache, Playwright's Chromium (`ms-playwright`, or `PLAYWRIGHT_BROWSERS_PATH`), and Microsoft Edge. On a machine without any of them, install a pinned Chrome for Testing build into Navree's cache:
 
 ```sh
 navree browser:install
 ```
 
 ```text
-Downloaded Chrome for Testing 141.0.7390.54 (linux64) to ~/.cache/navree/chrome/141.0.7390.54
+Downloaded Chrome for Testing 156.0.8078.47 (linux64) to ~/.cache/navree/chrome/156.0.8078.47
 ```
+
+The cache is `~/.cache/navree` on Linux (or `$XDG_CACHE_HOME/navree`), `~/Library/Caches/navree` on macOS and `%LOCALAPPDATA%\navree` on Windows; `NAVREE_CACHE_DIR` moves it, for example to a folder your CI caches. `navree browser:install --version <version>` installs another Chrome for Testing version, `--force` downloads again, and `NAVREE_BROWSER_DOWNLOAD_URL` points the download at a mirror. On Linux, Chrome itself needs the usual shared libraries (`libnss3`, `libgbm1`, ...), which desktop installs and CI images with Chrome already have.
 
 Put browser tests in a test file of their own, such as `tests/browser.rs`. They take seconds rather than milliseconds, so you can run them on their own with `cargo test --test browser`, and skip them with `cargo test --lib --test api` while you work.
 
@@ -58,6 +66,8 @@ fn crm_web() -> FrontEnd {
         .command("pnpm", ["--dir", "../crm-web", "start", "--port", "3100"])
         .url("http://127.0.0.1:3100")
         .api_env("NAVREE_API_URL")
+        // `next start` is a production server: allow its cookies over plain http.
+        .env("NAVREE_COOKIE_SECURE", "0")
 }
 
 #[tokio::test]
@@ -78,7 +88,22 @@ async fn a_rep_signs_in_and_sees_the_pipeline() -> Result<(), BrowserError> {
 }
 ```
 
-`Browser::launch` starts one headless Chrome per test binary and gives each test its own browser context: separate cookies, storage and cache, so tests can't see each other's sessions. The context closes when `browser` is dropped.
+`Browser::launch` starts headless Chrome, or joins the one already running for the tests of the binary that run at the same time, and gives each test its own browser context: separate cookies, storage and cache, so tests can't see each other's sessions. The context closes when `browser` and its pages are dropped, and Chrome stops when the last browser of the binary is dropped, so no browser outlives the tests. Run browser tests in a Tokio runtime (`#[tokio::test]`).
+
+### Skipping without a browser
+
+`Browser::launch` fails with an error that says where it looked when there is no browser on the machine. To skip browser tests there instead, check first:
+
+```rust
+use navree_browser::Browser;
+
+if let Err(error) = Browser::find_chrome() {
+    eprintln!("skipped: {error}");
+    return Ok(());
+}
+```
+
+`Browser::find_chrome()` returns the binary `launch` would start, and `BrowserError::is_chrome_not_found()` tells this error from the others.
 
 ## Serving your app
 
@@ -93,7 +118,7 @@ let server = TestServer::start(crm.ctx()).await?;
 server.url("/api/v1/deals"); // "http://127.0.0.1:52417/api/v1/deals"
 ```
 
-The server runs the app's real router (`build_router`), with every layer, so CORS, cookies, CSRF and rate limits behave as in production. Pages Navree renders itself, from [views](/docs/digging-deeper/views/), can be visited directly at `server.url(..)`.
+The server runs the app's real router (`build_router`), with every layer, so CORS, cookies, CSRF and rate limits behave as in production. It runs on the test's own runtime, and `server.addr()` gives its address. Pages Navree renders itself, from [views](/docs/digging-deeper/views/), can be visited directly at `server.url(..)`.
 
 ### Your front end
 
@@ -101,15 +126,17 @@ Most Navree apps have a separate web front end with a BFF in front of the API. `
 
 | Method | Meaning |
 |---|---|
-| `FrontEnd::new(name)` | A front end, identified by `name` within the test binary |
-| `.command(program, args)` | How to start it (a production build starts in about a second) |
+| `FrontEnd::new(name)` | A front end, identified by `name` within the test binary (every `serve` of that name shares one process, started with the settings of the first) |
+| `.command(program, args)` | How to start it: a program on `PATH` (on Windows also `.cmd` shims such as `pnpm`), run in the test's directory |
 | `.url(base)` | Where it listens; `serve` waits until this URL answers |
 | `.api_env(var)` | The environment variable that tells it where the API is |
 | `.env(var, value)` | Any other environment variable |
 | `.timeout(duration)` | How long to wait for it to start (default 60 s) |
 | `.serve(ctx)` | Starts it if needed, routes its API calls to this app, and returns a `WebSession` |
 
-The front end process starts once per test binary, on the first `serve`, and stops when the binary exits. It is given the address of a small proxy that navree-browser runs, and each `serve` points that proxy at the calling test's app. A `WebSession` holds the front end until it is dropped, so browser tests that share a front end run one after another, each against its own fresh database, while the rest of your tests keep running in parallel.
+The front end process starts on the first `serve`. It is given the address of a small proxy that navree-browser runs, and each `serve` starts a `TestServer` for the calling test's app and points that proxy at it. A `WebSession` holds the front end until it is dropped, so browser tests that share a front end run one after another, each against its own fresh database, while the rest of your tests keep running in parallel. `web.url(path)` is a URL of the front end and `web.server()` the test's `TestServer`.
+
+The process keeps running while any test of the binary uses it or waits for its turn; when the last `WebSession` is dropped, it is stopped together with every process it started. If something already answers at the front end's URL before it starts, `serve` fails rather than test against a stranger, and a front end that exits or never answers fails `serve` with the end of its output.
 
 Build the front end before the tests run (`pnpm --dir apps/crm-web build`). Starting a development server works too, but its first page loads compile on demand and can take longer than the default timeouts.
 
@@ -123,9 +150,9 @@ Actions and assertions take a **target** string, resolved in this order:
 |---|---|
 | `"#deal-title"`, `".board .card"`, `"[name=email]"`, `"css=main h1"` | A CSS selector: anything starting with `#`, `.` or `[`, or prefixed with `css=` |
 | `"@deal-card"` | The element with `data-testid="deal-card"` |
-| `"Email"` | For fields: the input whose label, `aria-label`, placeholder or `name` is `Email`. For buttons and links: the one whose text or accessible name is `Email`. |
+| `"Email"` | For fields: the input whose label, `aria-label`, `aria-labelledby`, placeholder or `name` is `Email`. For buttons and links: the one whose text or accessible name is `Email`. Otherwise any element whose text is `Email`. |
 
-Text and labels match exactly after trimming whitespace, case included. When a target matches several elements, actions use the first visible one. Narrow it with `Target`, or search inside one element with `within`:
+Text and labels match exactly after trimming and collapsing whitespace, case included. Only visible elements match (a file input or a checkbox hidden behind its label can still be attached to or checked). When a target matches several elements, actions use the first visible one. Narrow it with `Target`, or search inside one element with `within`:
 
 ```rust
 use navree_browser::Target;
@@ -137,7 +164,7 @@ let card = page.within(renewal).await?;
 card.press("Edit").await?;
 ```
 
-Every method that takes a target accepts a `&str` or a `Target`. `Target::nth(i)` picks one match by position.
+Every method that takes a target accepts a `&str`, a `String` or a `Target`. `Target::nth(i)` picks one match by position. `within` waits for its target and returns an `Element` with the same methods as `Page`, looking inside it; an element is found again each time it is used, so it survives re-renders.
 
 Prefer labels and button text: they are what users see, and a test that finds "Sign in" breaks when the button's text changes, which is when it should. Add `data-testid` attributes for elements without visible text.
 
@@ -157,9 +184,18 @@ page.drag("@deal-card", "[data-stage=won]").await?;
 page.scroll_to("@load-more").await?;
 page.back().await?;
 page.refresh().await?;
+page.visit(web.url("/deals")).await?;                  // in the same tab
 ```
 
-Each action waits for its target to be visible, enabled and not covered by another element, then scrolls it into view and acts like a user: `press` and `click` dispatch real mouse events at the element's center, `type_into` sends key events one character at a time. A target that never becomes ready fails the action after the timeout.
+Each action waits for its target to be visible, enabled, not covered by another element and not moving, then scrolls it into view and acts like a user: `press` and `click` dispatch real mouse events at the element's center, `type_into` sends key events one character at a time (characters a US keyboard has no key for are inserted as text). A target that never becomes ready fails the action after the timeout, and the error says why: `"Save" is disabled`, `"Save" is covered by <div class="overlay">`.
+
+A few actions have more to them:
+
+- `select` sets a native `<select>` by an option's text or value. A custom select (a `combobox` button, as UI kits build them) is opened with a click, then the option with that name is clicked.
+- `check` and `uncheck` work on checkboxes, switches and `role="checkbox"` elements; when the input itself is hidden, its label is clicked. Unchecking a radio button is an error.
+- `type_into` on a date, time, color or range input sets its value, with `input` and `change` events.
+- `drag` presses the source (beside any link inside it), moves to the middle of the target's visible part in steps, pauses, and releases. Pointer-based drag and drop (dnd-kit and the like) and native HTML drag and drop both work.
+- `alert`, `confirm` and `prompt` dialogs are accepted, and logged in the console log.
 
 ### Assertions
 
@@ -178,7 +214,9 @@ page.assert_enabled("Save").await?;
 page.assert_no_console_errors().await?;
 ```
 
-Assertions retry until they pass or the timeout ends: `assert_see("Deal saved")` passes as soon as the toast appears, and `assert_missing("@spinner")` as soon as loading finishes. `assert_see` looks at visible text only; text in hidden elements doesn't count.
+Assertions retry until they pass or the timeout ends: `assert_see("Deal saved")` passes as soon as the toast appears, and `assert_missing("@spinner")` as soon as loading finishes. `assert_see` looks at visible text only; text in hidden elements doesn't count. `assert_count` counts visible matches, and `assert_value` on a select accepts the option's value or its text.
+
+`assert_no_console_errors` is a check, not a wait: it fails if the page has logged a `console.error` or thrown an uncaught exception since it opened. Failed network requests are written to the console log but don't fail it, since apps often expect some (a 401 before signing in).
 
 ### Waiting
 
@@ -191,7 +229,9 @@ page.wait_for_url("/deals/*").await?;                 // a glob
 page.wait_for_request("/api/v1/deals/*/move").await?; // an API call the page makes
 ```
 
-The timeout is 5 seconds per step, set with `NAVREE_BROWSER_TIMEOUT_MS`, `Browser::builder().timeout(..)`, or per call with `page.with_timeout(Duration::from_secs(20)).assert_see("Export ready")`.
+`wait_for_url` and `wait_for_request` match a glob (`*` matches any characters) against the URL's path, its path and query, or the whole URL. `wait_for_request` waits until the response has arrived and returns a `PageRequest` (`method`, `url`, `status`, `failure`). Requests made by earlier steps count, so call it after the action that makes the request; each request satisfies one wait.
+
+The timeout is 5 seconds per step, set with `NAVREE_BROWSER_TIMEOUT_MS`, `Browser::builder().timeout(..)`, or per call with `page.with_timeout(Duration::from_secs(20)).assert_see("Export ready")`. Navigations (`visit`, `back`, `refresh`) wait for the page's `load` event for up to 30 seconds, or the timeout if it is longer.
 
 ### Reading the page
 
@@ -201,13 +241,14 @@ let value: String = page.value("Amount").await?;
 let cards = page.all("@deal-card").await?;            // Vec<Element>
 let total: f64 = page.script("return window.__DEAL_TOTAL__").await?;
 let cookie = page.cookie("navree_at").await?;          // Option<Cookie>
+let url: String = page.url().await?;
 ```
 
-`script` runs JavaScript in the page and deserializes its return value. Reach for it to read state, not to drive the page: a test that clicks through `script` skips what the user would see.
+`all` returns the visible matches now, without waiting for one; `element.inner_text()` reads an element's own text. `script` runs a function body in the page, awaits it and deserializes its return value. Reach for it to read state, not to drive the page: a test that clicks through `script` skips what the user would see. A `Cookie` has the cookie's `name`, `value`, `domain`, `path`, `expires`, `http_only`, `secure` and `same_site`, including `HttpOnly` cookies scripts can't see.
 
 ## Screenshots and failures
 
-When an action or an assertion fails, navree-browser saves three files under `target/navree-browser/<test name>/` and puts their paths in the error:
+When an action or an assertion fails, navree-browser saves three files in a folder named after the test, under `navree-browser` in Cargo's target directory, and puts their paths in the error:
 
 ```text wrap
 Error: assert_see("Deal saved") failed after 5s: the text is not visible on http://127.0.0.1:3100/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23
@@ -216,7 +257,7 @@ Error: assert_see("Deal saved") failed after 5s: the text is not visible on http
   console:    target/navree-browser/a_rep_moves_a_deal_to_won/03-console.log
 ```
 
-The console log holds the page's console messages and failed network requests, which usually explain a blank page faster than the screenshot. Take screenshots on purpose with `page.screenshot("board-after-move").await?`, and full-page ones with `page.screenshot_full_page(..)`.
+Paths inside the current directory are shown relative to it, others in full. The console log holds the page's console messages, uncaught exceptions, dialogs and failed network requests, which usually explain a blank page faster than the screenshot. Files are numbered in the order a test saves them; a test in a module gets a folder per module (`target/navree-browser/deals/a_rep_moves_a_deal/`), and each run starts the test's folder afresh. Take screenshots on purpose with `page.screenshot("board-after-move").await?`, and full-page ones with `page.screenshot_full_page(..)`; both return the file's path.
 
 To watch a test run, show the window and slow it down:
 
@@ -239,7 +280,7 @@ page.assert_see("Companies").await?;
 page.resize(768, 1024).await?;
 ```
 
-`Viewport::phone()`, `Viewport::tablet()` and `Viewport::desktop()` set the size, the device pixel ratio, touch support and the user agent.
+`Viewport::phone()` (390 by 844, pixel ratio 3), `Viewport::tablet()` (820 by 1180, pixel ratio 2) and `Viewport::desktop()` (1440 by 900) set the size, the device pixel ratio, touch support and the user agent; phones and tablets send Chrome's Android user agent. `Viewport::new(width, height)` is a desktop viewport of any size, and `.with_size(..)`, `.with_scale(..)`, `.with_touch(..)` and `.with_user_agent(..)` adjust any of them. Headless Chrome calls itself `HeadlessChrome` in its user agent; pages see `Chrome`, as in production.
 
 ## A complete journey
 
@@ -276,13 +317,16 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
         .json_value();
 
     let web = crm_web().serve(crm.ctx()).await?;
-    let browser = Browser::launch().await?;
+    // Wide enough for the board's six columns side by side.
+    let browser = Browser::builder().window(2200, 1100).launch().await?;
     let page = sign_in(&browser, &web, Role::Rep1).await?;
 
     page.click("Deals").await?;
     let card = Target::from("@deal-card").containing("Lovelace renewal");
     page.drag(card, "[data-stage=won]").await?;
     page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+    // The board moves the card at once; wait for its API call to finish.
+    page.wait_for_request("/api/v1/deals/*/move").await?;
 
     rep.get(&format!("/api/v1/deals/{}", deal["id"].as_str().unwrap()))
         .send()
@@ -302,7 +346,7 @@ async fn sign_in(browser: &Browser, web: &WebSession, role: Role) -> Result<Page
 }
 ```
 
-The test seeds data through the API with `crm.login_as`, drives the browser, then checks the result through the API again: the browser proves the journey works, the API proves it stuck.
+The test seeds data through the API with `crm.login_as`, drives the browser, then checks the result through the API again: the browser proves the journey works, the API proves it stuck. The board updates the card before its request to the API returns, so the test waits for that request before asking the API.
 
 ## Running in CI
 
@@ -332,29 +376,33 @@ jobs:
           path: target/navree-browser/
 ```
 
-On a runner without Chrome, add `navree browser:install` before the tests, or set `NAVREE_BROWSER_CHROME` to the browser your image provides.
+On a runner without Chrome, add `navree browser:install` before the tests, or set `NAVREE_BROWSER_CHROME` to the browser your image provides. On Linux, Chrome starts with `--no-sandbox`, since containers and recent Ubuntu runners can't start its sandbox; the tests load your own app's pages.
 
 ## Reference
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `NAVREE_BROWSER_CHROME` | found on the machine | The Chrome or Chromium binary |
+| `NAVREE_BROWSER_CHROME` | found on the machine | The Chrome, Chromium or Edge binary |
 | `NAVREE_BROWSER_HEADLESS` | `true` | `false` shows the window |
 | `NAVREE_BROWSER_SLOW_MO` | `0` | Milliseconds to pause after each action |
 | `NAVREE_BROWSER_TIMEOUT_MS` | `5000` | How long each action and assertion waits |
-| `NAVREE_BROWSER_ARTIFACTS` | `target/navree-browser` | Where screenshots and failure files go |
+| `NAVREE_BROWSER_ARTIFACTS` | `navree-browser` in Cargo's target directory | Where screenshots and failure files go |
+| `NAVREE_CACHE_DIR` | the platform's cache folder | Where `navree browser:install` puts Chrome for Testing, and where navree-browser looks for it |
+| `NAVREE_BROWSER_DOWNLOAD_URL` | Chrome for Testing's storage | A mirror for `navree browser:install` |
 
-These are environment variables of the test run, not app configuration, so they use the `NAVREE_BROWSER_` prefix rather than `APP_`. `Browser::builder()` sets the same options in code: `.headless(false)`, `.chrome(path)`, `.slow_mo(ms)`, `.timeout(duration)`, `.window(1440, 900)`, `.artifacts(dir)`, then `.launch()`.
+These are environment variables of the test run, not app configuration, so they use the `NAVREE_` prefix rather than `APP_`. Invalid values fail `Browser::launch` with an error naming the variable. `Browser::builder()` sets the same options in code, and each one overrides its variable: `.headless(false)`, `.chrome(path)`, `.slow_mo(ms)`, `.timeout(duration)`, `.window(1440, 900)`, `.artifacts(dir)`, then `.launch()`.
 
 | Type | |
 |---|---|
 | `Target` | A target with filters: `from(str)`, `containing(text)`, `nth(i)` |
-| `Browser` | `launch()`, `builder()`, `visit(url)`, `visit_with(url, viewport)`, `new_page()` |
-| `Page` | The actions, assertions and waits above; `within(target)` returns a scoped `Element` with the same methods |
-| `TestServer` | `start(ctx)`, `url(path)` |
-| `FrontEnd`, `WebSession` | The front end and a test's turn with it: `url(path)` |
-| `Viewport` | `phone()`, `tablet()`, `desktop()`, `new(width, height)` |
-| `BrowserError` | What failed, where, and the paths of the failure files |
+| `Browser` | `launch()`, `builder()`, `find_chrome()`, `visit(url)`, `visit_with(url, viewport)`, `new_page()`, `version()` |
+| `Page` | The actions, assertions, waits and reads above, `screenshot(name)`, `screenshot_full_page(name)` and `with_timeout(duration)`; `within(target)` returns a scoped `Element` |
+| `Element` | The same methods as `Page`, looking inside the element, and `inner_text()` |
+| `TestServer` | `start(ctx)`, `url(path)`, `addr()` |
+| `FrontEnd`, `WebSession` | The front end and a test's turn with it: `url(path)`, `server()` |
+| `Viewport` | `phone()`, `tablet()`, `desktop()`, `new(width, height)`, `with_size`, `with_scale`, `with_touch`, `with_user_agent` |
+| `Cookie`, `PageRequest` | What `cookie(name)` and `wait_for_request(glob)` return |
+| `BrowserError` | What failed, where, and the paths of the failure files: `step()`, `files()`, `is_chrome_not_found()` |
 
 <LinkCards>
   <LinkCard href="/docs/testing/getting-started/" title="Testing">
