@@ -1,5 +1,5 @@
-//! PostgreSQL integration: row-level security through `navree.workspace`
-//! and schema isolation through `search_path`.
+//! PostgreSQL integration: row-level security through `navree.workspace`,
+//! schema isolation through `search_path`, and demo resets under both.
 //!
 //! Opt-in: build with `--features postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
@@ -14,11 +14,14 @@ use http::Method;
 use navree_access::{AccessModule, AccessOptions};
 use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt, Repo};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{
+    BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
+};
 use navree_testing::{TestApp, principal};
 use navree_workspace::{
-    CurrentWorkspace, ModuleBuilderWorkspaceExt, NewWorkspace, RlsPolicy, WorkspaceModule,
-    WorkspaceRepo, WorkspaceScoped, WorkspaceUow, Workspaces,
+    CurrentWorkspace, DemoSeed, DemoSeeder, DemoWorkspaces, ModuleBuilderWorkspaceExt,
+    NewWorkspace, RlsPolicy, WorkspaceModule, WorkspaceRepo, WorkspaceScoped, WorkspaceUow,
+    Workspaces,
 };
 use sea_orm::sea_query::{ColumnDef, Table};
 use sea_orm::{
@@ -378,4 +381,165 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
 
     app.shutdown().await.unwrap();
     scratch.drop().await;
+}
+
+/// Seeds two items into a demo workspace.
+struct ItemsDemo;
+
+impl Injectable for ItemsDemo {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(ItemsDemo) })
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ItemFixture {
+    title: String,
+}
+
+impl DemoSeeder for ItemsDemo {
+    fn name(&self) -> &'static str {
+        "items"
+    }
+
+    fn tables(&self) -> &'static [&'static str] {
+        &["items"]
+    }
+
+    fn seed<'a>(&'a self, demo: &'a DemoSeed) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let items: Vec<ItemFixture> =
+                demo.parse_fixture(r#"[{ "title": "Demo one" }, { "title": "Demo two" }]"#)?;
+            for fixture in items {
+                WorkspaceRepo::<item::Entity>::insert(
+                    demo.uow(),
+                    demo.id(),
+                    item::ActiveModel {
+                        id: Set(Uuid::now_v7()),
+                        workspace_id: Set(demo.id()),
+                        title: Set(fixture.title),
+                    },
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    }
+}
+
+/// `items` (row or schema isolation) with the demo seeder.
+struct DemoItemsModule<M>(M);
+
+impl<M: Module> Module for DemoItemsModule<M> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        self.0.register(m);
+        m.demo_seeder::<ItemsDemo>();
+    }
+}
+
+/// The titles of `workspace`'s items, read in a transaction that entered it.
+async fn titles(app: &TestApp, workspace: Uuid) -> Vec<String> {
+    let db = app.get::<navree_db::Db>().await;
+    let uow = db.uow(None, None).await;
+    app.get::<Workspaces>()
+        .await
+        .enter(&uow, workspace)
+        .await
+        .unwrap();
+    let mut titles: Vec<String> = item::Entity::find()
+        .all(&*uow.tx().await.unwrap())
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|item| item.title)
+        .collect();
+    uow.rollback().await.unwrap();
+    titles.sort();
+    titles
+}
+
+async fn demo_workspace(app: &TestApp, owner: Uuid) -> navree_workspace::Workspace {
+    let demos = app.get::<DemoWorkspaces>().await;
+    let uow = app.get::<navree_db::Db>().await.uow(None, None).await;
+    let created = demos
+        .create(&uow, owner, NewWorkspace::named("Demo"))
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+    created
+}
+
+/// Seeds a demo, writes to it and to a live workspace, resets the demo and
+/// checks that only the demo's rows changed.
+async fn seed_write_and_reset(app: &TestApp) {
+    let ada = Uuid::now_v7();
+    let live = create(app, ada, "Acme").await;
+    let demo = demo_workspace(app, ada).await;
+    assert_eq!(titles(app, demo.id).await, ["Demo one", "Demo two"]);
+    assert!(titles(app, live.id).await.is_empty());
+
+    let client = app.acting_as(principal(ada));
+    for (workspace, title) in [("acme", "Real"), ("demo", "Experiment")] {
+        let response = client
+            .post("/api/items")
+            .header("x-workspace", workspace)
+            .json(&json!({ "title": title }))
+            .send()
+            .await
+            .assert_status(200);
+        let expected = (workspace == "demo").then_some("reset");
+        assert_eq!(response.header("x-navree-demo"), expected);
+    }
+    assert_eq!(
+        titles(app, demo.id).await,
+        ["Demo one", "Demo two", "Experiment"]
+    );
+
+    let reset = app
+        .get::<DemoWorkspaces>()
+        .await
+        .reset(demo.id)
+        .await
+        .unwrap();
+    assert_eq!(reset.seeders, ["items"]);
+    assert_eq!(titles(app, demo.id).await, ["Demo one", "Demo two"]);
+    assert_eq!(titles(app, live.id).await, ["Real"]);
+}
+
+#[tokio::test]
+async fn demo_resets_clear_only_the_demo_rows_under_row_level_security() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = demo_app(&scratch, "row", DemoItemsModule(RowItemsModule)).await;
+    seed_write_and_reset(&app).await;
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+#[tokio::test]
+async fn demo_resets_clear_the_demo_schema_under_schema_isolation() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = demo_app(&scratch, "schema", DemoItemsModule(SchemaItemsModule)).await;
+    seed_write_and_reset(&app).await;
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+async fn demo_app(scratch: &Scratch, isolation: &str, items: impl Module) -> TestApp {
+    TestApp::builder()
+        .config("database.url", scratch.url.clone())
+        .config("database.migrate_on_boot", true)
+        .config("http.per_ip_rate_limit", Value::Null)
+        .config("workspace.isolation", isolation)
+        .config("workspace.users_table", "")
+        .config("workspace.demo.mode", "reset")
+        .module(DatabaseModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(items)
+        .module(WorkspaceModule::from_config())
+        .build()
+        .await
 }
