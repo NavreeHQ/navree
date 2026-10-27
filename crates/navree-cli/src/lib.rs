@@ -1,8 +1,9 @@
 //! # navree-cli
 //!
 //! The library behind the `navree` command-line tool: it creates apps,
-//! generates code, runs the dev loop and the app's local services. Its only
-//! navree dependency is navree-dock (a tool crate): everything it knows
+//! generates code, runs the dev loop, the app's local services and deploys.
+//! Its only navree dependencies are two tool crates, navree-dock (local
+//! services) and navree-harbor (servers and deploys): everything it knows
 //! about the framework's runtime is in the code it generates.
 //!
 //! | Command | What it does |
@@ -14,6 +15,7 @@
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
+//! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass

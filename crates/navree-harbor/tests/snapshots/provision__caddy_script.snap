@@ -1,0 +1,106 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+expression: "step(&steps(SINGLE, \"app-1\", &plain(), 1987), \"caddy\").script"
+---
+# harbor: caddy on app-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+if ! harbor_installed caddy; then
+	harbor_apt install debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
+	apt-get update -q
+	harbor_apt install caddy
+fi
+install -d -m 0755 /etc/caddy/sites
+reload=0
+harbor_file /etc/caddy/Caddyfile 0644 root:root <<'HARBOR_EOF'
+# Written by navree harbor:provision. Each app's site is in /etc/caddy/sites/.
+
+import /etc/caddy/sites/*.caddy
+HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+# The site follows the live slot, which navree deploy switches.
+if [ "$(cat /srv/crm-api/.harbor-live 2> /dev/null || echo blue)" = green ]; then
+	harbor_file /etc/caddy/sites/crm-api.caddy 0644 navree:navree <<'HARBOR_EOF'
+# crm-api: written by navree harbor:provision; navree deploy points the
+# reverse_proxy lines at the live slot (green).
+crm.example.com {
+	encode zstd gzip
+
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy 127.0.0.1:8082
+}
+
+# Internal entry for workers and the scheduler, always pointing at the live slot.
+http://:8079 {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:8082
+}
+HARBOR_EOF
+else
+	harbor_file /etc/caddy/sites/crm-api.caddy 0644 navree:navree <<'HARBOR_EOF'
+# crm-api: written by navree harbor:provision; navree deploy points the
+# reverse_proxy lines at the live slot (blue).
+crm.example.com {
+	encode zstd gzip
+
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy 127.0.0.1:8081
+}
+
+# Internal entry for workers and the scheduler, always pointing at the live slot.
+http://:8079 {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:8081
+}
+HARBOR_EOF
+fi
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+if ! systemctl is-active --quiet caddy; then
+	systemctl enable --now caddy > /dev/null 2>&1
+elif [ "$reload" = 1 ]; then
+	systemctl reload caddy
+fi

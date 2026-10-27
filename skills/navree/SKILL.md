@@ -114,6 +114,7 @@ navree list                                 # every command of the app
 | Production errors and slow requests: issues, reporting handled errors, alerts, the `/_lighthouse` dashboard, reading issues from a script or agent | `navree-lighthouse` |
 | Running queue workers in production, balancing them across queues, the queue dashboard, failed-job retries from a UI, pausing workers, long-wait alerts | `navree-fleet` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
+| Provisioning Ubuntu servers and zero-downtime deploys, rollbacks, deploy secrets, container images, push-to-deploy (`harbor.toml`, `navree deploy`) | `navree-harbor` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |

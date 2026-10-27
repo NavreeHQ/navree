@@ -129,10 +129,10 @@ export const ecosystem: EcosystemEntry[] = [
     summary:
       "Provision a server over SSH with TLS, PostgreSQL, Redis and systemd units for your web, worker and scheduler processes, then ship atomic releases that only go live after a health check.",
     features: ["Provision any Ubuntu server", "Atomic, health-checked releases", "One-command rollbacks", "Encrypted environment secrets", "Container images and push-to-deploy"],
-    crate: "navree-cli",
+    crate: "navree-harbor",
     command: "navree deploy",
     href: "/docs/tools/harbor/",
-    status: "planned",
+    status: "stable",
     signature: "navree deploy",
     mount: "navree deploy",
   },

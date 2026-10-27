@@ -54,21 +54,23 @@
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
+//! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `otel`), and
-//! the `storage-s3` driver but not `storage-gcs` or `storage-azure`. A
-//! feature also turns on the features of the crates its crate builds on
-//! (`auth` turns on `access`, `db`, `http`, ...). SQLite is built in; the
-//! `postgres` feature adds navree-db's PostgreSQL driver and the `mysql`
-//! feature its MySQL and MariaDB driver, and the opt-in `otel` feature adds
-//! navree-observe's OTLP span exporter. `validation-phone` and
+//! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `harbor`,
+//! `otel`), and the `storage-s3` driver but not `storage-gcs` or
+//! `storage-azure`. A feature also turns on the features of the crates its
+//! crate builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is
+//! built in; the `postgres` feature adds navree-db's PostgreSQL driver and
+//! the `mysql` feature its MySQL and MariaDB driver, and the opt-in `otel`
+//! feature adds navree-observe's OTLP span exporter. `validation-phone` and
 //! `validation-html` (both in `full`) add navree-validation's `Phone` and
 //! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.
 //! `axum` is re-exported with `http`. `dock` is a development tool
-//! (`navree dock`), for tools and tests that read
-//! `dock.toml`.
+//! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
+//! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
+//! on only to read `harbor.toml` or drive deploys from its own code.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -260,6 +262,8 @@ pub use navree_search as search;
 // Tools (opt-in)
 #[cfg(feature = "dock")]
 pub use navree_dock as dock;
+#[cfg(feature = "harbor")]
+pub use navree_harbor as harbor;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

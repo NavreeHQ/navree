@@ -44,6 +44,7 @@ conventions, and says which skill to load for each task.
 | [`navree-lighthouse`](navree-lighthouse/SKILL.md) | Application monitoring: issues, alerts, the `/_lighthouse` dashboard and its JSON API |
 | [`navree-fleet`](navree-fleet/SKILL.md) | Supervised queue workers (`navree fleet`), balancing, recycling, pause and continue, the `/_fleet` dashboard, metrics and long-wait alerts |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
+| [`navree-harbor`](navree-harbor/SKILL.md) | Provision Ubuntu servers and ship zero-downtime releases with `navree deploy`: `harbor.toml`, secrets, rollbacks, several servers, `build:image`, GitHub Actions |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [`navree-flags`](navree-flags/SKILL.md) | Feature flags: define, check, roll out by percentage or plan, kill, test |

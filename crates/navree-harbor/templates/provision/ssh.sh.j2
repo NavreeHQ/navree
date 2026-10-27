@@ -1,0 +1,8 @@
+# harbor: ssh on {{ server.name }}
+{% include "provision/prelude.sh" %}
+harbor_file /etc/ssh/sshd_config.d/10-harbor.conf 0644 root:root <<'HARBOR_EOF'
+{{ files.sshd }}HARBOR_EOF
+if [ "$HARBOR_CHANGED" = 1 ]; then
+	sshd -t
+	systemctl try-reload-or-restart ssh
+fi

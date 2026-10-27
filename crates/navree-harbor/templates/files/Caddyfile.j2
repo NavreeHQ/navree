@@ -1,0 +1,29 @@
+# Written by navree harbor:provision. Each app's site is in /etc/caddy/sites/.
+{% if proxy_protocol %}
+{
+	# The load balancer sends the PROXY protocol on ports 80 and 443.
+	servers :443 {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+{% for proxy in trusted_proxies %}
+				allow {{ proxy }}
+{% endfor %}
+			}
+			tls
+		}
+	}
+	servers :80 {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+{% for proxy in trusted_proxies %}
+				allow {{ proxy }}
+{% endfor %}
+			}
+		}
+	}
+}
+{% endif %}
+
+import /etc/caddy/sites/*.caddy

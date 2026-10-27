@@ -1,0 +1,23 @@
+[Unit]
+Description={{ app }} worker %i
+After={{ after }}
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ user }}
+WorkingDirectory={{ base }}/current
+EnvironmentFile={{ etc }}/env
+ExecStart={{ base }}/current/{{ app }} {{ commands.worker }}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths={{ base }}/shared
+
+[Install]
+WantedBy=multi-user.target
