@@ -245,6 +245,20 @@ async fn a_transaction_per_test_keeps_nothing_but_runs_after_commit_hooks() {
     assert_eq!(left, 0);
 }
 
+#[tokio::test]
+async fn servers_are_skipped_without_their_driver() {
+    // Built without the drivers, server databases are skipped (with a
+    // notice), configured or not.
+    if !cfg!(feature = "postgres") {
+        assert!(TestDb::postgres().await.unwrap().is_none());
+        assert!(ORM.postgres().await.unwrap().is_none());
+    }
+    if !cfg!(feature = "mysql") {
+        assert!(TestDb::mysql().await.unwrap().is_none());
+        assert!(ORM.mysql().await.unwrap().is_none());
+    }
+}
+
 #[navree_orm::test(template = ORM)]
 async fn the_test_attribute_gives_a_copy_of_the_template(db: TestDb) {
     Deal::factory().count(2).create(db.db()).await.unwrap();

@@ -47,13 +47,12 @@
 //! let second = DATABASE.sqlite().await.unwrap();
 //! let rows = navree_orm::table("notes").count(second.db()).await.unwrap();
 //! assert_eq!(rows, 1);
-//!
-//! // On PostgreSQL when a server is configured (else a notice, and `None`).
-//! if let Some(on_postgres) = DATABASE.postgres().await.unwrap() {
-//!     assert_eq!(on_postgres.kind(), navree_orm::testing::database::DatabaseKind::Postgres);
-//! }
 //! # }
 //! ```
+//!
+//! On a server (navree-db's driver for it compiled in), the same template
+//! gives copies with `DATABASE.postgres()` or `DATABASE.mysql()`: `None`,
+//! after a notice, when the server is not configured.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -261,9 +260,10 @@ impl TestDb {
     }
 
     /// An empty database of its own on the PostgreSQL test server; `None`
-    /// (after a notice) when no server is configured.
+    /// (after a notice) when no server is configured, or this binary has
+    /// no PostgreSQL driver.
     pub async fn postgres() -> Result<Option<TestDb>, BoxError> {
-        let Some(server) = TestServer::Postgres.url() else {
+        let Some(server) = usable_server(TestServer::Postgres).await? else {
             return Ok(None);
         };
         server_database(&server, DatabaseKind::Postgres, None)
@@ -272,9 +272,10 @@ impl TestDb {
     }
 
     /// An empty database of its own on the MySQL test server; `None`
-    /// (after a notice) when no server is configured.
+    /// (after a notice) when no server is configured, or this binary has
+    /// no MySQL driver.
     pub async fn mysql() -> Result<Option<TestDb>, BoxError> {
-        let Some(server) = TestServer::MySql.url() else {
+        let Some(server) = usable_server(TestServer::MySql).await? else {
             return Ok(None);
         };
         server_database(&server, DatabaseKind::MySql, None)
@@ -452,9 +453,10 @@ impl Template {
     }
 
     /// A copy of the template on the PostgreSQL test server (`CREATE
-    /// DATABASE … TEMPLATE`); `None` (after a notice) without a server.
+    /// DATABASE … TEMPLATE`); `None` (after a notice) without a server or
+    /// its driver.
     pub async fn postgres(&self) -> Result<Option<TestDb>, BoxError> {
-        let Some(server) = TestServer::Postgres.url() else {
+        let Some(server) = usable_server(TestServer::Postgres).await? else {
             return Ok(None);
         };
         let template = self
@@ -468,9 +470,9 @@ impl Template {
 
     /// A copy of the template on the MySQL test server (a new database
     /// with the template's tables and rows); `None` (after a notice)
-    /// without a server.
+    /// without a server or its driver.
     pub async fn mysql(&self) -> Result<Option<TestDb>, BoxError> {
-        let Some(server) = TestServer::MySql.url() else {
+        let Some(server) = usable_server(TestServer::MySql).await? else {
             return Ok(None);
         };
         let template = self
@@ -850,6 +852,40 @@ async fn server_database(
         copy_mysql_tables(&test, template).await?;
     }
     Ok(test)
+}
+
+/// `server`'s URL when it is configured and this binary can talk to it
+/// (navree-db's driver for it compiled in); `None`, after a notice, when
+/// either is missing.
+async fn usable_server(server: TestServer) -> Result<Option<String>, BoxError> {
+    let Some(url) = server.url() else {
+        return Ok(None);
+    };
+    match Db::connect(&DbOptions {
+        url: url.clone(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    {
+        Ok(db) => {
+            close_pool(&db).await;
+            Ok(Some(url))
+        }
+        Err(error) if error.to_string().contains("no supporting driver") => {
+            eprintln!(
+                "skipped: {} is set, but this test binary has no driver for it: {error}",
+                server.variable()
+            );
+            Ok(None)
+        }
+        Err(error) => Err(format!(
+            "cannot connect to the test server {} ({}): {error}",
+            redact(&url),
+            server.variable()
+        )
+        .into()),
+    }
 }
 
 /// A pool on the server's own database, for creating and dropping others.

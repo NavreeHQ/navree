@@ -18,6 +18,12 @@
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
 //!   change events (the audit trail), exactly like navree-db's repositories.
+//! - **In apps**: model [`factory`] builders for tests and seeders, the
+//!   database assertions and test databases of [`testing`], route model
+//!   [`binding`] (`Bound<Deal>`), [`workspace`] scoping
+//!   (`#[model(workspace)]`), access control (`#[model(subject, policy)]`,
+//!   feature `access`), validation rules on models (feature `validation`)
+//!   and `model:show` ([`OrmModule`]).
 //!
 //! ```
 //! use chrono::{DateTime, Utc};
@@ -102,11 +108,11 @@ pub mod factory;
 pub mod hooks;
 pub mod ir;
 mod model;
+mod module;
 pub mod pagination;
 mod persist;
 pub mod prelude;
 mod query;
-mod quiet;
 mod record;
 pub mod relations;
 mod row;
@@ -139,8 +145,8 @@ pub use query::{
 };
 pub use record::Record;
 pub use row::Row;
+pub use module::{ModuleBuilderOrmExt, OrmModule, RegisteredModel, registered_models};
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
-pub use show::{ModuleBuilderOrmExt, OrmModule};
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
