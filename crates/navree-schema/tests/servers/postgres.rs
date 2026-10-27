@@ -350,6 +350,22 @@ async fn hypertables_policies_and_continuous_aggregates() {
         column(&conn, "SELECT count(*) FROM audit_logs").await,
         ["2"]
     );
+    // The catalog knows which tables are hypertables, by plain or
+    // schema-qualified name.
+    for (table, expected) in [
+        ("events", true),
+        ("public.events", true),
+        ("audit_logs", true),
+        ("events_daily", false),
+        ("other_schema.events", false),
+        ("missing", false),
+    ] {
+        assert_eq!(
+            schema.is_hypertable(table).await.unwrap(),
+            expected,
+            "{table}"
+        );
+    }
 
     // A table referenced by a foreign key cannot have its key widened.
     schema
@@ -430,6 +446,7 @@ async fn without_timescaledb_hypertables_are_regular_tables() {
         .await
         .unwrap();
     assert!(schema.has_index("metrics", ["at"], None).await.unwrap());
+    assert!(!schema.is_hypertable("metrics").await.unwrap());
     assert_eq!(
         schema.notices(),
         [

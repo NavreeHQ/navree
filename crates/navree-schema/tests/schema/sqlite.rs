@@ -682,6 +682,9 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         .await
         .unwrap();
     assert_eq!(schema.statements().len(), before);
+    // Without TimescaleDB, nothing is a hypertable.
+    assert!(!schema.is_hypertable("audit_logs").await.unwrap());
+    assert!(!schema.is_hypertable("events").await.unwrap());
 
     // Declaring the hypertable while altering a table converts it too.
     schema

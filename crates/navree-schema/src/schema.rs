@@ -828,6 +828,40 @@ impl<'c> Schema<'c> {
 
     // ----- TimescaleDB -------------------------------------------------------
 
+    /// Whether `table` (plain, or qualified as `schema.table`) is a
+    /// TimescaleDB hypertable.
+    ///
+    /// Only a PostgreSQL database with the TimescaleDB extension installed
+    /// has hypertables: there the answer comes from
+    /// `timescaledb_information.hypertables`. Everywhere else it is `false`,
+    /// without a query beyond detecting the database (none at all on a
+    /// MySQL, MariaDB or SQLite connection).
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), navree_schema::SchemaError> {
+    /// use navree_schema::{Schema, Target};
+    ///
+    /// // A database without TimescaleDB has regular tables only.
+    /// let schema = Schema::offline(Target::sqlite((3, 46)));
+    /// assert!(!schema.is_hypertable("events").await?);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn is_hypertable(&self, table: &str) -> SchemaResult<bool> {
+        if let Some(conn) = &self.conn
+            && Dialect::of(conn.get().backend()) != Some(Dialect::Postgres)
+        {
+            return Ok(false);
+        }
+        let target = self.target().await?;
+        if target.dialect() != Dialect::Postgres || target.timescaledb().is_none() {
+            return Ok(false);
+        }
+        let conn = self.connection(|| format!("checking whether `{table}` is a hypertable"))?;
+        inspect::is_hypertable(conn, table).await
+    }
+
     /// Converts existing `table` into a hypertable: checks its keys (widening
     /// the primary key with the time column, or explaining what blocks it),
     /// then creates the hypertable with its dimensions and policies. On a
