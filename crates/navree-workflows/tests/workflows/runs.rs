@@ -95,10 +95,7 @@ async fn a_failed_step_is_retried_after_its_backoff() {
     let workflows = h.workflows().await;
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(
-        run.wake_at,
-        Some(start() + chrono::TimeDelta::seconds(10))
-    );
+    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::seconds(10)));
     let details = workflows.details(id).await.unwrap();
     assert_eq!(details.steps[0].status, StepStatus::Retrying);
     assert_eq!(details.steps[0].attempts, 1);
@@ -252,7 +249,10 @@ async fn a_key_keeps_one_unfinished_run() {
         .await
         .unwrap();
     assert_ne!(next, first);
-    assert_eq!(workflows.run(next).await.unwrap().key.as_deref(), Some("user-7"));
+    assert_eq!(
+        workflows.run(next).await.unwrap().key.as_deref(),
+        Some("user-7")
+    );
 }
 
 #[tokio::test]
@@ -262,7 +262,9 @@ async fn a_delayed_start_waits() {
     let workspace = uuid::Uuid::now_v7();
     let id = workflows
         .spawn_with(
-            Greet { name: "later".into() },
+            Greet {
+                name: "later".into(),
+            },
             StartOptions::new().delay(HOUR).workspace(workspace),
         )
         .await
@@ -311,7 +313,10 @@ async fn starting_an_unregistered_workflow_names_the_fix() {
     impl Workflow for Stray {
         const NAME: &'static str = "stray";
         type Output = ();
-        async fn run(self, _ctx: navree_workflows::WorkflowCtx) -> Result<(), navree_kernel::BoxError> {
+        async fn run(
+            self,
+            _ctx: navree_workflows::WorkflowCtx,
+        ) -> Result<(), navree_kernel::BoxError> {
             Ok(())
         }
     }
@@ -339,10 +344,7 @@ async fn runs_resume_on_the_version_they_started_on() {
     first.app.shutdown().await.unwrap();
 
     // Deploy 2 ships version 2, which resumes version 1 runs.
-    let second = harness_on(database, clock, journal, |b| {
-        b.module(UpgradeModule(&[2]))
-    })
-    .await;
+    let second = harness_on(database, clock, journal, |b| b.module(UpgradeModule(&[2]))).await;
     let new = second.start(UpgradeV2).await;
     second.advance(HOUR).await;
     let workflows = second.workflows().await;

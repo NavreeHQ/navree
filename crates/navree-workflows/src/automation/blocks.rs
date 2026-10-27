@@ -117,7 +117,8 @@ pub trait Action: Serialize + DeserializeOwned + ToSchema + Send + Sync + 'stati
 
     /// Does it. Use [`AutomationCtx::idempotency_key`] with services that
     /// accept one: a step whose process dies runs again.
-    fn run(self, ctx: AutomationCtx) -> impl Future<Output = Result<Self::Output, BoxError>> + Send;
+    fn run(self, ctx: AutomationCtx)
+    -> impl Future<Output = Result<Self::Output, BoxError>> + Send;
 
     /// What a simulation shows instead of running it (default: the
     /// configuration).

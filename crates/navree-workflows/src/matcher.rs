@@ -83,11 +83,12 @@ pub(crate) fn lookup<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     if path.is_empty() {
         return Some(value);
     }
-    path.split('.').try_fold(value, |current, segment| match current {
-        Value::Object(map) => map.get(segment),
-        Value::Array(items) => segment.parse::<usize>().ok().and_then(|i| items.get(i)),
-        _ => None,
-    })
+    path.split('.')
+        .try_fold(value, |current, segment| match current {
+            Value::Object(map) => map.get(segment),
+            Value::Array(items) => segment.parse::<usize>().ok().and_then(|i| items.get(i)),
+            _ => None,
+        })
 }
 
 #[cfg(test)]

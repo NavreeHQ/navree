@@ -69,11 +69,11 @@ impl Workflows {
     /// The definition of `W`, or [`WorkflowsError::Unregistered`].
     pub fn definition<W: Workflow>(&self) -> Result<WorkflowDefinition, WorkflowsError> {
         match &self.inner {
-            Inner::Engine(engine) => engine
-                .registry
-                .of::<W>()
-                .cloned()
-                .ok_or_else(|| WorkflowsError::unregistered(W::NAME, std::any::type_name::<W>())),
+            Inner::Engine(engine) => {
+                engine.registry.of::<W>().cloned().ok_or_else(|| {
+                    WorkflowsError::unregistered(W::NAME, std::any::type_name::<W>())
+                })
+            }
             Inner::Fake(_) => Ok(WorkflowDefinition::of::<W>()),
         }
     }
@@ -234,13 +234,19 @@ impl Workflows {
         let Inner::Engine(engine) = &self.inner else {
             return Err(WorkflowsError::conflict(
                 codes::WORKFLOW_RUN_NOT_FAILED,
-                format!("Only a failed workflow run can be retried (this one is {}).", run.status),
+                format!(
+                    "Only a failed workflow run can be retried (this one is {}).",
+                    run.status
+                ),
             ));
         };
         if !engine.store.retry(None, id, engine.now()).await? {
             return Err(WorkflowsError::conflict(
                 codes::WORKFLOW_RUN_NOT_FAILED,
-                format!("Only a failed workflow run can be retried (this one is {}).", run.status),
+                format!(
+                    "Only a failed workflow run can be retried (this one is {}).",
+                    run.status
+                ),
             ));
         }
         engine.wake(id, None).await?;

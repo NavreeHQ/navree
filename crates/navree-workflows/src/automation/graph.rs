@@ -269,7 +269,10 @@ impl AutomationGraph {
     }
 
     /// The first edge that closes a loop: (node index, field, target).
-    fn find_loop(&self, positions: &BTreeMap<&str, usize>) -> Option<(usize, &'static str, String)> {
+    fn find_loop(
+        &self,
+        positions: &BTreeMap<&str, usize>,
+    ) -> Option<(usize, &'static str, String)> {
         // 0 = unvisited, 1 = on the current path, 2 = done.
         let mut state = vec![0u8; self.nodes.len()];
         for start in 0..self.nodes.len() {

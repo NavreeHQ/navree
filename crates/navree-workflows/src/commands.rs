@@ -221,7 +221,11 @@ async fn list_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError
         }
     }
     if let Some(limit) = flag(&args, "limit")? {
-        query = query.limit(limit.parse().map_err(|_| format!("`{limit}` is not a number"))?);
+        query = query.limit(
+            limit
+                .parse()
+                .map_err(|_| format!("`{limit}` is not a number"))?,
+        );
     }
     print!("{}", format_runs(&workflows.runs(&query).await?));
     Ok(())

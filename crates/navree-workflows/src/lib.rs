@@ -82,7 +82,9 @@ pub use automation::{
     MAX_AUTOMATION_NAME_LEN, MAX_NODES, MemoryAutomationStore, NewAutomation, Node, NodeStep,
     SimulateInput, SimulatedStep, Simulation, Trigger, ValidateInput, Validation, WaitOutcome,
 };
-pub use controller::{MANAGE_PERMISSION, RunsFilter, VIEW_PERMISSION, WorkflowInfo, WorkflowsController};
+pub use controller::{
+    MANAGE_PERMISSION, RunsFilter, VIEW_PERMISSION, WorkflowInfo, WorkflowsController,
+};
 pub use ctx::{StepOptions, WorkflowCtx};
 pub use engine::Execution;
 pub use error::{DefinitionIssue, WorkflowsError, codes};

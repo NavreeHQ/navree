@@ -54,7 +54,9 @@ impl FromStr for AutomationStatus {
         ]
         .into_iter()
         .find(|status| status.as_str() == value)
-        .ok_or_else(|| format!("unknown automation status `{value}`: expected draft, active or paused"))
+        .ok_or_else(|| {
+            format!("unknown automation status `{value}`: expected draft, active or paused")
+        })
     }
 }
 
@@ -96,7 +98,9 @@ impl FromStr for EnrollmentPolicy {
         .into_iter()
         .find(|policy| policy.as_str() == value)
         .ok_or_else(|| {
-            format!("unknown enrollment policy `{value}`: expected one_at_a_time, once or every_time")
+            format!(
+                "unknown enrollment policy `{value}`: expected one_at_a_time, once or every_time"
+            )
         })
     }
 }
@@ -216,7 +220,8 @@ impl AutomationQuery {
 
     /// Whether `automation` passes (the memory store's query).
     pub(crate) fn matches(&self, automation: &Automation) -> bool {
-        self.scope.is_none_or(|scope| automation.workspace_id == scope)
+        self.scope
+            .is_none_or(|scope| automation.workspace_id == scope)
             && self.status.is_none_or(|status| automation.status == status)
     }
 }

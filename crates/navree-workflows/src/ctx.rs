@@ -384,7 +384,10 @@ impl WorkflowCtx {
             ));
         }
         let key = self.next_key(&format!("$wait:{}", E::NAME));
-        match self.wait_keyed(key, E::NAME, filter, timeout.into()).await? {
+        match self
+            .wait_keyed(key, E::NAME, filter, timeout.into())
+            .await?
+        {
             Some(payload) => serde_json::from_value(payload).map(Some).map_err(|error| {
                 WorkflowsError::payload(&format!("the event `{}` cannot be read", E::NAME), error)
             }),
@@ -423,7 +426,9 @@ impl WorkflowCtx {
         let deadline = match self.recorded(&key) {
             Some(step) if step.status == StepStatus::Completed => {
                 // `{"event": payload}` when an event came; null on timeout.
-                return Ok(step.output.and_then(|mut output| output.get_mut("event").map(Value::take)));
+                return Ok(step
+                    .output
+                    .and_then(|mut output| output.get_mut("event").map(Value::take)));
             }
             Some(step) => step.wake_at,
             None => {
@@ -441,9 +446,9 @@ impl WorkflowCtx {
         if let Some(at) = deadline
             && at <= self.clock()
         {
-            let mut step = self.recorded(&key).unwrap_or_else(|| {
-                self.new_step(&key, StepKind::Wait, StepStatus::Waiting)
-            });
+            let mut step = self
+                .recorded(&key)
+                .unwrap_or_else(|| self.new_step(&key, StepKind::Wait, StepStatus::Waiting));
             step.status = StepStatus::Completed;
             step.output = Some(Value::Null);
             step.updated_at = self.clock();
@@ -459,9 +464,7 @@ impl WorkflowCtx {
     pub async fn now(&self) -> DateTime<Utc> {
         let key = self.next_key("$now");
         if let Some(step) = self.recorded(&key)
-            && let Some(Ok(at)) = step
-                .output
-                .map(serde_json::from_value::<DateTime<Utc>>)
+            && let Some(Ok(at)) = step.output.map(serde_json::from_value::<DateTime<Utc>>)
         {
             return at;
         }
@@ -479,7 +482,11 @@ impl WorkflowCtx {
 
     /// The execution's lease, as last renewed.
     pub(crate) fn lease(&self) -> Lease {
-        *self.inner.lease.lock().unwrap_or_else(PoisonError::into_inner)
+        *self
+            .inner
+            .lease
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The suspension, once the execution stopped.
@@ -557,7 +564,11 @@ impl WorkflowCtx {
     /// lease is lost or the store fails.
     async fn record(&self, step: WorkflowStep) {
         let lease = {
-            let mut lease = self.inner.lease.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut lease = self
+                .inner
+                .lease
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             let now = self.clock();
             lease.now = now;
             lease.until = now + delta(self.inner.engine.options.lease());

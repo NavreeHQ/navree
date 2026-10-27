@@ -118,7 +118,8 @@ fn opt_json(row: &QueryResult, column: &str) -> StoreResult<Option<Value>> {
 }
 
 fn uuid(text: &str) -> StoreResult<Uuid> {
-    Uuid::parse_str(text).map_err(|_| WorkflowsError::Other(format!("stored id `{text}` is not a UUID")))
+    Uuid::parse_str(text)
+        .map_err(|_| WorkflowsError::Other(format!("stored id `{text}` is not a UUID")))
 }
 
 fn opt_uuid_column(row: &QueryResult, column: &str) -> StoreResult<Option<Uuid>> {
@@ -366,7 +367,10 @@ impl WorkflowStore for DatabaseWorkflowStore {
                     "SELECT {RUN_COLUMNS} FROM {RUNS_TABLE} WHERE id = ? AND lease_token = ? \
                      AND status = 'running'"
                 ),
-                vec![lease.run_id.to_string().into(), lease.token.to_string().into()],
+                vec![
+                    lease.run_id.to_string().into(),
+                    lease.token.to_string().into(),
+                ],
             )
             .await
         })
@@ -497,10 +501,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
                     "error = ?, finished_at = ?, wake_at = NULL, status = 'failed'".to_owned(),
                     vec![error.clone().into(), now.into()],
                 ),
-                Release::Pending => (
-                    "wake_at = NULL, status = 'pending'".to_owned(),
-                    Vec::new(),
-                ),
+                Release::Pending => ("wake_at = NULL, status = 'pending'".to_owned(), Vec::new()),
                 Release::Sleeping(at) => (
                     "wake_at = CASE WHEN wake_requested THEN NULL ELSE ? END, \
                      status = CASE WHEN wake_requested THEN 'pending' ELSE 'sleeping' END"

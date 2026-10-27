@@ -219,7 +219,7 @@ impl WorkflowRegistry {
                 )));
             }
             versions.push(definition.clone());
-            versions.sort_by(|a, b| b.version.cmp(&a.version));
+            versions.sort_by_key(|d| std::cmp::Reverse(d.version));
             registry
                 .by_type
                 .insert(definition.type_name.to_owned(), definition);
@@ -319,9 +319,11 @@ mod tests {
 
     #[test]
     fn runs_resume_on_their_version() {
-        let registry =
-            WorkflowRegistry::new([WorkflowDefinition::of::<V1>(), WorkflowDefinition::of::<V3>()])
-                .unwrap();
+        let registry = WorkflowRegistry::new([
+            WorkflowDefinition::of::<V1>(),
+            WorkflowDefinition::of::<V3>(),
+        ])
+        .unwrap();
         assert_eq!(registry.latest("onboarding").unwrap().version, 3);
         assert_eq!(registry.for_run("onboarding", 1).unwrap().version, 1);
         assert_eq!(registry.for_run("onboarding", 2).unwrap().version, 3);
@@ -334,14 +336,23 @@ mod tests {
 
     #[test]
     fn duplicates_and_bad_names_fail() {
-        let error =
-            WorkflowRegistry::new([WorkflowDefinition::of::<V1>(), WorkflowDefinition::of::<Clash>()])
-                .unwrap_err();
-        assert!(error.to_string().contains("two workflows are registered as `onboarding` version 1"));
+        let error = WorkflowRegistry::new([
+            WorkflowDefinition::of::<V1>(),
+            WorkflowDefinition::of::<Clash>(),
+        ])
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("two workflows are registered as `onboarding` version 1")
+        );
         // The same type twice is one registration.
         assert!(
-            WorkflowRegistry::new([WorkflowDefinition::of::<V1>(), WorkflowDefinition::of::<V1>()])
-                .is_ok()
+            WorkflowRegistry::new([
+                WorkflowDefinition::of::<V1>(),
+                WorkflowDefinition::of::<V1>()
+            ])
+            .is_ok()
         );
         assert!(check_name("Onboarding").is_err());
         assert!(check_name("").is_err());

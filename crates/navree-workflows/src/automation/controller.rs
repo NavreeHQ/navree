@@ -16,9 +16,13 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::blocks::BlockInfo;
-use super::model::{Automation, AutomationTemplate, AutomationVersion, Enrollment, EnrollmentPolicy};
+use super::model::{
+    Automation, AutomationTemplate, AutomationVersion, Enrollment, EnrollmentPolicy,
+};
 use super::runner::{SimulateInput, Simulation};
-use super::service::{AutomationChanges, AutomationDetails, Automations, NewAutomation, Validation};
+use super::service::{
+    AutomationChanges, AutomationDetails, Automations, NewAutomation, Validation,
+};
 use crate::controller::{DataList, Scope};
 use crate::{WorkflowsError, WorkflowsOptions};
 
@@ -162,7 +166,12 @@ fn api(
     }
 }
 
-fn created(summary: &str, responses: &[u16], request: Option<SchemaFn>, response: SchemaFn) -> ApiMeta {
+fn created(
+    summary: &str,
+    responses: &[u16],
+    request: Option<SchemaFn>,
+    response: SchemaFn,
+) -> ApiMeta {
     ApiMeta {
         success_status: 201,
         ..api(summary, responses, request, Some(response))
@@ -171,7 +180,10 @@ fn created(summary: &str, responses: &[u16], request: Option<SchemaFn>, response
 
 fn location(uri: &Uri, tail: &str, id: Uuid) -> String {
     let base = uri.path();
-    let base = base.strip_suffix(tail).unwrap_or(base).trim_end_matches('/');
+    let base = base
+        .strip_suffix(tail)
+        .unwrap_or(base)
+        .trim_end_matches('/');
     format!("{base}/{id}")
 }
 
@@ -210,20 +222,21 @@ impl Controller for AutomationsController {
             }
         };
         let a = self.automations.clone();
-        let from_template = move |Scope(scope): Scope,
-                                  uow: Uow,
-                                  uri: Uri,
-                                  Path(key): Path<String>,
-                                  body: Option<Json<FromTemplateInput>>| {
-            let a = a.clone();
-            async move {
-                let name = body.and_then(|Json(input)| input.name);
-                let automation = a.create_from_template(&uow, &key, scope, name).await?;
-                let prefix = uri.path().split("/templates/").next().unwrap_or_default();
-                let location = format!("{prefix}/{}", automation.id);
-                Ok::<_, AppError>(Created(location, automation))
-            }
-        };
+        let from_template =
+            move |Scope(scope): Scope,
+                  uow: Uow,
+                  uri: Uri,
+                  Path(key): Path<String>,
+                  body: Option<Json<FromTemplateInput>>| {
+                let a = a.clone();
+                async move {
+                    let name = body.and_then(|Json(input)| input.name);
+                    let automation = a.create_from_template(&uow, &key, scope, name).await?;
+                    let prefix = uri.path().split("/templates/").next().unwrap_or_default();
+                    let location = format!("{prefix}/{}", automation.id);
+                    Ok::<_, AppError>(Created(location, automation))
+                }
+            };
         let a = self.automations.clone();
         let validate = move |Json(input): Json<ValidateInput>| {
             let a = a.clone();
@@ -316,15 +329,14 @@ impl Controller for AutomationsController {
             }
         };
         let a = self.automations.clone();
-        let simulate = move |Scope(scope): Scope,
-                             Path(id): Path<Uuid>,
-                             Json(input): Json<SimulateInput>| {
-            let a = a.clone();
-            async move {
-                scoped(&a, scope, id).await?;
-                Ok::<_, AppError>(Json(a.simulate(id, input).await?))
-            }
-        };
+        let simulate =
+            move |Scope(scope): Scope, Path(id): Path<Uuid>, Json(input): Json<SimulateInput>| {
+                let a = a.clone();
+                async move {
+                    scoped(&a, scope, id).await?;
+                    Ok::<_, AppError>(Json(a.simulate(id, input).await?))
+                }
+            };
         let a = self.automations.clone();
         let enroll = move |Scope(scope): Scope,
                            uri: Uri,
@@ -348,12 +360,13 @@ impl Controller for AutomationsController {
             }
         };
         let a = self.automations.clone();
-        let show_enrollment = move |Scope(scope): Scope, Path((id, enrollment)): Path<(Uuid, Uuid)>| {
-            let a = a.clone();
-            async move {
-                Ok::<_, AppError>(Json(scoped_enrollment(&a, scope, id, enrollment).await?))
-            }
-        };
+        let show_enrollment =
+            move |Scope(scope): Scope, Path((id, enrollment)): Path<(Uuid, Uuid)>| {
+                let a = a.clone();
+                async move {
+                    Ok::<_, AppError>(Json(scoped_enrollment(&a, scope, id, enrollment).await?))
+                }
+            };
         let a = self.automations.clone();
         let cancel_enrollment =
             move |Scope(scope): Scope, Path((id, enrollment)): Path<(Uuid, Uuid)>| {
@@ -397,14 +410,18 @@ impl Controller for AutomationsController {
                     None,
                     Some(schema_fn::<AutomationTemplate>),
                 )),
-            manage(RouteDef::on(Method::POST, "/templates/{key}", from_template))
-                .name("automations.templates.use")
-                .api(created(
-                    "Create a draft automation from a template",
-                    &[400, 401, 403, 404],
-                    Some(schema_fn::<FromTemplateInput>),
-                    schema_fn::<Automation>,
-                )),
+            manage(RouteDef::on(
+                Method::POST,
+                "/templates/{key}",
+                from_template,
+            ))
+            .name("automations.templates.use")
+            .api(created(
+                "Create a draft automation from a template",
+                &[400, 401, 403, 404],
+                Some(schema_fn::<FromTemplateInput>),
+                schema_fn::<Automation>,
+            )),
             view(RouteDef::on(Method::POST, "/validate", validate))
                 .name("automations.validate")
                 .api(api(

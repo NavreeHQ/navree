@@ -96,10 +96,7 @@ async fn events_can_be_delivered_by_name() {
         .await
         .unwrap();
     assert_eq!(woken, 1);
-    assert_eq!(
-        workflows.run(id).await.unwrap().output,
-        Some(json!(12))
-    );
+    assert_eq!(workflows.run(id).await.unwrap().output, Some(json!(12)));
 }
 
 #[tokio::test]

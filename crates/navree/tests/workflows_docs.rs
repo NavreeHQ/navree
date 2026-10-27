@@ -56,7 +56,11 @@ pub struct Billing {
 }
 
 impl Billing {
-    pub async fn charge(&self, _account_id: u64, _idempotency_key: &str) -> Result<String, BoxError> {
+    pub async fn charge(
+        &self,
+        _account_id: u64,
+        _idempotency_key: &str,
+    ) -> Result<String, BoxError> {
         let mut attempts = self.attempts.lock().unwrap_or_else(PoisonError::into_inner);
         *attempts += 1;
         if *attempts <= self.declines {
@@ -128,8 +132,11 @@ pub async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<bool, Box
         .wait_for::<CourseCompleted>(EventMatch::field("user_id", user_id), 7 * DAY)
         .await?;
     if completed.is_none() {
-        ctx.step("send-nudge", || async move { mail.send(user_id, "nudge").await })
-            .await?;
+        ctx.step(
+            "send-nudge",
+            || async move { mail.send(user_id, "nudge").await },
+        )
+        .await?;
     }
     Ok(completed.is_some())
 }
@@ -467,7 +474,10 @@ async fn trial_reminders_sleep_until_their_days() {
     assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::days(11)));
     assert_eq!(h.advance(11 * DAY).await, 1);
     assert_eq!(h.advance(3 * DAY).await, 1);
-    assert_eq!(workflows.run(id).await.unwrap().status, RunStatus::Completed);
+    assert_eq!(
+        workflows.run(id).await.unwrap().status,
+        RunStatus::Completed
+    );
     let sent: Vec<String> = h
         .app
         .get::<LearnerMail>()
@@ -494,10 +504,7 @@ async fn a_renewal_retries_then_mails_instead_of_failing() {
     }
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Completed);
-    assert_eq!(
-        run.output,
-        Some(json!("not charged: card declined"))
-    );
+    assert_eq!(run.output, Some(json!("not charged: card declined")));
 
     let paid = harness(Billing {
         declines: 1,
@@ -576,9 +583,18 @@ async fn the_follow_up_enrolls_won_deals() {
     assert_eq!(
         issues,
         [
-            ("/nodes/0/type".to_owned(), "unknown action `task.make`".to_owned()),
-            ("/nodes/1/seconds".to_owned(), "a delay lasts at least 1 second".to_owned()),
-            ("/nodes/2/config".to_owned(), "missing field `amount_cents`".to_owned()),
+            (
+                "/nodes/0/type".to_owned(),
+                "unknown action `task.make`".to_owned()
+            ),
+            (
+                "/nodes/1/seconds".to_owned(),
+                "a delay lasts at least 1 second".to_owned()
+            ),
+            (
+                "/nodes/2/config".to_owned(),
+                "missing field `amount_cents`".to_owned()
+            ),
             (
                 "/nodes/4/next".to_owned(),
                 "going to `thank` makes a loop: each node runs at most once".to_owned()

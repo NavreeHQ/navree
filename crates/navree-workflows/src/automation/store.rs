@@ -54,15 +54,19 @@ pub trait AutomationStore: Send + Sync + 'static {
     ) -> BoxFuture<'a, StoreResult<Option<Automation>>>;
 
     /// Automations passing `query`, newest first.
-    fn list<'a>(&'a self, query: &'a AutomationQuery)
-    -> BoxFuture<'a, StoreResult<Vec<Automation>>>;
+    fn list<'a>(
+        &'a self,
+        query: &'a AutomationQuery,
+    ) -> BoxFuture<'a, StoreResult<Vec<Automation>>>;
 
     /// How many automations pass `query` (its limit and offset aside).
     fn count<'a>(&'a self, query: &'a AutomationQuery) -> BoxFuture<'a, StoreResult<u64>>;
 
     /// The active automations whose published trigger listens to `event`.
-    fn active_for_event<'a>(&'a self, event: &'a str)
-    -> BoxFuture<'a, StoreResult<Vec<Automation>>>;
+    fn active_for_event<'a>(
+        &'a self,
+        event: &'a str,
+    ) -> BoxFuture<'a, StoreResult<Vec<Automation>>>;
 
     /// Stores a published version.
     fn insert_version<'a>(
@@ -72,8 +76,11 @@ pub trait AutomationStore: Send + Sync + 'static {
     ) -> BoxFuture<'a, StoreResult<()>>;
 
     /// Version `version` of automation `id`.
-    fn version(&self, id: Uuid, version: u32)
-    -> BoxFuture<'_, StoreResult<Option<AutomationVersion>>>;
+    fn version(
+        &self,
+        id: Uuid,
+        version: u32,
+    ) -> BoxFuture<'_, StoreResult<Option<AutomationVersion>>>;
 
     /// Every version of automation `id`, newest first, as `uow` sees them
     /// when given.
@@ -100,8 +107,10 @@ pub trait AutomationStore: Send + Sync + 'static {
     ) -> BoxFuture<'a, StoreResult<Vec<EnrollmentRecord>>>;
 
     /// How many enrollments pass `query` (its limit and offset aside).
-    fn count_enrollments<'a>(&'a self, query: &'a EnrollmentQuery)
-    -> BoxFuture<'a, StoreResult<u64>>;
+    fn count_enrollments<'a>(
+        &'a self,
+        query: &'a EnrollmentQuery,
+    ) -> BoxFuture<'a, StoreResult<u64>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +390,7 @@ impl AutomationStore for MemoryAutomationStore {
             .into_iter()
             .filter(|v| v.automation_id == id)
             .collect();
-        versions.sort_by(|a, b| b.version.cmp(&a.version));
+        versions.sort_by_key(|v| std::cmp::Reverse(v.version));
         ready(versions)
     }
 
@@ -520,13 +529,15 @@ fn opt_uuid(row: &QueryResult, column: &str) -> StoreResult<Option<Uuid>> {
 }
 
 fn graph(text: &str) -> StoreResult<AutomationGraph> {
-    serde_json::from_str(text)
-        .map_err(|error| WorkflowsError::payload("a stored automation definition cannot be read", error))
+    serde_json::from_str(text).map_err(|error| {
+        WorkflowsError::payload("a stored automation definition cannot be read", error)
+    })
 }
 
 fn graph_text(graph: &AutomationGraph) -> StoreResult<String> {
-    serde_json::to_string(graph)
-        .map_err(|error| WorkflowsError::payload("an automation definition cannot be stored", error))
+    serde_json::to_string(graph).map_err(|error| {
+        WorkflowsError::payload("an automation definition cannot be stored", error)
+    })
 }
 
 fn u32_column(row: &QueryResult, column: &str) -> StoreResult<u32> {
@@ -780,9 +791,7 @@ impl AutomationStore for DatabaseAutomationStore {
     ) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
             let stmt = self.stmt(
-                &format!(
-                    "INSERT INTO {VERSIONS_TABLE} ({VERSION_COLUMNS}) VALUES (?, ?, ?, ?, ?)"
-                ),
+                &format!("INSERT INTO {VERSIONS_TABLE} ({VERSION_COLUMNS}) VALUES (?, ?, ?, ?, ?)"),
                 vec![
                     version.automation_id.to_string().into(),
                     i64::from(version.version).into(),

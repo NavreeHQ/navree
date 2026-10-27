@@ -13,7 +13,14 @@ async fn commands_inspect_and_change_runs() {
         ("workflows:list", &[]),
         (
             "workflows:list",
-            &["--workflow", "greet", "--status", "completed", "--limit", "5"],
+            &[
+                "--workflow",
+                "greet",
+                "--status",
+                "completed",
+                "--limit",
+                "5",
+            ],
         ),
         ("workflows:tick", &[]),
         ("workflows:prune", &["--days", "1"]),
@@ -29,7 +36,12 @@ async fn commands_inspect_and_change_runs() {
     assert_eq!(h.status(sleeping).await, RunStatus::Cancelled);
     // Cancelling again, a bad id and a missing id are errors.
     assert!(h.app.run_command("workflows:cancel", &[&id]).await.is_err());
-    assert!(h.app.run_command("workflows:show", &["nope"]).await.is_err());
+    assert!(
+        h.app
+            .run_command("workflows:show", &["nope"])
+            .await
+            .is_err()
+    );
     assert!(h.app.run_command("workflows:retry", &[]).await.is_err());
     assert!(
         h.app

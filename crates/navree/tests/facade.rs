@@ -85,7 +85,10 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::logbook::Logbook, navree::logbook::Logbook>());
     assert!(same::<navree::fleet::FleetModule, FleetModule>());
     assert!(same::<navree::workflows::WorkflowsModule, WorkflowsModule>());
-    assert!(same::<navree::workflows::Workflows, navree::workflows::Workflows>());
+    assert!(same::<
+        navree::workflows::Workflows,
+        navree::workflows::Workflows,
+    >());
     // L7 (opt-in)
     #[cfg(feature = "billing")]
     assert!(same::<navree::billing::BillingModule, BillingModule>());

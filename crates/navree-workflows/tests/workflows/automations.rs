@@ -57,7 +57,10 @@ async fn the_catalog_lists_blocks_with_their_schemas() {
     let catalog = automations.catalog();
     let triggers = catalog.triggers();
     assert_eq!(
-        triggers.iter().map(|b| b.block_type.as_str()).collect::<Vec<_>>(),
+        triggers
+            .iter()
+            .map(|b| b.block_type.as_str())
+            .collect::<Vec<_>>(),
         ["deal.won", "task.completed"]
     );
     let won = &triggers[0];
@@ -339,8 +342,14 @@ async fn enrollments_keep_their_version() {
                     name: Some("Follow-up v2".into()),
                     ..AutomationChanges::default()
                 };
-                automations.update(&uow, automation.id, changes).await.unwrap();
-                automations.publish(&uow, automation.id, None).await.unwrap()
+                automations
+                    .update(&uow, automation.id, changes)
+                    .await
+                    .unwrap();
+                automations
+                    .publish(&uow, automation.id, None)
+                    .await
+                    .unwrap()
             }
         })
         .await;
@@ -482,7 +491,10 @@ async fn simulations_walk_the_path_without_running_actions() {
         .unwrap();
     // A draft enrolls nobody.
     assert!(!simulation.enrolls);
-    assert_eq!(simulation.reason.as_deref(), Some("the automation is draft"));
+    assert_eq!(
+        simulation.reason.as_deref(),
+        Some("the automation is draft")
+    );
     assert_eq!(simulation.subject.as_deref(), Some("7"));
     let path: Vec<(&str, &str, u64)> = simulation
         .steps
@@ -504,7 +516,14 @@ async fn simulations_walk_the_path_without_running_actions() {
     );
     // Nothing ran, nothing was stored.
     assert!(h.journal.calls().is_empty());
-    assert!(h.workflows().await.runs(&Default::default()).await.unwrap().is_empty());
+    assert!(
+        h.workflows()
+            .await
+            .runs(&Default::default())
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     // A sample that is not the trigger's event.
     let error = automations
@@ -654,7 +673,10 @@ async fn manual_enrollment_and_cancellation() {
         })
         .await;
     let error = automations
-        .enroll(draft.id, json!({"deal_id": 1, "owner_id": 3, "amount_cents": 1}))
+        .enroll(
+            draft.id,
+            json!({"deal_id": 1, "owner_id": 3, "amount_cents": 1}),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code(), Some("automation_not_published"));
@@ -671,7 +693,10 @@ async fn manual_enrollment_and_cancellation() {
     assert_eq!(h.journal.calls(), ["note:thanks:3"]);
     let cancelled = automations.cancel_enrollment(enrollment.id).await.unwrap();
     assert_eq!(cancelled.status, RunStatus::Cancelled);
-    let error = automations.cancel_enrollment(enrollment.id).await.unwrap_err();
+    let error = automations
+        .cancel_enrollment(enrollment.id)
+        .await
+        .unwrap_err();
     assert_eq!(error.code(), Some("enrollment_finished"));
     assert!(matches!(
         automations.enrollment(Uuid::nil()).await,

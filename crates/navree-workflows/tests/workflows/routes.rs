@@ -189,14 +189,20 @@ async fn the_editor_builds_publishes_simulates_and_enrolls() {
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(catalog["nodes"], json!(["action", "condition", "delay", "wait"]));
+    assert_eq!(
+        catalog["nodes"],
+        json!(["action", "condition", "delay", "wait"])
+    );
     assert_eq!(catalog["triggers"][0]["type"], "deal.won");
     assert_eq!(catalog["triggers"][0]["kind"], "trigger");
     assert_eq!(
         catalog["triggers"][0]["schema"]["properties"]["min_amount_cents"]["description"],
         "Only deals worth at least this much."
     );
-    assert_eq!(catalog["actions"][1]["schema"]["required"], json!(["template"]));
+    assert_eq!(
+        catalog["actions"][1]["schema"]["required"],
+        json!(["template"])
+    );
     let templates = viewer
         .get("/api/automations/templates")
         .send()
@@ -256,7 +262,7 @@ async fn the_editor_builds_publishes_simulates_and_enrolls() {
         .json_value();
     assert_eq!(renamed["name"], "Deal follow-up");
     let listed = viewer.get("/api/automations").send().await.json_value();
-    assert_eq!(ids(&listed), [id.clone()]);
+    assert_eq!(ids(&listed), std::slice::from_ref(&id));
 
     // A simulation of the draft walks the path without running anything.
     let event = json!({"deal_id": 1, "owner_id": 7, "amount_cents": 500_000, "workspace_id": null});
@@ -324,9 +330,11 @@ async fn the_editor_builds_publishes_simulates_and_enrolls() {
         .send()
         .await
         .json_value();
-    assert_eq!(ids(&page), [enrollment_id.clone()]);
+    assert_eq!(ids(&page), std::slice::from_ref(&enrollment_id));
     let one = viewer
-        .get(&format!("/api/automations/{id}/enrollments/{enrollment_id}"))
+        .get(&format!(
+            "/api/automations/{id}/enrollments/{enrollment_id}"
+        ))
         .send()
         .await
         .assert_status(200)
@@ -342,7 +350,10 @@ async fn the_editor_builds_publishes_simulates_and_enrolls() {
         .json_value();
     assert_eq!(cancelled["status"], "cancelled");
     viewer
-        .get(&format!("/api/automations/{id}/enrollments/{}", Uuid::nil()))
+        .get(&format!(
+            "/api/automations/{id}/enrollments/{}",
+            Uuid::nil()
+        ))
         .send()
         .await
         .assert_error_code(404, "enrollment_not_found");
@@ -521,7 +532,13 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
     })
     .await;
     assert_eq!(h.status(run).await, RunStatus::Cancelled);
-    assert!(h.automations().await.get(id.parse().unwrap()).await.is_err());
+    assert!(
+        h.automations()
+            .await
+            .get(id.parse().unwrap())
+            .await
+            .is_err()
+    );
     let _ = globex;
 }
 
