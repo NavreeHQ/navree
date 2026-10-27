@@ -15,6 +15,8 @@ use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, t
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod lifecycle;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Stage {
