@@ -1,0 +1,21 @@
+//! Abilities on `{{ model_pascal }}`, attached to the model
+//! (`#[model(policy = ...)]` on `{{ model_pascal }}`): they join every user's rules
+//! because the module imports `AccessModule::for_feature::<{{ model_pascal }}>()`.
+
+use navree::access::{AbilityCtx, Policy, READ, Rules};
+
+/// The rules on `{{ model_pascal }}`. Rules and conditions name database
+/// columns; later rules win, and the app's abilities function
+/// (`src/abilities.rs`) comes after these. Writes are granted by role
+/// permissions (`{{ table }}.create`, `{{ table }}.update`, `{{ table }}.delete`, or
+/// `{{ table }}.manage` for all).
+pub struct {{ pascal }}Policy;
+
+impl Policy for {{ pascal }}Policy {
+    fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+        if ctx.user.is_none() {
+            return;
+        }
+        rules.can(READ, "{{ model_pascal }}");
+    }
+}

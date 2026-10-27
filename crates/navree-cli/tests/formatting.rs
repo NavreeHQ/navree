@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use navree_cli::clock::Timestamp;
-use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
+use navree_cli::make::{Companions, MakeKind, MakeOptions, make_item, make_model, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
 
@@ -70,6 +70,7 @@ fn generated_rust_is_rustfmt_clean() {
     .unwrap();
     let with_event = MakeOptions {
         event: Some(name("tag_added")),
+        ..MakeOptions::default()
     };
     make_item(
         &root,
@@ -78,6 +79,36 @@ fn generated_rust_is_rustfmt_clean() {
         &name("tags"),
         &name("count_tags"),
         &with_event,
+        now,
+    )
+    .unwrap();
+    // Models with their companions, with and without a policy.
+    make_model(
+        &root,
+        "src/modules",
+        &name("tags"),
+        &name("label"),
+        Companions::all(),
+        now,
+    )
+    .unwrap();
+    let badge = Companions {
+        migration: true,
+        controller: true,
+        ..Companions::default()
+    };
+    make_model(&root, "src/modules", &name("tags"), &name("badge"), badge, now).unwrap();
+    let for_badges = MakeOptions {
+        model: Some(name("badge")),
+        ..MakeOptions::default()
+    };
+    make_item(
+        &root,
+        "src/modules",
+        MakeKind::Factory,
+        &name("tags"),
+        &name("rare_badge"),
+        &for_badges,
         now,
     )
     .unwrap();
