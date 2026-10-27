@@ -5,6 +5,7 @@ mod api;
 mod commands;
 mod delivery;
 mod dkim;
+mod inbound;
 mod domains;
 mod harness;
 mod ingest;

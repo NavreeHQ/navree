@@ -1,6 +1,7 @@
 //! The mail module's events, emitted through navree-events' `EventBus`
 //! (when `EventsModule` is in the app) once a provider event or a tracked
-//! open or click is recorded.
+//! open or click is recorded, and (crate feature `inbound`) once a message
+//! is received.
 //!
 //! Each carries the delivery (when the message was found in the log), its
 //! workspace and the recipient's address as the provider reported it.
@@ -111,4 +112,49 @@ pub struct MailClicked {
 
 impl Event for MailClicked {
     const NAME: &'static str = "mail.clicked";
+}
+
+/// A message was received (crate feature `inbound`): emitted once its
+/// mailbox handled it, rejected it, or no mailbox matched. It carries what
+/// a listener needs to find the message, not the message itself: read the
+/// raw `.eml` back with `Inbound::read(&event.stored)`.
+#[cfg(feature = "inbound")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InboundMailReceived {
+    /// The receipt's id.
+    pub id: Uuid,
+    /// The source (`ses`, `mailgun`, `postmark`, `raw`, `gmail`, `graph`,
+    /// `test`).
+    pub source: String,
+    /// The provider's id for the message.
+    pub provider_id: Option<String>,
+    /// `Message-ID`, without angle brackets.
+    pub message_id: Option<String>,
+    /// The `From` address.
+    pub from: Option<String>,
+    /// The recipients, in the order mailboxes tried them.
+    pub recipients: Vec<String>,
+    /// `Subject`.
+    pub subject: Option<String>,
+    /// The raw message's size in bytes.
+    pub size: usize,
+    /// How many attachments it has.
+    pub attachments: usize,
+    /// The SHA-256 of the raw message, in hex.
+    pub fingerprint: String,
+    /// `handled`, `unrouted` or `rejected`.
+    pub status: crate::inbound::InboundStatus,
+    /// The mailbox pattern that matched.
+    pub mailbox: Option<String>,
+    /// The recipient address that matched it.
+    pub address: Option<String>,
+    /// Where the raw message is stored.
+    pub stored: Option<crate::inbound::StoredMail>,
+    /// When it was received.
+    pub received_at: DateTime<Utc>,
+}
+
+#[cfg(feature = "inbound")]
+impl Event for InboundMailReceived {
+    const NAME: &'static str = "mail.inbound.received";
 }

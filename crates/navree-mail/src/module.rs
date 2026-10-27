@@ -250,6 +250,42 @@ fn register(m: &mut ModuleBuilder, source: Source) {
     for command in commands() {
         m.command(command);
     }
+    #[cfg(feature = "inbound")]
+    register_inbound(m);
+}
+
+/// Inbound mail (crate feature `inbound`): provides and exports
+/// [`ReplyTokens`](crate::ReplyTokens) and [`Inbound`](crate::Inbound),
+/// mounts the source routes of
+/// [`InboundController`](crate::inbound::InboundController) and maps
+/// [`InboundError`](crate::InboundError)s to responses.
+#[cfg(feature = "inbound")]
+fn register_inbound(m: &mut ModuleBuilder) {
+    use crate::inbound::{Inbound, InboundController, InboundError, ReplyTokens};
+
+    m.factory(
+        Factory::<ReplyTokens>::new(|r| async move {
+            let options = r.get::<MailOptions>().await?;
+            Ok(Arc::new(
+                crate::inbound::reply_tokens(&r, options.inbound.reply_token_ttl_days).await,
+            ))
+        })
+        .deps(vec![ProviderKey::of::<MailOptions>()]),
+    )
+    .factory(
+        Factory::<Inbound>::new(|r| async move {
+            let options = r.get::<MailOptions>().await?;
+            Ok(Arc::new(Inbound::build(&r, options.inbound.clone()).await?))
+        })
+        .deps(vec![
+            ProviderKey::of::<MailOptions>(),
+            ProviderKey::of::<ReplyTokens>(),
+        ]),
+    )
+    .exports::<ReplyTokens>()
+    .exports::<Inbound>()
+    .controller::<InboundController>()
+    .map_error::<InboundError>(crate::inbound::map_inbound_error);
 }
 
 /// The delivery pipeline (`mail.delivery.enabled`): needs `DatabaseModule`;
