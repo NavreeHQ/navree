@@ -6,7 +6,9 @@
 //! `#[grpc_service]` (gRPC services, for navree-grpc), the
 //! `Searchable` derive of navree-search, the `Settings` derive of
 //! navree-settings, the `Exportable` and `Importable` derives of
-//! navree-sheets and `#[agent]` (navree-ai's agents and their tools).
+//! navree-sheets, `#[agent]` (navree-ai's agents and their tools) and
+//! `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`
+//! (navree-workflows' durable workflows and automation blocks).
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -43,6 +45,7 @@ mod route;
 mod searchable;
 mod settings;
 mod sheets;
+mod workflows;
 
 /// Implements `navree_micro::MessageHandlers` for an impl block whose
 /// methods answer message and event patterns.
@@ -771,4 +774,122 @@ pub fn mcp_prompt(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn agent(args: TokenStream, item: TokenStream) -> TokenStream {
     agent::expand(args.into(), item.into()).into()
+}
+
+/// Implements `navree_workflows::Workflow` on a workflow's input type from
+/// an `async fn` (re-exported as `navree::workflows::workflow`).
+///
+/// ```text
+/// /// Welcomes a new user, then nudges them after three days.
+/// #[workflow]
+/// async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<(), BoxError> {
+///     ctx.step("send-welcome", || send_welcome(input.user_id)).await?;
+///     ctx.sleep(Duration::from_secs(3 * 86_400)).await;
+///     ctx.step("send-nudge", || send_nudge(input.user_id)).await?;
+///     Ok(())
+/// }
+/// // impl navree::workflows::Workflow for Onboarding {
+/// //     const NAME: &'static str = "onboarding";
+/// //     const DESCRIPTION: &'static str = "Welcomes a new user, then nudges them after three days.";
+/// //     type Output = ();
+/// //     fn run(self, ctx: WorkflowCtx) -> impl Future<..> + Send { /* onboarding(ctx, self) */ }
+/// // }
+/// ```
+///
+/// | Argument | Default | Meaning |
+/// |---|---|---|
+/// | `name = ".."` | the fn name in kebab case (`deal_follow_up` → `deal-follow-up`) | the stable name stored with runs |
+/// | `version = N` | 1 | the version new runs start on |
+/// | `min_version = N` | `version` | the oldest version whose runs this code resumes |
+///
+/// The fn takes `(ctx: WorkflowCtx, input: In)` (the input by value; `In`
+/// is a local type deriving `Serialize` and `Deserialize`) and returns
+/// `Result<T, E>`: `T` is stored as the run's output and `E` converts into
+/// `BoxError`. The fn stays callable as written. The doc comment becomes
+/// the description. The expansion names `::navree::workflows` (the facade's
+/// `workflows` feature) or `::navree_workflows`.
+#[proc_macro_attribute]
+pub fn workflow(args: TokenStream, item: TokenStream) -> TokenStream {
+    workflows::expand_workflow(args.into(), item.into()).into()
+}
+
+/// Implements `navree_workflows::Trigger` on an automation trigger's
+/// configuration type (re-exported as `navree::workflows::trigger`): on a
+/// fn that decides which events fire it, or on the configuration struct.
+///
+/// ```text
+/// /// A deal moved to won.
+/// #[trigger(type = "deal.won", label = "Deal won", subject = "owner_id")]
+/// fn deal_won(config: &DealWonTrigger, event: &DealWon) -> bool {
+///     config.min_amount_cents.is_none_or(|min| event.amount_cents >= min)
+/// }
+///
+/// /// A task was completed.
+/// #[trigger(type = "task.completed", event = TaskCompleted, workspace = false)]
+/// #[derive(Serialize, Deserialize, ToSchema)]
+/// struct TaskCompletedTrigger {}
+/// ```
+///
+/// | Argument | Default | Meaning |
+/// |---|---|---|
+/// | `type = ".."` | required | the stable type name stored in definitions |
+/// | `label = ".."` | the type name | the name the editor shows |
+/// | `subject = ".."` | none | the event field naming who or what is enrolled |
+/// | `workspace = ".."` or `false` | `"workspace_id"` | the event field holding the workspace id, or none |
+/// | `event = Type` | the fn's second argument | the event, for the struct form |
+///
+/// The configuration type derives `Serialize`, `Deserialize` and utoipa's
+/// `ToSchema` (its JSON Schema is the editor's form); the event implements
+/// `navree_events::Event`. The doc comment becomes the description.
+#[proc_macro_attribute]
+pub fn trigger(args: TokenStream, item: TokenStream) -> TokenStream {
+    workflows::expand_trigger(args.into(), item.into()).into()
+}
+
+/// Implements `navree_workflows::Condition` on an automation condition's
+/// configuration type from a fn (re-exported as
+/// `navree::workflows::condition`).
+///
+/// ```text
+/// /// The won deal is worth at least the amount.
+/// #[condition(type = "deal.amount_at_least", label = "Deal amount")]
+/// async fn amount_at_least(config: &AmountAtLeast, ctx: &AutomationCtx) -> Result<bool, BoxError> {
+///     let deal: DealWon = ctx.event_as()?;
+///     Ok(deal.amount_cents >= config.cents)
+/// }
+/// ```
+///
+/// The fn (async or not) takes `(config: &Config, ctx: &AutomationCtx)`
+/// and returns `bool` or `Result<bool, E>`. Keys: `type = ".."` (required)
+/// and `label = ".."`. Keep it free of side effects: simulations evaluate
+/// it too.
+#[proc_macro_attribute]
+pub fn condition(args: TokenStream, item: TokenStream) -> TokenStream {
+    workflows::expand_condition(args.into(), item.into()).into()
+}
+
+/// Implements `navree_workflows::Action` on an automation action's
+/// configuration type from a fn (re-exported as
+/// `navree::workflows::action`).
+///
+/// ```text
+/// /// Sends a mail from a template.
+/// #[action(type = "mail.send", label = "Send a mail", preview = mail_preview)]
+/// async fn send_mail(config: SendMail, ctx: AutomationCtx) -> Result<MailSent, BoxError> {
+///     let mailer = ctx.app().get::<Mailer>().await?;
+///     ..
+/// }
+///
+/// fn mail_preview(config: &SendMail, ctx: &AutomationCtx) -> serde_json::Value { .. }
+/// ```
+///
+/// The fn (async or not) takes `(config: Config, ctx: AutomationCtx)` by
+/// value and returns `Result<T, E>`: `T` serializes and later nodes read it
+/// as `nodes.<id>`. Keys: `type = ".."` (required), `label = ".."` and
+/// `preview = path` (a `fn(&Config, &AutomationCtx) -> Value` a
+/// simulation shows instead of running the action; default: the
+/// configuration).
+#[proc_macro_attribute]
+pub fn action(args: TokenStream, item: TokenStream) -> TokenStream {
+    workflows::expand_action(args.into(), item.into()).into()
 }

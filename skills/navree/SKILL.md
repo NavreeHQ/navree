@@ -149,6 +149,7 @@ navree list                                 # every command of the app
 | Measuring or lowering per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits | `navree-performance` |
 | PDF or Word documents: certificates, invoices, reports, exports; Arabic or other right-to-left documents; merging or stamping PDFs | `navree-documents` |
 | CSV or Excel files: export buttons, big exports queued with a download link, importing users, contacts or other records from a spreadsheet, column mapping, import previews, error files, non-UTF-8 files from Excel | `navree-sheets` |
+| Work that waits days or for an event (onboarding sequences, reminders, trials, dunning, follow-ups), multi-step processes that must survive restarts, automations or rules your users build in an editor | `navree-workflows` |
 
 ## Common mistakes
 

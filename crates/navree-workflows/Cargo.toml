@@ -1,0 +1,53 @@
+[package]
+name = "navree-workflows"
+description = "Navree WorkflowsModule: durable workflows in code (steps replayed on resume, timers, event waits, versions) and end-user automations (triggers, conditions and actions in versioned graphs, enrollments, simulation, templates)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
+## database tests also run on a fresh PostgreSQL database each.
+postgres = ["navree-db/postgres"]
+## MySQL for the tests: with `NAVREE_TEST_MYSQL_URL` set, the database
+## tests also run on a fresh MySQL database each.
+mysql = ["navree-db/mysql"]
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`, re-exported.
+navree-macros = { workspace = true }
+# `workflows:tick`, every minute in apps with `ScheduleModule`.
+navree-schedule = { workspace = true }
+# Routes act on the request's workspace (`InWorkspace`).
+navree-workspace = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
