@@ -4,6 +4,7 @@ mod fixtures;
 mod support;
 
 mod connect;
+mod connections;
 mod http;
 mod migrations;
 mod module;

@@ -15,10 +15,11 @@ use sea_orm::DbErr;
 use crate::http::{map_db_error, uow_layer};
 use crate::migrate::{self, MigrationSet, commands};
 use crate::seed::run_seeders;
-use crate::{ChangeObserver, Db, DbOptions, Seeder};
+use crate::{ChangeObserver, Db, DbConnections, DbOptions, Seeder};
 
-/// The database module. Global; provides and exports [`Db`] and
-/// [`DbOptions`]; contributes the unit-of-work layer
+/// The database module. Global; provides and exports [`Db`],
+/// [`DbOptions`] and [`DbConnections`] (the named connections of
+/// `[database.connections.<name>]`); contributes the unit-of-work layer
 /// ([`LayerSlot::Uow`](navree_http::LayerSlot::Uow)), the `DbErr` → error
 /// mapping and the `database` health check (a `dyn HealthCheck`
 /// multi-binding); registers the commands `migrate`, `migrate:install`,
@@ -114,6 +115,22 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
             .deps(vec![ProviderKey::of::<DbOptions>()]),
         )
         .exports::<Db>()
+        .factory(
+            ProviderFactory::<DbConnections>::new(|r: Resolver| async move {
+                let options = r.get::<DbOptions>().await?;
+                let db = r.get::<Db>().await?;
+                let telemetry = Telemetry::from_app(&r.app()).await;
+                Ok(Arc::new(DbConnections::new(
+                    db,
+                    &options,
+                    Some(r.app().downgrade()),
+                    telemetry,
+                )))
+            })
+            .deps(vec![ProviderKey::of::<DbOptions>(), ProviderKey::of::<Db>()]),
+        )
+        .exports::<DbConnections>()
+        .lifecycle::<DbConnections>()
         .factory(
             ProviderFactory::<PoolCloser>::new(|r: Resolver| async move {
                 Ok(Arc::new(PoolCloser(r.get::<Db>().await?)))

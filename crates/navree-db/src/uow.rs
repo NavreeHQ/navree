@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use navree_kernel::BoxFuture;
@@ -142,6 +143,8 @@ struct UowInner {
     tx: tokio::sync::Mutex<TxState>,
     changes: Mutex<Vec<ChangeEvent>>,
     after_commit: Mutex<Vec<AfterCommit>>,
+    /// Whether anything was written through the unit of work.
+    modified: AtomicBool,
 }
 
 tokio::task_local! {
@@ -184,8 +187,23 @@ impl Uow {
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 changes: Mutex::new(Vec::new()),
                 after_commit: Mutex::new(Vec::new()),
+                modified: AtomicBool::new(false),
             }),
         }
+    }
+
+    /// Notes that something was written through the unit of work (the
+    /// ORM's writes, [`Repo`](crate::Repo) and recorded changes do it);
+    /// see [`has_modified_records`](Uow::has_modified_records).
+    pub fn mark_modified(&self) {
+        self.inner.modified.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether anything was written through the unit of work (also after it
+    /// committed). With read replicas and `sticky` (the default), the
+    /// task's reads then go to the writer, so it reads its own writes.
+    pub fn has_modified_records(&self) -> bool {
+        self.inner.modified.load(Ordering::Relaxed)
     }
 
     /// The transaction, begun on the first call. Drop the returned `Arc`
@@ -230,8 +248,10 @@ impl Uow {
         &self.inner.db
     }
 
-    /// Records a change for the [`ChangeObserver`]s.
+    /// Records a change for the [`ChangeObserver`]s (the unit of work then
+    /// [has modified records](Uow::has_modified_records)).
     pub fn record_change(&self, ev: ChangeEvent) {
+        self.mark_modified();
         lock(&self.inner.changes).push(ev);
     }
 

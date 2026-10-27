@@ -82,6 +82,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod connections;
 mod db;
 mod http;
 mod migrate;
@@ -95,14 +96,15 @@ mod seed;
 mod text;
 mod uow;
 
-pub use db::Db;
+pub use connections::DbConnections;
+pub use db::{Db, PoolStats};
 pub use http::map_db_error;
 pub use migrate::{
     FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
     MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
 };
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
-pub use options::{DbOptions, IsolationLevel, MySqlOptions};
+pub use options::{DbOptions, IsolationLevel, MySqlOptions, PostgresOptions, SqliteOptions};
 pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
     cursor_paginate, cursor_paginate_desc, paginate,
