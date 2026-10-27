@@ -83,7 +83,17 @@ src/
   column.rs         Column<M, T>, col, col_as, Untyped, Filter, Assignment, ColumnName, ColumnOf, IntoExpr, IntoQuery
   record.rs         Record<M>: the instance; dirty tracking; extras; relations; the instance API
   persist.rs        insert / update / delete / refresh / touch / increment flows
-  hooks.rs          ModelEvent, Flow, ModelHook<M>, Hooks<M> (resolution and dispatch)
+  hooks.rs          ModelEvent (+ Custom), Flow, HookKind, ModelHook<M>, Hooks<M> (resolution, unit-of-work scoping, after-commit dispatch)
+  events/           without_events; the after-commit runner; Observer + ObserverHook; closure listeners; Dispatch (typed application events); Record::fire and replicate_on; ModelEventFake
+  quiet.rs          the quiet operations (save_quietly, delete_quietly, increment_each_quietly, ...)
+  soft_deletes.rs   SoftDeleting; restore, force_delete; with_trashed_if / without_trashed / only_trashed; mass restore and force_delete; restore-or-create
+  lifecycle.rs      ModelLifecycle: create_quietly, force_destroy, restore_or_create, create_or_restore, global-scope inspection
+  global_scopes.rs  the runtime scope registry, ClosureScope, the scope list queries apply, removal by name
+  strict.rs         Strictness, Violation, handlers, strict::scope / current, ExecContext::strictness
+  options.rs        OrmOptions (the `[orm]` section)
+  module.rs         OrmModule, OrmRuntime, ModuleBuilderOrmExt, RegisteredModel, registered_models
+  prune.rs          Prunable, MassPrunable, Pruning (in ModelMeta), prune(), `model:prune`, the pruning events
+  broadcast.rs      Broadcasts, BroadcastHook, BroadcastModelEvent (job `orm.broadcast`), without_broadcasting
   collection.rs     Collection<M>
   pagination.rs     PageRequest, SimplePage, CursorPage, CursorRequest (extractor), Builder::{paginate, simple_paginate, cursor_paginate}
   cast.rs           Cast, CastError, AsJson, StringEnum, IntEnum, encode/decode helpers
@@ -139,7 +149,11 @@ anything else (`String`) → manual),
 `timestamps` or `timestamps(created_at = "..." | false, updated_at = "..."
 | false)`, `soft_deletes` or `soft_deletes = "column"` (the field must be an
 `Option`), `connection = "name"`, `per_page = N`, `global_scopes(expr,
-...)` (expressions, each an `impl GlobalScope<Self>`).
+...)` (expressions, each an `impl GlobalScope<Self>`), and the lifecycle's
+(parsed in `navree-orm-macros/src/model/lifecycle.rs`): `observers(expr,
+..)` (stateless observers declared on the model), `dispatches(event = Type,
+..)` (typed application events), `broadcasts`, `prunable` or
+`mass_prunable`.
 
 Field attributes: `column = "name"`, `cast = "json" | "string_enum" |
 "int_enum" | path::To::Cast` (also as a string; a lowercase word that is
@@ -149,10 +163,15 @@ the field's default), `skip` (not a column; `Default` when read).
 The derive generates:
 
 - `impl Model`: `type Key`, `meta()` (a `&'static ModelMeta` built in a
-  `static`), `key`/`set_key`, `from_row`, `values` (every column as `(name,
-  Value)`, field order), `value(column)`, `set_value(column, Value)`,
+  `static`; `.pruned(..)` for prunable models), `key`/`set_key`,
+  `from_row` (each field read with its default when its type has one, see
+  section 12, strict modes), `values` (every column as `(name, Value)`,
+  field order), `value(column)`, `set_value(column, Value)`,
   `touch_timestamp`, `timestamp_is_empty`, `clear_timestamp`,
-  `timestamp_value`, and `global_scopes` when declared.
+  `timestamp_value`, `global_scopes` when declared, and `hooks()` when the
+  model declares hooks (`lifecycle::hook_entries`: observers, dispatches,
+  broadcasts; built once, in a `static`).
+- `impl SoftDeleting` for a soft-deleting model.
 - One typed constant per column, named after the field in
   SCREAMING_SNAKE_CASE, with the struct's visibility, typed like the field:
   `Deal::TITLE: Column<Deal, String>`, `Deal::COMPANY_ID: Column<Deal,
@@ -248,13 +267,24 @@ changed columns) → `updated` → `saved` → sync. A clean record runs `saving
 and `saved` and writes nothing.
 
 Delete: `deleting` (cancellable) → `DELETE`; a soft-deleting model sets the
-deleted-at (and updated-at) column instead → `deleted` change event (the
-whole old record) → `deleted` (and `trashed` for a soft delete). Deleting a
-record that is not stored returns `false`.
+deleted-at (and updated-at) column instead, unless the record is being
+force deleted → `deleted` change event (the whole old record) → `trashed`
+(a soft delete only) → `deleted`. Deleting a record that is not stored
+returns `false`.
 
-Increment/decrement: in memory and as `SET column = column ± amount` (plus
-extras and `updated_at`), `updating` → `UPDATE` → `updated`; overflow is an
-error; a record that is not stored is `NotPersisted` (never a whole-table
+Force delete (`soft_deletes.rs`): `force_deleting` (cancellable) → the
+delete flow with `Record::force_deleting` set (a real `DELETE`; listeners
+of `deleting`/`deleted` see `is_force_deleting()`) → `force_deleted`. On a
+model without soft deletes it is the delete flow.
+
+Restore: `restoring` (cancellable) → the deleted-at column cleared → the
+save flow (`saving`, `updating`, `UPDATE`, `updated`, `saved`) →
+`restored`.
+
+Increment/decrement (one column or several, `increment_each`): in memory
+and as `SET column = column ± amount, ..` (plus extras and `updated_at`),
+`updating` → `UPDATE` → `updated`; overflow and a column listed twice are
+errors; a record that is not stored is `NotPersisted` (never a whole-table
 update).
 
 `refresh`/`fresh` read by the original key without global scopes (a
@@ -348,11 +378,21 @@ Local scopes are functions of the builder: `query.scope(f)` applies one;
 "..."` renames it), implemented for every `Scoped<Deal>`, so
 `Deal::query().open().worth(10_000)` works wherever the trait is imported.
 `Self` in a scope's parameters means the model. Global scopes implement
-`GlobalScope<M>` (`apply`, `scope_id`) and come from `M::global_scopes()`
-plus `SoftDeletes` for soft-deleting models; they apply once, when the
-query runs (`Builder::apply_global_scopes`), unless removed. Any scope's
-conditions are grouped when they or the conditions before them contain an
-`OR`, so a scope never changes the meaning of the caller's conditions.
+`GlobalScope<M>` (`apply`, `scope_id`, `name`: the type's name by
+default) and come, in this order, from `M::global_scopes()` (declared),
+the runtime registry (`m.global_scope::<M>(name, f)` /
+`m.global_scope_of::<M>(scope)`, installed process-wide by `OrmModule`
+at boot, since scopes apply where no executor is at hand), then
+`SoftDeletes` for soft-deleting models (`global_scopes::scopes_of`). They
+apply once, when the query runs (`Builder::apply_global_scopes`), unless
+the query's `ScopeChoices` remove them (`without_global_scope::<S>()`,
+`without_global_scope_named`, `without_global_scopes`,
+`without_global_scopes_except`); `removed_scopes()` names them. The
+query's trashed choice (`with_trashed`, `without_trashed`, `only_trashed`)
+replaces the `SoftDeletes` scope and applies last, grouped, even after
+`without_global_scopes()`. Any scope's conditions are grouped when they or
+the conditions before them contain an `OR`, so a scope never changes the
+meaning of the caller's conditions.
 
 ### The IR (`ir.rs`)
 
@@ -466,6 +506,9 @@ selected values decode leniently into the requested type.
 | `Unsupported { feature, driver }` | a feature the dialect or driver lacks | 500 |
 | `NotPersisted`, `MissingKey` | an operation needing a stored record; an empty manual key | 500 |
 | `Hook { model, message }`, `Driver { driver, message }` | a hook or a document driver failed | 500 |
+| `MissingAttribute { model, column, expected, selected }` | a row lacks a model column (strict mode, or a field without a default) | 500 |
+| `MassAssignment { model, columns }` | filling columns that are not fillable (strict mode) | 500 |
+| `LazyLoading { model, relation }` | a relation loaded one record at a time (strict mode) | 500 |
 
 `is_not_found()` and `is_unique_violation()` classify. Messages name the
 model, the column and the operation; no SQL or values reach clients
@@ -507,9 +550,18 @@ extractor (400 for a malformed cursor or limit).
   timestamps with a fixed clock, hooks from an app, the unit of work
   (events, rollback, joining, after-commit), casts, HTTP (404 shape, page
   shapes, extractors, request transactions), `TableBuilder`, and the
-  document-driver reference.
+  document-driver reference. `tests/orm/lifecycle/` covers the lifecycle
+  (dispatch timing, observers and listeners, typed events, custom events,
+  quiet writes, soft deletes, runtime scopes, strict modes with
+  `strict::scope`, pruning and `model:prune`, broadcasting, the event fake,
+  the unit of work of listeners).
+- `tests/strict_apps.rs`: strict modes chosen by apps through `[orm]` (a
+  process of its own: an app with `OrmModule` installs its strictness for
+  code without an executor).
 - `tests/sql/`: SQL snapshots per dialect (insta), each showing the
-  PostgreSQL, MySQL and SQLite statement and values or the error.
+  PostgreSQL, MySQL and SQLite statement and values or the error
+  (`tests/sql/lifecycle.rs` captures mass restores and force deletes
+  through a recording document driver).
 - `tests/servers/`: PostgreSQL with TimescaleDB and MySQL, gated by
   `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` (`cargo test -p
   navree-orm --features postgres,mysql --test servers`; a test skips with
