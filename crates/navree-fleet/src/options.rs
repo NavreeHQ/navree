@@ -253,10 +253,10 @@ impl FleetOptions {
 
     /// The supervisors this server runs: [`all_supervisors`](FleetOptions::all_supervisors)
     /// limited to [`only`](FleetOptions::only). A name in `only` that is no
-    /// supervisor is an error. The default supervisor (an app without
-    /// `fleet.supervisors`) has a balanced process count only when its
-    /// queues allow it: with more queues than processes it works them all
-    /// in every process.
+    /// supervisor is an error. The implicit `default` supervisor (an app
+    /// without `fleet.supervisors`) gets enough processes for one per queue
+    /// when `queue.queues` lists more than its 4 (see
+    /// [`Supervisor::resolve`]).
     pub fn supervisors(&self, queue: &QueueOptions) -> Result<Vec<Supervisor>, FleetError> {
         let all = self.all_supervisors(queue);
         if let Some(unknown) = self
@@ -682,5 +682,16 @@ mod tests {
             &queue,
         );
         assert_eq!(off.processes_label(), "2 processes");
+    }
+
+    #[test]
+    fn the_default_supervisor_gets_a_process_per_queue() {
+        let queue = QueueOptions {
+            queues: (0..6).map(|i| format!("q{i}")).collect(),
+            ..QueueOptions::default()
+        };
+        let supervisors = FleetOptions::default().supervisors(&queue).unwrap();
+        assert_eq!(supervisors[0].queues.len(), 6);
+        assert_eq!(supervisors[0].max_processes, 6);
     }
 }
