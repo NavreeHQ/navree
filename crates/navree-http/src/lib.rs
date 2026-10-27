@@ -18,7 +18,8 @@
 //!   security headers → compression (not for `text/event-stream`) →
 //!   error rendering → maintenance mode → per-IP rate limit → body limit →
 //!   [`LayerSlot::Session`] → [`LayerSlot::AuthContext`] (the registered
-//!   [`Authenticator`] runs first) → [`LayerSlot::Uow`] → router → per-route:
+//!   [`Authenticator`] runs first) → [`LayerSlot::Uow`] →
+//!   [`LayerSlot::Context`] → router → per-route:
 //!   authentication → per-user throttle → [`Guard`]s → [`RouteAuthorizer`]
 //!   → route timeout → handler → audit action.
 //! - Every error is an [`AppError`] rendered in one JSON shape, as
