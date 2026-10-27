@@ -1,18 +1,18 @@
 //! The Fluent files navree-i18n ships: validation messages in English,
 //! French, German, Spanish, Italian, Dutch and Brazilian Portuguese
-//! (`crates/navree-i18n/locales/<tag>/validation.ftl`).
+//! (`crates/navree-i18n/resources/<tag>/validation.ftl`).
 
 use unic_langid::LanguageIdentifier;
 
 /// The shipped validation messages, by locale.
 pub(crate) const VALIDATION: &[(&str, &str)] = &[
-    ("en", include_str!("../locales/en/validation.ftl")),
-    ("fr", include_str!("../locales/fr/validation.ftl")),
-    ("de", include_str!("../locales/de/validation.ftl")),
-    ("es", include_str!("../locales/es/validation.ftl")),
-    ("it", include_str!("../locales/it/validation.ftl")),
-    ("nl", include_str!("../locales/nl/validation.ftl")),
-    ("pt-BR", include_str!("../locales/pt-BR/validation.ftl")),
+    ("en", include_str!("../resources/en/validation.ftl")),
+    ("fr", include_str!("../resources/fr/validation.ftl")),
+    ("de", include_str!("../resources/de/validation.ftl")),
+    ("es", include_str!("../resources/es/validation.ftl")),
+    ("it", include_str!("../resources/it/validation.ftl")),
+    ("nl", include_str!("../resources/nl/validation.ftl")),
+    ("pt-BR", include_str!("../resources/pt-BR/validation.ftl")),
 ];
 
 /// The shipped tag for `langid`: the same tag, else the first of the same

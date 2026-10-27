@@ -38,7 +38,6 @@ pub(crate) struct Definition {
 /// One locale: its bundle (the app's files, then the shipped validation
 /// messages) and the app's message ids.
 pub(crate) struct LocaleBundle {
-    pub(crate) langid: LanguageIdentifier,
     pub(crate) bundle: Bundle,
     /// The app's messages and terms (not the shipped ones), by id.
     pub(crate) messages: BTreeMap<String, Definition>,
@@ -172,6 +171,21 @@ impl Catalog {
         chain
     }
 
+    /// `locale`'s chain split in two: the locale and its parents, then the
+    /// default locale's bundles not already in the first part.
+    pub(crate) fn split_chain(&self, locale: &str) -> (Vec<&LocaleBundle>, Vec<&LocaleBundle>) {
+        let own: Vec<&LocaleBundle> = own_chain(locale)
+            .iter()
+            .filter_map(|tag| self.bundles.get(tag))
+            .collect();
+        let fallback = own_chain(&self.default)
+            .iter()
+            .filter_map(|tag| self.bundles.get(tag))
+            .filter(|bundle| !own.iter().any(|seen| std::ptr::eq(*seen, *bundle)))
+            .collect();
+        (own, fallback)
+    }
+
     /// `id` (or `id.attribute`) formatted in the first bundle of `locale`'s
     /// chain that defines it.
     pub(crate) fn format(&self, locale: &str, id: &str, args: Option<&FluentArgs<'_>>) -> Lookup {
@@ -181,21 +195,6 @@ impl Catalog {
             }
         }
         Lookup::Missing
-    }
-
-    /// `id` formatted in the first bundle of `locale`'s chain where the
-    /// app defines it (not the shipped messages).
-    pub(crate) fn format_app(
-        &self,
-        locale: &str,
-        id: &str,
-        args: Option<&FluentArgs<'_>>,
-    ) -> Option<Lookup> {
-        let (message, _) = split_id(id);
-        self.chain(locale)
-            .into_iter()
-            .find(|bundle| bundle.messages.contains_key(message))
-            .and_then(|bundle| format_in(bundle, id, args))
     }
 
     /// Whether `locale` or a parent of it (not the default locale, unless
@@ -314,7 +313,7 @@ fn split_id(id: &str) -> (&str, Option<&str>) {
 }
 
 /// `id` formatted with `bundle`, if the bundle has it.
-fn format_in(bundle: &LocaleBundle, id: &str, args: Option<&FluentArgs<'_>>) -> Option<Lookup> {
+pub(crate) fn format_in(bundle: &LocaleBundle, id: &str, args: Option<&FluentArgs<'_>>) -> Option<Lookup> {
     let (message, attribute) = split_id(id);
     let found = bundle.bundle.get_message(message)?;
     let pattern = match attribute {
@@ -396,11 +395,7 @@ fn locale_bundle(
         // The app's own messages win over the shipped ones.
         let _ = bundle.add_resource(Arc::new(resource));
     }
-    LocaleBundle {
-        langid,
-        bundle,
-        messages,
-    }
+    LocaleBundle { bundle, messages }
 }
 
 /// The ids of the messages (`id`) and terms (`-id`) of `resource`.
