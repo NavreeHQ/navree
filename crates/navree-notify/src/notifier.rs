@@ -8,7 +8,7 @@ use chrono::{DateTime, SubsecRound, Utc};
 use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
-use navree_mail::Mailer;
+use navree_mail::{MailScope, Mailable, Mailer};
 use navree_orm::{Executor, Model as _};
 use navree_telemetry::{EventKind, NotificationSent, Telemetry, TelemetryEvent};
 use sea_orm::DbErr;
@@ -16,12 +16,16 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::channels::ChannelDrivers;
+use crate::deferred::{Meta, Planned};
 use crate::deliveries::Outcome;
+use crate::digest::DigestMail;
+use crate::overrides::StyledMail;
 use crate::recipient::within;
 use crate::{
-    Channel, ChannelError, Delivery, DeliveryLog, Notifiable, Notification, NotifyError,
-    NotifyOptions, OptOutSource, OptOuts, PushSubscriptions, SendNotificationJob, SentMessage,
-    SlackRoute, TeamsRoute, WebPushMessage, notifications,
+    Channel, ChannelError, Delivery, DeliveryLog, Notifiable, Notification, NotificationDeferral,
+    NotificationOverrides, NotificationPreferences, NotifyError, NotifyOptions, OptOutSource,
+    OptOuts, PushSubscriptions, SendNotificationJob, SentMessage, SlackRoute, TeamsRoute,
+    TemplateOverrides, WebPushMessage, notifications,
 };
 
 /// The event the broadcast channel sends.
@@ -33,12 +37,14 @@ pub const NOTIFICATION_CREATED: &str = "notification.created";
 /// Provided and exported by the global [`NotifyModule`](crate::NotifyModule):
 /// inject `Arc<Notifier>`.
 pub struct Notifier {
-    options: NotifyOptions,
+    pub(crate) options: NotifyOptions,
     /// The app, to find the database, mailer, broadcaster and dispatcher
     /// when sending (weak: the app owns the notifier).
-    app: WeakAppContext,
+    pub(crate) app: WeakAppContext,
     /// Whether the "no dispatcher, delivering now" warning was logged.
     warned_inline: AtomicBool,
+    /// Whether the "no database, not holding" warning was logged.
+    pub(crate) warned_no_hold: AtomicBool,
     /// Where delivered channels are reported (`NotificationSent`).
     telemetry: Telemetry,
     /// The drivers configured in `notify`.
@@ -49,6 +55,8 @@ pub struct Notifier {
     opt_outs: Arc<OptOuts>,
     /// The web push subscriptions.
     push: Arc<PushSubscriptions>,
+    /// The stored preferences.
+    pub(crate) preferences: Arc<NotificationPreferences>,
 }
 
 /// What [`Notifier::new`] needs besides the options.
@@ -59,6 +67,7 @@ pub(crate) struct Parts {
     pub(crate) log: Arc<DeliveryLog>,
     pub(crate) opt_outs: Arc<OptOuts>,
     pub(crate) push: Arc<PushSubscriptions>,
+    pub(crate) preferences: Arc<NotificationPreferences>,
 }
 
 impl Notifier {
@@ -69,11 +78,13 @@ impl Notifier {
             options,
             app: parts.app,
             warned_inline: AtomicBool::new(false),
+            warned_no_hold: AtomicBool::new(false),
             telemetry: parts.telemetry,
             drivers: parts.drivers,
             log: parts.log,
             opt_outs: parts.opt_outs,
             push: parts.push,
+            preferences: parts.preferences,
         }
     }
 
@@ -99,6 +110,13 @@ impl Notifier {
     /// as with [`send_now`](Notifier::send_now). Every channel is attempted;
     /// the error lists the channels that failed.
     ///
+    /// The recipient's [preferences](crate::Preferences) apply first:
+    /// channels they turned off for the notification's category are
+    /// skipped, its mail waits for their digest, and the channels that
+    /// interrupt wait through their quiet hours and for the notification's
+    /// [send window](Notification::send_window) (held in
+    /// `notification_deferrals` until `notify:release` sends them).
+    ///
     /// Inside a unit of work's scope (`navree_db::Uow::current`: a request
     /// handler, `Db::transaction`) it behaves like
     /// [`send_in`](Notifier::send_in) with that unit of work while it is
@@ -113,14 +131,16 @@ impl Notifier {
             return self.send_with(&uow, notifiable, &notification, queue).await;
         }
         let ctx = self.app()?;
-        let (id, jobs) = render(&ctx, notifiable, &notification).await;
-        outcome(id, self.send_jobs(&ctx, &jobs, queue).await)
+        let (id, planned) = self.prepare(&ctx, notifiable, &notification).await?;
+        self.hold(planned.deferred).await?;
+        outcome(id, self.send_jobs(&ctx, &planned.now, queue).await)
     }
 
     /// Sends `notification` to `notifiable` now, over every channel its
     /// [`via`](Notification::via) lists, even when queueing is on. Every
     /// channel is attempted; the error lists the channels that failed.
-    /// Returns the notification id.
+    /// Returns the notification id. The recipient's preferences apply as
+    /// with [`send`](Notifier::send).
     ///
     /// Inside an unfinished unit of work's scope (`navree_db::Uow::current`)
     /// the database row is written in its transaction and the other
@@ -135,8 +155,9 @@ impl Notifier {
             return self.send_with(&uow, notifiable, &notification, false).await;
         }
         let ctx = self.app()?;
-        let (id, jobs) = render(&ctx, notifiable, &notification).await;
-        outcome(id, self.send_jobs(&ctx, &jobs, false).await)
+        let (id, planned) = self.prepare(&ctx, notifiable, &notification).await?;
+        self.hold(planned.deferred).await?;
+        outcome(id, self.send_jobs(&ctx, &planned.now, false).await)
     }
 
     /// Sends `notification` to `notifiable` as part of the unit of work
@@ -171,10 +192,19 @@ impl Notifier {
         queue: bool,
     ) -> Result<Uuid, NotifyError> {
         let ctx = self.app()?;
-        let (id, jobs) = render(&ctx, notifiable, notification).await;
-        let (stored, later): (Vec<_>, Vec<_>) = jobs
+        let (id, planned) = self.prepare(&ctx, notifiable, notification).await?;
+        let (stored, later): (Vec<_>, Vec<_>) = planned
+            .now
             .into_iter()
             .partition(|job| job.delivery.channel() == Channel::Database);
+        if !planned.deferred.is_empty() {
+            // Held with the transaction: a rollback drops them too.
+            let tx = uow.tx().await?;
+            NotificationDeferral::insert_or_ignore(&*tx, planned.deferred)
+                .await
+                .map_err(DbErr::from)?;
+            uow.mark_modified();
+        }
         if !stored.is_empty() {
             let tx = uow.tx().await?;
             for job in &stored {
@@ -201,9 +231,26 @@ impl Notifier {
         Ok(id)
     }
 
+    /// Renders `notification` for `notifiable` and applies the recipient's
+    /// preferences and timing.
+    async fn prepare<N: Notification>(
+        &self,
+        ctx: &AppContext,
+        notifiable: &dyn Notifiable,
+        notification: &N,
+    ) -> Result<(Uuid, Planned), NotifyError> {
+        let workspace = notifiable
+            .workspace_id()
+            .or_else(|| Uow::current().and_then(|uow| uow.workspace()));
+        let (id, jobs) = render(ctx, notifiable, notification, workspace).await;
+        let meta = Meta::of(notification, notifiable);
+        let planned = self.plan(ctx, notifiable, workspace, meta, jobs).await?;
+        Ok((id, planned))
+    }
+
     /// Delivers `jobs` now, or dispatches them when `queue` is set and the
     /// app has a dispatcher; returns the failures.
-    async fn send_jobs(
+    pub(crate) async fn send_jobs(
         &self,
         ctx: &AppContext,
         jobs: &[SendNotificationJob],
@@ -265,12 +312,41 @@ impl Notifier {
                     .try_get::<Mailer>()
                     .await
                     .ok_or_else(|| unavailable(Channel::Mail, "add MailModule"))?;
+                let overrides = overrides(ctx, job.workspace_id).await;
+                let styled = StyledMail {
+                    mail,
+                    notification_type: &job.notification_type,
+                    overrides: overrides.as_ref(),
+                };
                 // The template renders here, in the recipient's context.
                 let sent = within(
                     ctx,
                     &job.notifiable_type,
                     &job.notifiable_id,
-                    mailer.send(mail),
+                    send_mail(&mailer, job.workspace_id, &styled),
+                )
+                .await;
+                sent?;
+                Ok(true)
+            }
+            Delivery::Digest { digest, to, items } => {
+                let mailer = ctx
+                    .try_get::<Mailer>()
+                    .await
+                    .ok_or_else(|| unavailable(Channel::Mail, "add MailModule"))?;
+                let overrides = overrides(ctx, job.workspace_id).await;
+                let mail = DigestMail {
+                    to,
+                    digest: *digest,
+                    items,
+                    options: &self.options.digest,
+                    overrides: overrides.as_ref(),
+                };
+                let sent = within(
+                    ctx,
+                    &job.notifiable_type,
+                    &job.notifiable_id,
+                    send_mail(&mailer, job.workspace_id, &mail),
                 )
                 .await;
                 sent?;
@@ -532,7 +608,7 @@ impl Notifier {
     }
 
     /// The app, unless it has been dropped.
-    fn app(&self) -> Result<AppContext, NotifyError> {
+    pub(crate) fn app(&self) -> Result<AppContext, NotifyError> {
         self.app.upgrade().ok_or_else(|| NotifyError::Unavailable {
             channel: None,
             reason: "the app has shut down".to_owned(),
@@ -556,6 +632,7 @@ async fn render<N: Notification>(
     ctx: &AppContext,
     notifiable: &dyn Notifiable,
     notification: &N,
+    workspace: Option<Uuid>,
 ) -> (Uuid, Vec<SendNotificationJob>) {
     let id = Uuid::now_v7();
     let created_at = now(ctx).await;
@@ -577,6 +654,8 @@ async fn render<N: Notification>(
             notifiable_type: notifiable.notifiable_type().to_owned(),
             notifiable_id: notifiable.notifiable_id(),
             created_at,
+            category: Some(N::CATEGORY.to_owned()),
+            workspace_id: workspace,
             delivery,
         })
         .collect();
@@ -739,8 +818,44 @@ fn dedup(channels: &mut Vec<Channel>) {
     });
 }
 
+/// Sends `mail` through the workspace's mail transport (`MailScope`) when
+/// the notification has a workspace.
+async fn send_mail(
+    mailer: &Mailer,
+    workspace: Option<Uuid>,
+    mail: &(impl Mailable + Sync),
+) -> Result<(), navree_mail::MailError> {
+    match workspace {
+        Some(workspace) => {
+            mailer
+                .for_scope(&MailScope::workspace(workspace))
+                .send(mail)
+                .await
+        }
+        None => mailer.send(mail).await,
+    }
+}
+
+/// The template overrides of `workspace` (the app-wide ones without one),
+/// when the app has a `dyn TemplateOverrides`; a failure is logged and
+/// sends the mail as it is.
+async fn overrides(ctx: &AppContext, workspace: Option<Uuid>) -> Option<NotificationOverrides> {
+    let source = ctx.try_get::<dyn TemplateOverrides>().await?;
+    match source.overrides(workspace).await {
+        Ok(overrides) => Some(overrides),
+        Err(error) => {
+            tracing::warn!(
+                target: "navree::notify",
+                %error,
+                "reading the notification template overrides failed; sending the default mail"
+            );
+            None
+        }
+    }
+}
+
 /// Whether the app has a database (the channel tables).
-async fn has_database(ctx: &AppContext) -> bool {
+pub(crate) async fn has_database(ctx: &AppContext) -> bool {
     ctx.try_get::<Db>().await.is_some()
 }
 
@@ -793,7 +908,7 @@ pub(crate) async fn now_in(app: &WeakAppContext) -> DateTime<Utc> {
 
 /// The app clock's time (`dyn Clock` when registered), in microseconds
 /// like a PostgreSQL timestamp, so stored rows and broadcasts agree.
-async fn now(ctx: &AppContext) -> DateTime<Utc> {
+pub(crate) async fn now(ctx: &AppContext) -> DateTime<Utc> {
     let now = match ctx.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
         None => Utc::now(),

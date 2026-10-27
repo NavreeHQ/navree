@@ -1,5 +1,7 @@
 //! [`NotifyError`].
 
+use std::collections::BTreeMap;
+
 use navree_kernel::BoxError;
 use navree_mail::MailError;
 use sea_orm::DbErr;
@@ -53,6 +55,20 @@ pub enum NotifyError {
     /// Several channels failed; each error in channel order.
     #[error("{} notification channels failed: {}", .0.len(), list(.0))]
     Several(Vec<NotifyError>),
+    /// A change to notification preferences was refused: the messages by
+    /// field (`categories.security.channels.mail`), as a 422 response
+    /// shows them.
+    #[error("invalid notification preferences: {}", fields(.0))]
+    InvalidPreferences(BTreeMap<String, Vec<String>>),
+}
+
+/// `field: message; field: message`.
+fn fields(errors: &BTreeMap<String, Vec<String>>) -> String {
+    errors
+        .iter()
+        .map(|(field, messages)| format!("{field}: {}", messages.join(", ")))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 impl NotifyError {

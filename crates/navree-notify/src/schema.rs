@@ -108,6 +108,84 @@ pub(crate) fn push_subscription_schema() -> (String, Value) {
     ("PushSubscription".to_owned(), schema)
 }
 
+/// The schema of a [`Preferences`](crate::Preferences) document.
+fn preference_set() -> Value {
+    let switches = json!({
+        "type": "object",
+        "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+        "additionalProperties": {"type": "boolean"},
+    });
+    let digest = json!({"type": "string", "enum": ["off", "hourly", "daily", "weekly"]});
+    json!({
+        "type": "object",
+        "description": "Notification preferences: every field is optional and inherited when left out.",
+        "properties": {
+            "channels": switches,
+            "categories": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "properties": {"channels": switches, "digest": digest},
+                },
+            },
+            "digest": digest,
+            "quiet_hours": {
+                "type": "object",
+                "required": ["start", "end"],
+                "properties": {
+                    "start": {"type": "string", "examples": ["22:00"]},
+                    "end": {"type": "string", "examples": ["07:00"]},
+                },
+            },
+        },
+    })
+}
+
+/// `("NotificationPreferences", ..)`: an owner's choices, the workspace's
+/// and what each category gets.
+pub(crate) fn preferences_schema() -> (String, Value) {
+    let set = preference_set();
+    let schema = json!({
+        "type": "object",
+        "description": "Notification preferences with the workspace's defaults and the effective value of each category.",
+        "required": ["data", "workspace", "categories", "channels", "time_zone"],
+        "properties": {
+            "data": set,
+            "workspace": {"anyOf": [set, {"type": "null"}]},
+            "categories": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["category", "types", "required", "digest", "channels"],
+                    "properties": {
+                        "category": {"type": "string"},
+                        "types": {"type": "array", "items": {"type": "string"}},
+                        "required": {"type": "boolean"},
+                        "digest": {"type": "string", "enum": ["off", "hourly", "daily", "weekly"]},
+                        "channels": {"type": "object", "additionalProperties": {"type": "boolean"}},
+                    },
+                },
+            },
+            "channels": {"type": "array", "items": {"type": "string"}},
+            "time_zone": {"type": "string", "examples": ["Asia/Kolkata"]},
+        },
+    });
+    ("NotificationPreferences".to_owned(), schema)
+}
+
+/// `("NotificationPreferencesPatch", ..)`: a JSON merge patch of the
+/// choices (`null` removes one).
+pub(crate) fn preferences_patch_schema() -> (String, Value) {
+    let mut schema = preference_set();
+    if let Some(fields) = schema.as_object_mut() {
+        fields.insert(
+            "description".to_owned(),
+            json!("A JSON merge patch of the preferences: objects merge, null removes a choice."),
+        );
+    }
+    ("NotificationPreferencesPatch".to_owned(), schema)
+}
+
 /// `("PushUnsubscribe", {endpoint})`.
 pub(crate) fn unsubscribe_schema() -> (String, Value) {
     let schema = json!({
