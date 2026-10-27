@@ -1,0 +1,547 @@
+---
+title: "Workflows"
+description: "Durable workflows in code: `#[workflow]` async functions whose steps are stored and replayed, sleeps of minutes or months, event waits with timeouts, versions, cancellation and retries."
+---
+
+## Introduction
+
+<Badge feature="workflows" /> Some work spans days. A new learner gets a welcome mail, then a nudge a week later unless they finished a course in between. A renewal is charged, retried for an hour, and turned into a mail when the card keeps failing. A trial sends a reminder three days before it ends. Jobs and schedules can each do a piece of this, but the sequence itself, and the state between its pieces, ends up spread over tables, flags and cron tasks.
+
+`navree-workflows` lets you write the sequence as one `async fn`:
+
+- **Steps are stored.** `ctx.step("send-welcome", ..)` runs a closure once and stores its result. When the run resumes, a completed step returns its stored result instead of running again.
+- **Waiting costs nothing.** `ctx.sleep(..)`, `ctx.sleep_until(..)` and `ctx.wait_for::<E>(..)` stop the execution and store the run as sleeping or waiting. No worker is held, and a restart loses nothing: the timer or the event wakes the run later.
+- **Runs survive crashes.** An execution holds its run with a lease. When a worker dies mid-run, `workflows:tick` takes the run over once the lease runs out, and the replay picks up at the step that did not finish.
+- **Runs keep their version.** Change a workflow and new runs start on the new version, while runs under way resume on the code they started with.
+
+You get the `Workflows` service, `#[workflow]`, the `workflows.run` job, the `workflows:tick` and `workflows:prune` schedules, the `/api/workflows` routes for a runs page, the `workflows:*` commands and `WorkflowsFake` for tests. The same engine runs the end-user [automations](/docs/packages/automations/) people build in your app.
+
+## Installation
+
+The `workflows` feature of the `navree` facade is part of `full`, so an app on the default features has it. With a hand-picked feature list, add it by name:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["workflows"] }
+```
+
+It brings `navree::workflows` (the `navree-workflows` crate, with `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`) and puts `WorkflowsModule` and `ModuleBuilderWorkflowsExt` in the prelude.
+
+Add `WorkflowsModule` to your app root:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())
+    .module(QueueModule::from_config())
+    .module(ScheduleModule::for_root())
+    .module(WorkflowsModule::from_config()) // section `workflows`
+    .module(LearningModule)
+    // ...
+```
+
+The module is global and contributes the migration set `workflows`, which creates `workflow_runs`, `workflow_steps` and the three automation tables. It needs `DatabaseModule` (unless `workflows.store = "memory"`) and uses what else the app has:
+
+| With | You get |
+|---|---|
+| `QueueModule` | Every execution is a `workflows.run` job on a worker, and timers are delayed jobs. Without a queue, runs execute in the process that wakes them. |
+| `ScheduleModule` | `workflows:tick` every minute (timers, timeouts, takeovers) and `workflows:prune` daily at 03:40 |
+| `EventsModule` | Event waits, and the triggers of automations |
+| `WorkspaceModule` | Runs belong to workspaces; the routes show and change the request's workspace's runs only, and a deleted workspace's runs are cancelled |
+| `AccessModule` | The `workflows.view` and `workflows.manage` checks on the routes |
+
+## Configuration
+
+Every key has a default:
+
+```toml title="config/app.toml"
+[workflows]
+store = "database"        # database | memory
+lease_secs = 300          # how long one execution may hold a run
+queue = "default"         # the queue of the workflows.run jobs
+routes = true             # /api/workflows (workflows.view, workflows.manage)
+automations = true        # automations: triggers enroll on events
+automation_routes = true  # /api/automations (automations.view, automations.manage)
+prune_after_days = 30     # workflows:prune deletes runs finished longer ago; 0 keeps them
+```
+
+From the environment: `APP_WORKFLOWS__STORE=memory`, `APP_WORKFLOWS__LEASE_SECS=120`, `APP_WORKFLOWS__ROUTES=false`. `WorkflowsModule::for_root(WorkflowsOptions { .. })` takes the same options in code; a `lease_secs` of 0 or a blank `queue` fails the boot.
+
+The routes check permissions, so an app with them on needs a route authorizer (`AccessModule`). Turn `routes` and `automation_routes` off in an app without one.
+
+## Writing a workflow
+
+A workflow is an input type and an `async fn` that takes a `WorkflowCtx` and the input. `#[workflow]` implements the `Workflow` trait on the input type:
+
+```rust title="src/modules/learning/onboarding.rs"
+use std::time::Duration;
+
+use navree::prelude::*;
+use navree::workflows::{EventMatch, WorkflowCtx, workflow};
+use serde::{Deserialize, Serialize};
+
+const DAY: Duration = Duration::from_secs(86_400);
+
+/// A new learner.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Onboarding {
+    pub user_id: u64,
+}
+
+/// Welcomes a new learner, then nudges them if they have not finished a
+/// course within a week.
+#[workflow]
+pub async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<bool, BoxError> {
+    let mail = ctx.app().get::<LearnerMail>().await?;
+    let user_id = input.user_id;
+
+    let welcome = mail.clone();
+    ctx.step("send-welcome", || async move {
+        welcome.send(user_id, "welcome").await
+    })
+    .await?;
+
+    let completed = ctx
+        .wait_for::<CourseCompleted>(EventMatch::field("user_id", user_id), 7 * DAY)
+        .await?;
+    if completed.is_none() {
+        ctx.step("send-nudge", || async move { mail.send(user_id, "nudge").await })
+            .await?;
+    }
+    Ok(completed.is_some())
+}
+```
+
+The input derives `Serialize` and `Deserialize`: it is stored with the run as JSON. The function returns `Result<T, E>`: `T` is stored as the run's output, and `E` is anything that converts into `BoxError` (an `Err` fails the run). `ctx.app()` resolves your services, as a job or a listener does.
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `name = ".."` | the function name in kebab case (`deal_follow_up` → `deal-follow-up`) | The name stored with runs. Keep it stable. |
+| `version = N` | 1 | The version new runs start on (see [versions](#versions)) |
+| `min_version = N` | `version` | The oldest version whose runs this code resumes |
+
+The doc comment becomes the description that `GET /api/workflows` lists. A name holds lower-case letters, digits, `-`, `_` and `.` (at most 100, starting with a letter or a digit). A function that is not `async`, has generics, takes other arguments or does not return a `Result` is a compile error, and so are an invalid name, a version of 0 and a `min_version` above `version`.
+
+`#[workflow]` keeps your function as you wrote it and adds the impl. You can write the impl yourself instead:
+
+```rust
+impl Workflow for Onboarding {
+    const NAME: &'static str = "onboarding";
+    const DESCRIPTION: &'static str = "Welcomes a new learner, then nudges them.";
+    type Output = bool;
+
+    async fn run(self, ctx: WorkflowCtx) -> Result<bool, BoxError> {
+        onboarding(ctx, self).await
+    }
+}
+```
+
+### Registering
+
+Register each workflow in the module that owns it, together with the events its runs wait for:
+
+```rust title="src/modules/learning/mod.rs"
+#[module(
+    imports = [WorkflowsModule::for_feature::<Onboarding>()],
+    register = Self::workflows,
+)]
+pub struct LearningModule;
+
+impl LearningModule {
+    fn workflows(&self, m: &mut ModuleBuilder) {
+        m.workflow::<TrialReminders>()
+            .workflow::<Renewal>()
+            .workflow_event::<CourseCompleted>();
+    }
+}
+```
+
+`m.workflow::<W>()` does what `WorkflowsModule::for_feature::<W>()` does. `m.workflow_event::<E>()` subscribes the engine to `E`: every emitted `E` is checked against the open waits. Registering an event or a workflow twice, from two modules, is one registration. Two types with one name and version fail the boot, naming both.
+
+## Starting runs
+
+Start a run in your unit of work. It is stored with your writes and starts once they commit; a rollback leaves nothing:
+
+```rust title="src/modules/learning/service.rs"
+pub async fn enroll(&self, uow: &Uow, user: &User) -> Result<Uuid, AppError> {
+    self.users.insert(uow, user).await?;
+    let run_id = self.workflows.start(uow, Onboarding { user_id: user.id }).await?;
+    Ok(run_id)
+}
+```
+
+`start_with` takes `StartOptions`:
+
+```rust
+let run_id = workflows
+    .start_with(
+        uow,
+        Onboarding { user_id: 8 },
+        StartOptions::new()
+            .key("onboarding:8")              // at most one unfinished run with this key
+            .workspace(workspace.id)          // the run belongs to the workspace
+            .delay(Duration::from_secs(600)), // start in ten minutes
+    )
+    .await?;
+```
+
+- **`key`**: while an unfinished run of the same workflow has the key, starting again returns that run's id instead of a new one.
+- **`workspace`**: the run belongs to the workspace. The routes list it there, and deleting the workspace cancels it.
+- **`delay`**: the run starts sleeping and wakes after the delay.
+
+Outside a unit of work, `spawn(input)` and `spawn_with(input, options)` start in the request's unit of work when there is one (inside a handler), and at once otherwise. Starting a type no module registered fails with `WorkflowsError::Unregistered`, whose message names the missing `for_feature` import.
+
+## Steps
+
+`ctx.step(name, closure)` runs the closure once for the run and stores its result as JSON:
+
+```rust
+let account = ctx
+    .step("create-account", || async move { billing.create_account(user_id).await })
+    .await?;
+```
+
+Every later execution of the run (a replay) returns the stored `account` without calling the closure. The result type serializes and reads back; the closure's error converts into `BoxError`.
+
+**Retries.** An error is retried. With `ctx.step`, a step gets 3 attempts, 10 then 20 seconds apart, and the run sleeps in between: no worker waits for the next attempt. `step_with` takes your own `StepOptions`:
+
+```rust
+let retries = StepOptions::attempts(5).backoff(Backoff::Exponential {
+    base_secs: 60,
+    max_secs: 3_600,
+});
+let charged = ctx
+    .step_with("charge", retries, || async move {
+        billing.charge(input.account_id, &key).await
+    })
+    .await;
+```
+
+After the last attempt the step returns `WorkflowsError::StepFailed { step, attempts, message }`, on this execution and every replay. Return it with `?` to fail the run, or catch it to do something else:
+
+```rust title="src/modules/billing/renewal.rs"
+/// Charges a renewal: five attempts a minute or more apart, then a mail
+/// to the account instead of a failed run.
+#[workflow]
+pub async fn renewal(ctx: WorkflowCtx, input: Renewal) -> Result<String, BoxError> {
+    let billing = ctx.app().get::<Billing>().await?;
+    let key = format!("{}:charge", ctx.run_id());
+    let retries = StepOptions::attempts(5).backoff(Backoff::Exponential {
+        base_secs: 60,
+        max_secs: 3_600,
+    });
+    let charged = ctx
+        .step_with("charge", retries, || async move {
+            billing.charge(input.account_id, &key).await
+        })
+        .await;
+    match charged {
+        Ok(receipt) => Ok(receipt),
+        Err(WorkflowsError::StepFailed { message, .. }) => {
+            let mail = ctx.app().get::<LearnerMail>().await?;
+            ctx.step("payment-failed", || async move {
+                mail.send(input.account_id, "payment-failed").await
+            })
+            .await?;
+            Ok(format!("not charged: {message}"))
+        }
+        Err(other) => Err(other.into()),
+    }
+}
+```
+
+**Keep steps idempotent.** A step whose process dies (or that panics) before its result is stored runs again. Pass an idempotency key to services that accept one; `format!("{}:charge", ctx.run_id())` is unique to the step of the run.
+
+**Names.** A step name is 1 to 100 characters, without `#` and not starting with `$`. Using a name again in one run is fine: the second call is stored as `send-reminder#2`, the third as `send-reminder#3`. Steps can run at the same time, in `futures::join!` branches; clone `ctx` freely, the clones share the execution.
+
+## Timers
+
+`ctx.sleep(duration)` waits durably, on the app's clock, for seconds or months. `ctx.sleep_until(at)` waits until a time:
+
+```rust title="src/modules/billing/trial.rs"
+/// Reminds a user three days before their trial ends, and on the day.
+#[workflow(name = "trial-reminders")]
+pub async fn trial_reminders(ctx: WorkflowCtx, input: TrialReminders) -> Result<(), BoxError> {
+    let mail = ctx.app().get::<LearnerMail>().await?;
+    let user_id = input.user_id;
+    let started = ctx.now().await;
+    let three_days_before = input.ends_at - chrono::TimeDelta::days(3);
+    if started < three_days_before {
+        ctx.sleep_until(three_days_before).await;
+        let mail = mail.clone();
+        ctx.step("three-days-left", || async move {
+            mail.send(user_id, "trial-3-days").await
+        })
+        .await?;
+    }
+    ctx.sleep_until(input.ends_at).await;
+    ctx.step("trial-ended", || async move {
+        mail.send(user_id, "trial-ended").await
+    })
+    .await?;
+    Ok(())
+}
+```
+
+A run that sleeps is stored as `sleeping` with its `wake_at`. With a queue, the wake-up is a `workflows.run` job delayed until then; `workflows:tick` wakes the runs whose job was lost a minute after their time. Without a queue, `workflows:tick` wakes them within a minute.
+
+`ctx.now()` reads the app's clock (`dyn Clock`) once and stores the answer, so a replay sees the same instant. Read the time with it, never with `Utc::now()`, in workflow code.
+
+## Waiting for events
+
+`ctx.wait_for::<E>(filter, timeout)` waits for an event of type `E` that passes the filter. It returns `Some(event)` when one comes, or `None` once the timeout passed:
+
+```rust
+let completed = ctx
+    .wait_for::<CourseCompleted>(EventMatch::field("user_id", user_id), 7 * DAY)
+    .await?;
+```
+
+- **Filters** compare fields of the event's JSON with values: `EventMatch::field("course_id", 7).and("user.id", user_id)` (dotted paths). `EventMatch::any()` takes the first event of the type. The filter is stored with the waiting run, so an event is matched without running any workflow code.
+- **Timeouts** take a `Duration`, or `None` to wait for good.
+- **Only events emitted after the wait began count.** An event that arrived earlier does not resolve a later wait.
+- **The event type must be registered** with `m.workflow_event::<E>()`. Waiting for another type fails at once with `WorkflowsError::UnregisteredEvent`, whose message names the call to add.
+
+Emit the event as you emit any [event](/docs/digging-deeper/events/): `bus.emit(CourseCompleted { user_id: 7, course_id: 1 })`. Every waiting run it matches is woken; its wait returns the event. An event emitted inside a unit of work (in a handler, after your writes) counts once that work commits, so the run sees what the handler wrote; a rollback drops it. `ctx.wait_for_event(name, filter, timeout)` waits by event name and returns its JSON, and `Workflows::deliver(name, &payload)` hands an event to the engine by name, for events that arrive another way (a webhook, another service).
+
+## How runs execute
+
+A run is executed from the top every time it wakes. Each `step`, `sleep`, `wait_for` and `now` call is keyed by its name and how many times the name was used before; a call whose key has a stored result returns it, and the first call without one runs. When the code must wait, the call does not return: the execution stops, stores the run as sleeping or waiting, and lets go of its worker.
+
+That makes one rule for workflow code: **code between steps decides the same way on every execution.** Branch on step results, the input, `ctx.now()` and `ctx.version()`. Put anything with side effects or varying answers (database reads, HTTP calls, random numbers, the current time) inside a step.
+
+A run's status is one of:
+
+| Status | Meaning |
+|---|---|
+| `pending` | Ready to run: just started, woken by a timer or an event, or retried |
+| `running` | An execution holds it, until its lease runs out |
+| `sleeping` | Waiting for a timer (`sleep`, or a step's next attempt) until `wake_at` |
+| `waiting` | Waiting for an event, until its timeout at `wake_at` (none: for good) |
+| `completed` | The function returned `Ok`; `output` holds the result |
+| `failed` | The function returned an error or panicked; `error` holds the message |
+| `cancelled` | Cancelled before it finished |
+
+**Executions.** With `QueueModule`, every execution is a `workflows.run` job on `workflows.queue` (an hour's timeout): one when the run starts, one when its timer is due, one when an event resolves its wait. Without a queue, a run executes in the process that wakes it: right after the start commits, and inside the `emit` of an event that resolves its wait. Extra executions are harmless: a run that is not ready, or that another execution holds, is skipped.
+
+**Leases.** An execution claims its run for `workflows.lease_secs` (300 by default) and renews the lease with every step it stores. When a worker dies, the run stays `running` until the lease runs out; then `workflows:tick` takes it over, and the replay runs the step that never finished again. Keep single steps shorter than the lease. An execution that finds its lease gone (the run was cancelled, or taken over) stops without writing.
+
+## Versions
+
+A run always resumes on the version it started on. Changing a workflow's steps while runs are under way would otherwise replay their stored results against the wrong calls. Two ways to ship a change:
+
+**Keep the old code.** Register the new implementation on a new input type with the same name and a higher version, and keep the old one registered until its runs finish:
+
+```rust
+#[workflow(name = "onboarding", version = 2)]
+pub async fn onboarding_v2(ctx: WorkflowCtx, input: OnboardingV2) -> Result<bool, BoxError> {
+    // ...
+}
+```
+
+New runs start on version 2 (`workflows.start(uow, OnboardingV2 { .. })`); runs of version 1 resume on the version 1 code.
+
+**Branch on the version.** Let the new code resume older runs with `min_version`, and keep the old path for them:
+
+```rust
+#[workflow(name = "onboarding", version = 2, min_version = 1)]
+pub async fn onboarding_v2(ctx: WorkflowCtx, input: OnboardingV2) -> Result<bool, BoxError> {
+    // ... the steps both versions share ...
+    if ctx.version() >= 2 {
+        ctx.step("send-tips", || async move { /* ... */ Ok::<_, BoxError>(()) }).await?;
+    }
+    // ...
+}
+```
+
+A run whose version no registered code resumes waits when its version is newer than the app knows (a deploy in progress: it is tried again after a lease), and fails with a message naming the fix when it is older than every registered `min_version`.
+
+## Cancelling and retrying
+
+```rust
+let run = workflows.cancel(run_id).await?;  // 409 workflow_run_finished when it already finished
+let run = workflows.retry(run_id).await?;   // 409 workflow_run_not_failed unless it failed
+```
+
+A cancelled run never runs again, and an execution under way stops at its next step. Retrying a failed run runs it again from the top: completed steps are replayed, and failed steps run again with fresh attempts.
+
+`workflows.run(id)`, `details(id)` (the run with its steps), `runs(&RunQuery)` and `page(&RunQuery, PageQuery)` read runs:
+
+```rust
+let failed = workflows
+    .runs(&RunQuery::new().workflow("onboarding").status(RunStatus::Failed).limit(50))
+    .await?;
+```
+
+## Over HTTP
+
+With `workflows.routes` on (the default), the module mounts the routes of a runs page under `{http.api_prefix}/workflows`:
+
+| Route | Permission | Answer |
+|---|---|---|
+| `GET /api/workflows` | `workflows.view` | `{ "data": [{ "name", "version", "min_version", "description" }] }` |
+| `GET /api/workflows/runs?workflow=&status=&page=&per_page=` | `workflows.view` | A page of runs, newest first; `status` takes several, comma-separated |
+| `GET /api/workflows/runs/{id}` | `workflows.view` | The run with its `steps` |
+| `POST /api/workflows/runs/{id}/cancel` | `workflows.manage` | The cancelled run; 409 `workflow_run_finished` |
+| `POST /api/workflows/runs/{id}/retry` | `workflows.manage` | The run, run again; 409 `workflow_run_not_failed` |
+
+```json title="GET /api/workflows/runs/0199a1c2-…"
+{
+  "id": "0199a1c2-…",
+  "workflow": "onboarding",
+  "version": 1,
+  "status": "waiting",
+  "input": { "user_id": 8 },
+  "output": null,
+  "error": null,
+  "workspace_id": null,
+  "key": "onboarding:8",
+  "wake_at": "2026-11-02T08:00:00Z",
+  "created_at": "2026-10-26T08:00:00Z",
+  "updated_at": "2026-10-26T08:00:00Z",
+  "finished_at": null,
+  "steps": [
+    { "key": "send-welcome", "kind": "step", "status": "completed", "attempts": 1, "output": null, "…": "…" },
+    { "key": "$wait:course.completed", "kind": "wait", "status": "waiting", "event": "course.completed",
+      "filter": { "fields": { "user_id": 8 } }, "wake_at": "2026-11-02T08:00:00Z", "…": "…" }
+  ]
+}
+```
+
+In an app with `WorkspaceModule`, the routes need a workspace (`X-Workspace`), check the permission in it and show its runs only: another workspace's run is a 404. An unknown run is a 404 `workflow_run_not_found`, and an unknown status in the filter a 400.
+
+## From the command line
+
+| Command | |
+|---|---|
+| `workflows:list [--workflow <name>] [--status <s,..>] [--limit N]` | Runs, newest first |
+| `workflows:show <run-id>` | A run with its steps |
+| `workflows:cancel <run-id>` | Cancels an unfinished run |
+| `workflows:retry <run-id>` | Runs a failed run again |
+| `workflows:tick` | Wakes the runs that are due now |
+| `workflows:prune [--days N]` | Deletes runs finished more than N days ago (default `workflows.prune_after_days`) |
+
+```text
+0199a1c2-7d3e-7c41-9a55-2b8e0f9d6a10  waiting    onboarding v1  started 2026-10-26 08:00:00  wakes 2026-11-02 08:00:00
+0199a1b7-12aa-7f02-8c3d-5e6f7a8b9c0d  failed     renewal v1  started 2026-10-25 17:12:09  error: step `charge` failed after 5 attempt(s): card declined
+```
+
+## Storage
+
+`workflow_runs` holds one row per run (its input, output, status, `wake_at` and lease), and `workflow_steps` one row per stored call (`step_key`, kind, status, output or error, attempts, `wake_at`, and a wait's event and filter). Ids are UUID v7 text, times Unix milliseconds and JSON text, so the tables read the same on SQLite, PostgreSQL and MySQL.
+
+Finished runs are kept `workflows.prune_after_days` days (30 by default); `workflows:prune` deletes them with their steps every day at 03:40. `workflows.store = "memory"` keeps runs in the process instead: for tests and examples, lost on restart.
+
+## Testing
+
+**Assert what code starts.** `WorkflowsFake` records the runs app code starts instead of running them:
+
+```rust title="tests/learning.rs"
+#[tokio::test]
+async fn signing_up_starts_the_onboarding() {
+    let fake = WorkflowsFake::new();
+    let app = TestApp::builder()
+        .config("workflows.store", "memory")
+        .config("workflows.routes", false)
+        .config("workflows.automation_routes", false)
+        .module(WorkflowsModule::from_config())
+        .module(LearningModule)
+        .override_value(Arc::new(fake.workflows()))
+        .build()
+        .await;
+
+    let workflows = app.get::<Workflows>().await;
+    workflows.spawn(Onboarding { user_id: 7 }).await.unwrap();
+
+    fake.assert_started::<Onboarding>(|input| input.user_id == 7);
+    fake.assert_started_times::<Onboarding>(1);
+    fake.assert_not_started::<Renewal>();
+}
+```
+
+`started::<W>()` returns the recorded inputs, `started_runs()` every start with its options, `assert_nothing_started()` and `assert_cancelled(id)` check the rest. Reads through the fake's `Workflows` see each start as a pending run; nothing executes.
+
+**Run workflows for real.** With a fixed clock, runs execute inline in tests (no queue), and `tick()` wakes their timers once you move the clock:
+
+```rust title="tests/onboarding.rs"
+#[tokio::test]
+async fn a_learner_who_does_not_finish_is_nudged() {
+    let clock = Arc::new(FixedClock::new("2026-10-26T08:00:00Z".parse().unwrap()));
+    let app = TestApp::builder()
+        .temp_database()
+        .config("workflows.routes", false)
+        .config("workflows.automation_routes", false)
+        .module(DatabaseModule::from_config())
+        .module(EventsModule::for_root())
+        .module(WorkflowsModule::from_config())
+        .module(LearningModule)
+        .override_value::<dyn Clock>(clock.clone())
+        .build()
+        .await;
+    let workflows = app.get::<Workflows>().await;
+    let run_id = workflows.spawn(Onboarding { user_id: 8 }).await.unwrap();
+    assert_eq!(workflows.run(run_id).await.unwrap().status, RunStatus::Waiting);
+
+    clock.advance(Duration::from_secs(7 * 86_400));
+    assert_eq!(workflows.tick().await.unwrap(), 1);
+    let run = workflows.run(run_id).await.unwrap();
+    assert_eq!(run.status, RunStatus::Completed);
+    assert_eq!(run.output, Some(serde_json::json!(false)));
+}
+```
+
+Emit events with the `EventBus` to resolve waits, and read a run's `details(id).steps` to see what ran.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `workflows.store` | `database` | `database` or `memory` |
+| `workflows.lease_secs` | `300` | How long one execution may hold a run |
+| `workflows.queue` | `default` | The queue of the `workflows.run` jobs |
+| `workflows.routes` | `true` | Mounts `/api/workflows` |
+| `workflows.automations` | `true` | Automations: triggers enroll on events |
+| `workflows.automation_routes` | `true` | Mounts `/api/automations` |
+| `workflows.prune_after_days` | `30` | Retention of finished runs; `0` keeps them |
+
+| `WorkflowCtx` method | |
+|---|---|
+| `step(name, f)` / `step_with(name, options, f)` | Runs `f` once and stores its result; retries errors |
+| `sleep(duration)` / `sleep_until(at)` | Waits durably on the app's clock |
+| `wait_for::<E>(filter, timeout)` | Waits for a matching event; `None` after the timeout |
+| `wait_for_event(name, filter, timeout)` | The same by event name, as JSON |
+| `now()` | The app's time, recorded once per call |
+| `run_id()`, `workflow()`, `version()`, `workspace_id()`, `app()` | The run and the app |
+
+| `Workflows` method | |
+|---|---|
+| `start(&uow, input)` / `start_with(&uow, input, options)` | Starts a run when the unit of work commits |
+| `spawn(input)` / `spawn_with(input, options)` | Starts in the current unit of work, or at once |
+| `run(id)`, `details(id)`, `runs(&query)`, `page(&query, page)` | Reads runs |
+| `cancel(id)`, `retry(id)` | Changes runs (409 when the status does not allow it) |
+| `execute(id)`, `tick()`, `deliver(name, &payload)`, `prune(before)` | What the job, the schedule and the listeners call |
+| `definitions()`, `definition::<W>()`, `now()` | The registered workflows and the clock |
+
+| `WorkflowsError` | Response |
+|---|---|
+| `UnknownRun` | 404 `workflow_run_not_found` |
+| `Conflict` | 409 `workflow_run_finished`, `workflow_run_not_failed` |
+| `StepFailed` | Returned to the workflow; a 500 if a handler returns it |
+| `Unregistered`, `UnregisteredEvent`, `InvalidStepName`, `Payload`, `Database`, `Other` | 500 (logged) |
+
+<LinkCards>
+  <LinkCard href="/docs/packages/automations/" title="Automations">
+    Triggers, conditions and actions people combine in your app, run by the same engine.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    The events workflows wait for.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    The workers executions run on.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Scheduling">
+    Where `workflows:tick` and `workflows:prune` run.
+  </LinkCard>
+</LinkCards>

@@ -111,7 +111,7 @@ each test run.
 ```
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
-L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
+L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows (packages built on other packages)
 L6  navree-social  navree-sso  navree-webhooks  navree-sheets  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis  navree-mongo
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
@@ -183,6 +183,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L7 | `navree-logbook` | Logbook: a local debugging timeline at `/_logbook` of every request with its queries, events, jobs, mail, cache calls and log lines; filters by tag and user, duplicate-query detection, request replay, a bounded SQLite or memory store (facade feature `logbook`, in `full`; off in release builds) |
 | L7 | `navree-fleet` | Fleet: a supervisor of queue worker processes (`fleet`) with auto-balancing, recycling and graceful restarts; throughput, wait and runtime metrics; failed jobs; pause and continue; long-wait alerts; a dashboard at `/_fleet` (facade feature `fleet`, in `full`) |
 | L7 | `navree-helm` | Helm: the admin panel at `/admin` generated from your entities (resources with fields, filters, search, actions and metrics), checked against your access rules, audited, server-rendered with an embedded stylesheet and script, plus its JSON API |
+| L7 | `navree-workflows` | Durable workflows in code: `#[workflow]` async functions whose steps are stored and replayed on resume, durable sleeps for minutes or months, event waits with timeouts, versions, cancellation, retries and leases that survive crashes (`workflow_runs`, `workflow_steps`); end-user automations: `#[trigger]`, `#[condition]` and `#[action]` blocks with JSON Schemas for the editor, versioned definitions per workspace validated against the catalog, enrollments with policies, simulation, templates, the `/api/workflows` and `/api/automations` routes and `WorkflowsFake` (facade feature `workflows`, in `full`) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new` (with the starter kits: `--kit saas`, `api` or `micro`), `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install`, `navree openapi:client` |
 

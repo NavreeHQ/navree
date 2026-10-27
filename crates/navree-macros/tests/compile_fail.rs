@@ -59,6 +59,13 @@ fn agent_reports_misuse() {
     trybuild::TestCases::new().compile_fail("tests/ui/agent/*.rs");
 }
 
+/// `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` check the
+/// function's shape and their keys before they need navree-workflows.
+#[test]
+fn workflows_report_misuse() {
+    trybuild::TestCases::new().compile_fail("tests/ui/workflows/*.rs");
+}
+
 #[test]
 fn bad_duration_is_error() {
     trybuild::TestCases::new().compile_fail("tests/ui/bad_duration_is_error.rs");
