@@ -64,6 +64,7 @@ navree-lighthouse = { path = "crates/navree-lighthouse", version = "0.1.0" }
 navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
 navree-logbook = { path = "crates/navree-logbook", version = "0.1.0" }
 navree-micro = { path = "crates/navree-micro", version = "0.1.0" }
+navree-time = { path = "crates/navree-time", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -183,6 +184,9 @@ thiserror = "2.0.21"
 anyhow = "1.0.104"
 uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
 chrono = { version = "0.4.45", features = ["serde"] }
+# The IANA time zone database compiled in (navree-time): no build script,
+# no system tzdata.
+chrono-tz = "0.10.4"
 base64 = "0.23.1"
 hex = "0.4.3"
 
