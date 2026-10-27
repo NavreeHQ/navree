@@ -44,6 +44,7 @@
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `settings` | navree-settings (plus `#[derive(Settings)]`) | `settings` | `SettingsModule`: typed settings per global, organization, workspace and user, inherited, with the source of every value |
+//! | `sso` | navree-sso | `sso` | `SsoModule`: SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, just-in-time provisioning |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
@@ -226,6 +227,8 @@ pub use navree_redis as redis;
 /// (`use navree::settings::{Settings, Scope};`).
 #[cfg(feature = "settings")]
 pub use navree_settings as settings;
+#[cfg(feature = "sso")]
+pub use navree_sso as sso;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
 

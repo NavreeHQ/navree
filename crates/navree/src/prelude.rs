@@ -150,6 +150,9 @@ pub use navree_settings::{ModuleBuilderSettingsExt as _, Setting, SettingsModule
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
 
+#[cfg(feature = "sso")]
+pub use navree_sso::SsoModule;
+
 #[cfg(feature = "micro")]
 pub use crate::message_handlers;
 #[cfg(feature = "micro")]

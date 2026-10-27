@@ -170,6 +170,7 @@ mod migration;
 mod module;
 mod options;
 mod passkeys;
+mod password_policy;
 mod passwordless;
 mod platform;
 mod policy;
@@ -210,6 +211,7 @@ pub use passkeys::controller::{
     PasskeyRegisterInput,
 };
 pub use passkeys::{MAX_PASSKEY_NAME, PasskeyResource};
+pub use password_policy::PasswordSignInPolicy;
 pub use platform::PlatformAdmin;
 pub use policy::TwoFactorPolicy;
 pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResourceExtension};

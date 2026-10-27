@@ -12,6 +12,7 @@ mod login;
 mod logout;
 mod module;
 mod passkeys;
+mod password_policy;
 mod password_reset;
 mod passwordless;
 mod platform;

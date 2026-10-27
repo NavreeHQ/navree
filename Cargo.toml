@@ -77,6 +77,7 @@ navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
 navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
 navree-time = { path = "crates/navree-time", version = "0.1.0" }
+navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -213,6 +214,9 @@ rust_decimal = { version = "1.43.0", default-features = false, features = ["serd
 chrono-tz = "0.10.4"
 base64 = "0.23.1"
 hex = "0.4.3"
+# XML for single sign-on (navree-sso): SAML messages and metadata, read into
+# its own tree for exclusive canonicalization and signature checks.
+quick-xml = "0.41.0"
 # Insertion-ordered maps: navree-orm's `key_by`, `group_by` and keyed plucks.
 indexmap = { version = "2.14.2", features = ["serde"] }
 
