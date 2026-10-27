@@ -8,9 +8,10 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use navree_harbor::cli::ENV_VAR;
+use clap::Parser;
+use navree_harbor::cli::{ENV_VAR, HarborCommand};
 use navree_harbor::config::BuildMethod;
-use navree_harbor::exec::{Executor, FakeExecutor, SystemExecutor};
+use navree_harbor::exec::{Cmd, Executor, FakeExecutor, Output, SystemExecutor};
 use navree_harbor::fake::FakeHost;
 use navree_harbor::host::{Host, SshHost};
 use navree_harbor::layout::{Layout, Slot};
@@ -29,16 +30,64 @@ fn page() -> Option<String> {
     std::fs::read_to_string(repository().join("apps/website/content/docs/tools/harbor.mdx")).ok()
 }
 
+/// The skill, when this crate sits in the Navree repository.
+fn skill() -> Option<String> {
+    std::fs::read_to_string(repository().join("skills/navree-harbor/SKILL.md")).ok()
+}
+
+#[derive(Debug, Parser)]
+struct TestCli {
+    #[command(subcommand)]
+    command: HarborCommand,
+}
+
+/// Every Harbor command line in the `sh` blocks of `text`: `navree` and its
+/// arguments, without trailing comments, with `[optional]` brackets
+/// dropped and `<placeholders>` filled in.
+fn harbor_command_lines(text: &str) -> Vec<Vec<String>> {
+    let mut found = Vec::new();
+    for block in blocks(text, "```sh") {
+        for line in block.lines() {
+            let Some(start) = line.find("navree ") else {
+                continue;
+            };
+            let command = &line[start..];
+            let command = command.split(" #").next().unwrap_or(command);
+            let words: Vec<String> = command
+                .split_whitespace()
+                .map(|w| w.trim_matches(|c| c == '[' || c == ']'))
+                .filter(|w| !w.is_empty())
+                .map(|w| {
+                    if w.starts_with('<') && w.ends_with('>') {
+                        "x".to_owned()
+                    } else {
+                        w.to_owned()
+                    }
+                })
+                .collect();
+            let harbor = words.get(1).is_some_and(|w| {
+                w.starts_with("harbor:") || w.starts_with("deploy") || w == "build:image"
+            });
+            if harbor {
+                found.push(words);
+            }
+        }
+    }
+    found
+}
+
 /// The contents of every fenced block whose opening line contains `opening`.
 fn blocks(text: &str, opening: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut current: Option<String> = None;
     for line in text.lines() {
+        // Fences may be indented (inside a list item).
+        let fence = line.trim_start().starts_with("```");
         match &mut current {
-            None if line.starts_with("```") && line.contains(opening) => {
+            None if fence && line.contains(opening) => {
                 current = Some(String::new());
             }
-            Some(block) if line.starts_with("```") => {
+            Some(block) if fence => {
                 found.push(std::mem::take(block));
                 current = None;
             }
@@ -185,6 +234,73 @@ fn the_library_example() {
     assert_eq!(project.config.domain.as_deref(), Some("crm.example.com"));
     let missing = Project::load(&dir.path().join("nope"), Environment::production());
     assert!(matches!(missing, Err(HarborError::NoConfig { .. })));
+}
+
+/// Every Harbor command the page and the skill show is one the CLI accepts.
+#[test]
+fn every_command_shown_parses() {
+    let (Some(page), Some(skill)) = (page(), skill()) else {
+        eprintln!("SKIPPED: the docs page and the skill are not next to this crate");
+        return;
+    };
+    for (source, text, at_least) in [("the page", &page, 15), ("the skill", &skill, 20)] {
+        let lines = harbor_command_lines(text);
+        assert!(
+            lines.len() >= at_least,
+            "{source} shows {} Harbor commands",
+            lines.len()
+        );
+        for words in lines {
+            if let Err(error) = TestCli::try_parse_from(&words) {
+                panic!("{source}: `{}` does not parse:\n{error}", words.join(" "));
+            }
+        }
+    }
+}
+
+/// The skill: its front-matter, its `harbor.toml` template and its Rust
+/// example (reproduced here).
+#[test]
+fn the_skill() {
+    let Some(skill) = skill() else {
+        eprintln!("SKIPPED: the skill is not next to this crate");
+        return;
+    };
+    assert!(
+        skill.starts_with("---\nname: navree-harbor\ndescription: \""),
+        "the skill's front-matter"
+    );
+    let templates: Vec<String> = blocks(&skill, "```toml")
+        .into_iter()
+        .filter(|b| b.contains("[servers."))
+        .collect();
+    assert_eq!(templates.len(), 1, "the skill's harbor.toml template");
+    let config = common::config(&templates[0]);
+    assert_eq!(config.app, "crm-api");
+    assert_eq!(config.processes.worker.instances, 2);
+
+    // The example of "Using the library".
+    let example = || -> navree_harbor::Result<()> {
+        let config = HarborConfig::parse(
+            "app = \"crm-api\"\ndomain = \"crm.example.com\"\n\n[servers.app-1]\nhost = \"203.0.113.10\"\n",
+            Path::new("harbor.toml"),
+        )?;
+        assert!(config.validate().is_empty());
+        assert_eq!(config.servers_with(Role::Web).count(), 1);
+
+        let fake = FakeExecutor::new(|cmd| match cmd.program.as_str() {
+            "ssh" => Output::ok("arch=x86_64\n"),
+            _ => Output::failed(127, "not found"),
+        });
+        fake.run(&Cmd::new("ssh").arg("navree@203.0.113.10").arg("bash -s"))?;
+        assert_eq!(fake.calls()[0].program, "ssh");
+        Ok(())
+    };
+    example().unwrap();
+    assert!(
+        skill.contains("fake.run(&Cmd::new(\"ssh\").arg(\"navree@203.0.113.10\").arg(\"bash -s\"))?;"),
+        "the skill's example changed: update this test"
+    );
 }
 
 /// The traits and implementations the page names.

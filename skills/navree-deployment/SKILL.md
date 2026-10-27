@@ -10,6 +10,11 @@ runs queue workers and the scheduler, and migrates the database; the first
 argument picks the job. It reads `.env` and `config/app.toml` from its
 **working directory**.
 
+To have all of this done for you on Ubuntu servers (provisioning, systemd
+units, Caddy with TLS, blue-green releases with health checks and
+rollbacks), load the `navree-harbor` skill and use `navree harbor:provision`
+and `navree deploy`. This skill is for running the app on your own setup.
+
 ## Steps
 
 1. Build: `cargo build --release` (binary: `target/release/<package>`).
