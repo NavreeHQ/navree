@@ -90,6 +90,9 @@ pub enum Command {
     /// Stop a service and remove it from dock.toml.
     #[command(name = "dock:remove")]
     DockRemove(DockRemoveArgs),
+    /// Download Chrome for Testing into Navree's cache, for navree-browser.
+    #[command(name = "browser:install")]
+    BrowserInstall(BrowserInstallArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -242,6 +245,17 @@ pub struct DockRemoveArgs {
     /// Also delete its data (the volume).
     #[arg(long)]
     pub volumes: bool,
+}
+
+/// `navree browser:install [--version <version>] [--force]`.
+#[derive(Debug, Args)]
+pub struct BrowserInstallArgs {
+    /// The Chrome for Testing version (default: the one this navree pins).
+    #[arg(long = "version", value_name = "VERSION")]
+    pub chrome_version: Option<String>,
+    /// Download again even if that version is installed.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[cfg(test)]
@@ -418,6 +432,21 @@ mod tests {
             panic!("expected dock:remove");
         };
         assert!(!args.volumes);
+    }
+
+    #[test]
+    fn browser_install_options() {
+        let Command::BrowserInstall(args) = parse(&["browser:install"]) else {
+            panic!("expected browser:install");
+        };
+        assert_eq!((args.chrome_version, args.force), (None, false));
+        let Command::BrowserInstall(args) =
+            parse(&["browser:install", "--version", "141.0.7390.54", "--force"])
+        else {
+            panic!("expected browser:install");
+        };
+        assert_eq!(args.chrome_version.as_deref(), Some("141.0.7390.54"));
+        assert!(args.force);
     }
 
     #[test]

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 
+use crate::browser;
 use crate::cli::{Cli, Command};
 use crate::clock::Timestamp;
 use crate::dev::{self, DevOptions};
@@ -58,6 +59,16 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             &app_root(cwd)?,
             &mut std::io::stdout(),
         ),
+        Command::BrowserInstall(args) => {
+            let options =
+                browser::InstallOptions::for_this_machine(args.chrome_version.as_deref(), args.force)?;
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .context("cannot start the download")?;
+            runtime.block_on(browser::install(&options, &mut std::io::stdout()))?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");
