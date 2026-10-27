@@ -19,10 +19,10 @@ fn domains(dns: StaticResolver) -> SendingDomains {
 fn ready_dns() -> StaticResolver {
     let signer = DkimSigner::from_pem("acme.test", "mail", RSA_KEY).expect("signer");
     StaticResolver::new()
-        .txt("acme.test", "google-site-verification=abc")
-        .txt("acme.test", "v=spf1 include:amazonses.com ~all")
-        .txt("mail._domainkey.acme.test", &signer.dns_record())
-        .txt(
+        .record("acme.test", "google-site-verification=abc")
+        .record("acme.test", "v=spf1 include:amazonses.com ~all")
+        .record("mail._domainkey.acme.test", &signer.dns_record())
+        .record(
             "_dmarc.acme.test",
             "v=DMARC1; p=reject; rua=mailto:dmarc@acme.test",
         )
@@ -72,7 +72,7 @@ async fn missing_records_fail() {
 #[tokio::test]
 async fn spf_problems() {
     let check = |record: &'static str| async move {
-        domains(StaticResolver::new().txt("acme.test", record))
+        domains(StaticResolver::new().record("acme.test", record))
             .check("acme.test", &DomainExpectations::new().spf_include("amazonses.com"))
             .await
             .expect("check")
@@ -106,8 +106,8 @@ async fn spf_problems() {
 
     let two = domains(
         StaticResolver::new()
-            .txt("acme.test", "v=spf1 -all")
-            .txt("acme.test", "v=spf1 include:amazonses.com -all"),
+            .record("acme.test", "v=spf1 -all")
+            .record("acme.test", "v=spf1 include:amazonses.com -all"),
     )
     .check("acme.test", &DomainExpectations::new())
     .await
@@ -120,7 +120,7 @@ async fn spf_problems() {
 #[tokio::test]
 async fn dkim_problems() {
     let check = |record: String| async move {
-        domains(StaticResolver::new().txt("s1._domainkey.acme.test", &record))
+        domains(StaticResolver::new().record("s1._domainkey.acme.test", &record))
             .check("acme.test", &DomainExpectations::new().selector("s1"))
             .await
             .expect("check")
@@ -150,7 +150,7 @@ async fn dkim_problems() {
 #[tokio::test]
 async fn dmarc_problems() {
     let check = |record: &'static str| async move {
-        domains(StaticResolver::new().txt("_dmarc.acme.test", record))
+        domains(StaticResolver::new().record("_dmarc.acme.test", record))
             .check("acme.test", &DomainExpectations::new())
             .await
             .expect("check")

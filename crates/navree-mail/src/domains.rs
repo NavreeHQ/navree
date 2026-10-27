@@ -84,7 +84,7 @@ impl DnsResolver for SystemResolver {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
-/// let dns = StaticResolver::new().txt("acme.test", "v=spf1 include:amazonses.com -all");
+/// let dns = StaticResolver::new().record("acme.test", "v=spf1 include:amazonses.com -all");
 /// assert_eq!(dns.txt("ACME.test.").await.unwrap(), ["v=spf1 include:amazonses.com -all"]);
 /// assert!(dns.txt("other.test").await.unwrap().is_empty());
 /// # }
@@ -102,7 +102,7 @@ impl StaticResolver {
 
     /// This table with a TXT record `value` at `name`.
     #[must_use]
-    pub fn txt(self, name: &str, value: &str) -> Self {
+    pub fn record(self, name: &str, value: &str) -> Self {
         self.records
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -256,8 +256,8 @@ impl DomainReport {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), navree_mail::MailError> {
 /// let dns = StaticResolver::new()
-///     .txt("acme.test", "v=spf1 include:amazonses.com -all")
-///     .txt("_dmarc.acme.test", "v=DMARC1; p=quarantine; rua=mailto:dmarc@acme.test");
+///     .record("acme.test", "v=spf1 include:amazonses.com -all")
+///     .record("_dmarc.acme.test", "v=DMARC1; p=quarantine; rua=mailto:dmarc@acme.test");
 /// let domains = SendingDomains::new(Arc::new(dns));
 ///
 /// let report = domains
