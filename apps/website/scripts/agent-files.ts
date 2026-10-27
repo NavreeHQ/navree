@@ -9,7 +9,11 @@
  * - `public/skills/<name>/...`: each skill of the repository's `skills/`
  *   directory (its `SKILL.md` and reference files), as they are at build
  *   time;
- * - `public/skills/index.json`: every skill's name, description and URL.
+ * - `public/skills/index.json`: every skill's name, description and URL;
+ * - `public/v/<version>/docs.json`: every page split at its `##` headings,
+ *   for Navigator (`navree mcp`), which downloads the docs of the Navree
+ *   version an app uses (`<version>` is the workspace's, from the
+ *   repository's `Cargo.toml`).
  *
  * Runs before every `dev` and `build` (package.json), after
  * `scripts/prebuild.ts` has checked the docs. Everything it writes is
@@ -19,7 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { agentPages, llmsFullTxt, llmsTxt, pageMarkdown } from "../src/lib/agent-markdown.ts";
+import { agentPages, docsBundle, llmsFullTxt, llmsTxt, pageMarkdown } from "../src/lib/agent-markdown.ts";
 import { listSkills } from "../src/lib/agent-skills.ts";
 import { site } from "../site.config.ts";
 
@@ -36,7 +40,7 @@ function write(file: string, contents: string): void {
 
 const started = performance.now();
 
-for (const generated of ["docs", "skills", "llms.txt", "llms-full.txt"]) {
+for (const generated of ["docs", "skills", "llms.txt", "llms-full.txt", "v"]) {
   fs.rmSync(path.join(PUBLIC, generated), { recursive: true, force: true });
 }
 
@@ -86,7 +90,16 @@ write(path.join(PUBLIC, "llms.txt"), llmsTxt(pages, skills));
 const full = llmsFullTxt(pages, markdown);
 write(path.join(PUBLIC, "llms-full.txt"), full);
 
+// Navigator's docs bundle for this version.
+const cargoToml = fs.readFileSync(path.join(WEBSITE, "..", "..", "Cargo.toml"), "utf8");
+const version = /\[workspace\.package\][^[]*?\bversion\s*=\s*"([^"]+)"/.exec(cargoToml)?.[1];
+if (!version) {
+  console.error("agent-files: no [workspace.package] version in the repository's Cargo.toml");
+  process.exit(1);
+}
+write(path.join(PUBLIC, "v", version, "docs.json"), `${JSON.stringify(docsBundle(version, pages))}\n`);
+
 console.log(
   `agent-files: ${pages.length} Markdown pages, llms.txt, llms-full.txt (${Math.round(full.length / 1024)} KB), ` +
-    `${skills.length} skills (${Math.round(performance.now() - started)} ms)`,
+    `docs.json for ${version}, ${skills.length} skills (${Math.round(performance.now() - started)} ms)`,
 );
