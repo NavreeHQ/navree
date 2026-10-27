@@ -30,6 +30,7 @@ async fn current(ws: CurrentWorkspace) -> Result<Json<Value>, AppError> {
         "role": ws.role().as_str(),
         "resolver": ws.resolver().map(|r| r.as_str()),
         "permissions": ws.permissions(),
+        "mail_scope": ws.mail_scope(),
     })))
 }
 
@@ -92,7 +93,11 @@ async fn every_resolver_finds_the_workspace() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id));
+        .assert_json_path("id", json!(acme.id))
+        .assert_json_path(
+            "mail_scope",
+            json!({ "workspace_id": acme.id, "organization_id": null }),
+        );
     client
         .get("/api/w/acme/current")
         .send()
