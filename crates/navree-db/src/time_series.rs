@@ -122,10 +122,12 @@ where
         && let Some(dimension) = time_dimension(conn, table).await?
         && dimension.column == time_column
     {
+        // Built first: it checks the cutoff against the column's type
+        // before any statement runs.
+        let drop = drop_chunks(table, &dimension, before)?;
         let older = count_before(conn, table, time_column, before).await?;
         if older > 0 {
-            conn.query_all_raw(drop_chunks(table, &dimension, before)?)
-                .await?;
+            conn.query_all_raw(drop).await?;
             conn.execute(&delete).await?;
         }
         return Ok(older);

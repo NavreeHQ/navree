@@ -227,7 +227,9 @@ async fn integer_time_columns_lose_whole_chunks_too() {
         "the chunks of the 1st to the 3rd went; the 4th's straddles the cutoff and stays"
     );
 
-    // A moment for an integer column is refused before anything runs.
+    // A moment for an integer column is refused before anything runs (the
+    // database would only say `operator does not exist: bigint < timestamp
+    // with time zone`).
     let error = prune_time_series(db.conn(), "ticks", "at_ms", TimePoint::At(day(6)))
         .await
         .unwrap_err()
