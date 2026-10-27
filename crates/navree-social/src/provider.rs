@@ -3,12 +3,21 @@
 
 use std::sync::Arc;
 
+use navree_crypto::jose::{Algorithm, SigningKey};
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
 use tokio::sync::OnceCell;
 
-use crate::jose::EcSigningKey;
 use crate::{AuthorizeUrl, ProviderConfig, ProviderToken, SocialError, SocialUser};
+
+/// Reads Sign in with Apple's `.p8` key: a P-256 private key, which signs
+/// the ES256 client secret. Literal `\n` sequences (the key in one
+/// environment variable) are accepted.
+pub(crate) fn apple_key(pem: &str) -> Option<SigningKey> {
+    SigningKey::from_pem(pem)
+        .ok()
+        .filter(|key| key.algorithm() == Algorithm::ES256)
+}
 
 /// A provider that is not built in: Navree does the state, PKCE, code
 /// exchange (at `social.providers.<key>.token_url`), linking and token
@@ -194,7 +203,8 @@ pub(crate) struct ProviderEntry {
     pub(crate) name: String,
     pub(crate) config: ProviderConfig,
     pub(crate) custom: Option<Arc<dyn SocialProvider>>,
-    pub(crate) apple_key: Option<EcSigningKey>,
+    /// Apple's key, with the configured `key_id` as its `kid`.
+    pub(crate) apple_key: Option<SigningKey>,
     pub(crate) discovery: OnceCell<Discovery>,
 }
 
@@ -217,12 +227,13 @@ impl ProviderEntry {
             .unwrap_or_else(|| config.key.clone());
         let apple_key = match (kind, &config.private_key) {
             (Kind::Apple, Some(pem)) => {
-                Some(EcSigningKey::from_pem(pem.expose()).map_err(|_| {
+                let key = apple_key(pem.expose()).ok_or_else(|| {
                     format!(
                         "social.providers.{}.private_key is not a PKCS#8 P-256 private key",
                         config.key
                     )
-                })?)
+                })?;
+                Some(key.with_kid(config.key_id.clone().unwrap_or_default()))
             }
             _ => None,
         };
@@ -447,6 +458,33 @@ impl ProviderEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const APPLE_P8: &str = include_str!("../tests/fixtures/apple-authkey.p8");
+    const RSA_PEM: &str = include_str!("../tests/fixtures/rsa-2048.pem");
+
+    #[test]
+    fn apple_keys_are_p256_pkcs8_keys() {
+        let key = apple_key(APPLE_P8).unwrap();
+        assert_eq!(key.algorithm(), Algorithm::ES256);
+        // The same key in one line with `\n` escapes (an environment variable).
+        let escaped = APPLE_P8.trim().replace('\n', "\\n");
+        assert!(apple_key(&escaped).is_some());
+        assert!(apple_key("not a key").is_none());
+        assert!(apple_key(RSA_PEM).is_none(), "an RSA key is refused");
+        let ed25519 = SigningKey::generate_ed25519().to_pkcs8_pem().unwrap();
+        assert!(apple_key(&ed25519).is_none(), "an Ed25519 key is refused");
+    }
+
+    #[test]
+    fn the_apple_key_signs_with_the_configured_key_id() {
+        let apple = entry("apple", |c| {
+            c.team_id = Some("TEAMID".to_owned());
+            c.key_id = Some("KEYID".to_owned());
+            c.private_key = Some(navree_contracts::Secret::new(APPLE_P8.to_owned()));
+        });
+        let key = apple.apple_key.as_ref().unwrap();
+        assert_eq!(key.kid(), Some("KEYID"));
+    }
 
     fn entry(kind: &str, f: impl FnOnce(&mut ProviderConfig)) -> ProviderEntry {
         let mut config = ProviderConfig {

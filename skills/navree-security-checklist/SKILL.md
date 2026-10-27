@@ -64,6 +64,10 @@ Go through it in order; each item says how to check.
 - [ ] Features that need a verified email check `user.email_verified_at`.
 - [ ] Custom strategies (API keys) store digests (`sha256_hex`), return
   `Err` for unknown credentials (never a guest) and set `token_abilities`.
+- [ ] Tokens other services sign (ID tokens, partner callbacks) are verified
+  with `navree::crypto::jose` against a configured key or the provider's
+  JWKS, never a key the token itself names, and their `exp`, `aud` and
+  `iss` are checked (skill `navree-jose`).
 
 ## 5. Rate limits and client addresses
 

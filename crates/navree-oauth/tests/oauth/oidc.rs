@@ -2,7 +2,6 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signature, VerifyingKey};
 use navree_contracts::Secret;
 use navree_oauth::testing::{AuthorizeFlow, authorize};
 use navree_oauth::{OAuthOptions, OAuthServerModule, ScopeOptions, SigningKey25519};
@@ -32,15 +31,12 @@ async fn verify(world: &World, token: &str) -> Value {
         .expect("the key is published");
     assert_eq!(key["kty"], "OKP");
     assert_eq!(key["crv"], "Ed25519");
-    let x: [u8; 32] = URL_SAFE_NO_PAD
-        .decode(key["x"].as_str().unwrap())
-        .unwrap()
-        .try_into()
-        .unwrap();
-    let signature = Signature::from_slice(&URL_SAFE_NO_PAD.decode(parts[2]).unwrap()).unwrap();
-    VerifyingKey::from_bytes(&x)
-        .unwrap()
-        .verify_strict(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature)
+    let x = URL_SAFE_NO_PAD.decode(key["x"].as_str().unwrap()).unwrap();
+    assert_eq!(x.len(), 32);
+    let signature = URL_SAFE_NO_PAD.decode(parts[2]).unwrap();
+    // Checked with `ring` directly, apart from the code under test.
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, &x)
+        .verify(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature)
         .expect("the signature verifies");
     serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap()
 }
