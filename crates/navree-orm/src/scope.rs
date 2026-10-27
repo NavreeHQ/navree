@@ -69,6 +69,40 @@ impl<M: Model> GlobalScope<M> for SoftDeletes {
 /// A builder that model `M`'s local scopes apply to: [`Builder<M>`] (and
 /// relation builders). `#[scopes]` implements its generated trait for every
 /// `Scoped<M>`.
+///
+/// ```
+/// use chrono::{DateTime, Utc};
+/// use navree_orm::prelude::*;
+///
+/// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+/// pub struct Deal {
+///     id: i64,
+///     owner_id: Option<i64>,
+///     closed_at: Option<DateTime<Utc>>,
+/// }
+///
+/// #[scopes]
+/// impl Deal {
+///     /// Deals not closed yet.
+///     #[scope]
+///     fn open(query: Builder<Self>) -> Builder<Self> {
+///         query.where_null(Deal::CLOSED_AT)
+///     }
+///
+///     /// Deals of `owner`.
+///     #[scope]
+///     fn owned_by(query: Builder<Self>, owner: i64) -> Builder<Self> {
+///         query.where_(Deal::OWNER_ID.eq(owner))
+///     }
+/// }
+///
+/// // `DealScopes`, the generated trait, is in scope here.
+/// let sql = Deal::query().open().owned_by(7).to_sql(Dialect::Postgres).unwrap();
+/// assert_eq!(
+///     sql.sql,
+///     r#"SELECT "deals"."id", "deals"."owner_id", "deals"."closed_at" FROM "deals" WHERE "deals"."closed_at" IS NULL AND "deals"."owner_id" = $1"#
+/// );
+/// ```
 pub trait Scoped<M: Model>: Sized {
     /// Applies `scope`, grouping the conditions it adds.
     fn apply_scope(self, scope: impl FnOnce(Builder<M>) -> Builder<M>) -> Self;

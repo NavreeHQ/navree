@@ -91,6 +91,7 @@ src/
   expr.rs           Expr constructors: col, val, raw, func, aggregates, arithmetic, subquery, time_bucket, first, last
   relations.rs      Relation<P>, Relations (loaded relations on a record)
   driver.rs         DocumentDriver, InsertOutcome
+  doc_models.rs     `__doc_models` (hidden): the models the doc examples use, so every example compiles
   exec.rs           Executor, Access, Target, SqlTarget, DocumentTarget, ExecContext
   ir.rs             QueryIr, Where, Expr, Order, Join, TableRef, FullText, InsertIr, UpdateIr, DeleteIr, ...
   query/
@@ -512,7 +513,10 @@ extractor (400 for a malformed cursor or limit).
   a notice when its variable is unset); each test runs in a schema or
   database of its own, dropped afterwards.
 - `tests/compile_fail.rs` with `tests/ui/`: the macros' error messages.
-- Doctests on the public items; the crate root has a runnable example.
+- Doctests on the public items: none is `ignore`d. Examples that need a
+  database are `no_run` (compiled) over the hidden `__doc_models` models
+  (`# use navree_orm::__doc_models::*;`); the crate root has a runnable
+  example on SQLite. New examples follow the same pattern.
 
 ## 11. The feature tracks
 
