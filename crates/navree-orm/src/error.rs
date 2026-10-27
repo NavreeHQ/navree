@@ -89,6 +89,25 @@ pub enum OrmError {
         /// The operation, e.g. `increment`.
         action: &'static str,
     },
+    /// A record whose key the application assigns (`key_type = "manual"`)
+    /// was saved without one.
+    #[error(
+        "cannot insert a {model} without a key: set `{column}` first (its key type is manual, so no key is generated)"
+    )]
+    MissingKey {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The key column.
+        column: &'static str,
+    },
+    /// A lifecycle hook failed (or could not be resolved from the app).
+    #[error("a {model} hook failed: {message}")]
+    Hook {
+        /// The model.
+        model: Cow<'static, str>,
+        /// What went wrong.
+        message: String,
+    },
     /// A document driver failed.
     #[error("{driver}: {message}")]
     Driver {

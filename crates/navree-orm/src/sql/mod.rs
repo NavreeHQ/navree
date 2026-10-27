@@ -9,9 +9,7 @@
 use std::fmt;
 
 use sea_orm::DbBackend;
-use sea_query::{
-    Alias, Asterisk, MysqlQueryBuilder, PostgresQueryBuilder, QueryBuilder, SqliteQueryBuilder,
-};
+use sea_query::{Alias, Asterisk, MysqlQueryBuilder, PostgresQueryBuilder, SqliteQueryBuilder};
 
 use crate::error::OrmError;
 use crate::ir::{ColumnRef, Expr, JsonSegment, Where};
@@ -41,11 +39,12 @@ pub enum Dialect {
 
 impl Dialect {
     /// The dialect of a SeaORM backend.
-    pub fn from_backend(backend: DbBackend) -> Self {
+    pub fn from_backend(backend: DbBackend) -> Result<Self, OrmError> {
         match backend {
-            DbBackend::Postgres => Dialect::Postgres,
-            DbBackend::MySql => Dialect::MySql,
-            DbBackend::Sqlite => Dialect::Sqlite,
+            DbBackend::Postgres => Ok(Dialect::Postgres),
+            DbBackend::MySql => Ok(Dialect::MySql),
+            DbBackend::Sqlite => Ok(Dialect::Sqlite),
+            other => Err(OrmError::unsupported("the ORM", format!("{other:?}"))),
         }
     }
 
@@ -64,14 +63,6 @@ impl Dialect {
             Dialect::Postgres => "PostgreSQL",
             Dialect::MySql => "MySQL",
             Dialect::Sqlite => "SQLite",
-        }
-    }
-
-    pub(crate) fn query_builder(self) -> &'static dyn QueryBuilder {
-        match self {
-            Dialect::Postgres => &PostgresQueryBuilder,
-            Dialect::MySql => &MysqlQueryBuilder,
-            Dialect::Sqlite => &SqliteQueryBuilder,
         }
     }
 
@@ -124,7 +115,11 @@ impl fmt::Display for Statement {
 
 /// Builds a sea-query statement for `dialect`.
 pub(crate) fn build<S: sea_query::QueryStatementBuilder>(statement: &S, dialect: Dialect) -> Statement {
-    let (sql, values) = statement.build_any(dialect.query_builder());
+    let (sql, values) = match dialect {
+        Dialect::Postgres => statement.build_any(&PostgresQueryBuilder),
+        Dialect::MySql => statement.build_any(&MysqlQueryBuilder),
+        Dialect::Sqlite => statement.build_any(&SqliteQueryBuilder),
+    };
     Statement {
         sql,
         values: values.0,
@@ -289,13 +284,12 @@ impl Compiler {
                     crate::ir::ArithmeticOp::Sub => "-",
                     crate::ir::ArithmeticOp::Mul => "*",
                     crate::ir::ArithmeticOp::Div => "/",
-                    _ => return Err(OrmError::invalid("unknown arithmetic operator")),
                 };
                 self.custom(&format!("({{}} {op} {{}})"), vec![left, right])
             }
             Expr::Subquery(query) => {
                 let select = self.select(query)?;
-                sea_query::Expr::SubQuery(None, Box::new(select.into_sub_query_statement()))
+                sea_query::Expr::SubQuery(None, Box::new(select.into()))
             }
             Expr::TimeBucket {
                 width,
@@ -312,7 +306,6 @@ impl Compiler {
                 Some(table) => sea_query::Expr::col((Alias::new(table.to_string()), Asterisk)),
                 None => sea_query::Expr::col(Asterisk),
             },
-            other => return Err(self.unsupported(format!("the expression {other:?}"))),
         })
     }
 }

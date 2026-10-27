@@ -124,6 +124,15 @@ impl Row {
     }
 }
 
+/// The row as a JSON object of its columns (see [`Row::to_json`]).
+impl serde::Serialize for Row {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_json()
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
+    }
+}
+
 impl fmt::Debug for Row {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {

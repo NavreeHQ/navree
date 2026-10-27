@@ -23,6 +23,7 @@ axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
+indexmap = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }

@@ -12,8 +12,9 @@ use uuid::Uuid;
 
 use crate::collection::Collection;
 use crate::column::{Assignment, Filter};
-use crate::error::{OrmError, Result};
+use crate::error::Result;
 use crate::exec::Executor;
+use crate::hooks::ModelHook;
 use crate::query::Builder;
 use crate::record::Record;
 use crate::row::Row;
@@ -538,6 +539,12 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Vec::new()
     }
 
+    /// The model's own lifecycle hooks, run before the app's (see
+    /// [`hooks`](crate::hooks)).
+    fn hooks() -> Vec<Arc<dyn ModelHook<Self>>> {
+        Vec::new()
+    }
+
     /// A query of the model.
     fn query() -> Builder<Self> {
         Builder::new()
@@ -558,15 +565,17 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         exec: &E,
         key: impl Into<Self::Key>,
     ) -> impl Future<Output = Result<Option<Record<Self>>>> + Send {
+        let key: Self::Key = key.into();
         Self::query().find(exec, key)
     }
 
-    /// The record with key `key`, or [`OrmError::ModelNotFound`] (a 404 over
+    /// The record with key `key`, or [`OrmError::ModelNotFound`](crate::OrmError::ModelNotFound) (a 404 over
     /// HTTP).
     fn find_or_fail<E: Executor + ?Sized>(
         exec: &E,
         key: impl Into<Self::Key>,
     ) -> impl Future<Output = Result<Record<Self>>> + Send {
+        let key: Self::Key = key.into();
         Self::query().find_or_fail(exec, key)
     }
 
@@ -575,6 +584,7 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         exec: &E,
         keys: impl IntoIterator<Item = impl Into<Self::Key>>,
     ) -> impl Future<Output = Result<Collection<Self>>> + Send {
+        let keys: Vec<Self::Key> = keys.into_iter().map(Into::into).collect();
         Self::query().find_many(exec, keys)
     }
 
@@ -624,6 +634,7 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     where
         Self: Default,
     {
+        let attributes: Vec<Assignment> = attributes.into_iter().collect();
         Self::query().first_or_create(exec, attributes, fill)
     }
 
@@ -637,12 +648,14 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     where
         Self: Default,
     {
+        let attributes: Vec<Assignment> = attributes.into_iter().collect();
         Self::query().first_or_new(exec, attributes, fill)
     }
 
-    /// Updates the first record matching `attributes` with `fill`, or
-    /// creates one with both.
-    fn update_or_create<E: Executor + ?Sized>(
+    /// Inserts a record with `attributes` (and whatever `fill` sets), or,
+    /// when that violates a unique constraint, returns the record matching
+    /// `attributes`.
+    fn create_or_first<E: Executor + ?Sized>(
         exec: &E,
         attributes: impl IntoIterator<Item = Assignment>,
         fill: impl FnOnce(&mut Self) + Send,
@@ -650,6 +663,21 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     where
         Self: Default,
     {
+        let attributes: Vec<Assignment> = attributes.into_iter().collect();
+        Self::query().create_or_first(exec, attributes, fill)
+    }
+
+    /// Updates the first record matching `attributes` with `fill`, or
+    /// creates one with both.
+    fn update_or_create<E: Executor + ?Sized>(
+        exec: &E,
+        attributes: impl IntoIterator<Item = Assignment>,
+        fill: impl Fn(&mut Self) + Send + Sync,
+    ) -> impl Future<Output = Result<Record<Self>>> + Send
+    where
+        Self: Default,
+    {
+        let attributes: Vec<Assignment> = attributes.into_iter().collect();
         Self::query().update_or_create(exec, attributes, fill)
     }
 }
@@ -740,6 +768,18 @@ pub mod derive_support {
             read_cast::<M, C, T>(row, column)
         } else {
             Ok(T::default())
+        }
+    }
+
+    /// Reads nullable cast column `column`, or `None` when the row lacks it.
+    pub fn read_cast_option_or_default<M: Model, C: Cast<T>, T>(
+        row: &Row,
+        column: &str,
+    ) -> Result<Option<T>, OrmError> {
+        if row.has_column(column) {
+            read_cast_option::<M, C, T>(row, column)
+        } else {
+            Ok(None)
         }
     }
 

@@ -543,6 +543,15 @@ pub enum Where {
         /// The length compared with.
         length: i64,
     },
+    /// A full-text match of `query` against `columns`.
+    FullText {
+        /// The columns searched.
+        columns: Vec<Expr>,
+        /// The search text.
+        query: String,
+        /// The mode and language.
+        options: FullText,
+    },
     /// Raw SQL with `?` placeholders (`??` is a literal `?`). SQL drivers
     /// only.
     Raw {
@@ -559,6 +568,84 @@ pub enum Where {
     Invalid(String),
 }
 
+/// How a full-text condition matches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum FullTextMode {
+    /// Words, in any order (`plainto_tsquery`; MySQL's natural language
+    /// mode).
+    #[default]
+    Natural,
+    /// The words as a phrase (`phraseto_tsquery`; natural language mode
+    /// on MySQL).
+    Phrase,
+    /// Search-engine syntax: quotes, `or`, `-word` (`websearch_to_tsquery`;
+    /// boolean mode on MySQL).
+    Websearch,
+    /// MySQL's boolean mode (`+word -word "phrase"`); websearch syntax on
+    /// PostgreSQL.
+    Boolean,
+}
+
+/// The options of a full-text condition
+/// ([`where_full_text_with`](crate::Builder::where_full_text_with)).
+///
+/// ```
+/// use navree_orm::ir::{FullText, FullTextMode};
+///
+/// let options = FullText::websearch().language("german");
+/// assert_eq!(options.mode, FullTextMode::Websearch);
+/// assert_eq!(options.language.as_deref(), Some("german"));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FullText {
+    /// How the text matches.
+    pub mode: FullTextMode,
+    /// PostgreSQL's text search configuration (`english` by default); one
+    /// of PostgreSQL's built-in languages.
+    pub language: Option<String>,
+    /// MySQL's `WITH QUERY EXPANSION` (natural language mode).
+    pub expanded: bool,
+}
+
+impl FullText {
+    /// The words as a phrase.
+    pub fn phrase() -> Self {
+        FullText {
+            mode: FullTextMode::Phrase,
+            ..FullText::default()
+        }
+    }
+
+    /// Search-engine syntax.
+    pub fn websearch() -> Self {
+        FullText {
+            mode: FullTextMode::Websearch,
+            ..FullText::default()
+        }
+    }
+
+    /// MySQL's boolean mode.
+    pub fn boolean() -> Self {
+        FullText {
+            mode: FullTextMode::Boolean,
+            ..FullText::default()
+        }
+    }
+
+    /// PostgreSQL's text search language.
+    pub fn language(mut self, language: impl Into<String>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+
+    /// MySQL's query expansion.
+    pub fn expanded(mut self) -> Self {
+        self.expanded = true;
+        self
+    }
+}
+
 /// The right side of `IN`.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -569,13 +656,16 @@ pub enum InValues {
     Subquery(Box<QueryIr>),
 }
 
-/// A table, optionally aliased.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A table, optionally aliased, or a subquery used as a table (`FROM
+/// (SELECT ...) AS alias`, `JOIN (SELECT ...) AS alias`).
+#[derive(Clone, Debug)]
 pub struct TableRef {
-    /// The table name.
+    /// The table name (for a subquery, its alias).
     pub name: Cow<'static, str>,
     /// The alias.
     pub alias: Option<Cow<'static, str>>,
+    /// The subquery the rows come from, when the table is a subquery.
+    pub subquery: Option<Box<QueryIr>>,
 }
 
 impl TableRef {
@@ -584,6 +674,26 @@ impl TableRef {
         TableRef {
             name: name.into(),
             alias: None,
+            subquery: None,
+        }
+    }
+
+    /// The table `name` as `alias`.
+    pub fn aliased(name: impl Into<Cow<'static, str>>, alias: impl Into<Cow<'static, str>>) -> Self {
+        TableRef {
+            name: name.into(),
+            alias: Some(alias.into()),
+            subquery: None,
+        }
+    }
+
+    /// The rows of `query`, named `alias`.
+    pub fn subquery(query: QueryIr, alias: impl Into<Cow<'static, str>>) -> Self {
+        let alias = alias.into();
+        TableRef {
+            name: alias.clone(),
+            alias: Some(alias),
+            subquery: Some(Box::new(query)),
         }
     }
 
@@ -684,9 +794,28 @@ pub enum Order {
     },
     /// Random order.
     Random,
+    /// Raw SQL with `?` placeholders (`??` is a literal `?`), direction
+    /// included. SQL drivers only.
+    Raw {
+        /// The SQL fragment.
+        sql: Cow<'static, str>,
+        /// Its values, in order.
+        values: Vec<Value>,
+    },
 }
 
 impl Order {
+    /// Raw SQL with `?` placeholders for `values`: `Order::raw("field(stage, ?, ?)", ["won", "lost"])`.
+    pub fn raw(
+        sql: impl Into<Cow<'static, str>>,
+        values: impl IntoIterator<Item = impl Into<Value>>,
+    ) -> Self {
+        Order::Raw {
+            sql: sql.into(),
+            values: values.into_iter().map(Into::into).collect(),
+        }
+    }
+
     /// `expr ASC`.
     pub fn asc(expr: impl Into<Expr>) -> Self {
         Order::By {
