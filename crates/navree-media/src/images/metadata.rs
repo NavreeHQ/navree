@@ -112,7 +112,8 @@ fn strip_png(bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
         if pos + 12 > bytes.len() {
             return Err(malformed("PNG"));
         }
-        let length = u32::from_be_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]]);
+        let length =
+            u32::from_be_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]]);
         let end = pos + 12 + length as usize;
         if end > bytes.len() {
             return Err(malformed("PNG"));
@@ -142,8 +143,12 @@ fn strip_webp(bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
     let mut changed = false;
     while pos + 8 <= bytes.len() {
         let kind = &bytes[pos..pos + 4];
-        let length = u32::from_le_bytes([bytes[pos + 4], bytes[pos + 5], bytes[pos + 6], bytes[pos + 7]])
-            as usize;
+        let length = u32::from_le_bytes([
+            bytes[pos + 4],
+            bytes[pos + 5],
+            bytes[pos + 6],
+            bytes[pos + 7],
+        ]) as usize;
         let end = pos + 8 + length + (length & 1);
         if end > bytes.len() {
             return Err(malformed("WebP"));

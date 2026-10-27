@@ -66,7 +66,9 @@ impl FfmpegFake {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Answers `ffprobe` with `json` (its `-print_format json` shape).
@@ -111,7 +113,10 @@ impl FfmpegFake {
     #[track_caller]
     pub fn assert_nothing_ran(&self) {
         let calls = self.calls();
-        assert!(calls.is_empty(), "expected no ffmpeg runs; runs: {calls:#?}");
+        assert!(
+            calls.is_empty(),
+            "expected no ffmpeg runs; runs: {calls:#?}"
+        );
     }
 
     fn probe_value(&self) -> Value {
@@ -172,8 +177,9 @@ impl FfmpegFake {
 
     /// A grey frame of the probed video's size.
     fn frame(&self, format: ImageFormat) -> Vec<u8> {
-        let probe = super::Probe::from_json(&serde_json::to_vec(&self.probe_value()).unwrap_or_default())
-            .unwrap_or_default();
+        let probe =
+            super::Probe::from_json(&serde_json::to_vec(&self.probe_value()).unwrap_or_default())
+                .unwrap_or_default();
         let (width, height) = probe.dimensions().unwrap_or((1280, 720));
         let img = DynamicImage::ImageRgb8(RgbImage::from_pixel(width, height, Rgb([90, 90, 90])));
         let mut out = std::io::Cursor::new(Vec::new());

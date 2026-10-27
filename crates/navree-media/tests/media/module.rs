@@ -22,8 +22,10 @@ use crate::models::Course;
 use crate::support::{image_bytes, pdf};
 
 fn storage() -> StorageOptions {
-    let mut options = StorageOptions::default();
-    options.default = "media".into();
+    let mut options = StorageOptions {
+        default: "media".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("media".into(), DiskConfig::Memory);
     options
@@ -46,17 +48,25 @@ impl Controller for UploadController {
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let upload = self.clone();
         vec![
-            RouteDef::on(Method::POST, "/{collection}", move |axum::extract::Path(collection): axum::extract::Path<String>, body: Bytes| {
-                let this = upload.clone();
-                async move {
-                    let item = this
-                        .0
-                        .add(&Course { id: 7 }, &collection, MediaSource::bytes("upload", body))
-                        .save(None)
-                        .await?;
-                    Ok::<_, AppError>(Json(this.0.resource(&item).await?))
-                }
-            })
+            RouteDef::on(
+                Method::POST,
+                "/{collection}",
+                move |axum::extract::Path(collection): axum::extract::Path<String>, body: Bytes| {
+                    let this = upload.clone();
+                    async move {
+                        let item = this
+                            .0
+                            .add(
+                                &Course { id: 7 },
+                                &collection,
+                                MediaSource::bytes("upload", body),
+                            )
+                            .save(None)
+                            .await?;
+                        Ok::<_, AppError>(Json(this.0.resource(&item).await?))
+                    }
+                },
+            )
             .public(),
         ]
     }
@@ -92,7 +102,11 @@ async fn the_module_provides_media_from_config() {
     let options = app.get::<MediaOptions>().await;
     assert_eq!(options.max_file_size, 2048);
     let item = media
-        .add(&Course { id: 1 }, "attachments", MediaSource::bytes("a.txt", "hello"))
+        .add(
+            &Course { id: 1 },
+            "attachments",
+            MediaSource::bytes("a.txt", "hello"),
+        )
         .save(None)
         .await
         .unwrap();
@@ -108,8 +122,8 @@ async fn invalid_options_and_disks_fail_the_boot() {
         .module(MediaModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("boot fails");
+        .map(|_| ())
+        .expect_err("boot fails");
     assert!(error.to_string().contains("media.prefix"), "{error}");
 
     let error = TestApp::builder()
@@ -121,18 +135,26 @@ async fn invalid_options_and_disks_fail_the_boot() {
         }))
         .try_build()
         .await
-        .err()
-        .expect("boot fails");
-    assert!(error.to_string().contains("`s3` is not a configured storage disk"), "{error}");
+        .map(|_| ())
+        .expect_err("boot fails");
+    assert!(
+        error
+            .to_string()
+            .contains("`s3` is not a configured storage disk"),
+        "{error}"
+    );
 
     let error = TestApp::builder()
         .module(StorageModule::for_root(storage()))
         .module(MediaModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("boot fails");
-    assert!(error.to_string().contains("needs DatabaseModule"), "{error}");
+        .map(|_| ())
+        .expect_err("boot fails");
+    assert!(
+        error.to_string().contains("needs DatabaseModule"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -164,7 +186,11 @@ async fn conversions_are_queued_and_the_job_generates_them() {
 
     // A text file gets no image conversion: nothing more is queued.
     media
-        .add(&Course { id: 7 }, "attachments", MediaSource::bytes("a.txt", "x"))
+        .add(
+            &Course { id: 7 },
+            "attachments",
+            MediaSource::bytes("a.txt", "x"),
+        )
         .save(None)
         .await
         .unwrap();
@@ -322,6 +348,9 @@ async fn the_apps_ffmpeg_runner_is_used() {
         .build()
         .await;
     let media = app.get::<Media>().await;
-    assert_eq!(media.ffmpeg().version().await.unwrap(), "ffmpeg version navree-fake");
+    assert_eq!(
+        media.ffmpeg().version().await.unwrap(),
+        "ffmpeg version navree-fake"
+    );
     ffmpeg.assert_ran(|call| call.args.contains(&"-version".to_owned()));
 }

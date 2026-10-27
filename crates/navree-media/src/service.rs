@@ -310,7 +310,12 @@ impl Media {
 
     /// Starts attaching a file to `model` in `collection`; finish with
     /// [`PendingMedia::save`].
-    pub fn add<M: HasMedia>(&self, model: &M, collection: &str, source: MediaSource) -> PendingMedia {
+    pub fn add<M: HasMedia>(
+        &self,
+        model: &M,
+        collection: &str,
+        source: MediaSource,
+    ) -> PendingMedia {
         PendingMedia {
             media: self.clone(),
             collections: self.register::<M>(),
@@ -598,13 +603,13 @@ impl Media {
     /// The `srcset` of a responsive conversion (`url 320w, url 640w, ...`,
     /// the conversion itself last), with public URLs.
     pub fn srcset(&self, item: &MediaItem, conversion: &str) -> Result<String, MediaError> {
-        let generated = item
-            .conversions
-            .get(conversion)
-            .ok_or_else(|| MediaError::MissingConversion {
-                id: item.id,
-                conversion: conversion.to_owned(),
-            })?;
+        let generated =
+            item.conversions
+                .get(conversion)
+                .ok_or_else(|| MediaError::MissingConversion {
+                    id: item.id,
+                    conversion: conversion.to_owned(),
+                })?;
         let mut parts = Vec::new();
         for variant in &generated.variants {
             let url = self.public_url(&item.conversions_disk, &variant.path)?;
@@ -639,7 +644,9 @@ impl Media {
         let mut conversions = BTreeMap::new();
         let mut srcsets = BTreeMap::new();
         for (name, generated) in &item.conversions {
-            let url = self.any_url(&item.conversions_disk, &generated.path).await?;
+            let url = self
+                .any_url(&item.conversions_disk, &generated.path)
+                .await?;
             if !generated.variants.is_empty() {
                 let mut parts = Vec::new();
                 for variant in &generated.variants {
@@ -710,7 +717,10 @@ impl Media {
         prefix: &str,
     ) -> Result<ExtractReport, MediaError> {
         let disk = self.disk(disk)?;
-        self.open_archive(item).await?.extract_to(&disk, prefix).await
+        self.open_archive(item)
+            .await?
+            .extract_to(&disk, prefix)
+            .await
     }
 
     /// One zip archive of the items' originals (duplicate names get ` (2)`,
@@ -736,7 +746,11 @@ impl Media {
 
     /// Generates the item's conversions now (all of them, or `only` these)
     /// and saves them; what the queued job runs.
-    pub async fn convert(&self, id: Uuid, only: Option<&[String]>) -> Result<MediaItem, MediaError> {
+    pub async fn convert(
+        &self,
+        id: Uuid,
+        only: Option<&[String]>,
+    ) -> Result<MediaItem, MediaError> {
         let item = self.find_or_fail(id).await?;
         let conversions = self.conversions_of(&item, only, false)?;
         if conversions.is_empty() {
@@ -790,7 +804,7 @@ impl Media {
         Ok(collection
             .conversions
             .iter()
-            .filter(|c| only.is_none_or(|only| only.iter().any(|name| *name == c.name)))
+            .filter(|c| only.is_none_or(|only| only.contains(&c.name)))
             .filter(|c| !missing_only || !item.conversions.contains_key(&c.name))
             .filter(|c| generate::applies(c, &item.mime_type))
             .cloned()
@@ -900,7 +914,11 @@ impl Media {
             })
     }
 
-    async fn page(&self, filter: &Regenerate, after: Option<Uuid>) -> Result<Vec<MediaItem>, MediaError> {
+    async fn page(
+        &self,
+        filter: &Regenerate,
+        after: Option<Uuid>,
+    ) -> Result<Vec<MediaItem>, MediaError> {
         self.list(&MediaQuery {
             model_type: filter.model_type.clone(),
             model_id: None,
@@ -1022,13 +1040,12 @@ impl PendingMedia {
     async fn run(self, uow: Option<&Uow>) -> Result<MediaItem, MediaError> {
         let media = self.media;
         let options = &media.inner.options;
-        let collection = self
-            .collections?
-            .resolve(&self.collection)
-            .ok_or_else(|| MediaError::UnknownCollection {
+        let collection = self.collections?.resolve(&self.collection).ok_or_else(|| {
+            MediaError::UnknownCollection {
                 model_type: self.model_type.clone(),
                 collection: self.collection.clone(),
-            })?;
+            }
+        })?;
         let max = collection
             .max_size
             .map_or(options.max_file_size, |max| max.min(options.max_file_size));
@@ -1082,11 +1099,11 @@ impl PendingMedia {
             height = Some(info.height);
         }
         #[cfg(feature = "ffmpeg")]
-        if mime_type.starts_with("video/") || mime_type.starts_with("audio/") {
-            if let Some((probed, probe_metadata)) = media.probe(&bytes, &mime_type).await {
-                (width, height) = probed.map_or((None, None), |(w, h)| (Some(w), Some(h)));
-                metadata = probe_metadata;
-            }
+        if (mime_type.starts_with("video/") || mime_type.starts_with("audio/"))
+            && let Some((probed, probe_metadata)) = media.probe(&bytes, &mime_type).await
+        {
+            (width, height) = probed.map_or((None, None), |(w, h)| (Some(w), Some(h)));
+            metadata = probe_metadata;
         }
 
         let id = Uuid::now_v7();

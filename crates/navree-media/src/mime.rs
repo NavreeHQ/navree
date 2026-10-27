@@ -96,7 +96,10 @@ mod tests {
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
         assert_eq!(sniff(png, Some("cat.jpg")), "image/png");
         assert_eq!(sniff(b"%PDF-1.7\n", Some("x.txt")), "application/pdf");
-        assert_eq!(sniff(b"<svg xmlns='http://www.w3.org/2000/svg'/>", None), "image/svg+xml");
+        assert_eq!(
+            sniff(b"<svg xmlns='http://www.w3.org/2000/svg'/>", None),
+            "image/svg+xml"
+        );
     }
 
     #[test]
@@ -106,7 +109,10 @@ mod tests {
         assert_eq!(sniff(b"<!DOCTYPE html><p>x</p>", None), "text/html");
         assert_eq!(sniff(b"hello", None), "text/plain");
         assert_eq!(sniff(b"hello", Some("evil.exe")), "text/plain");
-        assert_eq!(sniff(&[0, 1, 2, 3], Some("a.txt")), "application/octet-stream");
+        assert_eq!(
+            sniff(&[0, 1, 2, 3], Some("a.txt")),
+            "application/octet-stream"
+        );
     }
 
     #[test]

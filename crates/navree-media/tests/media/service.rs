@@ -18,7 +18,11 @@ async fn adding_a_file_stores_it_and_its_row() {
     let s = service();
     let item = s
         .media
-        .add(&course(), "attachments", MediaSource::bytes("../Hand book?.pdf", pdf(&["Rules"])))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::bytes("../Hand book?.pdf", pdf(&["Rules"])),
+        )
         .property("caption", "The handbook")
         .save(None)
         .await
@@ -36,15 +40,16 @@ async fn adding_a_file_stores_it_and_its_row() {
     assert_eq!(item.property("caption"), Some(&json!("The handbook")));
     // A PDF gets no image conversion; that is not an error.
     assert!(item.conversions.is_empty());
-    assert_eq!(
-        s.media.read(&item).await.unwrap().len() as u64,
-        item.size
-    );
+    assert_eq!(s.media.read(&item).await.unwrap().len() as u64, item.size);
     assert_eq!(s.media.find(item.id).await.unwrap(), Some(item.clone()));
 
     let second = s
         .media
-        .add(&course(), "attachments", MediaSource::bytes("b.txt", "notes"))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::bytes("b.txt", "notes"),
+        )
         .name("Notes")
         .file_name("renamed.txt")
         .save(None)
@@ -58,7 +63,15 @@ async fn adding_a_file_stores_it_and_its_row() {
         all.iter().map(|i| i.id).collect::<Vec<_>>(),
         vec![item.id, second.id]
     );
-    assert_eq!(s.media.first(&course(), "attachments").await.unwrap().unwrap().id, item.id);
+    assert_eq!(
+        s.media
+            .first(&course(), "attachments")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        item.id
+    );
 }
 
 #[tokio::test]
@@ -66,29 +79,53 @@ async fn collections_refuse_wrong_types_sizes_and_names() {
     let s = service();
     let error = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("x.pdf", pdf(&["x"])))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("x.pdf", pdf(&["x"])),
+        )
         .save(None)
         .await
         .unwrap_err();
-    assert!(matches!(error, MediaError::TypeNotAllowed { .. }), "{error}");
-    assert_eq!((error.status(), error.code()), (400, "file_type_not_allowed"));
+    assert!(
+        matches!(error, MediaError::TypeNotAllowed { .. }),
+        "{error}"
+    );
+    assert_eq!(
+        (error.status(), error.code()),
+        (400, "file_type_not_allowed")
+    );
 
     // The type is sniffed from the content, not the name.
     let error = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("cover.png", "<?php echo 1;"))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("cover.png", "<?php echo 1;"),
+        )
         .save(None)
         .await
         .unwrap_err();
-    assert!(matches!(error, MediaError::TypeNotAllowed { .. }), "{error}");
+    assert!(
+        matches!(error, MediaError::TypeNotAllowed { .. }),
+        "{error}"
+    );
 
     let error = s
         .media
-        .add(&course(), "attachments", MediaSource::bytes("big.txt", "x".repeat(70 * 1024)))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::bytes("big.txt", "x".repeat(70 * 1024)),
+        )
         .save(None)
         .await
         .unwrap_err();
-    assert!(matches!(error, MediaError::TooLarge { max: 65536 }), "{error}");
+    assert!(
+        matches!(error, MediaError::TooLarge { max: 65536 }),
+        "{error}"
+    );
     assert_eq!((error.status(), error.code()), (413, "payload_too_large"));
 
     let error = s
@@ -97,12 +134,19 @@ async fn collections_refuse_wrong_types_sizes_and_names() {
         .save(None)
         .await
         .unwrap_err();
-    assert!(matches!(error, MediaError::UnknownCollection { .. }), "{error}");
+    assert!(
+        matches!(error, MediaError::UnknownCollection { .. }),
+        "{error}"
+    );
     assert_eq!(error.code(), "unknown_media_collection");
 
     let error = s
         .media
-        .add(&course(), "attachments", MediaSource::bytes("empty.txt", ""))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::bytes("empty.txt", ""),
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -122,12 +166,23 @@ async fn collections_refuse_wrong_types_sizes_and_names() {
         .unwrap();
     let error = small
         .media
-        .add(&note, "anything", MediaSource::bytes("a.txt", "far too long"))
+        .add(
+            &note,
+            "anything",
+            MediaSource::bytes("a.txt", "far too long"),
+        )
         .save(None)
         .await
         .unwrap_err();
     assert!(matches!(error, MediaError::TooLarge { max: 10 }), "{error}");
-    assert!(s.storage.default_disk().list("media").await.unwrap().is_empty());
+    assert!(
+        s.storage
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -135,7 +190,11 @@ async fn image_conversions_are_generated_without_a_queue() {
     let s = service();
     let item = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("cover.png", image_bytes(320, 240, ImageFormat::Png)))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("cover.png", image_bytes(320, 240, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -143,14 +202,23 @@ async fn image_conversions_are_generated_without_a_queue() {
     let card = &item.conversions["card"];
     assert_eq!((card.width, card.height), (Some(64), Some(36)));
     assert_eq!(card.mime_type, "image/webp");
-    assert_eq!(card.path, format!("media/{}/conversions/cover-card.webp", item.id));
+    assert_eq!(
+        card.path,
+        format!("media/{}/conversions/cover-card.webp", item.id)
+    );
     let bytes = s.media.read_conversion(&item, "card").await.unwrap();
     assert_eq!(bytes.len() as u64, card.size);
     assert_eq!(image::guess_format(&bytes).unwrap(), ImageFormat::WebP);
     // The stored row has them too.
-    assert_eq!(s.media.find_or_fail(item.id).await.unwrap().conversions, item.conversions);
+    assert_eq!(
+        s.media.find_or_fail(item.id).await.unwrap().conversions,
+        item.conversions
+    );
     let error = s.media.read_conversion(&item, "poster").await.unwrap_err();
-    assert_eq!((error.status(), error.code()), (404, "conversion_not_found"));
+    assert_eq!(
+        (error.status(), error.code()),
+        (404, "conversion_not_found")
+    );
 }
 
 #[tokio::test]
@@ -158,7 +226,11 @@ async fn responsive_conversions_have_variants_and_srcsets() {
     let s = service();
     let item = s
         .media
-        .add(&course(), "gallery", MediaSource::bytes("view.jpg", image_bytes(1200, 600, ImageFormat::Jpeg)))
+        .add(
+            &course(),
+            "gallery",
+            MediaSource::bytes("view.jpg", image_bytes(1200, 600, ImageFormat::Jpeg)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -180,7 +252,10 @@ async fn responsive_conversions_have_variants_and_srcsets() {
     assert!(matches!(error, MediaError::NoPublicUrl { .. }), "{error}");
     let resource = s.media.resource(&item).await.unwrap();
     assert_eq!(resource.kind, "Media");
-    assert!(resource.url.starts_with(&format!("/storage/media/media/{}/view.jpg?expires=", item.id)));
+    assert!(resource.url.starts_with(&format!(
+        "/storage/media/media/{}/view.jpg?expires=",
+        item.id
+    )));
     let srcset = &resource.srcsets["hero"];
     assert_eq!(srcset.matches(", ").count(), 2, "{srcset}");
     assert!(srcset.contains(" 320w, "), "{srcset}");
@@ -196,7 +271,11 @@ async fn public_disks_give_public_urls() {
     });
     let item = s
         .media
-        .add(&course(), "gallery", MediaSource::bytes("wide.png", image_bytes(900, 300, ImageFormat::Png)))
+        .add(
+            &course(),
+            "gallery",
+            MediaSource::bytes("wide.png", image_bytes(900, 300, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -241,17 +320,42 @@ async fn collections_can_name_their_own_disks() {
     });
     let item = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("c.png", image_bytes(100, 100, ImageFormat::Png)))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("c.png", image_bytes(100, 100, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
-    assert_eq!((item.disk.as_str(), item.conversions_disk.as_str()), ("media", "archive"));
+    assert_eq!(
+        (item.disk.as_str(), item.conversions_disk.as_str()),
+        ("media", "archive")
+    );
     let archive = s.storage.disk("archive").unwrap();
-    assert!(archive.exists(&item.conversions["card"].path).await.unwrap());
-    assert!(!s.storage.default_disk().exists(&item.conversions["card"].path).await.unwrap());
+    assert!(
+        archive
+            .exists(&item.conversions["card"].path)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !s.storage
+            .default_disk()
+            .exists(&item.conversions["card"].path)
+            .await
+            .unwrap()
+    );
     s.media.delete(None, item.id).await.unwrap();
     assert!(archive.list("media").await.unwrap().is_empty());
-    assert!(s.storage.default_disk().list("media").await.unwrap().is_empty());
+    assert!(
+        s.storage
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -260,7 +364,11 @@ async fn originals_lose_their_metadata_and_stand_upright() {
     // Orientation 6: stored 120 x 80, displayed 80 x 120.
     let item = s
         .media
-        .add(&course(), "gallery", MediaSource::bytes("phone.jpg", jpeg_with_exif(120, 80, 6)))
+        .add(
+            &course(),
+            "gallery",
+            MediaSource::bytes("phone.jpg", jpeg_with_exif(120, 80, 6)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -280,7 +388,11 @@ async fn originals_lose_their_metadata_and_stand_upright() {
     });
     let item = keep
         .media
-        .add(&course(), "gallery", MediaSource::bytes("phone.jpg", jpeg_with_exif(120, 80, 1)))
+        .add(
+            &course(),
+            "gallery",
+            MediaSource::bytes("phone.jpg", jpeg_with_exif(120, 80, 1)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -293,14 +405,21 @@ async fn svg_logos_are_measured_and_rasterized() {
     let s = service();
     let item = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("logo.svg", svg_logo(200, 100)))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("logo.svg", svg_logo(200, 100)),
+        )
         .save(None)
         .await
         .unwrap();
     assert_eq!(item.mime_type, "image/svg+xml");
     assert_eq!((item.width, item.height), (Some(200), Some(100)));
     let card = &item.conversions["card"];
-    assert_eq!((card.width, card.height, card.mime_type.as_str()), (Some(64), Some(36), "image/webp"));
+    assert_eq!(
+        (card.width, card.height, card.mime_type.as_str()),
+        (Some(64), Some(36), "image/webp")
+    );
 }
 
 #[tokio::test]
@@ -310,12 +429,27 @@ async fn broken_images_are_refused() {
     png.truncate(40);
     let error = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("broken.png", png))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("broken.png", png),
+        )
         .save(None)
         .await
         .unwrap_err();
-    assert_eq!((error.status(), error.code()), (400, "invalid_image"), "{error}");
-    assert!(s.storage.default_disk().list("media").await.unwrap().is_empty());
+    assert_eq!(
+        (error.status(), error.code()),
+        (400, "invalid_image"),
+        "{error}"
+    );
+    assert!(
+        s.storage
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -323,18 +457,29 @@ async fn single_file_collections_replace_the_previous_file() {
     let s = service();
     let first = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("a.png", image_bytes(80, 80, ImageFormat::Png)))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("a.png", image_bytes(80, 80, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
     let second = s
         .media
-        .add(&course(), "thumbnail", MediaSource::bytes("b.png", image_bytes(90, 90, ImageFormat::Png)))
+        .add(
+            &course(),
+            "thumbnail",
+            MediaSource::bytes("b.png", image_bytes(90, 90, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
     let items = s.media.get(&course(), "thumbnail").await.unwrap();
-    assert_eq!(items.iter().map(|i| i.id).collect::<Vec<_>>(), vec![second.id]);
+    assert_eq!(
+        items.iter().map(|i| i.id).collect::<Vec<_>>(),
+        vec![second.id]
+    );
     let disk = s.storage.default_disk();
     assert!(!disk.exists(&first.path).await.unwrap());
     assert!(!disk.exists(&first.conversions["card"].path).await.unwrap());
@@ -349,7 +494,10 @@ async fn single_file_collections_replace_the_previous_file() {
     }
     let handouts = s.media.get(&course(), "handouts").await.unwrap();
     assert_eq!(
-        handouts.iter().map(|i| i.file_name.as_str()).collect::<Vec<_>>(),
+        handouts
+            .iter()
+            .map(|i| i.file_name.as_str())
+            .collect::<Vec<_>>(),
         vec!["2.txt", "3.txt"]
     );
 }
@@ -369,7 +517,10 @@ async fn items_are_saved_reordered_and_deleted() {
                 .id,
         );
     }
-    s.media.reorder(None, &[ids[2], ids[0], ids[1]]).await.unwrap();
+    s.media
+        .reorder(None, &[ids[2], ids[0], ids[1]])
+        .await
+        .unwrap();
     let order: Vec<_> = s
         .media
         .get(&c, "attachments")
@@ -382,7 +533,8 @@ async fn items_are_saved_reordered_and_deleted() {
 
     let mut item = s.media.find_or_fail(ids[0]).await.unwrap();
     item.name = "Renamed".into();
-    item.custom_properties.insert("alt".into(), json!("Alt text"));
+    item.custom_properties
+        .insert("alt".into(), json!("Alt text"));
     item.path = "elsewhere/evil.txt".into(); // the module's, not saved
     let saved = s.media.save(None, &item).await.unwrap();
     assert_eq!(saved.name, "Renamed");
@@ -404,17 +556,31 @@ async fn items_are_saved_reordered_and_deleted() {
     assert_eq!(s.media.all(&c).await.unwrap().len(), 1);
     assert_eq!(s.media.delete_all(None, &c).await.unwrap(), 1);
     assert!(s.media.all(&c).await.unwrap().is_empty());
-    assert!(s.storage.default_disk().list("media").await.unwrap().is_empty());
+    assert!(
+        s.storage
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
 async fn files_are_added_from_disks_and_local_files() {
     let s = service();
     let uploads = s.storage.disk("archive").unwrap();
-    uploads.put("tmp/abc/report.pdf", pdf(&["Q1"])).await.unwrap();
+    uploads
+        .put("tmp/abc/report.pdf", pdf(&["Q1"]))
+        .await
+        .unwrap();
     let item = s
         .media
-        .add(&course(), "attachments", MediaSource::disk("archive", "tmp/abc/report.pdf"))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::disk("archive", "tmp/abc/report.pdf"),
+        )
         .save(None)
         .await
         .unwrap();
@@ -431,18 +597,29 @@ async fn files_are_added_from_disks_and_local_files() {
         .save(None)
         .await
         .unwrap();
-    assert_eq!((item.file_name.as_str(), item.mime_type.as_str()), ("syllabus.txt", "text/plain"));
+    assert_eq!(
+        (item.file_name.as_str(), item.mime_type.as_str()),
+        ("syllabus.txt", "text/plain")
+    );
 
     let error = s
         .media
-        .add(&course(), "attachments", MediaSource::file(dir.path().join("missing.txt")))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::file(dir.path().join("missing.txt")),
+        )
         .save(None)
         .await
         .unwrap_err();
     assert!(matches!(error, MediaError::File { .. }), "{error}");
     let error = s
         .media
-        .add(&course(), "attachments", MediaSource::disk("nowhere", "x.txt"))
+        .add(
+            &course(),
+            "attachments",
+            MediaSource::disk("nowhere", "x.txt"),
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -455,7 +632,11 @@ async fn text_archives_and_zips_come_from_items() {
     let note = Note { id: "n".into() };
     let document = s
         .media
-        .add(&note, "docs", MediaSource::bytes("rules.pdf", pdf(&["First page", "Second page"])))
+        .add(
+            &note,
+            "docs",
+            MediaSource::bytes("rules.pdf", pdf(&["First page", "Second page"])),
+        )
         .save(None)
         .await
         .unwrap();
@@ -469,7 +650,10 @@ async fn text_archives_and_zips_come_from_items() {
             "packages",
             MediaSource::bytes(
                 "course.zip",
-                zip_of(&[("imsmanifest.xml", b"<manifest/>"), ("sco/index.html", b"<p>Hi</p>")]),
+                zip_of(&[
+                    ("imsmanifest.xml", b"<manifest/>"),
+                    ("sco/index.html", b"<p>Hi</p>"),
+                ]),
             ),
         )
         .save(None)
@@ -478,10 +662,17 @@ async fn text_archives_and_zips_come_from_items() {
     assert_eq!(package.mime_type, "application/zip");
     let archive = s.media.open_archive(&package).await.unwrap();
     assert!(archive.contains("imsmanifest.xml"));
-    let report = s.media.unpack(&package, "public", "scorm/course-1").await.unwrap();
+    let report = s
+        .media
+        .unpack(&package, "public", "scorm/course-1")
+        .await
+        .unwrap();
     assert_eq!(
         report.files,
-        vec!["scorm/course-1/imsmanifest.xml", "scorm/course-1/sco/index.html"]
+        vec![
+            "scorm/course-1/imsmanifest.xml",
+            "scorm/course-1/sco/index.html"
+        ]
     );
 
     let error = s.media.open_archive(&document).await.unwrap_err();
@@ -489,7 +680,11 @@ async fn text_archives_and_zips_come_from_items() {
 
     let again = s
         .media
-        .add(&note, "docs", MediaSource::bytes("rules.pdf", pdf(&["Copy"])))
+        .add(
+            &note,
+            "docs",
+            MediaSource::bytes("rules.pdf", pdf(&["Copy"])),
+        )
         .save(None)
         .await
         .unwrap();
@@ -505,7 +700,11 @@ async fn regenerate_converts_again_and_reports() {
     let c = course();
     let png = s
         .media
-        .add(&c, "gallery", MediaSource::bytes("a.png", image_bytes(400, 200, ImageFormat::Png)))
+        .add(
+            &c,
+            "gallery",
+            MediaSource::bytes("a.png", image_bytes(400, 200, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
@@ -561,7 +760,11 @@ async fn regenerate_converts_again_and_reports() {
     assert_eq!(report.media, 0);
 
     // Without a queue there is nothing to batch on.
-    let error = s.media.queue_regenerate(&Regenerate::default()).await.unwrap_err();
+    let error = s
+        .media
+        .queue_regenerate(&Regenerate::default())
+        .await
+        .unwrap_err();
     assert!(matches!(error, MediaError::Queue { .. }), "{error}");
 }
 
@@ -570,17 +773,29 @@ async fn convert_keeps_changes_made_meanwhile() {
     let s = service();
     let item = s
         .media
-        .add(&course(), "gallery", MediaSource::bytes("a.png", image_bytes(300, 300, ImageFormat::Png)))
+        .add(
+            &course(),
+            "gallery",
+            MediaSource::bytes("a.png", image_bytes(300, 300, ImageFormat::Png)),
+        )
         .save(None)
         .await
         .unwrap();
     let mut renamed = item.clone();
     renamed.name = "Renamed".into();
     s.media.save(None, &renamed).await.unwrap();
-    let converted = s.media.convert(item.id, Some(&["thumb".to_owned()])).await.unwrap();
+    let converted = s
+        .media
+        .convert(item.id, Some(&["thumb".to_owned()]))
+        .await
+        .unwrap();
     assert_eq!(converted.name, "Renamed");
     assert!(converted.conversions["thumb"].generated_at > item.conversions["thumb"].generated_at);
-    let error = s.media.convert(uuid::Uuid::now_v7(), None).await.unwrap_err();
+    let error = s
+        .media
+        .convert(uuid::Uuid::now_v7(), None)
+        .await
+        .unwrap_err();
     assert!(matches!(error, MediaError::NotFound { .. }));
 }
 
@@ -596,7 +811,11 @@ async fn queries_select_rows() {
             .unwrap();
     }
     s.media
-        .add(&Note { id: "n".into() }, "docs", MediaSource::bytes("c.txt", "x"))
+        .add(
+            &Note { id: "n".into() },
+            "docs",
+            MediaSource::bytes("c.txt", "x"),
+        )
         .save(None)
         .await
         .unwrap();
@@ -648,9 +867,10 @@ fn options_are_checked() {
     let mut options = navree_media::MediaOptions::default();
     options.images.responsive_widths = vec![0];
     assert!(options.check().unwrap_err().contains("responsive_widths"));
-    let options: navree_media::MediaOptions =
-        serde_json::from_value(json!({"store": "memory", "images": {"responsive_widths": "480, 960"}}))
-            .unwrap();
+    let options: navree_media::MediaOptions = serde_json::from_value(
+        json!({"store": "memory", "images": {"responsive_widths": "480, 960"}}),
+    )
+    .unwrap();
     assert_eq!(options.store, StoreKind::Memory);
     assert_eq!(options.images.responsive_widths, vec![480, 960]);
 }

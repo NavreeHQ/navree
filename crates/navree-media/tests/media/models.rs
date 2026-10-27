@@ -62,8 +62,10 @@ impl HasMedia for Note {
 /// A storage with two memory disks, `media` (the default) and `archive`,
 /// and a local disk `public` served from `https://cdn.example.com/files`.
 pub fn storage(public_root: &std::path::Path) -> Arc<Storage> {
-    let mut options = StorageOptions::default();
-    options.default = "media".into();
+    let mut options = StorageOptions {
+        default: "media".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("media".into(), DiskConfig::Memory);
     options.disks.insert("archive".into(), DiskConfig::Memory);

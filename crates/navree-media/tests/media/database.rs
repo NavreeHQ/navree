@@ -108,17 +108,17 @@ struct LecturesModule;
 
 impl Module for LecturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(
-            MigrationSet::new("lectures")
-                .after(["media"])
-                .migration(SchemaMigration::new("m20261027_000001_create_lectures", CreateLectures)),
-        );
+        m.migrations(MigrationSet::new("lectures").after(["media"]).migration(
+            SchemaMigration::new("m20261027_000001_create_lectures", CreateLectures),
+        ));
     }
 }
 
 fn storage() -> StorageOptions {
-    let mut options = StorageOptions::default();
-    options.default = "media".into();
+    let mut options = StorageOptions {
+        default: "media".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("media".into(), DiskConfig::Memory);
     options
@@ -158,22 +158,30 @@ async fn store_flow(app: &TestApp) {
     .unwrap()
     .into_inner();
     let slide = media
-        .add(&lecture, "slides", MediaSource::bytes("one.png", image_bytes(200, 100, ImageFormat::Png)))
+        .add(
+            &lecture,
+            "slides",
+            MediaSource::bytes("one.png", image_bytes(200, 100, ImageFormat::Png)),
+        )
         .property("alt", "Slide one")
         .save(&uow)
         .await
         .unwrap();
     let notes = media
-        .add(&lecture, "slides", MediaSource::bytes("notes.txt", "Speaker notes"))
+        .add(
+            &lecture,
+            "slides",
+            MediaSource::bytes("notes.txt", "Speaker notes"),
+        )
         .save(&uow)
         .await
         .unwrap();
     assert_eq!(notes.order, 2, "the uncommitted first slide counts");
     let changes = uow.changes();
     assert!(
-        changes
-            .iter()
-            .any(|c| c.entity == "media" && c.op == ChangeOp::Created && c.id == slide.id.to_string()),
+        changes.iter().any(|c| c.entity == "media"
+            && c.op == ChangeOp::Created
+            && c.id == slide.id.to_string()),
         "{changes:?}"
     );
     uow.commit().await.unwrap();
@@ -183,7 +191,10 @@ async fn store_flow(app: &TestApp) {
     assert_eq!(stored.model_id, lecture.id.to_string());
     assert_eq!((stored.width, stored.height), (Some(200), Some(100)));
     assert_eq!(stored.conversions["thumb"].width, Some(50));
-    assert_eq!(stored.conversions["thumb"].path, slide.conversions["thumb"].path);
+    assert_eq!(
+        stored.conversions["thumb"].path,
+        slide.conversions["thumb"].path
+    );
     assert_eq!(stored.property("alt"), slide.property("alt"));
     assert_eq!(stored.size, slide.size);
     assert_eq!(micros(stored.created_at), micros(slide.created_at));
@@ -241,7 +252,10 @@ async fn store_flow(app: &TestApp) {
     uow.commit().await.unwrap();
     assert!(!disk.exists(&first.path).await.unwrap());
     let cover = media.get(&lecture, "cover").await.unwrap();
-    assert_eq!(cover.iter().map(|i| i.id).collect::<Vec<_>>(), vec![second.id]);
+    assert_eq!(
+        cover.iter().map(|i| i.id).collect::<Vec<_>>(),
+        vec![second.id]
+    );
 
     // Paging in id order.
     let page = media
@@ -308,7 +322,11 @@ async fn store_flow(app: &TestApp) {
     .unwrap()
     .into_inner();
     let sheet = media
-        .add(&handout, "sheets", MediaSource::bytes("list.txt", "1. Lock"))
+        .add(
+            &handout,
+            "sheets",
+            MediaSource::bytes("list.txt", "1. Lock"),
+        )
         .save(None)
         .await
         .unwrap();
@@ -408,11 +426,9 @@ impl Scratch {
     }
 
     async fn run(self) {
-        let app = app(
-            TestApp::builder()
-                .config("database.url", self.url.as_str())
-                .config("database.migrate_on_boot", true),
-        )
+        let app = app(TestApp::builder()
+            .config("database.url", self.url.as_str())
+            .config("database.migrate_on_boot", true))
         .build()
         .await;
         store_flow(&app).await;
@@ -424,8 +440,12 @@ impl Scratch {
 #[cfg(feature = "postgres")]
 #[tokio::test]
 async fn the_store_works_on_postgres() {
-    if let Some(scratch) =
-        Scratch::new("NAVREE_TEST_POSTGRES_URL", "the_store_works_on_postgres", false).await
+    if let Some(scratch) = Scratch::new(
+        "NAVREE_TEST_POSTGRES_URL",
+        "the_store_works_on_postgres",
+        false,
+    )
+    .await
     {
         scratch.run().await;
     }

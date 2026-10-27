@@ -5,9 +5,7 @@ use image::ImageFormat;
 use navree_media::images::{self, ImageOptions};
 use navree_media::{Conversion, Fit, MediaError, OutputFormat};
 
-use crate::support::{
-    image_bytes, jpeg_with_exif, png_with_text, svg_logo, transparent_png,
-};
+use crate::support::{image_bytes, jpeg_with_exif, png_with_text, svg_logo, transparent_png};
 
 fn options() -> ImageOptions {
     ImageOptions::default()
@@ -39,9 +37,15 @@ fn contain_fits_the_box_keeps_the_ratio_and_never_upscales() {
 
     let big = Conversion::new("big").fit(Fit::Contain, 2000, 2000);
     let out = images::convert(&source, "image/png", &big, &options()).unwrap();
-    assert_eq!((out.width, out.height), (800, 400), "no upscaling by default");
+    assert_eq!(
+        (out.width, out.height),
+        (800, 400),
+        "no upscaling by default"
+    );
 
-    let upscaled = Conversion::new("big").fit(Fit::Contain, 1600, 1600).upscale();
+    let upscaled = Conversion::new("big")
+        .fit(Fit::Contain, 1600, 1600)
+        .upscale();
     let out = images::convert(&source, "image/png", &upscaled, &options()).unwrap();
     assert_eq!((out.width, out.height), (1600, 800));
 }
@@ -49,11 +53,21 @@ fn contain_fits_the_box_keeps_the_ratio_and_never_upscales() {
 #[test]
 fn width_or_height_alone_keeps_the_ratio() {
     let source = image_bytes(800, 400, ImageFormat::Jpeg);
-    let out = images::convert(&source, "image/jpeg", &Conversion::new("w").width(400), &options())
-        .unwrap();
+    let out = images::convert(
+        &source,
+        "image/jpeg",
+        &Conversion::new("w").width(400),
+        &options(),
+    )
+    .unwrap();
     assert_eq!((out.width, out.height), (400, 200));
-    let out = images::convert(&source, "image/jpeg", &Conversion::new("h").height(100), &options())
-        .unwrap();
+    let out = images::convert(
+        &source,
+        "image/jpeg",
+        &Conversion::new("h").height(100),
+        &options(),
+    )
+    .unwrap();
     assert_eq!((out.width, out.height), (200, 100));
 }
 
@@ -89,11 +103,16 @@ fn formats_are_kept_or_converted() {
 #[test]
 fn jpeg_output_flattens_transparency_onto_white() {
     let png = transparent_png(20, 10);
-    let jpeg = Conversion::new("jpeg").format(OutputFormat::Jpeg).quality(95);
+    let jpeg = Conversion::new("jpeg")
+        .format(OutputFormat::Jpeg)
+        .quality(95);
     let out = images::convert(&png, "image/png", &jpeg, &options()).unwrap();
     let img = image::load_from_memory(&out.bytes).unwrap().to_rgb8();
     let left = img.get_pixel(2, 5);
-    assert!(left.0.iter().all(|&c| c > 240), "transparent pixels became white: {left:?}");
+    assert!(
+        left.0.iter().all(|&c| c > 240),
+        "transparent pixels became white: {left:?}"
+    );
 }
 
 #[test]
@@ -111,8 +130,13 @@ fn greyscale_and_blur_are_applied() {
 fn exif_orientation_is_applied_and_metadata_is_not_copied() {
     // Orientation 6: the camera was turned; the stored pixels are 80x40.
     let source = jpeg_with_exif(80, 40, 6);
-    let out = images::convert(&source, "image/jpeg", &Conversion::new("upright"), &options())
-        .unwrap();
+    let out = images::convert(
+        &source,
+        "image/jpeg",
+        &Conversion::new("upright"),
+        &options(),
+    )
+    .unwrap();
     assert_eq!((out.width, out.height), (40, 80));
     assert!(!contains(&out.bytes, b"Exif"));
     assert!(!contains(&out.bytes, b"SERIAL-12345"));
@@ -130,7 +154,10 @@ fn strip_metadata_removes_exif_from_a_jpeg_without_re_encoding() {
     assert_eq!(dims(&stripped), (80, 40));
     // Same compressed image data: only the segment was removed.
     assert!(stripped.len() < source.len());
-    assert_eq!(&stripped[stripped.len() - 200..], &source[source.len() - 200..]);
+    assert_eq!(
+        &stripped[stripped.len() - 200..],
+        &source[source.len() - 200..]
+    );
 }
 
 #[test]
@@ -154,10 +181,18 @@ fn strip_metadata_removes_png_text_chunks_and_leaves_clean_files_alone() {
     assert_eq!(dims(&stripped), (30, 20));
 
     let clean = image_bytes(30, 20, ImageFormat::Png);
-    assert!(images::strip_metadata(&clean, "image/png", &options()).unwrap().is_none());
+    assert!(
+        images::strip_metadata(&clean, "image/png", &options())
+            .unwrap()
+            .is_none()
+    );
     // Formats without metadata support are returned unchanged.
     let gif = image_bytes(8, 8, ImageFormat::Gif);
-    assert!(images::strip_metadata(&gif, "image/gif", &options()).unwrap().is_none());
+    assert!(
+        images::strip_metadata(&gif, "image/gif", &options())
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -211,12 +246,22 @@ fn oversized_and_broken_images_are_refused() {
     assert!(err.to_string().contains("20000 pixels"), "{err}");
 
     let svg = svg_logo(100, 50);
-    let err = images::convert(&svg, "image/svg+xml", &Conversion::new("x").width(1000), &opts)
-        .unwrap_err();
+    let err = images::convert(
+        &svg,
+        "image/svg+xml",
+        &Conversion::new("x").width(1000),
+        &opts,
+    )
+    .unwrap_err();
     assert!(matches!(err, MediaError::Image { .. }), "{err:?}");
 
-    let err = images::convert(b"not an image", "image/png", &Conversion::new("x"), &options())
-        .unwrap_err();
+    let err = images::convert(
+        b"not an image",
+        "image/png",
+        &Conversion::new("x"),
+        &options(),
+    )
+    .unwrap_err();
     assert!(matches!(err, MediaError::Image { .. }), "{err:?}");
 }
 

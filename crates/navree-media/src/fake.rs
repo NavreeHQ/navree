@@ -107,10 +107,11 @@ impl MediaFake {
     pub fn with_options(mut options: MediaOptions) -> Self {
         options.disk = None;
         options.conversions_disk = None;
-        let mut storage_options = StorageOptions::default();
-        storage_options.default = "media".into();
-        storage_options.disks.clear();
-        storage_options.disks.insert("media".into(), DiskConfig::Memory);
+        let storage_options = StorageOptions {
+            default: "media".into(),
+            disks: [("media".into(), DiskConfig::Memory)].into_iter().collect(),
+            ..StorageOptions::default()
+        };
         let storage = Arc::new(
             Storage::new(&storage_options, b"navree media fake signing key")
                 .expect("a memory disk"),
@@ -143,9 +144,7 @@ impl MediaFake {
     ///
     /// When a collection or conversion name is invalid.
     pub fn register<M: HasMedia>(self) -> Self {
-        self.media
-            .register::<M>()
-            .expect("valid media collections");
+        self.media.register::<M>().expect("valid media collections");
         self
     }
 
@@ -207,7 +206,10 @@ impl MediaFake {
             "no added media matched; added: {:?}",
             added
                 .iter()
-                .map(|item| format!("{}/{}: {}", item.model_type, item.collection, item.file_name))
+                .map(|item| format!(
+                    "{}/{}: {}",
+                    item.model_type, item.collection, item.file_name
+                ))
                 .collect::<Vec<_>>()
         );
     }

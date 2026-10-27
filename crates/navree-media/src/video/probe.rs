@@ -64,12 +64,16 @@ impl Probe {
 
     /// The first video stream.
     pub fn video(&self) -> Option<&ProbeStream> {
-        self.streams.iter().find(|stream| stream.codec_type == "video")
+        self.streams
+            .iter()
+            .find(|stream| stream.codec_type == "video")
     }
 
     /// The first audio stream.
     pub fn audio(&self) -> Option<&ProbeStream> {
-        self.streams.iter().find(|stream| stream.codec_type == "audio")
+        self.streams
+            .iter()
+            .find(|stream| stream.codec_type == "audio")
     }
 
     /// The displayed width and height of the first video stream (swapped

@@ -54,7 +54,6 @@ impl DatabaseStore {
             }
         }
     }
-
 }
 
 impl MediaStore for DatabaseStore {
@@ -109,9 +108,10 @@ impl MediaStore for DatabaseStore {
                 return Ok(0);
             }
             let ids = ids.to_vec();
-            self.write(uow, |uow| async move {
-                MediaRecord::destroy(&uow, ids).await
-            })
+            self.write(
+                uow,
+                |uow| async move { MediaRecord::destroy(&uow, ids).await },
+            )
             .await
         })
     }

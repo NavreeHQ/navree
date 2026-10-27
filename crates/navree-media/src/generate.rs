@@ -130,10 +130,11 @@ impl Media {
     ) -> Result<GeneratedConversion, MediaError> {
         let ffmpeg = self.ffmpeg();
         if let Some(transcode) = &conversion.transcode {
-            let output = scratch
-                .dir
-                .path()
-                .join(format!("{}.{}", conversion.name, transcode.extension()));
+            let output =
+                scratch
+                    .dir
+                    .path()
+                    .join(format!("{}.{}", conversion.name, transcode.extension()));
             ffmpeg.transcode(&scratch.input, &output, transcode).await?;
             let bytes = read_file(&output).await?;
             let dimensions = if transcode.has_video() {
@@ -173,8 +174,9 @@ impl Media {
         let png = read_file(&frame).await?;
         let options = self.options().images.clone();
         let conversion_owned = conversion.clone();
-        let image = blocking(move || images::convert(&png, "image/png", &conversion_owned, &options))
-            .await?;
+        let image =
+            blocking(move || images::convert(&png, "image/png", &conversion_owned, &options))
+                .await?;
         store_image(disk, item, &conversion.name, image).await
     }
 

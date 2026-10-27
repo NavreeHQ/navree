@@ -128,7 +128,9 @@ impl MediaCollections {
             }
             let mut seen = Vec::new();
             for conversion in &collection.conversions {
-                conversion.check().map_err(|e| format!("{model_type}: {e}"))?;
+                conversion
+                    .check()
+                    .map_err(|e| format!("{model_type}: {e}"))?;
                 if seen.contains(&conversion.name) {
                     return Err(format!(
                         "{model_type}: collection `{}` declares the conversion `{}` twice",
