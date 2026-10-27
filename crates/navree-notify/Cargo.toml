@@ -57,4 +57,6 @@ navree-view = { workspace = true }
 # A browser's side of web push in the tests (decrypting what was pushed).
 ring = { workspace = true }
 tokio = { workspace = true }
+# The documented configuration block, parsed in `tests/docs_surface.rs`.
+toml = { workspace = true }
 wiremock = { workspace = true }
