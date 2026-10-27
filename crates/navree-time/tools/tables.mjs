@@ -150,4 +150,15 @@ for (const [code, list] of countries) {
   out.push(`    ("${code}", &[${list.map((z) => `"${z}"`).join(", ")}]),`);
 }
 out.push("];");
+out.push("");
+out.push("/// Countries whose weekend is not Saturday and Sunday, with their weekend");
+out.push("/// days (ISO numbers: 1 is Monday, 7 is Sunday), sorted by code.");
+out.push("#[rustfmt::skip]");
+out.push("pub(crate) const WEEKENDS: &[(&str, &[u8])] = &[");
+for (const [code] of countries) {
+  const info = new Intl.Locale(`und-${code}`);
+  const weekend = (info.getWeekInfo ? info.getWeekInfo() : info.weekInfo).weekend;
+  if (weekend.join(",") !== "6,7") out.push(`    ("${code}", &[${weekend.join(", ")}]),`);
+}
+out.push("];");
 process.stdout.write(out.join("\n") + "\n");

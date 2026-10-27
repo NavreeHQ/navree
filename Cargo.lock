@@ -5097,7 +5097,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-testing",
- "sea-query",
+ "sea-orm",
  "serde",
  "serde_json",
  "thiserror",
