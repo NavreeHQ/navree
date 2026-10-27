@@ -421,7 +421,7 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
 }
 
 /// A deal of Acme (owned by rep1) to hang activities on.
-async fn renewal(crm: &crm_testkit::TestCrm) -> crm_core::entities::deal::Model {
+async fn renewal(crm: &crm_testkit::TestCrm) -> navree::orm::Record<crm_core::Deal> {
     let rep1 = crm.user_id(Role::Rep1);
     let acme = company(crm, rep1, "Acme").await;
     deal(

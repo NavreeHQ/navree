@@ -7,7 +7,7 @@ import type { DiagramSpec } from "@/components/diagrams";
  */
 export const crmCrates: DiagramSpec = {
   title: "The CRM API",
-  desc: "crm-api is one binary. Its app.rs registers the CRM's modules on top of the platform. They live in four feature crates: crm-users (users and roles), crm-companies (companies, contacts and the CSV export), crm-deals (deals, the board and deal events) and crm-activities (tasks, the dashboard and reminders). Each feature crate depends only on crm-core, never on another feature; crm-core holds the entities, the migrations, the roles and the abilities function. crm-core's platform() configures 19 Navree framework modules, from HTTP and the database to auth, access control, queues and real time.",
+  desc: "crm-api is one binary. Its app.rs registers the CRM's modules on top of the platform. They live in four feature crates: crm-users (users and roles), crm-companies (companies, contacts and the CSV export), crm-deals (deals, the board and deal events) and crm-activities (tasks, the dashboard and reminders). Each feature crate depends only on crm-core, never on another feature; crm-core holds the models, the migrations, the roles and the abilities function. crm-core's platform() configures 19 Navree framework modules, from HTTP and the database to auth, access control, queues and real time.",
   legend: [{ kind: "dep", label: "depends on" }],
   wide: {
     width: 592,

@@ -4,6 +4,10 @@
 //! is fixed (no randomness) and dated relative to the app's clock; the
 //! names match crm-web's mock data.
 //!
+//! The models' factories make the records: each table's rows are one
+//! factory [`Sequence`] whose state sets every column from the row's
+//! position, so none of the factories' fake data is left.
+//!
 //! `db:seed` (or `migrate:fresh --seed`) runs it after `crm-roles`. Running
 //! it again changes nothing: the accounts are found again and the records
 //! are only created into an empty CRM.
@@ -11,16 +15,17 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Datelike, Days, Duration, NaiveTime, Utc};
-use crm_core::entities::{activity, company, contact, deal};
-use crm_core::seed::ensure_demo_accounts;
+use crm_core::factories::{ActivityFactory, CompanyFactory, ContactFactory, DealFactory};
+use crm_core::models::{Activity, Company, Contact, Deal};
+use crm_core::seed::{ensure_demo_accounts, in_uow};
 use crm_core::{ActivityKind, CompanySize, ContactStatus, CrmCoreModule, Stage, SubjectType};
 use navree::BoxFuture;
 use navree::auth::User;
 use navree::contracts::Clock;
 use navree::db::{Db, Seeder};
+use navree::orm::factory::{Factory, Sequence};
+use navree::orm::{Executor, Model};
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, PaginatorTrait};
 use uuid::Uuid;
 
 /// The seeder's name: `db:seed crm-demo`.
@@ -50,17 +55,20 @@ impl Seeder for DemoSeeder {
     fn run<'a>(&'a self, ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
             let users = ensure_demo_accounts(ctx).await?;
-            if company::Entity::find().count(db.conn()).await? > 0 {
+            if Company::query().with_trashed().exists(db).await? {
                 tracing::info!(target: "crm::seed", "the CRM has data; demo records skipped");
                 return Ok(());
             }
-            let now = self.clock.now();
-            db.transaction(|uow| async move {
+            let demo = Demo::new(&users, self.clock.now());
+            // All of it or none of it, in one transaction. The records are
+            // written through the transaction itself rather than the unit of
+            // work, so the audit log does not list them.
+            in_uow(db, |uow| async move {
                 let tx = uow.tx().await?;
-                Demo::new(&users, now).insert(&*tx).await
+                demo.create(&*tx).await?;
+                Ok(())
             })
-            .await?;
-            Ok(())
+            .await
         })
     }
 }
@@ -359,25 +367,238 @@ const KINDS: [ActivityKind; 6] = [
     ActivityKind::Meeting,
 ];
 
-/// The demo records for `users` (the demo accounts, in order), dated
-/// relative to `now`.
-struct Demo<'a> {
+/// The demo records of the demo accounts, dated relative to `now`.
+#[derive(Clone, Copy, Debug)]
+struct Demo {
     now: DateTime<Utc>,
-    /// Who owns records, in turn: the manager and the two reps.
-    sellers: [&'a User; 5],
+    /// Who owns records, in turn: the manager, then each rep twice.
+    sellers: [Uuid; 5],
 }
 
-impl<'a> Demo<'a> {
-    fn new(users: &'a [User], now: DateTime<Utc>) -> Self {
-        let (manager, rep1, rep2) = (&users[1], &users[2], &users[3]);
+impl Demo {
+    /// The demo records of `users`, the demo accounts in
+    /// [`DEMO_ACCOUNTS`](crm_core::seed::DEMO_ACCOUNTS) order.
+    fn new(users: &[User], now: DateTime<Utc>) -> Self {
+        let (manager, rep1, rep2) = (users[1].id, users[2].id, users[3].id);
         Demo {
             now,
             sellers: [manager, rep1, rep1, rep2, rep2],
         }
     }
 
+    /// Creates every demo record through `exec`: the companies, then their
+    /// contacts, the deals and the activities on all three.
+    async fn create<E: Executor + ?Sized>(self, exec: &E) -> navree::orm::Result<()> {
+        let companies = self.companies().create(exec).await?.into_models();
+        let contacts = self
+            .contacts(companies.clone())
+            .create(exec)
+            .await?
+            .into_models();
+        let deals = self
+            .deals(companies.clone(), contacts.clone())
+            .create(exec)
+            .await?
+            .into_models();
+        self.activities(companies, contacts, deals)
+            .create(exec)
+            .await?;
+        Ok(())
+    }
+
+    /// The 20 [`COMPANIES`], owned by the sellers in turn.
+    fn companies(self) -> Factory<CompanyFactory> {
+        Company::factory()
+            .count(COMPANIES.len())
+            .sequence(Sequence::from_fn(move |company: &mut Company, at| {
+                let i = at.index();
+                let (name, domain, industry, size, city, country) = COMPANIES[i];
+                let created = self.days_ago(300 - i as u64 * 12);
+                company.name = name.to_owned();
+                company.domain = Some(domain.to_owned());
+                company.industry = Some(industry.to_owned());
+                company.size = Some(size);
+                company.phone = Some(format!("+1 555-01{i:02}"));
+                company.website = Some(format!("https://{domain}"));
+                company.city = Some(city.to_owned());
+                company.country = Some(country.to_owned());
+                company.owner_id = self.seller(i);
+                company.created_at = created;
+                company.updated_at = created + Duration::days((i % 7) as i64);
+            }))
+    }
+
+    /// 50 contacts: the first 42 at the `companies` in turn (most owned by
+    /// the company's owner), the last 8 at none we know of.
+    fn contacts(self, companies: Vec<Company>) -> Factory<ContactFactory> {
+        Contact::factory().count(50).sequence(Sequence::from_fn(
+            move |contact: &mut Contact, at| {
+                let i = at.index();
+                let company = (i < 42).then(|| &companies[i % companies.len()]);
+                let first = FIRST_NAMES[i % FIRST_NAMES.len()];
+                let last = LAST_NAMES[(i * 7 + i / FIRST_NAMES.len() * 3) % LAST_NAMES.len()];
+                let domain = company
+                    .and_then(|company| company.domain.as_deref())
+                    .unwrap_or("fastmail.com");
+                let created = self.days_ago(260 - i as u64 * 4);
+                contact.first_name = first.to_owned();
+                contact.last_name = last.to_owned();
+                contact.email = Some(format!(
+                    "{}.{}@{domain}",
+                    first.to_lowercase(),
+                    last.to_lowercase()
+                ));
+                contact.phone = (i % 5 != 0).then(|| format!("+1 555-02{i:02}"));
+                contact.title = (i % 9 != 0).then(|| TITLES[i % TITLES.len()].to_owned());
+                contact.status = STATUSES[i % STATUSES.len()];
+                contact.company_id = company.map(|company| company.id);
+                contact.owner_id = match company {
+                    Some(company) if i % 4 != 0 => company.owner_id,
+                    _ => self.seller(i),
+                };
+                contact.created_at = created;
+                contact.updated_at = created + Duration::days((i % 11) as i64);
+            },
+        ))
+    }
+
+    /// The 30 [`DEALS`], each with every third company (and the company's
+    /// first contact), stacked in its stage's column in order. Won deals
+    /// closed this month (the dashboard's `won_this_month`), lost ones a
+    /// few weeks ago.
+    fn deals(self, companies: Vec<Company>, contacts: Vec<Contact>) -> Factory<DealFactory> {
+        Deal::factory()
+            .count(DEALS.len())
+            .sequence(Sequence::from_fn(move |deal: &mut Deal, at| {
+                let i = at.index();
+                let (title, stage) = DEALS[i];
+                let company = &companies[(i * 3) % companies.len()];
+                let contact = contacts
+                    .iter()
+                    .find(|contact| contact.company_id == Some(company.id));
+                let created = self.days_ago(120 - i as u64 * 3);
+                let closed_at = match stage {
+                    Stage::Won => Some(self.days_ago((i % 3) as u64).max(self.start_of_month())),
+                    Stage::Lost => Some(self.days_ago(20 + i as u64)),
+                    _ => None,
+                };
+                deal.title = title.to_owned();
+                deal.amount_cents = ((i as i64 * 37) % 200 + 6) * 100_000;
+                deal.currency = "USD".to_owned();
+                deal.stage = stage;
+                // Below the deals of its stage listed before it.
+                deal.position = DEALS[..i]
+                    .iter()
+                    .filter(|(_, earlier)| *earlier == stage)
+                    .count() as i32;
+                deal.expected_close_date = match closed_at {
+                    Some(closed) => Some(closed.date_naive()),
+                    None => self
+                        .now
+                        .date_naive()
+                        .checked_add_days(Days::new(7 + (i as u64 * 5) % 90)),
+                };
+                deal.closed_at = closed_at;
+                deal.lost_reason =
+                    (stage == Stage::Lost).then(|| LOST_REASONS[i % LOST_REASONS.len()].to_owned());
+                deal.company_id = company.id;
+                deal.contact_id = contact.map(|contact| contact.id);
+                deal.owner_id = if i % 4 == 0 {
+                    self.seller(i)
+                } else {
+                    company.owner_id
+                };
+                deal.created_at = created;
+                deal.updated_at = closed_at.unwrap_or(created + Duration::days(2));
+            }))
+    }
+
+    /// 60 activities of the [`KINDS`] in turn, on a deal, a contact and a
+    /// company in turn, owned by the record's owner. The tasks are overdue,
+    /// due today, upcoming or done, in turn; every fifth activity's task is
+    /// assigned to the next seller.
+    fn activities(
+        self,
+        companies: Vec<Company>,
+        contacts: Vec<Contact>,
+        deals: Vec<Deal>,
+    ) -> Factory<ActivityFactory> {
+        Activity::factory().count(60).sequence(Sequence::from_fn(
+            move |activity: &mut Activity, at| {
+                let i = at.index();
+                let kind = KINDS[i % KINDS.len()];
+                let (subject_type, subject_id, owner, label) = match i % 3 {
+                    0 => {
+                        let deal = &deals[i % deals.len()];
+                        (
+                            SubjectType::Deal,
+                            deal.id,
+                            deal.owner_id,
+                            deal.title.clone(),
+                        )
+                    }
+                    1 => {
+                        let contact = &contacts[i % contacts.len()];
+                        (
+                            SubjectType::Contact,
+                            contact.id,
+                            contact.owner_id,
+                            contact.full_name(),
+                        )
+                    }
+                    _ => {
+                        let company = &companies[i % companies.len()];
+                        (
+                            SubjectType::Company,
+                            company.id,
+                            company.owner_id,
+                            company.name.clone(),
+                        )
+                    }
+                };
+                let today = self.start_of_today();
+                let (due_at, completed_at) = match kind {
+                    ActivityKind::Task => match (i / 3) % 4 {
+                        0 => (Some(today - Duration::days(2 + (i % 3) as i64)), None),
+                        1 => (Some(today + Duration::hours(9 + (i % 8) as i64)), None),
+                        2 => (Some(today + Duration::days(1 + (i % 6) as i64)), None),
+                        _ => (
+                            Some(today - Duration::days(4)),
+                            Some(today - Duration::days(3)),
+                        ),
+                    },
+                    _ => (None, None),
+                };
+                let (subject, body) = write_up(kind, &label);
+                let created = self.days_ago(60 - i as u64);
+                activity.kind = kind;
+                activity.subject = subject;
+                activity.body = body.map(str::to_owned);
+                activity.due_at = due_at;
+                activity.completed_at = completed_at;
+                activity.subject_type = subject_type;
+                activity.subject_id = subject_id;
+                activity.owner_id = owner;
+                activity.assignee_id = (kind == ActivityKind::Task).then(|| {
+                    if i % 5 == 0 {
+                        self.seller(i + 1)
+                    } else {
+                        owner
+                    }
+                });
+                activity.created_at = created;
+                activity.updated_at = completed_at.unwrap_or(created);
+            },
+        ))
+    }
+
     fn days_ago(&self, days: u64) -> DateTime<Utc> {
         self.now - Duration::days(days as i64)
+    }
+
+    /// Midnight UTC at the start of `now`'s day.
+    fn start_of_today(&self) -> DateTime<Utc> {
+        self.now.date_naive().and_time(NaiveTime::MIN).and_utc()
     }
 
     /// Midnight UTC on the first day of `now`'s month.
@@ -390,251 +611,31 @@ impl<'a> Demo<'a> {
             .and_utc()
     }
 
+    /// The `n`th seller, starting over after the last.
     fn seller(&self, n: usize) -> Uuid {
-        self.sellers[n % self.sellers.len()].id
+        self.sellers[n % self.sellers.len()]
     }
+}
 
-    async fn insert<C: sea_orm::ConnectionTrait>(&self, conn: &C) -> Result<(), DbErr> {
-        let companies = self.companies(conn).await?;
-        let contacts = self.contacts(conn, &companies).await?;
-        let deals = self.deals(conn, &companies, &contacts).await?;
-        self.activities(conn, &companies, &contacts, &deals).await
-    }
-
-    async fn companies<C: sea_orm::ConnectionTrait>(
-        &self,
-        conn: &C,
-    ) -> Result<Vec<company::Model>, DbErr> {
-        let mut companies = Vec::with_capacity(COMPANIES.len());
-        for (i, (name, domain, industry, size, city, country)) in COMPANIES.into_iter().enumerate()
-        {
-            let created = self.days_ago(300 - i as u64 * 12);
-            let model = company::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                name: Set(name.to_owned()),
-                domain: Set(Some(domain.to_owned())),
-                industry: Set(Some(industry.to_owned())),
-                size: Set(Some(size)),
-                phone: Set(Some(format!("+1 555-01{:02}", i))),
-                website: Set(Some(format!("https://{domain}"))),
-                city: Set(Some(city.to_owned())),
-                country: Set(Some(country.to_owned())),
-                owner_id: Set(self.seller(i)),
-                created_at: Set(created),
-                updated_at: Set(created + Duration::days((i % 7) as i64)),
-                deleted_at: Set(None),
-            };
-            companies.push(model.insert(conn).await?);
-        }
-        Ok(companies)
-    }
-
-    async fn contacts<C: sea_orm::ConnectionTrait>(
-        &self,
-        conn: &C,
-        companies: &[company::Model],
-    ) -> Result<Vec<contact::Model>, DbErr> {
-        let mut contacts = Vec::with_capacity(50);
-        for i in 0..50 {
-            // The last 8 contacts work nowhere we know of.
-            let company = (i < 42).then(|| &companies[i % companies.len()]);
-            let first = FIRST_NAMES[i % FIRST_NAMES.len()];
-            let last = LAST_NAMES[(i * 7 + i / FIRST_NAMES.len() * 3) % LAST_NAMES.len()];
-            let domain = company
-                .and_then(|c| c.domain.clone())
-                .unwrap_or_else(|| "fastmail.com".to_owned());
-            let created = self.days_ago(260 - i as u64 * 4);
-            let model = contact::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                first_name: Set(first.to_owned()),
-                last_name: Set(last.to_owned()),
-                email: Set(Some(format!(
-                    "{}.{}@{domain}",
-                    first.to_lowercase(),
-                    last.to_lowercase()
-                ))),
-                phone: Set((i % 5 != 0).then(|| format!("+1 555-02{:02}", i))),
-                title: Set((i % 9 != 0).then(|| TITLES[i % TITLES.len()].to_owned())),
-                status: Set(STATUSES[i % STATUSES.len()]),
-                company_id: Set(company.map(|c| c.id)),
-                owner_id: Set(match company {
-                    Some(company) if i % 4 != 0 => company.owner_id,
-                    _ => self.seller(i),
-                }),
-                created_at: Set(created),
-                updated_at: Set(created + Duration::days((i % 11) as i64)),
-                deleted_at: Set(None),
-            };
-            contacts.push(model.insert(conn).await?);
-        }
-        Ok(contacts)
-    }
-
-    async fn deals<C: sea_orm::ConnectionTrait>(
-        &self,
-        conn: &C,
-        companies: &[company::Model],
-        contacts: &[contact::Model],
-    ) -> Result<Vec<deal::Model>, DbErr> {
-        let mut deals = Vec::with_capacity(DEALS.len());
-        let mut positions = [0i32; 6];
-        let today = self.now.date_naive();
-        for (i, (title, stage)) in DEALS.into_iter().enumerate() {
-            let company = &companies[(i * 3) % companies.len()];
-            let contact = contacts.iter().find(|c| c.company_id == Some(company.id));
-            let created = self.days_ago(120 - i as u64 * 3);
-            let position = &mut positions[stage as usize];
-            // Won deals close this month (the dashboard's `won_this_month`),
-            // lost ones a few weeks ago.
-            let closed_at = match stage {
-                Stage::Won => Some(self.days_ago((i % 3) as u64).max(self.start_of_month())),
-                Stage::Lost => Some(self.days_ago(20 + i as u64)),
-                _ => None,
-            };
-            let expected_close_date = match closed_at {
-                Some(closed) => Some(closed.date_naive()),
-                None => today.checked_add_days(Days::new(7 + (i as u64 * 5) % 90)),
-            };
-            let model = deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set(title.to_owned()),
-                amount_cents: Set(((i as i64 * 37) % 200 + 6) * 100_000),
-                currency: Set("USD".to_owned()),
-                stage: Set(stage),
-                position: Set(*position),
-                expected_close_date: Set(expected_close_date),
-                closed_at: Set(closed_at),
-                lost_reason: Set(
-                    (stage == Stage::Lost).then(|| LOST_REASONS[i % LOST_REASONS.len()].to_owned())
-                ),
-                company_id: Set(company.id),
-                contact_id: Set(contact.map(|c| c.id)),
-                owner_id: Set(if i % 4 == 0 {
-                    self.seller(i)
-                } else {
-                    company.owner_id
-                }),
-                created_at: Set(created),
-                updated_at: Set(closed_at.unwrap_or(created + Duration::days(2))),
-            };
-            *position += 1;
-            deals.push(model.insert(conn).await?);
-        }
-        Ok(deals)
-    }
-
-    async fn activities<C: sea_orm::ConnectionTrait>(
-        &self,
-        conn: &C,
-        companies: &[company::Model],
-        contacts: &[contact::Model],
-        deals: &[deal::Model],
-    ) -> Result<(), DbErr> {
-        let start_of_today = self.now.date_naive().and_time(NaiveTime::MIN).and_utc();
-        for i in 0..60usize {
-            let kind = KINDS[i % KINDS.len()];
-            // Attached to a deal, a contact or a company, in turn.
-            let (subject_type, subject_id, owner, label) = match i % 3 {
-                0 => {
-                    let deal = &deals[i % deals.len()];
-                    (
-                        SubjectType::Deal,
-                        deal.id,
-                        deal.owner_id,
-                        deal.title.clone(),
-                    )
-                }
-                1 => {
-                    let contact = &contacts[i % contacts.len()];
-                    (
-                        SubjectType::Contact,
-                        contact.id,
-                        contact.owner_id,
-                        contact.full_name(),
-                    )
-                }
-                _ => {
-                    let company = &companies[i % companies.len()];
-                    (
-                        SubjectType::Company,
-                        company.id,
-                        company.owner_id,
-                        company.name.clone(),
-                    )
-                }
-            };
-            let created = self.days_ago(60 - i as u64);
-            // Tasks: overdue, due today, upcoming or done, in turn.
-            let (due_at, completed_at, assignee) = if kind == ActivityKind::Task {
-                let assignee = if i % 5 == 0 {
-                    self.seller(i + 1)
-                } else {
-                    owner
-                };
-                match (i / 3) % 4 {
-                    0 => (
-                        Some(start_of_today - Duration::days(2 + (i % 3) as i64)),
-                        None,
-                        assignee,
-                    ),
-                    1 => (
-                        Some(start_of_today + Duration::hours(9 + (i % 8) as i64)),
-                        None,
-                        assignee,
-                    ),
-                    2 => (
-                        Some(start_of_today + Duration::days(1 + (i % 6) as i64)),
-                        None,
-                        assignee,
-                    ),
-                    _ => (
-                        Some(start_of_today - Duration::days(4)),
-                        Some(start_of_today - Duration::days(3)),
-                        assignee,
-                    ),
-                }
-            } else {
-                (None, None, owner)
-            };
-            let (subject, body) = match kind {
-                ActivityKind::Task => (format!("Follow up with {label}"), None),
-                ActivityKind::Note => (
-                    format!("Notes on {label}"),
-                    Some(
-                        "Budget confirmed; decision expected after the steering meeting."
-                            .to_owned(),
-                    ),
-                ),
-                ActivityKind::Call => (
-                    format!("Call about {label}"),
-                    Some("Walked through pricing and the rollout plan.".to_owned()),
-                ),
-                ActivityKind::Email => (
-                    format!("Sent proposal to {label}"),
-                    Some("Attached the updated proposal and SLA terms.".to_owned()),
-                ),
-                ActivityKind::Meeting => (
-                    format!("Meeting with {label}"),
-                    Some("Demo for the operations team.".to_owned()),
-                ),
-            };
-            activity::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                kind: Set(kind),
-                subject: Set(subject),
-                body: Set(body),
-                due_at: Set(due_at),
-                completed_at: Set(completed_at),
-                subject_type: Set(subject_type),
-                subject_id: Set(subject_id),
-                owner_id: Set(owner),
-                assignee_id: Set((kind == ActivityKind::Task).then_some(assignee)),
-                created_at: Set(created),
-                updated_at: Set(completed_at.unwrap_or(created)),
-            }
-            .insert(conn)
-            .await?;
-        }
-        Ok(())
+/// The subject line and body of an activity of `kind` about `label`.
+fn write_up(kind: ActivityKind, label: &str) -> (String, Option<&'static str>) {
+    match kind {
+        ActivityKind::Task => (format!("Follow up with {label}"), None),
+        ActivityKind::Note => (
+            format!("Notes on {label}"),
+            Some("Budget confirmed; decision expected after the steering meeting."),
+        ),
+        ActivityKind::Call => (
+            format!("Call about {label}"),
+            Some("Walked through pricing and the rollout plan."),
+        ),
+        ActivityKind::Email => (
+            format!("Sent proposal to {label}"),
+            Some("Attached the updated proposal and SLA terms."),
+        ),
+        ActivityKind::Meeting => (
+            format!("Meeting with {label}"),
+            Some("Demo for the operations team."),
+        ),
     }
 }

@@ -1,11 +1,14 @@
 //! Conditions beyond comparisons: pattern operators (`ILIKE`, regular
-//! expressions, `SIMILAR TO`), JSON containment, overlap and key
-//! existence on typed columns, null-safe inequality, hand-written
-//! operators checked per database, and vector distances.
+//! expressions, `SIMILAR TO`), text matching that ignores case beyond
+//! ASCII, JSON containment, overlap and key existence on typed columns,
+//! null-safe inequality, hand-written operators checked per database, and
+//! vector distances.
 //!
 //! | Method | PostgreSQL | MySQL | SQLite |
 //! |---|---|---|---|
 //! | [`Column::ilike`] | `ILIKE` | `LOWER(..) LIKE LOWER(..)` | `LIKE` (ASCII case) |
+//! | [`Column::contains_ignore_case`] | `LOWER(..) LIKE '%text%'` | `INSTR` of lower-cased bytes | `GLOB` of case variants |
+//! | [`Column::eq_ignore_case`] | `LOWER(..) = 'text'` | lower-cased bytes `=` | `GLOB` of case variants |
 //! | [`Column::regex`] | `~` | `REGEXP_LIKE(.., 'c')` | `REGEXP` (a registered function) |
 //! | [`Column::regex_case_insensitive`] | `~*` | `REGEXP_LIKE(.., 'i')` | `REGEXP` with `(?i)` |
 //! | [`Column::similar_to`] | `SIMILAR TO` | unsupported | unsupported |
@@ -22,7 +25,7 @@
 use std::borrow::Cow;
 
 use crate::column::{Column, Filter, IntoExpr};
-use crate::ir::{ColumnRef, Expr, JsonSegment, Operator, VectorMetric, Where};
+use crate::ir::{ColumnRef, Expr, IgnoreCaseMode, JsonSegment, Operator, VectorMetric, Where};
 use crate::value::Value;
 
 /// A JSON value for a condition, or the reason it cannot be one.
@@ -52,6 +55,54 @@ impl<M, T> Column<M, T> {
     /// `column NOT ILIKE pattern`.
     pub fn not_ilike(&self, pattern: impl Into<String>) -> Filter {
         Filter::like(self.expr(), pattern.into(), false, true)
+    }
+
+    /// The column contains `text`, ignoring letter case on every database,
+    /// non-ASCII letters included (`équipe` finds `Équipe Lyon`), and
+    /// keeping accents (it does not find `Equipe`). `text` is literal: `%`,
+    /// `_`, `*`, `?` and `[` match themselves. A NULL never matches. Use it
+    /// for search boxes; like any "contains" search, it reads every row.
+    ///
+    /// SQLite's own `LOWER`, `LIKE` and `NOCASE` fold ASCII letters only, so
+    /// there the condition is a `GLOB` listing each letter's case variants;
+    /// PostgreSQL's `LOWER` folds ASCII letters only in a database with the
+    /// `C` locale, so a text with other cased letters is a regular
+    /// expression of their case variants there; MySQL compares the
+    /// lower-cased column byte for byte, so it ignores case under every
+    /// collation and never ignores accents (the column must be `utf8mb4`,
+    /// the connection's character set). These are navree-db's
+    /// `contains_ignore_case` and `eq_ignore_case`.
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, Value, col};
+    ///
+    /// let sql = col("name").contains_ignore_case("Équipe").to_sql(Dialect::Sqlite).unwrap();
+    /// assert_eq!(sql.sql, r#""name" GLOB ?"#);
+    /// assert_eq!(sql.values, [Value::from("*[Éé][qQ][uU][iI][pP][eE]*")]);
+    /// let sql = col("name").contains_ignore_case("Équipe").to_sql(Dialect::Postgres).unwrap();
+    /// assert_eq!(sql.sql, r#""name" ~ $1"#);
+    /// assert_eq!(sql.values, [Value::from("[Éé][qQ][uU][iI][pP][eE]")]);
+    /// let sql = col("name").contains_ignore_case("Acme").to_sql(Dialect::Postgres).unwrap();
+    /// assert_eq!(sql.sql, r#"LOWER("name") LIKE $1 ESCAPE E'\\'"#);
+    /// assert_eq!(sql.values, [Value::from("%acme%")]);
+    /// ```
+    pub fn contains_ignore_case(&self, text: impl Into<String>) -> Filter {
+        self.ignore_case(text, IgnoreCaseMode::Contains)
+    }
+
+    /// The column equals `text`, ignoring letter case on every database the
+    /// way [`contains_ignore_case`](Column::contains_ignore_case) does:
+    /// non-ASCII letters included, accents kept, `text` literal.
+    pub fn eq_ignore_case(&self, text: impl Into<String>) -> Filter {
+        self.ignore_case(text, IgnoreCaseMode::Equals)
+    }
+
+    fn ignore_case(&self, text: impl Into<String>, mode: IgnoreCaseMode) -> Filter {
+        Filter(Where::IgnoreCase {
+            expr: self.expr(),
+            text: text.into(),
+            mode,
+        })
     }
 
     /// The column matches regular expression `pattern`, matching case.

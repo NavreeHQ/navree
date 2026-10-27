@@ -9,9 +9,8 @@ use navree::access::AccessService;
 use navree::auth::{AuthService, User};
 use navree::db::{Db, Seeder, Uow};
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, IntoActiveModel};
 
+use crate::models;
 use crate::roles::UserRole;
 
 /// The name of the roles seeder: `db:seed crm-roles`.
@@ -98,10 +97,16 @@ pub async fn ensure_demo_accounts(ctx: &AppContext) -> Result<Vec<User>, BoxErro
                 let user = auth
                     .create_user(account.name, account.email, DEMO_PASSWORD)
                     .await?;
+                // The demo addresses count as verified from the start.
                 let verified_at = user.created_at;
-                let mut active = user.into_active_model();
-                active.email_verified_at = Set(Some(verified_at));
-                active.update(db.conn()).await?
+                models::User::query()
+                    .where_key(user.id)
+                    .update(&*db, [models::User::EMAIL_VERIFIED_AT.set(verified_at)])
+                    .await?;
+                User {
+                    email_verified_at: Some(verified_at),
+                    ..user
+                }
             }
         };
         let id = user.id;
@@ -117,8 +122,11 @@ pub async fn ensure_demo_accounts(ctx: &AppContext) -> Result<Vec<User>, BoxErro
 }
 
 /// Runs `f` in a new unit of work: commits when it succeeds, rolls back
-/// when it fails.
-async fn in_uow<F, Fut>(db: &Db, f: F) -> Result<(), BoxError>
+/// when it fails. Writes through the unit of work are audited; writes
+/// through its transaction (`uow.tx()`) are not, and every
+/// `Arc<DatabaseTransaction>` taken from it must be dropped by the time `f`
+/// returns.
+pub async fn in_uow<F, Fut>(db: &Db, f: F) -> Result<(), BoxError>
 where
     F: FnOnce(Uow) -> Fut,
     Fut: Future<Output = Result<(), BoxError>>,

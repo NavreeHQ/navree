@@ -23,7 +23,7 @@ use navree::prelude::*;
 
 pub use controller::{MeController, UsersController};
 pub use dto::{CreateUser, UpdateUser, UserFilter};
-pub use resource::{Me, UserPage, UserPageMeta, UserRolesExtension, UserView, roles_by_user};
+pub use resource::{Me, UserPage, UserPageMeta, UserRolesExtension, UserView};
 pub use service::UserService;
 
 /// Users and their roles; see the [crate docs](crate).

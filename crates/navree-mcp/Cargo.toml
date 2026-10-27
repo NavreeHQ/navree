@@ -33,7 +33,6 @@ navree-kernel = { workspace = true }
 navree-testing = { workspace = true }
 navree-validation = { workspace = true }
 rmcp = { workspace = true }
-sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -46,6 +45,8 @@ uuid = { workspace = true }
 navree-crypto = { workspace = true }
 navree-macros = { workspace = true }
 rmcp = { workspace = true, features = ["client"] }
+# The tests' `deals` table is a SeaORM entity (beside a subject that is not one).
+sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }

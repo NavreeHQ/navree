@@ -227,7 +227,7 @@ Give it a row in `HIERARCHY` in `dependency_graph.rs`, with its layer and the cr
 
 ## Applying the idea to your app
 
-The same discipline works for an application. The CRM's feature crates all build on `crm-core`, which holds the shared entities, migrations, abilities and platform setup, and none of them depends on another feature crate. When two features need to cooperate, they do it through something lower down: an event, a trait in the shared crate, or a service the shared crate exports. Inside a single crate, [modules](/docs/architecture/modules/) give you the same structure: a feature imports only what it uses, and the boot fails when it reaches for something it didn't import.
+The same discipline works for an application. The CRM's feature crates all build on `crm-core`, which holds the shared models, migrations, abilities and platform setup, and none of them depends on another feature crate. When two features need to cooperate, they do it through something lower down: an event, a trait in the shared crate, or a service the shared crate exports. Inside a single crate, [modules](/docs/architecture/modules/) give you the same structure: a feature imports only what it uses, and the boot fails when it reaches for something it didn't import.
 
 <LinkCards>
   <LinkCard href="/docs/architecture/facade-and-features/" title="The facade and features">

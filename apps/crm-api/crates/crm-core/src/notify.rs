@@ -4,9 +4,12 @@
 
 use navree::auth::User;
 use navree::notify::{Notifiable, USER_NOTIFIABLE_TYPE};
+use navree::orm::Record;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+use crate::models;
 
 /// A user as the recipient of a notification: stored for the signed-in
 /// user's `/api/notifications`, mailed to their address and broadcast on
@@ -23,6 +26,16 @@ pub struct NotifiableUser {
 
 impl From<&User> for NotifiableUser {
     fn from(user: &User) -> Self {
+        NotifiableUser {
+            id: user.id,
+            name: user.name.clone(),
+            email: user.email.clone(),
+        }
+    }
+}
+
+impl From<&Record<models::User>> for NotifiableUser {
+    fn from(user: &Record<models::User>) -> Self {
         NotifiableUser {
             id: user.id,
             name: user.name.clone(),

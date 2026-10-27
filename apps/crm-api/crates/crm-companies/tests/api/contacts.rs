@@ -2,7 +2,8 @@
 //! validation, search, filters, soft deletes and the CSV export.
 
 use crm_testkit::Role;
-use sea_orm::QueryFilter;
+use navree::audit::{AuditFilter, AuditLog};
+use navree::db::PageQuery;
 use serde_json::{Value, json};
 
 use crate::support::{START, column, create_company, create_contact, crm, id_of, list, tick};
@@ -476,17 +477,19 @@ async fn exports_are_audited() {
         .await
         .assert_status(200);
 
-    let audit = crm.get::<navree::audit::AuditLog>().await;
+    let audit = crm.get::<AuditLog>().await;
     audit.flush().await;
-    let db = crm.get::<navree::db::Db>().await;
-    let entries = <navree::audit::audit_log::Entity as sea_orm::EntityTrait>::find()
-        .filter(sea_orm::ColumnTrait::eq(
-            &navree::audit::audit_log::Column::Action,
-            "contacts.exported",
-        ))
-        .all(db.conn())
+    let entries = audit
+        .list(
+            &AuditFilter {
+                action: Some("contacts.exported".to_owned()),
+                ..AuditFilter::default()
+            },
+            PageQuery::new(1, 100),
+        )
         .await
-        .expect("audit entries");
+        .expect("audit entries")
+        .data;
     assert_eq!(entries.len(), 1, "{entries:?}");
     assert_eq!(entries[0].actor_id, Some(crm.user_id(Role::Manager)));
     crm.shutdown().await;
