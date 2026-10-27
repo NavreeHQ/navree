@@ -855,6 +855,170 @@ impl<T: Field> Field for Option<T> {
     }
 }
 
+/// A value a column holding `T` accepts in conditions and assignments
+/// (`Deal::TITLE.eq("Renewal")`, `Company::COUNTRY.eq("US")`,
+/// `Deal::AMOUNT_CENTS.gte(10_000)`).
+///
+/// Implemented for:
+///
+/// - `T` itself, and `T` for a nullable column (`Option<T>`);
+/// - text (`&str`, `&String`, `Cow<str>`) for `String` and `Option<String>`
+///   columns;
+/// - lossless widenings of integers (`i32` for an `i64` column, ...) and
+///   floats (`f32` for an `f64` column);
+/// - everything a [`Value`] is built from, for untyped columns
+///   ([`col`](crate::col)).
+///
+/// ```
+/// use navree_orm::{Value, ValueFor};
+///
+/// let title: String = "Renewal".into_value_for();
+/// let country: Option<String> = "US".into_value_for();
+/// let cents: i64 = 12_i32.into_value_for();
+/// let closed: Option<i64> = 7_i64.into_value_for();
+/// let any: Value = 42_u8.into_value_for();
+/// assert_eq!((title.as_str(), country.as_deref(), cents, closed), ("Renewal", Some("US"), 12, Some(7)));
+/// assert_eq!(any, Value::TinyUnsigned(Some(42)));
+/// ```
+#[diagnostic::on_unimplemented(
+    message = "a `{Self}` cannot be used for a column holding `{T}`",
+    note = "pass a `{T}` (or, for a nullable column, its inner type)"
+)]
+pub trait ValueFor<T> {
+    /// The value as the column's type.
+    fn into_value_for(self) -> T;
+}
+
+impl<T> ValueFor<T> for T {
+    fn into_value_for(self) -> T {
+        self
+    }
+}
+
+impl<T> ValueFor<Option<T>> for T {
+    fn into_value_for(self) -> Option<T> {
+        Some(self)
+    }
+}
+
+impl ValueFor<String> for &str {
+    fn into_value_for(self) -> String {
+        self.to_owned()
+    }
+}
+
+impl ValueFor<String> for &String {
+    fn into_value_for(self) -> String {
+        self.clone()
+    }
+}
+
+impl ValueFor<String> for Cow<'_, str> {
+    fn into_value_for(self) -> String {
+        self.into_owned()
+    }
+}
+
+impl ValueFor<Option<String>> for &str {
+    fn into_value_for(self) -> Option<String> {
+        Some(self.to_owned())
+    }
+}
+
+impl ValueFor<Option<String>> for &String {
+    fn into_value_for(self) -> Option<String> {
+        Some(self.clone())
+    }
+}
+
+impl ValueFor<Option<String>> for Option<&str> {
+    fn into_value_for(self) -> Option<String> {
+        self.map(str::to_owned)
+    }
+}
+
+/// Lossless widenings: `$from` values for `$to` (and `Option<$to>`)
+/// columns.
+macro_rules! widening {
+    ($($from:ty => $($to:ty),+;)*) => {$($(
+        impl ValueFor<$to> for $from {
+            fn into_value_for(self) -> $to {
+                <$to>::from(self)
+            }
+        }
+
+        impl ValueFor<Option<$to>> for $from {
+            fn into_value_for(self) -> Option<$to> {
+                Some(<$to>::from(self))
+            }
+        }
+    )+)*};
+}
+
+widening! {
+    i8 => i16, i32, i64;
+    i16 => i32, i64;
+    i32 => i64;
+    u8 => i16, i32, i64, u16, u32, u64;
+    u16 => i32, i64, u32, u64;
+    u32 => i64, u64;
+    f32 => f64;
+}
+
+/// Anything a [`Value`] is built from, for untyped columns.
+macro_rules! into_value {
+    ($($from:ty),* $(,)?) => {$(
+        impl ValueFor<Value> for $from {
+            fn into_value_for(self) -> Value {
+                Value::from(self)
+            }
+        }
+    )*};
+}
+
+into_value!(
+    bool,
+    i8,
+    i16,
+    i32,
+    i64,
+    u8,
+    u16,
+    u32,
+    u64,
+    f32,
+    f64,
+    char,
+    &str,
+    String,
+    Vec<u8>,
+    serde_json::Value,
+    NaiveDate,
+    NaiveTime,
+    NaiveDateTime,
+    DateTime<Utc>,
+    DateTime<FixedOffset>,
+    Uuid,
+    Decimal,
+    crate::Ulid,
+);
+
+impl ValueFor<Value> for &String {
+    fn into_value_for(self) -> Value {
+        Value::from(self.clone())
+    }
+}
+
+/// A nullable value for an untyped column (a typed NULL for `None`).
+impl<T> ValueFor<Value> for Option<T>
+where
+    Option<T>: Into<Value>,
+{
+    fn into_value_for(self) -> Value {
+        self.into()
+    }
+}
+
 /// A number a column can be incremented or decremented by
 /// ([`Record::increment`](crate::Record::increment),
 /// [`Builder::increment`](crate::Builder::increment)).
