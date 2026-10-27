@@ -1,16 +1,19 @@
 //! The behaviour every driver must have. Each function runs once per driver
 //! (see `main.rs`): `database::<name>` and `memory_driver_parity::<name>`.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use chrono::TimeDelta;
 use navree_contracts::{Dispatcher, Job};
 use navree_db::Db;
 use navree_queue::{
-    QueueDriver, QueueError, QueueOptions, RetryTarget, STALE_RESERVATION_GRACE_SECS, WorkOptions,
-    WorkStats,
+    Attempt, AttemptOutcome, PendingQuery, PendingState, QueueDriver, QueueError, QueueOptions,
+    RetryTarget, STALE_RESERVATION_GRACE_SECS, Supervision, WorkHooks, WorkOptions, WorkStats,
 };
 use serde_json::json;
+use tokio_util::sync::CancellationToken;
 
 use crate::support::{
     AlwaysFails, Hang, HangLast, Harness, Panics, Record, Sleepy, Toggle, UniqueReport,
@@ -563,4 +566,234 @@ pub async fn run_pending_drains_available_jobs_in_order(driver: QueueDriver) {
         1,
         "the delayed job waits"
     );
+}
+
+// ------------------------------------------------- supervision and introspection
+
+/// `status`: waiting (available now), delayed (later) and running
+/// (reserved) jobs, and when the oldest waiting job became available.
+pub async fn status_counts_waiting_delayed_and_running_jobs(driver: QueueDriver) {
+    let h = harness(driver).await;
+    let empty = h.queue.status("default").await.unwrap();
+    assert_eq!(empty.queue, "default");
+    assert_eq!((empty.waiting, empty.delayed, empty.running), (0, 0, 0));
+    assert_eq!(empty.pending(), 0);
+    assert_eq!(empty.oldest_available_at, None);
+    assert_eq!(empty.oldest_wait(), Duration::ZERO);
+
+    h.queue.dispatch(Hang { label: "h".into() }).await.unwrap();
+    crash_worker_mid_job(&h).await;
+    h.queue.dispatch(Record::new("first")).await.unwrap();
+    h.advance(10);
+    h.queue.dispatch(Record::new("second")).await.unwrap();
+    h.queue
+        .later(Record::new("later"), Duration::from_secs(60))
+        .await
+        .unwrap();
+    h.queue.dispatch(Urgent { label: "u".into() }).await.unwrap();
+    h.advance(5);
+
+    let status = h.queue.status("default").await.unwrap();
+    assert_eq!(status.waiting, 2);
+    assert_eq!(status.delayed, 1);
+    assert_eq!(status.running, 1);
+    assert_eq!(status.pending(), 4);
+    assert_eq!(status.oldest_available_at, Some(start()));
+    assert_eq!(status.at, start() + TimeDelta::seconds(15));
+    assert_eq!(status.oldest_wait(), Duration::from_secs(15));
+    let high = h.queue.status("high").await.unwrap();
+    assert_eq!((high.waiting, high.delayed, high.running), (1, 0, 0));
+    assert_eq!(high.oldest_wait(), Duration::from_secs(5));
+}
+
+/// `pending_jobs` lists unfinished jobs oldest first, filtered by queue and
+/// searched by job type or queue; `pending_job` finds one by id.
+pub async fn pending_jobs_lists_and_finds_unfinished_jobs(driver: QueueDriver) {
+    let h = harness(driver).await;
+    let first = h.queue.dispatch(Record::new("first")).await.unwrap();
+    h.advance(1);
+    let urgent = h.queue.dispatch(Urgent { label: "u".into() }).await.unwrap();
+    h.advance(1);
+    let later = h
+        .queue
+        .later(Record::new("later"), Duration::from_secs(60))
+        .await
+        .unwrap();
+
+    let all = h.queue.pending_jobs(&PendingQuery::default()).await.unwrap();
+    let ids: Vec<&str> = all.iter().map(|job| job.id.as_str()).collect();
+    assert_eq!(ids, [first.as_str(), urgent.as_str(), later.as_str()]);
+    assert_eq!(all[0].state, PendingState::Waiting);
+    assert_eq!(all[0].job_type, "test.record");
+    assert_eq!(all[0].payload, json!({ "label": "first" }));
+    assert_eq!(all[0].attempts, 0);
+    assert_eq!(all[0].available_at, start());
+    assert_eq!(all[0].created_at, start());
+    assert_eq!(all[0].reserved_at, None);
+    assert_eq!(all[2].state, PendingState::Delayed);
+    assert_eq!(all[2].available_at, start() + TimeDelta::seconds(62));
+
+    let high = PendingQuery {
+        queue: Some("high".into()),
+        ..PendingQuery::default()
+    };
+    let found = h.queue.pending_jobs(&high).await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, urgent);
+    let search = PendingQuery {
+        search: Some("RECORD".into()),
+        ..PendingQuery::default()
+    };
+    assert_eq!(h.queue.pending_jobs(&search).await.unwrap().len(), 2);
+    let by_queue = PendingQuery {
+        search: Some("hig".into()),
+        ..PendingQuery::default()
+    };
+    assert_eq!(h.queue.pending_jobs(&by_queue).await.unwrap().len(), 1);
+    let literal = PendingQuery {
+        search: Some("%".into()),
+        ..PendingQuery::default()
+    };
+    assert!(h.queue.pending_jobs(&literal).await.unwrap().is_empty());
+    let limited = PendingQuery {
+        limit: Some(1),
+        ..PendingQuery::default()
+    };
+    assert_eq!(h.queue.pending_jobs(&limited).await.unwrap().len(), 1);
+
+    let job = h.queue.pending_job(&later).await.unwrap().expect("pending");
+    assert_eq!(job.payload, json!({ "label": "later" }));
+    assert!(h.queue.pending_job("nope").await.unwrap().is_none());
+
+    h.queue.dispatch(Hang { label: "h".into() }).await.unwrap();
+    crash_worker_mid_job(&h).await;
+    let running: Vec<_> = h
+        .queue
+        .pending_jobs(&PendingQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|job| job.state == PendingState::Running)
+        .collect();
+    assert_eq!(running.len(), 1);
+    assert_eq!(running[0].attempts, 1);
+    assert!(running[0].reserved_at.is_some());
+}
+
+/// `forget` deletes one failed job; `failed_job` finds one by id.
+pub async fn forget_deletes_one_failed_job(driver: QueueDriver) {
+    let h = harness(driver).await;
+    let ids = failed_toggles(&h, &["one", "two"]).await;
+    let found = h.queue.failed_job(&ids[0]).await.unwrap().expect("failed");
+    assert_eq!(found.payload, json!({ "label": "one" }));
+
+    h.queue.forget(&ids[0]).await.unwrap();
+
+    let left = h.queue.failed().await.unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].id, ids[1]);
+    assert!(h.queue.failed_job(&ids[0]).await.unwrap().is_none());
+    assert!(matches!(
+        h.queue.forget(&ids[0]).await,
+        Err(QueueError::FailedJobNotFound { .. })
+    ));
+}
+
+/// What the supervised worker's hooks saw.
+#[derive(Default)]
+struct Recorder {
+    attempts: std::sync::Mutex<Vec<Attempt>>,
+    paused: AtomicBool,
+}
+
+impl WorkHooks for Recorder {
+    fn may_reserve(&self) -> bool {
+        !self.paused.load(Ordering::SeqCst)
+    }
+
+    fn attempted(&self, attempt: &Attempt) {
+        self.attempts.lock().unwrap().push(attempt.clone());
+    }
+}
+
+/// `work_supervised`: every attempt is reported to the hooks, a paused
+/// supervisor takes no job, and its own stop token ends the call.
+pub async fn supervised_work_reports_attempts_and_obeys_pause_and_stop(driver: QueueDriver) {
+    let h = harness(driver).await;
+    let hooks = Arc::new(Recorder::default());
+    let supervision = || Supervision {
+        workers: Some(1),
+        stop: CancellationToken::new(),
+        hooks: hooks.clone(),
+    };
+    let ok = h.queue.dispatch(Record::new("ok")).await.unwrap();
+    h.journal.set_failing(true);
+    let bad = h
+        .queue
+        .dispatch(Toggle {
+            label: "bad".into(),
+        })
+        .await
+        .unwrap();
+    let drain = WorkOptions {
+        stop_when_empty: true,
+        ..WorkOptions::default()
+    };
+
+    let stats = h
+        .queue
+        .work_supervised(drain.clone(), supervision())
+        .await
+        .unwrap();
+
+    assert_eq!((stats.succeeded, stats.failed), (1, 1));
+    let attempts = hooks.attempts.lock().unwrap().clone();
+    assert_eq!(attempts.len(), 2);
+    assert_eq!(attempts[0].job_id, ok);
+    assert_eq!(attempts[0].job_type, "test.record");
+    assert_eq!(attempts[0].queue, "default");
+    assert_eq!(attempts[0].attempt, 1);
+    assert_eq!(attempts[0].outcome, AttemptOutcome::Succeeded);
+    assert_eq!(attempts[1].job_id, bad);
+    assert_eq!(attempts[1].outcome, AttemptOutcome::Failed);
+
+    // Paused: nothing is taken.
+    h.queue.dispatch(Record::new("held")).await.unwrap();
+    hooks.paused.store(true, Ordering::SeqCst);
+    let stats = h
+        .queue
+        .work_supervised(drain.clone(), supervision())
+        .await
+        .unwrap();
+    assert_eq!(stats.processed, 0);
+    assert_eq!(h.queue.pending_count("default").await.unwrap(), 1);
+
+    // A long-running worker stops when its stop token is cancelled, after
+    // the job it runs; continuing runs the held job.
+    hooks.paused.store(false, Ordering::SeqCst);
+    let stop = CancellationToken::new();
+    let queue = h.queue.clone();
+    let supervised = Supervision {
+        workers: Some(2),
+        stop: stop.clone(),
+        hooks: hooks.clone(),
+    };
+    let worker = tokio::spawn(async move {
+        queue
+            .work_supervised(WorkOptions::default(), supervised)
+            .await
+    });
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while h.queue.pending_count("default").await.unwrap() > 0 {
+        assert!(Instant::now() < deadline, "the held job never ran");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    stop.cancel();
+    let stats = tokio::time::timeout(Duration::from_secs(10), worker)
+        .await
+        .expect("the worker stops")
+        .unwrap()
+        .unwrap();
+    assert_eq!(stats.succeeded, 1);
+    assert_eq!(h.journal.labels(), ["ok", "held"]);
 }

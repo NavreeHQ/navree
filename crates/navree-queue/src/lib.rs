@@ -34,6 +34,13 @@
 //! - Every attempt is logged at target `navree::job` with the job type
 //!   (`name`), id, queue, attempt, `duration_ms` and `outcome`
 //!   (`succeeded`, `released` or `failed`); payloads are never logged.
+//! - Introspection: [`Queue::status`] (a queue's waiting, delayed and
+//!   running jobs and how long its oldest job has waited),
+//!   [`Queue::pending_jobs`] and [`Queue::pending_job`], [`Queue::failed_job`]
+//!   and [`Queue::forget`] (delete one failed job).
+//! - Supervision: [`Queue::work_supervised`] runs workers for a supervisor
+//!   (navree-fleet): its own concurrency and stop token, and [`WorkHooks`]
+//!   asked before each reservation (pause) and told every [`Attempt`].
 //! - Commands: `queue:work [--queue a,b] [--once] [--stop-when-empty]
 //!   [--max-jobs N]`, `queue:failed`, `queue:retry <id|all>` and
 //!   `queue:flush`.
@@ -115,5 +122,12 @@ pub use migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 pub use module::QueueModule;
 pub use options::{QueueDriver, QueueOptions};
 pub use queue::Queue;
-pub use record::{FailedJob, RetryTarget};
-pub use worker::{STALE_RESERVATION_GRACE_SECS, WorkOptions, WorkStats};
+pub use record::{
+    FailedJob, PendingJob, PendingQuery, PendingState, QueueStatus, RetryTarget,
+};
+pub use worker::{
+    Attempt, AttemptOutcome, STALE_RESERVATION_GRACE_SECS, Supervision, WorkHooks, WorkOptions,
+    WorkStats,
+};
+/// The cancellation token [`Supervision::stop`] takes (tokio-util's).
+pub use tokio_util::sync::CancellationToken;
