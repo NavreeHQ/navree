@@ -429,7 +429,7 @@ impl SesEventsController {
 }
 ```
 
-Leave raw message delivery off on the subscription: a raw message carries no signature. The certificate URL must be HTTPS on an SNS host (`sns.<region>.amazonaws.com`, or `.amazonaws.com.cn`) and end in `.pem`; any other is refused before anything is fetched.
+Leave raw message delivery off on the subscription: a raw message carries no signature. The certificate URL must be HTTPS on an SNS host (`sns.<region>.amazonaws.com`, or `.amazonaws.com.cn`), with a path ending in `.pem` and no query; any other is refused before anything is fetched.
 
 A Pub/Sub push body is a `PubSubPush`, whose message carries its payload in base64. `data_json::<T>()` decodes it, here a Gmail notification:
 
@@ -469,7 +469,7 @@ Some senders check that your URL answers before they send it anything. The extra
 
 With `auto_confirm = false`, SNS confirmations reach your handler instead (`event_type()` is `SubscriptionConfirmation` or `UnsubscribeConfirmation`), and you confirm with `SnsMessage::subscribe_url` yourself.
 
-Graph sends a batch of notifications, `{"value": [...]}`; read it as `GraphNotifications`. Lifecycle notifications (`reauthorizationRequired`, `subscriptionRemoved`, `missed`) come the same way and carry the same `clientState`. Graph expects a `202 Accepted` within three seconds, so queue the work and answer at once.
+Graph sends a batch of notifications, `{"value": [...]}`; read it as `GraphNotifications`. Lifecycle notifications (`reauthorizationRequired`, `subscriptionRemoved`, `missed`) come the same way and carry the same `clientState`. Graph expects a `202 Accepted` within three seconds, so queue the work and answer at once. Notifications with resource data also carry `validationTokens`, JWTs signed by Microsoft; they are in `GraphNotifications::validation_tokens`, and the extractor doesn't check them: the `clientState` is what it verifies.
 
 ### Senders that sign the URL
 

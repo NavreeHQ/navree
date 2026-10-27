@@ -11,7 +11,7 @@ use axum::response::{IntoResponse as _, Response};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::HeaderMap;
-use http::header::CONTENT_TYPE;
+use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use navree_contracts::{Clock, SystemClock};
 use navree_db::Uow;
 use navree_http::AppError;
@@ -233,14 +233,18 @@ impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
     }
 }
 
-/// The response to a handshake: its status and `text/plain` body.
+/// The response to a handshake: its status and `text/plain` body (which
+/// may echo the request, so it is never sniffed as anything else).
 fn answer(handshake: Handshake) -> Response {
     if handshake.body.is_empty() {
         return handshake.status.into_response();
     }
     (
         handshake.status,
-        [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+        [
+            (CONTENT_TYPE, "text/plain; charset=utf-8"),
+            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
         handshake.body,
     )
         .into_response()
