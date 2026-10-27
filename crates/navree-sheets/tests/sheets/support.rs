@@ -366,11 +366,15 @@ impl Module for ContactsModule {
 // ---------------------------------------------------------------------------
 // The app.
 
-/// Database, memory queue, memory disk, access rules, sheets and the
-/// contacts module.
+/// Database (on a fresh SQLite file), memory queue, memory disk, access
+/// rules, sheets and the contacts module.
 pub fn builder() -> TestAppBuilder {
+    base().temp_database()
+}
+
+/// [`builder`] without the database URL.
+pub fn base() -> TestAppBuilder {
     TestApp::builder()
-        .temp_database()
         .config("queue.driver", "memory")
         .config(
             "storage",

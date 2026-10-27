@@ -5,5 +5,9 @@
 
 mod downloads;
 mod exports;
+#[cfg(feature = "i18n")]
+mod i18n;
 mod imports;
+#[cfg(any(feature = "postgres", feature = "mysql"))]
+mod servers;
 mod support;
