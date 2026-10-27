@@ -1,0 +1,9 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,mail)",
+  "value": [
+    {
+      "id": "074e56ea-0b50-4461-89e5-c67ae14a2c0b",
+      "mail": "DiegoS@contoso.com"
+    }
+  ]
+}

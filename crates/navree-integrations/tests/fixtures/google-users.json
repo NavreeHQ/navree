@@ -1,0 +1,28 @@
+{
+  "kind": "admin#directory#users",
+  "etag": "\"WqXzjPZ6V0R4\"",
+  "users": [
+    {
+      "kind": "admin#directory#user",
+      "id": "103487256984305829435",
+      "primaryEmail": "liz@acme.test",
+      "name": {
+        "givenName": "Liz",
+        "familyName": "Smith",
+        "fullName": "Liz Smith"
+      },
+      "isAdmin": true
+    },
+    {
+      "kind": "admin#directory#user",
+      "id": "104819266138207528846",
+      "primaryEmail": "sam@acme.test",
+      "name": {
+        "givenName": "Sam",
+        "familyName": "Lee",
+        "fullName": "Sam Lee"
+      },
+      "isAdmin": false
+    }
+  ]
+}
