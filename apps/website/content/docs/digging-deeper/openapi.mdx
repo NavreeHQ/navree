@@ -129,7 +129,7 @@ Give a route a name with `#[name("deals.index")]` to set its `operationId`; rout
 
 - **Paths** are the mounted paths, prefix and version included, in OpenAPI form (`{*rest}` becomes `{rest}`). Every `{param}` is a required path parameter of type `string`, whatever its Rust type.
 - **Security**: every route that isn't public lists the `bearer` (JWT access token) and `cookie` (session) security schemes and documents `401`. Routes checked by the route authoriser (`#[roles]`, `#[permissions]`, `#[can]`) also document `403`.
-- **Errors**: every documented error status uses the `HttpError` schema, Navree's [JSON error shape](/docs/basics/errors/) (`statusCode`, `message`, `error`, and `errors` for validation failures).
+- **Errors**: every documented error status uses the `HttpError` schema, Navree's [JSON error shape](/docs/basics/errors/) (`statusCode`, `message`, `error`, the optional `code`, and `errors` for validation failures).
 - **Tags** are listed in the order routes first use them.
 
 The `cookie` scheme names the session cookie from `session.cookie` (default `navree_session`). It is listed even in apps that only use bearer tokens, such as the CRM.
@@ -289,7 +289,7 @@ import type { components, paths as GeneratedPaths } from "./schema";
 
 type Schemas = components["schemas"];
 
-/** Navree error body: `{statusCode, message, error, errors?}`. */
+/** Navree error body: `{statusCode, message, error, code?, errors?}`. */
 export type ApiErrorBody = Schemas["HttpError"];
 export type User = Schemas["User"];
 export type TokenPair = Schemas["TokenPair"];

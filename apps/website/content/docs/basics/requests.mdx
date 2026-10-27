@@ -72,7 +72,8 @@ Missing fields must be `Option`s or have a serde default. A value of the wrong t
 {
   "statusCode": 400,
   "message": "Failed to deserialize query string: owner_id: UUID parsing failed: invalid character: found `n` at 0",
-  "error": "Bad Request"
+  "error": "Bad Request",
+  "code": "bad_request"
 }
 ```
 
@@ -307,7 +308,7 @@ async fn show(&self, Tenant(tenant): Tenant, Settings(settings): Settings) -> St
 Request extensions are also where you find the `RequestId`, the `ClientIp`, the `AuthState` and the route's metadata (as `Arc<RouteMeta>`), if your extractor needs them. A request without `X-Tenant` gets:
 
 ```json
-{ "statusCode": 400, "message": "The X-Tenant header is required.", "error": "Bad Request" }
+{ "statusCode": 400, "message": "The X-Tenant header is required.", "error": "Bad Request", "code": "bad_request" }
 ```
 
 ## Testing requests

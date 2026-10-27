@@ -225,7 +225,7 @@ let rates = self.rates.latest(&base).await.map_err(|error| {
 })?;
 ```
 
-The client sees `{"statusCode": 502, "message": "Bad Gateway", "error": "Bad Gateway"}`, and the cause is logged with the request.
+The client sees `{"statusCode": 502, "message": "Bad Gateway", "error": "Bad Gateway", "code": "rates_unavailable"}`, and the cause is logged with the request.
 
 ## The SSRF policy
 

@@ -438,6 +438,7 @@ Invalid input never reaches the handler. An empty title is a 400 in Navree's err
   "statusCode": 400,
   "message": ["title must be longer than or equal to 1 characters"],
   "error": "Bad Request",
+  "code": "validation_failed",
   "errors": { "title": ["title must be longer than or equal to 1 characters"] }
 }
 ```
@@ -445,7 +446,7 @@ Invalid input never reaches the handler. An empty title is a 400 in Navree's err
 Without a token, the API answers 401. With a token for another user, Grace, `GET /api/v1/tasks` shows none of Ada's tasks, and `GET /api/v1/tasks/{id}` of Ada's task is a 403:
 
 ```json
-{"statusCode":403,"message":"Forbidden","error":"Forbidden"}
+{"statusCode":403,"message":"Forbidden","error":"Forbidden","code":"forbidden"}
 ```
 
 <Callout type="note" title="403, not 404">

@@ -366,7 +366,7 @@ The protocol endpoints (`/oauth/token`, `/oauth/revoke`, `/oauth/introspect`, `/
 { "error": "invalid_grant", "error_description": "The authorization code has expired" }
 ```
 
-Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate: Basic` when the client used HTTP Basic), a missing flow page is 503 `temporarily_unavailable`, and everything else is a 400. `GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error`, `error_description`, `state` and `iss` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error" }`, and `OAuthError` returned from your own handlers renders in it too.
+Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate: Basic` when the client used HTTP Basic), a missing flow page is 503 `temporarily_unavailable`, and everything else is a 400. `GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error`, `error_description`, `state` and `iss` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error", "code" }`, and `OAuthError` returned from your own handlers renders in it too.
 
 ## Audit entries
 
