@@ -70,6 +70,7 @@ navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
 navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
+navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -315,6 +316,9 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# Chrome for Testing archives (`navree browser:install`): deflate through
+# flate2 on zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
+zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
 # The resident memory of the current process (navree-fleet workers recycle

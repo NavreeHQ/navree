@@ -32,13 +32,21 @@ navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
+# `navree browser:install`: downloads Chrome for Testing (rustls with ring)
+# and unpacks the zip.
+reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Reads entities for `make:resource`.
 syn = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
 tempfile = { workspace = true }
+# A local server for the browser:install download tests.
+wiremock = { workspace = true }
