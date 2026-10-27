@@ -70,6 +70,7 @@ mod isolation;
 mod members;
 mod migration;
 mod module;
+mod permission_check;
 mod resolve;
 mod role;
 mod tenant;
