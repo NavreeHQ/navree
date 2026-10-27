@@ -97,7 +97,7 @@ error: dock.toml: [services.redis]: unknown key `bucket`; redis takes image, ver
 | Service | Image | Ports on 127.0.0.1 | Settings your app gets |
 |---|---|---|---|
 | `postgres` | `postgres:17` (`pgvector/pgvector:pg17` with `extensions = ["vector"]`) | 5432 | `APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api` |
-| `redis` | `redis:7` | 6379 | `REDIS_URL=redis://127.0.0.1:6379`, for your own code and the [Redis Streams transport](/docs/microservices/transports/#redis-streams) |
+| `redis` | `redis:7` | 6379 | `REDIS_URL=redis://127.0.0.1:6379`, for [`RedisModule`](/docs/digging-deeper/redis/#configuration), your own code and the [Redis Streams transport](/docs/microservices/transports/#redis-streams) |
 | `meilisearch` | `getmeili/meilisearch:v1.55` | 7700 | `APP_SEARCH__ENGINE=meilisearch`, `APP_SEARCH__URL=http://127.0.0.1:7700`, `APP_SEARCH__KEY` |
 | `mailpit` | `axllent/mailpit:v1.31` | 1025 (SMTP), 8025 (inbox) | `APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | 9000 (S3 API), 9001 (console) | `AWS_ENDPOINT_URL=http://127.0.0.1:9000`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1` |
