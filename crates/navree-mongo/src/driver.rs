@@ -227,7 +227,8 @@ impl MongoDriver {
         let command = MongoCommand::Count(count.clone());
         let collection = self.database.collection::<Document>(&count.collection);
         let action = collection.count_documents(count.filter.clone());
-        self.timed(&command, |count: &u64| Some(*count), async {
+        // One value comes back, whatever it counts.
+        self.timed(&command, |_: &u64| Some(1), async {
             match &self.session {
                 None => action.await,
                 Some(state) => {

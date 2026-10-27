@@ -92,6 +92,10 @@ pub enum MongoError {
     /// A model operation failed.
     #[error(transparent)]
     Orm(#[from] OrmError),
+    /// An error of the app's own, with its message: a change observer
+    /// refusing a change, a migration's own check.
+    #[error("{0}")]
+    Custom(String),
 }
 
 impl MongoError {
@@ -235,7 +239,8 @@ pub(crate) fn orm_error(error: &mongodb::error::Error) -> OrmError {
 }
 
 /// An [`OrmError::Unsupported`] for MongoDB: `feature` names what was
-/// asked and, after a colon or in parentheses, what to do instead.
+/// asked and, in parentheses, what to do instead (the message reads
+/// "`feature` is not supported on MongoDB").
 pub(crate) fn unsupported(feature: impl Into<Cow<'static, str>>) -> OrmError {
     OrmError::Unsupported {
         feature: feature.into(),
