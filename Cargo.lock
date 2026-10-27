@@ -5335,6 +5335,7 @@ dependencies = [
  "navree-telemetry",
  "navree-testing",
  "navree-view",
+ "navree-workspace",
  "sea-orm",
  "sea-orm-migration",
  "serde",

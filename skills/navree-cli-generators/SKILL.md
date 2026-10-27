@@ -74,7 +74,9 @@ server too (pnpm, yarn or npm by lockfile).
 
 ```sh
 navree list                     # every command of the app (not `navree help`: that's the CLI's)
-navree check [--graph]          # validate the module graph; no boot (cheap CI step)
+navree check [--graph]          # module graph (no boot), then the conformity checks (boots once)
+navree check --only workspace --json   # some checks, as JSON (skill navree-module-conformity)
+navree gate [--skip web]        # fmt, clippy, tests, check and the front end, one gate per machine
 navree routes [--json]          # routes with access rules
 navree migrate | migrate:status | migrate:rollback | migrate:fresh [--seed]
 navree db:seed [name...]
@@ -88,8 +90,10 @@ navree cache:clear | down [--retry S] [--message T] | up
 navree serve [--addr HOST:PORT] # the default with no command
 ```
 
-Every command except `check`, `list` and `help` boots the whole app (config,
-database, modules), so it needs a working configuration. Modules add their
+Every command except `check --graph`, `list` and `help` boots the whole app
+(config, database, modules), so it needs a working configuration;
+`navree check` validates the graph without booting, then boots once for
+`conformity:check`. Modules add their
 own (`audit:prune` with `AuditModule`, schedule commands with `ScheduleModule`).
 
 ## Writing a console command

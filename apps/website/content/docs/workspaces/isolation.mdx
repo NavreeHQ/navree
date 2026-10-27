@@ -291,6 +291,16 @@ client
     .assert_error(404, None);
 ```
 
+An [isolation suite](/docs/testing/isolation-tests/) writes those tests for every route of a module, from its route table and a model factory, under every isolation strategy:
+
+```rust
+app.isolation_suite::<DealsModule>()
+    .factory(DealFactory::default())
+    .body("POST", "/api/v1/deals", json!({ "title": "Renewal" }))
+    .run()
+    .await;
+```
+
 Database isolation also runs on SQLite. Point the template at a temporary directory so each test gets its own files:
 
 ```rust

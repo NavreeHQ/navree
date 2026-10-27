@@ -87,6 +87,7 @@ impl PostController {
     /// (`?page=2&per_page=50`).
     #[get("/")]
     #[can(Read, Post)]
+    #[api(summary = "List posts", tag = "Post")]
     async fn index(
         &self,
         uow: Uow,
@@ -99,6 +100,7 @@ impl PostController {
     /// Shows one post.
     #[get("/{id}")]
     #[can(Read, Post, from = "id")]
+    #[api(summary = "Show a post", tag = "Post")]
     async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
         Json(post.into_inner())
     }
@@ -106,6 +108,7 @@ impl PostController {
     /// Creates a post owned by the caller.
     #[post("/")]
     #[can(Create, Post)]
+    #[api(summary = "Create a post", tag = "Post", status = 201)]
     async fn store(
         &self,
         uow: Uow,
@@ -118,6 +121,7 @@ impl PostController {
     /// Updates the fields present in the body.
     #[patch("/{id}")]
     #[can(Update, Post, from = "id")]
+    #[api(summary = "Update a post", tag = "Post")]
     async fn update(
         &self,
         uow: Uow,
@@ -132,6 +136,7 @@ impl PostController {
     /// Deletes a post.
     #[delete("/{id}")]
     #[can(Delete, Post, from = "id")]
+    #[api(summary = "Delete a post", tag = "Post", status = 204)]
     async fn destroy(&self, uow: Uow, post: Authorized<Post, Delete>) -> Result<NoContent> {
         self.posts.delete(&uow, post.into_inner()).await?;
         Ok(NoContent)

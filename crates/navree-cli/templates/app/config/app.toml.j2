@@ -26,3 +26,6 @@ registration = true
 
 [api]
 title = "{{ title }} API"
+# The Lighthouse and Logbook dashboards are pages, not API routes:
+# `navree check` doesn't ask them for #[api] docs.
+undocumented = ["/_lighthouse*", "/_logbook*"]

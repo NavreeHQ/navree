@@ -193,6 +193,8 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 `validation-phone` and `validation-html` are part of `full`. They add the [international types](/docs/basics/validation/#international-input) that need a dependency of their own; names, digits, countries and locales come with `validation` alone.
 
+With `workspace` on too, `testing` also adds `navree::workspace::testing`, the [isolation suites](/docs/testing/isolation-tests/); neither feature turns the other on.
+
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
 Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`), which you list yourself: `features = ["billing"]`.

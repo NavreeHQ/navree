@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use navree_config::{Config, ModuleBuilderConfigExt};
-use navree_http::{HttpModule, ModuleBuilderHttpExt, route_table};
+use navree_contracts::ModuleBuilderConformityExt;
+use navree_http::{HttpModule, ModuleBuilderHttpExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Injectable, KernelError, Lifecycle, Module,
     ModuleBuilder, ModuleId, ProviderKey, Resolver, WeakAppContext,
@@ -13,6 +14,7 @@ use navree_kernel::{
 use serde_json::Value;
 use tokio::sync::OnceCell;
 
+use crate::conformity::{docs_check, documented_routes, require_docs_error, undocumented};
 use crate::docs::DocsController;
 use crate::document::build;
 use crate::ext::ApiSchema;
@@ -33,6 +35,10 @@ use crate::{ApiOptions, DEFAULT_SESSION_COOKIE};
 ///   `GET {api_prefix}/docs`.
 /// - Command `openapi:export [path]`: writes the document (default
 ///   `openapi.json`), creating missing directories.
+/// - The conformity check `api.docs` (`navree check`): every route has
+///   `#[api]` documentation, unless [`undocumented`](ApiOptions::undocumented)
+///   allows it. With [`require_docs`](ApiOptions::require_docs), an
+///   undocumented route also stops the boot.
 ///
 /// ```no_run
 /// use navree_api::ApiModule;
@@ -107,7 +113,8 @@ fn register(m: &mut ModuleBuilder, options: Option<ApiOptions>) {
             "openapi:export",
             "Write the OpenAPI document to a file ([path], default openapi.json)",
             export,
-        ));
+        ))
+        .conformity_check(docs_check());
 }
 
 /// `openapi:export [path]`: writes the pretty-printed document, creating
@@ -188,12 +195,13 @@ impl ApiDocs {
                     .app
                     .upgrade()
                     .ok_or("the app was dropped; its OpenAPI document cannot be built")?;
-                let own_module = ModuleId::of::<ApiModule>().name();
-                let routes: Vec<_> = route_table(&ctx)
-                    .await?
-                    .into_iter()
-                    .filter(|route| route.module != Some(own_module))
-                    .collect();
+                let routes = documented_routes(&ctx).await?;
+                if self.options.require_docs {
+                    let missing = undocumented(&routes, &self.options);
+                    if !missing.is_empty() {
+                        return Err(require_docs_error(&missing).into());
+                    }
+                }
                 let extra: Vec<_> = ctx
                     .contributions::<ApiSchema>()
                     .into_iter()

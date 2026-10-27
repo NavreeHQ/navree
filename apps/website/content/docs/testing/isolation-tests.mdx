@@ -1,0 +1,215 @@
+---
+title: "Isolation tests"
+description: "Generate cross-workspace tests from a module's route table: reading, changing or deleting another workspace's record is a 404, lists never show it, and creates never land in it."
+---
+
+A multi-tenant app is only as safe as its least careful query. One `Entity::find_by_id` without the workspace filter, and Globex reads Acme's deals. Isolation tests prove each route keeps workspaces apart, and `TestApp::isolation_suite` writes them for you from the module's route table: every route, sent from one workspace against another workspace's records.
+
+## A first suite
+
+Give the suite the module to test and a model factory for its records, then run it:
+
+```rust title="tests/deals_isolation.rs"
+use navree::testing::TestApp;
+use navree::workspace::testing::IsolationSuiteExt;
+use serde_json::json;
+
+#[tokio::test]
+async fn deals_stay_in_their_workspace() {
+    let app = app().await; // your test app, with WorkspaceModule and DealsModule
+    app.isolation_suite::<DealsModule>()
+        .factory(DealFactory::default())
+        .body("POST", "/api/v1/deals", json!({ "title": "Renewal", "amount_cents": 1000 }))
+        .run()
+        .await;
+}
+```
+
+The factory is an ordinary [model factory](/docs/database/seeding-and-factories/#factories) whose entity implements `WorkspaceScoped`:
+
+```rust title="src/deals/factory.rs"
+use navree::db::sea_orm::ActiveValue::Set;
+use navree::db::Factory;
+use uuid::Uuid;
+
+#[derive(Default)]
+pub struct DealFactory;
+
+impl Factory for DealFactory {
+    type Entity = deal::Entity;
+
+    fn definition(&self, n: usize) -> deal::ActiveModel {
+        deal::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            workspace_id: Set(Uuid::nil()), // the suite sets the workspace
+            title: Set(format!("Deal {n}")),
+            ..Default::default()
+        }
+    }
+}
+```
+
+`run` passes when every route keeps workspaces apart. Otherwise it fails the test with a report of every route:
+
+```text
+Isolation suite for DealsModule: 5 routes, 1 passed, 4 failed, 0 skipped
+  ok    GET     /api/v1/deals       another workspace's records are not listed
+  FAIL  GET     /api/v1/deals/{id}  answered 200 to another workspace: its record was read
+  FAIL  PATCH   /api/v1/deals/{id}  answered 200 to another workspace: its record was changed
+  FAIL  DELETE  /api/v1/deals/{id}  answered 403 to another workspace: a record of another workspace must be a 404, so its existence does not show
+  FAIL  POST    /api/v1/deals       answered 201 and put the record in another workspace (workspace_id)
+```
+
+`try_run` returns the same report as an `IsolationReport` instead of failing, for tests that look at single routes.
+
+## What the suite sends
+
+The suite creates two workspaces, A and B, with one user who owns both, so role checks pass in either. Every request acts as that user in workspace A, through the `X-Workspace` header. Then, route by route:
+
+| Route | The suite | Passes when |
+|---|---|---|
+| With path parameters: `GET`, `PATCH`, `PUT`, `POST` or `DELETE /deals/{id}` | Creates a fresh record in B for each parameter, then sends the route from A with B's ids | The answer is `404`. A `GET` first answers 2xx in B (the control), so the 404 comes from isolation and not from a broken route. After a write, when the module has a `GET` route on the same path, it returns B's record unchanged |
+| `GET` without parameters, a list | Creates a record in B, then lists from A | The answer is 2xx and does not show B's record |
+| `POST`, `PUT`, `PATCH` or `DELETE` without parameters, a create | Sends the body you gave with `.body(..)`, with `workspace_id` set to B's id | The record is not created in B: the answer is a 4xx, or the created record's `workspace_id` is not B's and B's list does not show it |
+
+Any other answer to a cross-workspace request fails the route, with a reason:
+
+- **2xx**: the record was read, changed or deleted from the wrong workspace.
+- **403**: the route refused, but it told the caller that the record exists. A record of another workspace must look like one that doesn't exist.
+- **400** before the record was looked up: the route rejected the body, so the suite couldn't prove anything. Give it a valid body with `.body(..)`.
+- **401**: the suite's requests aren't authenticated. See [Requirements](#requirements).
+
+Each route gets its own records, so a leaking `DELETE` can't spoil the next route's test.
+
+## Records for path parameters
+
+`.factory(f)` binds the `{id}` parameter. Bind other parameters by name with `.factory_for`:
+
+```rust
+app.isolation_suite::<DealsModule>()
+    .factory_for("deal", DealFactory::default()) // /deals/{deal}/...
+    .run()
+    .await;
+```
+
+Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and into the workspace's own schema or database under schema and database isolation, with its workspace column set when the table keeps one. On PostgreSQL the insert runs inside the workspace, so a table with [row-level security](/docs/workspaces/isolation/#row-level-security-on-postgresql) accepts it.
+
+The suite tests what the routes do, not how the code is written. A handler that reads by id without the workspace filter still passes when row-level security or a per-workspace schema keeps the record out of reach; the [`workspace.repo` check](/docs/testing/conformity-checks/#workspace-data-through-workspacerepo) is the one that asks for `WorkspaceRepo` in the code.
+
+A nested route such as `/deals/{deal}/notes/{note}` needs a note that belongs to the deal. Bind it with `.record`, whose closure gets the parameters bound before it:
+
+```rust
+use navree::db::sea_orm::ActiveValue::Set;
+use navree::db::{Db, Factory};
+use navree::testing::RecordContext;
+use navree::workspace::WorkspaceRepo;
+use uuid::Uuid;
+
+async fn note(cx: RecordContext) -> Result<String, navree::kernel::BoxError> {
+    let workspace: Uuid = cx.tenant().id.parse()?;
+    let deal: Uuid = cx.params()["deal"].parse()?;
+    let db = cx.app().get::<Db>().await?;
+    let uow = db.uow(None, None).await;
+    let mut model = NoteFactory.definition(cx.n());
+    model.deal_id = Set(deal);
+    let note = WorkspaceRepo::<note::Entity>::insert(&uow, workspace, model).await?;
+    uow.commit().await?;
+    Ok(note.id.to_string())
+}
+
+app.isolation_suite::<DealsModule>()
+    .factory_for("deal", DealFactory::default())
+    .record("note", note)
+    .run()
+    .await;
+```
+
+A route whose parameter has no binding fails with `path parameter {note} has no record`, so a new route can't slip past the suite unnoticed.
+
+## Bodies and skipped routes
+
+Writes on a record (`PATCH /deals/{id}`) are sent with `{}` unless you give a body. Creates without parameters (`POST /deals`) need a body to be tested and are skipped without one. Give bodies by method and mounted path, the API prefix and version included:
+
+```rust
+app.isolation_suite::<DealsModule>()
+    .factory(DealFactory::default())
+    .body("POST", "/api/v1/deals", json!({ "title": "Renewal", "amount_cents": 1000 }))
+    .body("PATCH", "/api/v1/deals/{id}", json!({ "title": "Renamed" }))
+    .skip("POST", "/api/v1/deals/import", "an upload; covered by import_tests.rs")
+    .run()
+    .await;
+```
+
+Skipped routes are listed in the report with their reason and don't fail the suite.
+
+## Requirements
+
+- **The `testing` and `workspace` features.** `navree::workspace::testing` is there when the `navree` dependency has both, as the default `full` features do. An app that picks its features adds `testing` to its dev-dependency on `navree`.
+- **The `header` resolver.** The suite names the workspace in the `workspace.header` header (`X-Workspace` by default). It is in the default `workspace.resolvers`; if your app resolves workspaces only by path or subdomain, add `header` in the test app: `.config("workspace.resolvers", "header,path")`.
+- **A test authenticator.** The suite acts as its user with `acting_as`. Apps that include `AuthModule` build the test app with `.fake_auth()` (see [Apps with navree-auth](/docs/testing/http-tests/#apps-with-navree-auth)).
+- **Roles.** The user owns both workspaces, so the `owner` role's permissions (`all.*`) pass every route check. A route whose checks need something else, such as a global role, fails, and the report says which request was refused.
+- **A clean module.** The suite tests the routes of the module you name, not those of the modules it imports. Run one suite per feature module.
+
+## Other tenancies
+
+The suite itself lives in navree-testing and knows nothing about workspaces. A `Tenancy` creates its tenants and says how a request names one, and navree-workspace's `WorkspaceTenancy` is the one `.factory` installs. Bring your own for another tenant model:
+
+```rust
+use navree::kernel::{BoxError, BoxFuture};
+use navree::testing::{Tenancy, Tenant, TestApp};
+use uuid::Uuid;
+
+struct Organizations;
+
+impl Tenancy for Organizations {
+    fn create<'a>(
+        &'a self,
+        app: &'a TestApp,
+        name: &'a str,
+        member: Uuid,
+    ) -> BoxFuture<'a, Result<Tenant, BoxError>> {
+        Box::pin(async move {
+            let id = create_organization(app, name, member).await?;
+            Ok(Tenant::new(id.clone(), name).header("x-organization", &id))
+        })
+    }
+
+    fn owner_field(&self) -> Option<&str> {
+        Some("organization_id")
+    }
+
+    fn noun(&self) -> &str {
+        "organization"
+    }
+}
+
+app.isolation_suite::<InvoicesModule>()
+    .tenancy(Organizations)
+    .record("id", create_invoice)
+    .run()
+    .await;
+```
+
+## Reference
+
+| `IsolationSuite` | Does |
+|---|---|
+| `app.isolation_suite::<M>()` | A suite for every route of module `M` |
+| `.factory(f)`, `.factory_for(param, f)` | Binds `{id}` or `{param}` to records of a model factory, and uses workspaces (navree-workspace, `IsolationSuiteExt`) |
+| `.record(param, f)` | Binds `{param}` to records an async closure creates: `f(RecordContext) -> Result<String, BoxError>` |
+| `.body(method, path, json)` | The JSON body for one route |
+| `.skip(method, path, reason)` | Leaves one route out |
+| `.tenancy(t)`, `.workspaces()` | The `Tenancy` that creates the two tenants |
+| `.run().await` | Runs the suite; fails the test with the report when a route fails |
+| `.try_run().await` | Runs the suite and returns the `IsolationReport` |
+
+`IsolationReport` has `routes` (each a `RouteResult` with `method`, `path` and an `IsolationOutcome` of `Passed`, `Failed` or `Skipped` with its reason), `passed()`, `failed()`, `skipped()` and `is_ok()`, and prints as the table above.
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
+    Row, schema and database isolation, and `WorkspaceRepo`.
+  </LinkCard>
+  <LinkCard href="/docs/testing/conformity-checks/" title="Conformity checks">
+    `navree check` and `navree gate`: the checks that run before every push.
+  </LinkCard>
+</LinkCards>
