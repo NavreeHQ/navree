@@ -17,15 +17,13 @@ fn labels(names: &[&str]) -> Vec<Record> {
 pub async fn batch_runs_its_jobs_then_and_finally(driver: QueueDriver) {
     let h = harness_with(one_worker(driver)).await;
 
-    let batch = h
-        .queue
-        .dispatch_batch(
-            Batch::new("recipients.import")
-                .add(labels(&["a", "b", "c"]))
-                .then(Record::new("then"))
-                .catch(Record::new("catch"))
-                .finally(Record::new("finally")),
-        )
+    // The fluent form of `queue.dispatch_batch(batch)`.
+    let batch = Batch::new("recipients.import")
+        .add(labels(&["a", "b", "c"]))
+        .then(Record::new("then"))
+        .catch(Record::new("catch"))
+        .finally(Record::new("finally"))
+        .dispatch(&h.queue)
         .await
         .expect("dispatched");
     assert_eq!(batch.name, "recipients.import");
@@ -197,9 +195,10 @@ pub async fn batch_in_a_rolled_back_unit_of_work_is_not_stored(driver: QueueDriv
     assert_eq!(h.queue.pending_count("default").await.unwrap(), 0);
 
     let uow = db.uow(None, None).await;
-    let committed = h
-        .queue
-        .dispatch_batch_in(&uow, Batch::new("import").add(labels(&["b"])))
+    // The fluent form of `queue.dispatch_batch_in(&uow, batch)`.
+    let committed = Batch::new("import")
+        .add(labels(&["b"]))
+        .dispatch_in(&h.queue, &uow)
         .await
         .unwrap();
     assert_eq!(h.queue.find_batch(&committed.id).await.unwrap(), None);
