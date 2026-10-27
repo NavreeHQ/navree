@@ -34,6 +34,11 @@ pub enum KeyKind {
     UuidV4,
     /// A [`Ulid`], generated when the key is nil.
     Ulid,
+    /// A MongoDB ObjectId (12 bytes: a timestamp in seconds, a random
+    /// value and a counter, so new ids sort by creation time), generated
+    /// when the key is all zeros. The key type is the MongoDB driver
+    /// crate's `ObjectId`.
+    ObjectId,
     /// Set by the application; never generated.
     Manual,
 }
@@ -95,7 +100,7 @@ impl PrimaryKey for Uuid {
             KeyKind::UuidV7 => Some(Uuid::now_v7()),
             KeyKind::UuidV4 => Some(Uuid::new_v4()),
             KeyKind::Ulid => Some(Ulid::new().to_uuid()),
-            KeyKind::Increments | KeyKind::Manual => None,
+            KeyKind::Increments | KeyKind::ObjectId | KeyKind::Manual => None,
         }
     }
 
@@ -116,7 +121,7 @@ impl PrimaryKey for Ulid {
     fn generate(kind: KeyKind) -> Option<Self> {
         match kind {
             KeyKind::Ulid | KeyKind::UuidV7 | KeyKind::UuidV4 => Some(Ulid::new()),
-            KeyKind::Increments | KeyKind::Manual => None,
+            KeyKind::Increments | KeyKind::ObjectId | KeyKind::Manual => None,
         }
     }
 
@@ -139,7 +144,7 @@ impl PrimaryKey for String {
             KeyKind::UuidV7 => Some(Uuid::now_v7().to_string()),
             KeyKind::UuidV4 => Some(Uuid::new_v4().to_string()),
             KeyKind::Ulid => Some(Ulid::new().to_string()),
-            KeyKind::Increments | KeyKind::Manual => None,
+            KeyKind::Increments | KeyKind::ObjectId | KeyKind::Manual => None,
         }
     }
 
@@ -340,6 +345,7 @@ pub struct ModelMeta {
     updated_at: Option<&'static str>,
     deleted_at: Option<&'static str>,
     connection: Option<&'static str>,
+    driver: Option<&'static str>,
     per_page: u64,
 }
 
@@ -357,6 +363,7 @@ impl ModelMeta {
             updated_at: None,
             deleted_at: None,
             connection: None,
+            driver: None,
             per_page: 15,
         }
     }
@@ -401,6 +408,15 @@ impl ModelMeta {
     pub const fn connection(self, name: &'static str) -> Self {
         ModelMeta {
             connection: Some(name),
+            ..self
+        }
+    }
+
+    /// The document driver the model is stored with (`mongodb`), declared
+    /// with `#[model(driver = "...")]`; SQL models declare none.
+    pub const fn driver(self, name: &'static str) -> Self {
+        ModelMeta {
+            driver: Some(name),
             ..self
         }
     }
@@ -473,6 +489,12 @@ impl ModelMeta {
     /// The named connection, if the model declares one.
     pub const fn connection_name(&self) -> Option<&'static str> {
         self.connection
+    }
+
+    /// The document driver the model declares (`#[model(driver =
+    /// "mongodb")]`); `None` for SQL models.
+    pub const fn driver_name(&self) -> Option<&'static str> {
+        self.driver
     }
 
     /// The default page size.

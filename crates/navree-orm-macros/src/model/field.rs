@@ -32,6 +32,24 @@ pub(crate) struct FieldAttrs {
 /// The keys `#[model(...)]` takes on a field.
 const KEYS: &[&str] = &["column", "cast", "default", "skip"];
 
+/// The column a field names with `#[model(column = "...")]`, read ahead of
+/// [`parse`] (which reports malformed attributes).
+pub(crate) fn peek_column(attrs: &[Attribute]) -> Option<String> {
+    let mut column = None;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("model")) {
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column") {
+                let name: LitStr = meta.value()?.parse()?;
+                column = Some(name.value());
+            } else if meta.input.peek(syn::Token![=]) {
+                let _: syn::Expr = meta.value()?.parse()?;
+            }
+            Ok(())
+        });
+    }
+    column
+}
+
 /// Parses the `#[model(...)]` attributes of a field.
 pub(crate) fn parse(attrs: &[Attribute], errors: &mut Errors) -> FieldAttrs {
     let mut field = FieldAttrs::default();
