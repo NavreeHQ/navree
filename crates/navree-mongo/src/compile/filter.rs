@@ -13,7 +13,7 @@ use navree_orm::{OrmError, Value};
 
 use super::expr::{self, literal};
 use super::like::like_regex;
-use super::scope::{Cx, Place, Scope, field_path};
+use super::scope::{Cx, Place, Scope};
 use super::{Pending, subquery};
 use crate::convert::{json_to_bson, to_bson};
 use crate::error::{invalid, unsupported};
@@ -788,21 +788,6 @@ fn full_text(query: &str, options: &FullText) -> Result<Document, OrmError> {
     Ok(doc! { "$text": text })
 }
 
-/// Whether `filter` holds a `$text` condition anywhere.
-pub(crate) fn has_text(filter: &Document) -> bool {
-    filter.iter().any(|(key, value)| {
-        key == "$text"
-            || match value {
-                Bson::Document(inner) => has_text(inner),
-                Bson::Array(items) => items.iter().any(|item| match item {
-                    Bson::Document(inner) => has_text(inner),
-                    _ => false,
-                }),
-                _ => false,
-            }
-    })
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -1046,7 +1031,6 @@ mod tests {
             doc! { "$text": { "$search": "\"net 30\" -draft" } }
         );
         assert!(compile(text("x", FullText::default().language("klingon"))).is_err());
-        assert!(has_text(&doc! { "$and": [{ "a": 1 }, { "$text": { "$search": "x" } }] }));
     }
 
     #[test]

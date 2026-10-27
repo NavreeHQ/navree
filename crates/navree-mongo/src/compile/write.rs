@@ -4,7 +4,7 @@
 use std::str::FromStr;
 
 use bson::{Bson, Decimal128, Document, doc};
-use navree_orm::ir::{ArithmeticOp, ColumnRef, DeleteIr, Expr, InsertIr, TableRef, UpdateIr, WhereClause};
+use navree_orm::ir::{ArithmeticOp, ColumnRef, Expr, InsertIr, TableRef, UpdateIr, WhereClause};
 use navree_orm::{Decimal, OrmError};
 
 use super::Pending;
@@ -194,11 +194,6 @@ fn negate(amount: Bson) -> Result<Bson, OrmError> {
             )));
         }
     })
-}
-
-/// The target of a delete.
-pub(crate) fn delete(delete: &DeleteIr) -> Result<Target, OrmError> {
-    target(&delete.table, &delete.wheres)
 }
 
 #[cfg(test)]

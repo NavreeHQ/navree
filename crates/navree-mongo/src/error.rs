@@ -85,6 +85,10 @@ pub enum MongoError {
     /// A unit of work was used after it committed or rolled back.
     #[error("the MongoDB unit of work is already {0}")]
     Finished(&'static str),
+    /// The app could not provide something the operation needs (its
+    /// change observers, its configuration).
+    #[error("the app: {0}")]
+    Kernel(#[from] navree_kernel::KernelError),
     /// A model operation failed.
     #[error(transparent)]
     Orm(#[from] OrmError),
