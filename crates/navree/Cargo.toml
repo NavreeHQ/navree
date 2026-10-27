@@ -81,7 +81,8 @@ auth = [
     "mail",
     "access",
 ]
-## Workspaces: multi-tenancy with members, roles, invitations and isolation.
+## Workspaces: multi-tenancy with members, roles, invitations and isolation
+## (`navree::workspace::testing` runs isolation suites on navree-testing).
 workspace = [
     "dep:navree-workspace",
     "http",
@@ -90,6 +91,7 @@ workspace = [
     "events",
     "mail",
     "access",
+    "testing",
 ]
 ## L6
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,

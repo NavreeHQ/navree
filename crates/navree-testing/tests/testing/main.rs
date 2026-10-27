@@ -7,4 +7,5 @@ mod support;
 mod app;
 mod auth;
 mod client;
+mod isolation;
 mod response;

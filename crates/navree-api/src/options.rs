@@ -12,6 +12,8 @@ use serde::{Deserialize, Deserializer};
 /// version = "1.0.0"
 /// servers = ["https://crm.example.com"]
 /// docs_ui = false
+/// require_docs = true            # an undocumented route stops the boot
+/// undocumented = ["GET /storage/*"]
 /// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -27,6 +29,15 @@ pub struct ApiOptions {
     pub servers: Vec<String>,
     /// Serve the Scalar docs UI at `{api_prefix}/docs` (default `true`).
     pub docs_ui: bool,
+    /// Refuse to boot while a route has no `#[api]` documentation (default
+    /// `false`; `navree check` reports undocumented routes either way).
+    pub require_docs: bool,
+    /// Routes allowed without documentation: `"METHOD /path"` or `"/path"`
+    /// (every method), with a trailing `*` matching any rest of the path
+    /// (`"GET /storage/*"`). The path is the mounted one, prefix and
+    /// version included. From the environment, a comma-separated list.
+    #[serde(deserialize_with = "list_or_comma_separated")]
+    pub undocumented: Vec<String>,
 }
 
 impl Default for ApiOptions {
@@ -36,6 +47,8 @@ impl Default for ApiOptions {
             version: "1.0.0".to_owned(),
             servers: Vec::new(),
             docs_ui: true,
+            require_docs: false,
+            undocumented: Vec::new(),
         }
     }
 }
@@ -50,6 +63,13 @@ impl ConfigSection for ApiOptions {
         }
         if self.version.trim().is_empty() {
             errors.push("api.version must not be empty".to_owned());
+        }
+        for entry in &self.undocumented {
+            if !entry.contains('/') {
+                errors.push(format!(
+                    "api.undocumented: `{entry}` is not a route (\"METHOD /path\" or \"/path\", `*` at the end matches the rest)"
+                ));
+            }
         }
         if errors.is_empty() {
             Ok(())
