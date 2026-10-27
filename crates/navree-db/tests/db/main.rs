@@ -10,6 +10,7 @@ mod migrations;
 mod module;
 mod mysql_sql;
 mod paginate;
+mod queries;
 mod repo;
 mod schema_migrations;
 mod seed;

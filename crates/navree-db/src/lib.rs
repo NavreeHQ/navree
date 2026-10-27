@@ -90,6 +90,7 @@ mod module;
 mod mysql;
 mod options;
 mod paginate;
+mod queries;
 mod reader;
 mod repo;
 mod seed;
@@ -109,6 +110,7 @@ pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
     cursor_paginate, cursor_paginate_desc, paginate,
 };
+pub use queries::{LoggedQuery, QueryLog, QueryStats, RepeatedQuery};
 pub use reader::Reader;
 pub use repo::Repo;
 pub use seed::{Factory, Seeder, create, create_many, run_seeders};

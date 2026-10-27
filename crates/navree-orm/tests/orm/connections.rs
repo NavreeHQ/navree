@@ -3,11 +3,12 @@
 //! the writer on demand and after a unit of work writes.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use futures::TryStreamExt;
 use navree_db::sea_orm::ConnectionTrait;
-use navree_db::{DatabaseModule, Db, DbOptions};
+use navree_db::{DatabaseModule, Db, DbOptions, QueryLog};
 use navree_kernel::{App, Navree};
 use navree_orm::{
     Model, OrmError, Record, Value, col, raw, select, table, using_connection, using_writer,
@@ -263,6 +264,61 @@ async fn a_db_outside_an_app_cannot_reach_other_connections() {
     analytics.conn().execute_unprepared(METRICS).await.unwrap();
     Metric::create(&analytics, metric("visits", 1)).await.unwrap();
     assert_eq!(Metric::query().count(&analytics).await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn orm_statements_reach_query_logs_listeners_and_hooks() {
+    let test = crate::support::sqlite().await;
+    let db = &test.db;
+    let executing = Arc::new(Mutex::new(Vec::<String>::new()));
+    let hook = executing.clone();
+    db.before_executing(move |sql| hook.lock().unwrap().push(sql.to_owned()));
+    let transactions = Arc::new(AtomicUsize::new(0));
+    let counter = transactions.clone();
+    db.before_starting_transaction(move || {
+        counter.fetch_add(1, Ordering::SeqCst);
+    });
+    let heard = Arc::new(AtomicUsize::new(0));
+    let listener = heard.clone();
+    db.on_query(move |_| {
+        listener.fetch_add(1, Ordering::SeqCst);
+    });
+
+    Company::create(
+        db,
+        Company {
+            name: "Acme".into(),
+            active: true,
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    let (count, queries) =
+        QueryLog::capture(Company::query().where_(Company::ACTIVE.eq(true)).count(db)).await;
+    assert_eq!(count.unwrap(), 1);
+    assert_eq!(queries.len(), 1);
+    assert!(queries[0].sql.starts_with("SELECT COUNT(*)"), "{}", queries[0].sql);
+    assert_eq!(queries[0].values, [navree_db::sea_orm::Value::from(true)]);
+    assert!(!queries[0].raw_sql().contains('?'), "{}", queries[0].raw_sql());
+    assert_eq!(executing.lock().unwrap().last(), Some(&queries[0].sql));
+    assert!(heard.load(Ordering::SeqCst) >= 2);
+
+    // A unit of work counts the ORM's statements.
+    let uow = db.uow(None, None).await;
+    uow.scope(async {
+        for _ in 0..3 {
+            Company::query().count(db).await.unwrap();
+        }
+    })
+    .await;
+    assert_eq!(uow.query_stats().repeated[0].count, 3);
+    uow.commit().await.unwrap();
+
+    // The ORM announces the transactions it begins itself.
+    let before = transactions.load(Ordering::SeqCst);
+    Company::query().truncate(db).await.unwrap();
+    assert_eq!(transactions.load(Ordering::SeqCst), before + 1);
 }
 
 // ---------------------------------------------------------------------------
