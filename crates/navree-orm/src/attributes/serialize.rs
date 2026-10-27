@@ -323,8 +323,12 @@ fn output_keys(meta: &ModelMeta, names: &[Cow<'static, str>]) -> Vec<String> {
 
 /// The record's attributes before visibility applies: the model's fields
 /// (with cast overrides and date formats), the extras and the appended
-/// accessors.
+/// accessors, with the cast context the record was read or saved under.
 pub(crate) fn attributes_object<M: Model>(record: &Record<M>) -> Result<Object> {
+    record.in_cast_context(|| collect_attributes(record))
+}
+
+fn collect_attributes<M: Model>(record: &Record<M>) -> Result<Object> {
     let meta = M::meta();
     let mut object = record.model.serialize(Capture).map_err(|error| {
         serialize_error::<M>(error.column.as_deref(), error.message)

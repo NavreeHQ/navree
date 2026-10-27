@@ -234,6 +234,7 @@ fn visibility_changes_per_record() {
 #[test]
 fn appends_change_per_record() {
     let mut person = Record::new(ada());
+    assert_eq!(person.full_name(), "Ada Lovelace", "an accessor is a plain method of the model");
     assert_eq!(person.appends(), ["full_name"]);
     assert!(person.has_appended("full_name"));
     person.append(["initials"]).unwrap();
@@ -295,11 +296,13 @@ async fn extras_and_relations_serialize_with_the_records_visibility() {
     let person = &mut people[0];
     person.relations_mut().set("remarks", remarks);
     person.relations_mut().set("mentor", None::<Record<Person>>);
+    person.relations_mut().set("replies", Collection::<Remark>::new());
     let json = person.to_value().unwrap();
     assert!(json.get("remarks_count").is_none(), "hidden by the model");
     assert_eq!(json["reviewed_at"], "2026-05-06T07:08:09.000000Z", "extras use the date format");
     assert_eq!(json["remarks"], json!([{"id": 1, "body": "first"}, {"id": 2, "body": "second"}]));
-    assert_eq!(json["mentor"], serde_json::Value::Null);
+    assert_eq!(json["mentor"], serde_json::Value::Null, "an empty to-one");
+    assert_eq!(json["replies"], json!([]), "an empty to-many");
     person.make_hidden(["remarks"]).make_visible(["remarks_count"]);
     let json = person.to_value().unwrap();
     assert!(json.get("remarks").is_none());
@@ -379,5 +382,75 @@ fn only_and_except_pick_values_whatever_the_visibility() {
             "last_seen_at": "2026-10-27T09:30:00.000000Z",
         }),
         "keyed by column; columns serde leaves out are absent"
+    );
+}
+
+/// A remark that counts its words once: an expensive computed value cached
+/// in a field that is not a column.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "remarks", unguarded, appends(word_count))]
+pub struct Essay {
+    pub id: i64,
+    pub person_id: i64,
+    pub body: String,
+    #[model(skip)]
+    #[serde(skip)]
+    pub words: std::sync::OnceLock<usize>,
+}
+
+#[accessors]
+impl Essay {
+    /// How many words the body has (counted once per record).
+    #[accessor]
+    pub fn word_count(&self) -> usize {
+        *self.words.get_or_init(|| self.body.split_whitespace().count())
+    }
+}
+
+#[tokio::test]
+async fn expensive_accessors_cache_in_fields_that_are_not_columns() {
+    let t = sqlite(SCHEMA).await;
+    Remark::create(&t.db, Remark { person_id: 1, body: "one two three".into(), ..Remark::default() })
+        .await
+        .unwrap();
+    let essay = Essay::query().first(&t.db).await.unwrap().unwrap();
+    assert_eq!(essay.words.get(), None, "not computed until asked");
+    assert_eq!(essay.to_value().unwrap()["word_count"], 3);
+    assert_eq!(essay.words.get(), Some(&3), "kept on the record");
+    assert_eq!(essay.word_count(), 3);
+    assert!(essay.is_clean(), "the cache is not a column");
+}
+
+/// Whether `T` implements `Display`, decided at compile time: the inherent
+/// method exists only when it does, and wins over the trait's.
+struct DisplayProbe<T>(std::marker::PhantomData<T>);
+
+trait NoDisplay {
+    fn displays(&self) -> bool {
+        false
+    }
+}
+
+impl<T> NoDisplay for DisplayProbe<T> {}
+
+impl<T: std::fmt::Display> DisplayProbe<T> {
+    fn displays(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn records_have_no_display_and_templates_get_their_values() {
+    assert!(DisplayProbe::<String>(std::marker::PhantomData).displays(), "the probe tells");
+    assert!(
+        !DisplayProbe::<Record<Person>>(std::marker::PhantomData).displays(),
+        "records do not print themselves"
+    );
+    let mut person = Record::new(ada());
+    person.first_name = "<b>Ada</b>".into();
+    assert_eq!(
+        person.to_value().unwrap()["firstName"],
+        "<b>Ada</b>",
+        "values stay as they are, for the template to escape"
     );
 }
