@@ -289,6 +289,45 @@ mod tests {
     }
 
     #[test]
+    fn section_queue_operations_is_read_from_nested_keys() {
+        let sources = ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_QUEUE__OPERATIONS__ROUTES", "false"),
+                ("APP_QUEUE__OPERATIONS__WATCHDOG", "false"),
+                ("APP_QUEUE__OPERATIONS__STALE_AFTER_SECS", "600"),
+                ("APP_QUEUE__OPERATIONS__VIEW_PERMISSION", "reports.view"),
+            ],
+        );
+        let options = config(sources).typed::<QueueOptions>().expect("valid");
+        let operations = options.operations;
+        assert!(!operations.routes && !operations.watchdog);
+        assert_eq!(operations.stale_after_secs, 600);
+        assert_eq!(operations.view_permission, "reports.view");
+        // The rest keep their defaults.
+        assert_eq!(operations.heartbeat_secs, 30);
+        assert_eq!(operations.max_redispatches, 3);
+        assert_eq!(operations.progress_interval_ms, 500);
+        assert_eq!(operations.stream_poll_ms, 1000);
+        assert_eq!(operations.cancel_permission, "operations.cancel");
+    }
+
+    #[test]
+    fn validation_checks_the_operations_settings() {
+        let invalid = |change: fn(&mut OperationsOptions)| {
+            let mut options = QueueOptions::default();
+            change(&mut options.operations);
+            options.validate().unwrap_err()
+        };
+        assert!(invalid(|o| o.heartbeat_secs = 0).contains("heartbeat_secs"));
+        assert!(invalid(|o| o.stale_after_secs = 30).contains("stale_after_secs"));
+        assert!(invalid(|o| o.stream_poll_ms = 0).contains("stream_poll_ms"));
+        assert!(invalid(|o| o.view_permission = " ".into()).contains("view_permission"));
+        assert!(invalid(|o| o.cancel_permission = String::new()).contains("cancel_permission"));
+        assert!(QueueOptions::default().validate().is_ok());
+    }
+
+    #[test]
     fn validation_rejects_zero_workers_and_empty_default_queue() {
         let options = QueueOptions {
             workers: 0,
