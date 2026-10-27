@@ -27,18 +27,33 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 heck = { workspace = true }
 minijinja = { workspace = true }
-# `navree dock` and Harbor's commands: tool crates, no runtime crates.
+# `navree dock`, Harbor's commands, and `navree mcp` / `navree skills:install`:
+# tool crates, no runtime crates (Navigator reads configuration with
+# navree-config, D7).
 navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
+navree-navigator = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
+# `navree browser:install`: downloads Chrome for Testing (rustls with ring)
+# and unpacks the zip.
+reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Reads entities for `make:resource`.
 syn = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+# `tests/navigator.rs`: rmcp's client over `navree mcp`'s stdio, and the
+# fixture app's SQLite database.
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+sqlx = { workspace = true }
 tempfile = { workspace = true }
+# A local server for the browser:install download tests.
+wiremock = { workspace = true }

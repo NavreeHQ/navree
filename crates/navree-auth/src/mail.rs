@@ -4,7 +4,7 @@
 use navree_mail::{Mailable, Message, TemplateMail};
 use serde_json::json;
 
-use crate::{PasswordResetOptions, User, VerificationOptions};
+use crate::{MagicLinkOptions, OtpOptions, PasswordResetOptions, User, VerificationOptions};
 
 /// The password reset mail for `user` carrying `token` (and a link to
 /// `options.url` when configured).
@@ -123,6 +123,116 @@ pub(crate) fn email_changed(user: &User, new_email: &str) -> Box<dyn Mailable> {
                 name = escape_html(&user.name),
                 old = escape_html(&user.email),
                 new = escape_html(new_email),
+            )),
+    )
+}
+
+/// The magic link mail for `user` carrying `token` (and a link to
+/// `options.url` when configured).
+pub(crate) fn magic_link(
+    user: &User,
+    token: &str,
+    options: &MagicLinkOptions,
+) -> Box<dyn Mailable> {
+    let minutes = minutes(options.ttl_secs);
+    let url = options
+        .url
+        .as_deref()
+        .map(|url| with_query(url, &[("token", token)]));
+    let subject = "Your sign-in link";
+    if let Some(template) = &options.mail_template {
+        return Box::new(
+            TemplateMail::new(user.email.clone(), subject, template.clone()).context(json!({
+                "name": user.name,
+                "email": user.email,
+                "token": token,
+                "url": url.clone().unwrap_or_default(),
+                "expires_in_minutes": minutes,
+            })),
+        );
+    }
+    let outro = "If you did not ask to sign in, no further action is required.";
+    let expiry = format!("It works once and expires in {minutes} minutes.");
+    let (text_action, html_action) = match &url {
+        Some(url) => (
+            format!("Sign in: {url}"),
+            format!(
+                r#"<p><a href="{href}">Sign in</a></p>"#,
+                href = escape_html(url)
+            ),
+        ),
+        None => (
+            format!("Your sign-in token: {token}"),
+            format!(
+                "<p>Your sign-in token: <code>{}</code></p>",
+                escape_html(token)
+            ),
+        ),
+    };
+    Box::new(
+        Message::new()
+            .to(user.email.clone())
+            .subject(subject)
+            .text(format!(
+                "Hello {name},
+
+{text_action}
+
+{expiry}
+
+{outro}
+",
+                name = user.name
+            ))
+            .html(format!(
+                "<p>Hello {name},</p>
+{html_action}
+<p>{expiry}</p>
+<p>{outro}</p>
+",
+                name = escape_html(&user.name)
+            )),
+    )
+}
+
+/// The sign-in code mail for `user` carrying `code`.
+pub(crate) fn login_code(user: &User, code: &str, options: &OtpOptions) -> Box<dyn Mailable> {
+    let minutes = minutes(options.ttl_secs);
+    let subject = "Your sign-in code";
+    if let Some(template) = &options.mail_template {
+        return Box::new(
+            TemplateMail::new(user.email.clone(), subject, template.clone()).context(json!({
+                "name": user.name,
+                "email": user.email,
+                "code": code,
+                "expires_in_minutes": minutes,
+            })),
+        );
+    }
+    let outro = "If you did not ask to sign in, no further action is required.";
+    Box::new(
+        Message::new()
+            .to(user.email.clone())
+            .subject(subject)
+            .text(format!(
+                "Hello {name},
+
+Your sign-in code: {code}
+
+It works once and expires in                  {minutes} minutes.
+
+{outro}
+",
+                name = user.name
+            ))
+            .html(format!(
+                "<p>Hello {name},</p>
+<p>Your sign-in code: <strong>{code}</strong></p>
+                 <p>It works once and expires in {minutes} minutes.</p>
+<p>{outro}</p>
+",
+                name = escape_html(&user.name),
+                code = escape_html(code)
             )),
     )
 }

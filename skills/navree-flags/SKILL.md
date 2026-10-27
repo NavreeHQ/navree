@@ -15,7 +15,8 @@ and `crates/navree/tests/flags.rs` (the docs examples through the facade).
 
 ## Steps: add flags to an app
 
-1. Turn the feature on (it adds to the default `full`):
+1. Turn the feature on by name (`full` does not include it; listing it keeps
+   the default features):
 
 ```toml
 [dependencies]
@@ -187,24 +188,33 @@ let state = flags.state::<NewPipeline>().await?; // FlagState { everyone, rollou
 - The bucket of a user or workspace is `SHA-256("<flag name>:<id>")`, first 8
   bytes big-endian, mod 100 (`navree::flags::bucket`); inside when below the
   percentage. Raising the percentage never removes anyone.
-- Plan rollouts read the app's `dyn PlanResolver`. Billing registers one; to
-  write your own:
+- Plan rollouts read the app's `dyn PlanResolver`, which the app registers
+  (one per app; nothing registers it for you). A workspace it gives `None` is
+  outside. With billing, read the workspace's local subscription copy (the
+  same code runs in `crates/navree/tests/flags.rs`, `with_billing`):
 
 ```rust
 use navree::BoxFuture;
+use navree::billing::{BillableRef, Billing, Subscription, WORKSPACE_BILLABLE};
 use navree::flags::PlanResolver;
 
 #[injectable]
-pub struct Plans { /* ... */ }
+pub struct SubscriptionPlans {
+    billing: Arc<Billing>,
+}
 
-impl PlanResolver for Plans {
+impl PlanResolver for SubscriptionPlans {
     fn plan(&self, workspace: Uuid) -> BoxFuture<'_, Result<Option<String>, BoxError>> {
-        Box::pin(async move { Ok(self.lookup(workspace).await?) })
+        Box::pin(async move {
+            let billable = BillableRef::new(WORKSPACE_BILLABLE, workspace);
+            let subscription = self.billing.subscription(&billable).await?;
+            Ok(subscription.filter(Subscription::valid).map(|s| s.plan))
+        })
     }
 }
 
-// in a module's register function:
-m.plan_resolver::<Plans>();
+// in the register function of the module that owns billing:
+m.plan_resolver::<SubscriptionPlans>();
 ```
 
 ## Front end, admin routes and commands
@@ -310,8 +320,15 @@ Who is inside a rollout: `Rollout::percent(25).of_workspaces().includes::<NewPip
   one, or one the user is not a member of; a guest resolves for nobody.
 - `#[requires_flag]` goes on route methods only, once per route; `status` is
   403 or 404. It needs `navree` with the `flags` feature (or `navree-flags`).
-- Several instances: the cache is per instance, so a change reaches the others
-  within `cache_ttl_secs` (60). Lower it, or `0` to read the database on every
-  check.
+- Several instances: with the memory cache store (the default) the cache is
+  per instance, so a change reaches the others within `cache_ttl_secs` (60).
+  Lower it, `0` to read the database on every check, or use
+  `cache.store = "redis"`, where a change clears the shared entries at once.
+- The flags store (`flags.store = "memory"`) is per process too: only for
+  tests and single-process tools.
 - The memory store has no transactions: changes apply at once, even in a unit
   of work that later rolls back.
+- `flags:on --user <id>` checks only that the id is a UUID; it does not look
+  the user up. A typo silently creates an override for nobody, so copy ids.
+- `flags:list`, the admin routes and `GET /api/flags` list registered flags
+  only; state left behind by a deleted flag shows up in `flags:purge --dry-run`.

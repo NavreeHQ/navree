@@ -6,6 +6,7 @@ mod channels;
 mod http;
 mod module;
 mod queue;
+mod recipient;
 mod rendering;
 mod telemetry;
 mod uow;

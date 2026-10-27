@@ -10,8 +10,16 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## PostgreSQL integration tests (`tests/postgres.rs`, with NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+
 [dependencies]
 axum = { workspace = true }
+# base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
+# and passkeys (WebAuthn signatures), until navree_crypto::jose carries them.
+base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
@@ -27,12 +35,15 @@ navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
+# Fetching trusted issuers' key sets (`auth.trusted_issuers.*.jwks_url`).
+navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 # navree-mail, qrcode2 and totp-rs: the account flows of plan Task 30
 # (password reset mail, TOTP two-factor).
 navree-mail = { workspace = true }
 navree-validation = { workspace = true }
 qrcode2 = { workspace = true }
+ring = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
@@ -48,6 +59,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 futures = { workspace = true }
 navree-api = { workspace = true }
+# The PostgreSQL test checks the impersonator column of the audit log.
+navree-audit = { workspace = true }
 navree-observe = { workspace = true }
 navree-testing = { workspace = true }
 # Tests boot MailModule, which needs ViewModule.

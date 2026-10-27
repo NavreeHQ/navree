@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use http::HeaderValue;
 use http::header::WWW_AUTHENTICATE;
+use http::{HeaderValue, StatusCode};
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
 use navree_http::AppError;
@@ -35,6 +35,18 @@ use sea_orm::DbErr;
 /// | `TwoFactorAlreadyEnabled` | 409 | `two_factor_already_enabled` |
 /// | `TwoFactorNotEnabled` | 400 | `two_factor_not_enabled` |
 /// | `InvalidTwoFactorCode` | 401 | `invalid_two_factor_code` |
+/// | `TwoFactorSetupRequired` | 403 | `two_factor_required` |
+/// | `ReauthenticationRequired` | 403 | `reauthentication_required` |
+/// | `ImpersonationForbidden` | 403 | `impersonation_forbidden` |
+/// | `NotImpersonating` | 400 | `not_impersonating` |
+/// | `CannotImpersonate` | 403 | `cannot_impersonate` |
+/// | `SessionNotFound` | 404 | `session_not_found` |
+/// | `PasskeyNotFound` | 404 | `passkey_not_found` |
+/// | `InvalidLoginToken` | 401 | `invalid_login_token` |
+/// | `PlatformSessionRequired` | 403 | `platform_session_required` |
+/// | `ExchangeRefused` | 401 | `invalid_token` |
+/// | `PasskeyRefused` | 401 | `invalid_passkey` |
+/// | `Disabled` | 404 | `not_found` |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AuthError {
@@ -118,6 +130,49 @@ pub enum AuthError {
     /// A [`UserResourceExtension`](crate::UserResourceExtension) failed.
     #[error("user resource extension failed: {0}")]
     Extension(BoxError),
+    /// The user must set up two-factor authentication before doing anything
+    /// else (`auth.two_factor.required_for` or a `TwoFactorPolicy`), or a
+    /// platform administrator has none.
+    #[error("two-factor authentication must be set up first")]
+    TwoFactorSetupRequired,
+    /// The route needs a recent sign-in or `POST /auth/confirm`
+    /// (`#[recent_auth]`).
+    #[error("the user must confirm their identity again")]
+    ReauthenticationRequired,
+    /// The action is not allowed while impersonating a user.
+    #[error("not allowed while impersonating a user")]
+    ImpersonationForbidden,
+    /// `DELETE /auth/impersonate` without an impersonation session.
+    #[error("not impersonating a user")]
+    NotImpersonating,
+    /// The user may not be impersonated (themselves, a platform
+    /// administrator).
+    #[error("this user cannot be impersonated: {0}")]
+    CannotImpersonate(&'static str),
+    /// The session (`/auth/sessions/{id}`) is not one of the user's live
+    /// sessions.
+    #[error("session not found")]
+    SessionNotFound,
+    /// A magic link or emailed code is unknown, wrong, used or expired.
+    #[error("invalid or expired sign-in token")]
+    InvalidLoginToken,
+    /// The route needs a platform session (`auth.platform`).
+    #[error("a platform session is required")]
+    PlatformSessionRequired,
+    /// A token presented to `POST /auth/exchange` was refused (the reason
+    /// is logged and audited, never sent).
+    #[error("token exchange refused: {0}")]
+    ExchangeRefused(String),
+    /// The passkey (`/auth/passkeys/{id}`) is not one of the user's.
+    #[error("passkey not found")]
+    PasskeyNotFound,
+    /// A passkey registration or sign-in was refused (the reason is
+    /// logged, never sent).
+    #[error("passkey refused: {0}")]
+    PasskeyRefused(String),
+    /// The feature is turned off in the configuration.
+    #[error("{0} is not enabled")]
+    Disabled(&'static str),
     /// The login throttle's cache failed.
     #[error("auth cache error: {0}")]
     Cache(#[from] CacheError),
@@ -177,6 +232,61 @@ impl AuthError {
                     .with_code("invalid_two_factor_code")
                     .with_detail("Invalid two-factor code"),
             ),
+            AuthError::TwoFactorSetupRequired => Some(
+                AppError::new(StatusCode::FORBIDDEN, "two_factor_required", "Forbidden")
+                    .with_detail("Two-factor authentication required"),
+            ),
+            AuthError::ReauthenticationRequired => Some(
+                AppError::new(
+                    StatusCode::FORBIDDEN,
+                    "reauthentication_required",
+                    "Forbidden",
+                )
+                .with_detail("Please confirm your identity to continue"),
+            ),
+            AuthError::ImpersonationForbidden => Some(
+                AppError::new(
+                    StatusCode::FORBIDDEN,
+                    "impersonation_forbidden",
+                    "Forbidden",
+                )
+                .with_detail("Not allowed while impersonating a user"),
+            ),
+            AuthError::NotImpersonating => Some(
+                AppError::bad_request("Not impersonating a user").with_code("not_impersonating"),
+            ),
+            AuthError::CannotImpersonate(reason) => Some(
+                AppError::new(StatusCode::FORBIDDEN, "cannot_impersonate", "Forbidden")
+                    .with_detail(format!("This user cannot be impersonated: {reason}")),
+            ),
+            AuthError::SessionNotFound => {
+                Some(AppError::not_found().with_code("session_not_found"))
+            }
+            AuthError::PasskeyNotFound => {
+                Some(AppError::not_found().with_code("passkey_not_found"))
+            }
+            AuthError::InvalidLoginToken => Some(
+                AppError::unauthenticated()
+                    .with_code("invalid_login_token")
+                    .with_detail("Invalid or expired sign-in code"),
+            ),
+            AuthError::PlatformSessionRequired => Some(
+                AppError::new(
+                    StatusCode::FORBIDDEN,
+                    "platform_session_required",
+                    "Forbidden",
+                )
+                .with_detail("A platform session is required"),
+            ),
+            AuthError::ExchangeRefused(_) => {
+                Some(bearer_challenge("invalid_token", "Invalid token"))
+            }
+            AuthError::PasskeyRefused(_) => Some(
+                AppError::unauthenticated()
+                    .with_code("invalid_passkey")
+                    .with_detail("Invalid passkey"),
+            ),
+            AuthError::Disabled(_) => Some(AppError::not_found()),
             AuthError::Db(error) => navree_db::map_db_error(error),
             AuthError::Signing(_)
             | AuthError::Crypto(_)
@@ -397,6 +507,93 @@ mod tests {
             AppError::two_factor_required().body(),
             "the framework's stable two_factor_required error"
         );
+    }
+
+    #[test]
+    fn auth_plus_errors_carry_codes() {
+        let cases = [
+            (
+                AuthError::TwoFactorSetupRequired,
+                403,
+                "two_factor_required",
+                "Two-factor authentication required",
+            ),
+            (
+                AuthError::ReauthenticationRequired,
+                403,
+                "reauthentication_required",
+                "Please confirm your identity to continue",
+            ),
+            (
+                AuthError::ImpersonationForbidden,
+                403,
+                "impersonation_forbidden",
+                "Not allowed while impersonating a user",
+            ),
+            (
+                AuthError::NotImpersonating,
+                400,
+                "not_impersonating",
+                "Not impersonating a user",
+            ),
+            (
+                AuthError::CannotImpersonate("yourself"),
+                403,
+                "cannot_impersonate",
+                "This user cannot be impersonated: yourself",
+            ),
+            (
+                AuthError::SessionNotFound,
+                404,
+                "session_not_found",
+                "Not Found",
+            ),
+            (
+                AuthError::PasskeyNotFound,
+                404,
+                "passkey_not_found",
+                "Not Found",
+            ),
+            (
+                AuthError::InvalidLoginToken,
+                401,
+                "invalid_login_token",
+                "Invalid or expired sign-in code",
+            ),
+            (
+                AuthError::PlatformSessionRequired,
+                403,
+                "platform_session_required",
+                "A platform session is required",
+            ),
+            (
+                AuthError::ExchangeRefused("bad signature".to_owned()),
+                401,
+                "invalid_token",
+                "Invalid token",
+            ),
+            (
+                AuthError::PasskeyRefused("wrong origin".to_owned()),
+                401,
+                "invalid_passkey",
+                "Invalid passkey",
+            ),
+            (
+                AuthError::Disabled("magic links"),
+                404,
+                "not_found",
+                "Not Found",
+            ),
+        ];
+        for (error, status, code, message) in cases {
+            let error = error.into_app_error();
+            assert_eq!(error.status.as_u16(), status, "{message}");
+            assert_eq!(error.code, code, "{message}");
+            assert_eq!(error.body()["message"], message);
+            assert!(navree_http::codes::is_valid(code), "{code}");
+        }
+        let refused = AuthError::ExchangeRefused("kid=secret-key-id".to_owned()).into_app_error();
+        assert!(!refused.body().to_string().contains("secret-key-id"));
     }
 
     #[test]

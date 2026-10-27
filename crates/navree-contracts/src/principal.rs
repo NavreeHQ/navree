@@ -49,3 +49,28 @@ pub enum AuthVia {
 /// `None` for guests.
 #[derive(Clone, Debug, Default)]
 pub struct AuthState(pub Option<Principal>);
+
+/// The user acting as the request's [`Principal`] while impersonating them
+/// (the `act` claim of an impersonation token, RFC 8693 §4.1): a request
+/// extension the authenticator sets next to [`AuthState`]. The principal is
+/// the impersonated user; this is who is really at the keyboard. The unit
+/// of work carries it and the audit trail records it on every entry of the
+/// request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Impersonator(pub Uuid);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn impersonator_is_a_plain_id() {
+        let id = Uuid::nil();
+        let impersonator = Impersonator(id);
+        assert_eq!(impersonator.0, id);
+        assert_eq!(
+            serde_json::to_value(impersonator).unwrap(),
+            serde_json::json!(id)
+        );
+    }
+}

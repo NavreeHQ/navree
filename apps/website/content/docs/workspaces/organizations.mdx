@@ -285,7 +285,7 @@ With `workspace.routes` and `workspace.organizations.enabled` on, the module mou
 | `POST .../access-requests/{request}/approve` `{role?, workspaces?}` | `organization.access_requests.update` | `{request, member}` |
 | `POST .../access-requests/{request}/decline` `{reason?}` | `organization.access_requests.update` | The request |
 
-An admin limited to some workspaces grants only workspaces they reach and changes only members whose workspaces they reach: anything else is a 403, `You can only grant workspaces you reach.` Attaching a workspace takes its owner: an organization admin can't pull in a workspace that isn't theirs. An organization comes back as:
+An admin limited to some workspaces grants only workspaces they reach and changes only members whose workspaces they reach: anything else is a 403, `You can only grant workspaces you reach.` (code `workspace_grant_forbidden`). Attaching a workspace takes its owner: an organization admin can't pull in a workspace that isn't theirs (a 403, `not_the_workspace_owner`). An organization comes back as:
 
 ```json
 {

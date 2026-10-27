@@ -125,6 +125,8 @@ impl AppBuilder {
     /// - `check [--graph]` validates the graph without constructing anything
     ///   and prints a summary (or the module tree);
     /// - `help` / `list` prints the commands;
+    /// - `introspect [--json]` validates the graph without constructing
+    ///   anything and prints it as JSON ([`GraphReport::to_json`]);
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully;
     /// - no command runs `serve` if a module registers it, else `help`.
@@ -144,6 +146,10 @@ impl AppBuilder {
                         report.modules.len().saturating_sub(1)
                     );
                 }
+                Ok(())
+            }
+            Some("introspect") => {
+                println!("{}", self.validate()?.to_json());
                 Ok(())
             }
             Some("help" | "list" | "--help" | "-h") => {
@@ -444,6 +450,15 @@ impl AppContext {
         &self,
     ) -> Result<Vec<Arc<T>>, KernelError> {
         self.root_resolver().get_all::<T>().await
+    }
+
+    /// How many multi-bindings of `T` the app registers, read from the
+    /// module graph without resolving any (so a provider's factory can call
+    /// it even when those multi-bindings depend on the provider). A module
+    /// decides with it, once at boot, whether anybody listens: navree-db
+    /// skips preparing change events in an app with no `dyn ChangeObserver`.
+    pub fn multi_count<T: ?Sized + 'static>(&self) -> usize {
+        self.inner.graph.multi_of(std::any::TypeId::of::<T>()).len()
     }
 
     /// Every value of type `C` contributed by any module, modules in dependency

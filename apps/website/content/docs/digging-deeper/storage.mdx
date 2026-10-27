@@ -277,7 +277,7 @@ There is no `copy` or `move` helper; stream the file to its new path (below), or
 
 ### Errors in handlers
 
-A `StorageError` that reaches a handler's `?` turns into a response: a missing file is a `404`, an invalid path a `400` with the message `Invalid file path.`, an upload that breaks its rules a `400` or `413` (see [direct uploads](#direct-uploads)), and anything else a `500` (logged, never shown). See [Errors](/docs/basics/errors/) for the response format.
+A `StorageError` that reaches a handler's `?` turns into a response: a missing file is a `404` (code `not_found`), an invalid path a `400` with the message `Invalid file path.` (code `invalid_file_path`), an upload that breaks its rules a `400` or `413` with a code per rule (see [direct uploads](#direct-uploads)), and anything else a `500` (logged, never shown). See [Errors](/docs/basics/errors/) for the response format.
 
 ## Streaming large files
 
@@ -502,14 +502,39 @@ export async function uploadDocument(file: File, token: string) {
 
 No provider can see what a file contains, and only some check its size, so `accept_upload` is the step that makes a file trusted. It reads the file's size and its first 8 KiB, sniffs the type the same way `store_upload` does, and returns a `StoredFile` (with `original_name: null`). A file that breaks the rules is deleted, and the error is `StorageError::Rejected`:
 
-| Problem | Response through `?` |
-|---|---|
-| A type the rules don't allow (declared or sniffed) | `400` `The file must be of type: application/pdf, image/* (it is text/html).` |
-| No declared type while the rules list types | `400` `Declare the file's content type (allowed: application/pdf, image/*).` |
-| A malformed declared type | `400` ``The declared content type is not a valid `type/subtype`.`` |
-| An empty file | `400` `The file should not be empty.` |
-| A file over `max_bytes` | `413` `The file must not be larger than 20971520 bytes.` |
-| `accept_upload` on a path with no file | `404` |
+| Problem | Response through `?` | `code` |
+|---|---|---|
+| A type the rules don't allow (declared or sniffed) | `400` `The file must be of type: application/pdf, image/* (it is text/html).` | `file_type_not_allowed` |
+| No declared type while the rules list types | `400` `Declare the file's content type (allowed: application/pdf, image/*).` | `missing_content_type` |
+| A malformed declared type | `400` ``The declared content type is not a valid `type/subtype`.`` | `invalid_content_type` |
+| An empty file | `400` `The file should not be empty.` | `empty_file` |
+| A file over `max_bytes` | `413` `The file must not be larger than 20971520 bytes.` | `payload_too_large` |
+| `accept_upload` on a path with no file | `404` | `not_found` |
+
+The `code` is what your front end maps to a translation key, so the user reads "this file is too large" in their own language whatever the English message says. When you handle a rejection yourself instead of with `?`, `rejection.code()` gives the same code. Here a rejection is shown next to the form's `document` field:
+
+```rust
+use std::collections::BTreeMap;
+
+use navree::prelude::*;
+use navree::storage::{Disk, StorageError, StoredFile};
+
+/// Checks an uploaded document; a rejection is shown next to the form's
+/// `document` field, with the rejection's code.
+pub async fn accept_document(disk: &Disk, path: &str) -> Result<StoredFile> {
+    match disk.accept_upload(path, &document_rules()).await {
+        Ok(file) => Ok(file),
+        Err(StorageError::Rejected { rejection, .. }) => {
+            let errors = BTreeMap::from([("document".to_owned(), vec![rejection.to_string()])]);
+            Err(AppError::validation(errors).with_code(rejection.code()))
+        }
+        // Any other error goes on to the module's mapping: a missing file is a 404.
+        Err(error) => Err(error.into()),
+    }
+}
+```
+
+The response is a `400` with `"code": "file_type_not_allowed"` and `"errors": {"document": ["the file must be of type: application/pdf, image/* (it is text/html)"]}`.
 
 <Callout type="warning" title="Allow your front end in the bucket's CORS rules">
 
@@ -517,7 +542,7 @@ A browser uploads to another origin than your app's, so the bucket must allow it
 
 </Callout>
 
-On local and memory disks the link points at your app, `PUT /storage/{disk}/{*path}?expires=...&type=...&max=...&size=...&signature=...`. The route is public (the signature is the authorisation), streams the body to the disk with no body limit other than the signed one, allows an hour per upload, and answers `200` when the file is stored. It answers `403` `Invalid signature.` for a forged or altered link, `403` `The link has expired.` after `expires_at`, `403` when the `Content-Type` differs, `413` over `max_bytes` and `400` for another size than declared; nothing is stored in those cases. Without `storage.base_url` the link is path-only, which a browser sends to the page's own origin: set `storage.base_url` when your API runs on another origin.
+On local and memory disks the link points at your app, `PUT /storage/{disk}/{*path}?expires=...&type=...&max=...&size=...&signature=...`. The route is public (the signature is the authorisation), streams the body to the disk with no body limit other than the signed one, allows an hour per upload, and answers `200` when the file is stored. It answers `403` `Invalid signature.` for a forged or altered link, `403` `The link has expired.` after `expires_at` and `403` when the `Content-Type` differs (all three with the code `invalid_signature`), `413` over `max_bytes` (`payload_too_large`) and `400` for another size than declared (`upload_size_mismatch`); nothing is stored in those cases. Without `storage.base_url` the link is path-only, which a browser sends to the page's own origin: set `storage.base_url` when your API runs on another origin.
 
 ## Public URLs
 

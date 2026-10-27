@@ -1,6 +1,6 @@
 ---
 name: navree-redis
-description: "Redis with navree-redis: `RedisModule` and the `redis` config section (`url`, `prefix`, `connect_timeout_ms`, `response_timeout_ms`, `connections.<name>.url`, `APP_REDIS__URL`), the `Redis` connections (`manager()`, `key()`, `named()`, `dedicated()`, `pubsub()`), the Redis drivers selected by name (`cache.store = \"redis\"`, `queue.driver = \"redis\"`, `session.store = \"redis\"`, `realtime.backplane = \"redis\"`), shared rate limits with `RateLimiter::hit`, the `redis` health check, key layout and production settings (eviction, persistence). Use when an app runs several processes or servers that must share the cache, locks, jobs, sessions, rate limits or WebSocket broadcasts and presence; when moving any of those to Redis; when running raw Redis commands; or when debugging `needs RedisModule` boot errors, `realtime.backplane needs realtime.secret`, readiness down for `redis`, jobs or sessions lost to eviction, or broadcasts that don't reach clients on another server."
+description: "Redis with navree-redis: `RedisModule` and the `redis` config section (`url`, `prefix`, `connect_timeout_ms`, `response_timeout_ms`, `connections.<name>.url`, `APP_REDIS__URL`, the `REDIS_URL` fallback), the `Redis` connections (`manager()`, `key()`, `named()`, `dedicated()`, `pubsub()`), the Redis drivers selected by name (`cache.store = \"redis\"`, `queue.driver = \"redis\"`, `session.store = \"redis\"`, `realtime.backplane = \"redis\"`), shared rate limits with `RateLimiter::hit`, the `redis` health check, key layout and production settings (eviction, persistence). Use when an app runs several processes or servers that must share the cache, locks, jobs, sessions, rate limits or WebSocket broadcasts and presence; when moving any of those to Redis; when running raw Redis commands; or when debugging `needs RedisModule` boot errors, `realtime.backplane needs realtime.secret`, readiness down for `redis`, jobs or sessions lost to eviction, or broadcasts that don't reach clients on another server."
 ---
 
 # Redis
@@ -64,7 +64,11 @@ secret = "..."                   # required with a backplane (APP_REALTIME__SECR
    `RedisModule::for_root(RedisOptions { url, prefix, ..RedisOptions::default() })`.
 
 3. Put the URL (with its password) in the environment:
-   `APP_REDIS__URL=rediss://default:secret@redis.internal:6380/0`.
+   `APP_REDIS__URL=rediss://default:secret@redis.internal:6380/0`. When
+   the configuration leaves `redis.url` out, `RedisModule::from_config()`
+   reads `REDIS_URL` instead (`RedisOptions::from_config`), which
+   `navree dock` and Harbor set, so a Dock or Harbor app needs no Redis
+   URL of its own.
 
 4. Check readiness: the `redis` health check pings every connection
    (`/health/ready` with `ObserveModule`).
@@ -148,6 +152,9 @@ named connection; `RedisConnection::dedicated()` is for blocking commands;
 
 - `cache.store = "redis"` (or the queue, session or backplane setting)
   without `RedisModule` fails the boot: `... needs RedisModule (navree-redis) in the app`.
+- A `redis.url` in `config/app.toml` or `APP_REDIS__URL` wins over
+  `REDIS_URL`: leave `url` out of `[redis]` for Dock and Harbor to apply.
+  `RedisModule::for_root(options)` never reads the environment.
 - The app boots while Redis is down; commands fail until it is back and
   readiness reports it. Connections open on first use.
 - `realtime.backplane = "redis"` without `realtime.secret` fails the boot:

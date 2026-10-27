@@ -235,19 +235,22 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
         .json(&json!({ "workspaces": "all" }))
         .send()
         .await
-        .assert_error(403, "You can only grant workspaces you reach.");
+        .assert_error(403, "You can only grant workspaces you reach.")
+        .assert_error_code(403, "workspace_grant_forbidden");
     admin
         .post("/api/organizations/acme/members")
         .json(&json!({ "user_id": ken, "workspaces": [de.id] }))
         .send()
         .await
-        .assert_error(403, "You can only grant workspaces you reach.");
+        .assert_error(403, "You can only grant workspaces you reach.")
+        .assert_error_code(403, "workspace_grant_forbidden");
     admin
         .post("/api/organizations/acme/members")
         .json(&json!({ "user_id": ken }))
         .send()
         .await
-        .assert_error(403, "You can only grant workspaces you reach.");
+        .assert_error(403, "You can only grant workspaces you reach.")
+        .assert_error_code(403, "workspace_grant_forbidden");
     admin
         .post("/api/organizations/acme/members")
         .json(&json!({ "user_id": ken, "workspaces": [uk.id] }))
@@ -259,7 +262,8 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
         .delete(&format!("/api/organizations/acme/members/{ada}"))
         .send()
         .await
-        .assert_error(403, "You can only grant workspaces you reach.");
+        .assert_error(403, "You can only grant workspaces you reach.")
+        .assert_error_code(403, "workspace_grant_forbidden");
     // And they see only their workspaces.
     admin
         .get("/api/organizations/acme/workspaces")
@@ -308,7 +312,8 @@ async fn workspaces_are_attached_and_detached_over_http() {
         .assert_error(
             403,
             "Only the workspace's owner can attach it to an organization.",
-        );
+        )
+        .assert_error_code(403, "not_the_workspace_owner");
     world
         .as_user(grace)
         .post("/api/organizations/acme/workspaces")
@@ -512,13 +517,15 @@ async fn partitions_over_http() {
         .json(&json!({ "partitions": "all" }))
         .send()
         .await
-        .assert_error(403, "You can only grant partitions you see.");
+        .assert_error(403, "You can only grant partitions you see.")
+        .assert_error_code(403, "partition_grant_forbidden");
     admin
         .put(&format!("/api/workspaces/acme/members/{linus}/partitions"))
         .json(&json!({ "partitions": [de.id] }))
         .send()
         .await
-        .assert_error(403, "You can only grant partitions you see.");
+        .assert_error(403, "You can only grant partitions you see.")
+        .assert_error_code(403, "partition_grant_forbidden");
     admin
         .delete(&format!("/api/workspaces/acme/partitions/{}", uk.id))
         .send()
@@ -526,7 +533,8 @@ async fn partitions_over_http() {
         .assert_error(
             403,
             "Only members who see every partition can manage partitions.",
-        );
+        )
+        .assert_error_code(403, "partition_manager_required");
 
     owner
         .delete(&format!("/api/workspaces/acme/partitions/{}", de.id))

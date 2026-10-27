@@ -273,3 +273,24 @@ async fn route_is_documented_for_openapi() {
     let (name, _schema) = (api.response.expect("response schema"))();
     assert_eq!(name, "AuditPage");
 }
+
+#[tokio::test]
+async fn the_impersonator_filter_reads_a_uuid() {
+    let (app, admin, _alice, _bob) = seeded().await;
+    app.acting_as(principal(admin))
+        .get("/api/audit")
+        .query(&[("impersonator_id", "nope")])
+        .send()
+        .await
+        .assert_validation_error("impersonator_id");
+    let unknown = Uuid::now_v7().to_string();
+    let body = app
+        .acting_as(principal(admin))
+        .get("/api/audit")
+        .query(&[("impersonator_id", unknown.as_str())])
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(body["data"], json!([]));
+}

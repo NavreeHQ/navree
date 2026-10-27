@@ -64,7 +64,19 @@ impl ConfigSources {
     /// The conventional sources, relative to the working directory: `.env`,
     /// then `config/app.toml`, then `APP_` environment variables.
     pub fn defaults() -> Self {
-        Self::new().dotenv(".env").file("config/app.toml").env()
+        Self::defaults_in("")
+    }
+
+    /// The conventional sources of the app in `dir`: `dir/.env`, then
+    /// `dir/config/app.toml`, then `APP_` environment variables. What
+    /// [`defaults`](ConfigSources::defaults) reads, for tools that look at
+    /// an app from another directory (Navigator, `navree mcp`).
+    pub fn defaults_in(dir: impl AsRef<std::path::Path>) -> Self {
+        let dir = dir.as_ref();
+        Self::new()
+            .dotenv(dir.join(".env"))
+            .file(dir.join("config/app.toml"))
+            .env()
     }
 
     /// `APP_` environment variables (see [`env_prefixed`](ConfigSources::env_prefixed)).

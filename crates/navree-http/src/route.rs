@@ -126,6 +126,13 @@ impl RouteDef {
         self
     }
 
+    /// The code that handles the route, for route listings
+    /// (`DealsController::index`; `#[controller]` sets it).
+    pub fn handler_name(mut self, handler: &str) -> Self {
+        self.meta.handler = Some(handler.to_owned());
+        self
+    }
+
     /// At most `limit` requests per `per`, per user (per client IP for guests).
     pub fn throttle(mut self, limit: u32, per: Duration) -> Self {
         self.meta.throttle = Some(Throttle { limit, per });
@@ -202,6 +209,9 @@ impl fmt::Debug for RouteDef {
 pub struct RouteMeta {
     /// The route name.
     pub name: Option<String>,
+    /// The code that handles it (`DealsController::index`), set by
+    /// `#[controller]` ([`RouteDef::handler_name`]).
+    pub handler: Option<String>,
     /// Who may call the route.
     pub access: AccessSpec,
     /// Custom guards, in order.

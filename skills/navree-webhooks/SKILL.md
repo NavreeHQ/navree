@@ -1,6 +1,6 @@
 ---
 name: navree-webhooks
-description: "Webhooks with navree-webhooks: `WebhooksModule` and the `webhooks` config section, outgoing webhooks from events (`WebhookEvent`, `WebhooksModule::for_feature::<E>()`, `m.webhook_type`, `Webhooks::dispatch_json`), endpoints and secrets (`create_endpoint`, `rotate_secret`, `whsec_` secrets), Standard Webhooks signing (`webhook-id`, `webhook-timestamp`, `webhook-signature`), the retry schedule, disabling failing endpoints, the delivery log and the `/api/webhooks` routes, and incoming webhooks verified with `VerifiedWebhook<S>` (`Stripe`, `GitHub`, `Paddle`, `StandardWebhooks`, `Hmac`, `mark_processed`). Use when sending webhooks to customers' URLs, letting users manage webhook endpoints, receiving Stripe, GitHub, Paddle or other signed callbacks, testing deliveries or signatures, or debugging a webhook that is not sent, not retried, refused with 400 `Invalid webhook signature`, or an endpoint that got disabled."
+description: "Webhooks with navree-webhooks: `WebhooksModule` and the `webhooks` config section, outgoing webhooks from events (`WebhookEvent`, `WebhooksModule::for_feature::<E>()`, `m.webhook_type`, `Webhooks::dispatch_json`), endpoints and secrets (`create_endpoint`, `rotate_secret`, `whsec_` secrets), Standard Webhooks signing (`webhook-id`, `webhook-timestamp`, `webhook-signature`), the retry schedule, disabling failing endpoints, the delivery log and the `/api/webhooks` routes, and incoming webhooks verified with `VerifiedWebhook<S>` (`Stripe`, `GitHub`, `Paddle`, `StandardWebhooks`, `AwsSns`, `GooglePubSub`, `MicrosoftGraph`, `Twilio`, `Slack`, `Mailgun`, `Postmark`, `Hmac`, custom `WebhookVerifier`s with `verify_incoming`, handshakes, `mark_processed`). Use when sending webhooks to customers' URLs, letting users manage webhook endpoints, receiving Stripe, GitHub, Paddle, SES-over-SNS, Pub/Sub or Gmail push, Graph change notifications, Twilio, Slack, Mailgun, Postmark or other signed callbacks, testing deliveries or signatures, or debugging a webhook that is not sent, not retried, refused with 400 `Invalid webhook signature`, or an endpoint that got disabled."
 ---
 
 # Webhooks
@@ -175,7 +175,11 @@ false` or the boot fails.
 
 1. Put the secret in `.env`:
    `APP_WEBHOOKS__INCOMING__GITHUB__SECRET=...` (source names: `stripe`,
-   `github`, `paddle`, `standard`, or your own).
+   `github`, `paddle`, `standard`, `microsoft_graph` (the `clientState`),
+   `twilio` (auth token), `slack` (signing secret), `mailgun` (webhook
+   signing key), `postmark` (`username:password`), or your own). `aws_sns`
+   and `google_pubsub` have no secret; they need `topics` and
+   `service_account` (step 4).
 2. Take `VerifiedWebhook<S>` as the **last** argument of a `#[public]`
    route; dedupe with `mark_processed` in the same unit of work:
 
@@ -226,12 +230,60 @@ signed = "{timestamp}.{body}"            # {timestamp}, {id}, {body}
 | `Paddle` | `Paddle-Signature: ts=..;h1=<hex>` | `{ts}:{body}` | secret as is | body `event_id` / `event_type` |
 | `StandardWebhooks` | `webhook-signature: v1,<b64>` | `{id}.{ts}.{body}` | base64 after `whsec_` | `webhook-id` / body `type` |
 
-`id()` falls back to the hex SHA-256 of the body. GitHub has no timestamp
-(`timestamp()` is `None`), so no age check. Answers: 400 `Invalid webhook
-signature` (bad, missing or old signature; the reason is logged at debug),
-413 over `webhooks.incoming.max_body_bytes`, 500 when the source has no
-secret configured (the log names the key). A source table with an empty
-secret fails the boot.
+| `AwsSns` | body `Signature` (RSA, v1 SHA-1 / v2 SHA-256) | `SnsMessage::string_to_sign()` | cert at `SigningCertURL` (SNS host, `.pem`, cached 24 h) | `MessageId` / `Type` |
+| `GooglePubSub` | `Authorization: Bearer <OIDC JWT>` | RS256 JWT | Google's JWKS (`GooglePubSub::KEYS_URL`, cached) | `message.messageId` / none |
+| `MicrosoftGraph` | body `value[].clientState` | (nothing signed) | `clientState` = secret | body SHA-256 / `lifecycleEvent` or `changeType` |
+| `Twilio` | `X-Twilio-Signature: <b64>` | URL + sorted form params (or URL with `bodySHA256`) | auth token, HMAC-SHA1 | `I-Twilio-Idempotency-Token` / none |
+| `Slack` | `X-Slack-Signature: v0=<hex>` | `v0:{X-Slack-Request-Timestamp}:{body}` | signing secret | `event_id` / `event.type` or `type` |
+| `Mailgun` | body `signature` (JSON object or form fields) | `{timestamp}{token}` | webhook signing key | `event-data.id` or token / `event-data.event` |
+| `Postmark` | `Authorization: Basic` | (nothing signed) | `username:password` | `MessageID` / `RecordType` |
+
+`id()` falls back to the hex SHA-256 of the body. GitHub, Twilio, Postmark
+and Graph have no timestamp (`timestamp()` is `None`), so no age check; the
+SNS `Timestamp` is checked only against the source's own `tolerance_secs`.
+Answers: 400 `Invalid webhook signature` (bad, missing or old signature,
+wrong topic, audience or account; the reason is logged at debug), 413 over
+`webhooks.incoming.max_body_bytes`, 503 when an SNS certificate or Google's
+keys cannot be fetched (the sender retries), 500 when the source lacks its
+secret or required setting (the log names the key). A source table with an
+empty secret fails the boot unless it sets `topics` or `service_account`.
+
+4. Keyless senders (AWS SNS, Google Pub/Sub) fetch the sender's public keys
+   with the app's `HttpClient` (a default one without `HttpClientModule`).
+   The setting that ties requests to *your* subscription is required:
+
+```toml
+[webhooks.incoming.aws_sns]
+topics = ["arn:aws:sns:eu-west-1:123456789012:ses-events"] # env: comma-separated
+auto_confirm = true   # SubscriptionConfirmation confirmed, UnsubscribeConfirmation acked, handler not run
+
+[webhooks.incoming.google_pubsub]
+service_account = "gmail-push@project.iam.gserviceaccount.com"
+audience = "https://api.example.com/api/v1/mail/gmail-push" # default: public URL (`url`, else rebuilt)
+```
+
+```rust
+let message: SnsMessage = hook.json()?;           // SES event: message.message_json::<SesEvent>()
+let push: PubSubPush = hook.json()?;               // Gmail: push.message.data_json::<GmailChange>()
+let batch: GraphNotifications = hook.json()?;      // batch.value[i].resource / lifecycle_event
+let status: TwilioStatus = hook.form()?;           // form bodies: Twilio, Slack commands, Mailgun routes
+```
+
+5. Handshakes are answered by the extractor (200 `text/plain`); the handler
+   never runs: Graph `?validationToken=` (echoed), Slack
+   `url_verification` (its `challenge`), SNS confirmations (see
+   `auto_confirm`). Twilio signs the URL it called: behind a proxy set
+   `webhooks.incoming.twilio.url` to the public route URL (the query string
+   is appended), or make the proxy send `X-Forwarded-Proto` and
+   `X-Forwarded-Host`. Leave SNS raw message delivery off (raw messages are
+   unsigned).
+
+6. A scheme of your own that needs the URL, fetched keys or a handshake:
+   implement `WebhookVerifier::verify_incoming(&IncomingRequest) ->
+   Result<Verdict, VerifyError>` (`request.query("x")`, `request.url()`,
+   `request.keys().await?`), returning `Verdict::Verified(..)` or
+   `Verdict::Handshake(Handshake::text(..))`; override `missing_setting`
+   when the required key is not `secret`.
 
 ## Testing templates
 
@@ -275,8 +327,27 @@ app.client().post("/api/v1/integrations/github")
     .header("X-Hub-Signature-256", GitHub::sign("test-secret", &body))
     .body(body).send().await.assert_status(204);
 // Stripe::sign(secret, ts, body), Paddle::sign(secret, ts, body),
-// StandardWebhooks::sign(secret, id, ts, body), Hmac::sign(&source_options, Some(ts), None, body)
+// StandardWebhooks::sign(secret, id, ts, body), Hmac::sign(&source_options, Some(ts), None, body),
+// Twilio::sign(token, public_url, &params), Slack::sign(secret, ts, body),
+// Mailgun::sign(key, ts, token), Postmark::authorization("user:pass")
 ```
+
+Pub/Sub: serve an RSA test key as Google's JWKS and sign tokens with it
+(`SigningKey::from_pem(rsa_pem)?.with_kid("k")`, then `key.sign_jwt(&claims)`
+with `iss`, `aud`, `email`, `email_verified`, `iat` and `exp`):
+
+```rust
+let (client, server) = HttpClient::fake();
+let keys: JwkSet = key.public_jwk().into_iter().collect();
+server.on(Method::GET, GooglePubSub::KEYS_URL, FakeResponse::new(200).json(&keys));
+// .override_value(Arc::new(client)), then .bearer(&token) on the request
+```
+
+SNS: serve a test certificate (PEM) at the message's `SigningCertURL`
+(`https://sns.<region>.amazonaws.com/....pem`) and sign
+`message.string_to_sign()` with its RSA key (`key.sign(..)` gives version
+2), base64 into `Signature`. Fixtures signed by OpenSSL, v1 and v2, are in
+`crates/navree-webhooks/tests/fixtures/sources/`.
 
 ## Checks before you finish
 
@@ -286,6 +357,8 @@ app.client().post("/api/v1/integrations/github")
 - [ ] Routes: `AccessModule` + authenticator present, or `webhooks.routes = false`.
 - [ ] Incoming routes are `#[public]`, take `VerifiedWebhook<S>` last, and call `mark_processed` in the same `Uow` as their writes.
 - [ ] Every incoming secret comes from `.env`, never from code or the repository.
+- [ ] `aws_sns` lists its `topics`; `google_pubsub` names its `service_account` (and `audience` when the subscription sets one).
+- [ ] Twilio behind a proxy: `webhooks.incoming.twilio.url` is the URL configured in Twilio.
 
 ## Gotchas
 
@@ -293,6 +366,8 @@ app.client().post("/api/v1/integrations/github")
   `data` order. Verify the raw body (`request.body()`), never a re-serialized
   one.
 - `VerifiedWebhook` consumes the body: no `Json<T>` next to it.
+- SNS posts JSON with `Content-Type: text/plain`; `hook.json()` reads it anyway.
+- Graph wants a `202` within 3 s, Slack an answer within 3 s: queue the work.
 - A workspace event never reaches app-wide endpoints, and an app-wide event
   never reaches workspace endpoints.
 - A changed `APP_KEY` without the old one in `app.previous_keys` makes stored

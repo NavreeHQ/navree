@@ -354,6 +354,7 @@ fn routes_json(routes: &[RouteMeta]) -> serde_json::Value {
                 "name": r.name,
                 "access": r.access.describe(),
                 "module": r.module,
+                "handler": r.handler,
                 "throttle": r.throttle.map(|t| serde_json::json!({"limit": t.limit, "per_secs": t.per.as_secs_f64()})),
                 "timeout_ms": r.timeout.map(|t| t.as_millis() as u64),
                 "body_limit": r.body_limit,
@@ -437,6 +438,13 @@ mod tests {
         let json = routes_json(&[route("GET", "/x", None, true)]);
         assert_eq!(json[0]["path"], "/x");
         assert_eq!(json[0]["access"], "public");
+        assert_eq!(json[0]["handler"], serde_json::Value::Null);
+        let mut handled = route("GET", "/y", None, true);
+        handled.handler = Some("DealsController::index".to_owned());
+        assert_eq!(
+            routes_json(&[handled])[0]["handler"],
+            "DealsController::index"
+        );
     }
 
     #[test]

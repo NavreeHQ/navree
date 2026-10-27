@@ -37,8 +37,8 @@ pub enum FlagsError {
     InvalidRollout(String),
     /// A rollout by plan, but the app registers no `dyn PlanResolver`.
     #[error(
-        "rollouts by plan need a `dyn PlanResolver` in the app (registered by billing, or \
-         with ModuleBuilderFlagsExt::plan_resolver)"
+        "rollouts by plan need a `dyn PlanResolver` in the app: register one with \
+         ModuleBuilderFlagsExt::plan_resolver"
     )]
     NoPlanResolver,
     /// The database failed.

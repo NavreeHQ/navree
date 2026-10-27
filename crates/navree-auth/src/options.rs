@@ -1,5 +1,7 @@
 //! [`AuthOptions`] and [`JwtOptions`]: the `auth` configuration section.
 
+use std::collections::BTreeMap;
+
 use navree_config::ConfigSection;
 use navree_contracts::Secret;
 use serde::Deserialize;
@@ -39,6 +41,43 @@ pub const MIN_SECRET_LEN: usize = 32;
 /// challenge_ttl_secs = 300        # the login challenge token lives 5 minutes
 /// recovery_codes = 8
 /// max_attempts_per_minute = 5     # wrong codes per user, then 429; 0 = off
+/// required_for = []               # roles that must use two-factor authentication
+///
+/// [auth.impersonation]
+/// enabled = false                 # POST/DELETE /auth/impersonate
+/// ttl_secs = 3600                 # impersonation sessions end after an hour
+///
+/// [auth.magic_link]
+/// enabled = false                 # POST /auth/magic-link, /auth/magic-link/verify
+/// ttl_secs = 900
+/// throttle_secs = 60
+/// # url = "https://app.example.com/magic-link"      # mail link: {url}?token=..
+///
+/// [auth.otp]
+/// enabled = false                 # POST /auth/otp, /auth/otp/verify
+/// length = 6
+/// ttl_secs = 600
+/// max_attempts = 5                # wrong guesses per code, then it is burned
+/// throttle_secs = 60
+///
+/// [auth.platform]
+/// enabled = false                 # POST /auth/platform/login, /auth/platform/2fa/verify
+/// roles = ["platform-admin"]
+/// login_throttle_per_minute = 3
+/// access_ttl_secs = 900
+/// session_ttl_secs = 28800        # platform sessions end after 8 hours
+///
+/// [auth.trusted_issuers.legacy]   # POST /auth/exchange
+/// issuer = "https://legacy.example.com"
+/// jwks_url = "https://legacy.example.com/.well-known/jwks.json"  # or public_key = "-----BEGIN PUBLIC KEY-----..."
+/// audience = "navree"
+/// enabled = true
+///
+/// [auth.passkeys]
+/// enabled = false                 # /auth/passkeys/*
+/// # rp_id = "example.com"
+/// rp_name = "Navree"
+/// # origins = ["https://app.example.com"]
 /// ```
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
@@ -63,6 +102,20 @@ pub struct AuthOptions {
     pub verification: VerificationOptions,
     /// TOTP two-factor authentication (`/auth/2fa/*`).
     pub two_factor: TwoFactorOptions,
+    /// Impersonation (`POST /auth/impersonate/{user}`).
+    pub impersonation: ImpersonationOptions,
+    /// Magic links (`POST /auth/magic-link`).
+    pub magic_link: MagicLinkOptions,
+    /// Emailed sign-in codes (`POST /auth/otp`).
+    pub otp: OtpOptions,
+    /// The platform audience for platform administrators
+    /// (`POST /auth/platform/login`).
+    pub platform: PlatformOptions,
+    /// Sibling systems whose signed tokens `POST /auth/exchange` accepts,
+    /// by name.
+    pub trusted_issuers: BTreeMap<String, TrustedIssuerOptions>,
+    /// Passkeys (WebAuthn, `/auth/passkeys/*`).
+    pub passkeys: PasskeyOptions,
 }
 
 impl Default for AuthOptions {
@@ -76,6 +129,12 @@ impl Default for AuthOptions {
             password_reset: PasswordResetOptions::default(),
             verification: VerificationOptions::default(),
             two_factor: TwoFactorOptions::default(),
+            impersonation: ImpersonationOptions::default(),
+            magic_link: MagicLinkOptions::default(),
+            otp: OtpOptions::default(),
+            platform: PlatformOptions::default(),
+            trusted_issuers: BTreeMap::new(),
+            passkeys: PasskeyOptions::default(),
         }
     }
 }
@@ -140,6 +199,85 @@ impl AuthOptions {
             errors.push(format!(
                 "auth.two_factor.recovery_codes must be between 1 and {MAX_RECOVERY_CODES}"
             ));
+        }
+        if two_factor
+            .required_for
+            .iter()
+            .any(|role| role.trim().is_empty())
+        {
+            errors.push("auth.two_factor.required_for must not contain empty roles".to_owned());
+        }
+        if self.impersonation.ttl_secs == 0 {
+            errors.push("auth.impersonation.ttl_secs must be at least 1".to_owned());
+        }
+        let magic_link = &self.magic_link;
+        if magic_link.ttl_secs == 0 {
+            errors.push("auth.magic_link.ttl_secs must be at least 1".to_owned());
+        }
+        if magic_link
+            .url
+            .as_deref()
+            .is_some_and(|url| !is_http_url(url))
+        {
+            errors.push("auth.magic_link.url must be an absolute http(s) URL".to_owned());
+        }
+        let otp = &self.otp;
+        if !(4..=10).contains(&otp.length) {
+            errors.push("auth.otp.length must be between 4 and 10".to_owned());
+        }
+        if otp.ttl_secs == 0 {
+            errors.push("auth.otp.ttl_secs must be at least 1".to_owned());
+        }
+        if otp.max_attempts == 0 {
+            errors.push("auth.otp.max_attempts must be at least 1".to_owned());
+        }
+        let platform = &self.platform;
+        if platform.enabled && platform.roles.iter().all(|role| role.trim().is_empty()) {
+            errors.push("auth.platform.roles must name at least one role".to_owned());
+        }
+        if platform.access_ttl_secs == 0 {
+            errors.push("auth.platform.access_ttl_secs must be at least 1".to_owned());
+        }
+        if platform.session_ttl_secs == 0 {
+            errors.push("auth.platform.session_ttl_secs must be at least 1".to_owned());
+        }
+        for (name, issuer) in &self.trusted_issuers {
+            issuer.check(name, &mut errors);
+        }
+        let passkeys = &self.passkeys;
+        if passkeys.enabled {
+            if passkeys
+                .rp_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+            {
+                errors.push("auth.passkeys.rp_id must be set when passkeys are enabled".to_owned());
+            }
+            if passkeys.origins.is_empty() {
+                errors.push(
+                    "auth.passkeys.origins must list at least one origin when passkeys are enabled"
+                        .to_owned(),
+                );
+            }
+        }
+        if passkeys
+            .origins
+            .iter()
+            .any(|origin| !is_http_url(origin) || origin.ends_with('/'))
+        {
+            errors.push(
+                "auth.passkeys.origins must be http(s) origins without a trailing slash".to_owned(),
+            );
+        }
+        if passkeys.timeout_secs == 0 {
+            errors.push("auth.passkeys.timeout_secs must be at least 1".to_owned());
+        }
+        if !["required", "preferred", "discouraged"].contains(&passkeys.user_verification.as_str())
+        {
+            errors.push(
+                "auth.passkeys.user_verification must be required, preferred or discouraged"
+                    .to_owned(),
+            );
         }
         if errors.is_empty() {
             Ok(())
@@ -269,6 +407,12 @@ pub struct TwoFactorOptions {
     /// Wrong codes accepted per user per minute at `POST /auth/2fa/verify`
     /// before it answers 429; `0` turns the limit off.
     pub max_attempts_per_minute: u32,
+    /// Roles (navree-access) whose holders must use two-factor
+    /// authentication: until they set it up, their sessions reach only the
+    /// two-factor setup routes (403 `two_factor_required` elsewhere).
+    /// Needs `AccessModule` when not empty. Workspaces and organizations
+    /// add their own rules with a [`TwoFactorPolicy`](crate::TwoFactorPolicy).
+    pub required_for: Vec<String>,
 }
 
 impl Default for TwoFactorOptions {
@@ -278,6 +422,227 @@ impl Default for TwoFactorOptions {
             challenge_ttl_secs: 300,
             recovery_codes: 8,
             max_attempts_per_minute: 5,
+            required_for: Vec::new(),
+        }
+    }
+}
+
+/// Impersonation options (configuration section `auth.impersonation`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct ImpersonationOptions {
+    /// Whether `POST /auth/impersonate/{user}` and `DELETE
+    /// /auth/impersonate` are mounted. They require the permission
+    /// [`permission`](Self::permission), so the app needs `AccessModule`.
+    pub enabled: bool,
+    /// How long an impersonation session lasts, in seconds (refreshing does
+    /// not extend it).
+    pub ttl_secs: u64,
+    /// The permission `POST /auth/impersonate/{user}` requires.
+    pub permission: String,
+}
+
+impl Default for ImpersonationOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ttl_secs: 3600,
+            permission: "users.impersonate".to_owned(),
+        }
+    }
+}
+
+/// Magic link options (configuration section `auth.magic_link`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct MagicLinkOptions {
+    /// Whether `POST /auth/magic-link` and `POST /auth/magic-link/verify`
+    /// are mounted.
+    pub enabled: bool,
+    /// How long a link works, in seconds.
+    pub ttl_secs: u64,
+    /// The shortest time between two links to the same address, in
+    /// seconds (requests in between are accepted but send nothing).
+    pub throttle_secs: u64,
+    /// The front-end page the mail links to, as `{url}?token=..`; the page
+    /// posts the token to `POST /auth/magic-link/verify`. Without it the
+    /// mail carries the token alone.
+    pub url: Option<String>,
+    /// A navree-view template pair for the mail, rendered with
+    /// `{name, email, token, url, expires_in_minutes}`; built-in text when
+    /// unset.
+    pub mail_template: Option<String>,
+}
+
+impl Default for MagicLinkOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ttl_secs: 900,
+            throttle_secs: 60,
+            url: None,
+            mail_template: None,
+        }
+    }
+}
+
+/// Emailed sign-in code options (configuration section `auth.otp`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct OtpOptions {
+    /// Whether `POST /auth/otp` and `POST /auth/otp/verify` are mounted.
+    pub enabled: bool,
+    /// Digits per code (4 to 10).
+    pub length: usize,
+    /// How long a code works, in seconds.
+    pub ttl_secs: u64,
+    /// Wrong guesses a code survives; then it is burned.
+    pub max_attempts: u32,
+    /// The shortest time between two codes to the same address, in seconds.
+    pub throttle_secs: u64,
+    /// A navree-view template pair for the mail, rendered with
+    /// `{name, email, code, expires_in_minutes}`; built-in text when unset.
+    pub mail_template: Option<String>,
+}
+
+impl Default for OtpOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            length: 6,
+            ttl_secs: 600,
+            max_attempts: 5,
+            throttle_secs: 60,
+            mail_template: None,
+        }
+    }
+}
+
+/// Platform audience options (configuration section `auth.platform`):
+/// platform administrators sign in apart from the app, with two-factor
+/// authentication always.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PlatformOptions {
+    /// Whether `POST /auth/platform/login` and `POST
+    /// /auth/platform/2fa/verify` are mounted.
+    pub enabled: bool,
+    /// The roles (navree-access) that make a user a platform administrator.
+    pub roles: Vec<String>,
+    /// Failed platform sign-ins allowed per email and IP per minute; `0`
+    /// turns the limit off.
+    pub login_throttle_per_minute: u32,
+    /// Lifetime of platform access tokens, in seconds.
+    pub access_ttl_secs: u64,
+    /// How long a platform session lasts, in seconds (refreshing does not
+    /// extend it).
+    pub session_ttl_secs: u64,
+}
+
+impl Default for PlatformOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            roles: vec!["platform-admin".to_owned()],
+            login_throttle_per_minute: 3,
+            access_ttl_secs: 900,
+            session_ttl_secs: 28_800,
+        }
+    }
+}
+
+/// A sibling system whose signed tokens `POST /auth/exchange` accepts
+/// (configuration section `auth.trusted_issuers.<name>`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct TrustedIssuerOptions {
+    /// The `iss` claim its tokens carry.
+    pub issuer: String,
+    /// Where its JSON Web Key Set is published (fetched with the app's
+    /// `HttpClient` and cached).
+    pub jwks_url: Option<String>,
+    /// Its public key instead: a PEM `PUBLIC KEY` (SubjectPublicKeyInfo:
+    /// RSA, P-256 or Ed25519) or a JWK as JSON.
+    pub public_key: Option<String>,
+    /// The `aud` its tokens must carry.
+    pub audience: String,
+    /// The kill switch: `false` refuses its tokens.
+    pub enabled: bool,
+    /// The longest accepted token lifetime (`exp - iat`), in seconds.
+    pub max_lifetime_secs: u64,
+    /// How long a fetched key set is cached, in seconds.
+    pub jwks_cache_secs: u64,
+}
+
+impl Default for TrustedIssuerOptions {
+    fn default() -> Self {
+        Self {
+            issuer: String::new(),
+            jwks_url: None,
+            public_key: None,
+            audience: String::new(),
+            enabled: true,
+            max_lifetime_secs: 300,
+            jwks_cache_secs: 3600,
+        }
+    }
+}
+
+impl TrustedIssuerOptions {
+    fn check(&self, name: &str, errors: &mut Vec<String>) {
+        let key = format!("auth.trusted_issuers.{name}");
+        if self.issuer.trim().is_empty() {
+            errors.push(format!("{key}.issuer must not be empty"));
+        }
+        if self.audience.trim().is_empty() {
+            errors.push(format!("{key}.audience must not be empty"));
+        }
+        match (&self.jwks_url, &self.public_key) {
+            (Some(_), Some(_)) => errors.push(format!(
+                "{key} must set either jwks_url or public_key, not both"
+            )),
+            (None, None) => errors.push(format!("{key} must set jwks_url or public_key")),
+            (Some(url), None) if !url.starts_with("https://") && !url.starts_with("http://") => {
+                errors.push(format!("{key}.jwks_url must be an http(s) URL"));
+            }
+            _ => {}
+        }
+        if self.max_lifetime_secs == 0 {
+            errors.push(format!("{key}.max_lifetime_secs must be at least 1"));
+        }
+    }
+}
+
+/// Passkey options (configuration section `auth.passkeys`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PasskeyOptions {
+    /// Whether the `/auth/passkeys/*` routes are mounted.
+    pub enabled: bool,
+    /// The relying party id: the app's registrable domain
+    /// (`example.com`). Required when enabled.
+    pub rp_id: Option<String>,
+    /// The relying party name shown by the browser.
+    pub rp_name: String,
+    /// The origins the front end runs on (`https://app.example.com`).
+    /// Required when enabled.
+    pub origins: Vec<String>,
+    /// How long a registration or sign-in ceremony may take, in seconds.
+    pub timeout_secs: u64,
+    /// `required`, `preferred` or `discouraged`: whether authenticators
+    /// must verify the user (PIN, biometrics).
+    pub user_verification: String,
+}
+
+impl Default for PasskeyOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rp_id: None,
+            rp_name: "Navree".to_owned(),
+            origins: Vec::new(),
+            timeout_secs: 300,
+            user_verification: "preferred".to_owned(),
         }
     }
 }
@@ -398,6 +763,101 @@ mod tests {
             Some("https://app.example.com/reset")
         );
         assert_eq!(options.two_factor.issuer, "Acme CRM");
+    }
+
+    #[test]
+    fn auth_plus_defaults() {
+        let options = load(ConfigSources::new()).unwrap();
+        assert!(options.two_factor.required_for.is_empty());
+        assert!(!options.impersonation.enabled);
+        assert_eq!(options.impersonation.ttl_secs, 3600);
+        assert_eq!(options.impersonation.permission, "users.impersonate");
+        assert!(!options.magic_link.enabled);
+        assert_eq!(options.magic_link.ttl_secs, 900);
+        assert_eq!(options.magic_link.throttle_secs, 60);
+        assert!(!options.otp.enabled);
+        assert_eq!(options.otp.length, 6);
+        assert_eq!(options.otp.ttl_secs, 600);
+        assert_eq!(options.otp.max_attempts, 5);
+        assert!(!options.platform.enabled);
+        assert_eq!(options.platform.roles, ["platform-admin"]);
+        assert_eq!(options.platform.login_throttle_per_minute, 3);
+        assert_eq!(options.platform.access_ttl_secs, 900);
+        assert_eq!(options.platform.session_ttl_secs, 28_800);
+        assert!(options.trusted_issuers.is_empty());
+        assert!(!options.passkeys.enabled);
+        assert_eq!(options.passkeys.rp_name, "Navree");
+        assert_eq!(options.passkeys.user_verification, "preferred");
+    }
+
+    #[test]
+    fn trusted_issuers_are_read_by_name() {
+        let options = load(
+            ConfigSources::new()
+                .set(
+                    "auth.trusted_issuers.legacy.issuer",
+                    "https://legacy.example.com",
+                )
+                .set(
+                    "auth.trusted_issuers.legacy.jwks_url",
+                    "https://legacy.example.com/jwks.json",
+                )
+                .set("auth.trusted_issuers.legacy.audience", "crm")
+                .env_vars(
+                    "APP_",
+                    [("APP_AUTH__TRUSTED_ISSUERS__LEGACY__ENABLED", "false")],
+                ),
+        )
+        .unwrap();
+        let legacy = &options.trusted_issuers["legacy"];
+        assert_eq!(legacy.issuer, "https://legacy.example.com");
+        assert_eq!(legacy.audience, "crm");
+        assert!(!legacy.enabled);
+        assert_eq!(legacy.max_lifetime_secs, 300);
+    }
+
+    #[test]
+    fn invalid_auth_plus_values_fail_validation() {
+        for (key, value) in [
+            ("auth.two_factor.required_for", json!([""])),
+            ("auth.impersonation.ttl_secs", json!(0)),
+            ("auth.magic_link.ttl_secs", json!(0)),
+            ("auth.magic_link.url", json!("magic")),
+            ("auth.otp.length", json!(3)),
+            ("auth.otp.length", json!(11)),
+            ("auth.otp.max_attempts", json!(0)),
+            ("auth.platform.access_ttl_secs", json!(0)),
+            ("auth.passkeys.origins", json!(["https://app.example.com/"])),
+            ("auth.passkeys.user_verification", json!("always")),
+            ("auth.trusted_issuers.legacy.issuer", json!("x")),
+        ] {
+            let result = load(ConfigSources::new().set(key, value.clone()));
+            assert!(result.is_err(), "{key} = {value} should be rejected");
+        }
+        let error = load(ConfigSources::new().set("auth.passkeys.enabled", true))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("auth.passkeys.rp_id"), "{error}");
+        assert!(error.contains("auth.passkeys.origins"), "{error}");
+        let error = load(
+            ConfigSources::new()
+                .set(
+                    "auth.trusted_issuers.legacy.issuer",
+                    "https://legacy.example.com",
+                )
+                .set("auth.trusted_issuers.legacy.audience", "crm"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("auth.trusted_issuers.legacy"), "{error}");
+        let error = load(
+            ConfigSources::new()
+                .set("auth.platform.enabled", true)
+                .set("auth.platform.roles", json!([])),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("auth.platform.roles"), "{error}");
     }
 
     #[test]

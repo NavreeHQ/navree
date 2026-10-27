@@ -20,7 +20,7 @@ use serde_json::Value;
 
 use crate::context;
 use crate::failure::{self, Failure};
-use crate::{AsyncRule, AsyncRules, InputContext, Messages};
+use crate::{AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages};
 
 /// Runs `$f` (deserializing or validating) in `$context` (a [`Context`]):
 /// first as is, and again with the resolved context when a value asked for
@@ -110,21 +110,15 @@ where
 
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
-        let (mut parts, input) = match json_body(req).await? {
+        let (mut parts, body) = json_body(req).await?;
+        let mut context = Context::new(ctx.as_ref());
+        let (value, input) = match in_context!(context, &mut parts, || from_json_bytes::<T>(&body))
+        {
             Ok(read) => read,
             Err(invalid) => return Err(invalid.reject(ctx.as_ref()).await),
         };
-        let mut context = Context::new(ctx.as_ref());
-        let value = match in_context!(context, &mut parts, || from_json::<T>(&input)) {
-            Ok(value) => value,
-            Err(failure) => {
-                return Err(Invalid::new(vec![failure], Some(input), "body")
-                    .reject(ctx.as_ref())
-                    .await);
-            }
-        };
         if let Err(failures) = in_context!(context, &mut parts, || check(&value)) {
-            return Err(Invalid::new(failures, Some(input), "body")
+            return Err(Invalid::new(failures, input.into_value(), "body")
                 .reject(ctx.as_ref())
                 .await);
         }
@@ -530,10 +524,19 @@ impl Invalid {
         Self::new(failures, None, "body")
     }
 
-    /// The 400 error, with the app's messages.
+    /// The 400 error, with the app's messages (through its
+    /// [`MessageTranslator`], when it has one).
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
         let messages = messages(ctx).await;
-        failure::render(&self.failures, &messages, self.input.as_ref(), self.root).into_app_error()
+        let translator = translator(ctx).await;
+        failure::render(
+            &self.failures,
+            &messages,
+            translator.as_deref(),
+            self.input.as_ref(),
+            self.root,
+        )
+        .into_app_error()
     }
 }
 
@@ -579,7 +582,7 @@ pub fn validate<T: Validate<Context = ()>>(
     messages: &Messages,
     root: &str,
 ) -> Result<(), crate::ValidationErrors> {
-    check(value).map_err(|failures| failure::render(&failures, messages, input, root))
+    check(value).map_err(|failures| failure::render(&failures, messages, None, input, root))
 }
 
 /// [`validate`] with the app's [`Messages`] (`ctx`'s, or the defaults
@@ -607,7 +610,14 @@ pub async fn validate_in<T: Validate<Context = ()>>(
         Ok(()) => Ok(()),
         Err(failures) => {
             let messages = messages(ctx).await;
-            Err(failure::render(&failures, &messages, None, "input"))
+            let translator = translator(ctx).await;
+            Err(failure::render(
+                &failures,
+                &messages,
+                translator.as_deref(),
+                None,
+                "input",
+            ))
         }
     }
 }
@@ -691,27 +701,68 @@ where
     }
 }
 
+/// The app's [`MessageTranslator`], when `ctx` has one.
+async fn translator(ctx: Option<&AppContext>) -> Option<Arc<dyn MessageTranslator>> {
+    match ctx {
+        Some(ctx) => ctx.try_get::<dyn MessageTranslator>().await,
+        None => None,
+    }
+}
+
 /// Runs the garde rules of `value`.
 pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Failure>> {
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)
 }
 
-/// Reads a JSON body as a JSON value, keeping the request head. The outer
-/// error is an HTTP failure (415, 413); the inner one a validation failure
-/// (malformed JSON).
-async fn json_body(req: Request) -> Result<Result<(Parts, Value), Invalid>, AppError> {
+/// Reads a JSON body, keeping the request head. The outer error is an
+/// HTTP failure (415, 413); the body is deserialized later, in the input
+/// context ([`from_json_bytes`]).
+async fn json_body(req: Request) -> Result<(Parts, Bytes), AppError> {
     if !is_json(req.headers()) {
         return Err(AppError::from_status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
             .with_detail("Expected request with `Content-Type: application/json`"));
     }
-    let (parts, bytes) = read_body(req).await?;
-    match serde_json::from_slice(&bytes) {
-        Ok(input) => Ok(Ok((parts, input))),
-        Err(_) => Ok(Err(Invalid::new(
-            vec![Failure::keyed("", "json")],
-            None,
-            "body",
-        ))),
+    read_body(req).await
+}
+
+/// A JSON body as the garde failures see it: its bytes, parsed into a
+/// [`Value`] only when a failure needs it (the length messages pick their
+/// `array` variant from it).
+enum JsonInput {
+    Bytes(Bytes),
+    Value(Value),
+}
+
+impl JsonInput {
+    fn into_value(self) -> Option<Value> {
+        match self {
+            JsonInput::Bytes(bytes) => serde_json::from_slice(&bytes).ok(),
+            JsonInput::Value(value) => Some(value),
+        }
+    }
+}
+
+/// Deserializes `T` from a JSON body, failing as a validation failure.
+///
+/// A body is deserialized straight from its bytes. Only one that fails
+/// that way is parsed into a [`Value`] and deserialized from it
+/// ([`from_json`]), as every body once was: that reports every failure as
+/// before (malformed JSON on `body`, serde errors at their path) and
+/// accepts what the `Value` route accepts (a repeated key keeps its last
+/// value).
+fn from_json_bytes<T: DeserializeOwned>(bytes: &Bytes) -> Result<(T, JsonInput), Invalid> {
+    if let Ok(value) = failure::encoding(|| serde_json::from_slice::<T>(bytes)) {
+        return Ok((value, JsonInput::Bytes(bytes.clone())));
+    }
+    let input: Value = match serde_json::from_slice(bytes) {
+        Ok(input) => input,
+        Err(_) => {
+            return Err(Invalid::new(vec![Failure::keyed("", "json")], None, "body"));
+        }
+    };
+    match from_json::<T>(&input) {
+        Ok(value) => Ok((value, JsonInput::Value(input))),
+        Err(failure) => Err(Invalid::new(vec![failure], Some(input), "body")),
     }
 }
 

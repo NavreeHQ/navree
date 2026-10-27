@@ -239,6 +239,9 @@ pub struct LighthouseOptions {
     pub database_url: Option<Secret<String>>,
     /// Mount the dashboard and its JSON API.
     pub dashboard: bool,
+    /// Offer Lighthouse's MCP tools, resource and prompt on the app's MCP
+    /// server (with the `mcp` feature and `McpModule` in the app).
+    pub mcp: bool,
     /// Where the dashboard is served (`/_lighthouse`).
     pub path: String,
     /// The dashboard's public URL, for links in alerts; `app.url` followed
@@ -281,6 +284,7 @@ impl Default for LighthouseOptions {
             store: StoreKind::Database,
             database_url: None,
             dashboard: true,
+            mcp: true,
             path: "/_lighthouse".to_owned(),
             url: None,
             environment: None,
@@ -507,6 +511,7 @@ fn kinds<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<AlertKind>>, D::E
 
 /// A period of the dashboard: the last hour, 24 hours or 7 days.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(utoipa::ToSchema))]
 pub enum Period {
     /// The last hour (per-minute buckets).
     #[serde(rename = "1h")]
@@ -582,6 +587,7 @@ mod tests {
         let options = LighthouseOptions::default();
         assert!(options.enabled);
         assert!(options.dashboard);
+        assert!(options.mcp);
         assert_eq!(options.path, "/_lighthouse");
         assert_eq!(options.thresholds.slow_request_ms, 1000);
         assert_eq!(options.thresholds.slow_query_ms, 200);
@@ -626,10 +632,12 @@ mod tests {
                 ),
                 ("APP_LIGHTHOUSE__ALERTS__SLACK__ON", "new_issue,failed_job"),
                 ("APP_LIGHTHOUSE__RELEASE", "20261026-091512-3f2a9c1"),
+                ("APP_LIGHTHOUSE__MCP", "false"),
             ],
         ))
         .unwrap();
         assert_eq!(options.retention_days, 30);
+        assert!(!options.mcp);
         assert!((options.sample.requests - 0.1).abs() < f64::EPSILON);
         assert_eq!(
             options.ignore.routes,
