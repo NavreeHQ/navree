@@ -55,6 +55,16 @@ async fn the_check_always_answers_and_follows_access_changes() {
         Some(true)
     );
     let factory = app.get::<AbilityFactory>().await;
-    assert!(factory.has_permission(&who, "reports.export").await.unwrap());
-    assert!(!factory.has_permission(&who, "reports.delete").await.unwrap());
+    assert!(
+        factory
+            .has_permission(&who, "reports.export")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !factory
+            .has_permission(&who, "reports.delete")
+            .await
+            .unwrap()
+    );
 }

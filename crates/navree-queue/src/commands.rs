@@ -108,7 +108,9 @@ async fn prune_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErro
         Some(operations) => operations.prune(older_than).await?,
         None => 0,
     };
-    println!("Deleted {batches} batch(es) and {operations} operation(s) finished over {hours} hour(s) ago.");
+    println!(
+        "Deleted {batches} batch(es) and {operations} operation(s) finished over {hours} hour(s) ago."
+    );
     Ok(())
 }
 
@@ -123,7 +125,11 @@ fn parse_number_flag(args: &[String], flag: &str, command: &str) -> Result<Optio
                 .next()
                 .cloned()
                 .ok_or_else(|| format!("`{flag}` needs a value"))?,
-            _ => return Err(format!("unknown option `{arg}` for {command} (expected {flag})")),
+            _ => {
+                return Err(format!(
+                    "unknown option `{arg}` for {command} (expected {flag})"
+                ));
+            }
         };
         value = Some(
             text.parse()

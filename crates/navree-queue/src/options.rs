@@ -162,7 +162,8 @@ impl OperationsOptions {
             problems.push("operations.heartbeat_secs must be at least 1");
         }
         if self.stale_after_secs <= self.heartbeat_secs {
-            problems.push("operations.stale_after_secs must be more than operations.heartbeat_secs");
+            problems
+                .push("operations.stale_after_secs must be more than operations.heartbeat_secs");
         }
         if self.stream_poll_ms == 0 {
             problems.push("operations.stream_poll_ms must be at least 1");

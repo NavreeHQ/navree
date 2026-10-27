@@ -255,7 +255,11 @@ impl Queue {
         };
         if self.is_skipped(ctx, &job).await? {
             self.finish(&job, worker, Finish::Skipped, "").await?;
-            log_cancelled(&job, started, "the job's batch or operation was cancelled; skipped");
+            log_cancelled(
+                &job,
+                started,
+                "the job's batch or operation was cancelled; skipped",
+            );
             return Ok(Outcome::Cancelled);
         }
         let job_ctx = JobContext {
@@ -293,7 +297,11 @@ impl Queue {
             }
             Ran::Cancelled => {
                 self.finish(&job, worker, Finish::Skipped, "").await?;
-                log_cancelled(&job, started, "the job stopped: its batch or operation was cancelled");
+                log_cancelled(
+                    &job,
+                    started,
+                    "the job stopped: its batch or operation was cancelled",
+                );
                 Ok(Outcome::Cancelled)
             }
             Ran::Failed(error) if job.attempts >= job.options.max_attempts.max(1) => {

@@ -20,8 +20,8 @@ use tokio::sync::broadcast;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-pub use controller::{OPERATION_EVENT, OperationsController};
 pub(crate) use controller::authorize_channel;
+pub use controller::{OPERATION_EVENT, OperationsController};
 pub(crate) use hooks::{QueueMonitor, RunningJobs, batch_settled, job_finished, skips};
 
 use crate::batch::{Batch, JobBatch};
@@ -307,7 +307,11 @@ impl Operations {
     }
 
     /// Stores `operation` as `pending`, as part of `uow`; returns it.
-    pub async fn start(&self, uow: &Uow, operation: Operation) -> Result<OperationRecord, QueueError> {
+    pub async fn start(
+        &self,
+        uow: &Uow,
+        operation: Operation,
+    ) -> Result<OperationRecord, QueueError> {
         let now = self.queue.now_ms();
         let record = sql::new_record(Uuid::now_v7(), &operation, now);
         let tx = uow.tx().await?;
@@ -491,8 +495,8 @@ impl Operations {
     /// heartbeat that arrives during the sweep keeps it alive.
     pub async fn sweep(&self) -> Result<SweepReport, QueueError> {
         let now = self.queue.now_ms();
-        let stale_ms = i64::try_from(self.options.stale_after_secs.saturating_mul(1000))
-            .unwrap_or(i64::MAX);
+        let stale_ms =
+            i64::try_from(self.options.stale_after_secs.saturating_mul(1000)).unwrap_or(i64::MAX);
         let before = now.saturating_sub(stale_ms);
         let backend = self.db()?.backend();
         let stale = sql::stale(self.db()?.conn(), backend, before).await?;
@@ -628,7 +632,14 @@ impl Operations {
             sql::finish(backend, id, OperationStatus::Cancelled, None, None, now)
         } else if row.failed_jobs > 0 && !row.allow_failures {
             let error = format!("{} of {} jobs failed.", row.failed_jobs, row.total_jobs);
-            sql::finish(backend, id, OperationStatus::Failed, None, Some(&error), now)
+            sql::finish(
+                backend,
+                id,
+                OperationStatus::Failed,
+                None,
+                Some(&error),
+                now,
+            )
         } else if row.callbacks_failed > 0 {
             let error = "A follow-up job of the batch failed.";
             sql::finish(backend, id, OperationStatus::Failed, None, Some(error), now)
@@ -662,7 +673,10 @@ impl Operations {
 
     /// Finishes the operation as `succeeded` (its own job succeeded),
     /// keeping a result already set.
-    pub(crate) async fn job_succeeded(&self, id: Uuid) -> Result<Option<OperationRecord>, QueueError> {
+    pub(crate) async fn job_succeeded(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
         let stmt = sql::finish(
             self.db()?.backend(),
@@ -676,7 +690,10 @@ impl Operations {
     }
 
     /// Marks the operation running (its job started).
-    pub(crate) async fn mark_running(&self, id: Uuid) -> Result<Option<OperationRecord>, QueueError> {
+    pub(crate) async fn mark_running(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<OperationRecord>, QueueError> {
         let stmt = sql::running(self.db()?.backend(), id, self.queue.now_ms());
         self.update(id, stmt).await
     }
@@ -731,7 +748,9 @@ impl Operations {
             drop(tx);
             if changed && let Some(record) = record.clone() {
                 let announcer = self.announcer();
-                uow.after_commit(move || Box::pin(async move { announcer.announce(&record).await }));
+                uow.after_commit(move || {
+                    Box::pin(async move { announcer.announce(&record).await })
+                });
             }
             return Ok((changed, record));
         }

@@ -64,7 +64,10 @@ fn progress_of(done: u64, total: u64, note: String) -> OperationProgress {
     }
 }
 
-pub(super) fn insert(backend: DbBackend, record: &OperationRecord) -> Result<Statement, QueueError> {
+pub(super) fn insert(
+    backend: DbBackend,
+    record: &OperationRecord,
+) -> Result<Statement, QueueError> {
     let now = record.created_at.timestamp_millis();
     Ok(statement(
         backend,
@@ -230,18 +233,19 @@ pub(super) fn redispatched(backend: DbBackend, id: Uuid, before: i64, now: i64) 
              progress_note = 'Restarted after it stopped responding', updated_at = ?, \
              version = version + 1 WHERE id = ? AND {ACTIVE} AND {STALE}"
         ),
-        vec![
-            now.into(),
-            now.into(),
-            id.to_string().into(),
-            before.into(),
-        ],
+        vec![now.into(), now.into(), id.to_string().into(), before.into()],
     )
 }
 
 /// Failed by the watchdog with `error`, if it is still stale (a heartbeat
 /// that arrived during the sweep keeps it alive).
-pub(super) fn stalled(backend: DbBackend, id: Uuid, error: &str, before: i64, now: i64) -> Statement {
+pub(super) fn stalled(
+    backend: DbBackend,
+    id: Uuid,
+    error: &str,
+    before: i64,
+    now: i64,
+) -> Statement {
     statement(
         backend,
         &format!(
@@ -335,7 +339,9 @@ pub(super) async fn status<C: ConnectionTrait>(
         ))
         .await?;
     match row {
-        Some(row) => Ok(OperationStatus::parse(&row.try_get::<String>("", "status")?)),
+        Some(row) => Ok(OperationStatus::parse(
+            &row.try_get::<String>("", "status")?,
+        )),
         None => Ok(None),
     }
 }
@@ -412,7 +418,9 @@ fn record(row: &QueryResult) -> Result<OperationRecord, QueueError> {
         workspace_id: uuid_column(row, "workspace_id")?,
         batch_id: row.try_get("", "batch_id")?,
         created_at: from_millis(row.try_get("", "created_at")?),
-        started_at: row.try_get::<Option<i64>>("", "started_at")?.map(from_millis),
+        started_at: row
+            .try_get::<Option<i64>>("", "started_at")?
+            .map(from_millis),
         heartbeat_at: row
             .try_get::<Option<i64>>("", "heartbeat_at")?
             .map(from_millis),

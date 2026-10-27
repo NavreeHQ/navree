@@ -193,7 +193,9 @@ impl Store {
                 db.finish_batch_job(job, worker, finish, error, now, prepare)
                     .await
             }
-            Store::Memory(memory) => memory.finish_batch_job(job, worker, finish, error, now, prepare),
+            Store::Memory(memory) => {
+                memory.finish_batch_job(job, worker, finish, error, now, prepare)
+            }
             Store::Fake(_) => Ok(Finished::Lost),
         }
     }

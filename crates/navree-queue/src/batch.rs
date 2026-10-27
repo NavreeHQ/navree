@@ -346,7 +346,12 @@ impl BatchRow {
 
     /// Records that job `job_id` ended with `finish` at `now`; returns the
     /// callbacks due now (counted as pending).
-    pub(crate) fn job_finished(&mut self, job_id: &str, finish: Finish, now: i64) -> Vec<JobEnvelope> {
+    pub(crate) fn job_finished(
+        &mut self,
+        job_id: &str,
+        finish: Finish,
+        now: i64,
+    ) -> Vec<JobEnvelope> {
         if self.pending_jobs == 0 {
             return Vec::new();
         }

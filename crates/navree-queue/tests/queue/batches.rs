@@ -79,10 +79,7 @@ pub async fn first_failure_runs_catch_cancels_the_rest_and_skips_then(driver: Qu
 
     // `a` and `b` are skipped: the failure cancelled the batch.
     assert_eq!(h.journal.labels(), ["catch", "finally"]);
-    assert_eq!(
-        (stats.failed, stats.cancelled, stats.succeeded),
-        (1, 2, 2)
-    );
+    assert_eq!((stats.failed, stats.cancelled, stats.succeeded), (1, 2, 2));
     let done = h.queue.find_batch(&batch.id).await.unwrap().unwrap();
     assert_eq!((done.pending_jobs, done.failed_jobs), (0, 1));
     assert!(done.finished() && done.cancelled() && done.has_failures());
@@ -218,7 +215,10 @@ pub async fn batch_dispatch_joins_the_current_unit_of_work(driver: QueueDriver) 
     let uow = db.uow(None, None).await;
     drop(uow.tx().await.unwrap());
     let batch = uow
-        .scope(h.queue.dispatch_batch(Batch::new("import").add(labels(&["a"]))))
+        .scope(
+            h.queue
+                .dispatch_batch(Batch::new("import").add(labels(&["a"]))),
+        )
         .await
         .unwrap();
     assert_eq!(h.queue.find_batch(&batch.id).await.unwrap(), None);
@@ -290,14 +290,23 @@ pub async fn unique_jobs_in_a_batch_all_count(driver: QueueDriver) {
     assert_eq!(batch.total_jobs, 2);
     h.drain().await;
     assert_eq!(h.journal.labels(), ["acme", "acme"]);
-    assert!(h.queue.find_batch(&batch.id).await.unwrap().unwrap().finished());
+    assert!(
+        h.queue
+            .find_batch(&batch.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .finished()
+    );
 }
 
 pub async fn unknown_job_types_reject_the_whole_batch(driver: QueueDriver) {
     let h = harness_with(options(driver)).await;
 
     for batch in [
-        Batch::new("bad job").push(Record::new("a")).push(Unregistered),
+        Batch::new("bad job")
+            .push(Record::new("a"))
+            .push(Unregistered),
         Batch::new("bad callback")
             .push(Record::new("a"))
             .then(Unregistered),

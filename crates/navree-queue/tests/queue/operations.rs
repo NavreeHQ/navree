@@ -81,7 +81,11 @@ pub async fn an_operation_follows_its_job(driver: QueueDriver) {
     let done = h.operations.find(op.id).await.unwrap().unwrap();
     assert_eq!(done.status, OperationStatus::Succeeded);
     assert_eq!(
-        (done.progress.done, done.progress.total, done.progress.percent),
+        (
+            done.progress.done,
+            done.progress.total,
+            done.progress.percent
+        ),
         (4, 4, 100)
     );
     assert_eq!(done.progress.note, "Exported 4 of 4");
@@ -169,10 +173,7 @@ pub async fn a_finished_operation_never_changes(driver: QueueDriver) {
     for after in [
         h.operations.fail(op.id, "late").await.unwrap(),
         h.operations.cancel(op.id).await.unwrap(),
-        h.operations
-            .progress(op.id, 1, 10, "late")
-            .await
-            .unwrap(),
+        h.operations.progress(op.id, 1, 10, "late").await.unwrap(),
     ] {
         assert_eq!(after, Some(done.clone()));
     }
@@ -280,7 +281,10 @@ pub async fn a_batch_drives_its_operation(driver: QueueDriver) {
         .iter()
         .map(|(_, _, data)| data["progress"]["percent"].as_u64().unwrap())
         .collect();
-    assert!(percents.contains(&33) && percents.contains(&66), "{percents:?}");
+    assert!(
+        percents.contains(&33) && percents.contains(&66),
+        "{percents:?}"
+    );
 }
 
 pub async fn a_failing_batch_fails_its_operation(driver: QueueDriver) {
@@ -374,10 +378,7 @@ pub async fn the_watchdog_fails_stalled_operations(driver: QueueDriver) {
     assert_eq!(h.operations.sweep().await.unwrap(), SweepReport::default());
 
     h.advance(200);
-    h.operations
-        .heartbeat(fresh_at_start.id)
-        .await
-        .unwrap();
+    h.operations.heartbeat(fresh_at_start.id).await.unwrap();
     h.advance(150);
     let report = h.operations.sweep().await.unwrap();
 
@@ -482,10 +483,7 @@ pub async fn owners_list_and_prune_operations(driver: QueueDriver) {
     h.operations.complete(first.id, json!(null)).await.unwrap();
     h.advance(2 * 3600);
     assert_eq!(
-        h.operations
-            .prune(Duration::from_secs(3600))
-            .await
-            .unwrap(),
+        h.operations.prune(Duration::from_secs(3600)).await.unwrap(),
         1
     );
     assert_eq!(h.operations.find(first.id).await.unwrap(), None);
@@ -608,7 +606,11 @@ async fn overlapping_sweeps_restart_a_lost_job_once() {
     let (first, second) = tokio::join!(h.operations.sweep(), h.operations.sweep());
     let (first, second) = (first.unwrap(), second.unwrap());
 
-    assert_eq!(first.redispatched + second.redispatched, 1, "{first:?} {second:?}");
+    assert_eq!(
+        first.redispatched + second.redispatched,
+        1,
+        "{first:?} {second:?}"
+    );
     assert_eq!(first.failed + second.failed, 0, "{first:?} {second:?}");
     let jobs = db
         .conn()
@@ -685,9 +687,7 @@ async fn the_watchdog_finishes_operations_of_finished_batches() {
     h.drain().await;
     // Undo the operation's finish, as if the worker had stopped first.
     db.conn()
-        .execute_unprepared(
-            "UPDATE operations SET status = 'running', finished_at = NULL",
-        )
+        .execute_unprepared("UPDATE operations SET status = 'running', finished_at = NULL")
         .await
         .unwrap();
 

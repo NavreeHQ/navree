@@ -46,7 +46,10 @@ async fn the_owner_and_permission_holders_see_an_operation() {
     })])
     .await;
     let op = start(&h, Operation::new("deals.export").owner(owner).total(10)).await;
-    h.operations.progress(op.id, 4, 10, "Exporting").await.unwrap();
+    h.operations
+        .progress(op.id, 4, 10, "Exporting")
+        .await
+        .unwrap();
     let path = format!("/api/operations/{}", op.id);
 
     let body = h
@@ -104,7 +107,12 @@ async fn the_owner_and_permission_holders_see_an_operation() {
         .send()
         .await
         .assert_error(404, None);
-    h.app.client().get(&path).send().await.assert_error(401, None);
+    h.app
+        .client()
+        .get(&path)
+        .send()
+        .await
+        .assert_error(401, None);
 }
 
 #[tokio::test]
@@ -371,7 +379,10 @@ async fn the_private_channel_is_for_those_who_may_see_the_operation() {
         .assert_status(403);
     let unknown = [
         ("socket_id", "1234.5678".to_owned()),
-        ("channel_name", format!("private-operations.{}", Uuid::now_v7())),
+        (
+            "channel_name",
+            format!("private-operations.{}", Uuid::now_v7()),
+        ),
     ];
     h.app
         .acting_as(principal(owner))
