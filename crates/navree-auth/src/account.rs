@@ -514,8 +514,12 @@ impl AuthService {
         self.app.upgrade()?.try_get::<Mailer>().await
     }
 
-    /// Records `entry` once `uow` commits (dropped on rollback).
-    pub(crate) async fn audit_after_commit(&self, uow: &Uow, entry: AuditEntry) {
+    /// Records `entry` once `uow` commits (dropped on rollback), with the
+    /// unit of work's impersonator when the entry has none.
+    pub(crate) async fn audit_after_commit(&self, uow: &Uow, mut entry: AuditEntry) {
+        if entry.impersonator_id.is_none() {
+            entry.impersonator_id = uow.impersonator();
+        }
         if let Some(sink) = self.audit_sink().await {
             uow.after_commit(move || Box::pin(record(sink, entry)));
         }

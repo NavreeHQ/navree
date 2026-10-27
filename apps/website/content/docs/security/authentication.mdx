@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "JWT access tokens, rotating refresh tokens with reuse detection, pluggable strategies and the `CurrentUser` extractor."
+description: "JWT access tokens, rotating refresh tokens with reuse detection, pluggable strategies, the `CurrentUser` extractor, platform administrators and trusted token exchange."
 ---
 
 Navree authenticates API requests with tokens. A client signs in with an email address and a password and gets two tokens: a short-lived JWT **access token**, which it sends as `Authorization: Bearer` with every request, and an opaque **refresh token**, which it trades for a new pair when the access token expires. `navree-auth` provides the routes, the token handling, pluggable strategies and a `CurrentUser` extractor. Routes stay denied unless they say who may call them.
@@ -16,7 +16,7 @@ A browser app shouldn't hold the tokens in JavaScript at all. The [BFF pattern](
 
 ## Setting up
 
-<Badge feature="auth" /> The `auth` feature of the `navree` facade (part of the default `full` feature) brings `navree-auth` and the crates it builds on: `crypto`, `db`, `http`, `validation`, `cache`, `mail` and `access`. Add `AuthModule` to your app root with the modules it needs:
+<Badge feature="auth" /> The `auth` feature of the `navree` facade (part of the default `full` feature) brings `navree-auth` and the crates it builds on: `crypto`, `db`, `http`, `validation`, `cache`, `mail`, `access` and `http-client`. Add `AuthModule` to your app root with the modules it needs:
 
 ```rust title="src/main.rs"
 use navree::prelude::*;
@@ -64,7 +64,7 @@ APP_KEY=base64:mfPeqWFuSe93GQYipIfV8X4lDcR0+9JZT0yRCGGfMPo=
 
 ### Migrations
 
-`AuthModule` contributes the migration set `auth`, which creates three tables: `users`, `refresh_tokens` and `password_reset_tokens`. A migration set of yours whose tables reference `users` runs after it:
+`AuthModule` contributes the migration set `auth`, which creates the tables `users`, `refresh_tokens`, `password_reset_tokens`, `login_tokens` ([magic links and emailed codes](/docs/security/passwordless/)) and `passkeys` ([passkeys](/docs/security/passwordless/#passkeys)), and adds the [session columns](/docs/security/sessions/#the-session-columns) to `refresh_tokens`. A migration set of yours whose tables reference `users` runs after it:
 
 ```rust
 MigrationSet::new("posts").after(["auth"])
@@ -98,7 +98,18 @@ The routes are mounted under `{http.api_prefix}{auth.routes_prefix}`, which is `
 | `POST /api/auth/logout` | Signed in | 204 |
 | `GET /api/auth/me` | Signed in | 200: the user |
 
-The account routes (changing the profile and the password, password reset, email verification and two-factor authentication) are described in [Account flows](/docs/security/account-flows/). Every error uses Navree's JSON error shape (see [Errors](/docs/basics/errors/)).
+The other routes live on their own pages:
+
+| Routes | Page |
+|---|---|
+| Profile and password changes, password reset, email verification, two-factor authentication | [Account flows](/docs/security/account-flows/) |
+| `GET /api/auth/sessions`, `DELETE /api/auth/sessions/{id}`, `POST /api/auth/confirm` | [Sessions and step-up](/docs/security/sessions/) |
+| `POST /api/auth/impersonate/{user}`, `DELETE /api/auth/impersonate` (when `auth.impersonation.enabled`) | [Impersonation](/docs/security/impersonation/) |
+| `/api/auth/magic-link`, `/api/auth/otp`, `/api/auth/passkeys/*` (each when enabled) | [Passwordless sign-in](/docs/security/passwordless/) |
+| `POST /api/auth/platform/login`, `POST /api/auth/platform/2fa/verify` (when `auth.platform.enabled`) | [Platform administrators](#platform-administrators) |
+| `POST /api/auth/exchange` (when `auth.trusted_issuers` is not empty) | [Trusted token exchange](#trusted-token-exchange) |
+
+Every error uses Navree's JSON error shape (see [Errors](/docs/basics/errors/)).
 
 ### Signing in
 
@@ -230,7 +241,9 @@ Access tokens are JWTs signed with HS256. Here are the header and the claims of 
   "exp": 1793003527,
   "iss": "navree",
   "jti": "01a17748e21b71c697cf968dfe4f9f6d",
-  "typ": "access"
+  "typ": "access",
+  "sid": "01a17748-e21b-71c6-97cf-968b61f8e6b3",
+  "auth_time": 1793002627
 }
 ```
 
@@ -241,7 +254,17 @@ Access tokens are JWTs signed with HS256. Here are the header and the claims of 
 | `iss` | `auth.jwt.issuer` (`navree`) |
 | `aud` | `auth.jwt.audience`, only when it is configured |
 | `jti` | A unique token id |
-| `typ` | `access`, or `two_factor_challenge` for the [two-factor login step](/docs/security/account-flows/#signing-in-with-a-second-factor) |
+| `typ` | What the token is for (below) |
+| `sid` | The [session](/docs/security/sessions/) (refresh-token family) |
+| `auth_time` | When the user last signed in or [confirmed](/docs/security/sessions/#confirming-the-password-or-a-code), in Unix seconds |
+| `act` | For an [impersonation](/docs/security/impersonation/) session, `{"sub": <the impersonator's id>}` (RFC 8693) |
+
+| `typ` | |
+|---|---|
+| `access` | An access token |
+| `two_factor_setup` | The access token of a user who must [set up two-factor authentication](/docs/security/account-flows/#requiring-two-factor-authentication) first; it reaches only the setup routes |
+| `platform` | The access token of a [platform session](#platform-administrators) |
+| `two_factor_challenge`, `platform_challenge` | The challenge of a [two-factor login step](/docs/security/account-flows/#signing-in-with-a-second-factor) or a platform sign-in; never an access token |
 
 The claims carry no roles or permissions: [authorization](/docs/security/authorization/) looks them up for each request (cached until they change), so a role change applies to the next request.
 
@@ -249,7 +272,7 @@ When it verifies a token, `JwtService` accepts only HS256 (an unsigned `alg: non
 
 - the signature;
 - `iss`, and `aud` when an audience is configured (when none is, a token that carries one is rejected);
-- the token type, so a two-factor challenge token never works as an access token;
+- the token type, so a challenge token never works as an access token;
 - the expiry, with 30 seconds of leeway (`navree::auth::LEEWAY_SECS`) against the app's `dyn Clock`. A token issued more than 30 seconds in the future is rejected too.
 
 Access tokens are stateless. Nothing revokes one before it expires: not a logout, not a password change. Keep `auth.jwt.access_ttl_secs` short; refresh tokens are the part that gets revoked.
@@ -302,6 +325,7 @@ A refresh runs in its own transaction, so the revocation of a reused family stan
 | `replaced_by` | The id of the token it was exchanged for |
 | `ip`, `user_agent` | The client that received it (the user agent is cut to 512 characters) |
 | `created_at` | |
+| `authenticated_at`, `impersonator_id`, `audience` | The [session columns](/docs/security/sessions/#the-session-columns), copied to each successor |
 
 <Callout type="warning" title="Old refresh tokens are kept">
 
@@ -320,6 +344,15 @@ Routes are denied by default: a route must declare who may call it. `#[controlle
 | `#[roles(..)]`, `#[permissions(..)]`, `#[can(..)]` | Signed-in users the access rules allow; see [Authorization](/docs/security/authorization/) |
 
 [Access control on routes](/docs/basics/access-control/) covers the declarations in full. A guest on a protected route gets `401 Unauthorized`; a signed-in user who isn't allowed gets `403 Forbidden`.
+
+Two more attributes add guards from `navree-auth` (they aren't access declarations, so a route still needs one of the above):
+
+| Attribute | Refuses |
+|---|---|
+| `#[recent_auth(minutes = 10)]` | Sessions that didn't sign in or [confirm](/docs/security/sessions/#requiring-a-recent-sign-in) within the last 10 minutes: 403 `reauthentication_required` |
+| `#[not_while_impersonating]` | [Impersonation](/docs/security/impersonation/#guarding-risky-routes) sessions: 403 `impersonation_forbidden` |
+
+Both may sit on the impl block. For hand-written routes the guards are `navree::auth::recent_auth(duration)` and `navree::auth::not_while_impersonating()`, and `navree::auth::platform_session()` admits only [platform sessions](#platform-administrators).
 
 ## The current user
 
@@ -383,6 +416,8 @@ impl WhoAmIController {
 
 A `Principal` holds `user_id`, `via` (how the request authenticated: `AuthVia::Token` for JWTs), `token_abilities` (see [custom strategies](#writing-your-own-strategy)) and `session_id`.
 
+For the access token itself, take `navree::auth::AccessClaims`: its session id, `auth_time` and impersonator (see [Reading the token's claims](/docs/security/sessions/#reading-the-tokens-claims)). `navree::auth::Actor` names the signed-in user and, in an impersonation session, the impersonator.
+
 ### The user resource
 
 The auth routes answer with `UserResource`:
@@ -444,7 +479,7 @@ Authentication is a chain of strategies, each one a way of recognising a request
 | `Ok(Some(principal))` | Authenticated. Later strategies don't run. |
 | `Err(error)` | Credentials of this kind are present but invalid. The request fails with `error` (usually a 401), even on a public route. It never falls through to another strategy or to a guest. |
 
-`JwtStrategy` only claims `Authorization: Bearer` values shaped like a JWT: three base64url segments separated by dots. Other bearer values, such as an opaque API key or the scrape token of the `/metrics` endpoint, are left to other strategies and to route guards.
+`JwtStrategy` only claims `Authorization: Bearer` values shaped like a JWT: three base64url segments separated by dots. Other bearer values, such as an opaque API key or the scrape token of the `/metrics` endpoint, are left to other strategies and to route guards. It accepts tokens of type `access`, `platform` and `two_factor_setup` (the last only on the setup routes), stores the verified `AccessClaims` in the request, and for an impersonation token also a `navree::contracts::Impersonator`, which the unit of work and the audit log pick up.
 
 ### Writing your own strategy
 
@@ -530,7 +565,7 @@ The strategy runs after the JWT strategy, so a request with a valid bearer token
 | `validate_user(email, password)` | The user, or `AuthError::InvalidCredentials` |
 | `attempt_login(email, password, &meta)` | The login flow: throttle, password check, then `LoginOutcome::Authenticated { user, tokens }` or `LoginOutcome::TwoFactorRequired { user, challenge_token }` |
 | `login(email, password, &meta)` | `attempt_login` for accounts without two-factor authentication; `AuthError::TwoFactorRequired` for the others |
-| `issue_tokens(&user, meta)` | A new session: an access token and the first refresh token of a new family |
+| `issue_tokens(&user, meta)` | A new session: an access token and the first refresh token of a new family (limited to the two-factor setup when the user [must set it up](/docs/security/account-flows/#requiring-two-factor-authentication)) |
 | `refresh(refresh_token, meta)` | Rotates a refresh token |
 | `logout(refresh_token, user_id, all)` | Ends one session, or all of them |
 | `revoke_all_refresh_tokens(user_id)` | Ends every session of a user |
@@ -538,8 +573,11 @@ The strategy runs after the JWT strategy, so a request with a valid bearer token
 | `update_password(user_id, password)` | Sets a password with the policy; sessions are left alone |
 | `present(&user)` | The user resource, with its extensions |
 | `jwt()` | The `JwtService` |
+| `is_platform_admin(user_id)` | Whether the user holds a role of `auth.platform.roles` |
+| `platform_login(email, password, &meta)`, `verify_platform_two_factor(challenge, proof, &meta)` | The [platform sign-in](#platform-administrators) |
+| `exchange_token(token, &meta)` | [Trusted token exchange](#trusted-token-exchange) |
 
-The account flows add more methods; see [Account flows](/docs/security/account-flows/#using-the-flows-from-code). Writes join the unit of work of the current task when there is an unfinished one (a request's, say) and otherwise commit their own transaction.
+The account flows, sessions, impersonation and passwordless sign-in add more methods; see [Account flows](/docs/security/account-flows/#using-the-flows-from-code), [Sessions and step-up](/docs/security/sessions/#in-code), [Impersonation](/docs/security/impersonation/#in-code) and [Passwordless sign-in](/docs/security/passwordless/#in-code). Writes join the unit of work of the current task when there is an unfinished one (a request's, say) and otherwise commit their own transaction.
 
 This console command creates an admin account with a random password, using the access module to assign the role:
 
@@ -595,7 +633,7 @@ Rotating the signing key, either way, invalidates every access token: requests g
 
 <Callout type="note" title="HS256 only">
 
-Tokens are signed with a shared secret, and only HS256 is supported: there are no RS256 keys or JWKS endpoint. Anything that can verify a token can also sign one, so don't hand the secret to other services. Every instance of your API needs the same key.
+Tokens are signed with a shared secret, and only HS256 is supported: there are no RS256 keys or JWKS endpoint. Anything that can verify a token can also sign one, so don't hand the secret to other services. Every instance of your API needs the same key. To accept tokens that another system signs with its own keys, use [trusted token exchange](#trusted-token-exchange).
 
 </Callout>
 
@@ -622,6 +660,102 @@ The counters live in the app's cache when `CacheModule` is in the app, and in a 
 The throttle is only as good as the client address. Behind a reverse proxy or a BFF, list the proxy in `http.trusted_proxies`, or every client shares the proxy's address and one person's wrong passwords lock everyone out of that account. See [Rate limiting](/docs/basics/rate-limiting/).
 
 Registration, the forgot-password route and the reset-password route have no attempt throttle of their own (forgot-password only limits how often it mails one address). Only navree-http's per-IP limit (`http.per_ip_rate_limit`, 600 requests a minute by default) applies to them.
+
+## Platform administrators
+
+Some people run the platform rather than use it: they manage every tenant, look at system health and help support. They sign in apart from the app, into the **platform audience**: a separate sign-in with its own throttle, two-factor authentication always, shorter sessions, and tokens that platform routes recognize.
+
+```toml title="config/app.toml"
+[auth.platform]
+enabled = true
+roles = ["platform-admin"]        # navree-access roles that may sign in
+login_throttle_per_minute = 3     # failed platform sign-ins per email and IP
+access_ttl_secs = 900
+session_ttl_secs = 28800          # platform sessions end after 8 hours
+```
+
+A platform administrator holds one of `roles` (from `AccessModule`) and has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on. The sign-in always takes two steps:
+
+```http
+POST /api/auth/platform/login HTTP/1.1
+Content-Type: application/json
+
+{"email": "root@example.com", "password": "correct horse battery"}
+```
+
+```json
+{
+  "challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 300,
+  "two_factor_required": true
+}
+```
+
+`POST /api/auth/platform/2fa/verify` with `{"challenge_token", "code"}` (or `recovery_code`) answers with the user and a token pair, like `POST /api/auth/2fa/verify`. The access token is of type `platform`.
+
+- Wrong credentials and users without a platform role get the same `401 Invalid credentials`, recorded as `auth.login_failed` with `metadata.flow = "platform"`. An administrator without two-factor authentication gets `403 Two-factor authentication required` and sets it up through the app first.
+- Failed attempts count against their own throttle (`login_throttle_per_minute`, 3), apart from the app's login throttle.
+- A platform challenge works only at the platform route, and an app challenge only at the app's.
+- Platform sessions end `session_ttl_secs` after the sign-in, however often they are refreshed through `POST /api/auth/refresh`. Each refresh checks the role again: a user who lost it is signed out.
+- Platform administrators can't be [impersonated](/docs/security/impersonation/).
+
+Platform routes refuse everything but platform sessions. Use the `PlatformAdmin` extractor, or the `platform_session()` guard on hand-written routes:
+
+```rust title="src/modules/console/controller.rs"
+use navree::auth::PlatformAdmin;
+use navree::prelude::*;
+
+#[injectable]
+pub struct ConsoleController;
+
+#[controller("/console")]
+#[authenticated]
+impl ConsoleController {
+    /// `GET /api/console/whoami`: platform sessions only.
+    #[get("/whoami")]
+    async fn whoami(&self, PlatformAdmin(admin): PlatformAdmin) -> Json<String> {
+        Json(format!("Signed in to the platform as {}", admin.email))
+    }
+}
+```
+
+`PlatformAdmin` loads the user; anything but a platform session gets 403 with the code `platform_session_required` ("A platform session is required"). Platform access tokens also work on the app's own routes, as the same user.
+
+## Trusted token exchange
+
+A sibling system (an older version of your product, a partner portal) can hand its signed-in users over without a second password prompt. It signs a short-lived JWT for the user with its own key, the client posts it to `POST /api/auth/exchange`, and Navree answers with a session. Configure each system under a name:
+
+```toml title="config/app.toml"
+[auth.trusted_issuers.legacy]
+issuer = "https://legacy.example.com"           # the `iss` its tokens carry
+jwks_url = "https://legacy.example.com/.well-known/jwks.json"
+audience = "navree-app"                         # the `aud` they must carry
+enabled = true                                  # the kill switch
+max_lifetime_secs = 300                         # exp - iat at most 5 minutes
+jwks_cache_secs = 3600
+```
+
+Set either `jwks_url` (fetched with the app's `HttpClient`, or a default client, and cached for `jwks_cache_secs`) or `public_key`: a PEM `PUBLIC KEY` (RSA, P-256 or Ed25519) or a JWK as JSON. Keep the PEM in `.env` (`APP_AUTH__TRUSTED_ISSUERS__LEGACY__PUBLIC_KEY`).
+
+```http
+POST /api/auth/exchange HTTP/1.1
+Content-Type: application/json
+
+{"token": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImsxIn0.eyJpc3MiOiJodHRwczovL2xlZ2FjeS5leGFtcGxlLmNvbSIs..."}
+```
+
+The answer is the user and a token pair. A token is accepted when:
+
+- its `iss` is a configured, enabled issuer;
+- it is signed with RS256, ES256 or EdDSA by that issuer's key (the key with the token's `kid`, when it has one; an unknown `kid` fetches the key set again, at most once a minute);
+- its `aud` (a string or a list) contains `audience`;
+- `exp` and `iat` are present, it hasn't expired, `iat` and `nbf` aren't in the future (30 seconds of leeway each way), and it lives at most `max_lifetime_secs`;
+- its `jti` hasn't been seen before: each token works once (the ids are kept in the app's cache until the token expires);
+- its `email` belongs to a registered user, and `email_verified` isn't `false`.
+
+Every refusal is `401 Invalid token`, whatever the reason; the reason goes to the log and to an `auth.token_exchange_failed` audit entry. Success is recorded as `auth.token_exchanged` with `metadata.issuer` (the name). The session that starts is an ordinary one: the [two-factor policy](/docs/security/account-flows/#requiring-two-factor-authentication) applies, but no second factor is asked for, because the issuer already authenticated the user. Set `enabled = false` to stop accepting an issuer's tokens at once. Unknown users are refused, never created.
+
+Signatures are checked with `ring`; `alg: none`, HMAC algorithms and critical header extensions are refused.
 
 ## Browser apps: the BFF pattern
 
@@ -688,6 +822,19 @@ refresh_ttl_secs = 2592000      # 30 days
 | `auth.password_reset.*` | | See [Password reset](/docs/security/account-flows/#password-reset) |
 | `auth.verification.*` | | See [Email verification](/docs/security/account-flows/#email-verification) |
 | `auth.two_factor.*` | | See [Two-factor authentication](/docs/security/account-flows/#two-factor-authentication) |
+| `auth.impersonation.*` | | See [Impersonation](/docs/security/impersonation/#turning-it-on) |
+| `auth.magic_link.*`, `auth.otp.*`, `auth.passkeys.*` | | See [Passwordless sign-in](/docs/security/passwordless/#configuration) |
+| `auth.platform.enabled` | `false` | Mounts the [platform sign-in](#platform-administrators) routes |
+| `auth.platform.roles` | `["platform-admin"]` | Roles that make a user a platform administrator; at least one when enabled |
+| `auth.platform.login_throttle_per_minute` | `3` | Failed platform sign-ins per email and IP per minute; `0` turns it off |
+| `auth.platform.access_ttl_secs` | `900` | Platform access token lifetime |
+| `auth.platform.session_ttl_secs` | `28800` | Platform session lifetime (8 hours), not extended by refreshing |
+| `auth.trusted_issuers.<name>.issuer` | | The `iss` of the issuer's tokens; required |
+| `auth.trusted_issuers.<name>.jwks_url` / `.public_key` | | Where its keys come from; exactly one |
+| `auth.trusted_issuers.<name>.audience` | | The `aud` its tokens must carry; required |
+| `auth.trusted_issuers.<name>.enabled` | `true` | The kill switch |
+| `auth.trusted_issuers.<name>.max_lifetime_secs` | `300` | The longest accepted `exp - iat` |
+| `auth.trusted_issuers.<name>.jwks_cache_secs` | `3600` | How long a fetched key set is used |
 
 Related settings: `app.key` (see [Encryption and hashing](/docs/security/encryption-and-hashing/)), the `hashing` section for password hashes, `http.trusted_proxies` for client addresses, and `http.signing_key` for the signed verification links.
 
@@ -723,8 +870,11 @@ With an [audit log](/docs/security/audit-log/) in the app, the module records:
 | `auth.refresh` | `auth` | A refresh token was rotated; `metadata.family_id` |
 | `auth.refresh_reuse_detected` | `security` | A spent refresh token came back and its family was revoked |
 | `auth.logout` | `auth` | `metadata.all` and `metadata.revoked` (how many tokens) |
+| `auth.platform_login` | `auth` | A platform sign-in finished; `metadata.two_factor` and `metadata.session_id` |
+| `auth.token_exchanged` | `auth` | A trusted issuer's token was accepted; `metadata.issuer` |
+| `auth.token_exchange_failed` | `security` | One was refused; `metadata.issuer` (when known) and `metadata.reason` |
 
-Entries carry the client's IP address, user agent and request id. Passwords and tokens are never recorded. The account flows add their own entries; see [Account flows](/docs/security/account-flows/#events-and-audit-entries).
+Entries carry the client's IP address, user agent and request id, and the impersonator in an [impersonation](/docs/security/impersonation/#the-audit-trail) session. Passwords and tokens are never recorded. The account flows, sessions, impersonation and passwordless sign-in add their own entries; see [Account flows](/docs/security/account-flows/#events-and-audit-entries), [Sessions and step-up](/docs/security/sessions/#audit-entries), [Impersonation](/docs/security/impersonation/#the-audit-trail) and [Passwordless sign-in](/docs/security/passwordless/#audit-entries).
 
 ## Testing
 
@@ -795,12 +945,18 @@ For API keys of your own design, [write a strategy](#writing-your-own-strategy).
 ## Limits
 
 - **Tokens, not sessions.** `navree-auth` issues tokens only. Cookie sessions with CSRF protection are a separate, optional module ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) that `navree-auth` doesn't use.
-- **Access tokens can't be revoked** before they expire, and they are signed with HS256 only.
+- **Access tokens can't be revoked** before they expire, and they are signed with HS256 only. Ending a [session](/docs/security/sessions/) stops its refresh tokens, not its access tokens.
 - **Refresh tokens are never pruned** from the database.
 
 <LinkCards>
   <LinkCard href="/docs/security/account-flows/" title="Account flows">
     Registration, password reset, email verification and two-factor authentication.
+  </LinkCard>
+  <LinkCard href="/docs/security/sessions/" title="Sessions and step-up">
+    Session lists, ending sessions and `#[recent_auth]`.
+  </LinkCard>
+  <LinkCard href="/docs/security/passwordless/" title="Passwordless sign-in">
+    Magic links, emailed codes and passkeys.
   </LinkCard>
   <LinkCard href="/docs/security/authorization/" title="Authorization">
     Roles, permissions and abilities, checked on routes and in SQL.

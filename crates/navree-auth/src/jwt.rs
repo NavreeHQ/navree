@@ -19,6 +19,11 @@ use crate::{AuthError, JwtOptions};
 pub const LEEWAY_SECS: i64 = 30;
 
 /// The claims of a navree JWT.
+///
+/// Access tokens also carry their session: `sid` (the refresh-token family
+/// they belong to), `auth_time` (when the user last proved who they are:
+/// signing in or `POST /auth/confirm`) and, for an impersonation session,
+/// `act` (RFC 8693 §4.1: who is acting as the user).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Claims {
     /// The user id.
@@ -36,18 +41,76 @@ pub struct Claims {
     pub jti: String,
     /// What the token may be used for.
     pub typ: TokenType,
+    /// The session (refresh-token family) the token belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sid: Option<Uuid>,
+    /// When the user last authenticated (Unix seconds): signing in, or
+    /// confirming their password or a code at `POST /auth/confirm`.
+    /// `#[recent_auth]` routes check it. None for impersonation sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_time: Option<i64>,
+    /// The user acting as `sub` (an impersonation session).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub act: Option<ActorClaim>,
+}
+
+/// The `act` claim of an impersonation token: who is acting as the
+/// token's subject (RFC 8693 §4.1).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ActorClaim {
+    /// The impersonating user's id.
+    pub sub: Uuid,
+}
+
+/// The session claims of an access token ([`Claims::sid`],
+/// [`Claims::auth_time`] and [`Claims::act`]), for
+/// [`JwtService::sign_session`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SessionClaims {
+    /// The session (refresh-token family) id.
+    pub session_id: Option<Uuid>,
+    /// When the user last authenticated (Unix seconds).
+    pub auth_time: Option<i64>,
+    /// The impersonating user, for an impersonation session.
+    pub impersonator: Option<Uuid>,
 }
 
 /// What a JWT may be used for: [`verify`](JwtService::verify) rejects a
 /// token of another type, so a two-factor challenge token is never an
 /// access token.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum TokenType {
     /// An access token (`Authorization: Bearer`).
     Access,
     /// A short-lived token proving the password step of a two-factor login.
     TwoFactorChallenge,
+    /// The access token of a user who must set up two-factor
+    /// authentication first (`auth.two_factor.required_for` or a
+    /// [`TwoFactorPolicy`](crate::TwoFactorPolicy)): it reaches only the
+    /// two-factor setup routes, `GET /auth/me` and `POST /auth/logout`;
+    /// everything else answers 403 `two_factor_required`.
+    TwoFactorSetup,
+    /// An access token of the platform audience (`auth.platform`): a
+    /// platform administrator signed in with two-factor authentication.
+    Platform,
+    /// The challenge token of a platform sign-in (password checked, second
+    /// factor pending).
+    PlatformChallenge,
+}
+
+impl TokenType {
+    /// The snake-case name (`access`, `two_factor_setup`, ...).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TokenType::Access => "access",
+            TokenType::TwoFactorChallenge => "two_factor_challenge",
+            TokenType::TwoFactorSetup => "two_factor_setup",
+            TokenType::Platform => "platform",
+            TokenType::PlatformChallenge => "platform_challenge",
+        }
+    }
 }
 
 /// Signs and verifies HS256 JWTs (jsonwebtoken with an HMAC-only RustCrypto
@@ -119,6 +182,18 @@ impl JwtService {
 
     /// A token for `user_id` of type `typ`, valid for `ttl`.
     pub fn sign(&self, user_id: Uuid, typ: TokenType, ttl: Duration) -> Result<String, AuthError> {
+        self.sign_session(user_id, typ, ttl, SessionClaims::default())
+    }
+
+    /// A token for `user_id` of type `typ`, valid for `ttl`, carrying the
+    /// session claims `session` (`sid`, `auth_time`, `act`).
+    pub fn sign_session(
+        &self,
+        user_id: Uuid,
+        typ: TokenType,
+        ttl: Duration,
+        session: SessionClaims,
+    ) -> Result<String, AuthError> {
         let iat = self.clock.now().timestamp();
         let ttl = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);
         let claims = Claims {
@@ -129,9 +204,17 @@ impl JwtService {
             aud: self.audience.clone(),
             jti: Uuid::now_v7().simple().to_string(),
             typ,
+            sid: session.session_id,
+            auth_time: session.auth_time,
+            act: session.impersonator.map(|sub| ActorClaim { sub }),
         };
         jsonwebtoken::encode(&Header::new(Algorithm::HS256), &claims, &self.encoding)
             .map_err(|error| AuthError::Signing(error.to_string()))
+    }
+
+    /// The current time of the service's clock, in Unix seconds.
+    pub fn now(&self) -> i64 {
+        self.clock.now().timestamp()
     }
 
     /// An access token for `user_id`, valid for [`access_ttl`](JwtService::access_ttl).
@@ -143,6 +226,12 @@ impl JwtService {
     /// `expected`: [`AuthError::TokenExpired`] once it has expired,
     /// [`AuthError::InvalidToken`] for anything else.
     pub fn verify(&self, token: &str, expected: TokenType) -> Result<Claims, AuthError> {
+        self.verify_any(token, &[expected])
+    }
+
+    /// Like [`verify`](JwtService::verify), accepting a token of any of
+    /// the `expected` types.
+    pub fn verify_any(&self, token: &str, expected: &[TokenType]) -> Result<Claims, AuthError> {
         let data = jsonwebtoken::decode::<Claims>(token, &self.decoding, &self.validation)
             .map_err(|error| match error.kind() {
                 ErrorKind::ExpiredSignature => AuthError::TokenExpired,
@@ -150,7 +239,7 @@ impl JwtService {
             })?;
         let claims = data.claims;
         let now = self.clock.now().timestamp();
-        if claims.typ != expected || claims.iat > now.saturating_add(LEEWAY_SECS) {
+        if !expected.contains(&claims.typ) || claims.iat > now.saturating_add(LEEWAY_SECS) {
             return Err(AuthError::InvalidToken);
         }
         if claims.exp.saturating_add(LEEWAY_SECS) < now {
@@ -243,10 +332,77 @@ mod tests {
             aud: None,
             jti: "j".to_owned(),
             typ: TokenType::TwoFactorChallenge,
+            sid: None,
+            auth_time: None,
+            act: None,
         };
         let value = serde_json::to_value(&claims).unwrap();
         assert_eq!(value["typ"], "two_factor_challenge");
         assert!(value.get("aud").is_none());
+        for absent in ["sid", "auth_time", "act"] {
+            assert!(value.get(absent).is_none(), "{absent}");
+        }
+        for typ in [
+            TokenType::Access,
+            TokenType::TwoFactorChallenge,
+            TokenType::TwoFactorSetup,
+            TokenType::Platform,
+            TokenType::PlatformChallenge,
+        ] {
+            assert_eq!(serde_json::to_value(typ).unwrap(), typ.as_str());
+        }
+    }
+
+    #[test]
+    fn session_claims_round_trip() {
+        let (jwt, clock) = clocked();
+        let (user, admin, session) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let auth_time = clock.now().timestamp() - 60;
+        let token = jwt
+            .sign_session(
+                user,
+                TokenType::Access,
+                Duration::from_secs(900),
+                SessionClaims {
+                    session_id: Some(session),
+                    auth_time: Some(auth_time),
+                    impersonator: Some(admin),
+                },
+            )
+            .unwrap();
+        let claims = jwt.verify(&token, TokenType::Access).unwrap();
+        assert_eq!(claims.sid, Some(session));
+        assert_eq!(claims.auth_time, Some(auth_time));
+        assert_eq!(claims.act, Some(ActorClaim { sub: admin }));
+        assert_eq!(jwt.now(), clock.now().timestamp());
+
+        // A token without them (older tokens, challenges) still verifies.
+        let plain = jwt.sign_access(user).unwrap();
+        let claims = jwt.verify(&plain, TokenType::Access).unwrap();
+        assert_eq!(
+            (claims.sid, claims.auth_time, claims.act),
+            (None, None, None)
+        );
+    }
+
+    #[test]
+    fn verify_any_accepts_only_the_listed_types() {
+        let jwt = service();
+        let platform = jwt
+            .sign(Uuid::now_v7(), TokenType::Platform, Duration::from_secs(60))
+            .unwrap();
+        assert!(
+            jwt.verify_any(&platform, &[TokenType::Access, TokenType::Platform])
+                .is_ok()
+        );
+        assert!(matches!(
+            jwt.verify_any(&platform, &[TokenType::Access, TokenType::TwoFactorSetup]),
+            Err(AuthError::InvalidToken)
+        ));
+        assert!(matches!(
+            jwt.verify_any(&platform, &[]),
+            Err(AuthError::InvalidToken)
+        ));
     }
 
     #[test]

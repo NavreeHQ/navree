@@ -9,7 +9,7 @@ use syn::{FnArg, Ident, ImplItem, ImplItemFn, Item, ItemImpl, Lit, LitStr, Recei
 
 use crate::attr::Errors;
 use crate::path;
-use crate::paths::{ACCESS, FLAGS, HTTP};
+use crate::paths::{ACCESS, AUTH, FLAGS, HTTP};
 use crate::route::{Api, Can, Name, Route, RouteAttrs, Site};
 
 /// Expands `#[controller(args)] impl X { .. }`.
@@ -165,6 +165,9 @@ struct Paths {
     access: Option<TokenStream>,
     /// navree-flags, needed for `#[requires_flag]`.
     flags: Option<TokenStream>,
+    /// navree-auth, needed for `#[not_while_impersonating]` and
+    /// `#[recent_auth]`.
+    auth: Option<TokenStream>,
 }
 
 impl Paths {
@@ -189,10 +192,15 @@ impl Paths {
             Some(requires) => Some(FLAGS.path(requires.at.span())?),
             None => None,
         };
+        let auth = match routes.iter().find_map(|route| route.attrs.auth_attribute()) {
+            Some(at) => Some(AUTH.path(at.span())?),
+            None => None,
+        };
         Ok(Paths {
             http,
             access,
             flags,
+            auth,
         })
     }
 }
@@ -456,6 +464,19 @@ fn route_def(route: &RouteFn, paths: &Paths) -> TokenStream {
             })
         }
     });
+    let auth_guards = paths.auth.as_ref().map(|auth| {
+        let impersonation = route
+            .attrs
+            .not_while_impersonating
+            .as_ref()
+            .map(|at| quote_spanned!(at.span()=> .guard(#auth::not_while_impersonating())));
+        let recent = route.attrs.recent_auth.as_ref().map(|(secs, at)| {
+            quote_spanned! {at.span()=>
+                .guard(#auth::recent_auth(::core::time::Duration::from_secs(#secs)))
+            }
+        });
+        quote!(#impersonation #recent)
+    });
     let options = options(&route.attrs);
     let api = route.attrs.api.as_ref().map(|api| api_call(api, http));
     let mut def = quote! {
@@ -482,6 +503,7 @@ fn route_def(route: &RouteFn, paths: &Paths) -> TokenStream {
             };
             let #this = ::std::sync::Arc::clone(&self);
             #def
+            #auth_guards
             #(#guards)*
             #options
             #api

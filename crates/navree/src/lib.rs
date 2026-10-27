@@ -32,7 +32,7 @@
 //! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
-//! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
+//! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless, passkeys |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |

@@ -17,13 +17,16 @@ use crate::log::kind_str;
 /// Filters for audit entries; every field is optional and they combine
 /// with AND.
 ///
-/// As an extractor it reads `?actor_id=&subject_type=&subject_id=&action=&kind=`
-/// (other parameters are ignored) and rejects a malformed `actor_id` or an
-/// unknown `kind` with a 400.
+/// As an extractor it reads
+/// `?actor_id=&impersonator_id=&subject_type=&subject_id=&action=&kind=`
+/// (other parameters are ignored) and rejects a malformed `actor_id` or
+/// `impersonator_id` or an unknown `kind` with a 400.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AuditFilter {
     /// Entries by this user.
     pub actor_id: Option<Uuid>,
+    /// Entries written while this user impersonated the actor.
+    pub impersonator_id: Option<Uuid>,
     /// Entries about this record type (`Deal`).
     pub subject_type: Option<String>,
     /// Entries about this record id.
@@ -42,6 +45,9 @@ impl AuditFilter {
         let mut condition = Condition::all();
         if let Some(actor_id) = self.actor_id {
             condition = condition.add(Column::ActorId.eq(actor_id));
+        }
+        if let Some(impersonator_id) = self.impersonator_id {
+            condition = condition.add(Column::ImpersonatorId.eq(impersonator_id));
         }
         if let Some(subject_type) = &self.subject_type {
             condition = condition.add(Column::SubjectType.eq(subject_type.as_str()));
@@ -84,6 +90,7 @@ fn escape_like(value: &str) -> String {
 #[derive(Deserialize)]
 struct RawFilter {
     actor_id: Option<String>,
+    impersonator_id: Option<String>,
     subject_type: Option<String>,
     subject_id: Option<String>,
     action: Option<String>,
@@ -98,16 +105,17 @@ impl<S: Send + Sync> FromRequestParts<S> for AuditFilter {
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         let mut errors = BTreeMap::new();
         let present = |v: Option<String>| v.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
-        let actor_id = present(raw.actor_id).and_then(|id| match Uuid::parse_str(&id) {
-            Ok(id) => Some(id),
-            Err(_) => {
-                errors.insert(
-                    "actor_id".to_owned(),
-                    vec!["actor_id must be a UUID".to_owned()],
-                );
-                None
-            }
-        });
+        let mut uuid = |field: &str, value: Option<String>| {
+            present(value).and_then(|id| match Uuid::parse_str(&id) {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    errors.insert(field.to_owned(), vec![format!("{field} must be a UUID")]);
+                    None
+                }
+            })
+        };
+        let actor_id = uuid("actor_id", raw.actor_id);
+        let impersonator_id = uuid("impersonator_id", raw.impersonator_id);
         let kind = present(raw.kind).and_then(|kind| match parse_kind(&kind) {
             Some(kind) => Some(kind),
             None => {
@@ -126,6 +134,7 @@ impl<S: Send + Sync> FromRequestParts<S> for AuditFilter {
         }
         Ok(AuditFilter {
             actor_id,
+            impersonator_id,
             subject_type: present(raw.subject_type),
             subject_id: present(raw.subject_id),
             action: present(raw.action),

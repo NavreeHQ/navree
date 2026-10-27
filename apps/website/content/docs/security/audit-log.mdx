@@ -33,6 +33,7 @@ Every insert, update and delete you make through `Repo` in a unit of work become
   "kind": "data",
   "action": "user.updated",
   "actor_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
+  "impersonator_id": null,
   "subject_type": "User",
   "subject_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
   "old_values": {"name": "Ada Lovelace", "updated_at": "2026-10-26T08:37:33.199180700Z"},
@@ -47,7 +48,7 @@ Every insert, update and delete you make through `Repo` in a unit of work become
 
 - The **subject type** comes from the table name, singular and in PascalCase: `deals` is `Deal`, `companies` is `Company`, `deal_notes` is `DealNote`. Only the last word is made singular, with simple English rules; map irregular names with `audit.subject_types`.
 - The **action** is the subject type in snake case plus `created`, `updated` or `deleted`: `deal.updated`, `deal_note.created`.
-- The **actor** and the **request id** are those of the unit of work: in a request, the signed-in user and the request's id.
+- The **actor** and the **request id** are those of the unit of work: in a request, the signed-in user and the request's id. In an [impersonation](/docs/security/impersonation/) session the unit of work also carries the **impersonator**, so the entry names both the user and the support agent acting as them.
 - A **created** record is stored whole in `new_values`, a **deleted** one in `old_values`. An **update** keeps only the fields that changed, before and after; an update that changes nothing records nothing.
 
 Data entries don't carry the client's IP address or user agent. To see where a change came from, match its `request_id` with the request's [log](/docs/basics/logging/) lines or its other audit entries.
@@ -158,6 +159,7 @@ Each row of `audit_logs` is a `navree::audit::AuditRecord` (the model of `navree
 | `kind` | string | `data`, `auth`, `access`, `security` or `custom` |
 | `action` | string | What happened: `deal.updated`, `auth.login`, `access.denied` |
 | `actor_id` | UUID or null | The user who did it |
+| `impersonator_id` | UUID or null | The user impersonating the actor when it happened ([impersonation](/docs/security/impersonation/)) |
 | `subject_type`, `subject_id` | string or null | What it happened to: `Deal` and its id |
 | `old_values`, `new_values` | object or null | Values before and after (changed fields only for updates) |
 | `request_id` | string or null | The request, to connect the entries of one request |
@@ -202,12 +204,13 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 | Parameter | Keeps entries |
 |---|---|
 | `actor_id` | By this user (a UUID) |
+| `impersonator_id` | Written while this user impersonated someone (a UUID) |
 | `subject_type`, `subject_id` | About this kind of record, or this record |
 | `action` | With this action: exactly (`deal.updated`), or, without a `.`, any action ending in it (`updated` matches `deal.updated` and `company.updated`). `%` and `_` are plain characters |
 | `kind` | Of this kind |
 | `page`, `per_page` | The page (default 1) and its size (default 15, at most 100) |
 
-The filters combine with AND. A malformed `actor_id` or an unknown `kind` is a 400:
+The filters combine with AND. A malformed `actor_id` or `impersonator_id`, or an unknown `kind`, is a 400:
 
 ```json wrap
 {
@@ -266,7 +269,7 @@ For queries `list` can't express, `AuditFilter::apply` adds the filter to a SeaO
 
 ## Adding entries
 
-Build an entry with `navree::contracts::AuditEntry::new(kind, action)` and its setters: `actor`, `subject`, `old_values`, `new_values`, `request_id`, `ip`, `user_agent` and `metadata`. Then choose where to write it:
+Build an entry with `navree::contracts::AuditEntry::new(kind, action)` and its setters: `actor`, `impersonator`, `subject`, `old_values`, `new_values`, `request_id`, `ip`, `user_agent` and `metadata`. Then choose where to write it:
 
 ```rust title="src/modules/deals/exports.rs"
 use navree::audit::{AuditError, AuditLog};
@@ -305,8 +308,8 @@ impl DealExports {
 }
 ```
 
-- **`record`** writes on the audit log's own connection, outside any transaction: the entry stays even if the request fails afterwards. Use it for attempts and security events. Entries go into a queue of 4,096 and a background task writes them in order; `record` fails with `AuditError::QueueFull` only when that queue is full, and the entry is then dropped with a warning in the log. `flush().await` waits until everything queued so far is written.
-- **`record_in`** writes inside the unit of work's transaction, so the entry commits or rolls back with the work. Use it for business events that belong to a change. The actor and the request id default to the unit of work's.
+- **`record`** writes on the audit log's own connection, outside any transaction: the entry stays even if the request fails afterwards. Use it for attempts and security events. Entries go into a queue of 4,096 and a background task writes them in order; `record` fails with `AuditError::QueueFull` only when that queue is full, and the entry is then dropped with a warning in the log. `flush().await` waits until everything queued so far is written. An entry without an impersonator gets the one of the task's current unit of work (`Uow::current()`), so entries written during an impersonated request name the impersonator.
+- **`record_in`** writes inside the unit of work's transaction, so the entry commits or rolls back with the work. Use it for business events that belong to a change. The actor, the impersonator and the request id default to the unit of work's.
 
 When the app shuts down gracefully, the queue is written out first; entries recorded after that are written directly.
 

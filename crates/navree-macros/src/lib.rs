@@ -198,6 +198,8 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
 /// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(400, 404), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `navree_http::schema_fn::<T>` |
 /// | `#[requires_flag(NewPipeline)]`, `#[requires_flag(NewPipeline, status = 403)]` | fn | `navree_flags::requires_flag::<NewPipeline>(route, 404)`: while the flag is off the route answers 404 (or 403) before its authorization, extractors and handler; OpenAPI shows `x-navree-flag` |
+/// | `#[not_while_impersonating]` | fn, impl | `.guard(navree_auth::not_while_impersonating())`: 403 `impersonation_forbidden` in an impersonation session |
+/// | `#[recent_auth(minutes = 10)]` | fn, impl | `.guard(navree_auth::recent_auth(10 min))`: 403 `reauthentication_required` unless the user signed in or confirmed (`POST /auth/confirm`) within the last 10 minutes |
 ///
 /// Durations are a whole number followed by `ms`, `s`, `m` or `h` (`"500ms"`,
 /// `"5s"`, `"1m"`, `"1h"`). Access declarations on the impl add to a route's
@@ -213,7 +215,9 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// `#[can]` with marker types needs `navree` (or `navree-access`) among the
 /// dependencies, `#[requires_flag]` needs `navree` with the `flags` feature
-/// (or `navree-flags`); everything else needs `navree` (or `navree-http`). Register the
+/// (or `navree-flags`), `#[not_while_impersonating]` and `#[recent_auth]`
+/// need `navree` with the `auth` feature (or `navree-auth`); everything
+/// else needs `navree` (or `navree-http`). Register the
 /// controller with `#[module(controllers = [DealController])]` or
 /// `ModuleBuilderHttpExt::controller`; it must also be `Injectable` (usually
 /// `#[injectable]`).
