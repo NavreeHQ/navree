@@ -1,0 +1,20 @@
+/** Suggested industries (the field is free text). */
+export const INDUSTRIES = [
+  "Aerospace",
+  "Agriculture",
+  "Biotech",
+  "Design",
+  "Education",
+  "Energy",
+  "Financial services",
+  "Food & beverage",
+  "Healthcare",
+  "Hospitality",
+  "Legal",
+  "Logistics",
+  "Manufacturing",
+  "Media",
+  "Real estate",
+  "Retail",
+  "Software",
+] as const;

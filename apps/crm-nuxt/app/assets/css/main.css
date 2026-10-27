@@ -1,0 +1,365 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* The CRM is dark only, like navree.com: `dark:` utilities always apply. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Fonts: the three faces navree.com uses, self-hosted from the @fontsource
+ * packages (Vite copies the files into the build; no runtime font requests).
+ * Mona Sans for page titles and big figures, Geist for the UI, Monaspace Neon
+ * for code, ids and eyebrows.
+ */
+@font-face {
+  font-family: "Mona Sans";
+  src: url("../../../node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2")
+    format("woff2-variations");
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-italic.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monaspace Neon";
+  src: url("../../../node_modules/@fontsource/monaspace-neon/files/monaspace-neon-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monaspace Neon";
+  src: url("../../../node_modules/@fontsource/monaspace-neon/files/monaspace-neon-latin-600-normal.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Navree design tokens, copied from apps/website/src/app/globals.css.
+ * Ink: near-black surfaces with a faint sea-green cast. One accent, the
+ * starboard green, used sparingly: the primary action, focus, links and the
+ * one figure that matters most.
+ */
+@theme static {
+  --color-ink-0: #040605;
+  --color-ink-1: #0a0e0c;
+  --color-ink-2: #111714;
+  --color-ink-3: #16201b;
+  --color-line: #1c2420;
+  --color-line-2: #2a3530;
+  --color-fg: #e9efeb;
+  --color-fg-1: #cfd8d3;
+  --color-fg-2: #a9b5ae;
+  --color-fg-3: #8a968f;
+  --color-accent: #3dff8f;
+  --color-accent-ink: #03130a;
+  --color-amber: #ffbf5e;
+  --color-danger: #ff6b6b;
+  --color-bar: #5b6862;
+
+  /*
+   * The pipeline ramp (CRM only): open stages brighten toward the accent as a
+   * deal gets closer to closing; won is the accent itself, lost the danger
+   * red. Always paired with a label, never color alone.
+   */
+  --color-stage-lead: #66756d;
+  --color-stage-qualified: #2c7a52;
+  --color-stage-proposal: #29b067;
+  --color-stage-negotiation: #36dc7f;
+  --color-stage-won: #3dff8f;
+  --color-stage-lost: #ff6b6b;
+
+  --text-display-xl: clamp(2.375rem, 1.8rem + 2.4vw, 3.75rem);
+  --text-display-xl--line-height: 1.04;
+  --text-display-xl--letter-spacing: -0.034em;
+  --text-display-lg: clamp(2rem, 1.6rem + 1.7vw, 3rem);
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-md: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.024em;
+  --text-display-sm: 1.25rem;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--letter-spacing: -0.016em;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.14em;
+
+  /* Glows: green light, never a dark drop shadow. */
+  --shadow-glow-sm: 0 0 10px rgb(61 255 143 / 0.3);
+  --shadow-glow: 0 0 18px rgb(61 255 143 / 0.35);
+  --shadow-glow-lg: 0 0 60px -12px rgb(61 255 143 / 0.45);
+  --shadow-bezel: inset 0 1px 0 0 rgb(233 239 235 / 0.05);
+  --shadow-float: 0 30px 80px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(61 255 143 / 0.04);
+  --shadow-lift: 0 18px 40px -16px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(61 255 143 / 0.18);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* shadcn-vue semantic colors mapped onto the Navree tokens (DESIGN.md §1). */
+@theme inline {
+  --font-sans:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-display: "Mona Sans", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display--font-variation-settings: "wdth" 112;
+  --font-mono: "Monaspace Neon", ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --color-background: var(--color-ink-0);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-ink-1);
+  --color-card-foreground: var(--color-fg);
+  --color-popover: var(--color-ink-1);
+  --color-popover-foreground: var(--color-fg);
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-accent-ink);
+  --color-secondary: var(--color-ink-2);
+  --color-secondary-foreground: var(--color-fg);
+  --color-muted: var(--color-ink-2);
+  --color-muted-foreground: var(--color-fg-2);
+  --color-accent-foreground: var(--color-accent-ink);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line-2);
+  --color-ring: var(--color-accent);
+
+  /*
+   * App UI corners (DESIGN.md §9): 4px for controls (buttons, inputs, menu
+   * items, badges, tabs, avatars), 6px for surfaces (cards, popovers,
+   * dialogs). The whole scale collapses onto those two, so a stray
+   * `rounded-2xl` still lands on 6px. `rounded-full` is for status dots only.
+   */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.375rem;
+  --radius-3xl: 0.375rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    /* The shell (DESIGN.md §9): a 16rem sidebar that collapses to a 3rem icon rail, a 48px top bar. */
+    --sidebar-w: 16rem;
+    --sidebar-w-icon: 3rem;
+    --header-h: 3rem;
+  }
+
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  html {
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--color-line-2) var(--color-ink-0);
+  }
+
+  body {
+    min-height: 100dvh;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    background: var(--color-ink-0);
+  }
+
+  :where(h1) {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 112;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: rgb(61 255 143 / 0.28);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings:
+      "calt" 1,
+      "liga" 0;
+  }
+
+  /* Native date pickers follow the dark scheme. */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    opacity: 0.6;
+    cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Tabular, lining figures for every number that lines up in a column. */
+@utility figures {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+@utility font-display-wide {
+  font-variation-settings: "wdth" 125;
+}
+
+/* A thin scrollbar for the sidebar, the board columns and popovers. */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-2) transparent;
+}
+
+@layer components {
+  /* The skip link: the first focusable thing on every page. */
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -4rem;
+    z-index: 100;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    top: 0.75rem;
+  }
+
+  /*
+   * The eyebrow: a small mono label with a green running light, as on
+   * navree.com. `<p class="eyebrow">Pipeline</p>`.
+   */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-fg-3);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 0.3125rem;
+    height: 0.3125rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+  }
+
+  /* A raised surface: ink-1, a 1px line and a faint top highlight. */
+  .surface {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    background: var(--color-ink-1);
+    box-shadow: var(--shadow-bezel);
+  }
+
+  /* Text links inside running copy and table cells. */
+  .link {
+    color: var(--color-fg);
+    text-decoration-line: underline;
+    text-decoration-color: rgb(233 239 235 / 0.2);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color 150ms;
+  }
+  .link:hover {
+    text-decoration-color: var(--color-accent);
+  }
+  .link-accent {
+    color: var(--color-accent);
+    text-decoration-line: underline;
+    text-decoration-color: rgb(61 255 143 / 0.35);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  .link-accent:hover {
+    text-decoration-color: var(--color-accent);
+  }
+
+  /* The keycap used for keyboard shortcuts. */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3125rem;
+    border: 1px solid var(--color-line-2);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-fg-2);
+    background: var(--color-ink-1);
+  }
+}
+
+/* Loading placeholders: a slow sheen across ink, still under reduced motion. */
+@layer components {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(233 239 235 / 0.035), transparent);
+    animation: skeleton-sheen 1.6s var(--ease-out-quint) infinite;
+  }
+  @keyframes skeleton-sheen {
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
