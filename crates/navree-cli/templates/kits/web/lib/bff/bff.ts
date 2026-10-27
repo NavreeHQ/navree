@@ -1,9 +1,20 @@
 /**
- * Backend-for-frontend for the Navree API (spec §7, §10).
+ * Backend-for-frontend for the Navree API.
  *
  * The browser only ever talks to this Next.js server, same origin, with no
  * tokens. The BFF keeps the JWT access token and the rotating refresh token in
- * httpOnly cookies and forwards requests to Navree with `Authorization: Bearer`.
+ * httpOnly cookies and forwards requests to Navree with `Authorization: Bearer`
+ * (and the `X-Workspace` header the browser's API client sets from the
+ * `/w/<slug>/` URL).
+ *
+ * - `admin` forwards `/admin/*` (the Helm admin panel's pages, forms and
+ *   assets) the same way, so the panel opens on this origin with the same
+ *   session; without one it sends the browser to the sign-in page;
+ * - `socialRedirect` and `socialCallback` run a social sign-in: the state
+ *   waits in an httpOnly cookie between the two, and the callback ends like a
+ *   password sign-in;
+ * - `verifyEmail` follows the signed verification link from the mail and
+ *   lands on the web app's `/verify-email` page;
  *
  * - `login` stores both tokens and returns only `{user}`; for an account with
  *   two-factor authentication Navree answers with a challenge instead, which the
@@ -76,7 +87,17 @@ const FORWARD_REQUEST_HEADERS = [
   "if-modified-since",
   "user-agent",
   "x-request-id",
+  // The workspace of the request (`/w/<slug>/` in the browser).
+  "x-workspace",
 ];
+
+/** The admin panel's responses also carry these (HTML pages, assets and their policy). */
+const ADMIN_RESPONSE_HEADERS = ["content-security-policy", "referrer-policy", "x-content-type-options", "x-frame-options"];
+
+/** The social sign-in state, between the redirect and the callback. */
+export const SOCIAL_STATE_COOKIE = "navree_social";
+/** Only the callback routes receive the state cookie. */
+const SOCIAL_CALLBACK_PATH = "/auth/callback";
 
 /** Response headers passed back to the browser (no hop-by-hop or encoding headers: fetch already decoded the body). */
 const FORWARD_RESPONSE_HEADERS = [
@@ -519,7 +540,184 @@ export function createBff(options: BffOptions) {
     return new Response(null, { status: 204, headers });
   }
 
-  return { proxy, login, verifyTwoFactor, logout, refreshSession, originAllowed };
+  /** A `303 See Other` to `location` on this origin, with `headers` (cookies). */
+  function redirect(location: string, headers?: Headers): Response {
+    const out = new Headers(headers);
+    out.set("location", location);
+    return new Response(null, { status: 303, headers: out });
+  }
+
+  /** `next` when it is a path on this origin, else `/` (never an open redirect). */
+  function localPath(next: string | null | undefined): string {
+    return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  }
+
+  /** Where the sign-in page sends the browser back to. */
+  function signIn(request: Request, headers?: Headers): Response {
+    const url = new URL(request.url);
+    return redirect(`/sign-in?next=${encodeURIComponent(url.pathname + url.search)}`, headers);
+  }
+
+  /**
+   * `/admin/*`: the Helm admin panel, forwarded with the bearer token like `proxy` (refreshing
+   * once on a 401). Pages, assets, form posts and redirects pass through with the panel's
+   * security headers; a browser without a session, or whose session ended, goes to the sign-in
+   * page and comes back.
+   */
+  async function admin(request: Request): Promise<Response> {
+    if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
+    const tokens = tokensFrom(request);
+    if (!tokens.access && !tokens.refresh) return signIn(request);
+
+    const url = new URL(request.url);
+    const method = request.method.toUpperCase();
+    const body = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
+    const send = (accessToken?: string) => {
+      const headers = upstreamHeaders(request, accessToken);
+      headers.set("accept", request.headers.get("accept") ?? "text/html");
+      return upstreamFetch(`${apiUrl}${url.pathname}${url.search}`, {
+        method,
+        headers,
+        body,
+        redirect: "manual",
+        cache: "no-store",
+      });
+    };
+
+    let refreshed: TokenPair | null = null;
+    if (!tokens.access && tokens.refresh) refreshed = await refresh(tokens.refresh, request);
+    let upstream: Response;
+    try {
+      upstream = await send(refreshed?.access_token ?? tokens.access);
+      if (upstream.status === 401 && !refreshed && tokens.refresh) {
+        refreshed = await refresh(tokens.refresh, request);
+        if (refreshed) {
+          await discard(upstream);
+          upstream = await send(refreshed.access_token);
+        }
+      }
+    } catch {
+      return unreachable();
+    }
+
+    const cookies = new Headers();
+    if (refreshed) setTokenCookies(cookies, refreshed);
+    if (upstream.status === 401) {
+      await discard(upstream);
+      clearTokenCookies(cookies);
+      return signIn(request, cookies);
+    }
+    const response = passThrough(upstream, cookies);
+    for (const name of ADMIN_RESPONSE_HEADERS) {
+      const value = upstream.headers.get(name);
+      if (value) response.headers.set(name, value);
+    }
+    // A redirect to the API's own address stays on this origin.
+    const location = upstream.headers.get("location");
+    if (location?.startsWith(apiUrl)) response.headers.set("location", location.slice(apiUrl.length) || "/");
+    return response;
+  }
+
+  /**
+   * `GET /auth/social/{provider}?next=/w/acme`: starts a social sign-in. Navree answers with the
+   * provider's URL and a sealed state; the state waits in an httpOnly cookie that only the
+   * callback route receives, and the browser goes to the provider.
+   */
+  async function socialRedirect(request: Request, provider: string): Promise<Response> {
+    const next = localPath(new URL(request.url).searchParams.get("next"));
+    let upstream: Response;
+    try {
+      upstream = await upstreamFetch(
+        `${apiUrl}/api/auth/social/${encodeURIComponent(provider)}/redirect?return_to=${encodeURIComponent(next)}`,
+        { headers: upstreamHeaders(request), cache: "no-store" },
+      );
+    } catch {
+      return redirect("/sign-in?error=api_unreachable");
+    }
+    if (!upstream.ok) {
+      await discard(upstream);
+      return redirect("/sign-in?error=social_unavailable");
+    }
+    const { url, state } = (await upstream.json().catch(() => ({}))) as { url?: string; state?: string };
+    if (!url || !state) return redirect("/sign-in?error=social_unavailable");
+    const headers = new Headers();
+    headers.append("set-cookie", cookie(SOCIAL_STATE_COOKIE, state, { maxAge: 600, path: SOCIAL_CALLBACK_PATH }));
+    headers.set("location", url);
+    return new Response(null, { status: 303, headers });
+  }
+
+  /**
+   * `GET /auth/callback/{provider}?code&state`: the provider sends the browser back here. The
+   * state must match the cookie; Navree exchanges the code and answers like a password sign-in
+   * (tokens into the cookies, then the page the sign-in started from) or with a two-factor
+   * challenge (the `/two-factor` page finishes it).
+   */
+  async function socialCallback(request: Request, provider: string): Promise<Response> {
+    const params = new URL(request.url).searchParams;
+    const code = params.get("code");
+    const state = params.get("state");
+    const expected = readCookie(request, SOCIAL_STATE_COOKIE);
+    const headers = new Headers();
+    headers.append("set-cookie", cookie(SOCIAL_STATE_COOKIE, "", { maxAge: 0, path: SOCIAL_CALLBACK_PATH }));
+    if (!code || !state || !expected || state !== expected) return redirect("/sign-in?error=social_state", headers);
+
+    let upstream: Response;
+    try {
+      upstream = await upstreamFetch(`${apiUrl}/api/auth/social/${encodeURIComponent(provider)}/callback`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { ...Object.fromEntries(upstreamHeaders(request)), "content-type": "application/json" },
+        body: JSON.stringify({ code, state }),
+      });
+    } catch {
+      return redirect("/sign-in?error=api_unreachable", headers);
+    }
+    if (!upstream.ok) {
+      await discard(upstream);
+      return redirect("/sign-in?error=social_failed", headers);
+    }
+    const data = (await upstream.json().catch(() => ({}))) as LoginBody & { return_to?: string };
+    const next = localPath(data.return_to);
+    if (data.two_factor_required === true && typeof data.challenge_token === "string") {
+      setChallengeCookie(headers, data.challenge_token, data.expires_in);
+      return redirect(`/two-factor?next=${encodeURIComponent(next)}`, headers);
+    }
+    if (!isTokenPair(data)) return redirect("/sign-in?error=social_failed", headers);
+    setTokenCookies(headers, data);
+    return redirect(next, headers);
+  }
+
+  /**
+   * `GET /api/auth/email/verify/{id}/{hash}?expires&signature`: the link in the verification
+   * mail. Navree checks the signature and marks the address verified; the browser lands on
+   * `/verify-email?status=verified` (or `invalid`).
+   */
+  async function verifyEmail(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    try {
+      const upstream = await upstreamFetch(`${apiUrl}${url.pathname}${url.search}`, {
+        headers: upstreamHeaders(request),
+        cache: "no-store",
+      });
+      await discard(upstream);
+      return redirect(`/verify-email?status=${upstream.ok ? "verified" : "invalid"}`);
+    } catch {
+      return redirect("/verify-email?status=unreachable");
+    }
+  }
+
+  return {
+    proxy,
+    admin,
+    login,
+    verifyTwoFactor,
+    logout,
+    refreshSession,
+    socialRedirect,
+    socialCallback,
+    verifyEmail,
+    originAllowed,
+  };
 }
 
 export type Bff = ReturnType<typeof createBff>;

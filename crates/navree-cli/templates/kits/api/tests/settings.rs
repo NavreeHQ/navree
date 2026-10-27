@@ -66,6 +66,30 @@ async fn members_cannot_change_the_workspace() {
 }
 
 #[tokio::test]
+async fn the_front_end_reads_the_rules_of_the_role_in_the_workspace() {
+    let (app, _guard) = boot().await;
+    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let team = workspace(&app, &owner, "Acme").await;
+    let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
+    add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;
+    let token = sign_in(&app, "vera@example.com").await;
+
+    let rules = in_workspace(app.client().get("/api/v1/settings/abilities"), &token, &team.slug)
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let rules = rules.as_array().expect("CASL rules");
+    let grants = |action: &str, subject: &str| {
+        rules.iter().any(|rule| {
+            rule["action"] == action && rule["subject"] == subject && rule.get("inverted").is_none()
+        })
+    };
+    assert!(grants("read", "Project"), "{rules:?}");
+    assert!(!grants("create", "Project"), "{rules:?}");
+}
+
+#[tokio::test]
 async fn each_member_keeps_their_own_notification_preferences() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;

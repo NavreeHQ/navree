@@ -66,6 +66,20 @@ async fn people_see_and_end_their_sessions() {
 }
 
 #[tokio::test]
+async fn the_user_resource_says_whether_two_factor_is_on() {
+    let (app, _guard) = boot().await;
+    user(&app, "Ada Lovelace", "ada@example.com").await;
+    let token = sign_in(&app, "ada@example.com").await;
+    app.client()
+        .get("/api/auth/me")
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("two_factor_enabled", json!(false));
+}
+
+#[tokio::test]
 async fn the_sign_in_page_lists_the_configured_providers() {
     let (app, _guard) = boot().await;
     // config/app.toml configures none.

@@ -57,6 +57,21 @@ impl SettingsController {
         Ok(Json(workspace.into()))
     }
 
+    /// `GET /api/v1/settings/abilities`: the caller's rules in this
+    /// workspace (CASL's JSON rule array: the permissions of their role plus
+    /// the conditions of `src/abilities.rs`), so the front end shows only
+    /// what the API allows. `GET /api/me/abilities` has the global ones.
+    #[get("/abilities")]
+    #[authenticated]
+    #[api(
+        summary = "My rules in this workspace",
+        tag = "Settings",
+        responses(401, 403)
+    )]
+    async fn abilities(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
+        Json(ws.ability().to_casl_json())
+    }
+
     /// `GET /api/v1/settings/notifications`: the caller's preferences here.
     #[get("/notifications")]
     #[authenticated]

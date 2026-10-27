@@ -12,7 +12,7 @@ export const bff = createBff({
     process.env.NAVREE_COOKIE_SECURE !== undefined
       ? process.env.NAVREE_COOKIE_SECURE === "1"
       : process.env.NODE_ENV === "production",
-  // Public origin(s) when the app sits behind a proxy that rewrites Host, e.g. https://crm.example.com
+  // Public origin(s) when the app sits behind a proxy that rewrites Host, e.g. https://app.example.com
   allowedOrigins: process.env.APP_ORIGINS?.split(",")
     .map((o) => o.trim())
     .filter(Boolean),
