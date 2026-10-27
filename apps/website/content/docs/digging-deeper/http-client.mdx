@@ -179,7 +179,29 @@ let body: Rates = response.json()?;
 
 A `4xx` or `5xx` status is **not** an error: you get the response and decide. Call `error_for_status()` to turn it into `HttpClientError::Status`.
 
-A body larger than `max_response_bytes` fails with `HttpClientError::BodyTooLarge` as soon as the limit is passed, so a misbehaving server can't fill your memory. There is no streaming response API: for large downloads, raise the limit for that client or use reqwest directly.
+A body larger than `max_response_bytes` fails with `HttpClientError::BodyTooLarge` as soon as the limit is passed, so a misbehaving server can't fill your memory.
+
+### Streaming responses
+
+For server-sent events and other long responses, `send_streaming` returns a `StreamingResponse` as soon as the headers arrive, and you read the body as it comes:
+
+```rust
+let mut response = self
+    .http
+    .post("https://models.example.com/v1/stream")
+    .json(&request)
+    .send_streaming()
+    .await?;
+
+response.status();                       // the same header accessors as Response
+while let Some(chunk) = response.chunk().await? {
+    // chunk: Bytes, in the order the server sent them
+}
+// or: response.into_stream() for a Stream of Result<Bytes, HttpClientError>
+// or: response.bytes().await? to read the rest, up to max_response_bytes
+```
+
+A streaming request goes through the same SSRF policy, carries the same `traceparent`, and is logged and reported like any other, at the moment its headers arrive. It is sent once and never retried, the timeout covers the wait for the headers only, and the body has no size limit except through `bytes()`. Dropping the response closes the connection.
 
 ## Retries and timeouts
 

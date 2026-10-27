@@ -170,8 +170,9 @@ impl RequestBuilder {
 
     /// Sends the request once (never retried) and returns as soon as the
     /// response headers arrive; read the body with
-    /// [`StreamingResponse::chunk`] or as a stream. The SSRF policy applies
-    /// as for [`send`](Self::send); the attempt timeout covers the wait for
+    /// [`StreamingResponse::chunk`] or as a stream. The SSRF policy, the
+    /// `traceparent` header and the `HttpClientRequest` event (reported at
+    /// the headers) apply as for [`send`](Self::send); the attempt timeout covers the wait for
     /// the headers, not the body, and the body is not limited to
     /// `max_response_bytes` (except through [`StreamingResponse::bytes`]).
     pub async fn send_streaming(self) -> Result<StreamingResponse, HttpClientError> {
