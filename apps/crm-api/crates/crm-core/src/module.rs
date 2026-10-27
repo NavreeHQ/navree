@@ -5,6 +5,7 @@ use navree::prelude::*;
 
 use crate::entities::{Activity, Company, Contact, Deal, User};
 use crate::migrations::migrations;
+use crate::models;
 use crate::seed::RolesSeeder;
 
 /// What every CRM feature module builds on: the `crm` migration set (every
@@ -28,9 +29,16 @@ use crate::seed::RolesSeeder;
 pub struct CrmCoreModule;
 
 impl CrmCoreModule {
-    /// Migrations and seeders (no `#[module]` keys for them).
+    /// Migrations, seeders and the models (no `#[module]` keys for
+    /// them). Registered models are what `model:show` describes.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations());
         m.seeder::<RolesSeeder>();
+        m.model::<models::Company>()
+            .model::<models::Contact>()
+            .model::<models::Deal>()
+            .model::<models::Activity>()
+            .model::<models::User>()
+            .model::<models::Role>();
     }
 }

@@ -176,8 +176,10 @@ impl Stage {
 string_enum! {
     /// What an activity records (`activities.kind`); only tasks have due
     /// dates that matter and can be completed.
+    #[derive(Default)]
     ActivityKind, "activity kind", db_type = "String(StringLen::N(16))" {
-        /// A note.
+        /// A note (the default: the plainest kind).
+        #[default]
         Note => "note",
         /// A phone call.
         Call => "call",
@@ -192,13 +194,16 @@ string_enum! {
 
 string_enum! {
     /// The kind of record an activity is attached to
-    /// (`activities.subject_type`).
+    /// (`activities.subject_type`): the morph name of the model the
+    /// activity's `subject_record` relation loads.
+    #[derive(Default)]
     SubjectType, "subject type", db_type = "String(StringLen::N(16))" {
         /// A company.
         Company => "company",
         /// A contact.
         Contact => "contact",
-        /// A deal.
+        /// A deal (the default: most activities are about deals).
+        #[default]
         Deal => "deal",
     }
 }

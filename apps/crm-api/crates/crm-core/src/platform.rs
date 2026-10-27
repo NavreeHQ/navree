@@ -54,8 +54,10 @@ pub const MCP_INSTRUCTIONS: &str = "Tools for the Navree CRM. Deals move through
 /// Adds every platform module the CRM uses to `builder`, configured from
 /// `sources`:
 ///
-/// Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail,
-/// Queue, Schedule, Validation, Auth (public registration off: accounts are
+/// Config, Logger, Crypto, Http, Database, Orm (strict outside
+/// production: a relation loaded record by record, a column a query left
+/// out or an attribute that cannot be filled is an error), Cache, Events,
+/// View, Mail, Queue, Schedule, Validation, Auth (public registration off: accounts are
 /// created by admins), Access ([`abilities::define`], super-admin role
 /// `admin`), Audit, Notify, Realtime (key [`REALTIME_KEY`]; channels
 /// `private-crm.deals` for users who can read deals and
@@ -84,6 +86,7 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         .module(CryptoModule::from_config())
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
+        .module(OrmModule::from_config())
         .module(CacheModule::from_config())
         .module(EventsModule::for_root())
         .module(ViewModule::from_config())

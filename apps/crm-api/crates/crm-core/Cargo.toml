@@ -15,7 +15,6 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 navree = { workspace = true }
 sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 utoipa = { workspace = true }
