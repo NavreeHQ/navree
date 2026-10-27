@@ -341,6 +341,8 @@ pub struct ModelMeta {
     deleted_at: Option<&'static str>,
     connection: Option<&'static str>,
     per_page: u64,
+    route_key: Option<&'static str>,
+    workspace: Option<&'static str>,
 }
 
 impl ModelMeta {
@@ -358,6 +360,27 @@ impl ModelMeta {
             deleted_at: None,
             connection: None,
             per_page: 15,
+            route_key: None,
+            workspace: None,
+        }
+    }
+
+    /// The column route model binding looks records up by, when it is not
+    /// the key (`#[model(route_key = "slug")]`).
+    pub const fn route_key(self, column: &'static str) -> Self {
+        ModelMeta {
+            route_key: Some(column),
+            ..self
+        }
+    }
+
+    /// The column holding a workspace-scoped model's workspace
+    /// (`#[model(workspace)]`): queries see the current workspace's records
+    /// only, and new records get it.
+    pub const fn workspace(self, column: &'static str) -> Self {
+        ModelMeta {
+            workspace: Some(column),
+            ..self
         }
     }
 
@@ -479,6 +502,25 @@ impl ModelMeta {
     pub const fn default_per_page(&self) -> u64 {
         self.per_page
     }
+
+    /// The column route model binding looks records up by: the declared
+    /// route key, else the key column.
+    pub const fn route_key_column(&self) -> &'static str {
+        match self.route_key {
+            Some(column) => column,
+            None => self.key,
+        }
+    }
+
+    /// The workspace column of a workspace-scoped model.
+    pub const fn workspace_column(&self) -> Option<&'static str> {
+        self.workspace
+    }
+
+    /// Whether the model is scoped to workspaces.
+    pub const fn is_workspace_scoped(&self) -> bool {
+        self.workspace.is_some()
+    }
 }
 
 /// An ORM model: a plain struct with `#[derive(Model)]`.
@@ -546,6 +588,17 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     /// [`hooks`](crate::hooks)).
     fn hooks() -> Vec<Arc<dyn ModelHook<Self>>> {
         Vec::new()
+    }
+
+    /// The column route model binding looks records up by: the model's
+    /// `#[model(route_key = "...")]`, else its key column.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// assert_eq!(Deal::route_key_name(), "id");
+    /// ```
+    fn route_key_name() -> &'static str {
+        Self::meta().route_key_column()
     }
 
     /// A query of the model.
