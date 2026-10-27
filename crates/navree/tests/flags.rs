@@ -116,7 +116,8 @@ impl DealsController {
 /// The deals module: its flags, service and routes.
 pub struct DealsModule;
 
-/// Plans of workspaces (what billing provides).
+/// Plans of workspaces, set by the test (an app with billing reads them
+/// from subscriptions: see `with_billing` below).
 #[injectable]
 pub struct Plans {
     #[inject(default)]
@@ -130,11 +131,11 @@ impl PlanResolver for Plans {
     }
 }
 
-/// Registers the plan resolver, as billing does.
+/// Registers the plan resolver.
 #[module(global, register = Self::wire)]
-pub struct BillingModule;
+pub struct PlansModule;
 
-impl BillingModule {
+impl PlansModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.plan_resolver::<Plans>().exports::<Plans>();
     }
@@ -149,7 +150,7 @@ fn deals_app() -> TestAppBuilder {
         .module(EventsModule::for_root())
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
-        .module(BillingModule)
+        .module(PlansModule)
         .module(DealsModule)
         .module(FlagsModule::from_config())
 }
