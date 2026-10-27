@@ -1,7 +1,10 @@
 //! Company request bodies and the list query, with their validation rules.
 
 use crm_core::CompanySize;
+use crm_core::models::{Company, User};
 use garde::Validate;
+use navree::orm::validation::exists;
+use navree::orm::{Builder, Expr};
 use navree::validation::{AsyncRule, AsyncRules};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -9,7 +12,7 @@ use uuid::Uuid;
 
 use crate::common::{
     MAX_TEXT, blank_as_none, not_blank, nullable, nullable_text, optional_text, present,
-    present_trimmed, trimmed,
+    present_trimmed, set_some, trimmed,
 };
 
 /// The body of `POST /api/v1/companies`. Text fields are trimmed; blank
@@ -56,9 +59,27 @@ pub struct CreateCompany {
     pub owner_id: Option<Uuid>,
 }
 
+impl CreateCompany {
+    /// The new company, owned by `owner_id`.
+    pub fn into_company(self, owner_id: Uuid) -> Company {
+        Company {
+            name: self.name,
+            domain: self.domain,
+            industry: self.industry,
+            size: self.size,
+            phone: self.phone,
+            website: self.website,
+            city: self.city,
+            country: self.country,
+            owner_id,
+            ..Company::default()
+        }
+    }
+}
+
 impl AsyncRules for CreateCompany {
     fn async_rules(&self) -> Vec<AsyncRule> {
-        vec![AsyncRule::exists("owner_id", "users", "id", self.owner_id)]
+        vec![exists(User::ID, self.owner_id).field("owner_id").into()]
     }
 }
 
@@ -114,9 +135,24 @@ pub struct UpdateCompany {
     pub owner_id: Option<Uuid>,
 }
 
+impl UpdateCompany {
+    /// Changes the fields sent (not the owner: who may change it is the
+    /// service's call).
+    pub fn apply_to(self, company: &mut Company) {
+        set_some(&mut company.name, self.name);
+        set_some(&mut company.domain, self.domain);
+        set_some(&mut company.industry, self.industry);
+        set_some(&mut company.size, self.size);
+        set_some(&mut company.phone, self.phone);
+        set_some(&mut company.website, self.website);
+        set_some(&mut company.city, self.city);
+        set_some(&mut company.country, self.country);
+    }
+}
+
 impl AsyncRules for UpdateCompany {
     fn async_rules(&self) -> Vec<AsyncRule> {
-        vec![AsyncRule::exists("owner_id", "users", "id", self.owner_id)]
+        vec![exists(User::ID, self.owner_id).field("owner_id").into()]
     }
 }
 
@@ -137,6 +173,21 @@ pub enum CompanySort {
     /// Newest first.
     #[serde(rename = "-created_at")]
     CreatedAtDesc,
+}
+
+impl CompanySort {
+    /// `query` in this order, then by id (so pages never overlap): names
+    /// compare ignoring ASCII case.
+    pub fn apply(self, query: Builder<Company>) -> Builder<Company> {
+        let name = || Expr::lower(Company::NAME);
+        match self {
+            CompanySort::Name => query.order_by(name()),
+            CompanySort::NameDesc => query.order_by_desc(name()),
+            CompanySort::CreatedAt => query.order_by(Company::CREATED_AT),
+            CompanySort::CreatedAtDesc => query.order_by_desc(Company::CREATED_AT),
+        }
+        .order_by(Company::ID)
+    }
 }
 
 /// The query of `GET /api/v1/companies` (besides `page` and `per_page`).

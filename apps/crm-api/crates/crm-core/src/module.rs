@@ -3,9 +3,9 @@
 
 use navree::prelude::*;
 
-use crate::entities::{Activity, Company, Contact, Deal, User};
+use crate::entities::{Activity, Deal, User};
 use crate::migrations::migrations;
-use crate::models;
+use crate::models::{self, Company, Contact};
 use crate::seed::RolesSeeder;
 
 /// What every CRM feature module builds on: the `crm` migration set (every

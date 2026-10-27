@@ -3,6 +3,7 @@
 
 use crm_core::Stage;
 use crm_testkit::Role;
+use navree::orm::Model;
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -510,13 +511,13 @@ async fn soft_deleted_hidden() {
 
     // The row stays, marked deleted.
     let db = crm.get::<navree::db::Db>().await;
-    let row = <crm_core::Company as sea_orm::EntityTrait>::find_by_id(
-        id_of(&gone).parse::<uuid::Uuid>().expect("uuid"),
-    )
-    .one(db.conn())
-    .await
-    .expect("query")
-    .expect("the row is kept");
+    let row = crm_core::Company::query()
+        .with_trashed()
+        .find(&*db, id_of(&gone).parse::<uuid::Uuid>().expect("uuid"))
+        .await
+        .expect("query")
+        .expect("the row is kept");
+    assert!(row.trashed());
     assert_eq!(
         row.deleted_at
             .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),

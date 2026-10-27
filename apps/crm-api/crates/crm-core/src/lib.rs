@@ -47,8 +47,9 @@ mod platform;
 
 pub use actions::{Complete, Export, Move};
 pub use embeds::{CompanyRef, ContactRef, OwnerRef};
-pub use entities::{Activity, Company, Contact, Deal, User};
+pub use entities::{Activity, Deal, User};
 pub use enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
+pub use models::{Company, Contact};
 pub use module::CrmCoreModule;
 pub use notify::{NotifiableUser, NotificationData};
 pub use ownership::owner_for;
