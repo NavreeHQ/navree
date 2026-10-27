@@ -7,7 +7,7 @@
 //!
 //! | Executor | Reads | Writes |
 //! |---|---|---|
-//! | [`Db`] | the task's current unit of work when its transaction is open on this pool, else the pool | the task's current unfinished unit of work on this pool, else the pool |
+//! | [`Db`] | the task's current unit of work when its transaction is open on this pool, else a read replica (the writer with none, after the unit of work wrote, or when asked) | the task's current unfinished unit of work on this pool, else the pool |
 //! | [`Uow`] | its transaction | its transaction, change events recorded |
 //! | `DatabaseConnection`, `DatabaseTransaction` | as given | as given, no change events |
 //! | `Arc<E>` | as `E` | as `E` |
@@ -17,6 +17,16 @@
 //! connection would wait for the request's write lock until
 //! `busy_timeout`, and joining keeps the write in the request's
 //! transaction and audit trail.
+//!
+//! **Connections.** An operation runs on the connection its query names
+//! (`on_connection`), else on its model's (`#[model(connection = "..")]`)
+//! when the executor is the default connection, else on the executor's
+//! ([`Route`]). Given the default `Db`, it reaches the named connection
+//! through the app's `DbConnections`; inside [`using_connection`] another
+//! connection stands in for the default one. A unit of work spans one
+//! connection: given a [`Uow`], an operation on another connection fails
+//! with [`OrmError::Connection`]. SeaORM connections, transactions and
+//! document stores run what they are given.
 
 use std::fmt;
 use std::future::Future;
@@ -27,7 +37,7 @@ use std::task::{Context, Poll};
 use chrono::{DateTime, Utc};
 use futures::stream::{BoxStream, Stream, StreamExt};
 use navree_contracts::Clock;
-use navree_db::{Db, Reader, Uow};
+use navree_db::{DEFAULT_CONNECTION, Db, Reader, Uow};
 use navree_kernel::AppContext;
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult,
@@ -55,12 +65,147 @@ pub enum Access {
     Write,
 }
 
+/// Where an operation asks to run, beyond its [`Access`]: the connection
+/// its query names (`on_connection`), its model's connection
+/// (`#[model(connection = "..")]`), and whether its reads go to the writer
+/// (`use_write`). Terminal methods hand it to
+/// [`Executor::target_routed`].
+///
+/// ```
+/// use navree_orm::Route;
+///
+/// let route = Route::new().for_model(Some("analytics")).writer(true);
+/// assert_eq!(route.connection_for("default"), Some("analytics"));
+/// // A named connection's executor runs a model's operations itself...
+/// assert_eq!(route.connection_for("reports"), None);
+/// // ...unless the query names a connection.
+/// assert_eq!(route.on(Some("archive")).connection_for("reports"), Some("archive"));
+/// assert!(route.reads_from_writer());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Route<'a> {
+    connection: Option<&'a str>,
+    model: Option<&'a str>,
+    writer: bool,
+}
+
+impl<'a> Route<'a> {
+    /// No preference: the executor's own connection, reads from its
+    /// replicas.
+    pub const fn new() -> Self {
+        Route {
+            connection: None,
+            model: None,
+            writer: false,
+        }
+    }
+
+    /// On connection `name` (`on_connection`), whatever the executor's;
+    /// `None` leaves the choice to the model and the executor.
+    #[must_use]
+    pub const fn on(self, name: Option<&'a str>) -> Self {
+        Route {
+            connection: name,
+            ..self
+        }
+    }
+
+    /// For a model living on connection `name`: followed when the
+    /// executor is the default connection.
+    #[must_use]
+    pub const fn for_model(self, name: Option<&'a str>) -> Self {
+        Route {
+            model: name,
+            ..self
+        }
+    }
+
+    /// Reads go to the writer, even where read replicas exist, when
+    /// `writer` (`use_write`).
+    #[must_use]
+    pub const fn writer(self, writer: bool) -> Self {
+        Route { writer, ..self }
+    }
+
+    /// The connection the query names.
+    pub const fn connection(&self) -> Option<&'a str> {
+        self.connection
+    }
+
+    /// The connection of the query's model.
+    pub const fn model_connection(&self) -> Option<&'a str> {
+        self.model
+    }
+
+    /// Whether reads go to the writer.
+    pub const fn reads_from_writer(&self) -> bool {
+        self.writer
+    }
+
+    /// The connection an executor on connection `own` sends the operation
+    /// to: the one the query names, else, when `own` is the default
+    /// connection, the model's; `None` keeps it on `own`.
+    pub fn connection_for(&self, own: &str) -> Option<&'a str> {
+        let wanted = match self.connection {
+            Some(name) => Some(name),
+            None if own == DEFAULT_CONNECTION => self.model,
+            None => None,
+        };
+        wanted.filter(|name| *name != own)
+    }
+}
+
+tokio::task_local! {
+    /// The connection standing in for the default one ([`using_connection`]).
+    static USING_CONNECTION: Arc<str>;
+}
+
+/// Runs `future` with connection `name` standing in for the default one:
+/// operations given the default [`Db`] run on `name`, unless their query
+/// or model names another connection. Task-local, like
+/// [`using_writer`]: tasks spawned inside start without it.
+///
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db) -> Result<()> {
+/// let archived = navree_orm::using_connection("archive", Deal::query().count(&db)).await?;
+/// # Ok(()) }
+/// ```
+pub async fn using_connection<F: Future>(name: &str, future: F) -> F::Output {
+    USING_CONNECTION.scope(Arc::from(name), future).await
+}
+
+/// The connection [`using_connection`] set for the running task.
+pub fn scoped_connection() -> Option<Arc<str>> {
+    USING_CONNECTION.try_with(Arc::clone).ok()
+}
+
+/// Runs `future` with every read of the task going to the writer, even
+/// where read replicas exist (see [`Db::using_writer`]): for reads that
+/// must see a write made outside the task's unit of work.
+pub async fn using_writer<F: Future>(future: F) -> F::Output {
+    Db::using_writer(future).await
+}
+
 /// Something ORM operations run on: [`Db`], [`Uow`], a SeaORM connection or
 /// transaction, a document store (see [`DocumentDriver`]), or an `Arc` of
 /// one.
 pub trait Executor: Send + Sync {
     /// Where the next operation runs.
     fn target(&self, access: Access) -> impl Future<Output = Result<Target<'_>, OrmError>> + Send;
+
+    /// Where the next operation runs, following `route` (see [`Route`]).
+    /// [`Db`] sends it to the connection the route asks for and reads from
+    /// the writer when asked; [`Uow`] refuses another connection; other
+    /// executors run it where they run everything.
+    fn target_routed(
+        &self,
+        access: Access,
+        route: Route<'_>,
+    ) -> impl Future<Output = Result<Target<'_>, OrmError>> + Send {
+        let _ = route;
+        self.target(access)
+    }
 }
 
 /// Where one operation runs.
@@ -81,6 +226,9 @@ pub struct SqlTarget<'a> {
 
 enum SqlConn<'a> {
     Pool(&'a DatabaseConnection),
+    /// A pool handle of a [`Db`] (cheap to clone), which may be a named
+    /// connection resolved for this operation.
+    Owned(DatabaseConnection),
     Transaction(Arc<DatabaseTransaction>),
     TransactionRef(&'a DatabaseTransaction),
 }
@@ -216,7 +364,7 @@ impl Target<'_> {
                 match &sql.conn {
                     SqlConn::Transaction(tx) => Ok(Some(tx.begin().await?)),
                     SqlConn::TransactionRef(tx) => Ok(Some(tx.begin().await?)),
-                    SqlConn::Pool(_) => Ok(None),
+                    SqlConn::Pool(_) | SqlConn::Owned(_) => Ok(None),
                 }
             }
             Target::Document(_) => Ok(None),
@@ -230,6 +378,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => match &sql.conn {
                 SqlConn::Pool(conn) => Ok(Some(conn.begin().await?)),
+                SqlConn::Owned(conn) => Ok(Some(conn.begin().await?)),
                 SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => self.begin_savepoint().await,
             },
             Target::Document(_) => Ok(None),
@@ -405,6 +554,7 @@ impl<'a> SqlTarget<'a> {
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_all_raw(statement).await?,
+            SqlConn::Owned(conn) => conn.query_all_raw(statement).await?,
             SqlConn::Transaction(tx) => tx.query_all_raw(statement).await?,
             SqlConn::TransactionRef(tx) => tx.query_all_raw(statement).await?,
         })
@@ -416,6 +566,7 @@ impl<'a> SqlTarget<'a> {
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_one_raw(statement).await?,
+            SqlConn::Owned(conn) => conn.query_one_raw(statement).await?,
             SqlConn::Transaction(tx) => tx.query_one_raw(statement).await?,
             SqlConn::TransactionRef(tx) => tx.query_one_raw(statement).await?,
         })
@@ -427,6 +578,7 @@ impl<'a> SqlTarget<'a> {
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.execute_raw(statement).await?,
+            SqlConn::Owned(conn) => conn.execute_raw(statement).await?,
             SqlConn::Transaction(tx) => tx.execute_raw(statement).await?,
             SqlConn::TransactionRef(tx) => tx.execute_raw(statement).await?,
         })
@@ -438,6 +590,7 @@ impl<'a> SqlTarget<'a> {
         ensure_free(self.conn.transaction_id())?;
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.execute_unprepared(sql).await?,
+            SqlConn::Owned(conn) => conn.execute_unprepared(sql).await?,
             SqlConn::Transaction(tx) => tx.execute_unprepared(sql).await?,
             SqlConn::TransactionRef(tx) => tx.execute_unprepared(sql).await?,
         })
@@ -457,6 +610,11 @@ impl<'a> SqlTarget<'a> {
                 .await?
                 .map(|row| row.map(Row::from_sql).map_err(OrmError::from))
                 .boxed(),
+            SqlConn::Owned(conn) => conn
+                .stream_raw(statement)
+                .await?
+                .map(|row| row.map(Row::from_sql).map_err(OrmError::from))
+                .boxed(),
             SqlConn::Transaction(tx) => Guarded::new(tx.stream_raw(statement).await?, id).boxed(),
             SqlConn::TransactionRef(tx) => {
                 Guarded::new(tx.stream_raw(statement).await?, id).boxed()
@@ -471,7 +629,7 @@ impl SqlConn<'_> {
     /// `None` on the pool.
     fn transaction_id(&self) -> Option<usize> {
         match self {
-            SqlConn::Pool(_) => None,
+            SqlConn::Pool(_) | SqlConn::Owned(_) => None,
             SqlConn::Transaction(tx) => Some(Arc::as_ptr(tx) as usize),
             SqlConn::TransactionRef(tx) => Some(std::ptr::from_ref::<DatabaseTransaction>(tx) as usize),
         }
@@ -513,27 +671,38 @@ fn same_pool(db: &Db, uow: &Uow) -> bool {
     std::ptr::eq(db.conn(), uow.db().conn())
 }
 
-impl Executor for Db {
-    async fn target(&self, access: Access) -> Result<Target<'_>, OrmError> {
-        let dialect = Dialect::from_backend(self.backend())?;
-        let app = self.app();
-        match access {
-            Access::Read => {
-                let uow = Uow::current().filter(|uow| same_pool(self, uow));
-                let conn = match self.reader().await {
-                    Reader::Pool(conn) => SqlConn::Pool(conn),
-                    Reader::Transaction(tx) => SqlConn::Transaction(tx),
-                };
-                let uow = match &conn {
-                    SqlConn::Transaction(_) => uow,
-                    _ => None,
-                };
-                Ok(Target::Sql(SqlTarget::new(conn, dialect, uow, app)))
+/// Where an operation of `access` runs on `db`: the task's unit of work on
+/// its pool (writes join it while it is unfinished, reads use its open
+/// transaction), else the writer for writes, and for reads a replica or
+/// the writer (`writer`, [`Db::using_writer`], or a unit of work that
+/// wrote). A write marks the task's unit of work as having written, so
+/// its later reads stay on the writer.
+async fn db_target(db: &Db, access: Access, writer: bool) -> Result<Target<'static>, OrmError> {
+    let dialect = Dialect::from_backend(db.backend())?;
+    let app = db.app();
+    let current = Uow::current().filter(|uow| same_pool(db, uow));
+    match access {
+        Access::Read => match db.reader().await {
+            Reader::Transaction(tx) => Ok(Target::Sql(SqlTarget::new(
+                SqlConn::Transaction(tx),
+                dialect,
+                current,
+                app,
+            ))),
+            Reader::Pool(conn) => {
+                let conn = if writer { db.conn() } else { conn };
+                Ok(Target::Sql(SqlTarget::new(
+                    SqlConn::Owned(conn.clone()),
+                    dialect,
+                    None,
+                    app,
+                )))
             }
-            Access::Write => {
-                if let Some(uow) = Uow::current().filter(|uow| same_pool(self, uow))
-                    && !uow.is_finished().await
-                {
+        },
+        Access::Write => {
+            if let Some(uow) = current {
+                uow.mark_modified();
+                if !uow.is_finished().await {
                     let tx = uow.tx().await?;
                     return Ok(Target::Sql(SqlTarget::new(
                         SqlConn::Transaction(tx),
@@ -542,19 +711,63 @@ impl Executor for Db {
                         app,
                     )));
                 }
-                Ok(Target::Sql(SqlTarget::new(
-                    SqlConn::Pool(self.conn()),
-                    dialect,
-                    None,
-                    app,
-                )))
             }
+            Ok(Target::Sql(SqlTarget::new(
+                SqlConn::Owned(db.conn().clone()),
+                dialect,
+                None,
+                app,
+            )))
+        }
+    }
+}
+
+/// An [`OrmError::Connection`] for connection `name`.
+fn connection_error(name: &str, message: impl Into<String>) -> OrmError {
+    OrmError::Connection {
+        connection: name.to_owned().into(),
+        message: message.into(),
+    }
+}
+
+impl Executor for Db {
+    async fn target(&self, access: Access) -> Result<Target<'_>, OrmError> {
+        self.target_routed(access, Route::new()).await
+    }
+
+    async fn target_routed(&self, access: Access, route: Route<'_>) -> Result<Target<'_>, OrmError> {
+        let scoped = if route.connection.is_none() && self.is_default() {
+            scoped_connection()
+        } else {
+            None
+        };
+        let route = match &scoped {
+            // The scope stands in for the default connection, below the
+            // model's own.
+            Some(name) if route.model.is_none() => route.for_model(Some(&**name)),
+            _ => route,
+        };
+        match route.connection_for(self.name()) {
+            Some(name) => {
+                let db = self.connection(name).await.map_err(|error| {
+                    let message = match error {
+                        sea_orm::DbErr::Custom(message) => message,
+                        other => other.to_string(),
+                    };
+                    connection_error(name, message)
+                })?;
+                db_target(&db, access, route.writer).await
+            }
+            None => db_target(self, access, route.writer).await,
         }
     }
 }
 
 impl Executor for Uow {
-    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
+    async fn target(&self, access: Access) -> Result<Target<'_>, OrmError> {
+        if access == Access::Write {
+            self.mark_modified();
+        }
         let tx = self.tx().await?;
         Ok(Target::Sql(SqlTarget::new(
             SqlConn::Transaction(tx),
@@ -562,6 +775,19 @@ impl Executor for Uow {
             Some(self.clone()),
             self.db().app(),
         )))
+    }
+
+    async fn target_routed(&self, access: Access, route: Route<'_>) -> Result<Target<'_>, OrmError> {
+        let own = self.db().name();
+        if let Some(name) = route.connection_for(own) {
+            return Err(connection_error(
+                name,
+                format!(
+                    "the unit of work runs on connection `{own}`, and a unit of work spans one connection; pass a `Db` (it runs the operation on `{name}`) or a unit of work of `{name}`"
+                ),
+            ));
+        }
+        self.target(access).await
     }
 }
 
@@ -590,6 +816,14 @@ impl Executor for DatabaseTransaction {
 impl<E: Executor + ?Sized> Executor for Arc<E> {
     fn target(&self, access: Access) -> impl Future<Output = Result<Target<'_>, OrmError>> + Send {
         (**self).target(access)
+    }
+
+    fn target_routed(
+        &self,
+        access: Access,
+        route: Route<'_>,
+    ) -> impl Future<Output = Result<Target<'_>, OrmError>> + Send {
+        (**self).target_routed(access, route)
     }
 }
 

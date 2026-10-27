@@ -8,6 +8,7 @@ mod bulk;
 mod casts;
 mod collection;
 mod compound;
+mod connections;
 mod crud;
 mod derive;
 mod dirty;

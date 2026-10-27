@@ -174,6 +174,12 @@ impl TableBuilder {
         self.ir
     }
 
+    /// Where the query asks to run: the connection it names and whether
+    /// its reads go to the writer.
+    pub(crate) fn route(&self) -> crate::Route<'_> {
+        self.ir.route(None)
+    }
+
     /// The statement the query compiles to for `dialect`, without running
     /// it.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Statement> {
@@ -226,7 +232,7 @@ impl TableBuilder {
 
     /// The query's rows.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Vec<Row>> {
-        let target = exec.target(crate::query::read_access(&self.ir)).await?;
+        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
         target.fetch(&self.ir).await
     }
 
@@ -252,7 +258,7 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(crate::query::read_access(&self.ir)).await?;
+        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -274,7 +280,7 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(crate::query::read_access(&self.ir)).await?;
+        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -303,7 +309,7 @@ impl TableBuilder {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target(crate::query::read_access(&self.ir)).await?;
+        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
         let name = self.table_name();
         let items = vec![
             SelectItem {
@@ -331,7 +337,7 @@ impl TableBuilder {
 
     /// Whether the query has any row.
     pub async fn exists<E: Executor + ?Sized>(self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         target.exists(&self.ir).await
     }
 
@@ -417,7 +423,7 @@ impl TableBuilder {
         argument: Option<Expr>,
         distinct: bool,
     ) -> Result<Option<T>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let name = self.table_name();
         let aggregate = Aggregate {
             function,
@@ -441,7 +447,7 @@ impl TableBuilder {
             page: page.page.max(1),
             per_page: page.per_page.unwrap_or(TABLE_PER_PAGE).max(1),
         };
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let aggregate = Aggregate {
             function: AggregateFunction::Count,
             arg: None,
@@ -547,7 +553,7 @@ impl TableBuilder {
             .into_iter()
             .map(|assignment| assignment.into_set().map_err(OrmError::invalid))
             .collect::<Result<Vec<_>>>()?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let (table, wheres) = self.write_target("update", target.dialect())?;
         target
             .update(&UpdateIr {
@@ -561,7 +567,7 @@ impl TableBuilder {
     /// Deletes every matching row; returns how many were deleted. A query
     /// with joins, orders or a limit deletes the rows it selects.
     pub async fn delete<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let (table, wheres) = self.write_target("delete", target.dialect())?;
         target.delete(&DeleteIr { table, wheres }).await
     }
@@ -604,7 +610,7 @@ impl TableBuilder {
                 right: Box::new(Expr::Value(amount)),
             },
         )];
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let (table, wheres) = self.write_target("update", target.dialect())?;
         target
             .update(&UpdateIr {

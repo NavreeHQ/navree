@@ -127,7 +127,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let ctx = target.context();
         let now = ctx.now().await;
         let sets = Self::sets(now, assignments)?;
@@ -148,7 +148,7 @@ impl<M: Model> Builder<M> {
         let meta = M::meta();
         match meta.deleted_at() {
             Some(deleted_at) => {
-                let target = exec.target(Access::Write).await?;
+                let target = exec.target_routed(Access::Write, self.route()).await?;
                 let ctx = target.context();
                 let now = ctx.now().await;
                 let value = M::timestamp_value(deleted_at, now).ok_or_else(|| {
@@ -171,7 +171,7 @@ impl<M: Model> Builder<M> {
     /// Removes every matching row in one statement, also for a
     /// soft-deleting model (no hooks, no change events).
     pub(crate) async fn delete_rows<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let (table, wheres) = self.write_target()?;
         target.delete(&DeleteIr { table, wheres }).await
     }
@@ -261,7 +261,7 @@ impl<M: Model> Builder<M> {
             op,
             right: Box::new(Expr::Value(amount.to_value())),
         });
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let ctx = target.context();
         let now = ctx.now().await;
         let sets = Self::sets(now, std::iter::once(step).chain(extra))?;
@@ -304,7 +304,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         if let Some(found) = self.matching(&attributes).first_on(&target).await? {
             return Ok(found);
         }
@@ -325,7 +325,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         if let Some(found) = self.clone().matching(&attributes).first_on(&target).await? {
             return Ok(found);
         }
@@ -346,7 +346,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         self.create_or_first_on(&target, &attributes, fill).await
     }
 
@@ -371,7 +371,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let mut record = match self.clone().matching(&attributes).first_on(&target).await? {
             Some(found) => found,
             None => self.create_or_first_on(&target, &attributes, &fill).await?,

@@ -907,6 +907,37 @@ macro_rules! clauses {
             query.lock = Some($crate::ir::Lock { mode, wait });
             self
         }
+
+        /// Runs the query on connection `name` (a named connection of
+        /// `[database.connections.<name>]`, or `default`), whatever the
+        /// model's: given a [`Db`](navree_db::Db), the query goes to that
+        /// connection; a unit of work of another connection refuses it.
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(db: Db) -> Result<()> {
+        /// let archived = Deal::query().on_connection("archive").count(&db).await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn on_connection(mut self, name: impl Into<std::borrow::Cow<'static, str>>) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).connection = Some(name.into());
+            self
+        }
+
+        /// Reads from the writer even where read replicas exist: for a
+        /// read that must see a write made outside the task's unit of work
+        /// (reads in a unit of work that wrote use the writer anyway).
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(db: Db, id: Uuid) -> Result<()> {
+        /// let fresh = Deal::query().use_write().find(&db, id).await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn use_write(mut self) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).use_writer = true;
+            self
+        }
     };
 }
 

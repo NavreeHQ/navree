@@ -4940,6 +4940,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-orm-macros",
+ "navree-telemetry",
  "navree-testing",
  "rust_decimal",
  "sea-orm",
