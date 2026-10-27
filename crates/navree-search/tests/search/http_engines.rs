@@ -2,14 +2,17 @@
 //! against local mock servers: the requests they send and how they read
 //! the answers.
 
+use std::sync::Arc;
 use std::time::Duration;
 
-use navree_db::Db;
+use navree_access::{Accessible, READ, Read, Rules, field};
+use navree_db::{Db, PageQuery};
 use navree_search::{
     Document, EngineQuery, Filter, HighlightTags, IndexSettings, MeilisearchEngine, Metric,
     QdrantStore, Search, SearchEngine, SearchError, SortBy, TypesenseEngine, VectorRecord,
     VectorStore,
 };
+use sea_orm::ActiveValue::Set;
 use serde_json::{Value, json};
 use wiremock::matchers::{body_partial_json, header, method, path, path_regex, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -251,35 +254,41 @@ async fn meilisearch_outages_are_unavailable() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn an_app_on_meilisearch_syncs_and_searches() {
-    let server = MockServer::start().await;
-    mount_tasks(&server).await;
+/// A Meilisearch server for an app: `contacts` exists, every other index
+/// is created, settings and document writes succeed.
+async fn mount_meilisearch_app(server: &MockServer) {
+    mount_tasks(server).await;
     Mock::given(method("GET"))
         .and(path("/indexes/contacts"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "uid": "contacts" })))
-        .mount(&server)
+        .mount(server)
         .await;
     Mock::given(method("GET"))
         .and(path_regex(r"^/indexes/[a-z]+$"))
         .respond_with(ResponseTemplate::new(404))
-        .mount(&server)
+        .mount(server)
         .await;
     Mock::given(method("POST"))
         .and(path("/indexes"))
         .respond_with(task(1))
-        .mount(&server)
+        .mount(server)
         .await;
     Mock::given(method("PATCH"))
         .and(path_regex(r"^/indexes/[a-z]+/settings$"))
         .respond_with(task(2))
-        .mount(&server)
+        .mount(server)
         .await;
     Mock::given(method("POST"))
         .and(path("/indexes/contacts/documents"))
         .respond_with(task(3))
-        .mount(&server)
+        .mount(server)
         .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_app_on_meilisearch_syncs_and_searches() {
+    let server = MockServer::start().await;
+    mount_meilisearch_app(&server).await;
     let app = support::builder("meilisearch", "inline")
         .config("search.url", server.uri())
         .config("search.key", "masterKey")
@@ -313,6 +322,71 @@ async fn an_app_on_meilisearch_syncs_and_searches() {
         "records gone from the database are dropped"
     );
     assert_eq!(page.data[0].first_name, "Ada");
+}
+
+/// Meilisearch compares only numbers in ranges, so an access rule with a
+/// range on a text column isn't sent to it: the loaded rows are filtered
+/// with the SQL condition instead.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn access_rules_meilisearch_cannot_run_filter_the_loaded_rows() {
+    let server = MockServer::start().await;
+    mount_meilisearch_app(&server).await;
+    let app = support::builder("meilisearch", "off")
+        .config("search.url", server.uri())
+        .build()
+        .await;
+    let db = app.get::<Db>().await;
+    let mut grace = new_contact("Grace", "Hopper");
+    grace.status = Set("customer".into());
+    let rows = insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), grace]).await;
+    Mock::given(method("POST"))
+        .and(path("/indexes/contacts/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "hits": [
+                { "id": rows[0].id.to_string(), "_rankingScore": 0.9 },
+                { "id": rows[1].id.to_string(), "_rankingScore": 0.8 }
+            ],
+            "totalHits": 2
+        })))
+        .mount(&server)
+        .await;
+    let search = app.get::<Search>().await;
+    let scope = |rules: Rules| Accessible::<Contact, Read>::new(Arc::new(rules.build()));
+
+    // `status > "d"`: Ada (a lead) only.
+    let mut rules = Rules::new();
+    rules.can(READ, "Contact").when(field("status").gt("d"));
+    let page = search
+        .query::<Contact>("")
+        .accessible(scope(rules))
+        .paginate(PageQuery::default())
+        .await
+        .unwrap();
+    assert_eq!(support::ids(&page), [rows[0].id.to_string()]);
+    let sent = requests_to(&server, "POST", "/indexes/contacts/search").await;
+    assert!(
+        !body(&sent[0])["filter"].to_string().contains("status"),
+        "the range on a string stays out of the engine: {}",
+        body(&sent[0])
+    );
+
+    // `status = "customer"` runs in the engine.
+    let mut rules = Rules::new();
+    rules
+        .can(READ, "Contact")
+        .when(field("status").eq("customer"));
+    search
+        .query::<Contact>("")
+        .accessible(scope(rules))
+        .paginate(PageQuery::default())
+        .await
+        .unwrap();
+    let sent = requests_to(&server, "POST", "/indexes/contacts/search").await;
+    assert!(
+        body(&sent[1])["filter"].to_string().contains("status"),
+        "{}",
+        body(&sent[1])
+    );
 }
 
 async fn mount_typesense_collection(server: &MockServer) {
