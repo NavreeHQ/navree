@@ -20,7 +20,7 @@ use serde_json::Value;
 
 use crate::context;
 use crate::failure::{self, Failure};
-use crate::{AsyncRule, AsyncRules, InputContext, Messages};
+use crate::{AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages};
 
 /// Runs `$f` (deserializing or validating) in `$context` (a [`Context`]):
 /// first as is, and again with the resolved context when a value asked for
@@ -530,10 +530,19 @@ impl Invalid {
         Self::new(failures, None, "body")
     }
 
-    /// The 400 error, with the app's messages.
+    /// The 400 error, with the app's messages (through its
+    /// [`MessageTranslator`], when it has one).
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
         let messages = messages(ctx).await;
-        failure::render(&self.failures, &messages, self.input.as_ref(), self.root).into_app_error()
+        let translator = translator(ctx).await;
+        failure::render(
+            &self.failures,
+            &messages,
+            translator.as_deref(),
+            self.input.as_ref(),
+            self.root,
+        )
+        .into_app_error()
     }
 }
 
@@ -579,7 +588,7 @@ pub fn validate<T: Validate<Context = ()>>(
     messages: &Messages,
     root: &str,
 ) -> Result<(), crate::ValidationErrors> {
-    check(value).map_err(|failures| failure::render(&failures, messages, input, root))
+    check(value).map_err(|failures| failure::render(&failures, messages, None, input, root))
 }
 
 /// [`validate`] with the app's [`Messages`] (`ctx`'s, or the defaults
@@ -607,7 +616,14 @@ pub async fn validate_in<T: Validate<Context = ()>>(
         Ok(()) => Ok(()),
         Err(failures) => {
             let messages = messages(ctx).await;
-            Err(failure::render(&failures, &messages, None, "input"))
+            let translator = translator(ctx).await;
+            Err(failure::render(
+                &failures,
+                &messages,
+                translator.as_deref(),
+                None,
+                "input",
+            ))
         }
     }
 }
@@ -688,6 +704,14 @@ where
     match checked {
         Ok(()) => Ok(value),
         Err(failures) => Err(Invalid::new(failures, Some(input), "body")),
+    }
+}
+
+/// The app's [`MessageTranslator`], when `ctx` has one.
+async fn translator(ctx: Option<&AppContext>) -> Option<Arc<dyn MessageTranslator>> {
+    match ctx {
+        Some(ctx) => ctx.try_get::<dyn MessageTranslator>().await,
+        None => None,
     }
 }
 

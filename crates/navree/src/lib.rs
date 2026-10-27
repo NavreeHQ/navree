@@ -57,11 +57,12 @@
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
+//! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `harbor`,
-//! `otel`), and the `storage-s3` driver but not `storage-gcs` or
+//! `mcp`, `ai`, `redis`, `micro` and its transports, `i18n`, `dock`,
+//! `harbor`, `otel`), and the `storage-s3` driver but not `storage-gcs` or
 //! `storage-azure`. A feature also turns on the features of the crates its
 //! crate builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is
 //! built in; the `postgres` feature adds navree-db's PostgreSQL driver and
@@ -240,6 +241,10 @@ pub mod flags {
 }
 #[cfg(feature = "ai")]
 pub use navree_ai as ai;
+/// Localization (the `i18n` feature): navree-i18n re-exported whole,
+/// with `t!`, `args!` and `embed_locales!`.
+#[cfg(feature = "i18n")]
+pub use navree_i18n as i18n;
 
 /// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
 /// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.

@@ -149,6 +149,17 @@ impl Messages {
     /// The template for `rule` on `field`: a field-specific override, a rule
     /// override, the default, or the `invalid` template.
     pub fn template(&self, field: &str, rule: &str) -> &str {
+        self.lookup(field, rule)
+            .or_else(|| self.overrides.get(FALLBACK_RULE).map(String::as_str))
+            .or_else(|| default_template(FALLBACK_RULE))
+            .unwrap_or(":attribute is invalid")
+    }
+
+    /// The template for `rule` on `field` if there is one: a field-specific
+    /// override, a rule override or the built-in template. Unlike
+    /// [`template`](Messages::template), an unknown rule gives `None`
+    /// rather than the `invalid` template.
+    pub fn lookup(&self, field: &str, rule: &str) -> Option<&str> {
         let specific = (!field.is_empty())
             .then(|| self.overrides.get(&format!("{field}.{rule}")))
             .flatten();
@@ -156,9 +167,12 @@ impl Messages {
             .or_else(|| self.overrides.get(rule))
             .map(String::as_str)
             .or_else(|| default_template(rule))
-            .or_else(|| self.overrides.get(FALLBACK_RULE).map(String::as_str))
-            .or_else(|| default_template(FALLBACK_RULE))
-            .unwrap_or(":attribute is invalid")
+    }
+
+    /// Fills the `:name` placeholders of `template` that have a value in
+    /// `values`, leaving the others as they are.
+    pub fn fill(template: &str, values: &[(&str, String)]) -> String {
+        interpolate(template, values)
     }
 
     /// The display name of `field`: its configured attribute name, else the
@@ -187,6 +201,32 @@ impl Messages {
         }
         interpolate(self.template(field, rule), &values)
     }
+}
+
+/// Renders validation messages in another language.
+///
+/// With one in the app (registered as `Arc<dyn MessageTranslator>`; the
+/// `I18nModule` of navree-i18n registers one), the [`Valid`](crate::Valid)
+/// and [`ValidAsync`](crate::ValidAsync) extractors render every message
+/// through it instead of [`Messages::render`]. `messages` is the app's
+/// table (built-in English templates plus `validation` overrides), for the
+/// translator to fall back on with [`Messages::lookup`] and
+/// [`Messages::fill`].
+pub trait MessageTranslator: Send + Sync + 'static {
+    /// The message for `rule` (a key such as `required` or `min.string`)
+    /// failing on `field` (a dotted path), with the rule's `params`
+    /// (`min`, `max`, `other`, `values`, ...).
+    fn message(
+        &self,
+        messages: &Messages,
+        field: &str,
+        rule: &str,
+        params: &[(&str, String)],
+    ) -> String;
+
+    /// The display name of `field`, for messages that come as text with an
+    /// `:attribute` placeholder (an app rule's `garde::Error::new`).
+    fn attribute(&self, messages: &Messages, field: &str) -> String;
 }
 
 /// The built-in template of `rule`.
