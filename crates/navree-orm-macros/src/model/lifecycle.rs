@@ -13,7 +13,13 @@ use syn::{Ident, Token};
 use crate::errors::{key_name, suggestion};
 
 /// The lifecycle keys `#[model(..)]` takes on a struct.
-pub(crate) const KEYS: &[&str] = &["observers", "dispatches", "prunable", "mass_prunable"];
+pub(crate) const KEYS: &[&str] = &[
+    "observers",
+    "dispatches",
+    "broadcasts",
+    "prunable",
+    "mass_prunable",
+];
 
 /// The model events, as `dispatches(..)` names them.
 const EVENTS: &[&str] = &[
@@ -51,8 +57,19 @@ pub(crate) struct Lifecycle {
     /// `dispatches(created = DealCreated, ..)`: the `ModelEvent` variant
     /// and the application event type.
     pub(crate) dispatches: Vec<(Ident, syn::Type)>,
+    /// `broadcasts`: changes go out on real-time channels.
+    pub(crate) broadcasts: bool,
     /// `prunable` or `mass_prunable`.
     pub(crate) prune: Option<Prune>,
+}
+
+/// `Ok` when the flag `meta` stands alone (no `= value`, no list).
+fn flag(meta: &ParseNestedMeta<'_>, what: &str) -> syn::Result<()> {
+    if meta.input.is_empty() || meta.input.peek(Token![,]) {
+        Ok(())
+    } else {
+        Err(meta.error(format!("`{}` takes no value: {what}", key_name(&meta.path))))
+    }
 }
 
 /// Parses `meta` when it is a lifecycle key; `Ok(false)` when it is not.
@@ -85,17 +102,23 @@ pub(crate) fn parse_key(lifecycle: &mut Lifecycle, meta: &ParseNestedMeta<'_>) -
             Ok(())
         })?;
         Ok(true)
+    } else if path.is_ident("broadcasts") {
+        flag(
+            meta,
+            "implement `Broadcasts` for the model to choose channels, names, data and a queue",
+        )?;
+        lifecycle.broadcasts = true;
+        Ok(true)
     } else if path.is_ident("prunable") || path.is_ident("mass_prunable") {
         let prune = if path.is_ident("prunable") {
             Prune::Each
         } else {
             Prune::Mass
         };
-        if !meta.input.is_empty() && !meta.input.peek(Token![,]) {
-            return Err(meta.error(
-                "`prunable` and `mass_prunable` take no value: implement `Prunable` / `MassPrunable` for the model",
-            ));
-        }
+        flag(
+            meta,
+            "implement `Prunable` / `MassPrunable` for the model to say which records go",
+        )?;
         if lifecycle.prune.is_some_and(|known| known != prune) {
             return Err(meta.error(
                 "a model is `prunable` (record by record) or `mass_prunable` (a chunk per statement), not both",
@@ -130,7 +153,11 @@ pub(crate) fn hook_entries(lifecycle: &Lifecycle, krate: &TokenStream) -> Vec<To
             #krate::events::Dispatch::<Self, #event>::new(#krate::hooks::ModelEvent::#variant)
         ) as #private::Arc<dyn #krate::hooks::ModelHook<Self>>)
     });
-    observers.chain(dispatches).collect()
+    let broadcasts = lifecycle.broadcasts.then(|| {
+        quote!(#private::Arc::new(#krate::broadcast::BroadcastHook::<Self>::new())
+            as #private::Arc<dyn #krate::hooks::ModelHook<Self>>)
+    });
+    observers.chain(dispatches).chain(broadcasts).collect()
 }
 
 /// The capability traits a model's declarations give it:

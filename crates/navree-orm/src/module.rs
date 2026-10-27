@@ -7,6 +7,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use navree_config::Config;
+use navree_contracts::ModuleBuilderJobsExt;
 use navree_kernel::{
     BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder, ModuleId, Resolver,
 };
@@ -31,7 +32,9 @@ use crate::strict::{self, Strictness, Violation};
 ///   ([`ModuleBuilderOrmExt::global_scope`]);
 /// - keeps the registry of the app's models
 ///   ([`ModuleBuilderOrmExt::model`]) for tooling;
-/// - registers the command `model:prune` (see [`prune`](crate::prune)).
+/// - registers the command `model:prune` (see [`prune`](crate::prune)) and
+///   the job `orm.broadcast` (queued model broadcasts, see
+///   [`broadcast`](crate::broadcast)).
 ///
 /// The ORM works without it (models need no module); add it to configure
 /// strict modes and their handlers, or let a module that registers scopes
@@ -192,6 +195,7 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
             }
         }))
         .exports::<OrmRuntime>()
+        .job::<crate::broadcast::BroadcastModelEvent>()
         .command(CommandSpec::new(
             "model:prune",
             "Prune the registered prunable models ([--model M]... [--except M]... [--chunk N] [--pretend])",
