@@ -102,11 +102,13 @@ pub mod pagination;
 mod persist;
 pub mod prelude;
 mod query;
+mod raw;
 mod record;
 pub mod relations;
 mod row;
 mod scope;
 pub mod sql;
+pub mod streams;
 mod ulid;
 mod value;
 
@@ -117,7 +119,9 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
-pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
+pub use exec::{Access, DocumentTarget, ExecContext, Executor, RowsStream, SqlTarget, Target};
+pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
+pub use streams::{RowStream, cursor};
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
 pub use pagination::{

@@ -70,6 +70,7 @@ use crate::hooks::{Hooks, ModelEvent};
 use crate::ir::{ColumnRef, Direction, Expr, Operator, Order, QueryIr, Where, WhereClause};
 use crate::model::Model;
 use crate::query::{Builder, HasQuery, TableBuilder, key_expr};
+use crate::raw::Raw;
 use crate::record::Record;
 use crate::row::Row;
 use crate::scope::group_scope_wheres;
@@ -276,12 +277,8 @@ impl<M: Model> Paged for Builder<M> {
     }
 
     fn column_value(record: &Record<M>, column: &str) -> Result<Option<Value>> {
-        // The stored value: the callback may change the record.
         if M::meta().has_column(column) {
-            return match record.get_original_value(column)? {
-                Some(value) => Ok(Some(value)),
-                None => record.model().value(column),
-            };
+            return record.model().value(column);
         }
         Ok(record
             .extras()
@@ -1078,6 +1075,44 @@ impl TableBuilder {
 /// The `id` column of a table query, qualified by its table (or alias).
 fn id_column(query: &TableBuilder) -> ColumnRef {
     ColumnRef::new(Some(query.ir().table.qualifier().to_owned()), "id")
+}
+
+// ---------------------------------------------------------------------------
+// Raw statements
+// ---------------------------------------------------------------------------
+
+/// The rows of raw query `query` as a stream, read one by one as the
+/// database sends them (see [`Builder::cursor`]: the stream holds a
+/// connection while it lives).
+///
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::streams::TryStreamExt;
+/// use navree_orm::{cursor, raw};
+///
+/// # async fn demo(db: Db) -> Result<()> {
+/// let mut rows = cursor(&db, raw("SELECT id, payload FROM events WHERE name = ?", ["signup"]));
+/// while let Some(row) = rows.try_next().await? {
+///     let payload: serde_json::Value = row.get("payload")?;
+///     # let _ = payload;
+/// }
+/// # Ok(()) }
+/// ```
+pub fn cursor<E: Executor + ?Sized>(exec: &E, query: Raw) -> RowStream<'_, Result<Row>> {
+    RowStream::try_generate(move |mut out| async move {
+        let outcome = async {
+            let target = exec.target(Access::Read).await?;
+            let sql = crate::raw::sql_target(&target)?;
+            let statement = query.to_statement(sql.dialect())?;
+            let mut rows = sql.stream(&statement).await?;
+            while let Some(row) = rows.next().await {
+                out.send(Ok(row?)).await;
+            }
+            Ok(())
+        }
+        .await;
+        (out, outcome)
+    })
 }
 
 #[cfg(test)]

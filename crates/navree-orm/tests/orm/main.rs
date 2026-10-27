@@ -18,6 +18,7 @@ mod query;
 mod retrieve;
 mod scopes;
 mod soft_deletes;
+mod streams;
 mod table;
 mod timestamps;
 mod uow;
