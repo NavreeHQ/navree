@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: scoped
+---
+db.notes.find({"body": "hi", "workspace_id": {"$oid": "65f1a2b3c4d5e6f708091a2b"}}, {"_id": 1, "workspace_id": 1, "body": 1})

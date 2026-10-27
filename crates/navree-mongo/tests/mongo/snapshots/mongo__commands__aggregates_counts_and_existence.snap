@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "format!(\"{count:#}\")"
+---
+db.deals.countDocuments({"stage": "won", "deleted_at": null})

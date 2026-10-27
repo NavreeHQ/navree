@@ -1,0 +1,6 @@
+---
+source: crates/navree-mongo/tests/mongo/schema.rs
+expression: "schema.statements().join(\"\\n\")"
+---
+db.runCommand({"create": "tickets", "validator": {"$jsonSchema": {"bsonType": "object", "required": ["_id", "subject", "account_id"], "properties": {"_id": {"bsonType": ["int", "long"], "minimum": 0}, "subject": {"bsonType": "string", "maxLength": 255}, "account_id": {"bsonType": ["int", "long"], "minimum": 0}}}}})
+db.runCommand({"createIndexes": "tickets", "indexes": [{"key": {"subject": 1}, "name": "tickets_subject_unique", "unique": true}, {"key": {"account_id": 1}, "name": "tickets_account_id_foreign"}]})

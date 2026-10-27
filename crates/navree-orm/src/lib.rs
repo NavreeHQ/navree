@@ -168,8 +168,8 @@ pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
 pub use events::{Observer, ObserverHook, without_events};
 pub use exec::{
-    Access, DocumentTarget, ExecContext, Executor, Route, RowsStream, SqlTarget, Target,
-    scoped_connection, using_connection, using_writer,
+    Access, ChangeRecorder, DocumentTarget, ExecContext, Executor, Route, RowsStream, SqlTarget,
+    Target, scoped_connection, using_connection, using_writer,
 };
 pub use global_scopes::ClosureScope;
 pub use ir::{Expr, LockMode, VectorMetric};

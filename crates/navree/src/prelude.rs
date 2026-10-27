@@ -106,6 +106,8 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 #[cfg(feature = "ai")]
 pub use navree_ai::{AiModule, ModuleBuilderAiExt as _};
 
+#[cfg(feature = "mongo")]
+pub use navree_mongo::{ModuleBuilderMongoExt as _, MongoDb, MongoModule};
 #[cfg(feature = "redis")]
 pub use navree_redis::RedisModule;
 

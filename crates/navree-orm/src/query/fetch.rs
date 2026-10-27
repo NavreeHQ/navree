@@ -88,22 +88,40 @@ impl Selectable for Expr {
 const VALUE: &str = "value";
 const KEY: &str = "key";
 
-impl<M: Model> Builder<M> {
-    /// Runs the query on `target` and reads its records (with the strict
-    /// modes of the executor's app, running the `Retrieved` hooks), then
-    /// loads its eager loads into them (an empty result still checks the
-    /// names of the first level).
-    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
-        let mut query = self.with_pending_default_counts();
-        let eager = query.take_eager();
-        let extra_casts = query.extra_casts.clone();
-        let ir = crate::workspace::with_target(target, || query.into_ir());
-        let rows = target.fetch(&ir).await?;
-        let ctx = target.context();
+impl Target<'_> {
+    /// Records of model `M` read from `rows`, the way a query reads its
+    /// own: stored records with the model's columns, the other columns as
+    /// [extras](Record::extras), decoded in the model's cast context with
+    /// the app's strict modes, and the `Retrieved` hooks run. For rows a
+    /// driver got outside a builder (a native MongoDB pipeline, say).
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # use navree_orm::{Access, Executor, Row};
+    /// # async fn demo(db: Db, rows: Vec<Row>) -> Result<()> {
+    /// let target = db.target(Access::Read).await?;
+    /// let deals = target.records::<Deal>(&rows).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn records<M: Model>(&self, rows: &[Row]) -> Result<Collection<M>> {
+        let records = self
+            .read_records::<M>(rows, &crate::attributes::extras::ExtraCasts::default())
+            .await?;
+        Ok(Collection::from(records))
+    }
+
+    /// The records of `rows`, with the query-time casts of `extra_casts`
+    /// applied to their extras and the `Retrieved` hooks run.
+    async fn read_records<M: Model>(
+        &self,
+        rows: &[Row],
+        extra_casts: &crate::attributes::extras::ExtraCasts,
+    ) -> Result<Vec<Record<M>>> {
+        let ctx = self.context();
         // Rows decode inside the model's cast context (the app's encrypter,
         // ...) with the app's strict modes, and so do the `Retrieved` hooks
         // that may read the records.
-        let mut records = in_model_scope::<M, _, _>(&ctx, async {
+        in_model_scope::<M, _, _>(&ctx, async {
             let mut records = Vec::new();
             if !rows.is_empty() {
                 let strictness = ctx.strictness().await;
@@ -125,7 +143,22 @@ impl<M: Model> Builder<M> {
             }
             Ok(records)
         })
-        .await?;
+        .await
+    }
+}
+
+impl<M: Model> Builder<M> {
+    /// Runs the query on `target` and reads its records (with the strict
+    /// modes of the executor's app, running the `Retrieved` hooks), then
+    /// loads its eager loads into them (an empty result still checks the
+    /// names of the first level).
+    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
+        let mut query = self.with_pending_default_counts();
+        let eager = query.take_eager();
+        let extra_casts = query.extra_casts.clone();
+        let ir = crate::workspace::with_target(target, || query.into_ir());
+        let rows = target.fetch(&ir).await?;
+        let mut records = target.read_records::<M>(&rows, &extra_casts).await?;
         crate::relations::eager::after_fetch(target, &mut records, &eager).await?;
         Ok(Collection::from(records))
     }

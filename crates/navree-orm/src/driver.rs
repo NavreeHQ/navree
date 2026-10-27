@@ -15,7 +15,12 @@
 //! answers with `$in`, so eager loading needs nothing more; a `$lookup` is
 //! an optimisation a driver may add. Embedded documents are JSON casts.
 //! Transactions are the driver's sessions: its crate provides an
-//! [`Executor`](crate::Executor) for a session as well as for the client.
+//! [`Executor`](crate::Executor) for a session as well as for the client,
+//! whose [`DocumentTarget`](crate::DocumentTarget) says where the change
+//! events of the writes go (navree-db's unit of work, or the store's own
+//! [`ChangeRecorder`](crate::ChangeRecorder)). Rows a driver gets from
+//! its own queries become records with
+//! [`Target::records`](crate::Target::records).
 //!
 //! ```
 //! use std::sync::{Arc, Mutex};
@@ -61,6 +66,15 @@ use crate::value::{Field, Value};
 pub trait DocumentDriver: Send + Sync + 'static {
     /// The driver's name in messages, e.g. `mongodb`.
     fn name(&self) -> &'static str;
+
+    /// The fractional-second digits the store keeps in date-times: 6
+    /// (microseconds, like the SQL databases) unless the driver says
+    /// otherwise; MongoDB keeps 3. The timestamps the ORM sets
+    /// (`created_at`, `updated_at`, `deleted_at`, touches) are truncated to
+    /// it, so a saved record and its stored document agree.
+    fn time_precision(&self) -> u32 {
+        6
+    }
 
     /// The documents matching `query`.
     fn find<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<Vec<Row>, OrmError>>;

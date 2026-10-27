@@ -40,6 +40,7 @@
 //! | `orm` | navree-orm | `orm` | `#[derive(Model)]` models, the query builder, records, collections, pagination |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless, passkeys |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
+//! | `mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: MongoDB connections and readiness; ORM models on collections, sessions and units of work; the schema builder, migrations and time-series collections on MongoDB |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
@@ -64,22 +65,22 @@
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `i18n`, `dock`,
-//! `harbor`, `navigator`, `browser`, `otel`), and the `storage-s3` driver but
-//! not `storage-gcs` or `storage-azure`. A feature also turns on the features
-//! of the crates its crate builds on (`auth` turns on `access`, `db`, `http`,
-//! ...). SQLite is built in; the `postgres` feature adds navree-db's
-//! PostgreSQL driver and the `mysql` feature its MySQL and MariaDB driver,
-//! and the opt-in `otel` feature adds navree-observe's OTLP span exporter.
-//! `validation-phone` and `validation-html` (both in `full`) add
-//! navree-validation's `Phone` and `SafeHtml`. `search-tantivy` adds search's
-//! embedded Tantivy engine. `axum` is re-exported with `http`. `dock` is a
-//! development tool (`navree dock`), for tools and tests that read
-//! `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has Harbor
-//! built in, and an app turns it on only to read `harbor.toml` or drive
-//! deploys from its own code. `navigator` is the library behind `navree mcp`
-//! and `navree skills:install`, for tools and tests. `browser` is for tests:
-//! turn it on in `[dev-dependencies]`.
+//! `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports, `i18n`,
+//! `dock`, `harbor`, `navigator`, `browser`, `otel`), and the `storage-s3`
+//! driver but not `storage-gcs` or `storage-azure`. A feature also turns on
+//! the features of the crates its crate builds on (`auth` turns on
+//! `access`, `db`, `http`, ...). SQLite is built in; the `postgres` feature
+//! adds navree-db's PostgreSQL driver and the `mysql` feature its MySQL and
+//! MariaDB driver, and the opt-in `otel` feature adds navree-observe's OTLP
+//! span exporter. `validation-phone` and `validation-html` (both in `full`)
+//! add navree-validation's `Phone` and `SafeHtml`. `search-tantivy` adds
+//! search's embedded Tantivy engine. `axum` is re-exported with `http`.
+//! `dock` is a development tool (`navree dock`), for tools and tests that
+//! read `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has
+//! Harbor built in, and an app turns it on only to read `harbor.toml` or
+//! drive deploys from its own code. `navigator` is the library behind
+//! `navree mcp` and `navree skills:install`, for tools and tests. `browser`
+//! is for tests: turn it on in `[dev-dependencies]`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -213,6 +214,8 @@ pub use navree_auth as auth;
 pub use navree_workspace as workspace;
 
 // L5 (opt-in)
+#[cfg(feature = "mongo")]
+pub use navree_mongo as mongo;
 #[cfg(feature = "redis")]
 pub use navree_redis as redis;
 

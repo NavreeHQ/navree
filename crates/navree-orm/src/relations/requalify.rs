@@ -179,9 +179,10 @@ impl Renamer<'_> {
                     self.expr(column);
                 }
             }
-            // Raw SQL and sea-query conditions are written by the caller,
-            // who names tables as they mean them.
-            Where::Raw { .. } | Where::Sql(_) | Where::Invalid(_) => {}
+            // Raw SQL, sea-query conditions and a document store's native
+            // filters are written by the caller, who names tables as they
+            // mean them.
+            Where::Raw { .. } | Where::Sql(_) | Where::Native(_) | Where::Invalid(_) => {}
         }
     }
 }

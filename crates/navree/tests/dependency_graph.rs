@@ -160,6 +160,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-queue", "navree-session", "navree-realtime",
     ]),
+    // MongoDB: the ORM's document driver (navree-orm), the schema builder's
+    // blueprints compiled into collections, validators and time-series
+    // collections (navree-schema), units of work that join navree-db's and
+    // record its change events, and MongoDB commands reported as query
+    // telemetry (navree-telemetry).
+    rule("navree-mongo", 5, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry",
+        "navree-schema", "navree-db", "navree-orm",
+    ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
     // issues their tokens.
@@ -360,6 +369,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-browser",
     "navree-auth",
     "navree-workspace",
+    "navree-mongo",
     "navree-redis",
     "navree-social",
     "navree-webhooks",

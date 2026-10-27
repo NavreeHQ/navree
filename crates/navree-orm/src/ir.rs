@@ -677,9 +677,80 @@ pub enum Where {
     /// A sea-query condition (navree-access SQL filters, navree-db's text
     /// helpers). SQL drivers only.
     Sql(sea_query::Condition),
+    /// A condition in a document store's own query language (a MongoDB
+    /// filter document), built by that store's driver crate. Only the
+    /// driver that built it can run it; SQL databases and other drivers
+    /// answer [`OrmError::Unsupported`](crate::OrmError::Unsupported).
+    Native(NativeFilter),
     /// A condition that could not be built (a value its column could not
     /// encode); the query fails with this message when it runs.
     Invalid(String),
+}
+
+/// A condition written in a document store's own query language, carried
+/// through the IR untouched: [`Where::Native`].
+///
+/// A driver crate wraps its native value (MongoDB's filter document) with
+/// [`NativeFilter::new`] and reads it back with
+/// [`downcast_ref`](NativeFilter::downcast_ref); `Debug` shows the value.
+///
+/// ```
+/// use navree_orm::ir::NativeFilter;
+///
+/// let filter = NativeFilter::new("memory", String::from("status == open"));
+/// assert_eq!(filter.driver(), "memory");
+/// assert_eq!(filter.downcast_ref::<String>().map(String::as_str), Some("status == open"));
+/// assert!(filter.downcast_ref::<i64>().is_none());
+/// assert_eq!(format!("{filter:?}"), r#"NativeFilter(memory: "status == open")"#);
+/// ```
+#[derive(Clone)]
+pub struct NativeFilter {
+    driver: &'static str,
+    value: std::sync::Arc<dyn NativeValue>,
+}
+
+/// What a [`NativeFilter`] holds: any `Debug` value that can cross threads.
+trait NativeValue: std::any::Any + fmt::Debug + Send + Sync {
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+impl<T: std::any::Any + fmt::Debug + Send + Sync> NativeValue for T {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl NativeFilter {
+    /// `value`, a condition only driver `driver` (its name, e.g.
+    /// `mongodb`) understands.
+    pub fn new<T: std::any::Any + fmt::Debug + Send + Sync>(
+        driver: &'static str,
+        value: T,
+    ) -> Self {
+        NativeFilter {
+            driver,
+            value: std::sync::Arc::new(value),
+        }
+    }
+
+    /// The driver that understands the condition.
+    pub fn driver(&self) -> &'static str {
+        self.driver
+    }
+
+    /// The native value, when it is a `T`.
+    pub fn downcast_ref<T: std::any::Any>(&self) -> Option<&T> {
+        // Through the trait object: the `Arc` itself is a `NativeValue`
+        // too, and would answer for itself.
+        let value: &dyn NativeValue = &*self.value;
+        value.as_any().downcast_ref::<T>()
+    }
+}
+
+impl fmt::Debug for NativeFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NativeFilter({}: {:?})", self.driver, self.value)
+    }
 }
 
 /// How a full-text condition matches.
