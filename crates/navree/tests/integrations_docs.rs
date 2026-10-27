@@ -2,19 +2,24 @@
 //! `integrations` feature (in `full`): the testing example as written, the
 //! scope set, the controller with `Connection<MicrosoftGraph,
 //! DirectoryRead>` (macros), the job-side client, a provider type of your
-//! own and the `ConnectionUnhealthy` listener.
+//! own, the report on the connections table and the `ConnectionUnhealthy`
+//! listener.
 #![cfg(feature = "integrations")]
+// The page's examples are written as an app writes them, without doc comments.
+#![allow(missing_docs)]
 
 use navree::access::{AbilityCtx, AccessOptions, Rules};
 use navree::axum::http::Method;
 use navree::contracts::{AuthVia, Principal};
 use navree::events::{Listener, ModuleBuilderEventsExt};
 use navree::http_client::FakeResponse;
+use navree::db::Db;
 use navree::integrations::{
     ConnectCallback, ConnectOptions, Connection, ConnectionUnhealthy, GoogleWorkspace,
-    IntegrationClient, Integrations, IntegrationsError, MicrosoftGraph, NewServiceAccount, Owner,
-    Provider, ScopeSet, ServiceAccountKey,
+    IntegrationClient, IntegrationConnection, Integrations, IntegrationsError, MicrosoftGraph,
+    NewServiceAccount, Owner, Provider, ScopeSet, ServiceAccountKey,
 };
+use navree::orm::{Model as _, OrmError};
 use navree::prelude::*;
 use navree::testing::TestApp;
 use serde_json::{Value, json};
@@ -131,6 +136,23 @@ pub async fn sync_google(
     Ok(users.len())
 }
 
+// ---------------------------------------------------------------------------
+// "The connections table": a report through the ORM model.
+
+/// Unhealthy connections, by provider, for the operations dashboard.
+pub async fn unhealthy_by_provider(db: &Db) -> Result<Vec<(String, u64)>, OrmError> {
+    let mut counts = Vec::new();
+    for provider in ["microsoft", "google", "slack"] {
+        let unhealthy = IntegrationConnection::query()
+            .where_(IntegrationConnection::PROVIDER.eq(provider))
+            .where_(IntegrationConnection::STATUS.eq("unhealthy"))
+            .count(db)
+            .await?;
+        counts.push((provider.to_owned(), unhealthy));
+    }
+    Ok(counts)
+}
+
 /// `[integrations.providers.hubspot]`.
 pub struct HubSpot;
 
@@ -237,7 +259,7 @@ async fn the_feature_module_reads_the_directory_through_its_scope_set() {
         )
         .await
         .unwrap();
-    integrations
+    let microsoft = integrations
         .complete(
             Owner::App,
             "microsoft",
@@ -245,7 +267,8 @@ async fn the_feature_module_reads_the_directory_through_its_scope_set() {
             None,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .connection;
     fake.api().on(
         Method::GET,
         "https://graph.microsoft.com/v1.0/users*",
@@ -284,4 +307,17 @@ async fn the_feature_module_reads_the_directory_through_its_scope_set() {
 
     // A provider type of your own names its key.
     assert_eq!(HubSpot::KEY, "hubspot");
+
+    // The report counts the connection that stopped working.
+    let db = app.get::<Db>().await;
+    fake.refuse_tokens("microsoft", "unauthorized_client");
+    integrations.check(microsoft.id).await.unwrap();
+    assert_eq!(
+        unhealthy_by_provider(&db).await.unwrap(),
+        [
+            ("microsoft".to_owned(), 1),
+            ("google".to_owned(), 0),
+            ("slack".to_owned(), 0)
+        ]
+    );
 }
