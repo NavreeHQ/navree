@@ -1,6 +1,6 @@
 //! [`Schema`]: the async entry point of the schema builder.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::blueprint::Blueprint;
 use crate::connection::SchemaConnection;
@@ -54,17 +54,35 @@ use crate::timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPoli
 /// transaction); elsewhere, build one on any SeaORM connection:
 /// `Schema::new(db.conn())`.
 pub struct Schema<'c> {
-    conn: Option<&'c dyn SchemaConnection>,
+    conn: Option<Conn<'c>>,
+    pretend: bool,
     target: Mutex<Option<Target>>,
     options: SchemaOptions,
     statements: Mutex<Vec<String>>,
     notices: Mutex<Vec<String>>,
 }
 
+/// The connection a schema reads (and, unless pretending, writes) through.
+enum Conn<'c> {
+    Borrowed(&'c dyn SchemaConnection),
+    /// A pretending migration's reader (see [`MigrationContext::pretending`]).
+    Shared(Arc<dyn SchemaConnection>),
+}
+
+impl Conn<'_> {
+    fn get(&self) -> &dyn SchemaConnection {
+        match self {
+            Conn::Borrowed(conn) => *conn,
+            Conn::Shared(conn) => conn.as_ref(),
+        }
+    }
+}
+
 impl std::fmt::Debug for Schema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Schema")
             .field("connected", &self.conn.is_some())
+            .field("pretend", &self.pretend)
             .field("target", &*self.target.lock().expect("target lock"))
             .field("options", &self.options)
             .finish_non_exhaustive()
@@ -73,18 +91,27 @@ impl std::fmt::Debug for Schema<'_> {
 
 impl<'c> Schema<'c> {
     /// A schema on `conn` (a SeaORM connection, transaction or executor).
-    /// Inside a migration it picks up the migrator's options.
+    /// Inside a migration it picks up the migrator's options, and when the
+    /// migrator pretends it reads through the migration context's reader
+    /// and only records statements.
     pub fn new<C: SchemaConnection>(conn: &'c C) -> Schema<'c> {
         Schema::from_dyn(conn)
     }
 
     /// A schema on a `dyn` connection.
     pub fn from_dyn(conn: &'c dyn SchemaConnection) -> Schema<'c> {
-        let options = MigrationContext::current()
+        let context = MigrationContext::current();
+        let options = context
+            .as_ref()
             .map(|cx| cx.options().clone())
             .unwrap_or_default();
+        let (conn, pretend) = match context.and_then(|cx| cx.reader()) {
+            Some(reader) => (Conn::Shared(reader), true),
+            None => (Conn::Borrowed(conn), false),
+        };
         Schema {
             conn: Some(conn),
+            pretend,
             target: Mutex::new(None),
             options,
             statements: Mutex::new(Vec::new()),
@@ -99,11 +126,33 @@ impl<'c> Schema<'c> {
     pub fn offline(target: Target) -> Schema<'static> {
         Schema {
             conn: None,
+            pretend: true,
             target: Mutex::new(Some(target)),
             options: SchemaOptions::default(),
             statements: Mutex::new(Vec::new()),
             notices: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The same schema, recording statements instead of running them while
+    /// still reading the database: what a change would do to a real
+    /// database, without making it.
+    ///
+    /// ```no_run
+    /// # async fn preview(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// use navree_schema::Schema;
+    ///
+    /// let schema = Schema::new(conn).pretending();
+    /// schema.table("deals", |t| { t.text("notes").change(); }).await?;
+    /// for statement in schema.statements() {
+    ///     println!("{statement};");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn pretending(mut self) -> Schema<'c> {
+        self.pretend = true;
+        self
     }
 
     /// The same schema with `options`.
@@ -117,10 +166,16 @@ impl<'c> Schema<'c> {
         &self.options
     }
 
-    /// Whether the schema runs statements (rather than only recording
-    /// them).
+    /// Whether the schema has a database to read (it is not
+    /// [`offline`](Schema::offline)).
     pub fn is_connected(&self) -> bool {
         self.conn.is_some()
+    }
+
+    /// Whether the schema only records statements (offline, or
+    /// [`pretending`](Schema::pretending)).
+    pub fn is_pretending(&self) -> bool {
+        self.pretend
     }
 
     /// The database: detected from the connection on first use, or the
@@ -129,8 +184,11 @@ impl<'c> Schema<'c> {
         if let Some(target) = self.target.lock().expect("target lock").clone() {
             return Ok(target);
         }
-        let conn = self.conn.expect("a schema without a target is connected");
-        let target = inspect::detect(conn).await?;
+        let conn = self
+            .conn
+            .as_ref()
+            .expect("a schema without a target is connected");
+        let target = inspect::detect(conn.get()).await?;
         *self.target.lock().expect("target lock") = Some(target.clone());
         Ok(target)
     }
@@ -146,10 +204,13 @@ impl<'c> Schema<'c> {
         self.notices.lock().expect("notices lock").clone()
     }
 
-    fn connection(&self, operation: impl FnOnce() -> String) -> SchemaResult<&'c dyn SchemaConnection> {
-        self.conn.ok_or_else(|| SchemaError::Offline {
-            operation: operation(),
-        })
+    fn connection(&self, operation: impl FnOnce() -> String) -> SchemaResult<&dyn SchemaConnection> {
+        self.conn
+            .as_ref()
+            .map(Conn::get)
+            .ok_or_else(|| SchemaError::Offline {
+                operation: operation(),
+            })
     }
 
     fn notice(&self, message: String) {
@@ -175,9 +236,15 @@ impl<'c> Schema<'c> {
             .lock()
             .expect("statements lock")
             .push(statement.to_owned());
-        if let Some(conn) = self.conn {
+        if let Some(cx) = MigrationContext::current() {
+            cx.record(statement);
+        }
+        if !self.pretend
+            && let Some(conn) = &self.conn
+        {
             tracing::debug!(target: "navree_schema", sql = statement, "schema statement");
-            conn.execute(statement)
+            conn.get()
+                .execute(statement)
                 .await
                 .map_err(|source| SchemaError::database(statement, source))?;
         }
@@ -209,8 +276,10 @@ impl<'c> Schema<'c> {
         let state = if target.dialect() == Dialect::Sqlite
             && sqlite::needs_state(&blueprint, &commands)
         {
-            match self.conn {
-                Some(conn) => Some(inspect::sqlite_table_state(conn, blueprint.table()).await?),
+            match &self.conn {
+                Some(conn) => {
+                    Some(inspect::sqlite_table_state(conn.get(), blueprint.table()).await?)
+                }
                 None => None,
             }
         } else {

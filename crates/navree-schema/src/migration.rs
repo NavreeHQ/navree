@@ -12,6 +12,7 @@ use sea_orm::DbErr;
 use sea_orm_migration::async_trait::async_trait;
 use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
+use crate::connection::SchemaConnection;
 use crate::error::SchemaResult;
 use crate::options::SchemaOptions;
 use crate::schema::Schema;
@@ -173,62 +174,92 @@ tokio::task_local! {
 }
 
 /// What the migrator tells a running migration: the app's
-/// [`SchemaOptions`], whether it is only pretending, and where notices go.
+/// [`SchemaOptions`], whether it only pretends, and where its statements
+/// and notices go.
 ///
-/// The migrator (in `navree-db`) sets it around each migration;
-/// [`Schema::new`] reads the options from it, and every notice the schema
-/// reports is collected here so the migrate commands can print them.
+/// The migrator (in `navree-db`) runs each migration inside
+/// [`scope`](MigrationContext::scope). [`Schema::new`] picks the options
+/// up from it, records every statement it runs and every notice it reports
+/// here (so the migrate commands can print them), and, when the migrator
+/// pretends, reads the database through the context's reader while only
+/// recording what it would change.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() {
-/// use navree_schema::{MigrationContext, SchemaOptions};
+/// # async fn main() -> Result<(), navree_schema::SchemaError> {
+/// use navree_schema::{MigrationContext, Schema, SchemaOptions, Target};
 ///
 /// let cx = MigrationContext::new("deals/m0001_create_deals", SchemaOptions::default());
 /// cx.clone()
 ///     .scope(async {
-///         MigrationContext::current().unwrap().notice("hello");
+///         let schema = Schema::offline(Target::sqlite((3, 46)));
+///         schema.create("deals", |t| { t.id(); }).await
 ///     })
-///     .await;
-/// assert_eq!(cx.notices(), ["hello"]);
+///     .await?;
+/// assert_eq!(
+///     cx.statements(),
+///     ["CREATE TABLE \"deals\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL)"]
+/// );
 /// assert!(MigrationContext::current().is_none());
+/// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MigrationContext {
     inner: Arc<ContextInner>,
 }
 
-#[derive(Debug)]
 struct ContextInner {
     migration: String,
     options: SchemaOptions,
-    pretend: bool,
+    reader: Option<Arc<dyn SchemaConnection>>,
+    statements: Mutex<Vec<String>>,
     notices: Mutex<Vec<String>>,
 }
 
+impl std::fmt::Debug for MigrationContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MigrationContext")
+            .field("migration", &self.inner.migration)
+            .field("options", &self.inner.options)
+            .field("pretend", &self.is_pretend())
+            .field("statements", &self.statements())
+            .field("notices", &self.notices())
+            .finish()
+    }
+}
+
 impl MigrationContext {
-    /// The context of migration `migration` (`module/name`).
+    /// The context of migration `migration` (`module/name`), run for real.
     pub fn new(migration: impl Into<String>, options: SchemaOptions) -> MigrationContext {
-        MigrationContext {
-            inner: Arc::new(ContextInner {
-                migration: migration.into(),
-                options,
-                pretend: false,
-                notices: Mutex::new(Vec::new()),
-            }),
-        }
+        MigrationContext::build(migration.into(), options, None)
     }
 
-    /// The same context, only pretending (statements are printed, not
-    /// run).
-    pub fn pretending(self, pretend: bool) -> MigrationContext {
+    /// The context of migration `migration` when the migrator only
+    /// pretends: a [`Schema`] reads the database through `reader` (so it
+    /// sees the real tables, and SQLite rebuilds and hypertable conversions
+    /// plan against them) and records the statements it would run instead
+    /// of running them.
+    pub fn pretending(
+        migration: impl Into<String>,
+        options: SchemaOptions,
+        reader: Arc<dyn SchemaConnection>,
+    ) -> MigrationContext {
+        MigrationContext::build(migration.into(), options, Some(reader))
+    }
+
+    fn build(
+        migration: String,
+        options: SchemaOptions,
+        reader: Option<Arc<dyn SchemaConnection>>,
+    ) -> MigrationContext {
         MigrationContext {
             inner: Arc::new(ContextInner {
-                migration: self.inner.migration.clone(),
-                options: self.inner.options.clone(),
-                pretend,
-                notices: Mutex::new(self.notices()),
+                migration,
+                options,
+                reader,
+                statements: Mutex::new(Vec::new()),
+                notices: Mutex::new(Vec::new()),
             }),
         }
     }
@@ -253,9 +284,32 @@ impl MigrationContext {
         &self.inner.options
     }
 
-    /// Whether the migrator only pretends (prints the SQL).
+    /// Whether the migrator only pretends (records the SQL, runs nothing).
     pub fn is_pretend(&self) -> bool {
-        self.inner.pretend
+        self.inner.reader.is_some()
+    }
+
+    /// The connection a pretending migration reads through.
+    pub fn reader(&self) -> Option<Arc<dyn SchemaConnection>> {
+        self.inner.reader.clone()
+    }
+
+    /// Records a statement the migration ran (or, pretending, would run).
+    pub fn record(&self, statement: impl Into<String>) {
+        self.inner
+            .statements
+            .lock()
+            .expect("statements lock")
+            .push(statement.into());
+    }
+
+    /// The statements so far, in order.
+    pub fn statements(&self) -> Vec<String> {
+        self.inner
+            .statements
+            .lock()
+            .expect("statements lock")
+            .clone()
     }
 
     /// Records a notice.

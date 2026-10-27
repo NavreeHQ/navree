@@ -2,8 +2,11 @@
 //! with the data, indexes, triggers and constraints intact), read back, and
 //! the TimescaleDB fallbacks, on a real database file.
 
+use std::sync::Arc;
+
 use navree_schema::{
-    ContinuousAggregate, Hypertable, IndexKind, ReferentialAction, Schema, SchemaError, raw,
+    ContinuousAggregate, Hypertable, IndexKind, MigrationContext, ReferentialAction, Schema,
+    SchemaConnection, SchemaError, SchemaOptions, raw,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 
@@ -524,6 +527,59 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         .await
         .unwrap();
     assert_eq!(schema.statements().len(), before);
+}
+
+#[tokio::test]
+async fn pretending_reads_the_database_and_changes_nothing() {
+    let db = TempSqlite::new();
+    let conn = db.connect().await;
+    Schema::new(&conn)
+        .create("notes", |t| {
+            t.id();
+            t.string("body");
+        })
+        .await
+        .unwrap();
+
+    let schema = Schema::new(&conn).pretending();
+    assert!(schema.is_connected() && schema.is_pretending());
+    schema
+        .table("notes", |t| {
+            t.text("body").change();
+            t.string("title").nullable();
+        })
+        .await
+        .unwrap();
+    let planned = schema.statements();
+    assert!(
+        planned[0].starts_with("CREATE TABLE \"__temp__notes\""),
+        "the rebuild was planned from the real table: {planned:?}"
+    );
+    assert_eq!(
+        planned.last().map(String::as_str),
+        Some("ALTER TABLE \"notes\" ADD COLUMN \"title\" VARCHAR")
+    );
+    assert_eq!(
+        Schema::new(&conn).column_listing("notes").await.unwrap(),
+        ["id", "body"],
+        "nothing ran"
+    );
+
+    // The migrator pretends through the migration context: reads go to its
+    // reader, statements are recorded in the context.
+    let reader: Arc<dyn SchemaConnection> = Arc::new(conn.clone());
+    let cx = MigrationContext::pretending("notes/m0002_drop_body", SchemaOptions::default(), reader);
+    cx.clone()
+        .scope(async {
+            let schema = Schema::new(&conn);
+            assert!(schema.is_pretending());
+            assert!(schema.has_column("notes", "body").await?);
+            schema.table("notes", |t| t.drop_column("body")).await
+        })
+        .await
+        .unwrap();
+    assert_eq!(cx.statements(), ["ALTER TABLE \"notes\" DROP COLUMN \"body\""]);
+    assert!(Schema::new(&conn).has_column("notes", "body").await.unwrap());
 }
 
 #[tokio::test]
