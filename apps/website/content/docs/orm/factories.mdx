@@ -1,0 +1,288 @@
+---
+title: "Factories"
+description: "Model factories for tests and seeders: definitions with fake data, states, sequences, parents and children, many-to-many attachments, recycled records, hooks, and making, creating or bulk-inserting records."
+---
+
+A factory knows how to build plausible records of one model, so a test or a seeder asks for "three won deals of one company, each with two activities" in one expression instead of filling every field by hand:
+
+```rust
+let deals = Deal::factory()
+    .count(3)
+    .state(DealFactory::won)
+    .for_(Company::factory().set(Company::NAME, "Acme"), Deal::COMPANY_ID)
+    .has(Activity::factory().count(2), Activity::DEAL_ID)
+    .create(&db)
+    .await?;
+```
+
+Records are created through the executor you pass, like any other save, so they get keys and timestamps, run their model events, join the unit of work and fill the current workspace.
+
+## Defining a factory
+
+A factory implements `ModelFactory` for one model: `definition` returns one new model, usually with fake data. Link it to the model with `#[model(factory = ..)]`, which gives the model a `factory()` function:
+
+```rust title="src/modules/deals/factories/deal.rs"
+use navree::orm::factory::{FactoryContext, ModelFactory, Pivot, Relationships};
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, soft_deletes, factory = DealFactory)]
+pub struct Deal {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+/// Lead deals of a new company each, with fake titles.
+#[derive(Default)]
+pub struct DealFactory;
+
+impl ModelFactory for DealFactory {
+    type Model = Deal;
+
+    fn definition(&self, ctx: &mut FactoryContext<'_, Deal>) -> Deal {
+        Deal {
+            company_id: ctx.belongs_to(Deal::COMPANY_ID, Company::factory()),
+            title: ctx.fake().title(),
+            amount_cents: ctx.fake().number(1_000..=500_000),
+            ..Deal::default()
+        }
+    }
+}
+```
+
+Keys and timestamps left empty are filled when a record is saved. `ctx.belongs_to(column, factory)` declares a parent: creating a deal creates its company first (or reuses a [recycled](#recycling-records) one) and fills the foreign key; making unsaved records leaves the column empty. `ctx.index()` is the record's position in the batch, `ctx.count()` the batch's size, and `ctx.now()` the app's clock.
+
+`navree make:factory deals deal` writes a factory, and `navree make:model deals Deal --factory` links one to a new model.
+
+### Fake data
+
+`ctx.fake()` is a `Faker`:
+
+| Kind | Methods |
+|---|---|
+| People | `first_name`, `last_name`, `name`, `username`, `email`, `safe_email`, `phone`, `job_title` |
+| Companies and the web | `company`, `catch_phrase`, `domain`, `url`, `slug`, `ipv4` |
+| Places | `street_address`, `city`, `postcode`, `country`, `country_code` |
+| Text | `word`, `words(n)`, `sentence`, `sentences(n)`, `paragraph`, `title`, `text(n)` |
+| Numbers and choices | `number(range)`, `decimal(low, high, scale)`, `boolean`, `chance(percent)`, `optional(percent, f)`, `pick(&items)`, `pick_many(&items, n)`, `shuffle(&mut items)` |
+| Times | `past(within)`, `future(within)`, `recent()`, `date_time_between(start, end)`, `date_between(start, end)` |
+| Identifiers and secrets | `uuid`, `ulid`, `alphanumeric(n)`, `hex(n)`, `password()`, `color_name`, `hex_color`, `currency_code` |
+
+`ctx.fake().unique(|f| f.word())` draws until it gets a value the faker hasn't returned before, for unique columns (and fails after 10,000 draws in a row that were all seen, when the generator has too few values). The faker is seeded: `.seed(42)` on a builder makes it generate the same data every run, which keeps a failing test reproducible.
+
+## Making and creating
+
+| Method | Returns |
+|---|---|
+| `make()`, `make_one()`, `make_many(n)` | Unsaved records: no database, parents left empty. |
+| `raw()`, `raw_one()` | The generated values by column, as `Attributes` (a request body for an HTTP test). |
+| `create(exec)`, `create_one(exec)`, `create_many(exec, n)` | Stored records, with their parents, children and attachments, saved one by one through their events. |
+| `create_quietly(exec)` and the other `_quietly` forms | The same without model events (the model's behaviours, such as workspace filling, still run). |
+| `insert(exec)` | One bulk `INSERT` of the records, without events; returns how many. |
+
+```rust
+let deal = Deal::factory().create_one(&db).await?;
+let deals = Deal::factory().count(3).create(&db).await?;
+let draft = Deal::factory().set(Deal::TITLE, "Draft").make_one()?;
+let body = Deal::factory().raw_one()?;
+```
+
+`Factory::<DealFactory>::new()` starts a builder for a factory that isn't linked to its model.
+
+## States
+
+States change the model after the definition, in the order you add them. A named state is a function of the factory:
+
+```rust
+impl DealFactory {
+    /// A won deal: `Deal::factory().state(DealFactory::won)`.
+    pub fn won(deal: &mut Deal) {
+        deal.stage = Stage::Won;
+        deal.closed_at = Some(Utc::now());
+    }
+}
+
+let won = Deal::factory().count(5).state(DealFactory::won).create(&db).await?;
+let big = Deal::factory()
+    .state(|deal| deal.amount_cents = 1_000_000)
+    .set(Deal::TITLE, "Enterprise renewal")
+    .create_one(&db)
+    .await?;
+let dated = Deal::factory()
+    .state_with(|deal, ctx| deal.created_at = ctx.fake().past(Duration::days(30)))
+    .create(&db)
+    .await?;
+let trashed = Deal::factory().trashed().create_one(&db).await?;
+```
+
+`set(column, value)` sets one column, typed. `state_with` also gets the context (the faker, the index). `prepend_state` runs a state before the others, `trashed()` and `trashed_at(time)` soft-delete the records, and `when(condition, |f| ..)` applies changes conditionally. `ModelFactory::configure` sets defaults for every builder of a factory, such as hooks every record needs.
+
+### Sequences
+
+A sequence gives the records of a batch states in turn, starting over after the last:
+
+```rust
+use navree::orm::factory::Sequence;
+
+let alternating = Deal::factory()
+    .count(4)
+    .sequence(Sequence::new([DealFactory::won, DealFactory::lost])) // won, lost, won, lost
+    .create(&db)
+    .await?;
+let titled = Deal::factory()
+    .count(3)
+    .sequence(Sequence::column(Deal::TITLE, ["Renewal", "Upsell", "Pilot"]))
+    .create(&db)
+    .await?;
+let ranked = Deal::factory()
+    .count(3)
+    .sequence(Sequence::from_fn(|deal: &mut Deal, at| {
+        deal.amount_cents = 1_000 * (at.index() as i64 + 1)
+    }))
+    .create(&db)
+    .await?;
+```
+
+`for_each_sequence` also sets the count to the sequence's length, one record per state, and `cross_join_sequence([..])` makes a record for every combination of several sequences.
+
+## Relationships
+
+### Parents
+
+`for_` points every record of the batch at one parent: a factory (one parent is created for the batch) or a stored record (`for_record`).
+
+```rust
+let at_acme = Deal::factory()
+    .count(2)
+    .for_(Company::factory().set(Company::NAME, "Acme"), Deal::COMPANY_ID)
+    .create(&db)
+    .await?;
+let same = Deal::factory().count(2).for_record(&acme, Deal::COMPANY_ID).create(&db).await?;
+```
+
+The parent's key is set before the states, so a state can still change it. `without_parents()` skips the parents the definition declares (their columns stay empty), and `without_parent(column)` skips one.
+
+### Children
+
+`has` creates children for each record once it is stored, pointing at it:
+
+```rust
+let deals = Deal::factory()
+    .count(3)
+    .has(Activity::factory().count(2), Activity::DEAL_ID)   // two activities per deal
+    .create(&db)
+    .await?;
+```
+
+### Many to many
+
+`has_attached` attaches records through a pivot table, with values for every pivot row: new records from a factory, created for each record, or stored ones, attached to each.
+
+```rust
+let deals = Deal::factory()
+    .has_attached(Tag::factory().count(2), [], "tags")
+    .has_attached(&vip, [("added_by", Value::from("seeder"))], "tags")
+    .create(&db)
+    .await?;
+```
+
+### Naming relationships
+
+A link is a typed column, a `BelongsTo` / `HasMany` / `Pivot`, or a name the factory declares in `relationships`:
+
+```rust
+impl ModelFactory for DealFactory {
+    // definition as above
+
+    fn relationships(relationships: &mut Relationships<Deal>) {
+        relationships
+            .belongs_to::<Company>("company", Deal::COMPANY_ID)
+            .has_many::<Activity>("activities", Activity::DEAL_ID)
+            .belongs_to_many::<Tag>("tags", Pivot::new("deal_tag", "deal_id", "tag_id"));
+    }
+}
+
+Deal::factory()
+    .for_(Company::factory(), "company")
+    .has(Activity::factory().count(2), "activities")
+    .create(&db)
+    .await?;
+```
+
+Declared relationships appear in `model:show`. Polymorphic links take `BelongsTo::morph` and `HasMany::morph`.
+
+### Recycling records
+
+Creating twenty deals with a definition that declares a company parent creates twenty companies. `recycle` reuses stored records instead, wherever the builder (or a factory nested in it) needs a parent of their model: a random one per record for the definition's parents, one per batch for `for_`:
+
+```rust
+let companies = Company::factory().count(3).create(&db).await?;
+let deals = Deal::factory().count(20).recycle(&companies).create(&db).await?;   // 3 companies, 20 deals
+```
+
+`lazy()` turns a builder into a `LazyFactory`: one record, created the first time something needs it, then shared.
+
+## Hooks
+
+```rust
+let deals = Deal::factory()
+    .after_making(|deal| deal.title = deal.title.to_uppercase())
+    .after_creating(|deal, target| {
+        Box::pin(async move {
+            // runs after each record is stored, on the same executor
+            Ok(())
+        })
+    })
+    .create(&db)
+    .await?;
+```
+
+`after_making` runs on each record once it is made (by `make`, and by `create` before saving); `after_creating` after each record is stored, with the executor's target to write more. `without_after_making()` and `without_after_creating()` remove the hooks a factory's `configure` added.
+
+## Defaults for an app
+
+`FactoryOptions` sets defaults for the factories that create records through an app: whether definitions' parents are created, and a seed for every factory without one. Register it in the app (`override_value(Arc::new(FactoryOptions::new().seed(7)))` in a test app), and `.connection("analytics")` sends one builder's records to a named connection.
+
+## In seeders
+
+Factories make [seeders](/docs/database/seeding-and-factories/) short:
+
+```rust title="src/modules/deals/seeders/demo.rs"
+use navree::db::{Db, Seeder};
+use navree::kernel::{AppContext, BoxError, BoxFuture};
+
+/// `navree db:seed demo`: a sample pipeline.
+#[injectable]
+pub struct DemoSeeder;
+
+impl Seeder for DemoSeeder {
+    fn name(&self) -> &'static str {
+        "demo"
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let companies = Company::factory().count(20).create(db).await?;
+            Deal::factory().count(60).recycle(&companies).create(db).await?;
+            Deal::factory().count(10).recycle(&companies).state(DealFactory::won).create(db).await?;
+            Ok(())
+        })
+    }
+}
+```
+
+<LinkCards>
+  <LinkCard href="/docs/orm/testing/" title="Testing">
+    Database assertions and test databases.
+  </LinkCard>
+  <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding">
+    Seeders and `db:seed`.
+  </LinkCard>
+</LinkCards>
