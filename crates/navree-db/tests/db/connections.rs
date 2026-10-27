@@ -466,6 +466,21 @@ async fn sqlite_settings_apply_to_every_connection() {
 }
 
 #[tokio::test]
+async fn sqlite_databases_can_live_in_memory() {
+    // One connection: every connection to `:memory:` is a database of its own.
+    let db = Db::connect(&DbOptions {
+        url: "sqlite::memory:".into(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    place(&db, db.conn(), "memory").await;
+    assert_eq!(read_place(db.conn()).await, "memory");
+    assert_eq!(db.database_name().await.unwrap(), "main");
+}
+
+#[tokio::test]
 async fn server_facts() {
     let temp = TempDb::new();
     let db = Db::connect(&temp.options()).await.unwrap();
