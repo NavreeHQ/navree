@@ -1,7 +1,6 @@
 ---
 title: "Request-response"
 description: "Answer messages with `#[message_pattern]` handlers and call them with `ServiceClient::send`: payloads, validation, access, the unit of work, deadlines, errors across services and testing with `MicroFake`."
-status: "planned"
 ---
 
 ## Introduction
@@ -368,7 +367,7 @@ let totals: Vec<OwnerTotal> = client
 Every request has a **deadline**: `micro.request_timeout_ms` (5 seconds) from the moment it is sent, or `.timeout(..)`. It travels with the message as `navree-deadline`, and both sides respect it:
 
 - **The caller** stops waiting at the deadline and gets `MicroError::Timeout`.
-- **The receiving service** drops a message whose deadline has already passed without running the handler, since nobody is waiting for the answer. A handler still running at the deadline is cut off: its unit of work rolls back, and no reply is sent. A handler's `#[timeout("2s")]` sets a shorter limit of its own.
+- **The receiving service** drops a message whose deadline has already passed without running the handler, since nobody is waiting for the answer. A handler still running at the deadline is cut off: its unit of work rolls back, and no reply is sent. A handler's `#[timeout("2s")]` sets a shorter limit of its own; a handler cut off by it rolls back and replies with a 503 whose detail says it didn't finish in time.
 - **Calls made while handling a message** inherit what is left of the deadline. If `crm-api` gives `deals.move` two seconds and the deals service spends 1.5 of them before it calls `companies.get`, that call gets the remaining half second, even if its own timeout is longer. A chain of calls can't outlive the request that started it.
 
 In an HTTP handler, `http.timeout_secs` (or the route's `#[timeout]`) still bounds the whole request, so give a `send` a deadline shorter than the route's.
@@ -386,6 +385,7 @@ In an HTTP handler, `http.timeout_secs` (or the route's `#[timeout]`) still boun
 | `Transport(..)` | The broker is unreachable, or the connection broke | 503 Service Unavailable |
 | `Decode { pattern, .. }` | The reply doesn't decode into the type you asked for | 502 Bad Gateway |
 | `PayloadTooLarge { size, limit }` | The payload is over `micro.max_message_bytes` | 500 Internal Server Error |
+| `Encode { pattern, .. }`, `InvalidPattern { pattern, .. }` | The payload doesn't encode, or the pattern isn't a valid one | 500 Internal Server Error |
 | `ShutDown` | The app is shutting down | 503 Service Unavailable |
 
 A 4xx passes through because it describes the user's request: a deal that doesn't exist is a 404 for the browser too. A 5xx doesn't, because the failure is between your services, not in what the user sent; the original error is logged by the service where it happened, under the same request id.
@@ -575,7 +575,7 @@ async fn the_api_passes_deal_errors_through() {
 | `Reply::timeout()` | A service that never answers: the call times out at once, without waiting for the deadline. |
 | `Reply::sequence([..])` | Each answer in turn, then the last one again: for testing retries. |
 
-A later `on` for the same pattern replaces the earlier one. `micro.sent::<T>(pattern)` returns the decoded payloads sent to a pattern, and `assert_nothing_sent()` checks that nothing went out.
+A later `on` for the same pattern replaces the earlier one. `micro.sent::<T>(pattern)` returns the decoded payloads sent to a pattern, `micro.sent_envelopes(pattern)` the whole messages (to check a header such as `authorization` or `traceparent`), and `assert_nothing_sent()` checks that nothing went out.
 
 <LinkCards>
   <LinkCard href="/docs/microservices/events/" title="Events">

@@ -255,10 +255,10 @@ struct Features {
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
 /// `features = ["billing"]`, `features = ["search"]`, `features = ["mcp"]`,
-/// `features = ["ai"]`, `features = ["redis"]`).
+/// `features = ["ai"]`, `features = ["redis"]`, `features = ["micro"]`).
 const OPT_IN: &[&str] = &[
     "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp", "ai",
-    "redis",
+    "redis", "micro",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -499,5 +499,21 @@ fn database_driver_features_turn_on_db_and_the_driver() {
     assert!(
         !features.table.contains_key("mysql-rsa"),
         "`mysql-rsa` would pull in the `rsa` crate"
+    );
+}
+
+/// `navree::micro` is navree-micro re-exported whole, and the `micro`
+/// feature puts its module, client and payload in the prelude
+/// (`cargo test -p navree --features micro --test facade`).
+#[cfg(feature = "micro")]
+#[test]
+fn micro_is_reexported_with_its_feature() {
+    assert!(same::<navree::micro::MicroModule, MicroModule>());
+    assert!(same::<navree::micro::ServiceClient, ServiceClient>());
+    assert!(same::<navree::micro::Payload<u8>, Payload<u8>>());
+    let fake = navree::micro::MicroFake::new();
+    assert_eq!(
+        fake.transport().kind(),
+        Some(navree::micro::TransportKind::Custom)
     );
 }

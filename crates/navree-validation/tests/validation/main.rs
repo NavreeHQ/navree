@@ -3,6 +3,7 @@
 
 mod database;
 mod form;
+mod input;
 mod json;
 mod module;
 mod rules;

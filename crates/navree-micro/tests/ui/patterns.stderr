@@ -1,0 +1,41 @@
+error: invalid pattern `deals.*`: a message pattern names exactly one handler, so it has no wildcards
+  --> tests/ui/patterns.rs:10:23
+   |
+10 |     #[message_pattern("deals.*")]
+   |                       ^^^^^^^^^
+
+error: invalid pattern `Deals.Get`: segment `Deals` may only hold lower-case letters, digits, `_` and `-`
+  --> tests/ui/patterns.rs:15:23
+   |
+15 |     #[message_pattern("Deals.Get")]
+   |                       ^^^^^^^^^^^
+
+error: `max_attempts` applies to #[event_pattern]: requests are not retried by the broker
+  --> tests/ui/patterns.rs:20:40
+   |
+20 |     #[message_pattern("deals.retried", max_attempts = 3)]
+   |                                        ^^^^^^^^^^^^
+
+error: `dedupe` applies to #[message_pattern]: the inbox already deduplicates events
+  --> tests/ui/patterns.rs:25:37
+   |
+25 |     #[event_pattern("deal.deduped", dedupe)]
+   |                                     ^^^^^^
+
+error: `broadcast` and `ordered` exclude each other
+  --> tests/ui/patterns.rs:30:5
+   |
+30 |     #[event_pattern("deal.both", ordered, broadcast)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `concurrency` must be a whole number of at least 1
+  --> tests/ui/patterns.rs:35:48
+   |
+35 |     #[event_pattern("deal.zero", concurrency = 0)]
+   |                                                ^
+
+error: `second` answers `deals.twice` too: one handler per pattern (first: `first`)
+  --> tests/ui/patterns.rs:45:23
+   |
+45 |     #[message_pattern("deals.twice")]
+   |                       ^^^^^^^^^^^^^
