@@ -4,19 +4,23 @@
 //! contacts, deals, activities and the dashboard) build in parallel without
 //! depending on each other:
 //!
-//! - [`entities`]: the SeaORM entities of every CRM table (`companies`,
-//!   `contacts`, `deals`, `activities`), each an access subject, and the
-//!   subject aliases [`Company`], [`Contact`], [`Deal`], [`Activity`],
-//!   [`User`] for `#[can(..)]` and the access extractors;
+//! - [`models`]: the ORM models of every CRM table ([`Company`],
+//!   [`Contact`], [`Deal`], [`Activity`]) and of the users and roles the
+//!   CRM reads ([`User`], [`models::Role`]), with their relations and
+//!   scopes. Each is an access subject, named as such in `#[can(..)]` and
+//!   the access extractors (`Authorized<Deal, Update>`,
+//!   `Accessible<Company, Read>`);
+//! - [`factories`]: their model factories, for tests and the demo seeder;
+//! - [`migrations`]: the one `crm` migration set, written with the schema
+//!   builder (after `auth` and `access`): the tables, and the activity
+//!   timeline as a time series (a TimescaleDB hypertable);
 //! - [`enums`]: [`CompanySize`], [`ContactStatus`], [`Stage`] (with
 //!   `probability()` and `label()`), [`ActivityKind`], [`SubjectType`];
-//! - [`migrations`]: the one `crm` migration set (after `auth` and
-//!   `access`);
 //! - [`abilities`]: who may do what (spec §6 and §9), [`roles`],
 //!   [`permissions`] and the custom [`actions`] [`Move`], [`Export`] and
 //!   [`Complete`];
-//! - [`embeds`]: [`OwnerRef`], [`CompanyRef`], [`ContactRef`] and their
-//!   batch loaders;
+//! - [`embeds`]: [`OwnerRef`], [`CompanyRef`], [`ContactRef`], built from
+//!   eager loaded relations;
 //! - [`ownership`]: [`owner_for`](ownership::owner_for), who may set a
 //!   record's `owner_id` (spec §9.3);
 //! - [`notify`]: [`NotifiableUser`](notify::NotifiableUser) and the
@@ -30,7 +34,6 @@
 pub mod abilities;
 pub mod actions;
 pub mod embeds;
-pub mod entities;
 pub mod enums;
 pub mod factories;
 pub mod migrations;
@@ -47,8 +50,8 @@ mod platform;
 
 pub use actions::{Complete, Export, Move};
 pub use embeds::{CompanyRef, ContactRef, OwnerRef};
-
 pub use enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
+pub use factories::{ActivityFactory, CompanyFactory, ContactFactory, DealFactory};
 pub use models::{Activity, Company, Contact, Deal, User};
 pub use module::CrmCoreModule;
 pub use notify::{NotifiableUser, NotificationData};
