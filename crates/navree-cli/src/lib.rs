@@ -22,6 +22,7 @@
 //! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
 //! | `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
 //! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
+//! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -34,6 +35,7 @@
 //! edited safely becomes a printed hint.
 #![forbid(unsafe_code)]
 
+pub mod browser;
 pub mod check;
 pub mod cli;
 pub mod clock;

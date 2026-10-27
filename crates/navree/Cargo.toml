@@ -14,7 +14,7 @@ workspace = true
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
 ## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`,
-## `i18n`, `dock`, `navigator`).
+## `i18n`, `dock`, `navigator`, `browser`).
 full = [
     "access",
     "api",
@@ -355,6 +355,10 @@ dock = ["dep:navree-dock"]
 ## agents behind `navree mcp`, its tools, and the embedded agent skills of
 ## `navree skills:install`), for tools and tests. The CLI does not need it.
 navigator = ["dep:navree-navigator", "dock"]
+## Opt-in, not in `full`: browser testing (navree-browser) for tests, usually
+## turned on in `[dev-dependencies]`; it drives Chrome or Chromium over the
+## DevTools Protocol, so it needs a browser on the machine at test time.
+browser = ["dep:navree-browser", "http"]
 ## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
 ## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
 otel = ["observe", "navree-observe/otel"]
@@ -374,6 +378,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-billing = { workspace = true, optional = true }
+navree-browser = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
 navree-oauth = { workspace = true, optional = true }
 navree-flags = { workspace = true, optional = true }
