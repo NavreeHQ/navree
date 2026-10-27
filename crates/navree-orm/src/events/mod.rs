@@ -45,11 +45,14 @@ use crate::model::{Model, PrimaryKey};
 use crate::record::Record;
 
 mod dispatch;
+mod fake;
 mod listener;
 mod observer;
 mod record;
 
 pub use dispatch::Dispatch;
+pub(crate) use fake::FakeListener;
+pub use fake::{FiredEvent, ModelEventFake};
 pub(crate) use listener::ClosureListener;
 pub use observer::{Observer, ObserverHook};
 

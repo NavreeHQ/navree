@@ -355,9 +355,12 @@ pub(crate) struct Hooks<M: Model> {
 
 impl<M: Model> Hooks<M> {
     /// The hooks that apply in `ctx`: the model's own and the app's;
-    /// behaviours only inside [`without_events`](crate::without_events).
+    /// behaviours only inside [`without_events`](crate::without_events);
+    /// behaviours and a recorder when the app has a
+    /// [`ModelEventFake`](crate::events::ModelEventFake).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
+        let mut fake = None;
         if let Some(app) = ctx.app() {
             let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
                 crate::error::OrmError::Hook {
@@ -366,9 +369,13 @@ impl<M: Model> Hooks<M> {
                 }
             })?;
             hooks.extend(registered);
+            fake = app.try_get::<crate::events::ModelEventFake>().await;
         }
         if crate::events::events_are_silenced() {
             hooks.retain(|hook| hook.kind() == HookKind::Behaviour);
+        } else if let Some(fake) = fake {
+            hooks.retain(|hook| hook.kind() == HookKind::Behaviour);
+            hooks.push(Arc::new(crate::events::FakeListener(fake)));
         }
         Ok(Hooks { hooks })
     }
