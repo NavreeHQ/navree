@@ -498,3 +498,172 @@ fn client_ip_of_a_request_follows_the_proxy_settings() {
     let forwarded = ClientIp::of(&parts.headers, &parts.extensions, &behind_proxy);
     assert_eq!(forwarded, ClientIp(client));
 }
+
+/// Without CORS and compression nothing separates the fixed layers, and
+/// they run as the stages of one middleware: still in their order, so a
+/// panic is rendered outside the security headers, and every response
+/// carries the request id.
+#[tokio::test]
+async fn fixed_layers_keep_their_order_in_one_middleware() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut routes = error_routes();
+    routes.push(RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public());
+    let single = HttpOptions {
+        compression: false,
+        per_ip_rate_limit: Some(4),
+        maintenance_file: dir.path().join("down"),
+        ..HttpOptions::default()
+    };
+    assert!(single.cors.allowed_origins.is_empty());
+    let app = Setup::new(routes).options(single).boot().await;
+
+    let ok = app.get("/api/ok").await;
+    assert_eq!(ok.status, StatusCode::OK);
+    assert_eq!(ok.header("x-frame-options"), Some("DENY"));
+    assert_eq!(ok.header("x-request-id").map(str::len), Some(32));
+
+    let missing = app.get("/api/missing").await;
+    missing.assert_error(404);
+    assert_eq!(missing.header("x-frame-options"), Some("DENY"));
+
+    let panicked = app.get("/api/panic").await;
+    panicked.assert_error(500);
+    assert_eq!(
+        panicked.header("x-frame-options"),
+        None,
+        "the panic catcher is outside the security headers"
+    );
+    assert!(panicked.header("x-request-id").is_some());
+
+    // A limit of 4 a minute: the fifth request is refused.
+    app.get("/api/ok").await;
+    let limited = app.get("/api/ok").await;
+    limited.assert_error(429);
+    assert!(limited.header("retry-after").is_some());
+    assert!(limited.header("x-request-id").is_some());
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_app_timeout_holds_in_one_middleware() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut single = HttpOptions {
+        compression: false,
+        timeout_secs: 1,
+        maintenance_file: dir.path().join("down"),
+        ..options()
+    };
+    single.cors.allowed_origins.clear();
+    let app = Setup::new(error_routes()).options(single).boot().await;
+    let response = app.get("/api/slow").await;
+    let body = response.assert_error(503);
+    assert_eq!(
+        body["message"],
+        "The server did not finish the request in time."
+    );
+    assert_eq!(
+        response.header("x-frame-options"),
+        None,
+        "the timeout is outside the security headers"
+    );
+}
+
+mod recorded_metrics {
+    use std::sync::{Arc, Mutex};
+
+    use metrics::{
+        Counter, CounterFn, Gauge, Histogram, HistogramFn, Key, KeyName, Metadata, Recorder,
+        SharedString, Unit,
+    };
+
+    use super::*;
+
+    /// Every counter increment and histogram sample, as `name{k=v,...}`.
+    #[derive(Clone, Default)]
+    struct Recorded(Arc<Mutex<Vec<String>>>);
+
+    struct Series {
+        key: String,
+        recorded: Recorded,
+    }
+
+    impl CounterFn for Series {
+        fn increment(&self, _value: u64) {
+            self.recorded.0.lock().unwrap().push(self.key.clone());
+        }
+
+        fn absolute(&self, _value: u64) {}
+    }
+
+    impl HistogramFn for Series {
+        fn record(&self, _value: f64) {
+            self.recorded.0.lock().unwrap().push(self.key.clone());
+        }
+    }
+
+    struct TestRecorder(Recorded);
+
+    impl TestRecorder {
+        fn series(&self, key: &Key) -> Arc<Series> {
+            let labels: Vec<String> = key
+                .labels()
+                .map(|label| format!("{}={}", label.key(), label.value()))
+                .collect();
+            Arc::new(Series {
+                key: format!("{}{{{}}}", key.name(), labels.join(",")),
+                recorded: self.0.clone(),
+            })
+        }
+    }
+
+    impl Recorder for TestRecorder {
+        fn describe_counter(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+
+        fn describe_gauge(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+
+        fn describe_histogram(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+
+        fn register_counter(&self, key: &Key, _: &Metadata<'_>) -> Counter {
+            Counter::from_arc(self.series(key))
+        }
+
+        fn register_gauge(&self, _: &Key, _: &Metadata<'_>) -> Gauge {
+            Gauge::noop()
+        }
+
+        fn register_histogram(&self, key: &Key, _: &Metadata<'_>) -> Histogram {
+            Histogram::from_arc(self.series(key))
+        }
+    }
+
+    /// The labels are built only when a recorder is installed; with one,
+    /// every request is counted and timed by method, route template and
+    /// status.
+    #[tokio::test]
+    async fn requests_are_counted_when_a_recorder_is_installed() {
+        let app = Setup::new(vec![
+            RouteDef::new(Method::GET, "/deals/{id}", get(|| async { "deal" })).public(),
+        ])
+        .boot()
+        .await;
+        assert_eq!(app.get("/api/deals/1").await.status, StatusCode::OK);
+
+        let recorded = Recorded::default();
+        let recorder = TestRecorder(recorded.clone());
+        // The test runtime has one thread: the local recorder sees the
+        // whole request.
+        let _local = metrics::set_default_local_recorder(&recorder);
+        assert_eq!(app.get("/api/deals/7").await.status, StatusCode::OK);
+        app.get("/api/nowhere").await.assert_error(404);
+
+        let seen = recorded.0.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            [
+                "http_requests_total{method=GET,route=/api/deals/{id},status=200}",
+                "http_request_duration_seconds{method=GET,route=/api/deals/{id},status=200}",
+                "http_requests_total{method=GET,route=unmatched,status=404}",
+                "http_request_duration_seconds{method=GET,route=unmatched,status=404}",
+            ]
+        );
+    }
+}

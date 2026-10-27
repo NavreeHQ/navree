@@ -3,10 +3,12 @@
 //! CORS, panic catcher, timeout, security headers, compression, error
 //! rendering, maintenance mode, per-IP rate limit, body limit; then the
 //! [`LayerSlot`](crate::LayerSlot)s (navree's authentication runs first in the
-//! `AuthContext` slot) and the router.
+//! `AuthContext` slot) and the router. The fixed layers between CORS and
+//! compression run as [`Stages`] of one middleware each.
 
 use std::any::Any;
 use std::error::Error as StdError;
+use std::future::Future;
 use std::net::IpAddr;
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, OnceLock};
@@ -73,10 +75,98 @@ fn request_id_of(request: &Request) -> Option<RequestId> {
 }
 
 // ---------------------------------------------------------------------------
+// The fixed layers, as stages of as few middlewares as possible
+// ---------------------------------------------------------------------------
+
+/// Fixed layers that sit between the same two Tower layers (CORS,
+/// compression) and run as one middleware: each stage awaits the next as
+/// a plain future, so a request pays for one middleware, not one per
+/// layer. Outermost first: the request context; the guard (panic catcher,
+/// timeout, security headers); the checks (error rendering, maintenance
+/// mode, per-IP rate limit). A missing part is skipped.
+#[derive(Default)]
+pub(crate) struct Stages {
+    pub(crate) context: Option<ContextState>,
+    pub(crate) guard: Option<GuardStages>,
+    pub(crate) checks: Option<CheckStages>,
+}
+
+/// The panic catcher, the app-wide timeout and the security headers.
+pub(crate) struct GuardStages {
+    /// `http.timeout_secs`.
+    pub(crate) timeout: Duration,
+    /// `http.security_headers`.
+    pub(crate) security_headers: bool,
+}
+
+/// Error rendering, maintenance mode and the per-IP rate limit.
+pub(crate) struct CheckStages {
+    pub(crate) mappers: Vec<ErrorMapper>,
+    pub(crate) maintenance: MaintenanceGate,
+    pub(crate) per_ip: Option<PerIpLimit>,
+}
+
+/// The middleware that runs [`Stages`].
+pub(crate) async fn run_stages(
+    State(stages): State<Arc<Stages>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    match &stages.context {
+        Some(context) => {
+            request_context(context, request, |request| stages.guarded(request, next)).await
+        }
+        None => stages.guarded(request, next).await,
+    }
+}
+
+impl Stages {
+    async fn guarded(&self, request: Request, next: Next) -> Response {
+        let Some(guard) = &self.guard else {
+            return self.checked(request, next).await;
+        };
+        catch_panic(request, move |request| {
+            timeout(guard.timeout, request, move |request| async move {
+                let response = self.checked(request, next).await;
+                if guard.security_headers {
+                    with_security_headers(response)
+                } else {
+                    response
+                }
+            })
+        })
+        .await
+    }
+
+    async fn checked(&self, request: Request, next: Next) -> Response {
+        let Some(checks) = &self.checks else {
+            return next.run(request).await;
+        };
+        render_errors(&checks.mappers, request, move |request| {
+            maintenance(&checks.maintenance, request, move |request| async move {
+                match &checks.per_ip {
+                    Some(limit) => {
+                        per_ip_rate_limit(limit, request, move |request| next.run(request)).await
+                    }
+                    None => next.run(request).await,
+                }
+            })
+        })
+        .await
+    }
+}
+
+/// Whether a `metrics` recorder is installed for this thread (a local one)
+/// or the process (the global one). The `metrics` crate's no-op recorder,
+/// what the macros fall back to without one, is a zero-sized type.
+fn metrics_recorder_installed() -> bool {
+    metrics::with_recorder(|recorder| std::mem::size_of_val(recorder) != 0)
+}
+
+// ---------------------------------------------------------------------------
 // Request context: request id, client ip, app context, span, log, metrics
 // ---------------------------------------------------------------------------
 
-#[derive(Clone)]
 pub(crate) struct ContextState {
     pub(crate) ctx: AppContext,
     pub(crate) proxies: ProxyTrust,
@@ -94,12 +184,13 @@ static TRACESTATE: HeaderName = HeaderName::from_static("tracestate");
 /// client ip and the app context in the request extensions, starts or
 /// continues the request's trace (`traceparent`), runs the request in a
 /// tracing span and its [`TelemetryContext`], echoes the id, writes the
-/// request log line and emits [`RequestHandled`].
-pub(crate) async fn request_context(
-    State(state): State<Arc<ContextState>>,
-    mut request: Request,
-    next: Next,
-) -> Response {
+/// request log line, emits [`RequestHandled`] and records the request
+/// metrics (when a `metrics` recorder is installed).
+async fn request_context<F, Fut>(state: &ContextState, mut request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let incoming = request
         .headers()
         .get(&X_REQUEST_ID)
@@ -120,12 +211,13 @@ pub(crate) async fn request_context(
     request
         .headers_mut()
         .insert(X_REQUEST_ID.clone(), header.clone());
-    request.extensions_mut().insert(request_id.clone());
-    request.extensions_mut().insert(ip);
-    request.extensions_mut().insert(state.ctx.clone());
-    request.extensions_mut().insert(telemetry_context.clone());
+    let extensions = request.extensions_mut();
+    extensions.insert(request_id.clone());
+    extensions.insert(ip);
+    extensions.insert(state.ctx.clone());
+    extensions.insert(telemetry_context.clone());
     // Request-scoped providers are built once per request (see `Scoped`).
-    request.extensions_mut().insert(RequestScope::new());
+    extensions.insert(RequestScope::new());
     let path = state
         .telemetry
         .enabled(EventKind::RequestHandled)
@@ -141,19 +233,19 @@ pub(crate) async fn request_context(
         request_id = %request_id,
         user_id = tracing::field::Empty,
     );
-    request.extensions_mut().insert(RequestSpan(span.clone()));
+    if !span.is_disabled() {
+        request.extensions_mut().insert(RequestSpan(span.clone()));
+    }
     let start = Instant::now();
     let mut response = telemetry_context
         .clone()
-        .scope(next.run(request).instrument(span.clone()))
+        .scope(next(request).instrument(span.clone()))
         .await;
     response.headers_mut().insert(X_REQUEST_ID.clone(), header);
 
     let latency = start.elapsed();
-    let matched = response.extensions().get::<Arc<RouteMeta>>().cloned();
-    let route = matched
-        .as_ref()
-        .map_or_else(|| "unmatched".to_owned(), |meta| meta.full_path.clone());
+    let matched = response.extensions().get::<Arc<RouteMeta>>();
+    let route = matched.map_or("unmatched", |meta| meta.full_path.as_str());
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
     let status = response.status().as_u16();
     let event = path.map(|path| RequestHandled {
@@ -189,32 +281,44 @@ pub(crate) async fn request_context(
             );
         });
     });
-    let labels = [
-        ("method", method.to_string()),
-        ("route", route),
-        ("status", status.to_string()),
-    ];
-    metrics::counter!("http_requests_total", &labels).increment(1);
-    metrics::histogram!("http_request_duration_seconds", &labels).record(latency.as_secs_f64());
+    if metrics_recorder_installed() {
+        let labels = [
+            ("method", method.to_string()),
+            ("route", route.to_owned()),
+            ("status", status.to_string()),
+        ];
+        metrics::counter!("http_requests_total", &labels).increment(1);
+        metrics::histogram!("http_request_duration_seconds", &labels)
+            .record(latency.as_secs_f64());
+    }
     response
 }
 
 // ---------------------------------------------------------------------------
-// Panic catcher and timeout (outside the error layer: they render themselves)
+// Panic catcher and timeout (outside the error stage: they render themselves)
 // ---------------------------------------------------------------------------
 
 /// Turns a panicking handler or layer into a 500 error (and an
 /// [`ExceptionReported`] event with the panic's location).
-pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
+async fn catch_panic<F, Fut>(request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let request_id = request_id_of(&request);
-    let telemetry = Telemetry::current();
-    let request_info = telemetry.enabled(EventKind::ExceptionReported).then(|| {
+    let reported = TelemetryContext::with_current(|context| {
+        context
+            .telemetry()
+            .enabled(EventKind::ExceptionReported)
+    })
+    .unwrap_or(false);
+    let request_info = reported.then(|| {
         (
             request.method().to_string(),
             request.uri().path().to_owned(),
         )
     });
-    match AssertUnwindSafe(next.run(request)).catch_unwind().await {
+    match AssertUnwindSafe(next(request)).catch_unwind().await {
         Ok(response) => response,
         Err(payload) => {
             let message = panic_message(payload.as_ref());
@@ -229,7 +333,7 @@ pub(crate) async fn catch_panic(request: Request, next: Next) -> Response {
                     context.panic_location().map(str::to_owned)
                 })
                 .flatten();
-                telemetry.emit(TelemetryEvent::ExceptionReported(ExceptionReported {
+                Telemetry::current().emit(TelemetryEvent::ExceptionReported(ExceptionReported {
                     message: message.clone(),
                     chain: vec![message],
                     location,
@@ -259,17 +363,17 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 
 /// The app-wide request timeout. A route with its own timeout records it in
 /// [`TimeoutOverride`]; the deadline then moves to the route's.
-pub(crate) async fn timeout(
-    State(default): State<Duration>,
-    mut request: Request,
-    next: Next,
-) -> Response {
+async fn timeout<F, Fut>(default: Duration, mut request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let request_id = request_id_of(&request);
     let route_timeout = TimeoutOverride::default();
     request.extensions_mut().insert(route_timeout.clone());
     let start = Instant::now();
     let mut deadline = start + default;
-    let run = next.run(request);
+    let run = next(request);
     tokio::pin!(run);
     loop {
         tokio::select! {
@@ -315,8 +419,7 @@ static SECURITY_HEADERS: [(HeaderName, &str); 5] = [
     ),
 ];
 
-pub(crate) async fn security_headers(request: Request, next: Next) -> Response {
-    let mut response = next.run(request).await;
+fn with_security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
     for (name, value) in SECURITY_HEADERS.iter() {
         if !headers.contains_key(name) {
@@ -330,30 +433,19 @@ pub(crate) async fn security_headers(request: Request, next: Next) -> Response {
 // Error rendering
 // ---------------------------------------------------------------------------
 
-pub(crate) struct ErrorState {
-    pub(crate) mappers: Vec<ErrorMapper>,
-}
-
 /// Renders every error response in the JSON error shape: [`AppError`]s (mapped
 /// by the contributed [`ErrorMapper`]s, 5xx logged with the request id) and
 /// plain-text or empty error responses from Axum and Tower layers.
-pub(crate) async fn errors(
-    State(state): State<Arc<ErrorState>>,
-    request: Request,
-    next: Next,
-) -> Response {
+async fn render_errors<F, Fut>(mappers: &[ErrorMapper], request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let request_id = request_id_of(&request);
     let method = request.method().clone();
-    let path = request.uri().path().to_owned();
-    let response = next.run(request).await;
-    finalize(
-        response,
-        request_id.as_ref(),
-        &state.mappers,
-        &method,
-        &path,
-    )
-    .await
+    let uri = request.uri().clone();
+    let response = next(request).await;
+    finalize(response, request_id.as_ref(), mappers, &method, uri.path()).await
 }
 
 async fn finalize(
@@ -474,25 +566,25 @@ fn needs_normalizing(response: &Response) -> bool {
 // Maintenance mode and per-IP rate limit
 // ---------------------------------------------------------------------------
 
-/// The state of the maintenance layer: the mode and the paths it never blocks.
+/// The state of the maintenance stage: the mode and the paths it never blocks.
 pub(crate) struct MaintenanceGate {
     pub(crate) mode: Arc<MaintenanceMode>,
     /// `HttpOptions::maintenance_except`: exact request paths.
     pub(crate) except: Vec<String>,
 }
 
-pub(crate) async fn maintenance(
-    State(gate): State<Arc<MaintenanceGate>>,
-    request: Request,
-    next: Next,
-) -> Response {
+async fn maintenance<F, Fut>(gate: &MaintenanceGate, request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let path = request.uri().path();
     if gate.except.iter().any(|except| except == path) {
-        return next.run(request).await;
+        return next(request).await;
     }
     match gate.mode.current().await {
         Some(info) => info.error().into_response(),
-        None => next.run(request).await,
+        None => next(request).await,
     }
 }
 
@@ -502,11 +594,11 @@ pub(crate) struct PerIpLimit {
     pub(crate) audit: Option<Arc<dyn AuditSink>>,
 }
 
-pub(crate) async fn per_ip_rate_limit(
-    State(limit): State<Arc<PerIpLimit>>,
-    request: Request,
-    next: Next,
-) -> Response {
+async fn per_ip_rate_limit<F, Fut>(limit: &PerIpLimit, request: Request, next: F) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let ip = request
         .extensions()
         .get::<ClientIp>()
@@ -515,7 +607,7 @@ pub(crate) async fn per_ip_rate_limit(
             ClientIp::resolve(request.headers(), request.extensions(), &ProxyTrust::none())
         });
     match limit.limiter.check(&ip.0) {
-        Ok(()) => next.run(request).await,
+        Ok(()) => next(request).await,
         Err(limited) => {
             tracing::warn!(target: "navree::security", ip = %ip.0, "per-IP rate limit exceeded");
             if limited.report
