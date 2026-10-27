@@ -62,6 +62,8 @@ pub struct Batch {
     pub(crate) operation_id: Option<Uuid>,
     /// The first job that could not be serialized; dispatching fails with it.
     pub(crate) error: Option<String>,
+    /// The queue every job goes to instead of its own (`on_queue`).
+    pub(crate) queue: Option<String>,
 }
 
 /// A batch's callback jobs.
@@ -86,7 +88,25 @@ impl Batch {
             allow_failures: false,
             operation_id: None,
             error: None,
+            queue: None,
         }
+    }
+
+    /// Puts every job of the batch, and its callbacks, on `queue` instead
+    /// of the queue each job type names (`JobOptions::queue`): jobs added
+    /// before and after the call.
+    pub fn on_queue(mut self, queue: impl Into<String>) -> Self {
+        let queue = queue.into();
+        let callbacks = [
+            &mut self.callbacks.then,
+            &mut self.callbacks.catch,
+            &mut self.callbacks.finally,
+        ];
+        for envelope in self.jobs.iter_mut().chain(callbacks.into_iter().flatten()) {
+            envelope.options.queue = queue.clone();
+        }
+        self.queue = Some(queue);
+        self
     }
 
     /// Adds `jobs` to the batch.
@@ -176,13 +196,19 @@ impl Batch {
 
     fn envelope<J: Job>(&mut self, job: &J) -> Option<JobEnvelope> {
         match serde_json::to_value(job) {
-            Ok(payload) => Some(JobEnvelope {
-                job_type: J::NAME.to_owned(),
-                payload,
-                options: J::options(),
-                delay_secs: None,
-                unique_key: None,
-            }),
+            Ok(payload) => {
+                let mut options = J::options();
+                if let Some(queue) = &self.queue {
+                    options.queue = queue.clone();
+                }
+                Some(JobEnvelope {
+                    job_type: J::NAME.to_owned(),
+                    payload,
+                    options,
+                    delay_secs: None,
+                    unique_key: None,
+                })
+            }
             Err(error) => {
                 self.error
                     .get_or_insert_with(|| format!("job `{}`: {error}", J::NAME));
@@ -440,5 +466,42 @@ impl BatchRow {
             cancelled_at: self.cancelled_at.map(from_millis),
             finished_at: self.finished_at.map(from_millis),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_contracts::{BoxError, JobContext};
+
+    use super::*;
+
+    #[derive(Serialize, Deserialize)]
+    struct Ping;
+
+    impl Job for Ping {
+        const NAME: &'static str = "test.ping";
+
+        async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn on_queue_moves_every_job_and_callback() {
+        let batch = Batch::new("pings")
+            .push(Ping)
+            .then(Ping)
+            .on_queue("media")
+            .push(Ping)
+            .finally(Ping);
+        assert_eq!(batch.len(), 2);
+        assert!(batch.jobs.iter().all(|job| job.options.queue == "media"));
+        let callbacks = [&batch.callbacks.then, &batch.callbacks.finally];
+        assert!(
+            callbacks
+                .iter()
+                .all(|job| job.as_ref().is_some_and(|job| job.options.queue == "media"))
+        );
+        assert_eq!(Batch::new("plain").push(Ping).jobs[0].options.queue, "default");
     }
 }
