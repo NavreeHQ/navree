@@ -17,6 +17,11 @@ default = []
 postgres = ["navree-db/postgres"]
 ## MySQL for the tests, with `NAVREE_TEST_MYSQL_URL`.
 mysql = ["navree-db/mysql"]
+## How notification mail looks, as settings: the `notification-templates`
+## group (logo, brand color, footer, subject and body overrides per
+## notification type) and navree-notify's `dyn TemplateOverrides` read from
+## it.
+notify = ["dep:navree-notify", "dep:url"]
 
 [dependencies]
 axum = { workspace = true }
@@ -34,6 +39,9 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # `#[derive(Settings)]`, re-exported next to the `SettingsGroup` trait.
 navree-macros = { workspace = true }
+# Feature `notify`: `SettingsTemplateOverrides` is navree-notify's
+# `dyn TemplateOverrides`.
+navree-notify = { workspace = true, optional = true }
 navree-validation = { workspace = true }
 navree-workspace = { workspace = true }
 sea-orm = { workspace = true }
@@ -43,10 +51,17 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# Feature `notify`: the logo URL check.
+url = { workspace = true, optional = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 navree-api = { workspace = true }
+# The `notify` feature's tests (`tests/settings/notify.rs`): notification
+# mail rendered by navree-mail's array transport.
+navree-mail = { workspace = true }
+navree-settings = { workspace = true, features = ["notify"] }
 navree-testing = { workspace = true }
+navree-view = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
