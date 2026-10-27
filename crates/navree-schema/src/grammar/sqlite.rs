@@ -94,7 +94,11 @@ fn create(
     }
     out.push(format!(
         "CREATE {}TABLE {}{} ({})",
-        if blueprint.temporary { "TEMPORARY " } else { "" },
+        if blueprint.temporary {
+            "TEMPORARY "
+        } else {
+            ""
+        },
         if blueprint.if_not_exists {
             "IF NOT EXISTS "
         } else {
@@ -363,7 +367,9 @@ impl<'a> Alter<'a> {
                     let statement = format!("DROP INDEX {}", qualified_index(&self.table, &name));
                     self.in_place(statement)?;
                     if let Some(state) = self.state.as_mut() {
-                        state.indexes.retain(|i| !i.name.eq_ignore_ascii_case(&name));
+                        state
+                            .indexes
+                            .retain(|i| !i.name.eq_ignore_ascii_case(&name));
                     }
                 }
             }
@@ -448,7 +454,8 @@ impl<'a> Alter<'a> {
         let modern = self.ctx.target.at_least((3, 35));
         let Some(state) = self.state.as_mut() else {
             if modern {
-                let statement = format!("ALTER TABLE {} DROP COLUMN {}", self.t(), ident(D, column));
+                let statement =
+                    format!("ALTER TABLE {} DROP COLUMN {}", self.t(), ident(D, column));
                 return self.in_place(statement);
             }
             return Err(SchemaError::Offline {
@@ -499,7 +506,11 @@ fn rebuild_statements(
             format!(
                 "rebuilding `{table_name}` while foreign keys are on and {} reference{} it",
                 state.referenced_by.join(", "),
-                if state.referenced_by.len() == 1 { "s" } else { "" }
+                if state.referenced_by.len() == 1 {
+                    "s"
+                } else {
+                    ""
+                }
             ),
             "dropping the old table would run their ON DELETE actions; run the change through the migrator (it migrates SQLite with foreign keys off and checks them before committing), or turn `PRAGMA foreign_keys` off outside a transaction",
         ));

@@ -46,7 +46,9 @@ impl ScratchDb {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         );
-        let conn = Database::connect(&admin).await.expect("the admin URL connects");
+        let conn = Database::connect(&admin)
+            .await
+            .expect("the admin URL connects");
         conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
             .await
             .expect("the test user may create databases");

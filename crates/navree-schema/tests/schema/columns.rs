@@ -115,7 +115,8 @@ async fn column_modifiers() {
                 t.double("whole").default(2.0);
                 t.boolean("active").default(true);
                 t.boolean("archived").default(false);
-                t.json("settings").default(serde_json::json!({"theme": "dark"}));
+                t.json("settings")
+                    .default(serde_json::json!({"theme": "dark"}));
                 t.string("optional").nullable().default(DefaultValue::Null);
                 t.timestamp_tz("created_at").use_current();
                 t.timestamp("touched_at")
@@ -123,7 +124,9 @@ async fn column_modifiers() {
                     .use_current_on_update();
                 t.date("on").use_current();
                 t.date_time("checked_at").default(raw("CURRENT_TIMESTAMP"));
-                t.string("title").comment("shown in lists").collation("utf8mb4_bin");
+                t.string("title")
+                    .comment("shown in lists")
+                    .collation("utf8mb4_bin");
                 t.string("legacy").charset("latin1");
                 t.integer("price");
                 t.integer("tax");
@@ -139,7 +142,7 @@ async fn column_modifiers() {
 #[tokio::test]
 async fn generated_columns_need_postgres_18_for_virtual() {
     let sql = sql_for!(
-        vec![
+        [
             ("postgres 17", postgres()),
             ("postgres 18", navree_schema::Target::postgres(18)),
         ],
@@ -157,11 +160,12 @@ async fn generated_columns_need_postgres_18_for_virtual() {
 
 #[tokio::test]
 async fn identity_columns() {
-    let sql = sql_for!(vec![("postgres", postgres())], |schema| {
+    let sql = sql_for!([("postgres", postgres())], |schema| {
         schema
             .create("tickets", |t| {
                 t.big_integer("id").generated_as().always().primary();
-                t.integer("sequence").generated_as_with("START WITH 10 INCREMENT BY 10");
+                t.integer("sequence")
+                    .generated_as_with("START WITH 10 INCREMENT BY 10");
             })
             .await
     });
@@ -175,8 +179,13 @@ async fn helpers() {
             .create("helpers", |t| {
                 t.id();
                 t.foreign_id("company_id").constrained().cascade_on_delete();
-                t.foreign_uuid("owner_id").nullable().constrained_on("users", "id").null_on_delete();
-                t.foreign_ulid("ticket_id").references("public_id").on("tickets");
+                t.foreign_uuid("owner_id")
+                    .nullable()
+                    .constrained_on("users", "id")
+                    .null_on_delete();
+                t.foreign_ulid("ticket_id")
+                    .references("public_id")
+                    .on("tickets");
                 t.timestamps();
                 t.timestamps_tz();
                 t.soft_deletes_tz();
@@ -228,7 +237,7 @@ async fn morphs_follow_the_configured_key() {
 #[tokio::test]
 async fn mysql_versions_shape_defaults_and_types() {
     let sql = sql_for!(
-        vec![
+        [
             ("mysql 8.0.12", navree_schema::Target::mysql((8, 0, 12))),
             ("mysql 8.4", mysql()),
             ("mariadb 10.6", navree_schema::Target::mariadb((10, 6))),

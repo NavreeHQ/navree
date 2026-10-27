@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use navree_config::Config;
 use navree_kernel::{AppContext, BoxError};
 
-use super::report::{FreshOptions, MigrateOptions, MigrationReport, RollbackOptions};
 use super::Migrator;
+use super::report::{FreshOptions, MigrateOptions, MigrationReport, RollbackOptions};
 use crate::seed::run_seeders;
 
 /// What an option of a command takes.
@@ -42,15 +42,11 @@ impl Parsed {
         self.values
             .get(name)
             .map(|value| {
-                value
-                    .parse::<u32>()
-                    .ok()
-                    .filter(|n| *n > 0)
-                    .ok_or_else(|| {
-                        BoxError::from(format!(
-                            "`--{name}` takes a positive whole number, not `{value}`"
-                        ))
-                    })
+                value.parse::<u32>().ok().filter(|n| *n > 0).ok_or_else(|| {
+                    BoxError::from(format!(
+                        "`--{name}` takes a positive whole number, not `{value}`"
+                    ))
+                })
             })
             .transpose()
     }
@@ -222,11 +218,7 @@ fn print_report(report: &MigrationReport, verb: &str, statements: bool, empty: &
                 println!("  {statement};");
             }
         } else {
-            println!(
-                "{verb}: {} ({} ms)",
-                run.label(),
-                run.duration.as_millis()
-            );
+            println!("{verb}: {} ({} ms)", run.label(), run.duration.as_millis());
         }
         for notice in &run.notices {
             println!("  notice: {notice}");
@@ -292,8 +284,18 @@ pub(crate) async fn refresh(ctx: AppContext, args: Vec<String>) -> Result<(), Bo
     let parsed = REFRESH.parse(&args)?;
     guard(&ctx, &REFRESH, &parsed).await?;
     let refreshed = Migrator::refresh(&ctx, parsed.number("step")?).await?;
-    print_report(&refreshed.reverted, "Rolled back", false, "Nothing to roll back.");
-    print_report(&refreshed.migrated, "Migrated", false, "Nothing to migrate.");
+    print_report(
+        &refreshed.reverted,
+        "Rolled back",
+        false,
+        "Nothing to roll back.",
+    );
+    print_report(
+        &refreshed.migrated,
+        "Migrated",
+        false,
+        "Nothing to migrate.",
+    );
     if parsed.flag("seed") {
         seed(&ctx).await?;
     }
@@ -407,7 +409,10 @@ mod tests {
             "migrate takes no arguments (got `now`); it takes --pretend, --step, --seed, --schema-path <path>, --force"
         );
         assert_eq!(message(&ROLLBACK, &["--step"]), "`--step` needs a value");
-        assert_eq!(message(&MIGRATE, &["--seed=yes"]), "`--seed` takes no value");
+        assert_eq!(
+            message(&MIGRATE, &["--seed=yes"]),
+            "`--seed` takes no value"
+        );
         let zero = ROLLBACK.parse(&args(&["--step", "0"])).unwrap();
         assert_eq!(
             zero.number("step").unwrap_err().to_string(),

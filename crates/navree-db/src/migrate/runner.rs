@@ -93,7 +93,12 @@ impl Runner {
     pub(crate) async fn of(app: &AppContext) -> Result<Runner, BoxError> {
         let db = (*app.get::<Db>().await?).clone();
         let url = app.try_get::<DbOptions>().await.map(|o| o.url.clone());
-        Ok(Runner::new(db, sets_of(app), schema_options(app).await?, url))
+        Ok(Runner::new(
+            db,
+            sets_of(app),
+            schema_options(app).await?,
+            url,
+        ))
     }
 
     /// A runner for `sets` on `db`; `url` opens SQLite's migration
@@ -169,7 +174,10 @@ impl Runner {
 
     /// Runs the pending migrations as one batch (or one batch each with
     /// `step`), after loading the schema dump into an empty database.
-    pub(crate) async fn up(&self, options: &MigrateOptions) -> Result<MigrationReport, MigrationError> {
+    pub(crate) async fn up(
+        &self,
+        options: &MigrateOptions,
+    ) -> Result<MigrationReport, MigrationError> {
         let steps = plan(&self.sets)?;
         let session = self.session().await?;
         let result = self.up_on(&session, &steps, options).await;
@@ -228,7 +236,8 @@ impl Runner {
                     order.iter().filter(|(_, b)| Some(*b) == last).collect()
                 }
             };
-            self.revert(&session, &steps, &chosen, options.pretend).await
+            self.revert(&session, &steps, &chosen, options.pretend)
+                .await
         }
         .await;
         session.close().await;
@@ -283,7 +292,10 @@ impl Runner {
     }
 
     /// Drops every table (and views and types when asked), then migrates.
-    pub(crate) async fn fresh(&self, options: &FreshOptions) -> Result<MigrationReport, MigrationError> {
+    pub(crate) async fn fresh(
+        &self,
+        options: &FreshOptions,
+    ) -> Result<MigrationReport, MigrationError> {
         plan(&self.sets)?;
         let dialect = self.dialect();
         if options.drop_types && dialect != Dialect::Postgres {
@@ -355,7 +367,10 @@ impl Runner {
         path: Option<&Path>,
     ) -> Result<Option<LoadedDump>, MigrationError> {
         let explicit = path.is_some();
-        let path = path.map_or_else(|| self.options.dump_file(session.dialect()), Path::to_path_buf);
+        let path = path.map_or_else(
+            || self.options.dump_file(session.dialect()),
+            Path::to_path_buf,
+        );
         let dump_error = |source: SchemaError| MigrationError::Dump {
             path: path.clone(),
             source: Box::new(source),
@@ -512,7 +527,12 @@ impl Runner {
     }
 }
 
-fn run_of(step: &Step<'_>, batch: i64, context: &MigrationContext, duration: Duration) -> MigrationRun {
+fn run_of(
+    step: &Step<'_>,
+    batch: i64,
+    context: &MigrationContext,
+    duration: Duration,
+) -> MigrationRun {
     MigrationRun {
         module: step.module.to_owned(),
         name: step.name().to_owned(),

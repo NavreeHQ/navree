@@ -185,7 +185,10 @@ fn make_migration_adds_it_to_the_module_set() {
 fn make_migration_guesses_the_table_from_the_name() {
     let (_dir, root) = project();
     for (migration, expected) in [
-        ("add_avatar_to_user_profiles", ".table(\"user_profiles\", |t| {"),
+        (
+            "add_avatar_to_user_profiles",
+            ".table(\"user_profiles\", |t| {",
+        ),
         ("backfill_timezones", "let _ = schema;"),
     ] {
         make_item(

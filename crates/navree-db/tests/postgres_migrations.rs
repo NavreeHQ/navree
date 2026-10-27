@@ -98,15 +98,14 @@ mod m0002_create_events {
             schema
                 .create_hypertable("events", "occurred_at", |t| {
                     t.uuid_primary();
-                    t.foreign_uuid("company_id").constrained().cascade_on_delete();
+                    t.foreign_uuid("company_id")
+                        .constrained()
+                        .cascade_on_delete();
                     t.string("kind");
                     t.timestamp_tz("occurred_at");
                     let events = t.hypertable("occurred_at");
                     events.chunk_interval("1 day").retain_for("90 days");
-                    events
-                        .compress()
-                        .segment_by(["company_id"])
-                        .after("7 days");
+                    events.compress().segment_by(["company_id"]).after("7 days");
                 })
                 .await
         }
@@ -270,7 +269,10 @@ async fn the_migrator_on_postgres() {
     let dump = std::fs::read_to_string(&path).unwrap();
     assert!(dump.contains("INSERT INTO \"navree_migrations\""), "{dump}");
     if timescale {
-        assert!(dump.contains("SELECT create_hypertable('public.events'"), "{dump}");
+        assert!(
+            dump.contains("SELECT create_hypertable('public.events'"),
+            "{dump}"
+        );
     }
 
     // A second database starts from the dump.
@@ -286,7 +288,10 @@ async fn the_migrator_on_postgres() {
     .await
     .unwrap();
     assert!(report.loaded_dump.is_some());
-    assert!(report.migrations.is_empty(), "the dump records every migration");
+    assert!(
+        report.migrations.is_empty(),
+        "the dump records every migration"
+    );
     assert_eq!(tables(&copied).await, tables(&app).await);
     assert_eq!(hypertables(&copied).await, hypertables(&app).await);
     copied.shutdown().await.unwrap();

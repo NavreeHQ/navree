@@ -142,7 +142,15 @@ pub(crate) fn time_kind_of_type_name(type_name: &str) -> Option<TimeKind> {
     if name.starts_with("timestamp") || name == "date" || name.starts_with("datetime") {
         Some(TimeKind::Temporal)
     } else if [
-        "int2", "int4", "int8", "smallint", "integer", "bigint", "int", "tinyint", "mediumint",
+        "int2",
+        "int4",
+        "int8",
+        "smallint",
+        "integer",
+        "bigint",
+        "int",
+        "tinyint",
+        "mediumint",
     ]
     .contains(&name.as_str())
     {
@@ -746,7 +754,10 @@ pub(crate) fn create_continuous_aggregate(
     let name = &aggregate.name;
     if let Some(policy) = &aggregate.refresh {
         interval_arg(&policy.schedule_interval)?;
-        for offset in [&policy.start_offset, &policy.end_offset].into_iter().flatten() {
+        for offset in [&policy.start_offset, &policy.end_offset]
+            .into_iter()
+            .flatten()
+        {
             interval_arg(offset)?;
         }
     }
@@ -985,7 +996,10 @@ fn bucket_expression(bucket: &Bucket, style: BucketStyle) -> SchemaResult<String
 }
 
 /// `set_chunk_time_interval(...)` for an existing hypertable.
-pub(crate) fn set_chunk_interval_statement(table_name: &str, interval: &str) -> SchemaResult<String> {
+pub(crate) fn set_chunk_interval_statement(
+    table_name: &str,
+    interval: &str,
+) -> SchemaResult<String> {
     Ok(format!(
         "SELECT set_chunk_time_interval({}, {})",
         regclass(table_name),
@@ -1034,9 +1048,16 @@ mod tests {
     #[test]
     fn converting_widens_the_primary_key_then_creates_the_hypertable() {
         let mut audit = Hypertable::on("created_at");
-        audit.chunk_interval("1 day").partition_by("workspace_id", 4);
-        let compiled = convert(timescaledb(), SchemaOptions::default(), &audit, &audit_state())
-            .unwrap();
+        audit
+            .chunk_interval("1 day")
+            .partition_by("workspace_id", 4);
+        let compiled = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &audit,
+            &audit_state(),
+        )
+        .unwrap();
         assert_eq!(
             compiled.statements,
             [
@@ -1047,7 +1068,9 @@ mod tests {
         );
         assert_eq!(
             compiled.notices,
-            ["the primary key of `audit_logs` is now (id, created_at, workspace_id), not (id): a hypertable's unique keys must include its partitioning columns"]
+            [
+                "the primary key of `audit_logs` is now (id, created_at, workspace_id), not (id): a hypertable's unique keys must include its partitioning columns"
+            ]
         );
     }
 
@@ -1055,7 +1078,10 @@ mod tests {
     fn a_table_with_rows_needs_migrate_data() {
         let state = KeyState {
             has_rows: true,
-            primary: Some(("audit_logs_pkey".into(), vec!["id".into(), "created_at".into()])),
+            primary: Some((
+                "audit_logs_pkey".into(),
+                vec!["id".into(), "created_at".into()],
+            )),
             ..audit_state()
         };
         let error = convert(
@@ -1074,17 +1100,27 @@ mod tests {
         let compiled = convert(timescaledb(), SchemaOptions::default(), &audit, &state).unwrap();
         assert_eq!(
             compiled.statements,
-            ["SELECT create_hypertable('audit_logs', by_range('created_at'), if_not_exists => TRUE, migrate_data => TRUE)"]
+            [
+                "SELECT create_hypertable('audit_logs', by_range('created_at'), if_not_exists => TRUE, migrate_data => TRUE)"
+            ]
         );
-        assert!(compiled.notices.is_empty(), "the key already includes the time");
+        assert!(
+            compiled.notices.is_empty(),
+            "the key already includes the time"
+        );
     }
 
     #[test]
     fn keys_that_cannot_change_stop_the_conversion() {
         let mut audit = Hypertable::on("created_at");
         audit.keys(KeyStrategy::Reject);
-        let rejected = convert(timescaledb(), SchemaOptions::default(), &audit, &audit_state())
-            .unwrap_err();
+        let rejected = convert(
+            timescaledb(),
+            SchemaOptions::default(),
+            &audit,
+            &audit_state(),
+        )
+        .unwrap_err();
         assert_eq!(
             rejected.to_string(),
             "cannot make `audit_logs` a hypertable: its primary key `audit_logs_pkey` (id) lacks created_at: rebuild it as (id, created_at) first (`ALTER TABLE ... DROP CONSTRAINT audit_logs_pkey, ADD PRIMARY KEY (...)`), or let the builder do it (`hypertable_keys = \"extend\"`)"
@@ -1092,7 +1128,10 @@ mod tests {
 
         let referenced = KeyState {
             referenced_by: vec![
-                ("audit_notes_audit_log_id_foreign".into(), "audit_notes".into()),
+                (
+                    "audit_notes_audit_log_id_foreign".into(),
+                    "audit_notes".into(),
+                ),
                 ("exports_audit_log_id_foreign".into(), "exports".into()),
             ],
             ..audit_state()
@@ -1110,7 +1149,10 @@ mod tests {
         );
 
         let unique = KeyState {
-            uniques: vec![("audit_logs_request_id_unique".into(), vec!["request_id".into()])],
+            uniques: vec![(
+                "audit_logs_request_id_unique".into(),
+                vec!["request_id".into()],
+            )],
             ..audit_state()
         };
         let error = convert(
@@ -1132,17 +1174,25 @@ mod tests {
     fn databases_without_timescaledb_get_the_missing_indexes() {
         let mut audit = Hypertable::on("created_at");
         audit.partition_by("workspace_id", 4).retain_for("1 year");
-        let compiled =
-            convert(Target::mysql((8, 4)), SchemaOptions::default(), &audit, &audit_state())
-                .unwrap();
+        let compiled = convert(
+            Target::mysql((8, 4)),
+            SchemaOptions::default(),
+            &audit,
+            &audit_state(),
+        )
+        .unwrap();
         assert_eq!(
             compiled.statements,
-            ["ALTER TABLE `audit_logs` ADD INDEX `audit_logs_workspace_id_created_at_index`(`workspace_id`, `created_at` DESC)"],
+            [
+                "ALTER TABLE `audit_logs` ADD INDEX `audit_logs_workspace_id_created_at_index`(`workspace_id`, `created_at` DESC)"
+            ],
             "the primary key stays; the time index exists already"
         );
         assert_eq!(
             compiled.notices,
-            ["MySQL does not support TimescaleDB: `audit_logs` is a regular table with an index on `created_at`; its retention (1 year) policy is skipped"]
+            [
+                "MySQL does not support TimescaleDB: `audit_logs` is a regular table with an index on `created_at`; its retention (1 year) policy is skipped"
+            ]
         );
     }
 
@@ -1176,7 +1226,10 @@ mod tests {
     fn installs_the_extension_first_when_it_can() {
         let target = Target::postgres(17).with_timescaledb_installable((2, 17));
         let state = KeyState {
-            primary: Some(("audit_logs_pkey".into(), vec!["id".into(), "created_at".into()])),
+            primary: Some((
+                "audit_logs_pkey".into(),
+                vec!["id".into(), "created_at".into()],
+            )),
             ..audit_state()
         };
         let compiled = convert(
@@ -1193,9 +1246,13 @@ mod tests {
     #[test]
     fn raw_aggregates_are_scanned_for_time_bucket_calls() {
         assert!(calls_time_bucket("SELECT time_bucket('1 day', at) FROM t"));
-        assert!(calls_time_bucket("SELECT TIME_BUCKET_GAPFILL ('1 day', at) FROM t"));
+        assert!(calls_time_bucket(
+            "SELECT TIME_BUCKET_GAPFILL ('1 day', at) FROM t"
+        ));
         assert!(!calls_time_bucket("SELECT 'time_bucket(' AS label FROM t"));
-        assert!(!calls_time_bucket("SELECT date_trunc('day', at) -- time_bucket(\n FROM t"));
+        assert!(!calls_time_bucket(
+            "SELECT date_trunc('day', at) -- time_bucket(\n FROM t"
+        ));
     }
 
     #[test]

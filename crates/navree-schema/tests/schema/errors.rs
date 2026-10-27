@@ -95,7 +95,10 @@ async fn conflicting_definitions() {
         .await,
         "invalid definition of `things`: column `ratio` has a non-finite default (NaN); use a raw expression"
     );
-    assert_eq!(create_error(|_| {}).await, "invalid definition of `things`: a table needs at least one column");
+    assert_eq!(
+        create_error(|_| {}).await,
+        "invalid definition of `things`: a table needs at least one column"
+    );
 }
 
 #[tokio::test]

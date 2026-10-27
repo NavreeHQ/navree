@@ -57,7 +57,10 @@ async fn chunks_partitions_and_policies() {
 #[tokio::test]
 async fn older_timescaledb_uses_the_positional_signature() {
     let sql = sql_for!(
-        vec![("timescaledb 2.11", Target::postgres(15).with_timescaledb((2, 11)))],
+        [(
+            "timescaledb 2.11",
+            Target::postgres(15).with_timescaledb((2, 11))
+        )],
         |schema| {
             schema
                 .create("readings", |t| {
@@ -78,7 +81,10 @@ async fn older_timescaledb_uses_the_positional_signature() {
 #[tokio::test]
 async fn integer_time_columns_take_integer_intervals() {
     let sql = sql_for!(
-        vec![("timescaledb", timescaledb()), ("sqlite", Target::sqlite((3, 46)))],
+        [
+            ("timescaledb", timescaledb()),
+            ("sqlite", Target::sqlite((3, 46)))
+        ],
         |schema| {
             schema
                 .create("ticks", |t| {
@@ -238,7 +244,7 @@ async fn time_columns_must_exist_and_hold_time() {
 #[tokio::test]
 async fn the_extension_is_installed_when_allowed() {
     let installable = Target::postgres(17).with_timescaledb_installable((2, 17));
-    let sql = sql_for!(vec![("installable", installable.clone())], |schema| {
+    let sql = sql_for!([("installable", installable.clone())], |schema| {
         schema
             .create_hypertable("metrics", "at", |t| {
                 t.timestamp_tz("at");
@@ -348,8 +354,13 @@ async fn continuous_aggregates() {
 
 #[tokio::test]
 async fn continuous_aggregates_from_sql() {
-    let sql = sql_for!(vec![("timescaledb", timescaledb()), ("postgres", Target::postgres(17))], |schema| {
-        schema
+    let sql = sql_for!(
+        [
+            ("timescaledb", timescaledb()),
+            ("postgres", Target::postgres(17))
+        ],
+        |schema| {
+            schema
             .create_continuous_aggregate(
                 ContinuousAggregate::new(
                     "readings_hourly",
@@ -359,7 +370,8 @@ async fn continuous_aggregates_from_sql() {
                 .refresh(RefreshPolicy::every("30 minutes").end_offset("1 hour")),
             )
             .await
-    });
+        }
+    );
     insta::assert_snapshot!(sql);
 }
 
@@ -426,7 +438,7 @@ async fn converting_a_table_needs_the_database() {
 
 #[tokio::test]
 async fn a_configured_hypertable_can_be_passed_to_create_hypertable() {
-    let sql = sql_for!(vec![("timescaledb", timescaledb())], |schema| {
+    let sql = sql_for!([("timescaledb", timescaledb())], |schema| {
         schema
             .create_hypertable(
                 "events",

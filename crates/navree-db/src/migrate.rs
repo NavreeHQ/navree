@@ -215,7 +215,10 @@ impl Migrator {
     /// Applies every pending migration as `options` say: pretending,
     /// stepping, after loading the schema dump into an empty database
     /// (`navree migrate`).
-    pub async fn run(ctx: &AppContext, options: &MigrateOptions) -> Result<MigrationReport, BoxError> {
+    pub async fn run(
+        ctx: &AppContext,
+        options: &MigrateOptions,
+    ) -> Result<MigrationReport, BoxError> {
         Ok(Runner::of(ctx).await?.up(options).await?)
     }
 
