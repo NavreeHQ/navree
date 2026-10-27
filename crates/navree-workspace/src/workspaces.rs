@@ -289,13 +289,11 @@ impl Workspaces {
             .into_iter()
             .map(|(id, zone, country, organization)| {
                 match organization.and_then(|org| organizations.get(&org)) {
-                    Some((org_zone, org_country)) if unset(&zone) && unset(&country) => {
-                        ZoneOwner {
-                            id,
-                            zone: org_zone.clone(),
-                            country: org_country.clone(),
-                        }
-                    }
+                    Some((org_zone, org_country)) if unset(&zone) && unset(&country) => ZoneOwner {
+                        id,
+                        zone: org_zone.clone(),
+                        country: org_country.clone(),
+                    },
                     _ => ZoneOwner { id, zone, country },
                 }
             })
