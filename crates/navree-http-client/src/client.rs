@@ -274,7 +274,8 @@ impl HttpClient {
         };
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_millis() as u64;
-        self.report(&request, &url, &outcome, elapsed, attempts, span_id);
+        let status = outcome.as_ref().map(Response::status);
+        self.report(&request, &url, status, elapsed, attempts, span_id);
         match &outcome {
             Ok(response) => tracing::debug!(
                 method = %request.method,
@@ -296,14 +297,13 @@ impl HttpClient {
         outcome
     }
 
-<<<<<<< HEAD
     /// Emits an [`HttpClientRequest`] to this client's telemetry, or to the
     /// current context's when the client has none.
     fn report(
         &self,
         request: &PreparedRequest,
         url: &str,
-        outcome: &Result<Response, HttpClientError>,
+        outcome: Result<StatusCode, &HttpClientError>,
         duration: Duration,
         attempts: u32,
         span_id: Option<SpanId>,
@@ -317,7 +317,7 @@ impl HttpClient {
         };
         telemetry.emit_with(EventKind::HttpClientRequest, || {
             let (status, error) = match outcome {
-                Ok(response) => (Some(response.status().as_u16()), None),
+                Ok(status) => (Some(status.as_u16()), None),
                 Err(error) => (None, Some(error.to_string())),
             };
             TelemetryEvent::HttpClientRequest(HttpClientRequest {
@@ -330,15 +330,17 @@ impl HttpClient {
                 span_id,
             })
         });
-=======
+    }
+
     /// Sends `request` once and returns at its response headers; `timeout`
     /// (default: the options' attempt timeout) covers the wait for them.
     pub(crate) async fn send_streaming(
         &self,
-        request: PreparedRequest,
+        mut request: PreparedRequest,
         timeout: Option<Duration>,
     ) -> Result<StreamingResponse, HttpClientError> {
         self.inner.guard.check_url(&request.url)?;
+        let span_id = inject_trace(&mut request.headers);
         let options = &self.inner.options;
         let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
         let url = display_url(&request.url);
@@ -347,7 +349,7 @@ impl HttpClient {
         let method = request.method.clone();
         let outcome = match &self.inner.transport {
             Transport::Real(client) => {
-                tokio::time::timeout(timeout, open_real(client, request, limit))
+                tokio::time::timeout(timeout, open_real(client, request.clone(), limit))
                     .await
                     .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
             }
@@ -366,7 +368,10 @@ impl HttpClient {
                     )
                 }),
         };
-        let elapsed_ms = started.elapsed().as_millis() as u64;
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        let status = outcome.as_ref().map(StreamingResponse::status);
+        self.report(&request, &url, status, elapsed, 1, span_id);
         match &outcome {
             Ok(response) => tracing::debug!(
                 method = %method,
@@ -384,7 +389,6 @@ impl HttpClient {
             ),
         }
         outcome
->>>>>>> wip/ai
     }
 
     /// Sends `request` once.

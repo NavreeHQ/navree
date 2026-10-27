@@ -1,6 +1,7 @@
-//! Validation outside a request: [`validate_json`] and [`validate`], with the
-//! same messages as the extractors (for input that comes from elsewhere,
-//! such as a language model's tool arguments).
+//! Validation outside a request: [`validate_json`], with the same messages
+//! as the extractors (for input that comes from elsewhere, such as a
+//! language model's tool arguments). [`validate`](crate::validate) checks a
+//! value that is already deserialized.
 
 use garde::Validate;
 use serde::de::DeserializeOwned;
@@ -61,15 +62,6 @@ where
         Ok(()) => Ok(value),
         Err(failures) => Err(failure::render(&failures, messages, Some(input), ROOT)),
     }
-}
-
-/// Runs `value`'s garde rules, reporting failures as the extractors do,
-/// rendered with `messages`.
-pub fn validate<T>(value: &T, messages: &Messages) -> Result<(), ValidationErrors>
-where
-    T: Validate<Context = ()>,
-{
-    check(value).map_err(|failures| failure::render(&failures, messages, None, ROOT))
 }
 
 #[cfg(test)]
@@ -162,13 +154,13 @@ mod tests {
             kind: Kind::Note,
             count: 1,
         };
-        let errors = validate(&args, &Messages::default()).unwrap_err();
+        let errors = crate::validate(&args, None, &Messages::default(), ROOT).unwrap_err();
         assert_eq!(
             errors.get("subject").unwrap(),
             ["subject must be shorter than or equal to 5 characters"]
         );
         let messages = Messages::default().with_attribute("subject", "the subject");
-        let errors = validate(&args, &messages).unwrap_err();
+        let errors = crate::validate(&args, None, &messages, ROOT).unwrap_err();
         assert!(errors.get("subject").unwrap()[0].starts_with("the subject"));
     }
 }
