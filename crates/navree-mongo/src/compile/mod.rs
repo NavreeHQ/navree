@@ -72,11 +72,43 @@ pub fn read(query: &QueryIr) -> Result<MongoCommand, OrmError> {
 
 /// The command computing `aggregate` over `query`, in a field named
 /// `aggregate` (a `countDocuments` for a plain count).
+///
+/// ```
+/// use navree_mongo::compile;
+/// use navree_orm::Expr;
+/// use navree_orm::ir::{Aggregate, AggregateFunction, QueryIr};
+///
+/// let deals = QueryIr::new("deals");
+/// let count = Aggregate { function: AggregateFunction::Count, arg: None, distinct: false };
+/// assert_eq!(
+///     compile::aggregate(&deals, &count).unwrap().to_string(),
+///     "db.deals.countDocuments({})"
+/// );
+/// let total = Aggregate {
+///     function: AggregateFunction::Sum,
+///     arg: Some(Expr::col("amount")),
+///     distinct: false,
+/// };
+/// assert_eq!(
+///     compile::aggregate(&deals, &total).unwrap().to_string(),
+///     r#"db.deals.aggregate([{"$group": {"_id": null, "aggregate": {"$sum": "$amount"}}}, {"$project": {"_id": 0, "aggregate": "$aggregate"}}])"#
+/// );
+/// ```
 pub fn aggregate(query: &QueryIr, aggregate: &Aggregate) -> Result<MongoCommand, OrmError> {
     read::aggregate(query, aggregate)
 }
 
-/// The command telling whether `query` has a document.
+/// The command telling whether `query` has a document: one `_id`, at most.
+///
+/// ```
+/// use navree_mongo::compile;
+/// use navree_orm::ir::QueryIr;
+///
+/// assert_eq!(
+///     compile::exists(&QueryIr::new("deals")).unwrap().to_string(),
+///     r#"db.deals.find({}, {"_id": 1}).limit(1)"#
+/// );
+/// ```
 pub fn exists(query: &QueryIr) -> Result<MongoCommand, OrmError> {
     read::exists(query)
 }

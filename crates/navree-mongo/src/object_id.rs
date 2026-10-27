@@ -96,6 +96,13 @@ impl ObjectId {
 }
 
 /// Text that is not an ObjectId.
+///
+/// ```
+/// use navree_mongo::ObjectId;
+///
+/// let error = ObjectId::parse("65f1a2b3").unwrap_err();
+/// assert_eq!(error.to_string(), "`65f1a2b3` is not an ObjectId (24 hexadecimal digits)");
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("`{0}` is not an ObjectId (24 hexadecimal digits)")]
 pub struct ObjectIdError(String);

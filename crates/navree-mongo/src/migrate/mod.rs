@@ -68,6 +68,35 @@ pub trait MongoMigration: Send + Sync + 'static {
 }
 
 /// A migration with its name (what `mongo_migration!` builds).
+///
+/// ```
+/// use navree_mongo::{
+///     MongoMigration, MongoMigrationSet, MongoResult, MongoSchema, NamedMongoMigration,
+/// };
+///
+/// struct CreateEvents;
+///
+/// impl MongoMigration for CreateEvents {
+///     async fn up(&self, schema: &MongoSchema) -> MongoResult {
+///         schema
+///             .create("events", |t| {
+///                 t.object_id_primary();
+///                 t.string("kind");
+///             })
+///             .await
+///     }
+///
+///     async fn down(&self, schema: &MongoSchema) -> MongoResult {
+///         schema.drop_if_exists("events").await
+///     }
+/// }
+///
+/// let set = MongoMigrationSet::new("events").migration(NamedMongoMigration::new(
+///     "m20261027_000001_create_events",
+///     CreateEvents,
+/// ));
+/// assert_eq!(set.names(), ["m20261027_000001_create_events"]);
+/// ```
 pub struct NamedMongoMigration<M> {
     name: String,
     migration: M,
@@ -205,6 +234,19 @@ pub(crate) fn sets_of(ctx: &AppContext) -> Vec<Arc<MongoMigrationSet>> {
 }
 
 /// How to migrate (`mongo:migrate`).
+///
+/// ```no_run
+/// # async fn demo(migrator: navree_mongo::MongoMigrator) -> navree_mongo::MongoResult {
+/// use navree_mongo::MongoMigrateOptions;
+///
+/// let planned = migrator
+///     .up(&MongoMigrateOptions { pretend: true, ..MongoMigrateOptions::default() })
+///     .await?;
+/// for run in &planned.migrations {
+///     println!("{}:\n  {}", run.label(), run.statements.join("\n  "));
+/// }
+/// # Ok(()) }
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MongoMigrateOptions {
     /// Record the commands instead of running them.
@@ -214,6 +256,17 @@ pub struct MongoMigrateOptions {
 }
 
 /// What to roll back (`mongo:migrate:rollback`).
+///
+/// ```no_run
+/// # async fn demo(migrator: navree_mongo::MongoMigrator) -> navree_mongo::MongoResult {
+/// use navree_mongo::MongoRollbackOptions;
+///
+/// let undone = migrator
+///     .rollback(&MongoRollbackOptions { step: Some(2), ..MongoRollbackOptions::default() })
+///     .await?;
+/// println!("rolled back {}", undone.labels().join(", "));
+/// # Ok(()) }
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MongoRollbackOptions {
     /// The last `step` migrations, across batches.
@@ -475,7 +528,7 @@ impl MongoMigrator {
             .filter_map(|step| applied.get(&step.label()).map(|a| (step, a.batch)))
             .collect();
         done.reverse();
-        done.sort_by(|a, b| b.1.cmp(&a.1));
+        done.sort_by_key(|(_, batch)| std::cmp::Reverse(*batch));
         let chosen: Vec<&Step<'_>> = match (options.step, options.batch) {
             (Some(step), _) => done
                 .iter()
@@ -507,7 +560,7 @@ impl MongoMigrator {
             .filter_map(|step| applied.get(&step.label()).map(|a| (step, a.batch)))
             .collect();
         done.reverse();
-        done.sort_by(|a, b| b.1.cmp(&a.1));
+        done.sort_by_key(|(_, batch)| std::cmp::Reverse(*batch));
         self.revert(done.into_iter().map(|(step, _)| step).collect(), pretend)
             .await
     }

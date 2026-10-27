@@ -212,6 +212,20 @@ impl HealthCheck for MongoHealth {
 
 /// Registers MongoDB migrations and change observers on a
 /// [`ModuleBuilder`].
+///
+/// ```
+/// use navree_kernel::{Module, ModuleBuilder};
+/// use navree_mongo::{ModuleBuilderMongoExt, MongoMigrationSet};
+///
+/// struct Billing;
+///
+/// impl Module for Billing {
+///     fn register(&self, m: &mut ModuleBuilder) {
+///         // The module's migrations run after the users module's.
+///         m.mongo_migrations(MongoMigrationSet::new("billing").after(["users"]));
+///     }
+/// }
+/// ```
 pub trait ModuleBuilderMongoExt {
     /// Contributes the module's MongoDB migrations (run by
     /// `mongo:migrate`).

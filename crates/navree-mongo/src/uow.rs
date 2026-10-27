@@ -21,6 +21,41 @@ use crate::error::{DRIVER, MongoError, MongoResult};
 /// [`ModuleBuilderMongoExt::mongo_change_observer`](crate::ModuleBuilderMongoExt::mongo_change_observer).
 /// A unit of work joined to navree-db's ([`MongoDb::begin_in`]) gives its
 /// changes to navree-db's `ChangeObserver`s instead.
+///
+/// ```
+/// use navree_db::ChangeEvent;
+/// use navree_kernel::BoxFuture;
+/// use navree_mongo::{MongoChangeObserver, MongoResult, MongoUow};
+/// use navree_orm::{Value, table};
+///
+/// /// An audit document per change, written in the same transaction.
+/// struct AuditTrail;
+///
+/// impl MongoChangeObserver for AuditTrail {
+///     fn observe<'a>(
+///         &'a self,
+///         uow: &'a MongoUow,
+///         changes: &'a [ChangeEvent],
+///     ) -> BoxFuture<'a, MongoResult> {
+///         Box::pin(async move {
+///             for change in changes {
+///                 let actor = uow.actor().map(|actor| actor.to_string());
+///                 table("audit")
+///                     .insert(
+///                         uow,
+///                         [[
+///                             ("entity", Value::from(change.entity.clone())),
+///                             ("op", Value::from(change.op.as_str())),
+///                             ("actor", Value::from(actor)),
+///                         ]],
+///                     )
+///                     .await?;
+///             }
+///             Ok(())
+///         })
+///     }
+/// }
+/// ```
 pub trait MongoChangeObserver: Send + Sync + 'static {
     /// Called once per commit with every recorded change, in order. Write
     /// through `uow` to write in the transaction.

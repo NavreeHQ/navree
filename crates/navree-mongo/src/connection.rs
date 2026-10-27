@@ -442,7 +442,20 @@ impl std::fmt::Debug for MongoSession {
 
 /// An executor on MongoDB ([`MongoDb`], [`MongoSession`], [`MongoUow`]):
 /// native commands ([`pipeline`](crate::MongoQuery::pipeline) queries,
-/// `$lookup` loads) run on its driver, in its session when it has one.
+/// bulk writes, cursor streams) run on its driver, in its session when it
+/// has one.
+///
+/// ```no_run
+/// use navree_mongo::{MongoExecutor, MongoResult};
+///
+/// /// A collection's statistics, wherever `exec` runs: on the connection,
+/// /// or in a unit of work's session.
+/// async fn stats(exec: &impl MongoExecutor) -> MongoResult<bson::Document> {
+///     exec.mongo_driver()?
+///         .run_command(bson::doc! { "collStats": "deals" })
+///         .await
+/// }
+/// ```
 pub trait MongoExecutor: Executor {
     /// The driver the next native command runs on.
     fn mongo_driver(&self) -> Result<Arc<MongoDriver>, OrmError>;

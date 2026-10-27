@@ -77,24 +77,26 @@ async fn options_come_from_the_database_mongodb_section() {
 
 #[tokio::test]
 async fn invalid_options_fail_the_boot() {
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .config("database.mongodb.url", "postgres://localhost/crm")
         .module(MongoModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("an app with a PostgreSQL URL for MongoDB booted");
+    };
     let message = error.to_string();
     assert!(message.contains("url"), "{message}");
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .module(MongoModule::for_root(MongoOptions {
             read_preference: Some("anywhere".into()),
             ..unreachable_options()
         }))
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("an app with an unknown read preference booted");
+    };
     assert!(
         error.to_string().contains("invalid MongoDB options"),
         "{error}"

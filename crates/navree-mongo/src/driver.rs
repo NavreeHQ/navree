@@ -80,6 +80,18 @@ impl SessionState {
 /// - Every command is reported to telemetry as a `QueryExecuted` event
 ///   carrying the command's shape, never its values.
 ///
+/// It also runs what the builders do not say, in the executor's session:
+///
+/// ```no_run
+/// # use navree_mongo::{MongoDb, MongoResult};
+/// # async fn demo(mongo: MongoDb) -> MongoResult {
+/// let three = mongo
+///     .driver()
+///     .pipeline("deals", vec![bson::doc! { "$sample": { "size": 3 } }])
+///     .await?;
+/// # let _ = three; Ok(()) }
+/// ```
+///
 /// [`time_precision`]: DocumentDriver::time_precision
 pub struct MongoDriver {
     database: Database,
@@ -192,7 +204,7 @@ impl MongoDriver {
                     Some(state) => {
                         let mut session = state.session.lock().await;
                         let mut cursor = action.session(&mut *session).await?;
-                        cursor.stream(&mut *session).try_collect().await
+                        cursor.stream(&mut session).try_collect().await
                     }
                 }
             },
@@ -217,7 +229,7 @@ impl MongoDriver {
                     Some(state) => {
                         let mut session = state.session.lock().await;
                         let mut cursor = action.session(&mut *session).await?;
-                        cursor.stream(&mut *session).try_collect().await
+                        cursor.stream(&mut session).try_collect().await
                     }
                 }
             },
