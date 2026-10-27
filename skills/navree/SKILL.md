@@ -136,6 +136,7 @@ navree list                                 # every command of the app
 | Connecting a coding agent to the app (`navree mcp`, Navigator's routes, module graph, schema, read-only SQL, logs and docs tools), installing the skills (`navree skills:install`) | `navree-navigator` |
 | Testing a user journey in a real browser: sign-in forms, the front end and its BFF, drag and drop, phone layouts, failure screenshots | `navree-browser-testing` |
 | Measuring or lowering per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits | `navree-performance` |
+| PDF or Word documents: certificates, invoices, reports, exports; Arabic or other right-to-left documents; merging or stamping PDFs | `navree-documents` |
 
 ## Common mistakes
 

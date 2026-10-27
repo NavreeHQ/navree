@@ -51,6 +51,7 @@
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
+//! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from Typst or HTML templates, DOCX, merge and stamps |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
@@ -66,23 +67,24 @@
 //! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports, `i18n`,
-//! `dock`, `harbor`, `navigator`, `browser`, `otel`), and the `storage-s3`
-//! driver but not `storage-gcs` or `storage-azure`. A feature also turns on
-//! the features of the crates its crate builds on (`auth` turns on
-//! `access`, `db`, `http`, ...). SQLite is built in; the `postgres` feature
-//! adds navree-db's PostgreSQL driver and the `mysql` feature its MySQL and
-//! MariaDB driver, and the opt-in `otel` feature adds navree-observe's OTLP
-//! span exporter. `validation-phone` and `validation-html` (both in `full`)
-//! add navree-validation's `Phone` and `SafeHtml`. `search-tantivy` adds
-//! search's embedded Tantivy engine. `axum` is re-exported with `http`.
-//! `dock` is a development tool (`navree dock`), for tools and tests that
-//! read `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has
-//! Harbor built in, and an app turns it on only to read `harbor.toml` or
-//! drive deploys from its own code. `navigator` is the library behind
-//! `navree mcp` and `navree skills:install`, for tools and tests. `browser`
-//! is for tests: turn it on in `[dev-dependencies]`.
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`,
+//! `search`, `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports,
+//! `i18n`, `dock`, `harbor`, `navigator`, `browser`, `otel`), and the
+//! `storage-s3` driver but not `storage-gcs` or `storage-azure`. A feature
+//! also turns on the features of the crates its crate builds on (`auth`
+//! turns on `access`, `db`, `http`, ...). SQLite is built in; the `postgres`
+//! feature adds navree-db's PostgreSQL driver and the `mysql` feature its
+//! MySQL and MariaDB driver, and the opt-in `otel` feature adds
+//! navree-observe's OTLP span exporter. `validation-phone` and
+//! `validation-html` (both in `full`) add navree-validation's `Phone` and
+//! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.
+//! `axum` is re-exported with `http`. `dock` is a development tool
+//! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
+//! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
+//! on only to read `harbor.toml` or drive deploys from its own code.
+//! `navigator` is the library behind `navree mcp` and `navree skills:install`,
+//! for tools and tests. `browser` is for tests: turn it on in
+//! `[dev-dependencies]`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -233,6 +235,8 @@ pub use navree_sso as sso;
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
+#[cfg(feature = "documents")]
+pub use navree_documents as documents;
 #[cfg(feature = "grpc")]
 pub use navree_grpc as grpc;
 #[cfg(feature = "oauth")]
