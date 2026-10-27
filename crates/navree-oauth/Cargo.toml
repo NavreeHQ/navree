@@ -14,8 +14,6 @@ workspace = true
 axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
-# Ed25519 (EdDSA) ID token signatures, in pure Rust.
-ed25519-dalek = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 moka = { workspace = true }
@@ -23,6 +21,7 @@ navree-access = { workspace = true }
 navree-auth = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# Token digests, and `jose`: Ed25519 (EdDSA) ID tokens and the JWKS.
 navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
@@ -47,4 +46,7 @@ uuid = { workspace = true }
 [dev-dependencies]
 http-body-util = { workspace = true }
 navree-api = { workspace = true }
+# ID token signatures are checked with `ring` directly, apart from the code
+# under test.
+ring = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

@@ -13,7 +13,7 @@
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
 //! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
-//! | `crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, app key |
+//! | `crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, app key; `jose`: JWS and JWK |
 //! | `events` | navree-events | `events` | `EventsModule`: events and (queued) listeners |
 //! | `view` | navree-view | `view` | `ViewModule`: minijinja templates |
 //! | `cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |

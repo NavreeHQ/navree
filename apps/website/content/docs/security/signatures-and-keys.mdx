@@ -1,0 +1,336 @@
+---
+title: "Signatures and keys"
+description: "JSON Web Signatures with HS256, EdDSA, ES256 and RS256, JSON Web Keys and key sets, PKCS#8 keys such as Apple's `.p8` files, and key generation, in `navree::crypto::jose`."
+---
+
+`navree::crypto::jose` signs and verifies JSON Web Signatures (JWS, RFC 7515) and reads and publishes JSON Web Keys (JWK, RFC 7517). Reach for it when a token crosses the boundary of your app:
+
+- **verify** tokens that another service signs, such as an identity provider's ID tokens or a push service's OIDC token, against the keys it publishes;
+- **sign** tokens that another service verifies, such as Apple's client secret, a service account's assertion or your own ID tokens;
+- **publish** your public keys as a JSON Web Key Set, so others can verify what you sign.
+
+Navree's own packages are built on it: [social sign-in](/docs/packages/social-sign-in/) verifies ID tokens and signs Apple's client secret with it, and the [OAuth server](/docs/packages/oauth-server/) signs its EdDSA ID tokens and serves `/oauth/jwks` with it. The access tokens of [authentication](/docs/security/authentication/) are a separate thing: HS256 tokens that only your app reads.
+
+Every signature runs on `ring`, which rustls already brings into your app, so the module adds no cryptography crate to your dependency tree.
+
+## Setting up
+
+<Badge feature="crypto" /> The module is part of `navree-crypto`, behind the `crypto` feature of the `navree` facade (in the default `full` feature). It is a set of types, not a Navree module: there is nothing to register, and nothing runs until you call it.
+
+```rust
+use navree::crypto::jose::{Algorithm, Header, JwkSet, Jws, SigningKey, VerifyingKey};
+```
+
+| Algorithm | Key | Signs | Verifies |
+|---|---|---|---|
+| `HS256`, `HS384`, `HS512` | A shared secret of at least 32, 48 or 64 bytes | Yes | Yes |
+| `EdDSA` | Ed25519 | Yes | Yes |
+| `ES256`, `ES384` | P-256, P-384 | Yes | Yes |
+| `RS256`, `RS384`, `RS512` | RSA, 2048 to 8192 bits | Yes, with a key you load | Yes |
+| `PS256`, `PS384`, `PS512` | RSA, 2048 to 8192 bits | Yes, with a key you load | Yes |
+
+A token whose header names any other algorithm, `none` included, doesn't even parse.
+
+## Signing a token
+
+Load a `SigningKey`, then sign. This function makes the short-lived assertion a partner API asks for, signed with the P-256 key the partner registered for you:
+
+```rust title="src/modules/partners/assertion.rs"
+use navree::crypto::jose::{JoseError, SigningKey};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct Assertion<'a> {
+    iss: &'a str,
+    aud: &'a str,
+    iat: i64,
+    exp: i64,
+}
+
+/// The signed assertion the partner API expects, valid for five minutes.
+pub fn partner_assertion(pem: &str, key_id: &str, now: i64) -> Result<String, JoseError> {
+    let key = SigningKey::from_pem(pem)?.with_kid(key_id);
+    key.sign_jwt(&Assertion {
+        iss: "acme",
+        aud: "https://api.partner.example",
+        iat: now,
+        exp: now + 300,
+    })
+}
+```
+
+`sign_jwt` serializes the claims as JSON and signs them with the header `{"alg":"ES256","kid":"<key_id>","typ":"JWT"}`: the algorithm comes from the key, the key id from `with_kid`. The result is the compact form, `header.payload.signature`, each part base64url without padding.
+
+When the other side wants a different header, build it and use `sign_json`:
+
+```rust
+// Sign in with Apple wants `{"alg":"ES256","kid":"<key id>"}`, no `typ`.
+let token = key.sign_json(&key.header(), &claims)?;
+
+// Extra header parameters.
+let header = key.header().with_typ("JWT").with_param("x5t", thumbprint);
+let token = key.sign_json(&header, &claims)?;
+```
+
+| Method | |
+|---|---|
+| `sign_jwt(&claims)` | Claims as JSON, header `{alg, kid, typ: "JWT"}` |
+| `sign_json(&header, &claims)` | Claims as JSON, your header |
+| `sign_jws(&header, &[u8])` | Any payload bytes, your header |
+| `sign(&[u8])` | The raw signature of a message, for protocols that aren't JWS |
+| `header()` | `{alg, kid}` of this key, to build on |
+
+The header's `alg` must be the key's: signing with a mismatched header fails with `JoseError::NoKey`. ECDSA signatures are randomized, so signing the same claims twice gives two different tokens; HMAC, Ed25519 and RSASSA-PKCS1-v1_5 signatures are deterministic.
+
+## Keys
+
+### Loading private keys
+
+`SigningKey::from_pem` reads the key formats that providers hand out and tools write:
+
+| PEM label | Format | Keys |
+|---|---|---|
+| `PRIVATE KEY` | PKCS#8 | Ed25519 (v1 or v2), P-256, P-384, RSA |
+| `RSA PRIVATE KEY` | PKCS#1 | RSA |
+| `EC PRIVATE KEY` | SEC 1 | P-256, P-384 |
+
+The algorithm follows from the key: `EdDSA` for Ed25519, `ES256` for P-256, `ES384` for P-384 and `RS256` for RSA. An Apple `.p8` file is a PKCS#8 P-256 key and loads as it is.
+
+Keys usually live in the environment. A PEM key pasted into one variable with literal `\n` sequences works, and so does the base64 body without its `-----BEGIN` and `-----END` lines:
+
+```env title=".env"
+APP_PARTNER__PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg...\n-----END PRIVATE KEY-----"
+```
+
+Encrypted PEM keys are refused: decrypt them before you deploy. Errors are `JoseError::InvalidKey` with a reason, and never quote the key.
+
+The other constructors:
+
+| Constructor | |
+|---|---|
+| `SigningKey::from_pkcs8_der(&[u8])` | A PKCS#8 document as DER |
+| `SigningKey::from_jwk(&jwk)` | A private JWK: `oct` (`k`), `OKP` Ed25519 (`d`, `x`), `EC` (`d`, `x`, `y`) or `RSA` (`n`, `e`, `d`, `p`, `q`, `dp`, `dq`, `qi`). Its `kid` and `alg` carry over |
+| `SigningKey::hmac(alg, secret)` | An HMAC secret for `HS256`, `HS384` or `HS512` |
+| `SigningKey::ed25519_from_seed(&[u8; 32])` | The Ed25519 key of a 32-byte seed |
+
+An HMAC secret shorter than the hash output (32 bytes for `HS256`) is refused, as RFC 7518 requires. A JWK whose private and public halves don't belong together is refused too.
+
+### Generating keys
+
+`SigningKey::generate_ed25519()` and `SigningKey::generate_es256()` make new random keys. Export one as PKCS#8 to store it:
+
+```rust
+let key = SigningKey::generate_ed25519();
+let pem = key.to_pkcs8_pem().expect("Ed25519 keys export as PKCS#8");
+```
+
+```text
+-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIE2kVpZjRu4TGcHdsuuR3TCUhJkVFtNdJcPxSFqCHPOV
+-----END PRIVATE KEY-----
+```
+
+Ed25519 keys export in the 48-byte PKCS#8 v1 form of RFC 8410, which other tools read. `to_pkcs8_der()` gives the DER bytes. Both return `None` for HMAC keys, which have no PKCS#8 form. RSA keys can't be generated here: create them with another tool and load them.
+
+### Key ids and algorithms
+
+A key id (`kid`) tells the verifier which key of a set signed a token. Set one with `with_kid`, or use the key's RFC 7638 thumbprint, a stable id computed from the public key alone:
+
+```rust
+let key = SigningKey::generate_ed25519().with_thumbprint_kid();
+assert_eq!(key.kid(), Some(key.public_jwk().unwrap().thumbprint()?.as_str()));
+```
+
+An RSA key signs `RS256` unless you pick another RSA algorithm, and an HMAC secret long enough for a larger hash can sign with it:
+
+```rust
+let key = SigningKey::from_pem(&pem)?.with_algorithm(Algorithm::PS256)?;
+```
+
+Ed25519 and ECDSA keys have one algorithm each, so `with_algorithm` refuses any other.
+
+## Verifying a token
+
+Parse the token, verify it with the key you trust, then read its claims:
+
+```rust title="src/modules/partners/callback.rs"
+use navree::crypto::jose::{JoseError, Jws, VerifyingKey};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+pub struct PartnerCallback {
+    pub sub: String,
+    pub exp: i64,
+}
+
+/// The claims of a callback token the partner signed, if it hasn't expired.
+pub fn verify_callback(token: &str, public_pem: &str, now: i64) -> Option<PartnerCallback> {
+    let key = VerifyingKey::from_pem(public_pem).ok()?;
+    let jws = Jws::parse(token).ok()?;
+    jws.verify(&key).ok()?;
+    let claims: PartnerCallback = jws.claims().ok()?;
+    (claims.exp > now).then_some(claims)
+}
+```
+
+Each step refuses something different:
+
+| Step | Fails with | When |
+|---|---|---|
+| `Jws::parse` | `Malformed` | Not three base64url parts, a header that isn't a JSON object with `alg`, or a `crit` header (no extension is understood, so none may be critical) |
+| `Jws::parse` | `UnsupportedAlgorithm` | `alg` is `none` or not in the table above |
+| `verify` | `NoKey` | The key doesn't verify the header's algorithm |
+| `verify` | `BadSignature` | The signature is wrong |
+| `claims::<T>()` | `Payload` | The payload isn't JSON of type `T` |
+
+Until `verify` succeeds, the header and payload are whatever the sender wrote. Read the `kid` to find the key, and nothing else.
+
+A key verifies only the algorithms of its type: an Ed25519 key verifies `EdDSA`, a P-256 key `ES256`, an RSA key the `RS` and `PS` algorithms, and an HMAC key its own hash. A token can't switch a public key into an HMAC secret by naming `HS256`, which is the classic way to forge tokens against a verifier that trusts the header. To accept one algorithm only, pin it:
+
+```rust
+let key = VerifyingKey::from_jwk(&jwk)?.with_algorithm(Algorithm::RS256)?;
+```
+
+A JWK with an `alg` member is pinned to it already.
+
+Signatures say who signed a token, not whether it is still valid. Checking `exp`, `nbf`, `aud` and `iss` is yours to do, as the example does with `exp`.
+
+### Public keys
+
+| Constructor | |
+|---|---|
+| `VerifyingKey::from_pem(&str)` | `PUBLIC KEY` (SubjectPublicKeyInfo: RSA, P-256, P-384, Ed25519) or `RSA PUBLIC KEY` (PKCS#1) |
+| `VerifyingKey::from_spki_der(&[u8])` | A SubjectPublicKeyInfo document as DER |
+| `VerifyingKey::from_jwk(&jwk)` | A JWK's public members; its `kid` carries over and its `alg` pins the algorithm |
+| `VerifyingKey::rsa(n, e)` | An RSA modulus and exponent, big-endian |
+| `VerifyingKey::ec(alg, x, y)` | P-256 (`ES256`) or P-384 (`ES384`) coordinates |
+| `VerifyingKey::ed25519(&[u8])` | A 32-byte Ed25519 public key |
+| `VerifyingKey::hmac(alg, secret)` | An HMAC secret |
+| `signing_key.verifying_key()` | The public half of a `SigningKey` (or the same secret, for HMAC) |
+
+`verify(alg, message, signature)` checks a raw signature outside a JWS. `verify_der` does the same with ECDSA signatures in their DER form, the form WebAuthn authenticators send; JWS uses the fixed-width `R || S` form. `to_jwk()` turns a public key into a JWK.
+
+## Verifying against a key set
+
+An identity provider publishes its public keys as a JSON Web Key Set (`{"keys": [...]}`) and rotates them every few weeks. Fetch the set, cache it, and verify with `verify_with`, which picks the key by the token's `kid`:
+
+```rust title="src/modules/sso/id_tokens.rs"
+use std::time::Duration;
+
+use navree::cache::Cache;
+use navree::crypto::jose::{JwkSet, Jws};
+use navree::http_client::HttpClient;
+use navree::prelude::*;
+use serde_json::Value;
+
+const GOOGLE_KEYS: &str = "https://www.googleapis.com/oauth2/v3/certs";
+
+/// Verifies Google ID tokens.
+#[injectable]
+pub struct GoogleIdTokens {
+    http: Arc<HttpClient>,
+    cache: Arc<Cache>,
+}
+
+impl GoogleIdTokens {
+    /// The claims of an ID token Google issued to `client_id`.
+    pub async fn verify(&self, token: &str, client_id: &str, now: i64) -> Result<Value> {
+        let jws = Jws::parse(token).map_err(|_| AppError::unauthenticated())?;
+        let keys: JwkSet = self
+            .cache
+            .remember("google-jwks", Duration::from_secs(3600), || async {
+                Ok(self.http.get(GOOGLE_KEYS).send().await?.json::<JwkSet>()?)
+            })
+            .await
+            .map_err(|_| AppError::service_unavailable("Google's keys are unavailable"))?;
+        jws.verify_with(&keys)
+            .map_err(|_| AppError::unauthenticated())?;
+        let claims: Value = jws.claims().map_err(|_| AppError::unauthenticated())?;
+        let issuer = claims["iss"].as_str().unwrap_or_default();
+        let valid = matches!(issuer, "https://accounts.google.com" | "accounts.google.com")
+            && claims["aud"] == client_id
+            && claims["exp"].as_i64().is_some_and(|exp| exp > now);
+        if !valid {
+            return Err(AppError::unauthenticated());
+        }
+        Ok(claims)
+    }
+}
+```
+
+`verify_with` returns the key that verified the token. It tries the keys of the set that:
+
+- have the key type of the token's algorithm (`RSA` for `RS256`, `EC` for `ES256`, `OKP` for `EdDSA`);
+- have no `use`, or `use: "sig"`, and no `key_ops`, or `key_ops` with `verify`;
+- have no `alg`, or the token's `alg`;
+- have the token's `kid`, when the token names one. Without a `kid`, every key of the type is tried.
+
+No candidate is `JoseError::NoKey`; candidates that don't verify give the last error, usually `BadSignature`. HMAC tokens are refused with `UnsupportedAlgorithm`: a key set is public, so a shared secret never belongs in one.
+
+When a provider rotates its keys, new tokens name a `kid` your cached set lacks, so `verify_with` fails with `NoKey`. Fetch the set again when that happens, but not more often than every 30 seconds or so, or a stream of forged tokens with made-up key ids turns into a stream of requests to the provider. `JwkSet::has_kid` tells you whether the cached set knows the token's key.
+
+Reading a set skips entries that aren't keys (RFC 7517 §5), so one odd entry doesn't make the rest unusable. Members Navree doesn't read, such as `x5c`, `x5t` or a provider's `issuer`, are kept in `Jwk::other`.
+
+## Publishing a key set
+
+To let others verify what you sign, serve your public keys. Keep the previous key in the set for a while after a rotation, so tokens signed before it still verify:
+
+```rust title="src/modules/tokens/jwks.rs"
+use navree::crypto::jose::{JwkSet, SigningKey};
+use navree::prelude::*;
+
+/// The keys that sign our tokens: the current one first, then the previous
+/// ones still published.
+pub struct TokenKeys(pub Vec<SigningKey>);
+
+#[injectable]
+pub struct JwksController {
+    keys: Arc<TokenKeys>,
+}
+
+#[controller("/tokens")]
+impl JwksController {
+    /// `GET /.well-known/jwks.json`
+    #[get("!/.well-known/jwks.json")]
+    #[public]
+    async fn jwks(&self) -> Json<JwkSet> {
+        Json(self.keys.0.iter().filter_map(SigningKey::public_jwk).collect())
+    }
+}
+```
+
+```json title="GET /.well-known/jwks.json"
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "use": "sig",
+      "alg": "EdDSA",
+      "kid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
+      "crv": "Ed25519",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    }
+  ]
+}
+```
+
+`public_jwk()` is the public half only, with the key's `kid`, its `alg` and `use: "sig"`; HMAC keys have none, so `filter_map` skips them. A `Jwk` read from elsewhere may hold private members (`d`, `k`, RSA's `p` and `q`): `Jwk::to_public()` and `JwkSet::to_public()` drop them, and `Jwk::is_private()` tells you whether there are any. The `Debug` output of `Jwk`, `SigningKey` and `VerifyingKey` never shows private material.
+
+## Limits
+
+- Compact serialization only: there is no JSON serialization of JWS, and no JSON Web Encryption (JWE).
+- `ES512` (P-521) and `EdDSA` with Ed448 aren't supported.
+- RSA keys can't be generated, only loaded. `SigningKey::to_pkcs8_der` returns `None` for an RSA key read from a JWK.
+- Claims are not validated for you: check `exp`, `nbf`, `aud` and `iss` yourself.
+
+<LinkCards>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    The application key, encryption with key rotation and password hashing.
+  </LinkCard>
+  <LinkCard href="/docs/packages/social-sign-in/" title="Social sign-in">
+    ID tokens verified against each provider's key set.
+  </LinkCard>
+  <LinkCard href="/docs/packages/oauth-server/" title="OAuth server">
+    EdDSA ID tokens and a JWKS endpoint for your own clients.
+  </LinkCard>
+</LinkCards>

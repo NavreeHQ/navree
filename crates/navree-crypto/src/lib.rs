@@ -1,7 +1,7 @@
 //! # navree-crypto
 //!
 //! `CryptoModule`: AES-256-GCM [`Encrypter`] with key rotation, Argon2id
-//! [`Hasher`] and token helpers.
+//! [`Hasher`], token helpers and JOSE helpers ([`jose`]).
 //!
 //! - [`Encrypter`] encrypts bytes, strings and JSON values into compact,
 //!   URL- and cookie-safe `v1.<kid>.<nonce>.<ciphertext>` payloads (random
@@ -19,6 +19,9 @@
 //!   [`CryptoModule::from_config`] (`app.key` / `APP_KEY`,
 //!   `app.previous_keys`, section `hashing`). It also registers the
 //!   `key:generate` command, which prints a new `base64:<32 bytes>` key.
+//! - [`jose`] signs and verifies JSON Web Signatures (HS256, EdDSA, ES256,
+//!   RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys
+//!   and key sets, and loads PKCS#8 keys such as Apple's `.p8` files.
 //!
 //! Keys, plaintexts and passwords never appear in `Debug` output or error
 //! messages.
@@ -42,6 +45,7 @@
 mod encrypter;
 mod error;
 mod hasher;
+pub mod jose;
 mod key;
 mod module;
 mod tokens;
