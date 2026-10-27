@@ -1,0 +1,19 @@
+[app]
+name = "navigator-app"
+
+[http]
+addr = "127.0.0.1:0"
+api_prefix = "/api"
+
+[database]
+url = "sqlite://storage/app.db?mode=rwc"
+migrate_on_boot = true
+
+[log]
+level = "info"
+format = "json"
+file = { path = "storage/logs/navree.log", rotation = "never", keep_days = 1 }
+
+[mail]
+transport = "log"
+password = "not-a-real-password"

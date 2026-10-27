@@ -399,13 +399,15 @@ fn generate(
     // Mixed-site hygiene: expressions written by the user (guards) can
     // neither see nor shadow the generated locals.
     let list = Ident::new("routes", Span::mixed_site());
+    let self_ty = &item.self_ty;
+    let type_name = handler_type_name(self_ty);
     let routes = routes.iter().map(|route| {
         let cfgs = &route.cfgs;
         let def = route_def(route, paths);
-        quote!(#(#cfgs)* #list.push(#def);)
+        let handler = LitStr::new(&format!("{type_name}::{}", route.ident), route.ident.span());
+        quote!(#(#cfgs)* #list.push(#def.handler_name(#handler));)
     });
 
-    let self_ty = &item.self_ty;
     let (impl_generics, _, where_clause) = item.generics.split_for_impl();
     quote! {
         #item
@@ -428,6 +430,20 @@ fn generate(
                 #list
             }
         }
+    }
+}
+
+/// The controller's type as route listings show it: the last path segment
+/// without generics (`crate::deals::DealsController<T>` → `DealsController`).
+fn handler_type_name(self_ty: &syn::Type) -> String {
+    match self_ty {
+        syn::Type::Path(path) => path
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string())
+            .unwrap_or_default(),
+        other => quote!(#other).to_string().replace(' ', ""),
     }
 }
 
