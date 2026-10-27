@@ -4,7 +4,7 @@
 
 /// One bundled font file.
 #[derive(Clone, Copy, Debug)]
-#[cfg_attr(not(any(feature = "native", feature = "chrome")), allow(dead_code))]
+#[cfg_attr(not(feature = "chrome"), allow(dead_code))]
 pub(crate) struct BundledFont {
     /// The file name (`NotoSans-Regular.ttf`).
     pub(crate) file: &'static str,
