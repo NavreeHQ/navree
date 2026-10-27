@@ -2,14 +2,39 @@
 //! parts, LIKE, null-safe equality, regular expressions and JSON.
 
 use chrono::{Datelike, Timelike};
-use sea_query::{BinOper, Condition, ExprTrait};
+use sea_query::{Alias, BinOper, Condition, ExprTrait, Func};
 
 use super::{Compiler, Dialect, json_path_literal, raw_sql};
 use crate::error::OrmError;
 use crate::ir::{
-    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, Operator, Where, WhereClause,
+    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, Operator, QueryIr, SelectItem,
+    Where, WhereClause,
 };
-use crate::value::{Field, Value};
+use crate::value::{Field, Value, to_json};
+
+/// An `EXISTS` subquery selects `1`: its columns do not matter (unless a
+/// union needs them to line up).
+pub(crate) fn exists_select_list(query: &mut QueryIr) {
+    if query.unions.is_empty() {
+        query.columns = vec![SelectItem {
+            expr: Expr::Raw {
+                sql: "1".into(),
+                values: Vec::new(),
+            },
+            alias: None,
+        }];
+    }
+}
+
+/// The text a JSON value has in a document, as PostgreSQL's `->>` gives
+/// it: `3`, `true`, `{"a":1}`.
+fn json_text_of(value: &Value) -> Value {
+    match to_json(value) {
+        serde_json::Value::String(text) => Value::from(text),
+        serde_json::Value::Null => Value::String(None),
+        other => Value::from(other.to_string()),
+    }
+}
 
 impl Compiler {
     /// A list of clauses with SQL's precedence: `a AND b OR c AND d` is
@@ -74,6 +99,7 @@ impl Compiler {
             Where::Exists { query, not } => {
                 let mut query = (**query).clone();
                 query.orders.clear();
+                exists_select_list(&mut query);
                 let select = self.select(&query)?;
                 if *not {
                     sea_query::Expr::not_exists(select)
@@ -101,10 +127,10 @@ impl Compiler {
                 options,
             } => self.full_text(columns, query, options)?,
             Where::Raw { sql, values } => {
-                // Parenthesized: a fragment with an `OR` must not regroup
-                // the conditions around it.
+                // sea-query parenthesizes a custom fragment beside other
+                // conditions, so an `OR` inside it cannot regroup them.
                 let sql = raw_sql(sql, values.len(), self.dialect)?;
-                sea_query::Expr::cust_with_values(format!("({sql})"), values.iter().cloned())
+                sea_query::Expr::cust_with_values(sql, values.iter().cloned())
             }
             Where::Sql(condition) => return Ok(condition.clone()),
             Where::Invalid(message) => return Err(OrmError::invalid(message.clone())),
@@ -114,7 +140,17 @@ impl Compiler {
 
     fn compare(&self, left: &Expr, op: &Operator, right: &Expr) -> Result<sea_query::Expr, OrmError> {
         let l = self.expr(left)?;
-        let r = self.expr(right)?;
+        let r = match (self.dialect, left, right) {
+            // PostgreSQL's `->>` gives text, and a bound number or boolean
+            // would not compare with text: compare with the value's JSON
+            // text instead (`3`, `true`).
+            (Dialect::Postgres, Expr::Column(column), Expr::Value(value))
+                if !column.path.is_empty() && !matches!(value, Value::String(_)) =>
+            {
+                sea_query::Expr::val(json_text_of(value))
+            }
+            _ => self.expr(right)?,
+        };
         Ok(match op {
             Operator::Eq => l.eq(r),
             Operator::Ne => l.ne(r),
@@ -177,8 +213,8 @@ impl Compiler {
                 right,
             ),
             Dialect::MySql | Dialect::Sqlite => {
-                let left = self.custom("LOWER({})", vec![left]);
-                let right = self.custom("LOWER({})", vec![right]);
+                let left: sea_query::Expr = Func::lower(left).into();
+                let right: sea_query::Expr = Func::lower(right).into();
                 left.binary(if not { BinOper::NotLike } else { BinOper::Like }, right)
             }
         }
@@ -258,22 +294,31 @@ impl Compiler {
     ) -> Result<sea_query::Expr, OrmError> {
         let column = self.expr(expr)?;
         let value = self.date_part_value(part, value)?;
+        let function = |name: &str, column: sea_query::Expr| -> sea_query::Expr {
+            Func::cust(Alias::new(name)).arg(column).into()
+        };
+        let strftime = |format: &str, column: sea_query::Expr| -> sea_query::Expr {
+            Func::cust(Alias::new("strftime"))
+                .arg(sea_query::Expr::cust(format!("'{format}'")))
+                .arg(column)
+                .into()
+        };
         let left = match (self.dialect, part) {
             (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![column]),
             (Dialect::Postgres, DatePart::Time) => self.custom("CAST({} AS TIME)", vec![column]),
             (Dialect::Postgres, DatePart::Day) => self.custom("EXTRACT(DAY FROM {})", vec![column]),
             (Dialect::Postgres, DatePart::Month) => self.custom("EXTRACT(MONTH FROM {})", vec![column]),
             (Dialect::Postgres, DatePart::Year) => self.custom("EXTRACT(YEAR FROM {})", vec![column]),
-            (Dialect::MySql, DatePart::Date) => self.custom("DATE({})", vec![column]),
-            (Dialect::MySql, DatePart::Time) => self.custom("TIME({})", vec![column]),
-            (Dialect::MySql, DatePart::Day) => self.custom("DAY({})", vec![column]),
-            (Dialect::MySql, DatePart::Month) => self.custom("MONTH({})", vec![column]),
-            (Dialect::MySql, DatePart::Year) => self.custom("YEAR({})", vec![column]),
-            (Dialect::Sqlite, DatePart::Date) => self.custom("strftime('%Y-%m-%d', {})", vec![column]),
-            (Dialect::Sqlite, DatePart::Time) => self.custom("strftime('%H:%M:%S', {})", vec![column]),
-            (Dialect::Sqlite, DatePart::Day) => self.custom("strftime('%d', {})", vec![column]),
-            (Dialect::Sqlite, DatePart::Month) => self.custom("strftime('%m', {})", vec![column]),
-            (Dialect::Sqlite, DatePart::Year) => self.custom("strftime('%Y', {})", vec![column]),
+            (Dialect::MySql, DatePart::Date) => function("DATE", column),
+            (Dialect::MySql, DatePart::Time) => function("TIME", column),
+            (Dialect::MySql, DatePart::Day) => function("DAY", column),
+            (Dialect::MySql, DatePart::Month) => function("MONTH", column),
+            (Dialect::MySql, DatePart::Year) => function("YEAR", column),
+            (Dialect::Sqlite, DatePart::Date) => strftime("%Y-%m-%d", column),
+            (Dialect::Sqlite, DatePart::Time) => strftime("%H:%M:%S", column),
+            (Dialect::Sqlite, DatePart::Day) => strftime("%d", column),
+            (Dialect::Sqlite, DatePart::Month) => strftime("%m", column),
+            (Dialect::Sqlite, DatePart::Year) => strftime("%Y", column),
         };
         let right = match (self.dialect, part) {
             (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![value]),

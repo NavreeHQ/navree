@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().distinct_on([Deal::COMPANY_ID]).order_by(Deal::COMPANY_ID).latest())"
+---
+PostgreSQL: SELECT DISTINCT ON ("deals"."company_id") "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."deleted_at" IS NULL ORDER BY "deals"."company_id" ASC, "deals"."created_at" DESC
+MySQL: error: DISTINCT ON is not supported on MySQL
+SQLite: error: DISTINCT ON is not supported on SQLite

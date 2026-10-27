@@ -92,6 +92,7 @@ pub fn compile_exists(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
     let mut inner = query.clone();
     inner.orders.clear();
     inner.lock = None;
+    super::filter::exists_select_list(&mut inner);
     let inner = compiler.select(&inner)?;
     let mut select = sea_query::Query::select();
     select.expr_as(sea_query::Expr::exists(inner), Alias::new("exists"));
@@ -302,15 +303,18 @@ impl Compiler {
                 }
             }
         }
+        // Bound as signed 64-bit integers on every database: larger counts
+        // mean "no limit" anyway.
+        const LARGEST: u64 = i64::MAX as u64;
         if let Some(limit) = query.limit {
-            select.limit(limit);
+            select.limit(limit.min(LARGEST));
         }
         if let Some(offset) = query.offset {
             if query.limit.is_none() && self.dialect != Dialect::Postgres {
                 // MySQL and SQLite need a LIMIT before OFFSET.
-                select.limit(u64::MAX >> 1);
+                select.limit(LARGEST);
             }
-            select.offset(offset);
+            select.offset(offset.min(LARGEST));
         }
         if let Some(lock) = query.lock {
             // SQLite has no row locks: its write transactions are serialised

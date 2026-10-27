@@ -229,18 +229,18 @@ impl Compiler {
     }
 
     /// The JSON value at `path` of `column`, kept as JSON (PostgreSQL
-    /// `->`), for containment and length checks.
+    /// `->`), for containment and length checks (whose templates
+    /// parenthesize it).
     pub(crate) fn json_value(&self, column: &ColumnRef) -> sea_query::Expr {
         let base = self.plain_column(column);
         if column.path.is_empty() {
             return base;
         }
-        let mut template = String::from("({}");
+        let mut template = String::from("{}");
         for segment in &column.path {
             template.push_str("->");
             template.push_str(&postgres_path_segment(segment));
         }
-        template.push(')');
         self.custom(&template, vec![base])
     }
 
