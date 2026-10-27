@@ -5,6 +5,7 @@ use std::sync::Arc;
 use navree_access::{AccessModule, Subject};
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
+use navree_db::navree_schema::{Schema, SchemaOptions};
 use navree_db::{Db, DbOptions, ModuleBuilderDbExt};
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{
@@ -21,7 +22,7 @@ use crate::commands::commands;
 use crate::dashboard::LighthouseDashboardController;
 use crate::dispatch::Alerter;
 use crate::engine::{EngineHandle, Labels, Processor};
-use crate::migration::{create_tables, migrations};
+use crate::migration::{convert_time_series_at_boot, create_tables, migrations};
 use crate::options::{LighthouseOptions, StoreKind, parse_hh_mm};
 use crate::redact::{DEFAULT_FRAGMENTS, Redactor};
 use crate::service::{Lighthouse, LighthouseSink};
@@ -215,6 +216,15 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
             .await
             .map_err(|error| format!("lighthouse.database_url: cannot connect: {error}"))?;
             create_tables(&SchemaManager::new(db.conn())).await?;
+            // The app's `schema` section (TimescaleDB mode, extensions)
+            // applies to this database too.
+            let schema_options = match &config {
+                Some(config) => config.typed::<SchemaOptions>()?,
+                None => SchemaOptions::default(),
+            };
+            convert_time_series_at_boot(&Schema::new(db.conn()).with_options(schema_options))
+                .await
+                .map_err(|error| format!("lighthouse.database_url: {error}"))?;
             db
         }
         None => Db::clone(&*app.try_get::<Db>().await.ok_or(

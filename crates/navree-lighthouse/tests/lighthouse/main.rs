@@ -11,3 +11,4 @@ mod fake;
 mod module;
 mod recording;
 mod statuses;
+mod time_series;
