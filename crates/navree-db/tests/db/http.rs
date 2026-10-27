@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use axum::Extension;
 use axum::body::Body;
 use axum::extract::Path;
 use http::{Method, Request, StatusCode};
@@ -18,8 +19,10 @@ use navree_http::{
     RouteDef, build_router,
 };
 use navree_kernel::{
-    App, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
+    App, AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
+    ProviderKey, Resolver,
 };
+use navree_telemetry::TelemetryContext;
 use sea_orm::{DatabaseTransaction, DbErr};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify, oneshot};
@@ -32,12 +35,23 @@ use crate::support::TempDb;
 type Notes = Repo<note::Entity>;
 
 /// Signals for the disconnect test: the handler reports that it has
-/// written, then waits until the test lets it finish.
+/// written, then waits until the test lets it finish, and reports what it
+/// saw once it resumed.
 #[derive(Default)]
 struct Gate {
     written: Mutex<Option<oneshot::Sender<()>>>,
     proceed: Notify,
+    resumed: Mutex<Option<oneshot::Sender<Resumed>>>,
     committed: Mutex<Option<oneshot::Sender<()>>>,
+}
+
+/// What a handler sees after its client went away: whether its unit of
+/// work is still `Uow::current()`, and the request id of its telemetry
+/// context.
+#[derive(Debug, PartialEq)]
+struct Resumed {
+    current_uow: bool,
+    request_id: Option<String>,
 }
 
 /// Makes [`RefusingObserver`] fail the commit.
@@ -147,6 +161,14 @@ impl Controller for NotesController {
                             let _ = written.send(());
                         }
                         gate.proceed.notified().await;
+                        if let Some(resumed) = gate.resumed.lock().await.take() {
+                            let _ = resumed.send(Resumed {
+                                current_uow: Uow::current()
+                                    .is_some_and(|current| current.same_as(&uow)),
+                                request_id: TelemetryContext::current()
+                                    .and_then(|context| context.request_id().map(str::to_owned)),
+                            });
+                        }
                         Ok::<_, AppError>(StatusCode::CREATED)
                     }
                 },
@@ -171,6 +193,14 @@ impl Controller for NotesController {
                     },
                 }))
             })
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "/tracked-tasks",
+                |Extension(ctx): Extension<AppContext>| async move {
+                    Json(json!({ "tracked": ctx.tracker().len() }))
+                },
+            )
             .public(),
             RouteDef::on(Method::GET, "/whoami", |uow: Uow| async move {
                 Json(json!({
@@ -307,22 +337,60 @@ async fn uow_completes_even_if_client_disconnects() {
     let s = setup().await;
     let gate = s.app.ctx().get::<Gate>().await.unwrap();
     let (written_tx, written_rx) = oneshot::channel();
+    let (resumed_tx, resumed_rx) = oneshot::channel();
     let (committed_tx, committed_rx) = oneshot::channel();
     *gate.written.lock().await = Some(written_tx);
+    *gate.resumed.lock().await = Some(resumed_tx);
     *gate.committed.lock().await = Some(committed_tx);
 
-    let request = s.router.clone().oneshot(post("/api/notes/slow-one/slow"));
+    let mut request = post("/api/notes/slow-one/slow");
+    request
+        .headers_mut()
+        .insert("x-request-id", "gone-1".parse().unwrap());
+    let request = s.router.clone().oneshot(request);
     tokio::select! {
         _ = request => panic!("the handler must still be waiting"),
         written = written_rx => written.expect("handler wrote the row"),
     }
-    // The client is gone: the request future has been dropped.
+    // The client is gone: the request future has been dropped, and the
+    // rest of the request moved to a task on the app's tracker.
+    assert_eq!(
+        s.app.ctx().tracker().len(),
+        1,
+        "one task finishes the request"
+    );
     gate.proceed.notify_one();
+    let resumed = tokio::time::timeout(Duration::from_secs(10), resumed_rx)
+        .await
+        .expect("the handler resumes")
+        .expect("the handler reports");
+    assert_eq!(
+        resumed,
+        Resumed {
+            current_uow: true,
+            request_id: Some("gone-1".to_owned()),
+        },
+        "the handler keeps its unit of work and request context"
+    );
     tokio::time::timeout(Duration::from_secs(10), committed_rx)
         .await
         .expect("the unit of work commits")
         .expect("after-commit hook ran");
     assert_eq!(count(&s.db, "notes").await, 1);
+}
+
+/// The request runs in the task that polls it (the connection's): no task
+/// is spawned for it, so a request costs no task and no thread hand-off.
+#[tokio::test]
+async fn requests_run_without_a_task_of_their_own() {
+    let s = setup().await;
+    let request = Request::get("/api/notes/tracked-tasks")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = send(&s.router, request).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({ "tracked": 0 }));
+    assert_eq!(s.app.ctx().tracker().len(), 0);
 }
 
 #[tokio::test]

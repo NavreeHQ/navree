@@ -80,6 +80,28 @@ pub trait ChangeObserver: Send + Sync + 'static {
 /// A hook run after a successful commit.
 type AfterCommit = Box<dyn FnOnce() -> BoxFuture<'static, ()> + Send>;
 
+/// Prepares a change event on demand: `None` when the write changed
+/// nothing worth an event.
+pub(crate) type PrepareChange = Box<dyn Fn() -> Result<Option<ChangeEvent>, DbErr> + Send + Sync>;
+
+/// A recorded change: its event, or what prepares it. Writes defer the
+/// event (serializing records to JSON) in an app with no change observer,
+/// where only [`Uow::changes`] reads them.
+enum Recorded {
+    Ready(ChangeEvent),
+    Deferred(PrepareChange),
+}
+
+impl Recorded {
+    /// The event, prepared now if it was deferred.
+    fn event(&self) -> Result<Option<ChangeEvent>, DbErr> {
+        match self {
+            Recorded::Ready(event) => Ok(Some(event.clone())),
+            Recorded::Deferred(prepare) => prepare(),
+        }
+    }
+}
+
 enum TxState {
     /// No transaction yet (the unit of work is lazy).
     Idle,
@@ -105,6 +127,8 @@ enum TxState {
 /// PostgreSQL the actor and request id are set as `navree.actor` and
 /// `navree.request_id` for the transaction (`set_config(.., true)`), which
 /// triggers and row-level security policies read with `current_setting`.
+/// (Both this and the MySQL variables below can be turned off with
+/// `database.transaction_settings = false`, which saves those statements.)
 /// On MySQL and MariaDB they are the session variables `@navree_actor` and
 /// `@navree_request_id` (text, `NULL` when absent): set right after `BEGIN`
 /// and cleared right before `COMMIT` or `ROLLBACK`, because a session
@@ -140,7 +164,7 @@ struct UowInner {
     actor: Option<Uuid>,
     request_id: Option<String>,
     tx: tokio::sync::Mutex<TxState>,
-    changes: Mutex<Vec<ChangeEvent>>,
+    changes: Mutex<Vec<Recorded>>,
     after_commit: Mutex<Vec<AfterCommit>>,
 }
 
@@ -232,12 +256,37 @@ impl Uow {
 
     /// Records a change for the [`ChangeObserver`]s.
     pub fn record_change(&self, ev: ChangeEvent) {
-        lock(&self.inner.changes).push(ev);
+        lock(&self.inner.changes).push(Recorded::Ready(ev));
     }
 
-    /// The changes recorded so far (cleared by commit and rollback).
+    /// Records the change `prepare` describes: prepared now when the app
+    /// has a [`ChangeObserver`] (an error is returned, as the write's own),
+    /// when [`changes`](Uow::changes) asks otherwise.
+    pub(crate) fn record_with(&self, prepare: PrepareChange) -> Result<(), DbErr> {
+        if self.inner.db.observed() {
+            if let Some(event) = prepare()? {
+                self.record_change(event);
+            }
+        } else {
+            lock(&self.inner.changes).push(Recorded::Deferred(prepare));
+        }
+        Ok(())
+    }
+
+    /// The changes recorded so far (cleared by commit and rollback). A
+    /// deferred event that cannot be prepared (its record does not
+    /// serialize) is left out, with a warning.
     pub fn changes(&self) -> Vec<ChangeEvent> {
-        lock(&self.inner.changes).clone()
+        lock(&self.inner.changes)
+            .iter()
+            .filter_map(|recorded| match recorded.event() {
+                Ok(event) => event,
+                Err(error) => {
+                    tracing::warn!(target: "navree_db::uow", %error, "cannot prepare a change event");
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Runs `f` after a successful commit (dispatch jobs, send mail,
@@ -290,7 +339,7 @@ impl Uow {
             Ok(tx) => tx,
             Err(shared) => {
                 // Rolled back when the last holder drops it.
-                end_session_or_warn(&shared).await;
+                end_session_or_warn(&self.inner.db, &shared).await;
                 return Err(DbErr::Custom(
                     "cannot commit the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
                         .to_owned(),
@@ -298,11 +347,11 @@ impl Uow {
             }
         };
         if let Err(error) = self.observe(&tx, &changes).await {
-            end_session_or_warn(&tx).await;
+            end_session_or_warn(&self.inner.db, &tx).await;
             rollback_or_warn(tx, "a change observer error").await;
             return Err(error);
         }
-        if let Err(error) = end_session(&tx).await {
+        if let Err(error) = end_session(&self.inner.db, &tx).await {
             rollback_or_warn(tx, "a failure to clear the session variables").await;
             return Err(error);
         }
@@ -320,7 +369,7 @@ impl Uow {
         lock(&self.inner.after_commit).clear();
         match current {
             TxState::Open(tx) => {
-                end_session_or_warn(&tx).await;
+                end_session_or_warn(&self.inner.db, &tx).await;
                 match Arc::try_unwrap(tx) {
                     Ok(tx) => tx.rollback().await,
                     // Still held elsewhere: rolled back when the last holder drops it.
@@ -340,7 +389,14 @@ impl Uow {
 
     async fn begin(&self) -> Result<DatabaseTransaction, DbErr> {
         let db = &self.inner.db;
-        match db.backend() {
+        let backend = match db.backend() {
+            // Nothing to set: `database.transaction_settings` is off.
+            DbBackend::Postgres | DbBackend::MySql if !db.transaction_settings() => {
+                return db.conn().begin().await;
+            }
+            backend => backend,
+        };
+        match backend {
             DbBackend::Sqlite => {
                 db.conn()
                     .begin_with_options(TransactionOptions {
@@ -384,16 +440,20 @@ impl Uow {
         }
     }
 
-    async fn observe(
-        &self,
-        tx: &DatabaseTransaction,
-        changes: &[ChangeEvent],
-    ) -> Result<(), DbErr> {
+    async fn observe(&self, tx: &DatabaseTransaction, changes: &[Recorded]) -> Result<(), DbErr> {
         if changes.is_empty() {
             return Ok(());
         }
-        for observer in self.inner.db.observers().await? {
-            observer.observe(tx, self, changes).await?;
+        let observers = self.inner.db.observers().await?;
+        if observers.is_empty() {
+            return Ok(());
+        }
+        let mut events = Vec::with_capacity(changes.len());
+        for recorded in changes {
+            events.extend(recorded.event()?);
+        }
+        for observer in observers {
+            observer.observe(tx, self, &events).await?;
         }
         Ok(())
     }
@@ -416,17 +476,18 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// Undoes what [`Uow::begin`] set for the session, right before the
 /// transaction ends. Only MySQL needs it: its user variables belong to the
 /// connection, which goes back to the pool; PostgreSQL's `set_config(..,
-/// true)` ends with the transaction.
-async fn end_session(tx: &DatabaseTransaction) -> Result<(), DbErr> {
-    if tx.get_database_backend() == DbBackend::MySql {
+/// true)` ends with the transaction. Nothing was set when `db` has
+/// `database.transaction_settings` off.
+async fn end_session(db: &Db, tx: &DatabaseTransaction) -> Result<(), DbErr> {
+    if db.transaction_settings() && tx.get_database_backend() == DbBackend::MySql {
         tx.execute_unprepared(mysql::CLEAR_UOW_VARIABLES).await?;
     }
     Ok(())
 }
 
 /// [`end_session`] on a path that is already failing or rolling back.
-async fn end_session_or_warn(tx: &DatabaseTransaction) {
-    if let Err(error) = end_session(tx).await {
+async fn end_session_or_warn(db: &Db, tx: &DatabaseTransaction) {
+    if let Err(error) = end_session(db, tx).await {
         tracing::warn!(target: "navree_db::uow", %error, "clearing the unit of work's session variables failed");
     }
 }

@@ -327,7 +327,7 @@ Each write through `Repo` adds a `ChangeEvent` to the unit of work:
 | `old` | The whole record for deletes, the changed fields for updates, `None` for creates. |
 | `new` | The whole record for creates, the changed fields for updates, `None` for deletes. |
 
-`uow.changes()` returns the events recorded so far. When the unit of work commits, every registered change observer sees them, inside the transaction. `AuditModule` is one: it writes an audit row per event (`deal.created`, `deal.updated`, `deal.deleted`, with subject type `Deal`), so a rolled-back change leaves no audit row. [The unit of work](/docs/database/unit-of-work/#change-events-and-observers) shows how to write an observer of your own.
+`uow.changes()` returns the events recorded so far. When the unit of work commits, every registered change observer sees them, inside the transaction. An event holds the record as JSON; in an app with no change observer, `Repo` only builds that JSON if `uow.changes()` asks for it, so writes cost nothing extra for events nobody reads. `AuditModule` is one: it writes an audit row per event (`deal.created`, `deal.updated`, `deal.deleted`, with subject type `Deal`), so a rolled-back change leaves no audit row. [The unit of work](/docs/database/unit-of-work/#change-events-and-observers) shows how to write an observer of your own.
 
 ## When to use Repo and when plain SeaORM
 
