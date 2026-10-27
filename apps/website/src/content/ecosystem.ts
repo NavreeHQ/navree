@@ -330,7 +330,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-micro",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features micro",
     href: "/docs/microservices/introduction/",
-    status: "planned",
+    status: "stable",
     signature: "#[event_pattern(\"deal.won\")]",
   },
   {

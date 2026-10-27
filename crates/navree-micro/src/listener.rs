@@ -483,10 +483,10 @@ pub(crate) async fn relay(runtime: Arc<MicroRuntime>, stop: CancellationToken) {
     let poll = Duration::from_millis(runtime.options.outbox_poll_ms.max(1));
     let mut last_prune: Option<tokio::time::Instant> = None;
     loop {
-        if runtime.options.outbox {
-            if let Err(error) = sweep_outbox(&runtime, &store).await {
-                tracing::warn!(target: "navree::micro", %error, "the outbox relay failed");
-            }
+        if runtime.options.outbox
+            && let Err(error) = sweep_outbox(&runtime, &store).await
+        {
+            tracing::warn!(target: "navree::micro", %error, "the outbox relay failed");
         }
         if runtime.options.inbox && last_prune.is_none_or(|at| at.elapsed() >= INBOX_PRUNE_EVERY) {
             let retention = i64::try_from(runtime.options.inbox_retention_hours)
