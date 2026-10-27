@@ -42,7 +42,12 @@ async fn validated_locales_scope_like_tags() {
     let app = support::builder().build().await;
     let i18n = app.get::<I18n>().await;
     let requested = navree_validation::Locale::parse("fr-CA").unwrap();
-    let current = || (Locale::current().tag().to_owned(), t!("deal-created", count = 3));
+    let current = || {
+        (
+            Locale::current().tag().to_owned(),
+            t!("deal-created", count = 3),
+        )
+    };
     // Inside the app's scope, so the tag is matched with this app's locales.
     let by_ref = i18n
         .scope("en", async {
