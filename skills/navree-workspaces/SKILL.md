@@ -1,6 +1,6 @@
 ---
 name: navree-workspaces
-description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes. Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), checking permissions per workspace, inviting users, or debugging a 400/403/404 from a workspace route or data leaking between workspaces."
+description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes; organizations above workspaces (`workspace.organizations`, `Organizations`, `OrgMembers`, `OrgRole`, `WorkspaceSelector`, `CurrentOrganization`, `InOrganization`, `OrgRepo`, access requests, `/api/organizations`) and partitions inside them (`workspace.partitions`, `Partitions`, `PartitionScoped`, `PartitionScope`, `CurrentPartition`, `PartitionRepo`, `X-Partition`). Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), grouping workspaces under a company or partner, splitting a workspace's data by domain or region, checking permissions per workspace or organization, inviting users, or debugging a 400/403/404 from a workspace or organization route or data leaking between workspaces or partitions."
 ---
 
 # Workspaces
@@ -174,7 +174,7 @@ of this workspace.`
 ```rust
 let ws = workspaces.create(&uow, owner_id, NewWorkspace::named("Acme Inc.")).await?; // slug "acme-inc"
 workspaces.rename(&uow, ws.id, "Acme Corp").await?;          // slug unchanged
-workspaces.for_user(user_id).await?;                          // Vec<Membership { workspace, role }>
+workspaces.for_user(user_id).await?;                          // Vec<Membership { workspace, role, granted_by }>
 workspaces.resolve("acme").await?;                            // slug or id, 404 otherwise
 workspaces.transfer_ownership(&uow, ws.id, new_owner).await?; // new owner: owner, old: admin
 workspaces.delete(&uow, ws.id).await?;                        // members + invitations cascade
@@ -219,6 +219,79 @@ isolation = "schema"   # PostgreSQL only: schema workspace_<id>, search_path per
   isolation, committed when the status < 400.
 - Jobs: `databases.db(id).await?.uow(None, None).await` + `commit()`
   (`WorkspaceDatabases`), or `workspaces.enter(&uow, id)` for schema.
+
+## Organizations (above workspaces, off by default)
+
+```toml
+[workspace.organizations]
+enabled = true                       # APP_WORKSPACE__ORGANIZATIONS__ENABLED=true
+# resolvers = ["header", "path", "subdomain", "claim"]  X-Organization, /o/{slug}, base_domain, claim `organization`
+
+[workspace.organizations.roles.member]
+permissions = ["reports.read"]       # extra org permissions
+workspace_role = "viewer"            # the workspace role it gives (default: same name, must exist)
+```
+
+```rust
+let acme = organizations.create(&uow, owner, NewOrganization::named("Acme Group").country("gb")).await?;
+organizations.attach(&uow, acme.id, ws.id).await?;   // 409 if attached elsewhere
+org_members.add(&uow, acme.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
+org_members.grant(&uow, acme.id, linus, OrgRole::Member, WorkspaceSelector::only([ws.id])).await?;
+access_requests.approve(&uow, acme.id, request_id, Some(admin), Approval::default()).await?;
+```
+
+- Org roles: `owner` (`all.*`), `admin` (`organization.read|update|attach|detach`,
+  `organization.members.*`, `organization.access_requests.*`), `member`/`viewer`
+  (`organization.read`, `organization.members.read`), app-defined. Each maps to a
+  workspace role.
+- `CurrentWorkspace` admits a workspace member OR an org member whose selector
+  reaches the workspace (mapped role). Membership wins; `ws.granted_by()` says
+  which. Org-granted users have no `workspace_members` row.
+- Org-level routes: `#[guard(InOrganization::guard())]` + `CurrentOrganization`
+  (`workspace_ids()`, `reaches`, `authorize`, `scope`). Read across workspaces
+  with `OrgRepo::<E>::select(org.workspace_ids())` (read-only; writes go through
+  `WorkspaceRepo` in one workspace). 400 `The request names no organization.`,
+  404 `Organization not found.`, 403 `You are not a member of this organization.`
+- PostgreSQL: `RlsPolicy::new("deals").organizations()` adds a SELECT-only
+  policy on `navree.organization` (set by `CurrentOrganization`, or
+  `organizations.enter(&uow, id)` in jobs).
+- Routes `/api/organizations`, `/{organization}`, `/transfer`, `/leave`,
+  `/members[/{user}]`, `/workspaces[/{workspace}]` (attach needs owning the
+  workspace), `/access-requests[/{request}/approve|decline]`.
+- `AbilityCtx::organization_id` is the org (org requests) or the workspace's org.
+
+## Partitions (inside a workspace, off by default)
+
+```toml
+[workspace.partitions]
+enabled = true          # resolvers header (X-Partition), path (/p), claim; no subdomain
+```
+
+```rust
+impl WorkspaceScoped for contact::Entity {}
+impl PartitionScoped for contact::Entity {}   // column `partition_id` (PARTITION_COLUMN)
+
+let uk = partitions.create(&uow, ws.id, NewPartition::named("acme.co.uk")).await?; // slug acme-co-uk
+partitions.grant(&uow, ws.id, grace, PartitionSelector::only([uk.id])).await?;
+
+// lists: the named partition, else every partition the member sees
+async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<contact::Model>> {
+    Ok(paginate(PartitionRepo::<Contact>::select(scope.workspace_id(), scope.selector()), &*uow.tx().await?, page).await?)
+}
+// writes: CurrentPartition requires X-Partition (400 otherwise)
+PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), am).await?;
+```
+
+- Members see `All` by default; the workspace owner and org-granted users always
+  see all. `Only` members don't see rows without a partition.
+- 404 `Partition not found.`, 403 `You don't have access to this partition.`
+- `RlsPolicy::new("contacts").partitioned()` narrows to `navree.partition` only
+  while a request names a partition; listing for `Only` members relies on
+  `PartitionScope`/`PartitionRepo`.
+- Built-in roles gain `workspace.partitions.*` (admin) / `.read` (member, viewer).
+  Routes `/api/workspaces/{workspace}/partitions[/{partition}]`,
+  `GET|PUT .../members/{user}/partitions {partitions: "all" | [ids]}`.
+- `partitions.delete` keeps rows' `partition_id`: move or delete them first.
 
 ## Testing template
 
@@ -276,4 +349,5 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,
-`/docs/workspaces/isolation/`.
+`/docs/workspaces/isolation/`, `/docs/workspaces/organizations/`,
+`/docs/workspaces/partitions/`.

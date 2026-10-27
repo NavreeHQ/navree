@@ -87,6 +87,138 @@ pub struct RoleOptions {
     pub permissions: Vec<String>,
 }
 
+/// An organization role's settings, under
+/// `workspace.organizations.roles.<name>`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct OrgRoleOptions {
+    /// Permission strings the role grants inside the organization (on the
+    /// organization routes and behind [`InOrganization`](crate::InOrganization)),
+    /// on top of the built-in ones. A list, or a comma-separated string.
+    #[serde(deserialize_with = "list_or_csv")]
+    pub permissions: Vec<String>,
+    /// The workspace role the organization role gives in the workspaces its
+    /// members may enter. Default: the workspace role of the same name
+    /// (`owner` → `owner`, `admin` → `admin`, `partner` → `partner`), which
+    /// must be a built-in or configured workspace role.
+    pub workspace_role: Option<String>,
+}
+
+/// Organizations (`workspace.organizations`): an optional level above
+/// workspaces. An organization groups workspaces; its members get a role
+/// there, and through it a workspace role in all or some of its
+/// workspaces.
+///
+/// ```toml
+/// [workspace.organizations]
+/// enabled = true
+/// resolvers = ["header", "path", "subdomain", "claim"]
+/// header = "X-Organization"
+/// # base_domain = "partners.example.com"   # acme.partners.example.com -> acme
+/// path_prefix = "/o"                       # /api/o/acme/reports -> acme
+/// claim = "organization"
+///
+/// [workspace.organizations.roles.partner]  # an app-defined role
+/// permissions = ["organization.read", "reports.read"]
+/// workspace_role = "viewer"
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct OrganizationOptions {
+    /// Whether organizations are on: the services work, the routes are
+    /// mounted (with `workspace.routes`) and workspace resolution accepts
+    /// organization grants. Off by default.
+    pub enabled: bool,
+    /// The resolvers [`CurrentOrganization`](crate::CurrentOrganization)
+    /// tries, in order.
+    #[serde(deserialize_with = "list_or_csv")]
+    pub resolvers: Vec<ResolverKind>,
+    /// The header the `header` resolver reads.
+    pub header: String,
+    /// The domain whose subdomains name organizations; the `subdomain`
+    /// resolver finds nothing while it is unset.
+    pub base_domain: Option<String>,
+    /// The path segment(s) before the organization in a URL (`/o`).
+    pub path_prefix: String,
+    /// The bearer JWT claim the `claim` resolver reads.
+    pub claim: String,
+    /// Extra permissions per organization role, and app-defined roles.
+    pub roles: BTreeMap<String, OrgRoleOptions>,
+}
+
+impl Default for OrganizationOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            resolvers: vec![
+                ResolverKind::Header,
+                ResolverKind::Path,
+                ResolverKind::Subdomain,
+                ResolverKind::Claim,
+            ],
+            header: "X-Organization".to_owned(),
+            base_domain: None,
+            path_prefix: "/o".to_owned(),
+            claim: "organization".to_owned(),
+            roles: BTreeMap::new(),
+        }
+    }
+}
+
+impl OrganizationOptions {
+    /// The segments of [`path_prefix`](Self::path_prefix): `/o` → `["o"]`.
+    pub fn path_segments(&self) -> Vec<&str> {
+        segments(&self.path_prefix)
+    }
+}
+
+/// Partitions (`workspace.partitions`): named slices of a workspace's data
+/// (a `partition_id` column), with members limited to all or some of them.
+///
+/// ```toml
+/// [workspace.partitions]
+/// enabled = true
+/// resolvers = ["header", "claim"]   # header, path or claim
+/// header = "X-Partition"            # X-Partition: acme-co-uk (a slug or an id)
+/// path_prefix = "/p"
+/// claim = "partition"
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PartitionOptions {
+    /// Whether partitions are on. Off by default.
+    pub enabled: bool,
+    /// The resolvers that find the request's partition, in order (`header`,
+    /// `path` or `claim`).
+    #[serde(deserialize_with = "list_or_csv")]
+    pub resolvers: Vec<ResolverKind>,
+    /// The header the `header` resolver reads.
+    pub header: String,
+    /// The path segment(s) before the partition in a URL (`/p`).
+    pub path_prefix: String,
+    /// The bearer JWT claim the `claim` resolver reads.
+    pub claim: String,
+}
+
+impl Default for PartitionOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            resolvers: vec![ResolverKind::Header, ResolverKind::Claim],
+            header: "X-Partition".to_owned(),
+            path_prefix: "/p".to_owned(),
+            claim: "partition".to_owned(),
+        }
+    }
+}
+
+impl PartitionOptions {
+    /// The segments of [`path_prefix`](Self::path_prefix): `/p` → `["p"]`.
+    pub fn path_segments(&self) -> Vec<&str> {
+        segments(&self.path_prefix)
+    }
+}
+
 /// Invitation settings (`workspace.invitations`).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
@@ -145,6 +277,12 @@ impl Default for InvitationOptions {
 ///
 /// [workspace.roles.billing]       # an app-defined role
 /// permissions = ["invoices.*"]
+///
+/// [workspace.organizations]       # organizations above workspaces
+/// enabled = false
+///
+/// [workspace.partitions]          # partitions inside workspaces
+/// enabled = false
 /// ```
 ///
 /// Environment variables map as usual: `APP_WORKSPACE__HEADER` →
@@ -184,6 +322,10 @@ pub struct WorkspaceConfig {
     /// Database isolation: the URL of each workspace's database, with
     /// `{id}` standing for the workspace id (simple form, 32 hex digits).
     pub database_url: Option<String>,
+    /// Organizations above workspaces (off by default).
+    pub organizations: OrganizationOptions,
+    /// Partitions inside workspaces (off by default).
+    pub partitions: PartitionOptions,
 }
 
 impl Default for WorkspaceConfig {
@@ -206,6 +348,8 @@ impl Default for WorkspaceConfig {
             roles: BTreeMap::new(),
             schema_prefix: "workspace_".to_owned(),
             database_url: None,
+            organizations: OrganizationOptions::default(),
+            partitions: PartitionOptions::default(),
         }
     }
 }
@@ -276,6 +420,8 @@ impl WorkspaceConfig {
                 .push("workspace.database_url must contain `{id}` (the workspace id)".to_owned()),
             _ => {}
         }
+        self.check_organizations(&mut errors);
+        self.check_partitions(&mut errors);
         if errors.is_empty() {
             Ok(())
         } else {
@@ -285,10 +431,55 @@ impl WorkspaceConfig {
 
     /// The segments of [`path_prefix`](Self::path_prefix): `/w` → `["w"]`.
     pub fn path_segments(&self) -> Vec<&str> {
-        self.path_prefix
-            .split('/')
-            .filter(|segment| !segment.is_empty())
-            .collect()
+        segments(&self.path_prefix)
+    }
+
+    /// Whether `name` is a built-in or configured workspace role.
+    fn has_workspace_role(&self, name: &str) -> bool {
+        matches!(name, "owner" | "admin" | "member" | "viewer") || self.roles.contains_key(name)
+    }
+
+    fn check_organizations(&self, errors: &mut Vec<String>) {
+        let orgs = &self.organizations;
+        let key = "workspace.organizations";
+        check_resolvers(key, &orgs.resolvers, true, errors);
+        check_header(key, &orgs.header, errors);
+        if let Some(domain) = &orgs.base_domain
+            && !is_domain(domain)
+        {
+            errors.push(format!(
+                "{key}.base_domain must be a host name such as `partners.example.com`"
+            ));
+        }
+        check_prefix(key, &orgs.path_prefix, errors);
+        check_claim(key, &orgs.claim, errors);
+        for (name, role) in &orgs.roles {
+            if let Err(reason) = check_role_name(name) {
+                errors.push(format!("{key}.roles: `{name}` {reason}"));
+            }
+            for permission in &role.permissions {
+                if let Err(reason) = check_permission(permission) {
+                    errors.push(format!(
+                        "{key}.roles.{name}.permissions: `{permission}` {reason}"
+                    ));
+                }
+            }
+            let mapped = role.workspace_role.as_deref().unwrap_or(name);
+            if !self.has_workspace_role(mapped) {
+                errors.push(format!(
+                    "{key}.roles.{name}.workspace_role must name a workspace role (built in or under workspace.roles), not `{mapped}`"
+                ));
+            }
+        }
+    }
+
+    fn check_partitions(&self, errors: &mut Vec<String>) {
+        let partitions = &self.partitions;
+        let key = "workspace.partitions";
+        check_resolvers(key, &partitions.resolvers, false, errors);
+        check_header(key, &partitions.header, errors);
+        check_prefix(key, &partitions.path_prefix, errors);
+        check_claim(key, &partitions.claim, errors);
     }
 
     /// The users table, or `None` when [`users_table`](Self::users_table)
@@ -303,6 +494,57 @@ impl ConfigSection for WorkspaceConfig {
 
     fn validate(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
+    }
+}
+
+/// The non-empty segments of a path prefix.
+fn segments(prefix: &str) -> Vec<&str> {
+    prefix
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+/// A resolver list: at least one, no repeats, and (for partitions) no
+/// `subdomain`.
+fn check_resolvers(
+    key: &str,
+    resolvers: &[ResolverKind],
+    subdomain: bool,
+    errors: &mut Vec<String>,
+) {
+    if resolvers.is_empty() {
+        errors.push(format!("{key}.resolvers must name at least one resolver"));
+    }
+    for (index, kind) in resolvers.iter().enumerate() {
+        if resolvers[..index].contains(kind) {
+            errors.push(format!("{key}.resolvers lists `{kind}` twice"));
+        }
+        if !subdomain && *kind == ResolverKind::Subdomain {
+            errors.push(format!(
+                "{key}.resolvers can't use `subdomain` (use header, path or claim)"
+            ));
+        }
+    }
+}
+
+fn check_header(key: &str, header: &str, errors: &mut Vec<String>) {
+    if http::HeaderName::from_bytes(header.as_bytes()).is_err() {
+        errors.push(format!("{key}.header must be a valid header name"));
+    }
+}
+
+fn check_prefix(key: &str, prefix: &str, errors: &mut Vec<String>) {
+    if segments(prefix).is_empty() || !prefix.starts_with('/') {
+        errors.push(format!(
+            "{key}.path_prefix must start with `/` and name a segment"
+        ));
+    }
+}
+
+fn check_claim(key: &str, claim: &str, errors: &mut Vec<String>) {
+    if claim.trim().is_empty() {
+        errors.push(format!("{key}.claim must not be empty"));
     }
 }
 
@@ -506,6 +748,159 @@ mod tests {
     fn an_empty_users_table_means_none() {
         let config = load(ConfigSources::new().set("workspace.users_table", "")).unwrap();
         assert_eq!(config.users_table(), None);
+    }
+
+    #[test]
+    fn organizations_and_partitions_are_off_by_default() {
+        let config = load(ConfigSources::new()).unwrap();
+        let orgs = &config.organizations;
+        assert!(!orgs.enabled);
+        assert_eq!(
+            orgs.resolvers,
+            [
+                ResolverKind::Header,
+                ResolverKind::Path,
+                ResolverKind::Subdomain,
+                ResolverKind::Claim
+            ]
+        );
+        assert_eq!(orgs.header, "X-Organization");
+        assert_eq!(orgs.base_domain, None);
+        assert_eq!(orgs.path_prefix, "/o");
+        assert_eq!(orgs.path_segments(), ["o"]);
+        assert_eq!(orgs.claim, "organization");
+        assert!(orgs.roles.is_empty());
+        let partitions = &config.partitions;
+        assert!(!partitions.enabled);
+        assert_eq!(
+            partitions.resolvers,
+            [ResolverKind::Header, ResolverKind::Claim]
+        );
+        assert_eq!(partitions.header, "X-Partition");
+        assert_eq!(partitions.path_prefix, "/p");
+        assert_eq!(partitions.claim, "partition");
+    }
+
+    #[test]
+    fn organization_and_partition_options_are_read_from_config_and_environment() {
+        let config = load(
+            ConfigSources::new()
+                .set(
+                    "workspace.roles.auditor.permissions",
+                    json!(["reports.read"]),
+                )
+                .set(
+                    "workspace.organizations.roles.partner.permissions",
+                    json!(["organization.read"]),
+                )
+                .set(
+                    "workspace.organizations.roles.partner.workspace_role",
+                    "auditor",
+                )
+                .env_vars(
+                    "APP_",
+                    [
+                        ("APP_WORKSPACE__ORGANIZATIONS__ENABLED", "true"),
+                        (
+                            "APP_WORKSPACE__ORGANIZATIONS__RESOLVERS",
+                            "subdomain,header",
+                        ),
+                        ("APP_WORKSPACE__ORGANIZATIONS__HEADER", "X-Company"),
+                        (
+                            "APP_WORKSPACE__ORGANIZATIONS__BASE_DOMAIN",
+                            "partners.example.com",
+                        ),
+                        (
+                            "APP_WORKSPACE__ORGANIZATIONS__ROLES__ADMIN__PERMISSIONS",
+                            "reports.*,billing.read",
+                        ),
+                        ("APP_WORKSPACE__PARTITIONS__ENABLED", "true"),
+                        ("APP_WORKSPACE__PARTITIONS__RESOLVERS", "path,header"),
+                        ("APP_WORKSPACE__PARTITIONS__HEADER", "X-Domain"),
+                    ],
+                ),
+        )
+        .unwrap();
+        let orgs = &config.organizations;
+        assert!(orgs.enabled);
+        assert_eq!(
+            orgs.resolvers,
+            [ResolverKind::Subdomain, ResolverKind::Header]
+        );
+        assert_eq!(orgs.header, "X-Company");
+        assert_eq!(orgs.base_domain.as_deref(), Some("partners.example.com"));
+        assert_eq!(
+            orgs.roles["admin"].permissions,
+            ["reports.*", "billing.read"]
+        );
+        assert_eq!(orgs.roles["admin"].workspace_role, None);
+        assert_eq!(orgs.roles["partner"].permissions, ["organization.read"]);
+        assert_eq!(
+            orgs.roles["partner"].workspace_role.as_deref(),
+            Some("auditor")
+        );
+        let partitions = &config.partitions;
+        assert!(partitions.enabled);
+        assert_eq!(
+            partitions.resolvers,
+            [ResolverKind::Path, ResolverKind::Header]
+        );
+        assert_eq!(partitions.header, "X-Domain");
+    }
+
+    #[test]
+    fn invalid_organization_and_partition_options_fail_validation() {
+        for (key, value) in [
+            ("workspace.organizations.resolvers", json!([])),
+            (
+                "workspace.organizations.resolvers",
+                json!(["claim", "claim"]),
+            ),
+            ("workspace.organizations.header", json!("bad header")),
+            ("workspace.organizations.base_domain", json!("https://x")),
+            ("workspace.organizations.path_prefix", json!("o")),
+            ("workspace.organizations.claim", json!("")),
+            (
+                "workspace.organizations.roles.Partner.permissions",
+                json!(["organization.read"]),
+            ),
+            (
+                "workspace.organizations.roles.partner.permissions",
+                json!(["organization"]),
+            ),
+            // An app-defined organization role maps to a workspace role of
+            // the same name unless it names one, and that role must exist.
+            (
+                "workspace.organizations.roles.partner.permissions",
+                json!(["organization.read"]),
+            ),
+            (
+                "workspace.organizations.roles.admin.workspace_role",
+                json!("auditor"),
+            ),
+            ("workspace.partitions.resolvers", json!([])),
+            ("workspace.partitions.resolvers", json!(["subdomain"])),
+            ("workspace.partitions.header", json!("")),
+            ("workspace.partitions.path_prefix", json!("/")),
+            ("workspace.partitions.claim", json!("  ")),
+        ] {
+            let result = load(ConfigSources::new().set(key, value.clone()));
+            assert!(result.is_err(), "{key} = {value} should be rejected");
+        }
+        let mapped = load(ConfigSources::new().set(
+            "workspace.organizations.roles.partner.workspace_role",
+            "viewer",
+        ));
+        assert!(mapped.is_ok(), "{mapped:?}");
+        let same_name = load(
+            ConfigSources::new()
+                .set("workspace.roles.partner.permissions", json!(["deals.read"]))
+                .set(
+                    "workspace.organizations.roles.partner.permissions",
+                    json!(["organization.read"]),
+                ),
+        );
+        assert!(same_name.is_ok(), "{same_name:?}");
     }
 
     #[test]

@@ -39,8 +39,13 @@ pub struct AbilityCtx {
     /// The user's permission strings (`posts.publish`), from their roles and
     /// direct grants, sorted.
     pub permissions: Vec<String>,
-    /// The current team (Phase 2; always `None` for now).
+    /// The current team: the workspace of a request inside a workspace
+    /// (navree-workspace sets it); `None` elsewhere.
     pub team_id: Option<Uuid>,
+    /// The current organization: the organization of a request inside an
+    /// organization, or the one the current workspace belongs to
+    /// (navree-workspace sets it); `None` elsewhere.
+    pub organization_id: Option<Uuid>,
     /// Permission prefixes and the subject types they map to (`posts` →
     /// `Post`), from every registered subject; used by
     /// [`grant_permissions`](AbilityCtx::grant_permissions).
