@@ -103,7 +103,7 @@ The app is complete and working: a root module with every common platform module
 | Option | Default | What it does |
 |---|---|---|
 | `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
-| `--ui next` | `--ui none` | Also creates a Next.js front end in `web/`. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. |
+| `--ui next` | `--ui none` | Also creates a Next.js front end in `web/`. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. With a kit, only `saas` takes it (its front end is Next.js already); `api` and `micro` have no front end. |
 | `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
 
 ```sh

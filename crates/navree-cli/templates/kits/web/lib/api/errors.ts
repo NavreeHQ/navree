@@ -32,16 +32,12 @@ export class ApiError extends Error {
 
   /** The error of a failed response (any body). */
   static async from(response: Response): Promise<ApiError> {
-    let body: { message?: unknown; code?: unknown; errors?: unknown } | null = null;
-    try {
-      body = (await response.json()) as typeof body;
-    } catch {
-      // not JSON
-    }
-    const message = Array.isArray(body?.message)
-      ? body.message.join(", ")
-      : typeof body?.message === "string"
-        ? body.message
+    const body = await readBody(response);
+    const raw = body?.message;
+    const message = Array.isArray(raw)
+      ? raw.join(", ")
+      : typeof raw === "string"
+        ? raw
         : response.statusText || `Request failed (${response.status})`;
     const errors =
       body?.errors && typeof body.errors === "object" ? (body.errors as Record<string, string[]>) : {};
@@ -51,6 +47,19 @@ export class ApiError extends Error {
   /** A 400 whose `errors` name the fields. */
   get isValidation(): boolean {
     return this.status === 400 && Object.keys(this.errors).length > 0;
+  }
+}
+
+/** What a failed response's body may hold, before it is checked. */
+type ErrorBody = { message?: unknown; code?: unknown; errors?: unknown };
+
+/** The JSON body of a failed response, or `null` when it has none. */
+async function readBody(response: Response): Promise<ErrorBody | null> {
+  try {
+    const body: unknown = await response.json();
+    return body && typeof body === "object" ? (body as ErrorBody) : null;
+  } catch {
+    return null;
   }
 }
 

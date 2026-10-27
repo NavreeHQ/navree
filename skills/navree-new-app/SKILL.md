@@ -1,6 +1,6 @@
 ---
 name: navree-new-app
-description: "Creates and runs a new Navree app: installing the navree CLI, `navree new` and its options, APP_KEY, `navree dev`, the generated files, the first feature module and adding Navree to an existing Cargo package. Use when the user wants to start a Navree project, scaffold a Rust API with Navree, run a fresh app, or asks what `navree new` generated."
+description: "Creates and runs a new Navree app: installing the navree CLI, `navree new` and its options, the starter kits (`--kit saas|api|micro`: a multi-tenant SaaS with a Next.js front end, the same API alone, or a microservice workspace), APP_KEY, `navree dev`, the generated files, the first feature module and adding Navree to an existing Cargo package. Use when the user wants to start a Navree project, scaffold a Rust API, a SaaS or a microservice with Navree, run a fresh app or kit, or asks what `navree new` generated."
 ---
 
 # Create and run a Navree app
@@ -42,6 +42,44 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
 - `navree new` doesn't run Cargo or `git init`. The app is its own Cargo
   workspace (remove `[workspace]` from its `Cargo.toml` to join an
   enclosing one).
+
+### Or start from a starter kit
+
+When the user wants a product rather than a blank app, use a kit. Pick by
+shape:
+
+| Want | Command | Writes |
+|---|---|---|
+| Multi-tenant SaaS with a web app | `navree new acme --kit saas` | The API (accounts, two-factor, workspaces, members and invitations, billing, social sign-in, Helm at `/admin`, an example `projects` feature, a demo seeder) plus `web/`: Next.js, shadcn/ui and a backend-for-frontend holding the tokens in httpOnly cookies |
+| The same API for mobile or other clients | `navree new acme --kit api` | The SaaS kit's API without `web/`, and a committed `openapi.json` |
+| A service on a broker | `navree new billing --kit micro` | A Cargo workspace: `crates/billing` (an `invoices.get` message handler, a `deal.won` event handler, health and metrics over HTTP) and `crates/billing-contracts` (the payloads and events clients share), NATS configured |
+
+```sh
+navree new acme --kit saas
+cd acme
+navree dock up                 # PostgreSQL and Mailpit (micro: PostgreSQL and NATS)
+navree key:generate            # then set APP_KEY in .env
+navree migrate:fresh --seed    # saas/api: tables and the `demo` workspace (micro: navree migrate)
+pnpm --dir web install         # saas only: the web app's packages
+navree dev                     # API on :8080, web app on :3000
+```
+
+- Kits need Docker or Podman for Dock, and the SaaS kit needs Node.js 22+
+  and pnpm. `.env` already holds Dock's settings (`APP_DATABASE__URL`, ...)
+  between `# dock:start` and `# dock:end`; `web/.env.local` is a copy of
+  `web/.env.example`.
+- Demo accounts (saas/api): `owner@<app>.test` (also a super admin for
+  `/admin`) and `member@<app>.test`, password `password123`, workspace
+  `demo`.
+- `--ui next` only goes with `--kit saas` (where it changes nothing);
+  with `api` or `micro` it is an error.
+- The kit is recorded in `Cargo.toml`: `[package.metadata.navree] kit`
+  and `kit_version` (`[workspace.metadata.navree]` for `micro`). Compare
+  with a fresh `navree new acme-latest --kit saas` to adopt template fixes.
+- Read the generated `AGENTS.md` before changing a kit app: it lists the
+  layout, the commands and the conventions (workspace-scoped features copy
+  `src/modules/projects/`; micro handlers copy
+  `crates/<service>/src/modules/invoices/handlers.rs`).
 
 ## 3. Set the application key and run
 
@@ -146,6 +184,14 @@ cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
 navree check                         # the module graph, without booting
 ```
 
+For a kit, also:
+
+```sh
+navree openapi:export openapi.json   # saas/api: must leave the committed file unchanged (CI checks it)
+pnpm --dir web lint && pnpm --dir web typecheck && pnpm --dir web test && pnpm --dir web build   # saas
+cargo test --workspace && navree micro:patterns                   # micro, at the workspace root
+```
+
 ## Common mistakes
 
 - `navree help` prints the CLI's help; `navree list` prints the app's commands.
@@ -156,10 +202,26 @@ navree check                         # the module graph, without booting
   `routes` need a working configuration and database.
 - Leaving `migrate_on_boot = true` in production: turn it off with
   `APP_DATABASE__MIGRATE_ON_BOOT=false` and run `migrate` as a deploy step.
+- Kits keep the database URL out of `config/app.toml`, so `.env` (Dock's
+  settings) fills it: PostgreSQL must be up (`navree dock up`) before
+  `navree migrate`, `key:generate` or `dev`. Their tests need no services:
+  each boots on its own SQLite file (and `MicroFake` in `micro`).
+- In the `micro` workspace, run `navree dev`, `check`, `migrate` and
+  `micro:*` at the root (its `default-members` is the service), but the
+  generators (`make:module`, `make:migration`, ...) in `crates/<service>`.
+  Use `cargo fmt`, not `cargo fmt --all`: `--all` also reformats path
+  dependencies such as a local Navree checkout.
+- After changing a DTO in the SaaS kit, run `pnpm --dir web gen:api`: it
+  exports `openapi.json` and regenerates `web/lib/api/schema.d.ts`. Commit
+  both, or CI's OpenAPI drift check and the web type check fail.
+- `billing.provider = "fake"` is for development only; production sets
+  `APP_BILLING__PROVIDER=stripe` (see `harbor.toml`) with the keys in the
+  environment.
 
 ## Docs
 
 - https://navree.com/docs/getting-started/installation/
+- https://navree.com/docs/getting-started/starter-kits/
 - https://navree.com/docs/getting-started/your-first-app/
 - https://navree.com/docs/getting-started/directory-structure/
 - https://navree.com/docs/getting-started/configuration/

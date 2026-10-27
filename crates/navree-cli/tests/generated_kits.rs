@@ -2,7 +2,9 @@
 //! navree, and their own tests and lints pass.
 //!
 //! The Rust tests are ignored by default: each builds the whole framework in
-//! a fresh project (minutes). Run them with
+//! a fresh project (minutes). They run `cargo test`, clippy, the app's
+//! `check`, then `conformity:check` and the OpenAPI drift check (`saas`,
+//! `api`) or `micro:patterns` (`micro`). Run them with
 //!
 //! ```text
 //! CARGO_TARGET_DIR=target/agents/cli cargo test -p navree-cli --test generated_kits -- --ignored
@@ -10,8 +12,9 @@
 //!
 //! The SaaS kit's front end is checked by `saas_kit_web_installs_lints_tests_and_builds`,
 //! which runs only with `NAVREE_TEST_KIT_WEB=1` (it needs Node.js 22 and
-//! pnpm, and downloads the packages): `pnpm install`, `pnpm lint`,
-//! `pnpm typecheck`, `pnpm test` and `pnpm build` in `web/`.
+//! pnpm, and downloads the packages): `pnpm install --frozen-lockfile`, the
+//! shipped `lib/api/schema.d.ts` against `openapi-typescript ../openapi.json`,
+//! then `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in `web/`.
 //!
 //! `NAVREE_FACADE` may point at another `navree` facade crate directory
 //! (default: the workspace's `crates/navree`). The projects build in
@@ -126,17 +129,31 @@ fn rust_checks(root: &Path, extra: &[&str]) -> bool {
         && cargo(root, &run)
 }
 
+/// Whether the committed `openapi.json` is what the app exports now (the
+/// CI workflow's drift check).
+fn openapi_is_current(root: &Path) -> bool {
+    let committed = std::fs::read_to_string(root.join("openapi.json")).expect("the kit ships openapi.json");
+    cargo(
+        root,
+        &["run", "--quiet", "--", "openapi:export", "openapi.fresh.json"],
+    ) && {
+        let fresh = std::fs::read_to_string(root.join("openapi.fresh.json")).unwrap();
+        let same = fresh.replace("\r\n", "\n") == committed;
+        if !same {
+            eprintln!(
+                "openapi.json is stale: copy openapi.fresh.json over crates/navree-cli/templates/kits/api/openapi.json.j2 (with the title as `{{{{ title }}}} API`) and regenerate web/lib/api/schema.d.ts"
+            );
+        }
+        same
+    }
+}
+
 #[test]
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn api_kit_compiles_and_its_tests_pass() {
     let (parent, root) = generate(Kit::Api, "acme-api");
-    // Every route is documented, and the OpenAPI document exports.
-    let ok = rust_checks(&root, &["conformity:check"])
-        && cargo(
-            &root,
-            &["run", "--quiet", "--", "openapi:export", "openapi.json"],
-        )
-        && root.join("openapi.json").is_file();
+    // Every route is documented, and the committed contract is current.
+    let ok = rust_checks(&root, &["conformity:check"]) && openapi_is_current(&root);
     finish(parent, ok, "api kit");
 }
 
@@ -144,7 +161,7 @@ fn api_kit_compiles_and_its_tests_pass() {
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn saas_kit_api_compiles_and_its_tests_pass() {
     let (parent, root) = generate(Kit::Saas, "acme");
-    let ok = rust_checks(&root, &["conformity:check"]);
+    let ok = rust_checks(&root, &["conformity:check"]) && openapi_is_current(&root);
     finish(parent, ok, "saas kit");
 }
 
@@ -178,7 +195,32 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
     }
     let (parent, root) = generate(Kit::Saas, "acme");
     let web = root.join("web");
-    let ok = pnpm(&web, &["install"])
+    // The committed lockfile installs as it is, and the shipped types are
+    // what openapi-typescript makes of the shipped `openapi.json`.
+    let ok = pnpm(&web, &["install", "--frozen-lockfile"])
+        && pnpm(
+            &web,
+            &[
+                "exec",
+                "openapi-typescript",
+                "../openapi.json",
+                "-o",
+                "lib/api/schema.check.d.ts",
+            ],
+        )
+        && {
+            let read = |path: &str| {
+                std::fs::read_to_string(web.join(path))
+                    .unwrap()
+                    .replace("\r\n", "\n")
+            };
+            let same = read("lib/api/schema.check.d.ts") == read("lib/api/schema.d.ts");
+            std::fs::remove_file(web.join("lib/api/schema.check.d.ts")).unwrap();
+            if !same {
+                eprintln!("web/lib/api/schema.d.ts does not match openapi.json: run `pnpm gen:api`");
+            }
+            same
+        }
         && pnpm(&web, &["lint"])
         && pnpm(&web, &["typecheck"])
         && pnpm(&web, &["test"])
