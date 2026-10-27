@@ -14,6 +14,7 @@ fn app(name: &str, ui: Ui) -> NewApp {
     NewApp {
         name: AppName::parse(name).unwrap(),
         ui,
+        kit: None,
         navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
     }
 }

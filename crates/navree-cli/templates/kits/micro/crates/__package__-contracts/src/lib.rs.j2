@@ -1,0 +1,141 @@
+//! The contract of the {{ title }} service: the messages it answers, the
+//! events it handles and the events it publishes.
+//!
+//! Other services depend on this crate and call the service with
+//! `ServiceClient`, so a change to a payload is a compile error on both
+//! sides instead of a surprise at run time:
+//!
+//! ```ignore
+//! use {{ contracts_crate }}::{GET_INVOICE, GetInvoice, Invoice};
+//!
+//! let invoice: Invoice = client.send(GET_INVOICE, &GetInvoice { id }).await?;
+//! ```
+
+use chrono::{DateTime, Utc};
+use garde::Validate;
+use navree::events::Event;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// `invoices.get`: one invoice. Send a [`GetInvoice`]; the reply is an
+/// [`Invoice`], or a 404 when there is none with that id. The caller must
+/// be signed in (its bearer token is forwarded with the message).
+pub const GET_INVOICE: &str = "invoices.get";
+
+/// The payload of [`GET_INVOICE`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+pub struct GetInvoice {
+    /// The invoice's id.
+    #[garde(skip)]
+    pub id: Uuid,
+}
+
+/// An invoice, as other services see it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Invoice {
+    pub id: Uuid,
+    /// The deal the invoice bills.
+    pub deal_id: Uuid,
+    /// The amount in the currency's smallest unit (cents).
+    pub amount_cents: i64,
+    /// An ISO 4217 code, upper case (`EUR`).
+    pub currency: String,
+    pub status: InvoiceStatus,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Where an invoice is in its life.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InvoiceStatus {
+    /// Drafted, not sent yet.
+    Draft,
+    /// Sent to the customer.
+    Sent,
+    /// Paid.
+    Paid,
+    /// Cancelled.
+    Void,
+}
+
+impl InvoiceStatus {
+    /// The status as stored and sent (`draft`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InvoiceStatus::Draft => "draft",
+            InvoiceStatus::Sent => "sent",
+            InvoiceStatus::Paid => "paid",
+            InvoiceStatus::Void => "void",
+        }
+    }
+
+    /// The status named `s`, if any.
+    pub fn parse(s: &str) -> Option<InvoiceStatus> {
+        [
+            InvoiceStatus::Draft,
+            InvoiceStatus::Sent,
+            InvoiceStatus::Paid,
+            InvoiceStatus::Void,
+        ]
+        .into_iter()
+        .find(|status| status.as_str() == s)
+    }
+}
+
+/// `deal.won`: a deal was won in the service that owns deals. This service
+/// drafts an invoice for it (once per deal, however often the event
+/// arrives).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+pub struct DealWon {
+    #[garde(skip)]
+    pub deal_id: Uuid,
+    /// The deal's amount in cents.
+    #[garde(range(min = 0))]
+    pub amount_cents: i64,
+    /// An ISO 4217 code (`EUR`).
+    #[garde(length(min = 3, max = 3))]
+    pub currency: String,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+
+/// `invoice.drafted`: this service drafted an invoice. Published after
+/// the invoice is committed (through the outbox).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InvoiceDrafted {
+    pub invoice_id: Uuid,
+    pub deal_id: Uuid,
+    pub amount_cents: i64,
+    pub currency: String,
+}
+
+impl Event for InvoiceDrafted {
+    const NAME: &'static str = "invoice.drafted";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn statuses_round_trip() {
+        for status in [
+            InvoiceStatus::Draft,
+            InvoiceStatus::Sent,
+            InvoiceStatus::Paid,
+            InvoiceStatus::Void,
+        ] {
+            assert_eq!(InvoiceStatus::parse(status.as_str()), Some(status));
+        }
+        assert_eq!(InvoiceStatus::parse("lost"), None);
+    }
+
+    #[test]
+    fn events_travel_under_their_names() {
+        assert_eq!(DealWon::NAME, "deal.won");
+        assert_eq!(InvoiceDrafted::NAME, "invoice.drafted");
+        assert_eq!(GET_INVOICE, "invoices.get");
+    }
+}

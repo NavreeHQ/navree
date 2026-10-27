@@ -1,0 +1,60 @@
+# {{ title }}
+
+A Navree microservice, started from the `{{ kit }}` starter kit. It answers
+the message `invoices.get`, drafts an invoice when another service publishes
+`deal.won`, and publishes `invoice.drafted`, over NATS. Over HTTP it serves
+only health checks and metrics.
+
+## Getting started
+
+You need Rust, the `navree` CLI and Docker or Podman.
+
+```sh
+navree dock up                 # PostgreSQL and NATS
+navree key:generate            # then set APP_KEY in .env
+navree migrate                 # the invoices table
+navree dev                     # handlers on NATS, health on http://127.0.0.1:8080/health/ready
+```
+
+Try it from another terminal:
+
+```sh
+navree micro:patterns
+navree micro:emit deal.won '{"deal_id":"0199e5f8-4d0a-7c3e-9a51-3f8f5b6c2d10","amount_cents":129900,"currency":"EUR"}'
+```
+
+## What's where
+
+| Path | What it holds |
+|---|---|
+| `crates/{{ contracts_package }}/` | `GetInvoice`, `Invoice` and the events: what other services depend on |
+| `crates/{{ package }}/src/app.rs` | The root: the framework modules, `MicroModule`, the feature modules |
+| `crates/{{ package }}/src/modules/invoices/` | The handlers, the service, the entity and its migrations |
+| `crates/{{ package }}/tests/` | Tests on `MicroFake`'s in-memory transport: no broker needed |
+
+## Calling it from another service
+
+Depend on the contracts crate and send with `ServiceClient`:
+
+```rust
+use {{ contracts_crate }}::{GET_INVOICE, GetInvoice, Invoice};
+
+let invoice: Invoice = client.send(GET_INVOICE, &GetInvoice { id }).await?;
+```
+
+The caller's bearer token travels with the message, so give every service
+the same `auth.jwt.secret` (`APP_AUTH__JWT__SECRET`).
+
+## Another broker
+
+Set `micro.transport` in `config/app.toml` to `kafka`, `rabbitmq`, `redis`,
+`mqtt` or `tcp`, and turn on the matching feature (`micro-kafka`, ...) in
+`crates/{{ package }}/Cargo.toml`. The handlers stay the same.
+
+## Tests
+
+```sh
+cargo test --workspace
+```
+
+Built from the {{ kit }} kit {{ kit_version }}: https://navree.com/docs/getting-started/starter-kits/

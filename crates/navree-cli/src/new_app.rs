@@ -6,6 +6,7 @@ use anyhow::{Context, bail};
 use serde::Serialize;
 
 use crate::clock::Timestamp;
+use crate::kits::{Kit, kit_files};
 use crate::names::AppName;
 use crate::scaffold::FileSet;
 use crate::templates::{TemplateError, render};
@@ -65,13 +66,53 @@ impl NavreeSource {
     /// The right-hand side of `navree = ...` in `Cargo.toml`.
     pub fn dependency(&self) -> String {
         match self {
-            NavreeSource::Path(path) => {
-                let path = plain_path(&path.to_string_lossy()).replace('\\', "/");
-                format!("{{ path = {} }}", toml_string(&path))
-            }
+            NavreeSource::Path(path) => format!("{{ path = {} }}", path_value(path)),
             NavreeSource::Version(version) => toml_string(version),
         }
     }
+
+    /// The right-hand side of `navree = ...` with `features` turned on (on
+    /// top of the default ones): `{ path = "..", features = ["billing"] }`.
+    pub fn dependency_with_features(&self, features: &[&str]) -> String {
+        if features.is_empty() {
+            return self.dependency();
+        }
+        let features = features
+            .iter()
+            .map(|f| toml_string(f))
+            .collect::<Vec<_>>()
+            .join(", ");
+        match self {
+            NavreeSource::Path(path) => {
+                format!("{{ path = {}, features = [{features}] }}", path_value(path))
+            }
+            NavreeSource::Version(version) => format!(
+                "{{ version = {}, features = [{features}] }}",
+                toml_string(version)
+            ),
+        }
+    }
+
+    /// The right-hand side of `navree = ...` with the default features
+    /// off, for `[workspace.dependencies]`: each member turns on what it
+    /// uses (`{ path = "..", default-features = false }`).
+    pub fn dependency_without_default_features(&self) -> String {
+        match self {
+            NavreeSource::Path(path) => format!(
+                "{{ path = {}, default-features = false }}",
+                path_value(path)
+            ),
+            NavreeSource::Version(version) => format!(
+                "{{ version = {}, default-features = false }}",
+                toml_string(version)
+            ),
+        }
+    }
+}
+
+/// A local path as a TOML string, with `/` separators.
+fn path_value(path: &Path) -> String {
+    toml_string(&plain_path(&path.to_string_lossy()).replace('\\', "/"))
 }
 
 /// `path` itself when it is the `navree` package, or its `crates/navree`.
@@ -122,8 +163,10 @@ fn toml_string(s: &str) -> String {
 pub struct NewApp {
     /// The package name.
     pub name: AppName,
-    /// The front end.
+    /// The front end (the minimal app only; a kit brings its own).
     pub ui: Ui,
+    /// The starter kit, or `None` for the minimal app.
+    pub kit: Option<Kit>,
     /// Where `navree` comes from.
     pub navree: NavreeSource,
 }
@@ -138,8 +181,12 @@ struct AppContext {
     ui_next: bool,
 }
 
-/// The files of the app, relative to its directory.
+/// The files of the app, relative to its directory: the kit's when it has
+/// one ([`kit_files`]), else the minimal app with an optional front end.
 pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError> {
+    if let Some(kit) = app.kit {
+        return kit_files(app, kit, now);
+    }
     let ctx = AppContext {
         package: app.name.package().to_owned(),
         crate_name: app.name.crate_name(),
@@ -227,9 +274,69 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
     Ok(files)
 }
 
+/// What `navree new` prints once the app is written to `root`: where it
+/// is, and the next steps for its kit.
+pub fn created_message(app: &NewApp, root: &Path) -> String {
+    let package = app.name.package();
+    let mut out = match app.kit {
+        Some(kit) => format!("Created {package} in {} (kit: {kit})\n", root.display()),
+        None => format!("Created {package} in {}\n", root.display()),
+    };
+    if let NavreeSource::Path(path) = &app.navree {
+        out.push_str(&format!("It depends on navree at {}.\n", path.display()));
+    }
+    out.push_str("\nNext steps:\n");
+    let steps: &[(&str, &str)] = match app.kit {
+        Some(Kit::Saas) => &[
+            ("navree dock up", "PostgreSQL and Mailpit"),
+            ("navree key:generate", "then set APP_KEY in .env"),
+            ("navree migrate:fresh --seed", "tables and a demo workspace"),
+            ("pnpm --dir web install", "the web app's packages"),
+            ("navree dev", "API on :8080, web app on :3000"),
+        ],
+        Some(Kit::Api) => &[
+            ("navree dock up", "PostgreSQL and Mailpit"),
+            ("navree key:generate", "then set APP_KEY in .env"),
+            ("navree migrate:fresh --seed", "tables and a demo workspace"),
+            ("navree dev", "API on :8080, reference at /api/docs"),
+        ],
+        Some(Kit::Micro) => &[
+            ("navree dock up", "PostgreSQL and NATS"),
+            ("navree key:generate", "then set APP_KEY in .env"),
+            ("navree migrate", "the invoices table"),
+            ("navree dev", "handlers on NATS, health on :8080"),
+        ],
+        None if app.ui == Ui::Next => &[
+            ("navree key:generate", "then set APP_KEY in .env"),
+            (
+                "npm --prefix web install",
+                "the front end; `navree dev` starts it",
+            ),
+            ("navree dev", "http://127.0.0.1:8080/api/docs"),
+        ],
+        None => &[
+            ("navree key:generate", "then set APP_KEY in .env"),
+            ("navree dev", "http://127.0.0.1:8080/api/docs"),
+        ],
+    };
+    out.push_str(&format!("  cd {package}\n"));
+    for (command, comment) in steps {
+        out.push_str(&format!("  {command:<30} # {comment}\n"));
+    }
+    out
+}
+
 /// Creates the app in `parent/<name>` and returns its directory. The
 /// directory must not exist or be empty.
 pub fn create_app(parent: &Path, app: &NewApp, now: Timestamp) -> anyhow::Result<PathBuf> {
+    if let Some(kit) = app.kit
+        && app.ui == Ui::Next
+        && !kit.has_web()
+    {
+        bail!(
+            "the {kit} kit has no front end: --ui next goes with --kit saas (whose front end is Next.js) or with no kit"
+        );
+    }
     let root = parent.join(app.name.package());
     if root.exists() {
         let mut entries =

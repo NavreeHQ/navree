@@ -105,7 +105,7 @@ fn environment() -> &'static Environment<'static> {
         );
         env.set_undefined_behavior(UndefinedBehavior::Strict);
         env.set_auto_escape_callback(|_| AutoEscape::None);
-        for (name, source) in TEMPLATES {
+        for (name, source) in TEMPLATES.iter().copied().chain(crate::kits::templates()) {
             env.add_template(name, source)
                 .unwrap_or_else(|error| panic!("embedded template `{name}` is invalid: {error}"));
         }
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn every_embedded_template_parses() {
-        for (name, _) in TEMPLATES {
+        for (name, _) in TEMPLATES.iter().copied().chain(crate::kits::templates()) {
             assert!(environment().get_template(name).is_ok(), "{name}");
         }
     }

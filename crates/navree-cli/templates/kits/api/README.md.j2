@@ -1,0 +1,73 @@
+# {{ title }}
+
+A multi-tenant Navree app, started from the `{{ kit }}` starter kit: sign-up
+with email verification, two-factor sign-in, social sign-in, workspaces with
+members, roles and invitations, billing per workspace, settings, an admin
+panel at `/admin`, and an example feature (projects){% if web %}, with a Next.js
+and shadcn/ui front end in `web/`{% endif %}.
+
+## Getting started
+
+You need Rust, the `navree` CLI and Docker or Podman{% if web %}, plus Node.js 22 and
+pnpm for the front end{% endif %}.
+
+```sh
+navree dock up                 # PostgreSQL and Mailpit (http://localhost:8025)
+navree key:generate            # then set APP_KEY in .env
+navree migrate:fresh --seed    # tables and a demo workspace
+{% if web %}
+pnpm --dir web install         # the web app's packages
+navree dev                     # API on :8080, web app on http://localhost:3000
+{% else %}
+navree dev                     # API on http://127.0.0.1:8080, reference at /api/docs
+{% endif %}
+```
+
+Sign in as `owner@{{ package | replace("_", "-") }}.test` (password `password123`); the owner is
+also a super admin, so the admin panel at {% if web %}http://localhost:3000/admin{% else %}http://127.0.0.1:8080/admin{% endif %} opens
+for them. `member@{{ package | replace("_", "-") }}.test` is a member of the same workspace.
+
+## What's where
+
+| Path | What it holds |
+|---|---|
+| `src/platform.rs` | The framework modules: auth, access, workspaces, billing, social sign-in, real time, Helm, ... |
+| `src/modules/accounts/` | Sessions and the sign-in options (`/api/v1/account`) |
+| `src/modules/settings/` | Workspace name and slug, notification preferences, workspace billing |
+| `src/modules/projects/` | The example feature: copy it for your own |
+| `src/modules/admin/` | The admin panel's resources |
+| `src/abilities.rs` | Ability rules; role permissions are in `config/app.toml` |
+| `src/seed.rs` | The demo workspace |
+{% if web %}
+| `web/` | The Next.js front end and its backend-for-frontend |
+{% endif %}
+
+## Billing
+
+`billing.provider = "fake"` in `config/app.toml` lets you click through
+checkout without a payment account. For production, set
+`APP_BILLING__PROVIDER=stripe` (or `paddle`), put the keys in the
+environment (`APP_BILLING__STRIPE__SECRET_KEY`,
+`APP_BILLING__STRIPE__WEBHOOK_SECRET`), and set each plan's price ids
+under `[billing.plans.*]`.
+
+## The API contract
+
+`openapi.json` is the OpenAPI document, committed. After changing a route
+or a DTO, run `navree openapi:export openapi.json` to write it again; the
+CI workflow fails when the committed file no longer matches the code.
+{% if web %}
+`pnpm --dir web gen:api` does both: it exports the document and
+regenerates the web app's types in `web/lib/api/schema.d.ts`.
+{% endif %}
+
+## Tests
+
+```sh
+cargo test
+{% if web %}
+pnpm --dir web test
+{% endif %}
+```
+
+Built from the {{ kit }} kit {{ kit_version }}: https://navree.com/docs/getting-started/starter-kits/

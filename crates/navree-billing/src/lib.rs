@@ -83,6 +83,7 @@ pub use controller::{
     BillingController, BillingOverview, CheckoutInput, PlanPricesResource, PlanResource,
     PortalInput, SubscriptionResource, SwapInput, TrialResource, WebhookAnswer,
 };
+pub use entity::SUBSCRIPTION_SUBJECT;
 pub use error::BillingError;
 pub use events::{
     InvoicePaid, PaymentFailed, SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated,

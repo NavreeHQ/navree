@@ -37,6 +37,7 @@ fn generated_rust_is_rustfmt_clean() {
     let app = NewApp {
         name: AppName::parse("blog").unwrap(),
         ui: Ui::None,
+        kit: None,
         navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
     };
     let root = create_app(dir.path(), &app, now).unwrap();

@@ -1,0 +1,27 @@
+import type { Metadata, Viewport } from "next";
+import { fontVariables } from "./fonts";
+import { Providers } from "./providers";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: { default: "{{ title }}", template: "%s | {{ title }}" },
+  description: "{{ title }}: workspaces, projects and billing for your team.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#040605",
+  colorScheme: "dark",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className={`dark ${fontVariables} h-full`}>
+      <body className="min-h-full">
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

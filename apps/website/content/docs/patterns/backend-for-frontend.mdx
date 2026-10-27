@@ -372,11 +372,10 @@ The same suite covers the origin check, login and logout, two-factor sign-in, to
 
 ```sh
 navree new acme --ui next                # the API plus web/, a Next.js app with a BFF
-navree new acme --kit saas --ui next     # the full SaaS kit on Next.js: BFF, sign-in, workspaces, billing, settings, admin
-navree new acme --kit saas --ui nuxt     # the same kit on Nuxt, with the BFF in Nitro server routes
+navree new acme --kit saas               # the full SaaS kit on Next.js: BFF, sign-in, workspaces, billing, settings, admin
 ```
 
-`--ui next` writes `web/lib/bff.ts` with sign-in, sign-out, forwarding, a refresh on 401 and the origin check, and `navree dev` starts both servers. The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the CRM's complete BFF, in either framework. To see both running, see the [CRM showcase](/showcase/crm/).
+`--ui next` writes `web/lib/bff.ts` with sign-in, sign-out, forwarding, a refresh on 401 and the origin check, and `navree dev` starts both servers. The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the CRM's complete Next.js BFF. To see both running, see the [CRM showcase](/showcase/crm/).
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
