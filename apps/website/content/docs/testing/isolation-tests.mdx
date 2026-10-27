@@ -92,7 +92,9 @@ app.isolation_suite::<DealsModule>()
     .await;
 ```
 
-Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and into the workspace's own schema or database under schema and database isolation.
+Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and into the workspace's own schema or database under schema and database isolation, with its workspace column set when the table keeps one. On PostgreSQL the insert runs inside the workspace, so a table with [row-level security](/docs/workspaces/isolation/#row-level-security-on-postgresql) accepts it.
+
+The suite tests what the routes do, not how the code is written. A handler that reads by id without the workspace filter still passes when row-level security or a per-workspace schema keeps the record out of reach; the [`workspace.repo` check](/docs/testing/conformity-checks/#workspace-data-through-workspacerepo) is the one that asks for `WorkspaceRepo` in the code.
 
 A nested route such as `/deals/{deal}/notes/{note}` needs a note that belongs to the deal. Bind it with `.record`, whose closure gets the parameters bound before it:
 
@@ -142,6 +144,7 @@ Skipped routes are listed in the report with their reason and don't fail the sui
 
 ## Requirements
 
+- **The `testing` and `workspace` features.** `navree::workspace::testing` is there when the `navree` dependency has both, as the default `full` features do. An app that picks its features adds `testing` to its dev-dependency on `navree`.
 - **The `header` resolver.** The suite names the workspace in the `workspace.header` header (`X-Workspace` by default). It is in the default `workspace.resolvers`; if your app resolves workspaces only by path or subdomain, add `header` in the test app: `.config("workspace.resolvers", "header,path")`.
 - **A test authenticator.** The suite acts as its user with `acting_as`. Apps that include `AuthModule` build the test app with `.fake_auth()` (see [Apps with navree-auth](/docs/testing/http-tests/#apps-with-navree-auth)).
 - **Roles.** The user owns both workspaces, so the `owner` role's permissions (`all.*`) pass every route check. A route whose checks need something else, such as a global role, fails, and the report says which request was refused.
