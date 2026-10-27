@@ -1,0 +1,11 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 363
+expression: sql
+---
+-- timescaledb
+CREATE MATERIALIZED VIEW "readings_hourly" WITH (timescaledb.continuous) AS SELECT time_bucket(INTERVAL '1 hour', taken_at) AS hour, avg(value) AS mean FROM readings GROUP BY hour WITH NO DATA;
+SELECT add_continuous_aggregate_policy('readings_hourly', start_offset => NULL, end_offset => INTERVAL '1 hour', schedule_interval => INTERVAL '30 minutes');
+
+-- postgres
+-- error: invalid definition of `readings_hourly`: TimescaleDB is not installed in this PostgreSQL database, and this continuous aggregate's SQL calls `time_bucket`, a TimescaleDB function: describe it with `ContinuousAggregate::over("readings_hourly", table).time_bucket(width, column, alias)...` so it compiles for every database, or install TimescaleDB

@@ -11,7 +11,9 @@ use crate::interval::{Interval, IntervalUnit};
 use crate::naming::index_name;
 use crate::options::{KeyStrategy, TimescaleMode};
 use crate::target::{Dialect, Version};
-use crate::timescale::{AggregateQuery, Bucket, Compression, ContinuousAggregate, Hypertable};
+use crate::timescale::{
+    AggregateQuery, Bucket, Compression, ContinuousAggregate, Hypertable, RefreshPolicy,
+};
 
 /// Installs the extension.
 pub(crate) const CREATE_EXTENSION: &str = "CREATE EXTENSION IF NOT EXISTS timescaledb";
@@ -58,8 +60,9 @@ pub(crate) fn mode(table_name: &str, ctx: &Context<'_>) -> SchemaResult<Mode> {
                 None => "TimescaleDB is not installed in this PostgreSQL database".to_owned(),
             }
         }
-        Dialect::MySql => "MySQL has no hypertables".to_owned(),
-        Dialect::Sqlite => "SQLite has no hypertables".to_owned(),
+        Dialect::MySql if target.is_mariadb() => "MariaDB does not support TimescaleDB".to_owned(),
+        Dialect::MySql => "MySQL does not support TimescaleDB".to_owned(),
+        Dialect::Sqlite => "SQLite does not support TimescaleDB".to_owned(),
     };
     if ctx.options.timescaledb == TimescaleMode::Require && target.dialect() == Dialect::Postgres {
         return Err(SchemaError::hypertable(
@@ -506,8 +509,9 @@ pub(crate) fn plan_create(
                 let mut widened = primary.clone();
                 widened.columns.extend(lacking);
                 plan.notices.push(format!(
-                    "the primary key of `{table_name}` is ({}): a hypertable's unique keys must include its time{} column",
+                    "the primary key of `{table_name}` is ({}), not ({}): a hypertable's unique keys must include its time{} column",
                     widened.columns.join(", "),
+                    primary.columns.join(", "),
                     if hypertable.partition.is_some() {
                         " and partition"
                     } else {
@@ -668,8 +672,9 @@ pub(crate) fn plan_convert(
                 crate::grammar::columnize(Dialect::Postgres, &widened)
             ));
             out.notice(format!(
-                "the primary key of `{table_name}` is now ({}): a hypertable's unique keys must include its partitioning columns",
-                widened.join(", ")
+                "the primary key of `{table_name}` is now ({}), not ({}): a hypertable's unique keys must include its partitioning columns",
+                widened.join(", "),
+                columns.join(", ")
             ));
         }
     }
@@ -705,12 +710,12 @@ pub(crate) fn plan_convert(
     Ok(out)
 }
 
-/// A policy statement on an existing hypertable, or a notice when the
-/// database has no TimescaleDB.
+/// A statement on an existing hypertable or continuous aggregate, or, when
+/// the database has no TimescaleDB, the notice `"{reason}: {skipped}"`.
 pub(crate) fn policy_or_notice(
     table_name: &str,
-    what: &str,
     statement: String,
+    skipped: &str,
     ctx: &Context<'_>,
 ) -> SchemaResult<Compiled> {
     let mut out = Compiled::default();
@@ -721,9 +726,7 @@ pub(crate) fn policy_or_notice(
             }
             out.push(statement);
         }
-        Mode::Fallback { reason } => {
-            out.notice(format!("{reason}: the {what} of `{table_name}` is skipped"));
-        }
+        Mode::Fallback { reason } => out.notice(format!("{reason}: {skipped}")),
     }
     Ok(out)
 }
@@ -762,20 +765,20 @@ pub(crate) fn create_continuous_aggregate(
                 with.join(", ")
             ));
             if let Some(policy) = &aggregate.refresh {
-                let offset = |o: &Option<String>| match o {
-                    Some(value) => interval_arg(value),
-                    None => Ok("NULL".to_owned()),
-                };
-                out.push(format!(
-                    "SELECT add_continuous_aggregate_policy({}, start_offset => {}, end_offset => {}, schedule_interval => {})",
-                    regclass(name),
-                    offset(&policy.start_offset)?,
-                    offset(&policy.end_offset)?,
-                    interval_arg(&policy.schedule_interval)?
-                ));
+                out.push(refresh_policy_statement(name, policy)?);
             }
         }
         Mode::Fallback { reason } => {
+            if let AggregateQuery::Raw(sql) = &aggregate.query
+                && calls_time_bucket(sql)
+            {
+                return Err(SchemaError::definition(
+                    name,
+                    format!(
+                        "{reason}, and this continuous aggregate's SQL calls `time_bucket`, a TimescaleDB function: describe it with `ContinuousAggregate::over(\"{name}\", table).time_bucket(width, column, alias)...` so it compiles for every database, or install TimescaleDB"
+                    ),
+                ));
+            }
             let style = match dialect {
                 Dialect::Postgres if ctx.target.at_least(14) => BucketStyle::DateBin,
                 Dialect::Postgres => BucketStyle::PostgresEpoch,
@@ -784,18 +787,42 @@ pub(crate) fn create_continuous_aggregate(
             };
             let query = aggregate_query(&aggregate.query, style)?;
             out.push(format!("CREATE VIEW {} AS {query}", table(dialect, name)));
-            let raw = matches!(aggregate.query, AggregateQuery::Raw(_));
             out.notice(format!(
-                "{reason}: continuous aggregate `{name}` is a plain view, computed when read{}",
-                if raw {
-                    " (its SQL must work on this database)"
-                } else {
-                    ""
-                }
+                "{reason}: continuous aggregate `{name}` is a plain view, computed when read"
             ));
         }
     }
     Ok(out)
+}
+
+/// `add_continuous_aggregate_policy(...)` for `policy`; an unbounded side
+/// is `NULL`.
+pub(crate) fn refresh_policy_statement(name: &str, policy: &RefreshPolicy) -> SchemaResult<String> {
+    let offset = |o: &Option<String>| match o {
+        Some(value) => interval_arg(value),
+        None => Ok("NULL".to_owned()),
+    };
+    Ok(format!(
+        "SELECT add_continuous_aggregate_policy({}, start_offset => {}, end_offset => {}, schedule_interval => {})",
+        regclass(name),
+        offset(&policy.start_offset)?,
+        offset(&policy.end_offset)?,
+        interval_arg(&policy.schedule_interval)?
+    ))
+}
+
+/// Whether `sql` calls TimescaleDB's `time_bucket` (or one of its
+/// variants, `time_bucket_gapfill`), outside strings and comments.
+fn calls_time_bucket(sql: &str) -> bool {
+    use crate::rebuild::{TokenKind, tokenize};
+    let tokens = tokenize(sql);
+    tokens.windows(2).any(|pair| {
+        pair[0].kind == TokenKind::Word
+            && sql[pair[0].start..pair[0].end]
+                .to_ascii_lowercase()
+                .starts_with("time_bucket")
+            && pair[1].kind == TokenKind::Open
+    })
 }
 
 /// Drops a continuous aggregate (a materialized view on TimescaleDB, a view

@@ -1,10 +1,13 @@
 //! TimescaleDB: [`Hypertable`], [`Compression`], [`ContinuousAggregate`] and
 //! [`RefreshPolicy`].
 //!
-//! Each is a plain value built with chained calls and handed to the
-//! [`Schema`](crate::Schema) (or to [`Blueprint::hypertable`](crate::Blueprint::hypertable)).
-//! On a database without TimescaleDB the schema falls back to what the
-//! database can do and reports a notice for the rest.
+//! A hypertable and its compression are configured in place, the way a
+//! blueprint's table is: `t.hypertable("occurred_at").chunk_interval("1 day")`
+//! inside a blueprint, or a `let mut` [`Hypertable`] handed to
+//! [`Schema::convert_to_hypertable`](crate::Schema::convert_to_hypertable).
+//! Continuous aggregates and refresh policies are values built with
+//! chained calls. On a database without TimescaleDB the schema falls back
+//! to what the database can do and reports a notice for the rest.
 
 use crate::index::Columns;
 use crate::options::KeyStrategy;
@@ -13,23 +16,32 @@ use crate::options::KeyStrategy;
 /// column, optionally by a space column too, with compression, retention
 /// and reorder policies.
 ///
-/// ```
-/// use navree_schema::{Compression, Hypertable};
+/// Configure it in place: every setter takes `&mut self` and returns it,
+/// and [`compress`](Hypertable::compress) returns the [`Compression`] to
+/// configure.
 ///
-/// let audit = Hypertable::on("created_at")
+/// ```
+/// use navree_schema::Hypertable;
+///
+/// let mut audit = Hypertable::on("created_at");
+/// audit
 ///     .chunk_interval("1 day")
 ///     .partition_by("workspace_id", 4)
 ///     .migrate_data()
-///     .compress(
-///         Compression::new()
-///             .segment_by(["workspace_id"])
-///             .order_by("created_at DESC")
-///             .after("7 days"),
-///     )
 ///     .retain_for("365 days");
+/// audit
+///     .compress()
+///     .segment_by(["workspace_id"])
+///     .order_by("created_at DESC")
+///     .after("7 days");
 /// assert_eq!(audit.time_column(), "created_at");
 /// assert_eq!(audit.partition(), Some(("workspace_id", 4)));
+/// assert_eq!(audit.compression().unwrap().delay(), Some("7 days"));
 /// ```
+///
+/// A description that fits in one expression can be passed as it is
+/// built, since `&mut Hypertable` converts into a `Hypertable`:
+/// `schema.convert_to_hypertable("audit_logs", Hypertable::on("created_at").chunk_interval("1 day"))`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hypertable {
     pub(crate) time_column: String,
@@ -61,55 +73,77 @@ impl Hypertable {
 
     /// The span of time per chunk (`"1 day"`, `"7 days"`); a whole number
     /// for integer time columns (`"86400"`). TimescaleDB's default is 7
-    /// days.
-    pub fn chunk_interval(mut self, interval: impl Into<String>) -> Hypertable {
+    /// days; aim for chunks whose indexes fit in about a quarter of the
+    /// server's memory.
+    pub fn chunk_interval(&mut self, interval: impl Into<String>) -> &mut Hypertable {
         self.chunk_interval = Some(interval.into());
         self
     }
 
     /// Also partitions by hashing `column` into `partitions` (space
-    /// partitioning).
-    pub fn partition_by(mut self, column: impl Into<String>, partitions: u32) -> Hypertable {
+    /// partitioning). Every unique key must then include `column` too.
+    pub fn partition_by(&mut self, column: impl Into<String>, partitions: u32) -> &mut Hypertable {
         self.partition = Some((column.into(), partitions));
         self
     }
 
     /// Moves the rows of an existing table into chunks when converting it
-    /// (`migrate_data => true`; locks the table while it runs).
-    pub fn migrate_data(mut self) -> Hypertable {
+    /// (`migrate_data => true`; it locks the table while it runs). Without
+    /// it, converting a table that has rows fails.
+    pub fn migrate_data(&mut self) -> &mut Hypertable {
         self.migrate_data = true;
         self
     }
 
-    /// Skips TimescaleDB's default indexes on the time column.
-    pub fn without_default_indexes(mut self) -> Hypertable {
+    /// Skips TimescaleDB's default index on the time column (declare your
+    /// own, for example `t.index(["device_id", "taken_at"])`).
+    pub fn without_default_indexes(&mut self) -> &mut Hypertable {
         self.create_default_indexes = false;
         self
     }
 
-    /// Compresses chunks as described by `compression`.
-    pub fn compress(mut self, compression: Compression) -> Hypertable {
-        self.compression = Some(compression);
+    /// Compresses chunks (TimescaleDB's columnstore): returns the
+    /// [`Compression`] to configure, with TimescaleDB's defaults until set.
+    ///
+    /// ```
+    /// use navree_schema::Hypertable;
+    ///
+    /// let mut events = Hypertable::on("occurred_at");
+    /// events
+    ///     .compress()
+    ///     .segment_by(["workspace_id"])
+    ///     .order_by("occurred_at DESC")
+    ///     .after("7 days");
+    /// assert_eq!(events.compression().unwrap().segments(), ["workspace_id"]);
+    /// ```
+    pub fn compress(&mut self) -> &mut Compression {
+        self.compression.get_or_insert_with(Compression::new)
+    }
+
+    /// Compresses chunks as `compression` describes (instead of configuring
+    /// [`compress`](Hypertable::compress) in place).
+    pub fn compress_with(&mut self, compression: impl Into<Compression>) -> &mut Hypertable {
+        self.compression = Some(compression.into());
         self
     }
 
     /// Drops chunks older than `interval` (`"90 days"`), with a retention
     /// policy.
-    pub fn retain_for(mut self, interval: impl Into<String>) -> Hypertable {
+    pub fn retain_for(&mut self, interval: impl Into<String>) -> &mut Hypertable {
         self.retention = Some(interval.into());
         self
     }
 
     /// Reorders chunks by the index named `index` once they stop receiving
     /// writes, with a reorder policy.
-    pub fn reorder_by(mut self, index: impl Into<String>) -> Hypertable {
+    pub fn reorder_by(&mut self, index: impl Into<String>) -> &mut Hypertable {
         self.reorder_index = Some(index.into());
         self
     }
 
     /// What to do with a primary key lacking the time column, instead of
     /// `schema.hypertable_keys`.
-    pub fn keys(mut self, strategy: KeyStrategy) -> Hypertable {
+    pub fn keys(&mut self, strategy: KeyStrategy) -> &mut Hypertable {
         self.keys = Some(strategy);
         self
     }
@@ -174,16 +208,26 @@ impl From<&Hypertable> for Hypertable {
     }
 }
 
-/// How a hypertable's chunks are compressed.
+impl From<&mut Hypertable> for Hypertable {
+    /// The description built so far, so a chain can be passed as it is
+    /// built: `Hypertable::on("at").chunk_interval("1 day")`.
+    fn from(hypertable: &mut Hypertable) -> Hypertable {
+        hypertable.clone()
+    }
+}
+
+/// How a hypertable's chunks are compressed (TimescaleDB's columnstore).
 ///
 /// ```
 /// use navree_schema::Compression;
 ///
-/// let compression = Compression::new()
+/// let mut compression = Compression::new();
+/// compression
 ///     .segment_by(["workspace_id", "kind"])
 ///     .order_by("occurred_at DESC")
 ///     .after("7 days");
 /// assert_eq!(compression.segments(), ["workspace_id", "kind"]);
+/// assert_eq!(compression.order(), Some("occurred_at DESC"));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Compression {
@@ -198,22 +242,23 @@ impl Compression {
         Compression::default()
     }
 
-    /// Groups compressed rows by these columns (queries filtering on them
-    /// stay fast).
-    pub fn segment_by(mut self, columns: impl Columns) -> Compression {
+    /// Groups compressed rows by these columns, so queries filtering on
+    /// them stay fast (pick columns with many rows per value, such as a
+    /// workspace or device id).
+    pub fn segment_by(&mut self, columns: impl Columns) -> &mut Compression {
         self.segment_by = columns.into_columns();
         self
     }
 
     /// The order of rows inside a compressed segment, e.g. `occurred_at DESC`.
-    pub fn order_by(mut self, order: impl Into<String>) -> Compression {
+    pub fn order_by(&mut self, order: impl Into<String>) -> &mut Compression {
         self.order_by = Some(order.into());
         self
     }
 
     /// Compresses chunks once they are older than `interval`, with a
     /// compression policy.
-    pub fn after(mut self, interval: impl Into<String>) -> Compression {
+    pub fn after(&mut self, interval: impl Into<String>) -> &mut Compression {
         self.after = Some(interval.into());
         self
     }
@@ -231,6 +276,19 @@ impl Compression {
     /// The policy's delay, as given.
     pub fn delay(&self) -> Option<&str> {
         self.after.as_deref()
+    }
+}
+
+impl From<&Compression> for Compression {
+    fn from(compression: &Compression) -> Compression {
+        compression.clone()
+    }
+}
+
+impl From<&mut Compression> for Compression {
+    /// The settings built so far, so a chain can be passed as it is built.
+    fn from(compression: &mut Compression) -> Compression {
+        compression.clone()
     }
 }
 

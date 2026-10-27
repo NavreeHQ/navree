@@ -1,0 +1,11 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 254
+expression: sql
+---
+-- installable
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE TABLE "metrics" ("at" TIMESTAMP WITH TIME ZONE NOT NULL, "value" DOUBLE PRECISION NOT NULL);
+SELECT create_hypertable('metrics', by_range('at'));
+CREATE TABLE "samples" ("at" TIMESTAMP WITH TIME ZONE NOT NULL);
+SELECT create_hypertable('samples', by_range('at'));

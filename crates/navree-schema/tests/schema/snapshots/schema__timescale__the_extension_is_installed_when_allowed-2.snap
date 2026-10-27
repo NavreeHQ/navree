@@ -1,0 +1,9 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 267
+expression: "render(\"extensions off\", &schema, Ok(()))"
+---
+-- extensions off
+CREATE TABLE "metrics" ("at" TIMESTAMP WITH TIME ZONE NOT NULL);
+CREATE INDEX "metrics_at_index" ON "metrics" ("at" DESC);
+-- notice: TimescaleDB can be installed in this database, but `schema.create_extensions` is off (run `CREATE EXTENSION timescaledb`): `metrics` is a regular table with an index on `at`

@@ -215,13 +215,50 @@ impl Blueprint {
         self.commands.push(Command::Comment(comment.into()));
     }
 
-    /// Makes the table a TimescaleDB hypertable partitioned by `hypertable`'s
-    /// time column: `t.hypertable("occurred_at")`, or a configured
-    /// [`Hypertable`]. On databases without TimescaleDB the table stays a
-    /// regular table with an index on the time column, and the schema
-    /// reports a notice.
-    pub fn hypertable(&mut self, hypertable: impl Into<Hypertable>) {
-        self.hypertable = Some(hypertable.into());
+    /// Makes the table a TimescaleDB hypertable partitioned by a time
+    /// column, and returns it to configure: chunk interval, space
+    /// partitions, compression, retention and reorder policies.
+    ///
+    /// This is the table's time-series storage engine: TimescaleDB gets a
+    /// hypertable with its policies; plain PostgreSQL, MySQL and SQLite get a
+    /// regular table with an index on the time column (and on the partition
+    /// column with the time column), and the schema reports a notice naming
+    /// what was skipped. One migration runs on every database.
+    ///
+    /// Pass the time column (`t.hypertable("occurred_at")`) or a configured
+    /// [`Hypertable`]. Naming the time column of the hypertable already
+    /// declared (by [`Schema::create_hypertable`](crate::Schema::create_hypertable),
+    /// or an earlier call) returns that hypertable to configure further; a
+    /// configured `Hypertable` or another time column replaces it.
+    ///
+    /// ```
+    /// use navree_schema::Blueprint;
+    ///
+    /// let mut t = Blueprint::new("events");
+    /// t.uuid_primary();
+    /// t.foreign_uuid("workspace_id");
+    /// t.timestamp_tz("occurred_at");
+    /// t.hypertable("occurred_at")
+    ///     .chunk_interval("1 day")
+    ///     .retain_for("90 days")
+    ///     .compress()
+    ///     .segment_by(["workspace_id"])
+    ///     .after("7 days");
+    /// assert_eq!(t.hypertable_definition().unwrap().retention(), Some("90 days"));
+    /// ```
+    pub fn hypertable(&mut self, hypertable: impl Into<Hypertable>) -> &mut Hypertable {
+        let hypertable = hypertable.into();
+        let same_column = self
+            .hypertable
+            .as_ref()
+            .is_some_and(|declared| declared.time_column == hypertable.time_column);
+        if same_column && hypertable == Hypertable::on(hypertable.time_column.clone()) {
+            return self
+                .hypertable
+                .as_mut()
+                .expect("a hypertable with this time column is declared");
+        }
+        self.hypertable.insert(hypertable)
     }
 
     /// Declares the columns added by `f` after `column` (MySQL), each after
