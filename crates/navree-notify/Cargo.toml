@@ -31,6 +31,8 @@ navree-http = { workspace = true }
 # The Slack, Teams, Twilio, Vonage, SNS, WhatsApp and push service calls.
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# `#[notification]`, re-exported next to the `Notification` trait.
+navree-macros = { workspace = true }
 navree-mail = { workspace = true }
 # Stored notifications are models (`notifications::Model`), written by the
 # database channel through the ORM, like the delivery log, the opt-outs and
