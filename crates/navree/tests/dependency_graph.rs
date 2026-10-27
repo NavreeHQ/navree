@@ -146,6 +146,17 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-schedule",
         "navree-access", "navree-auth", "navree-workspace",
     ]),
+    // Lighthouse: a telemetry sink storing issues, occurrences, samples and
+    // aggregates in the app's database; alerts by mail (navree-mail) and
+    // over HTTP (navree-http-client), queued as jobs (navree-contracts) and
+    // pruned on the schedule; a server-rendered dashboard (navree-view)
+    // signed in through navree-auth, with an encrypted cookie
+    // (navree-crypto), behind navree-access abilities.
+    rule("navree-lighthouse", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
+        "navree-schedule", "navree-access", "navree-auth",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`.
@@ -214,6 +225,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-graphql",
     "navree-grpc",
     "navree-billing",
+    "navree-lighthouse",
 ];
 
 /// Cargo dependency kind of an edge.
