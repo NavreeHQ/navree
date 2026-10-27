@@ -21,7 +21,7 @@ Kits are generated code, not a framework layer. There is no kit runtime and noth
 ## Requirements
 
 - Rust (the stable toolchain) and the [Navree CLI](/docs/getting-started/installation/).
-- Docker or Podman, for the local services that [Dock](/docs/tools/dock/) starts: PostgreSQL and Mailpit for every kit, NATS for the `micro` kit.
+- Docker or Podman, for the local services that [Dock](/docs/tools/dock/) starts: [TimescaleDB](/docs/database/timescaledb/) and Mailpit for every kit, NATS for the `micro` kit.
 - For the `saas` kit, Node.js 22 or newer and pnpm.
 
 ## Creating an app
@@ -35,7 +35,7 @@ Created acme in /home/ada/code/acme (kit: saas)
 
 Next steps:
   cd acme
-  navree dock up                 # PostgreSQL and Mailpit
+  navree dock up                 # TimescaleDB and Mailpit
   navree key:generate            # then set APP_KEY in .env
   navree migrate:fresh --seed    # tables and a demo workspace
   navree dev                     # API on :8080, web app on :3000
@@ -44,7 +44,7 @@ Next steps:
 <Steps>
 <Step title="Start the local services">
 
-`navree dock up` reads `dock.toml` and starts PostgreSQL and Mailpit in containers. `.env` already points at them: `APP_DATABASE__URL` at the database, `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
+`navree dock up` reads `dock.toml` and starts TimescaleDB (PostgreSQL with hypertables, Navree's default database) and Mailpit in containers. `.env` already points at them: `APP_DATABASE__URL` at the database, `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
 
 </Step>
 <Step title="Set the application key">
@@ -149,7 +149,7 @@ The browser's API client is generated from the API's OpenAPI document. `pnpm gen
   AGENTS.md                 # conventions for coding agents
   CLAUDE.md                 # points at AGENTS.md
   Cargo.toml
-  dock.toml                 # local services: PostgreSQL, Mailpit
+  dock.toml                 # local services: TimescaleDB, Mailpit
   harbor.toml               # servers and deploys
   .env.example
   .github/
@@ -228,7 +228,7 @@ Use it for mobile apps, public APIs, or a front end you build in another stack. 
   AGENTS.md
   CLAUDE.md
   Cargo.toml                # the workspace
-  dock.toml                 # PostgreSQL and NATS
+  dock.toml                 # TimescaleDB and NATS
   harbor.toml
   config/
     app.toml                # [micro] transport = "nats"

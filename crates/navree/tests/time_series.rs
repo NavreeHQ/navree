@@ -197,6 +197,72 @@ mod timescaledb {
             .unwrap()
     }
 
+    /// With `lighthouse.database_url`, Lighthouse creates its tables in that
+    /// database at boot and makes the event tables hypertables there.
+    #[tokio::test]
+    async fn lighthouse_s_own_database_gets_hypertables_too() {
+        use navree::db::DbOptions;
+
+        let Some(app_db) = Scratch::new("NAVREE_TEST_POSTGRES_URL", false).await else {
+            return;
+        };
+        let monitoring = Scratch::new("NAVREE_TEST_POSTGRES_URL", false)
+            .await
+            .expect("the variable is set");
+        let lighthouse_db = Db::connect(&DbOptions {
+            url: monitoring.url.clone(),
+            ..DbOptions::default()
+        })
+        .await
+        .unwrap();
+        let target = Schema::new(lighthouse_db.conn()).target().await.unwrap();
+        if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
+            eprintln!("TimescaleDB is not available on this server: skipping");
+            app_db.drop().await;
+            monitoring.drop().await;
+            return;
+        }
+        let app = app()
+            .config("database.url", app_db.url.clone())
+            .config("lighthouse.database_url", monitoring.url.clone())
+            .build()
+            .await;
+        let schema = Schema::new(lighthouse_db.conn());
+        for (table, column) in [
+            ("lighthouse_samples", "at"),
+            ("lighthouse_occurrences", "at"),
+            ("lighthouse_aggregates", "bucket"),
+        ] {
+            let dimension = schema
+                .time_dimension(table)
+                .await
+                .unwrap()
+                .unwrap_or_else(|| panic!("{table} is a hypertable in Lighthouse's database"));
+            assert_eq!(dimension.column, column, "{table}");
+            assert_eq!(dimension.chunk_interval, "1 day", "{table}");
+        }
+        assert!(!schema.is_hypertable("lighthouse_issues").await.unwrap());
+        app.shutdown().await.unwrap();
+        // Booting again finds the hypertables and leaves them as they are.
+        let again = app()
+            .config("database.url", app_db.url.clone())
+            .config("lighthouse.database_url", monitoring.url.clone())
+            .build()
+            .await;
+        assert_eq!(
+            number(
+                &lighthouse_db,
+                "SELECT count(*) FROM timescaledb_information.dimensions WHERE hypertable_name LIKE 'lighthouse%'"
+            )
+            .await,
+            3
+        );
+        again.shutdown().await.unwrap();
+        lighthouse_db.conn().clone().close().await.unwrap();
+        app_db.drop().await;
+        monitoring.drop().await;
+    }
+
     /// The time-bucket queries of the TimescaleDB guide, on TimescaleDB:
     /// the same buckets as on SQLite, and `first` / `last`.
     #[tokio::test]
