@@ -314,7 +314,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-i18n",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features i18n",
     href: "/docs/packages/localization/",
-    status: "planned",
+    status: "stable",
     signature: "t!(\"deal-created\", count = 3)",
   },
   // Connect services

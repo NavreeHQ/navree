@@ -91,6 +91,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
 | `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search](/docs/packages/search/), `#[derive(Searchable)]` |
 | `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
+| `navree::i18n` | navree-i18n, with `t!`, `args!` and `embed_locales!` | `i18n` (opt-in) | `I18nModule`: [localization](/docs/packages/localization/) with Fluent files, the request's `Locale`, translated validation messages, templates and notifications |
 | `navree::lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: [application monitoring](/docs/tools/lighthouse/), issues, traces, alerts and the `/_lighthouse` dashboard |
 
 The facade's root also has:
@@ -123,6 +124,7 @@ The facade's root also has:
 | gRPC (`grpc`) | `GrpcModule` |
 | AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 | Billing (`billing`) | `BillingModule` |
+| Localization (`i18n`) | `I18nModule`, `Locale` |
 | Search (`search`) | `SearchModule` |
 | Lighthouse (`lighthouse`) | `LighthouseModule` (and `m.alert_channel::<C>()`) |
 
@@ -136,7 +138,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `i18n`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -167,12 +169,13 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
 | `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `testing`, `validation`, `access`, `auth` |
 | `ai` (opt-in, not in `full`) | `http`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
+| `i18n` (opt-in, not in `full`) | `http`, `view`, `db`, `validation`, `notify`, `workspace` |
 | `lighthouse` | `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `billing`, `search`, `mcp`), which you list yourself: `features = ["billing"]`.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `i18n`), which you list yourself: `features = ["billing"]`.
 
 <Callout type="note">
 
