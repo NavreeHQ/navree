@@ -2,9 +2,11 @@
 //!
 //! It brings the macros, the kernel types a module needs, the module types
 //! an app root imports, the extractors and responses handlers use, the
-//! access markers, and every `ModuleBuilder` extension trait (imported as
-//! `_`, so `m.migrations(..)`, `m.controller::<C>()`, `m.job::<J>()`,
-//! `m.templates(..)` and friends resolve without naming the traits).
+//! access markers, the ORM's `Model` (trait and derive), `Record`,
+//! `Collection` and `Builder`, and every `ModuleBuilder` extension trait
+//! (imported as `_`, so `m.migrations(..)`, `m.controller::<C>()`,
+//! `m.job::<J>()`, `m.templates(..)` and friends resolve without naming the
+//! traits). `navree::orm::prelude` has the rest of the ORM's names.
 //!
 //! Every name is gated by the feature of the crate it comes from. With
 //! `http`, `Result` here is `navree::Result` (error type `AppError` by
@@ -75,6 +77,8 @@ pub use navree_access::{
 pub use navree_audit::AuditModule;
 #[cfg(feature = "notify")]
 pub use navree_notify::NotifyModule;
+#[cfg(feature = "orm")]
+pub use navree_orm::{Builder, Collection, Model, Record};
 #[cfg(feature = "queue")]
 pub use navree_queue::QueueModule;
 #[cfg(feature = "schedule")]

@@ -56,6 +56,7 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::access::AccessModule, AccessModule>());
     assert!(same::<navree::schedule::ScheduleModule, ScheduleModule>());
     assert!(same::<navree::notify::NotifyModule, NotifyModule>());
+    assert!(same::<navree::orm::Record<Thing>, Record<Thing>>());
     // L5
     assert!(same::<navree::auth::AuthModule, AuthModule>());
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
@@ -142,6 +143,22 @@ fn prelude_brings_the_everyday_types() {
 
 /// A stand-in entity type for the model factory check.
 type DummyEntity = navree::access::entity::role::Entity;
+
+/// An ORM model declared with the prelude alone.
+#[derive(Model, Clone, Debug, Default, serde::Serialize)]
+#[model(table = "things")]
+struct Thing {
+    id: i64,
+    name: String,
+}
+
+#[test]
+fn prelude_brings_the_orm() {
+    assert!(same::<Collection<Thing>, navree::orm::Collection<Thing>>());
+    assert!(same::<Builder<Thing>, navree::orm::Builder<Thing>>());
+    assert_eq!(<Thing as navree::orm::Model>::meta().table(), "things");
+    assert_eq!(Thing::NAME.name(), "name");
+}
 
 /// A subject and an action declared by an app, with the prelude only.
 struct Invoice;
@@ -250,6 +267,11 @@ const ALWAYS: [&str; 4] = [
     "navree-macros",
 ];
 
+/// Proc-macro crates that a module crate re-exports, as (macro crate,
+/// module crate): they come with the module crate's feature (`orm` brings
+/// navree-orm-macros through navree-orm), so the facade does not name them.
+const COMPANION_MACROS: [(&str, &str); 1] = [("navree-orm-macros", "navree-orm")];
+
 impl Features {
     fn read() -> Features {
         let metadata = workspace_metadata();
@@ -349,7 +371,9 @@ fn module_features_turn_on_the_features_of_their_navree_dependencies() {
     for (krate, feature) in &features.feature_of {
         let enabled = features.closure(feature);
         for dep in &features.runtime_deps[krate] {
-            if ALWAYS.contains(&dep.as_str()) {
+            if ALWAYS.contains(&dep.as_str())
+                || COMPANION_MACROS.contains(&(dep.as_str(), krate.as_str()))
+            {
                 continue;
             }
             match features.feature_of.get(dep) {

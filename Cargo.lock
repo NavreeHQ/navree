@@ -3070,6 +3070,7 @@ dependencies = [
  "navree-notify",
  "navree-oauth",
  "navree-observe",
+ "navree-orm",
  "navree-queue",
  "navree-realtime",
  "navree-schedule",
