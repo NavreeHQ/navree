@@ -29,7 +29,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 
 `FleetModule` is global and provides the `Fleet` service. It needs `DatabaseModule` and `QueueModule`; the `fleet` command refuses the `memory` queue driver, whose jobs only exist in one process. Its dashboard routes declare access, so with the dashboard on (the default) the app also needs an authenticator (`AuthModule`) and navree-access's route authorizer (`AccessModule`); set `fleet.dashboard = false` in an app without them. With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
 
-The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type).
+The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables) the last two are hypertables on their Unix millisecond columns, an hour and a day per chunk, and trimming drops whole chunks.
 
 ```sh
 navree migrate

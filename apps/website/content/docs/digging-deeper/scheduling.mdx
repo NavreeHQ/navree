@@ -13,7 +13,7 @@ description: "Schedules on cron expressions, declared in modules: commands, jobs
 
 ## Registering the module
 
-Add `ScheduleModule` once, in your app root. It has no options. It needs `DatabaseModule`: its `schedule` migration set creates the `schedule_runs` table.
+Add `ScheduleModule` once, in your app root. It has no options. It needs `DatabaseModule`: its `schedule` migration set creates the `schedule_runs` table, a [hypertable](/docs/database/timescaledb/#navrees-own-tables) on `tick` on TimescaleDB.
 
 ```rust title="src/app.rs"
 Navree::app()

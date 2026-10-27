@@ -35,7 +35,9 @@ Navree::app()
    boot fails (the dashboard routes declare access).
 
 2. Run `navree migrate` (migration set `fleet`, after `queue`: tables
-   `fleet_masters`, `fleet_state`, `fleet_jobs`, `fleet_metrics`).
+   `fleet_masters`, `fleet_state`, `fleet_jobs`, `fleet_metrics`; on
+   TimescaleDB the last two are hypertables, an hour and a day per chunk,
+   and trimming drops whole chunks).
 
 3. Describe supervisors (optional: without any, one supervisor `default`
    works `queue.queues` or `queue.default_queue`):

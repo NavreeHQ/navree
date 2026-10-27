@@ -1,6 +1,6 @@
 ---
 title: "Getting started"
-description: "Connect to SQLite, PostgreSQL or MySQL, configure the pool and run your first queries with SeaORM."
+description: "Connect to TimescaleDB (the default), PostgreSQL, MySQL or SQLite, configure the pool and run your first queries with SeaORM."
 ---
 
 Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), which runs on SQLx. The `navree-db` crate (the `db` feature of the `navree` facade, on by default) adds what an application needs around it:
@@ -12,11 +12,14 @@ Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), wh
 - [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
 - [repository helpers](/docs/database/entities-and-repositories/) that record every change for the [audit log](/docs/security/audit-log/).
 
-Navree supports three databases:
+Navree supports four databases:
 
-- **SQLite** is the default. It is compiled into your app (bundled), so there is nothing to install. Development and every test in the Navree repository run on it.
-- **PostgreSQL** is behind the `postgres` Cargo feature.
+- **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
+- **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
 - **MySQL** and **MariaDB** are behind the `mysql` Cargo feature ([below](#mysql-and-mariadb)).
+- **SQLite** is compiled into your app (bundled), so there is nothing to install. Every test runs on it, each in a file of its own, and an app whose configuration names no database uses a SQLite file ([below](#sqlite)).
+
+`navree new my-app` makes a TimescaleDB app; `--database postgres`, `--database mysql` and `--database sqlite` make the others.
 
 ## Configuration
 
@@ -24,7 +27,7 @@ Navree supports three databases:
 
 ```toml title="config/app.toml"
 [database]
-url = "sqlite://storage/app.db?mode=rwc"
+url = "postgres://navree:navree@127.0.0.1:5432/my_app"
 max_connections = 10
 min_connections = 0
 connect_timeout_secs = 8
@@ -35,7 +38,7 @@ migrate_on_boot = false
 
 | Key | Default | What it does |
 |---|---|---|
-| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `sqlite://...`, `postgres://...`, `mysql://...` or `mariadb://...`. |
+| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `postgres://...` (TimescaleDB or PostgreSQL), `mysql://...`, `mariadb://...` or `sqlite://...`. A new app sets a TimescaleDB URL, the one Dock's `postgres` service serves; without a URL, Navree uses a SQLite file, so an app boots with nothing installed. |
 | `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
 | `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
 | `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
@@ -70,7 +73,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 use navree::db::DbOptions;
 
 Navree::app().module(DatabaseModule::for_root(DbOptions {
-    url: "sqlite://storage/app.db?mode=rwc".into(),
+    url: "postgres://navree:navree@127.0.0.1:5432/my_app".into(),
     max_connections: 5,
     ..DbOptions::default()
 }))
@@ -84,23 +87,18 @@ The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` 
 - the commands `migrate`, `migrate:install`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `schema:dump` and `db:seed`;
 - closing the pool when the app shuts down, so SQLite checkpoints its write-ahead log.
 
-## SQLite
+## TimescaleDB
 
-A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
+<Badge feature="postgres" /> TimescaleDB is PostgreSQL with an extension for time-series data, so it connects through the same driver: a `postgres://` URL and the `postgres` feature of the facade. Your tables are regular PostgreSQL tables until a migration makes one a [hypertable](/docs/database/timescaledb/), and Navree's own time-series tables (the audit log, webhook deliveries, job history, Lighthouse's events) become hypertables in their modules' migrations.
 
-Navree opens every SQLite connection with:
+A new app is set up for it: `navree new` turns on the feature, writes the URL of Dock's `postgres` service into `config/app.toml`, and adds a `dock.toml` that runs TimescaleDB 2.31 on PostgreSQL 17:
 
-- the write-ahead log (`journal_mode = WAL`), so readers don't block the writer;
-- `busy_timeout = 5000`: a statement waits up to 5 seconds for a lock before failing;
-- `foreign_keys = ON`, so foreign keys are enforced (SQLite's default is off).
+```sh
+navree dock up               # TimescaleDB on 127.0.0.1:5432
+navree dev
+```
 
-Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite's write lock at once. Concurrent requests that write therefore queue for up to 5 seconds instead of failing halfway through. SQLite allows one writer at a time, so this is also its limit: a busy app that writes on most requests outgrows it.
-
-<Callout type="warning" title="Don't use in-memory SQLite">
-
-An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/).
-
-</Callout>
+In production, point `APP_DATABASE__URL` at a server with TimescaleDB and set `APP_SCHEMA__TIMESCALEDB=require`, so a migration stops instead of falling back to regular tables on a server without it. [TimescaleDB](/docs/database/timescaledb/#running-it) covers running it, and which tables to make hypertables.
 
 ## PostgreSQL
 
@@ -111,7 +109,7 @@ An in-memory database (`sqlite::memory:`) is private to one connection, so every
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
 ```
 
-The crates aren't on crates.io yet, so the dependency comes from git. An app made by `navree new` depends on the checkout the CLI was built from instead (`navree = { path = "..." }`); add `features = ["postgres"]` to that line.
+The crates aren't on crates.io yet, so the dependency comes from git. An app made by `navree new` depends on the checkout the CLI was built from instead, with the feature already on for TimescaleDB and PostgreSQL apps: `navree = { path = "...", features = ["postgres"] }`.
 
 Then point `database.url` at the server with an environment variable, which overrides `config/app.toml`:
 
@@ -133,6 +131,8 @@ On PostgreSQL, Navree behaves differently in a few places:
 The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
 
 Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MySQL 8.4) in the opt-in real-server tests of navree-schema and navree-db: the schema builder's statements, hypertables with their policies and continuous aggregates, migrations written with the schema builder and with SeaORM, `--pretend`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh`, and schema dumps loaded into empty databases.
+
+The facade's `time_series` suite boots the audit, webhooks, Fleet, scheduling and Lighthouse modules on the same servers: their time-series tables become hypertables with the documented time columns, chunk intervals and keys on TimescaleDB, and stay regular tables with time indexes on MySQL; running their conversions again changes nothing; `audit:prune` drops whole chunks; and the [time-bucket queries](/docs/database/timescaledb/#time-bucket-queries) return the same buckets as on SQLite.
 
 These PostgreSQL paths are written but have not yet run against a real server: `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
 
@@ -241,6 +241,26 @@ NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test 
 ```
 
 MariaDB connects through the same code but hasn't been run against a server yet, and the other modules' test suites (auth, queue, audit, workspaces and the rest) run on SQLite. Try them in a staging environment before you rely on them.
+
+</Callout>
+
+## SQLite
+
+SQLite is built in: every test runs on it, `navree new my-app --database sqlite` makes an app on it, and an app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`. Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
+
+A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
+
+Navree opens every SQLite connection with:
+
+- the write-ahead log (`journal_mode = WAL`), so readers don't block the writer;
+- `busy_timeout = 5000`: a statement waits up to 5 seconds for a lock before failing;
+- `foreign_keys = ON`, so foreign keys are enforced (SQLite's default is off).
+
+Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite's write lock at once. Concurrent requests that write therefore queue for up to 5 seconds instead of failing halfway through. SQLite allows one writer at a time, so this is also its limit: a busy app that writes on most requests outgrows it.
+
+<Callout type="warning" title="Don't use in-memory SQLite">
+
+An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/).
 
 </Callout>
 
@@ -369,9 +389,12 @@ Set `database.log_queries = true` to log every statement at debug level, and `da
 
 ## Testing
 
-Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it.
+Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards, also in an app made for TimescaleDB: the same migrations run there. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it; [Dock](/docs/tools/dock/#tests-against-timescaledb) shows how to run a test against the server it runs.
 
 <LinkCards>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Hypertables, compression, retention and time-bucket queries.
+  </LinkCard>
   <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
     SeaORM entities, relations, soft deletes and the `Repo` helpers.
   </LinkCard>

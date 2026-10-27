@@ -12,9 +12,10 @@ Navree is a Rust framework, so you need a Rust toolchain and the `navree` comman
 | Rust | 1.95 or newer | Navree uses edition 2024. Install it with [rustup](https://rustup.rs). |
 | A C compiler | the one your Rust toolchain links with | SQLite is compiled from source (the bundled `libsqlite3-sys`). On Windows, that means the MSVC build tools. |
 | `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
+| Docker or Podman | Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
 | Node.js and npm | Node.js 20.9 or newer | Only for the optional Next.js front end (`navree new --ui next`). |
 
-You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need a database server either. New apps use SQLite, and PostgreSQL is an opt-in feature (see [Database: getting started](/docs/database/getting-started/)).
+You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need to install a database server either: new apps use [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and Dock runs it in a container. `navree new --database sqlite` makes an app that needs nothing at all (see [Database: getting started](/docs/database/getting-started/)).
 
 ## Installing the CLI
 
@@ -90,8 +91,9 @@ It depends on navree at /home/you/code/navree/crates/navree.
 
 Next steps:
   cd blog
-  navree key:generate     # then set APP_KEY in .env
-  navree dev              # http://127.0.0.1:8080/api/docs
+  navree dock up             # TimescaleDB on 127.0.0.1:5432
+  navree key:generate        # then set APP_KEY in .env
+  navree dev                 # http://127.0.0.1:8080/api/docs
 ```
 
 The name must start with a lower-case letter and use lower-case letters and digits separated by single `-` or `_`; Rust keywords and names such as `std`, `test` and `navree` are refused. The directory must not exist, or must be empty. `navree new` doesn't run Cargo or `git init`.
@@ -104,6 +106,7 @@ The app is complete and working: a root module with every common platform module
 |---|---|---|
 | `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
 | `--ui next` | `--ui none` | Also creates a Next.js front end in `web/`. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. |
+| `--database <db>` | `timescaledb` | The database: `timescaledb` (PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, run by `navree dock up` too), `mysql` (MySQL or MariaDB, on a server of yours) or `sqlite` (a file in `storage/`, nothing to install). It sets `database.url`, the driver feature of the `navree` dependency and, for the first two, `dock.toml`. |
 | `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
 
 ```sh
@@ -120,18 +123,20 @@ navree new acme --kit saas
 
 ## Local services with Dock
 
-A new app runs on SQLite and needs no other services. When yours uses PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS, [Dock](/docs/tools/dock/) runs them in containers (Docker or Podman). `navree dock:add <service>` adds a service to the app's `dock.toml`, and one command starts them all:
-
-```sh
-navree dock up
-```
-
-## Running the application
-
-Generate an application key first. It encrypts data and signs tokens; without it, every restart signs every user out.
+A new app runs on TimescaleDB, and its `dock.toml` tells [Dock](/docs/tools/dock/) to run it in a container (Docker or Podman). Start it before anything that boots the app, `navree key:generate` included:
 
 ```sh
 cd blog
+navree dock up
+```
+
+When your app also uses Redis, Meilisearch, Mailpit, MinIO or NATS, `navree dock:add <service>` adds the service to `dock.toml`, and the same command starts them all. `navree dev` and the app commands the CLI runs get their settings, the database URL included.
+
+## Running the application
+
+With the database running, generate an application key. It encrypts data and signs tokens; without it, every restart signs every user out.
+
+```sh
 navree key:generate
 ```
 
