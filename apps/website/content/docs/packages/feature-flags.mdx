@@ -38,7 +38,7 @@ Navree::app()
     // ...
 ```
 
-The module is global and contributes the migration set `flags`, which creates `feature_flags` and `feature_flag_overrides`. Its admin routes declare a permission, so the app also needs `AccessModule` (or set `flags.admin_routes = false`).
+The module is global and contributes the migration set `flags`, which creates `feature_flags` and `feature_flag_overrides`. Its admin routes declare a permission, so the app also needs `AccessModule` (or set `flags.admin_routes = false`); without either, the boot fails with a message that says so.
 
 ## Configuration
 
