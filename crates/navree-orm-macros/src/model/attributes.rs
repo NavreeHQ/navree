@@ -937,6 +937,7 @@ pub(crate) fn trait_items(model: &Model, krate: &TokenStream) -> TokenStream {
     let mut overrides = Vec::new();
     let mut stale = Vec::new();
     let mut increment_arms = Vec::new();
+    let mut part_arms = Vec::new();
 
     for column in &model.columns {
         let ident = &column.ident;
@@ -974,6 +975,50 @@ pub(crate) fn trait_items(model: &Model, krate: &TokenStream) -> TokenStream {
                     for index in #private::#changes::<Self, #cast, #value_ty>(#field_name, &self.#ident, &original.#ident) {
                         const NAMES: &[&str] = &[#(#names),*];
                         changed.push(NAMES[index]);
+                    }
+                });
+                let parts: Vec<&Column> = model
+                    .columns
+                    .iter()
+                    .filter(|part| part.ident == column.ident && part.field.multi.is_some())
+                    .collect();
+                let part_arms_of_field = parts.iter().enumerate().map(|(position, part)| {
+                    let part_name = &part.name;
+                    let part_ty = &part.ty;
+                    quote! {
+                        #part_name => {
+                            let part: #part_ty = #private::input::<Self, #part_ty>(&column, input)?;
+                            values[#position] = #krate::Field::to_value(&part);
+                        }
+                    }
+                });
+                let (current, from_values) = if multi.field_inner.is_some() {
+                    (
+                        quote!(#private::write_multi_option::<Self, #cast, #value_ty>(#field_name, &self.#ident)?),
+                        quote!(multi_from_values_option),
+                    )
+                } else {
+                    (
+                        quote!(#private::multi_values::<Self, #cast, #value_ty>(#field_name, &self.#ident)?),
+                        quote!(multi_from_values),
+                    )
+                };
+                part_arms.push(quote! {
+                    #field_name => {
+                        let mut values: ::std::vec::Vec<#krate::Value> = #current;
+                        for (column, input) in inputs {
+                            match column.as_str() {
+                                #(#part_arms_of_field)*
+                                _ => {
+                                    return ::core::result::Result::Err(#private::unknown_column::<Self>(&column));
+                                }
+                            }
+                        }
+                        let value: #field_ty = #private::#from_values::<Self, #cast, #value_ty>(
+                            #field_name, &[#(#names),*], values,
+                        )?;
+                        #assign
+                        ::core::result::Result::Ok(())
                     }
                 });
             }
@@ -1129,6 +1174,27 @@ pub(crate) fn trait_items(model: &Model, krate: &TokenStream) -> TokenStream {
             }
         }
     };
+    let parts_fn = if part_arms.is_empty() {
+        quote!()
+    } else {
+        quote! {
+            fn set_attribute_parts(
+                &mut self,
+                field: &str,
+                inputs: ::std::vec::Vec<(::std::string::String, #private::serde_json::Value)>,
+            ) -> #krate::Result<()> {
+                match field {
+                    #(#part_arms)*
+                    _ => {
+                        for (column, input) in inputs {
+                            #krate::Model::set_attribute(self, &column, input)?;
+                        }
+                        ::core::result::Result::Ok(())
+                    }
+                }
+            }
+        }
+    };
     let increment_fn = if increment_arms.is_empty() {
         quote!()
     } else {
@@ -1175,6 +1241,7 @@ pub(crate) fn trait_items(model: &Model, krate: &TokenStream) -> TokenStream {
         #overrides_fn
         #stale_fn
         #increment_fn
+        #parts_fn
     }
 }
 

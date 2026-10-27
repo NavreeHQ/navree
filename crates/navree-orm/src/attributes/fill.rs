@@ -505,19 +505,43 @@ fn fill_record<M: Model>(record: &mut Record<M>, attributes: Attributes, guard: 
             DiscardPolicy::Report(handler) => handler(meta.name(), &refused),
         }
     }
-    // Convert on a copy, so a value that does not fit changes nothing.
+    // Convert on a copy, so a value that does not fit changes nothing. The
+    // columns of a field stored across several columns are set together,
+    // so the field is checked whole.
     let mut model = record.model.clone();
+    let mut groups: Vec<(&'static str, Vec<(String, serde_json::Value)>)> = Vec::new();
     for (key, value) in attributes {
         if refused.contains(&key) {
             continue;
         }
         match split_key(&key) {
             (column, Some(path)) => set_json_path_on(&mut model, column, path, value)?,
-            (column, None) => model.set_attribute(column, value)?,
+            (column, None) => match multi_column_field(meta, column) {
+                Some(field) => match groups.iter_mut().find(|(known, _)| *known == field) {
+                    Some((_, inputs)) => inputs.push((column.to_owned(), value)),
+                    None => groups.push((field, vec![(column.to_owned(), value)])),
+                },
+                None => model.set_attribute(column, value)?,
+            },
         }
+    }
+    for (field, inputs) in groups {
+        model.set_attribute_parts(field, inputs)?;
     }
     record.model = model;
     Ok(())
+}
+
+/// The field `column` belongs to, when that field is stored across several
+/// columns.
+fn multi_column_field(meta: &ModelMeta, column: &str) -> Option<&'static str> {
+    let field = meta.column(column)?.field();
+    let columns = meta
+        .all_columns()
+        .iter()
+        .filter(|candidate| candidate.field() == field)
+        .count();
+    (columns > 1).then_some(field)
 }
 
 fn not_assignable<M: Model>(key: &str) -> OrmError {
