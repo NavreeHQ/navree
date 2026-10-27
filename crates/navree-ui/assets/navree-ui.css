@@ -626,6 +626,46 @@ body.ui {
 
 }
 
+/* The rail: the sidebar's right edge, a click target that toggles it. */
+.ui-sidebar-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 0.375rem;
+  cursor: ew-resize;
+}
+
+.ui-sidebar-rail::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background-color 120ms;
+}
+
+.ui-sidebar-rail:hover::after {
+  background: var(--ui-line-3);
+}
+
+.ui-shell[data-sidebar="collapsed"] .ui-sidebar-rail {
+  cursor: e-resize;
+}
+
+.ui-shell[data-sidebar="expanded"] .ui-sidebar-rail {
+  cursor: w-resize;
+}
+
+@media (max-width: 767.98px) {
+  .ui-sidebar-rail {
+    display: none;
+  }
+}
+
 /* The tooltip the collapsed sidebar shows next to an item. */
 .ui-tooltip {
   position: fixed;
