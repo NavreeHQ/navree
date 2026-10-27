@@ -1101,7 +1101,6 @@ impl PendingMedia {
         let conversions_disk = collection
             .conversions_disk
             .clone()
-            .or_else(|| collection.disk.clone().and(None))
             .or_else(|| options.conversions_disk.clone())
             .unwrap_or_else(|| disk_name.clone());
         let disk = media.disk(&disk_name)?;
