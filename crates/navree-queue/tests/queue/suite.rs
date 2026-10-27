@@ -665,6 +665,9 @@ pub async fn pending_jobs_lists_and_finds_unfinished_jobs(driver: QueueDriver) {
     assert_eq!(job.payload, json!({ "label": "later" }));
     assert!(h.queue.pending_job("nope").await.unwrap().is_none());
 
+    // Run the waiting `default` job, so the next worker takes the hanging
+    // one (workers take only `default` here).
+    assert_eq!(h.drain().await.succeeded, 1);
     h.queue.dispatch(Hang { label: "h".into() }).await.unwrap();
     crash_worker_mid_job(&h).await;
     let running: Vec<_> = h
