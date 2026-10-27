@@ -1,0 +1,61 @@
+[package]
+name = "navree-integrations"
+description = "Navree IntegrationsModule: workspace and organization connections to third-party APIs (Microsoft Graph, Google Workspace, Slack, any OAuth 2.0 API, API keys) with admin consent, service accounts, encrypted credentials, token refresh, scope sets, health checks and typed clients."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The database drivers of the gated server tests (`tests/integrations/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+# Token locks and the used-state memory (in-process without CacheModule).
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# Encrypted credentials, sealed states, and `jose`: service-account JWTs
+# (RS256) signed on ring.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+# `integration_connections` is a navree-orm model.
+navree-orm = { workspace = true }
+# `integrations:check` on the scheduler.
+navree-schedule = { workspace = true }
+# Connections belong to the request's workspace or organization.
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-api = { workspace = true }
+navree-testing = { workspace = true }
+# The mock providers verify service-account JWTs with `ring` directly, apart
+# from the code under test.
+ring = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = { workspace = true }

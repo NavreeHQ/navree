@@ -4812,6 +4812,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-i18n",
+ "navree-integrations",
  "navree-kernel",
  "navree-lighthouse",
  "navree-log",
@@ -4858,6 +4859,7 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tower",
+ "tracing",
  "utoipa",
  "uuid",
 ]
@@ -5622,6 +5624,44 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "tempfile",
+]
+
+[[package]]
+name = "navree-integrations"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "http",
+ "navree-access",
+ "navree-api",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-orm",
+ "navree-schedule",
+ "navree-testing",
+ "navree-workspace",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]

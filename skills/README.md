@@ -55,6 +55,7 @@ conventions, and says which skill to load for each task.
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
 | [`navree-sso`](navree-sso/SKILL.md) | SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, provisioning |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
+| [`navree-integrations`](navree-integrations/SKILL.md) | Workspace and organization connections to Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs and API keys: consent flows, service accounts, scope sets, typed clients, health checks, `IntegrationsFake` (feature `integrations`) |
 | [`navree-flags`](navree-flags/SKILL.md) | Feature flags: define, check, roll out by percentage or plan, kill, test |
 | [`navree-settings`](navree-settings/SKILL.md) | Typed settings per app, organization, workspace or user, inherited field by field with the source of every value |
 | [`navree-search`](navree-search/SKILL.md) | Full-text and vector search over entities, engines and index syncing |

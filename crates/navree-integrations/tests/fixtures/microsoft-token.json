@@ -1,0 +1,6 @@
+{
+  "token_type": "Bearer",
+  "expires_in": 3599,
+  "ext_expires_in": 3599,
+  "access_token": "eyJ0eXAiOiJKV1QiLCJub25jZSI6IkFRQUJBQUFBQUFEQ29NcGpKWHJ4VHE5Vkc5dGUtN0ZYIn0.eyJhdWQiOiJodHRwczovL2dyYXBoLm1pY3Jvc29mdC5jb20ifQ.c2lnbmF0dXJl"
+}

@@ -51,6 +51,7 @@ navree-workspace = { path = "crates/navree-workspace", version = "0.1.0" }
 navree-dock = { path = "crates/navree-dock", version = "0.1.0" }
 navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
+navree-integrations = { path = "crates/navree-integrations", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-settings = { path = "crates/navree-settings", version = "0.1.0" }
