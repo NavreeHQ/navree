@@ -74,6 +74,7 @@ fn every_module_crate_is_reexported_whole() {
     >());
     assert!(same::<navree::settings::Settings, navree::settings::Settings>());
     assert!(same::<navree::sso::SsoModule, SsoModule>());
+    assert!(same::<navree::sheets::SheetsModule, SheetsModule>());
     // L7
     assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
     assert!(same::<
@@ -303,6 +304,40 @@ fn module_builder_extensions_come_with_the_prelude() {
         .validate()
         .expect("the graph is valid");
     assert!(report.modules.iter().any(|m| m.name == "Wired"));
+}
+
+/// `#[derive(Exportable)]` and `#[derive(Importable)]` expand through
+/// `navree::sheets` in an app that depends on the facade only.
+#[test]
+fn sheets_derives_expand_through_the_facade() {
+    use navree::sheets::{Cell, Exportable, ImportRow, Importable};
+
+    #[derive(Exportable)]
+    #[export(sheet = "Deals")]
+    struct DealRow {
+        #[export(header = "Title")]
+        title: String,
+        amount: i64,
+    }
+
+    #[derive(Importable)]
+    #[allow(dead_code)]
+    struct DealInput {
+        #[import(aliases = ["Deal"])]
+        title: String,
+        amount: Option<i64>,
+    }
+
+    let row = DealRow {
+        title: "Renewal".into(),
+        amount: 1200,
+    };
+    assert_eq!(row.cells(), [Cell::Text("Renewal".into()), Cell::Int(1200)]);
+    assert_eq!(DealRow::sheet_name(), "Deals");
+    let columns = DealInput::columns();
+    assert_eq!(columns[0].aliases, ["Deal"]);
+    assert!(columns[0].required);
+    assert!(!columns[1].required);
 }
 
 /// A migration file as `navree make:migration` writes it: the schema
