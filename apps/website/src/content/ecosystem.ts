@@ -95,8 +95,8 @@ export const ecosystem: EcosystemEntry[] = [
     category: "operate",
     tagline: "Application monitoring, built in",
     summary:
-      "Exceptions, slow requests, slow queries, failed jobs and outgoing HTTP, grouped into issues and shown in a dashboard inside your app. Alerts go to email, Slack or a webhook, and your coding agent can read and resolve issues through its JSON API.",
-    features: ["Issues grouped by fingerprint", "Slow request and query traces", "Alerts to email, Slack and webhooks", "JSON API for scripts and agents", "Dashboard served by your app"],
+      "Exceptions, slow requests, slow queries, failed jobs and outgoing HTTP, grouped into issues and shown in a dashboard inside your app. Alerts go to email, Slack or a webhook, scripts read and resolve issues through its JSON API, and your coding agent through its MCP tools.",
+    features: ["Issues grouped by fingerprint", "Slow request and query traces", "Alerts to email, Slack and webhooks", "JSON API and MCP tools for agents", "Dashboard served by your app"],
     crate: "navree-lighthouse",
     command: "navree::LighthouseModule::from_config()",
     href: "/docs/tools/lighthouse/",
