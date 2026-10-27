@@ -39,6 +39,7 @@ use image::{
 use serde::{Deserialize, Deserializer, Serialize};
 
 pub use metadata::strip_metadata;
+pub(crate) use svg::looks_like_svg;
 pub use svg::rasterize_svg;
 
 use crate::conversion::{Conversion, Fit, OutputFormat};
