@@ -236,6 +236,17 @@ async fn modules_embed_templates() {
     );
 }
 
+#[tokio::test]
+async fn an_unknown_documents_disk_fails_the_boot() {
+    let error = app()
+        .config("documents.disk", "missing")
+        .try_build()
+        .await
+        .map(|_| ())
+        .unwrap_err();
+    assert!(error.to_string().contains("documents.disk"), "{error}");
+}
+
 #[test]
 fn for_root_takes_the_options() {
     let options = DocumentsOptions {
