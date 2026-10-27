@@ -4,8 +4,9 @@
 //! `#[controller]` and the route attributes, `#[flag]` (feature flags),
 //! `#[resolver]` (GraphQL root fields, for navree-graphql),
 //! `#[grpc_service]` (gRPC services, for navree-grpc), the
-//! `Searchable` derive of navree-search and `#[agent]` (navree-ai's agents
-//! and their tools).
+//! `Searchable` derive of navree-search, the `Exportable` and `Importable`
+//! derives of navree-sheets and `#[agent]` (navree-ai's agents and their
+//! tools).
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -40,6 +41,7 @@ mod paths;
 mod resolver;
 mod route;
 mod searchable;
+mod sheets;
 
 /// Implements `navree_micro::MessageHandlers` for an impl block whose
 /// methods answer message and event patterns.
@@ -552,6 +554,70 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Searchable, attributes(searchable))]
 pub fn derive_searchable(input: TokenStream) -> TokenStream {
     searchable::expand(input.into()).into()
+}
+
+/// Implements `navree_sheets::Exportable` for a struct with named fields:
+/// its columns (field order) and its cells (each field through
+/// `navree_sheets::IntoCell`). Re-exported as `navree::sheets::Exportable`.
+///
+/// ```text
+/// #[derive(Exportable)]
+/// #[export(sheet = "Contacts")]
+/// struct ContactRow {
+///     #[export(header = "contacts.name")]
+///     name: String,
+///     #[export(format = "#,##0.00", width = 14)]
+///     balance: f64,
+///     #[export(with = "cents_to_cell")]
+///     amount_cents: i64,
+///     #[export(skip)]
+///     internal_note: String,
+/// }
+/// ```
+///
+/// | Attribute | Effect |
+/// |---|---|
+/// | `#[export(sheet = "..")]` (struct) | the XLSX sheet name |
+/// | `#[export(header = "..")]` | the header or its translation key (default: the field in sentence case) |
+/// | `#[export(format = "..")]` | the column's Excel number format |
+/// | `#[export(width = N)]` | the column width in characters (1 to 255) |
+/// | `#[export(with = "path")]` | `fn(&FieldType) -> Cell` instead of `IntoCell` |
+/// | `#[export(skip)]` | leaves the field out |
+///
+/// The generated code names `::navree::sheets` (or `::navree_sheets`).
+#[proc_macro_derive(Exportable, attributes(export))]
+pub fn derive_exportable(input: TokenStream) -> TokenStream {
+    sheets::expand_exportable(input.into()).into()
+}
+
+/// Implements `navree_sheets::ImportRow` for an import's row type: the
+/// columns an upload is mapped to, read from the struct's fields.
+/// Re-exported as `navree::sheets::Importable`.
+///
+/// ```text
+/// #[derive(Deserialize, Validate, Importable)]
+/// struct RecipientRow {
+///     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
+///     #[garde(email)]
+///     email: String,
+///     #[garde(length(max = 100))]
+///     first_name: Option<String>,
+/// }
+/// ```
+///
+/// | Attribute | Effect |
+/// |---|---|
+/// | `#[import(header = "..")]` | the header the template shows and automatic mapping matches (default: the field in sentence case) |
+/// | `#[import(aliases = [".."])]` | other headers automatic mapping accepts |
+/// | `#[import(required)]` / `#[import(optional)]` | whether the column must be mapped (default: required unless the field is an `Option` or has `#[serde(default)]`) |
+/// | `#[import(skip)]` | not a column (also `#[serde(skip)]`) |
+///
+/// A column's field is the Rust field name, or its `#[serde(rename = "..")]`;
+/// `#[serde(rename_all)]` is a compile error. The generated code names
+/// `::navree::sheets` (or `::navree_sheets`).
+#[proc_macro_derive(Importable, attributes(import))]
+pub fn derive_importable(input: TokenStream) -> TokenStream {
+    sheets::expand_importable(input.into()).into()
 }
 
 /// Implements `navree_mcp::McpServer` for an inherent impl block whose
