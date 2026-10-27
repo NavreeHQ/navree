@@ -25,6 +25,7 @@
 //! | `mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
 //! | `realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 //! | `storage` | navree-storage | `storage` | `StorageModule`: disks and uploads |
+//! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 //! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
 //! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
@@ -151,6 +152,8 @@ pub use navree_realtime as realtime;
 pub use navree_storage as storage;
 #[cfg(feature = "testing")]
 pub use navree_testing as testing;
+#[cfg(feature = "ui")]
+pub use navree_ui as ui;
 
 // L4
 #[cfg(feature = "access")]
