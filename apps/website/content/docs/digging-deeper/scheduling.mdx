@@ -1,6 +1,6 @@
 ---
 title: "Task scheduling"
-description: "Schedules on cron expressions, declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, all in UTC."
+description: "Schedules on cron expressions, declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, in UTC, a time zone or each workspace's local time."
 ---
 
 ## Introduction
@@ -8,7 +8,7 @@ description: "Schedules on cron expressions, declared in modules: commands, jobs
 <Badge feature="schedule" /> Without a scheduler, every recurring task needs its own crontab entry on the server, outside your code and your version control. With `ScheduleModule`, modules declare their schedules in code, next to the work they schedule, and one long-running process (or one crontab entry) runs them all.
 
 - A task is a registered CLI command, a [queued job](/docs/digging-deeper/queues/) or an async function.
-- Its frequency is a cron expression or a helper such as `hourly` or `daily_at("08:00")`. Times are UTC.
+- Its frequency is a cron expression or a helper such as `hourly` or `daily_at("08:00")`. Times are UTC unless the task names a [time zone](#time-zones), or runs once per workspace on each workspace's clock.
 - Every run is recorded in the database, which is how each run happens on one server only, however many servers run the scheduler, and how `without_overlapping` sees runs on other servers.
 
 ## Registering the module
@@ -160,9 +160,39 @@ For any other rhythm, write the cron expression, for example `.cron("0 9 * * MON
 
 ## Time zones
 
-Every schedule is in UTC, and 0.1 has no time-zone setting, neither for the app nor per task. `daily_at("08:00")` runs at 08:00 UTC wherever your servers and users are: the CRM's reminders go out at 08:00 UTC for everyone.
+A frequency is read in UTC by default: `daily_at("08:00")` runs at 08:00 UTC wherever your servers and users are, and the CRM's reminders go out at 08:00 UTC for everyone. With [`TimeModule`](/docs/digging-deeper/time-zones/) (feature `time`, in `full`), a task can read it on another clock:
 
-To run a task at a local time, convert it to UTC yourself, and remember that the conversion changes when daylight saving time starts or ends: a task at 08:00 in London is `daily_at("07:00")` in summer and `daily_at("08:00")` in winter.
+```rust
+m.schedule(|s| {
+    // 02:00 in London, in summer and in winter.
+    s.command("reports:close-day", &[]).daily_at("02:00").in_zone("Europe/London");
+    // 08:00 in the app's zone (`time.default_zone`; UTC without TimeModule).
+    s.command("crm:task-reminders", &[]).daily_at("08:00").in_default_zone();
+});
+```
+
+`in_zone` takes any IANA name (legacy names such as `Asia/Calcutta` work); an unknown zone fails the boot. When clocks change, a local time that is skipped (02:30 on the night clocks jump from 02:00 to 03:00) runs at the first minute after the gap, and a local time that happens twice runs once, the first time.
+
+### Once per workspace, in its local time
+
+`per_workspace_local()` runs a task once for every workspace, when that workspace's clock reaches the frequency:
+
+```rust
+m.schedule(|s| {
+    s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_default() })
+        .daily_at("09:00")
+        .per_workspace_local();
+});
+```
+
+At each tick the scheduler asks `Zones` for every workspace and its zone (its `timezone`, else its country's primary zone, else `time.default_zone`) and runs the task for each workspace whose clock shows 09:00. The app needs `TimeModule` (the boot fails without it) and `WorkspaceModule`, which provides the workspaces' zones.
+
+- Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`, so a task that runs per workspace has a name of at most 154 characters. `without_overlapping` works per workspace.
+- Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick in UTC (`tick`) and on the workspace's clock (`local`). Plain tasks see a `LocalRun` too, with no owner and the zone `UTC`.
+- `s.job_with(f)` builds the job from the run, so each workspace gets its own job on the queue. `s.job(value)` dispatches the same value for every workspace.
+- `per_user_local()` and `per_local(level)` do the same per user (with a user-level zone source) or per organization.
+
+If listing the workspaces fails, the task is skipped for that tick and the error is logged; other tasks run.
 
 ## Preventing overlaps
 
@@ -219,13 +249,15 @@ The other lines are `Skipped: <task> (already run for this minute)`, `Skipped: <
 
 ### `schedule:list`
 
-`schedule:list` shows every task with its expression and next run. For the CRM, at noon UTC:
+`schedule:list` shows every task with its expression, the clock it is read on and its next run. For the CRM, at noon UTC:
 
 ```text
-Expression  Next run              Task
-0 8 * * *   2026-10-27 08:00 UTC  crm:task-reminders (without overlapping)
-0 3 * * *   2026-10-27 03:00 UTC  audit:prune (without overlapping)
+Expression  Zone  Next run              Task
+0 8 * * *   UTC   2026-10-27 08:00 UTC  crm:task-reminders (without overlapping)
+0 3 * * *   UTC   2026-10-27 03:00 UTC  audit:prune (without overlapping)
 ```
+
+A task that runs per workspace shows `per workspace (local)` and `per owner` instead of a next run.
 
 ## Failures and the run history
 
@@ -284,7 +316,8 @@ async fn reminders_run_once_at_eight() {
 ```
 
 - `RunStatus::Failed(message)` carries the error a failed run returned.
-- `scheduler.list(now)` returns every task as a `TaskInfo` (`name`, `module`, `expr`, `next_run`, `without_overlapping`), to check that a module schedules what it should.
+- `scheduler.list(now)` returns every task as a `TaskInfo` (`name`, `module`, `expr`, `next_run`, `without_overlapping`, `zone`), to check that a module schedules what it should.
+- For tasks that run per workspace, register a `ZonesFake` at the workspace level (see [time zones](/docs/digging-deeper/time-zones/#testing)); each due workspace's outcome is named `<task>@<workspace id>`.
 - To test a command task's effect, you can also run the command directly with `app.run_command(...)`.
 
 The CRM's `crm-activities/tests/reminders.rs` does all of this with the whole CRM: it seeds tasks, ticks at 08:00 and checks the notifications and mail each user got.
@@ -292,6 +325,9 @@ The CRM's `crm-activities/tests/reminders.rs` does all of this with the whole CR
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
     Retries for scheduled jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/time-zones/" title="Time zones">
+    Zones for users and workspaces, local days and send windows.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/cli/" title="Console commands">
     Writing the commands a schedule runs.

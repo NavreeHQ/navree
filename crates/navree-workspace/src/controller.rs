@@ -21,7 +21,7 @@ use crate::entity::{Invitation, Member, Partition, Workspace};
 use crate::invitations::AcceptedInvitation;
 use crate::members::MemberInfo;
 use crate::org_current::PartitionScope;
-use crate::workspaces::NewWorkspace;
+use crate::workspaces::{NewWorkspace, check_time_zone};
 use crate::{
     Invitations, Members, NewPartition, PartitionSelector, Partitions, Selector, WorkspaceConfig,
     WorkspaceRole, Workspaces,
@@ -50,6 +50,10 @@ pub struct WorkspaceResource {
     /// The caller's role in the workspace.
     #[schema(value_type = String, example = "owner")]
     pub role: WorkspaceRole,
+    /// The IANA time zone (`Asia/Kolkata`), if set.
+    pub timezone: Option<String>,
+    /// The ISO 3166-1 alpha-2 country (`IN`), if set.
+    pub country: Option<String>,
     /// When it was created.
     pub created_at: DateTime<Utc>,
     /// When it last changed.
@@ -67,6 +71,8 @@ impl WorkspaceResource {
             owner_id: workspace.owner_id,
             organization_id: workspace.organization_id,
             role,
+            timezone: workspace.timezone.clone(),
+            country: workspace.country.clone(),
             created_at: workspace.created_at,
             updated_at: workspace.updated_at,
         }
@@ -267,6 +273,25 @@ pub struct CreateWorkspaceInput {
     pub name: String,
     /// The slug; derived from the name when absent.
     pub slug: Option<String>,
+    /// The IANA time zone (`Asia/Kolkata`); legacy names are stored under
+    /// their current names.
+    #[serde(default)]
+    pub timezone: Option<String>,
+    /// The ISO 3166-1 alpha-2 country (`IN`).
+    #[serde(default)]
+    pub country: Option<String>,
+}
+
+/// The body of `PUT /workspaces/{workspace}/time-zone`: both values are
+/// replaced (`null` or absent clears one).
+#[derive(Clone, Debug, Default, Deserialize, ToSchema)]
+pub struct WorkspaceTimeZoneInput {
+    /// The IANA time zone, or `null`.
+    #[serde(default)]
+    pub timezone: Option<String>,
+    /// The ISO 3166-1 alpha-2 country, or `null`.
+    #[serde(default)]
+    pub country: Option<String>,
 }
 
 /// The body of `PATCH /workspaces/{workspace}`.
@@ -336,9 +361,10 @@ pub struct AcceptedInvitationResource {
 /// | Route | Permission | Answer |
 /// |---|---|---|
 /// | `GET /workspaces` | | the caller's workspaces, `{data: [..]}` |
-/// | `POST /workspaces` `{name, slug?}` | | 201, the workspace (caller is owner) |
+/// | `POST /workspaces` `{name, slug?, timezone?, country?}` | | 201, the workspace (caller is owner) |
 /// | `GET /workspaces/{workspace}` | (member) | the workspace with the caller's role |
 /// | `PATCH /workspaces/{workspace}` `{name}` | `workspace.update` | the workspace |
+/// | `PUT /workspaces/{workspace}/time-zone` `{timezone, country}` | `workspace.update` | the workspace |
 /// | `DELETE /workspaces/{workspace}` | `workspace.delete` | 204 |
 /// | `POST /workspaces/{workspace}/transfer` `{user_id}` | `workspace.transfer` | the workspace |
 /// | `POST /workspaces/{workspace}/leave` | (member) | 204; 409 for the owner |
@@ -451,7 +477,9 @@ impl Controller for WorkspaceController {
                           Json(input): Json<CreateWorkspaceInput>| {
             let workspaces = workspaces.clone();
             async move {
-                let created = workspaces
+                let (timezone, country) =
+                    check_time_zone(input.timezone.as_deref(), input.country.as_deref())?;
+                let mut created = workspaces
                     .create(
                         &uow,
                         me.user_id,
@@ -461,6 +489,11 @@ impl Controller for WorkspaceController {
                         },
                     )
                     .await?;
+                if timezone.is_some() || country.is_some() {
+                    created = workspaces
+                        .set_time_zone(&uow, created.id, timezone.as_deref(), country.as_deref())
+                        .await?;
+                }
                 let location = format!("{}/{}", uri.path().trim_end_matches('/'), created.slug);
                 Ok::<_, AppError>(Created(
                     location,
@@ -478,6 +511,22 @@ impl Controller for WorkspaceController {
                 async move {
                     let renamed = workspaces.rename(&uow, ws.id(), &input.name).await?;
                     Ok::<_, AppError>(Json(WorkspaceResource::new(&renamed, ws.role().clone())))
+                }
+            };
+        let workspaces = self.workspaces.clone();
+        let set_time_zone =
+            move |ws: CurrentWorkspace, uow: Uow, Json(input): Json<WorkspaceTimeZoneInput>| {
+                let workspaces = workspaces.clone();
+                async move {
+                    let updated = workspaces
+                        .set_time_zone(
+                            &uow,
+                            ws.id(),
+                            input.timezone.as_deref(),
+                            input.country.as_deref(),
+                        )
+                        .await?;
+                    Ok::<_, AppError>(Json(WorkspaceResource::new(&updated, ws.role().clone())))
                 }
             };
         let workspaces = self.workspaces.clone();
@@ -640,6 +689,16 @@ impl Controller for WorkspaceController {
                     "Rename a workspace",
                     &[400, 401, 403, 404],
                     Some(schema_fn::<RenameWorkspaceInput>),
+                    Some(schema_fn::<WorkspaceResource>),
+                )),
+            RouteDef::on(Method::PUT, "/{workspace}/time-zone", set_time_zone)
+                .permissions(&["workspace.update"])
+                .guard(guard())
+                .name("workspaces.time_zone")
+                .api(api(
+                    "Set a workspace's time zone and country",
+                    &[400, 401, 403, 404],
+                    Some(schema_fn::<WorkspaceTimeZoneInput>),
                     Some(schema_fn::<WorkspaceResource>),
                 )),
             RouteDef::on(Method::DELETE, "/{workspace}", destroy)

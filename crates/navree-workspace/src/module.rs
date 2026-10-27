@@ -9,6 +9,7 @@ use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderConformityExt;
 use navree_contracts::PermissionCheck;
+use navree_contracts::ZoneSource;
 use navree_db::{Db, DbOptions, MigrationSet, ModuleBuilderDbExt};
 use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
@@ -35,7 +36,7 @@ use crate::permission_check::WorkspacePermissionCheck;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
 use crate::{
     AccessRequests, Invitations, Isolation, Members, OrgMembers, Organizations, Partitions,
-    WorkspaceConfig, WorkspaceError, Workspaces,
+    WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
 };
 
 /// Multi-tenancy at the workspace level.
@@ -55,6 +56,8 @@ use crate::{
 /// - a `dyn PermissionCheck`, so `navree_contracts::permitted` answers
 ///   questions about a workspace with the member's role there (evaluated
 ///   as behind [`InWorkspace`](crate::InWorkspace));
+/// - [`WorkspaceZones`], the workspaces' `dyn ZoneSource` (their
+///   `timezone` and `country`) for navree-time;
 /// - a request layer that commits the workspace database's unit of work
 ///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation);
 /// - the commands `workspace:migrate` and `workspace:prune-invitations`;
@@ -301,6 +304,13 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             .deps(vec![ProviderKey::of::<Core>()]),
         )
         .exports::<Partitions>()
+        .multi(
+            Factory::<dyn ZoneSource>::new(|r: Resolver| async move {
+                Ok(Arc::new(WorkspaceZones::new(r.get::<Workspaces>().await?))
+                    as Arc<dyn ZoneSource>)
+            })
+            .deps(vec![ProviderKey::of::<Workspaces>()]),
+        )
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()
         .controller::<OrganizationController>()

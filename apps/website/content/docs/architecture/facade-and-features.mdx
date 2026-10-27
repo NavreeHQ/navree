@@ -72,6 +72,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 | `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
+| `navree::time` | navree-time | `time` | `TimeModule`: [time zones](/docs/digging-deeper/time-zones/), `CurrentZone`, local days, send windows, holidays |
 | `navree::session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 | `navree::validation` | navree-validation | `validation` | `Valid` extractors on garde |
 | `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
@@ -159,15 +160,16 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 |---|---|
 | `http`, `log`, `crypto`, `events`, `view`, `cache`, `http-client`, `schema` | Nothing else (and `http` adds `navree::axum`) |
 | `db` | `http`, `schema` |
-| `testing`, `observe`, `api` | `http` |
+| `testing`, `observe`, `api`, `time` | `http` |
 | `mail` | `view` |
 | `realtime`, `storage` | `http`, `crypto` |
 | `session` | `http`, `crypto`, `db` |
 | `validation`, `audit`, `access` | `http`, `db` |
-| `queue`, `schedule` | `db` |
+| `queue` | `db` |
+| `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access` |
-| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access` |
+| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time` |
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |

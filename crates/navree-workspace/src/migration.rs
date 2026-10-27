@@ -20,6 +20,53 @@ pub(crate) fn migrations() -> MigrationSet {
         .migration(CreateWorkspaceTables)
         .migration(CreateOrganizationTables)
         .migration(CreatePartitionTables)
+        .migration(AddWorkspaceTimeZone)
+}
+
+/// Adds `workspaces.timezone` and `workspaces.country` (nullable).
+struct AddWorkspaceTimeZone;
+
+impl MigrationName for AddWorkspaceTimeZone {
+    fn name(&self) -> &str {
+        "m20261027_000001_add_workspace_time_zone"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for AddWorkspaceTimeZone {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // One column per statement: SQLite alters one at a time.
+        manager
+            .alter_table(
+                Table::alter()
+                    .table("workspaces")
+                    .add_column(ColumnDef::new("timezone").string_len(64).null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table("workspaces")
+                    .add_column(ColumnDef::new("country").string_len(2).null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        for column in ["country", "timezone"] {
+            manager
+                .alter_table(
+                    Table::alter()
+                        .table("workspaces")
+                        .drop_column(column)
+                        .to_owned(),
+                )
+                .await?;
+        }
+        Ok(())
+    }
 }
 
 /// Creates `workspaces`, `workspace_members` and `workspace_invitations`.
