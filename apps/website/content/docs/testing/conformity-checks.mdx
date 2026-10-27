@@ -108,7 +108,16 @@ undocumented = ["POST /api/hooks/*"]  # routes allowed without docs
 | `api.require_docs` | `false` | Refuses to boot while a route has no `#[api]`, listing each one: `api.require_docs: 2 routes have no #[api] documentation: GET /api/v1/deals/board (module DealsModule), ...`. Turn it on in development so a new route can't ship undocumented. |
 | `api.undocumented` | `[]` | Routes allowed without docs, by mounted path: `"METHOD /path"` or `"/path"` for every method, and a trailing `*` matches the rest of the path. From the environment, comma-separated: `APP_API__UNDOCUMENTED=GET /internal/*`. |
 
-Apps made with `navree new` list the Lighthouse and Logbook dashboards there (`undocumented = ["/_lighthouse*", "/_logbook*"]`): they are pages, not API routes.
+Apps made with `navree new` list the Lighthouse and Logbook dashboards there (`undocumented = ["/_lighthouse*", "/_logbook*"]`): they are pages, not API routes. Other modules serve pages or speak their own protocol too; list them when you add them to the app:
+
+| Module | Routes | Pattern |
+|---|---|---|
+| Helm | the admin panel, its assets and the JSON calls behind it | `"/admin*"` (or your `helm.path`) |
+| Fleet | the dashboard and the JSON calls behind it | `"/_fleet*"` (or your `fleet.path`) |
+| GraphQL | the endpoint, GraphiQL and the subscriptions socket | `"/graphql*"` (or your `graphql.path`) |
+| UI | the component assets and the gallery | `"/_navree/ui*"` (or your `ui.mount`) |
+
+`navree check` names the module of every undocumented route, so a module missing from the list shows up the first time it runs.
 
 ### Entities classified
 
