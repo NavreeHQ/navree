@@ -195,7 +195,7 @@ A list endpoint then calls `CompanyRef::load(&*tx, page.data.iter().map(|d| d.co
 | `Repo::<E>::delete(&uow, model)` | `()` | `deleted`, with the whole old record |
 | `Repo::<E>::find(&uow, id)` | `Option<Model>` | none |
 | `Repo::<E>::find_or_fail(&uow, id)` | the model, or `DbErr::RecordNotFound` (a 404 over HTTP) | none |
-| `Repo::<E>::find_for_update(&uow, id)` | `Option<Model>`, row locked on PostgreSQL | none |
+| `Repo::<E>::find_for_update(&uow, id)` | `Option<Model>`, row locked on PostgreSQL and MySQL | none |
 
 Every function runs in the unit of work's transaction, beginning it if needed, so reads see the request's own uncommitted writes. The `find` functions take the value of a single-column primary key; on an entity with a composite key they return a `KeyArityMismatch` error. `insert`, `update` and `delete` work with composite keys too.
 
@@ -282,7 +282,7 @@ pub async fn update(&self, uow: &Uow, id: Uuid, input: UpdateDeal) -> Result<dea
 
 `into_active_model()` marks every field unchanged, and SeaORM's `UPDATE` only writes the fields you `Set`. `Repo::update` then:
 
-1. reads the current row by the active model's primary key (with `FOR UPDATE` on PostgreSQL), failing with `RecordNotFound` if it's gone, or with `PrimaryKeyNotSet` if the key isn't set;
+1. reads the current row by the active model's primary key (with `FOR UPDATE` on PostgreSQL and MySQL), failing with `RecordNotFound` if it's gone, or with `PrimaryKeyNotSet` if the key isn't set;
 2. runs the update;
 3. compares the old and new rows and records an `updated` event with only the fields whose values differ. When nothing changed, it records no event.
 

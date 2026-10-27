@@ -39,7 +39,7 @@ async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
 
 `Page<T>` is a response, so the handler returns it as it is. `PageQuery` and `Page` are in the prelude; `paginate` is `navree::db::paginate`.
 
-`paginate` runs two queries: a `COUNT(*)` for the total and the page itself with `LIMIT` and `OFFSET`. Run it on the unit of work's transaction, as above. On SQLite that keeps the total and the page consistent, because no other writer can commit while the unit of work holds the write lock. PostgreSQL transactions run at its default `READ COMMITTED` level, where each query sees the latest commits, so a write committed between the two queries can still make them disagree.
+`paginate` runs two queries: a `COUNT(*)` for the total and the page itself with `LIMIT` and `OFFSET`. Run it on the unit of work's transaction, as above. On SQLite that keeps the total and the page consistent, because no other writer can commit while the unit of work holds the write lock. PostgreSQL transactions run at its default `READ COMMITTED` level, where each query sees the latest commits, so a write committed between the two queries can still make them disagree. MySQL's default `REPEATABLE READ` reads both from the transaction's single snapshot, so they agree there, unless `database.mysql.isolation_level` lowers the level.
 
 **Always order the query**, and end the order with a unique column such as the id. Without a stable order, the database may return rows in a different order for each page, and a row can appear twice or not at all while someone pages through.
 

@@ -7,7 +7,7 @@ Every workspace's data must stay its own: a query in Acme never returns Globex's
 
 | Strategy | Where data lives | Enforced by | Databases |
 |---|---|---|---|
-| `row` (default) | Shared tables with a `workspace_id` column | `WorkspaceRepo` scoping, route record checks, and row-level security on PostgreSQL | SQLite, PostgreSQL |
+| `row` (default) | Shared tables with a `workspace_id` column | `WorkspaceRepo` scoping, route record checks, and row-level security on PostgreSQL | SQLite, PostgreSQL, MySQL (scoping only) |
 | `schema` | One PostgreSQL schema per workspace | The transaction's `search_path` | PostgreSQL |
 | `database` | One database per workspace | A separate connection pool | SQLite, PostgreSQL |
 
@@ -148,6 +148,8 @@ workspaces.enter(&uow, workspace.id).await?; // navree.workspace for this transa
 // ... queries in `uow` see only this workspace's rows
 uow.commit().await?;
 ```
+
+SQLite and MySQL have no row-level security, and `Workspaces::enter` sets nothing there. On them, row isolation is the scoping alone: a query that leaves out the workspace filter sees every workspace's rows, so read and write workspace data through `WorkspaceRepo`.
 
 On SQLite, `enter` and the request do nothing to the transaction: `WorkspaceRepo` and the route record checks are the scope.
 
