@@ -21,6 +21,7 @@ async fn companies(db: &navree_db::Db, n: usize) {
             Company {
                 name: format!("C{i}"),
                 employees: i32::try_from(i).unwrap(),
+                active: true,
                 ..Company::default()
             },
         )
@@ -593,6 +594,7 @@ async fn companies_in(uow: &navree_db::Uow, n: usize) {
             Company {
                 name: format!("C{i}"),
                 employees: i32::try_from(i).unwrap(),
+                active: true,
                 ..Company::default()
             },
         )
