@@ -15,6 +15,7 @@ use serde::{Deserialize, Deserializer};
 /// allowed_origins = ["http://localhost:3000"]
 /// activity_timeout_secs = 120
 /// relay_url = "auto"            # workers hand broadcasts to `serve`
+/// backplane = "none"            # or "redis": share broadcasts and presence across processes
 /// ```
 ///
 /// `Debug` redacts the secret.
@@ -52,6 +53,39 @@ pub struct RealtimeOptions {
     /// from the app key when there is no secret, so every process of the
     /// app must share one of them.
     pub relay_url: String,
+    /// What connects the app's processes (default
+    /// [`BackplaneKind::None`]). With [`BackplaneKind::Redis`], every
+    /// process shares broadcasts, presence members and user
+    /// disconnections over Redis; it needs `RedisModule` and a
+    /// [`secret`](RealtimeOptions::secret), because a subscription signed
+    /// by one process is checked by another.
+    pub backplane: BackplaneKind,
+}
+
+/// What connects the realtime hubs of an app's processes
+/// (`realtime.backplane`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum BackplaneKind {
+    /// Nothing (`"none"`, the default): each process reaches its own
+    /// sockets; workers use the relay. An app (or test) that provides an
+    /// unnamed `dyn Backplane` (`override_value`) uses that one.
+    #[default]
+    None,
+    /// Redis pub/sub (`"redis"`): the `dyn Backplane` provider named
+    /// `redis`, which navree-redis's `RedisModule` registers.
+    Redis,
+}
+
+impl BackplaneKind {
+    /// The configuration name: `none` or `redis`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BackplaneKind::None => "none",
+            BackplaneKind::Redis => "redis",
+        }
+    }
 }
 
 impl Default for RealtimeOptions {
@@ -63,6 +97,7 @@ impl Default for RealtimeOptions {
             allowed_origins: Vec::new(),
             activity_timeout_secs: 120,
             relay_url: String::new(),
+            backplane: BackplaneKind::None,
         }
     }
 }
@@ -92,6 +127,12 @@ impl RealtimeOptions {
         }
         if self.activity_timeout_secs == 0 {
             errors.push("realtime.activity_timeout_secs must be at least 1".to_owned());
+        }
+        if self.backplane != BackplaneKind::None && self.secret.expose().is_empty() {
+            errors.push(format!(
+                "realtime.backplane = \"{}\" needs realtime.secret: every process must sign channel subscriptions with the same secret",
+                self.backplane.as_str()
+            ));
         }
         let relay = self.relay_url.trim();
         if !(relay.is_empty()
@@ -227,5 +268,38 @@ mod tests {
         )
         .unwrap();
         assert_eq!(star.allowed_origins, ["*"]);
+    }
+
+    #[test]
+    fn a_backplane_needs_a_shared_secret() {
+        let defaults = load(ConfigSources::new()).unwrap();
+        assert_eq!(defaults.backplane, BackplaneKind::None);
+
+        let error =
+            load(ConfigSources::new().set("realtime", serde_json::json!({"backplane": "redis"})))
+                .expect_err("no secret")
+                .to_string();
+        assert!(
+            error.contains("realtime.backplane = \"redis\" needs realtime.secret"),
+            "{error}"
+        );
+
+        let options = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_REALTIME__BACKPLANE", "redis"),
+                ("APP_REALTIME__SECRET", "shared"),
+            ],
+        ))
+        .unwrap();
+        assert_eq!(options.backplane, BackplaneKind::Redis);
+        assert_eq!(
+            [BackplaneKind::None, BackplaneKind::Redis].map(BackplaneKind::as_str),
+            ["none", "redis"]
+        );
+        assert!(
+            load(ConfigSources::new().set("realtime", serde_json::json!({"backplane": "pigeon"})))
+                .is_err()
+        );
     }
 }

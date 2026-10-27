@@ -61,6 +61,7 @@ navree-ui = { path = "crates/navree-ui", version = "0.1.0" }
 navree-mcp = { path = "crates/navree-mcp", version = "0.1.0" }
 navree-ai = { path = "crates/navree-ai", version = "0.1.0" }
 navree-lighthouse = { path = "crates/navree-lighthouse", version = "0.1.0" }
+navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -136,6 +137,16 @@ http-body = "1.0.1"
 hyper-util = { version = "0.1.21", features = ["http1", "http2", "server", "server-auto", "server-graceful", "service", "tokio"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
+# Redis (navree-redis): Tokio, a reconnecting connection manager, Lua
+# scripts, and TLS for rediss:// with rustls (ring, through the workspace's
+# rustls features; never aws-lc).
+redis = { version = "1.8.0", default-features = false, features = [
+    "connection-manager",
+    "script",
+    "streams",
+    "tokio-comp",
+    "tokio-rustls-comp",
+] }
 
 # ---------------------------------------------------------------------------
 # Serialization, errors, ids, time

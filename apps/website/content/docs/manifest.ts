@@ -125,6 +125,8 @@ export const sections: DocsSection[] = [
     pages: [
       // Owner: E
       "cache",
+      // Owner: redis
+      "redis",
       "events",
       "queues",
       "scheduling",

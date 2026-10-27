@@ -253,9 +253,10 @@ struct Features {
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
 /// `features = ["billing"]`, `features = ["search"]`, `features = ["mcp"]`,
-/// `features = ["ai"]`).
+/// `features = ["ai"]`, `features = ["redis"]`).
 const OPT_IN: &[&str] = &[
     "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp", "ai",
+    "redis",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -446,6 +447,17 @@ fn opt_in_libraries_are_reexported_whole() {
     assert!(same::<navree::social::SocialModule, SocialModule>());
     let (_social, _fake): (navree::social::Social, navree::social::SocialFake) =
         navree::social::Social::fake();
+}
+
+/// `navree::redis` is navree-redis re-exported whole, and the `redis`
+/// feature puts `RedisModule` in the prelude
+/// (`cargo test -p navree --features redis --test facade`).
+#[cfg(feature = "redis")]
+#[test]
+fn redis_is_reexported_with_its_feature() {
+    assert!(same::<navree::redis::RedisModule, RedisModule>());
+    assert_eq!(navree::redis::DRIVER, "redis");
+    assert_eq!(navree::redis::RedisOptions::default().prefix, "navree:");
 }
 
 /// `navree::flags` is navree-flags re-exported whole, and the `flags`

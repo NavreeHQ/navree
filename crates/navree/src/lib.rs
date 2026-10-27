@@ -35,6 +35,7 @@
 //! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
@@ -50,13 +51,14 @@
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `dock`, `otel`). A feature also turns on the features of the
-//! crates its crate builds on (`auth` turns on `access`, `db`, `http`, ...).
-//! SQLite is built in; the `postgres` feature adds navree-db's PostgreSQL
-//! driver and the `mysql` feature its MySQL and MariaDB driver, and the
-//! opt-in `otel` feature adds navree-observe's OTLP span exporter. `search-tantivy` adds search's
-//! embedded Tantivy engine. `axum` is re-exported with `http`. `dock` is a
-//! development tool (`navree dock`), for tools and tests that read
+//! `mcp`, `ai`, `redis`, `dock`, `otel`). A feature also turns on the
+//! features of the crates its crate builds on (`auth` turns on `access`,
+//! `db`, `http`, ...). SQLite is built in; the `postgres` feature adds
+//! navree-db's PostgreSQL driver and the `mysql` feature its MySQL and
+//! MariaDB driver, and the opt-in `otel` feature adds navree-observe's OTLP
+//! span exporter. `search-tantivy` adds search's embedded Tantivy engine.
+//! `axum` is re-exported with `http`. `dock` is a development tool
+//! (`navree dock`), for tools and tests that read
 //! `dock.toml`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
@@ -183,6 +185,10 @@ pub use navree_validation as validation;
 pub use navree_auth as auth;
 #[cfg(feature = "workspace")]
 pub use navree_workspace as workspace;
+
+// L5 (opt-in)
+#[cfg(feature = "redis")]
+pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
 #[cfg(feature = "webhooks")]

@@ -1,7 +1,7 @@
 //! # navree-session
 //!
-//! `SessionModule`: encrypted session cookies, memory and database stores,
-//! and CSRF protection for single-page apps (a CSRF cookie echoed in a header).
+//! `SessionModule`: encrypted session cookies, memory and database stores (a
+//! Redis one with navree-redis), and CSRF protection for single-page apps (a CSRF cookie echoed in a header).
 //!
 //! - [`SessionModule`] is global. Configure it with
 //!   [`SessionModule::for_root`] or [`SessionModule::from_config`] (section
@@ -17,7 +17,9 @@
 //!   `lifetime_minutes`; activity extends them.
 //! - Stores implement `navree_contracts::SessionStore`: [`MemoryStore`] and
 //!   [`DatabaseStore`] (table [`SESSIONS_TABLE`], created by the `session`
-//!   migration set the module contributes). Override the store with
+//!   migration set the module contributes); `store = "redis"` uses the
+//!   `dyn SessionStore` provider named `redis` (navree-redis's
+//!   `RedisModule`). Override the store with
 //!   `AppBuilder::override_value::<dyn SessionStore>(..)`.
 //! - `GET /sanctum/csrf-cookie` (public) answers 204 and sets the
 //!   [`XSRF_COOKIE`] cookie (readable by JavaScript).

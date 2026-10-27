@@ -98,6 +98,13 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
     ]),
+    // Redis: the shared connections and the Redis drivers of the cache,
+    // the queue, sessions and the real-time backplane (ecosystem build
+    // plan §3: may also use http and db).
+    rule("navree-redis", 5, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
+        "navree-db", "navree-queue", "navree-session", "navree-realtime",
+    ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
     // issues their tokens.
@@ -249,6 +256,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-ui",
     "navree-auth",
     "navree-workspace",
+    "navree-redis",
     "navree-social",
     "navree-webhooks",
     "navree-oauth",
@@ -732,12 +740,12 @@ fn navree_cli_depends_on_navree_dock_only() {
 #[test]
 fn unknown_navree_crates_are_reported() {
     let found = violations(&[
-        edge("navree-redis", "navree-kernel", Kind::Normal),
-        edge("navree-http", "navree-redis", Kind::Normal),
+        edge("navree-unknown", "navree-kernel", Kind::Normal),
+        edge("navree-http", "navree-unknown", Kind::Normal),
     ]);
     assert_eq!(found.len(), 2, "{found:?}");
     assert!(
-        found.iter().all(|m| m.contains("navree-redis")),
+        found.iter().all(|m| m.contains("navree-unknown")),
         "{found:?}"
     );
 }

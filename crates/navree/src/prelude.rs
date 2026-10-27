@@ -89,6 +89,10 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 
 #[cfg(feature = "ai")]
 pub use navree_ai::{AiModule, ModuleBuilderAiExt as _};
+
+#[cfg(feature = "redis")]
+pub use navree_redis::RedisModule;
+
 #[cfg(feature = "flags")]
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 #[cfg(feature = "graphql")]

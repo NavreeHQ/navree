@@ -13,7 +13,7 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `dock`).
+## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`).
 full = [
     "access",
     "api",
@@ -96,6 +96,12 @@ workspace = [
     "mail",
     "access",
 ]
+## L5 (opt-in, not in `full`)
+## Redis: shared connections and the Redis drivers of the cache and locks,
+## the queue, sessions and the real-time backplane, plus shared rate limits
+## (pure Rust, rustls with ring for rediss://; opt-in because it adds the
+## redis client and its Lua scripts are only needed with a Redis server).
+redis = ["dep:navree-redis", "cache", "queue", "session", "realtime"]
 ## L6
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,
 ## verified incoming webhooks (pure Rust; in `full`).
@@ -272,6 +278,7 @@ navree-mcp = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
 navree-queue = { workspace = true, optional = true }
+navree-redis = { workspace = true, optional = true }
 navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
@@ -319,3 +326,8 @@ required-features = ["graphql"]
 [[test]]
 name = "grpc"
 required-features = ["grpc"]
+
+# Redis through the facade (`cargo test -p navree --features redis --test redis`).
+[[test]]
+name = "redis"
+required-features = ["redis"]

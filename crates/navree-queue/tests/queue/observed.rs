@@ -1,5 +1,6 @@
 //! `Queue::push_observed`: jobs queued by a change observer join the commit
-//! it observes, on both drivers.
+//! it observes, on every driver (a `QueueStore` driver queues them once the
+//! commit succeeds).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -92,7 +93,15 @@ fn change(id: &str) -> ChangeEvent {
 
 async fn push_observed_joins_the_commit(driver: QueueDriver) {
     let journal = Arc::new(Journal::default());
-    let app = TestApp::builder()
+    let mut builder = TestApp::builder();
+    if driver == QueueDriver::Redis {
+        // The `redis` driver name resolves the reference store, a store
+        // behind the public `QueueStore` trait.
+        builder = builder.module(crate::reference_store::NamedStoreModule(
+            crate::reference_store::ReferenceStore::default(),
+        ));
+    }
+    let app = builder
         .temp_database()
         .module(DatabaseModule)
         .module(QueueModule::for_root(options(driver)))
@@ -132,4 +141,9 @@ async fn push_observed_joins_the_commit_on_the_database_driver() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn push_observed_joins_the_commit_on_the_memory_driver() {
     push_observed_joins_the_commit(QueueDriver::Memory).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn push_observed_joins_the_commit_on_a_queue_store_driver() {
+    push_observed_joins_the_commit(QueueDriver::Redis).await;
 }

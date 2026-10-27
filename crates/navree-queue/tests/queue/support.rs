@@ -64,7 +64,15 @@ pub async fn harness(driver: QueueDriver) -> Harness {
 pub async fn harness_with(options: QueueOptions) -> Harness {
     let clock = Arc::new(FixedClock::new(start()));
     let journal = Arc::new(Journal::default());
-    let app = TestApp::builder()
+    let mut builder = TestApp::builder();
+    if options.driver == QueueDriver::Redis {
+        // The `redis` driver name resolves the reference store, which
+        // implements only the public `QueueStore` trait.
+        builder = builder.module(crate::reference_store::NamedStoreModule(
+            crate::reference_store::ReferenceStore::default(),
+        ));
+    }
+    let app = builder
         .temp_database()
         .module(DatabaseModule)
         .module(QueueModule::for_root(options))

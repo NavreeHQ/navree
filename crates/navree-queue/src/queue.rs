@@ -140,9 +140,9 @@ impl Queue {
     /// Queues a serialized job as part of `uow` (see
     /// [`dispatch_in`](Queue::dispatch_in)); returns its id.
     ///
-    /// With the memory driver, a unique job is deduplicated when the unit of
-    /// work commits, so the id returned here is the new job's id even if a
-    /// pending duplicate later takes its place.
+    /// With the memory and Redis drivers, a unique job is deduplicated when
+    /// the unit of work commits, so the id returned here is the new job's id
+    /// even if a pending duplicate later takes its place.
     pub async fn push_in(&self, uow: &Uow, envelope: JobEnvelope) -> Result<String, QueueError> {
         let delay = envelope_delay(&envelope);
         let job = self.prepare(envelope, delay)?;
@@ -166,7 +166,7 @@ impl Queue {
         let job = self.prepare(envelope, delay)?;
         match &self.inner.store {
             Store::Database(store) => store.insert_on_tx(tx, &job).await,
-            Store::Memory(_) | Store::Fake(_) => self.store_in(uow, job).await,
+            Store::Memory(_) | Store::Fake(_) | Store::Custom(..) => self.store_in(uow, job).await,
         }
     }
 
@@ -174,7 +174,7 @@ impl Queue {
     async fn store_in(&self, uow: &Uow, job: NewJob) -> Result<String, QueueError> {
         match &self.inner.store {
             Store::Database(store) => store.insert_in(uow, &job).await,
-            Store::Memory(_) | Store::Fake(_) => {
+            Store::Memory(_) | Store::Fake(_) | Store::Custom(..) => {
                 let id = job.id.clone();
                 let queue = self.clone();
                 uow.after_commit(move || {
@@ -311,13 +311,8 @@ impl fmt::Debug for Queue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut job_types: Vec<_> = self.inner.registry.keys().collect();
         job_types.sort();
-        let driver = match &self.inner.store {
-            Store::Database(_) => "Database",
-            Store::Memory(_) => "Memory",
-            Store::Fake(_) => "Fake",
-        };
         f.debug_struct("Queue")
-            .field("driver", &driver)
+            .field("driver", &self.inner.store.name())
             .field("job_types", &job_types)
             .finish_non_exhaustive()
     }

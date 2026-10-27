@@ -244,7 +244,7 @@ impl Queue {
         let limit = Duration::from_secs(job.options.timeout_secs);
         match execute(registration, job.payload.clone(), job_ctx, limit).await {
             Ok(()) => {
-                self.inner.store.complete(&job.id).await?;
+                self.inner.store.complete(&job).await?;
                 self.inner.telemetry.emit_with(EventKind::JobProcessed, || {
                     TelemetryEvent::JobProcessed(JobProcessed {
                         queue: job.queue.clone(),
