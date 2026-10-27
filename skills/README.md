@@ -60,6 +60,7 @@ conventions, and says which skill to load for each task.
 | [`navree-microservices`](navree-microservices/SKILL.md) | Messages and events between services: handlers, `ServiceClient`, the outbox and inbox, dead letters, the transports, and `MicroFake` tests (feature `micro`) |
 | [`navree-helm`](navree-helm/SKILL.md) | The Helm admin panel: resources, fields, filters, actions, metrics, custom pages |
 | [`navree-navigator`](navree-navigator/SKILL.md) | Connect a coding agent to Navigator (`navree mcp`), use its tools, install the skills |
+| [`navree-i18n`](navree-i18n/SKILL.md) | Localization: Fluent files, `t!`, the request's locale, formatting, translated validation, mail and notifications (feature `i18n`) |
 
 ## Installing
 

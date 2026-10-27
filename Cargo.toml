@@ -71,6 +71,8 @@ navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
 navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
+navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
+navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -339,6 +341,19 @@ async-trait = "0.1.92"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
+
+# Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
+# formatting with compiled data (pure Rust; Gregorian dates only).
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+unic-langid = "0.9.6"
+intl-memoizer = "0.5.3"
+icu_decimal = "2.4.0"
+icu_datetime = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+icu_calendar = { version = "2.4.0", default-features = false }
+# `sync`: formatters are Send + Sync, so bundles can share them.
+icu_provider = { version = "2.4.0", default-features = false, features = ["sync"] }
+fixed_decimal = "0.7.3"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

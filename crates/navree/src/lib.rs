@@ -58,24 +58,25 @@
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
 //! | `navigator` | navree-navigator | `navigator` (opt-in) | Navigator's MCP server and tools for coding agents (`navree mcp`), the embedded agent skills |
+//! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `harbor`,
-//! `navigator`, `otel`), and the `storage-s3` driver but not `storage-gcs` or
-//! `storage-azure`. A feature also turns on the features of the crates its
-//! crate builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is
-//! built in; the `postgres` feature adds navree-db's PostgreSQL driver and
-//! the `mysql` feature its MySQL and MariaDB driver, and the opt-in `otel`
-//! feature adds navree-observe's OTLP span exporter. `validation-phone` and
-//! `validation-html` (both in `full`) add navree-validation's `Phone` and
-//! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.
-//! `axum` is re-exported with `http`. `dock` is a development tool
-//! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
-//! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
-//! on only to read `harbor.toml` or drive deploys from its own code.
-//! `navigator` is the library behind `navree mcp` and
-//! `navree skills:install`, for tools and tests.
+//! `mcp`, `ai`, `redis`, `micro` and its transports, `i18n`, `dock`,
+//! `harbor`, `navigator`, `otel`), and the `storage-s3` driver but not
+//! `storage-gcs` or `storage-azure`. A feature also turns on the features of
+//! the crates its crate builds on (`auth` turns on `access`, `db`, `http`,
+//! ...). SQLite is built in; the `postgres` feature adds navree-db's
+//! PostgreSQL driver and the `mysql` feature its MySQL and MariaDB driver,
+//! and the opt-in `otel` feature adds navree-observe's OTLP span exporter.
+//! `validation-phone` and `validation-html` (both in `full`) add
+//! navree-validation's `Phone` and `SafeHtml`. `search-tantivy` adds search's
+//! embedded Tantivy engine. `axum` is re-exported with `http`. `dock` is a
+//! development tool (`navree dock`), for tools and tests that read
+//! `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has Harbor
+//! built in, and an app turns it on only to read `harbor.toml` or drive
+//! deploys from its own code. `navigator` is the library behind `navree mcp`
+//! and `navree skills:install`, for tools and tests.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -243,6 +244,10 @@ pub mod flags {
 }
 #[cfg(feature = "ai")]
 pub use navree_ai as ai;
+/// Localization (the `i18n` feature): navree-i18n re-exported whole,
+/// with `t!`, `args!` and `embed_locales!`.
+#[cfg(feature = "i18n")]
+pub use navree_i18n as i18n;
 
 /// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
 /// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
