@@ -417,7 +417,10 @@ mod tests {
             json!({ "type": "app" })
         );
         assert_eq!(Owner::App.columns(), ("app", Uuid::nil()));
-        assert_eq!(Owner::from_columns("organization", id), Owner::Organization(id));
+        assert_eq!(
+            Owner::from_columns("organization", id),
+            Owner::Organization(id)
+        );
         assert_eq!(Owner::Workspace(id).to_string(), format!("workspace:{id}"));
     }
 

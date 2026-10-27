@@ -65,7 +65,10 @@ async fn connecting_and_disconnecting_are_audited_without_secrets() {
 
     let entries = audit.entries();
     let actions: Vec<&str> = entries.iter().map(|e| e.action.as_str()).collect();
-    assert_eq!(actions, ["integration.connected", "integration.disconnected"]);
+    assert_eq!(
+        actions,
+        ["integration.connected", "integration.disconnected"]
+    );
     let connected = &entries[0];
     assert_eq!(connected.kind, AuditKind::Custom);
     assert_eq!(connected.actor_id, Some(ADMIN));

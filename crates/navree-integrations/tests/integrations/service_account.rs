@@ -1,8 +1,7 @@
 //! Google service accounts with domain-wide delegation, with the fake.
 
 use navree_integrations::{
-    CredentialKind, GoogleWorkspace, IntegrationsError, NewServiceAccount, Owner,
-    ServiceAccountKey,
+    CredentialKind, GoogleWorkspace, IntegrationsError, NewServiceAccount, Owner, ServiceAccountKey,
 };
 use serde_json::json;
 
@@ -80,7 +79,13 @@ async fn a_key_the_provider_refuses_is_not_stored() {
         error.to_string(),
         "Google Workspace refused the connection: unauthorized_client"
     );
-    assert!(integrations.connections(Owner::App).await.unwrap().is_empty());
+    assert!(
+        integrations
+            .connections(Owner::App)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]

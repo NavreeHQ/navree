@@ -17,12 +17,12 @@ use navree_integrations::{
     Connection, ConnectionInfo, ConnectionRestored, ConnectionStatus, ConnectionUnhealthy,
     CredentialKind, DEFAULT_SCOPE_SET, DefaultScopes, FakeGrant, GoogleClient, GoogleWorkspace,
     GraphClient, Health, INTEGRATIONS_MIGRATIONS, IntegrationClient, IntegrationConnected,
-    IntegrationDisconnected, IntegrationOwner, Integrations, IntegrationsController,
-    IntegrationsError, IntegrationsFake, IntegrationsModule, IntegrationsOptions, Level,
-    MANAGE_PERMISSION, MicrosoftGraph, MicrosoftMode, Minted, ModuleBuilderIntegrationsExt,
-    NewApiKey, NewServiceAccount, Owner, OwnerType, Provider, ProviderConfig, ProviderInfo,
-    ProviderType, ScopeSet, ScopeSetInfo, ServiceAccountInput, ServiceAccountKey, Slack,
-    SlackClient,
+    IntegrationConnection, IntegrationDisconnected, IntegrationOwner, Integrations,
+    IntegrationsController, IntegrationsError, IntegrationsFake, IntegrationsModule,
+    IntegrationsOptions, Level, MANAGE_PERMISSION, MicrosoftGraph, MicrosoftMode, Minted,
+    ModuleBuilderIntegrationsExt, NewApiKey, NewServiceAccount, Owner, OwnerType, Provider,
+    ProviderConfig, ProviderInfo, ProviderType, ScopeSet, ScopeSetInfo, ServiceAccountInput,
+    ServiceAccountKey, Slack, SlackClient,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -150,10 +150,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
         ProviderType::OAuth2,
         ProviderType::ApiKey,
     ] {
-        assert_eq!(
-            serde_json::to_value(kind).unwrap(),
-            json!(kind.as_str())
-        );
+        assert_eq!(serde_json::to_value(kind).unwrap(), json!(kind.as_str()));
     }
 }
 
@@ -381,8 +378,13 @@ fn connection_info_has_the_documented_members() {
             scopes: Vec::new(),
         }],
     };
-    let _: (String, String, ProviderType, Vec<CredentialKind>, Vec<ScopeSetInfo>) =
-        (key, name, kind, kinds, scope_sets);
+    let _: (
+        String,
+        String,
+        ProviderType,
+        Vec<CredentialKind>,
+        Vec<ScopeSetInfo>,
+    ) = (key, name, kind, kinds, scope_sets);
     for (kind, name) in [
         (CredentialKind::OAuth, "oauth"),
         (CredentialKind::AppOnly, "app_only"),
@@ -427,19 +429,19 @@ fn events_constants_and_types_have_their_documented_names() {
     };
 
     // The typed clients and extractors exist under their documented names.
-    fn _clients(
-        _: Option<IntegrationClient>,
-        _: Option<GraphClient>,
-        _: Option<GoogleClient>,
-        _: Option<SlackClient>,
-        _: Option<ApiRequest>,
-        _: Option<Connection<MicrosoftGraph>>,
-        _: Option<IntegrationOwner>,
-        _: Option<IntegrationsController>,
-        _: Option<IntegrationsError>,
-        _: Option<&FakeServer>,
-    ) {
-    }
+    type _Clients<'a> = (
+        Option<IntegrationClient>,
+        Option<GraphClient>,
+        Option<GoogleClient>,
+        Option<SlackClient>,
+        Option<ApiRequest>,
+        Option<Connection<MicrosoftGraph>>,
+        Option<IntegrationOwner>,
+        Option<IntegrationsController>,
+        Option<IntegrationsError>,
+        Option<&'a FakeServer>,
+        Option<IntegrationConnection>,
+    );
     let _ = IntegrationsModule::from_config;
     let _ = IntegrationsModule::for_root;
     let _ = IntegrationsModule::for_feature::<DefaultScopes>;
@@ -518,7 +520,12 @@ async fn service_methods(integrations: &Integrations, owner: Owner, id: Uuid) {
             .timeout(std::time::Duration::from_secs(1));
         let _ = request.send().await;
         let _ = client.get("/a").send_json::<serde_json::Value>().await;
-        let _ = (client.post("/"), client.put("/"), client.patch("/"), client.delete("/"));
+        let _ = (
+            client.post("/"),
+            client.put("/"),
+            client.patch("/"),
+            client.delete("/"),
+        );
         let slack = SlackClient::from(client);
         let _ = slack.call("auth.test", &json!({})).await;
         let graph = GraphClient::from(IntegrationClient::clone(&slack));

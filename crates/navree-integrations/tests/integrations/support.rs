@@ -99,7 +99,10 @@ impl Inbox {
     }
 
     pub fn clear(&self) {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).clear();
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 }
 
@@ -298,7 +301,11 @@ impl Harness {
     }
 
     /// Connects `owner` to Microsoft 365 through admin consent.
-    pub async fn connect_microsoft(&self, owner: Owner, tenant: &str) -> navree_integrations::ConnectionInfo {
+    pub async fn connect_microsoft(
+        &self,
+        owner: Owner,
+        tenant: &str,
+    ) -> navree_integrations::ConnectionInfo {
         let integrations = self.integrations().await;
         let redirect = integrations
             .connect_url(owner, "microsoft", Default::default())
@@ -379,7 +386,10 @@ pub fn loopback_http() -> impl Module {
 
 /// A harness with the real providers pointed at `mock` (a wiremock
 /// server's URI).
-pub async fn real(mock: &str, configure: impl FnOnce(TestAppBuilder) -> TestAppBuilder) -> RealHarness {
+pub async fn real(
+    mock: &str,
+    configure: impl FnOnce(TestAppBuilder) -> TestAppBuilder,
+) -> RealHarness {
     let clock = Arc::new(FixedClock::new(start()));
     let inbox = Arc::new(Inbox::default());
     let builder = builder(clock.clone(), inbox.clone())
@@ -389,17 +399,38 @@ pub async fn real(mock: &str, configure: impl FnOnce(TestAppBuilder) -> TestAppB
             "integrations.providers.microsoft.api_url",
             format!("{mock}/v1.0"),
         )
-        .config("integrations.providers.google.token_url", format!("{mock}/token"))
-        .config("integrations.providers.google.api_url", format!("{mock}/google"))
+        .config(
+            "integrations.providers.google.token_url",
+            format!("{mock}/token"),
+        )
+        .config(
+            "integrations.providers.google.api_url",
+            format!("{mock}/google"),
+        )
         .config(
             "integrations.providers.slack.token_url",
             format!("{mock}/api/oauth.v2.access"),
         )
-        .config("integrations.providers.slack.revoke_url", format!("{mock}/api/auth.revoke"))
-        .config("integrations.providers.slack.api_url", format!("{mock}/api"))
-        .config("integrations.providers.hubspot.token_url", format!("{mock}/oauth/v1/token"))
-        .config("integrations.providers.hubspot.revoke_url", format!("{mock}/oauth/v1/revoke"))
-        .config("integrations.providers.hubspot.api_url", format!("{mock}/hub"))
+        .config(
+            "integrations.providers.slack.revoke_url",
+            format!("{mock}/api/auth.revoke"),
+        )
+        .config(
+            "integrations.providers.slack.api_url",
+            format!("{mock}/api"),
+        )
+        .config(
+            "integrations.providers.hubspot.token_url",
+            format!("{mock}/oauth/v1/token"),
+        )
+        .config(
+            "integrations.providers.hubspot.revoke_url",
+            format!("{mock}/oauth/v1/revoke"),
+        )
+        .config(
+            "integrations.providers.hubspot.api_url",
+            format!("{mock}/hub"),
+        )
         .config("integrations.providers.edr.api_url", format!("{mock}/edr"));
     let app = configure(builder).build().await;
     RealHarness { app, clock, inbox }

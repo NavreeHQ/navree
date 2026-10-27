@@ -34,9 +34,11 @@ impl<S: Send + Sync> FromRequestParts<S> for IntegrationOwner {
             .map_err(IntegrationsError::into_app_error)?;
         let owner = match level {
             Level::App => Owner::App,
-            Level::Workspace => {
-                Owner::Workspace(CurrentWorkspace::from_request_parts(parts, state).await?.id())
-            }
+            Level::Workspace => Owner::Workspace(
+                CurrentWorkspace::from_request_parts(parts, state)
+                    .await?
+                    .id(),
+            ),
             Level::Organization => Owner::Organization(
                 CurrentOrganization::from_request_parts(parts, state)
                     .await?
@@ -49,9 +51,7 @@ impl<S: Send + Sync> FromRequestParts<S> for IntegrationOwner {
 }
 
 /// The app's `Integrations` service, from the request.
-pub(crate) async fn integrations(
-    parts: &Parts,
-) -> Result<std::sync::Arc<Integrations>, AppError> {
+pub(crate) async fn integrations(parts: &Parts) -> Result<std::sync::Arc<Integrations>, AppError> {
     let ctx = parts
         .extensions
         .get::<AppContext>()

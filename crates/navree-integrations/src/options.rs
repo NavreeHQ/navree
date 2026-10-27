@@ -390,7 +390,11 @@ impl ProviderConfig {
         };
         match kind {
             ProviderType::Microsoft | ProviderType::Slack | ProviderType::OAuth2 => {
-                if self.client_id.as_deref().is_none_or(|id| id.trim().is_empty()) {
+                if self
+                    .client_id
+                    .as_deref()
+                    .is_none_or(|id| id.trim().is_empty())
+                {
                     missing("client_id", errors);
                 }
             }
@@ -520,7 +524,10 @@ mod tests {
         assert_eq!(slack.scopes, vec!["chat:write", "users:read"]);
         assert_eq!(slack.display_name("slack"), "Slack");
         assert_eq!(
-            options.provider("microsoft").unwrap().display_name("microsoft"),
+            options
+                .provider("microsoft")
+                .unwrap()
+                .display_name("microsoft"),
             "Microsoft 365"
         );
         assert_eq!(
@@ -543,13 +550,34 @@ mod tests {
             }
         }))
         .unwrap_err();
-        assert!(error.contains("integrations.providers.crm.type is required"), "{error}");
-        assert!(error.contains("integrations.providers.slack.client_id is required"), "{error}");
-        assert!(error.contains("integrations.providers.acme.token_url is required"), "{error}");
-        assert!(error.contains("integrations.providers.Bad Key: provider keys"), "{error}");
-        assert!(error.contains("integrations.providers.providers: provider keys"), "{error}");
-        assert!(error.contains("integrations.redirect_base is required"), "{error}");
-        assert!(error.contains("apps.mail_send.client_id is required"), "{error}");
+        assert!(
+            error.contains("integrations.providers.crm.type is required"),
+            "{error}"
+        );
+        assert!(
+            error.contains("integrations.providers.slack.client_id is required"),
+            "{error}"
+        );
+        assert!(
+            error.contains("integrations.providers.acme.token_url is required"),
+            "{error}"
+        );
+        assert!(
+            error.contains("integrations.providers.Bad Key: provider keys"),
+            "{error}"
+        );
+        assert!(
+            error.contains("integrations.providers.providers: provider keys"),
+            "{error}"
+        );
+        assert!(
+            error.contains("integrations.redirect_base is required"),
+            "{error}"
+        );
+        assert!(
+            error.contains("apps.mail_send.client_id is required"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -597,7 +625,10 @@ mod tests {
             "providers": { "edr": { "type": "api_key", "api_url": "ftp://x" } }
         }))
         .unwrap_err();
-        assert!(error.contains("redirect_base must be an absolute"), "{error}");
+        assert!(
+            error.contains("redirect_base must be an absolute"),
+            "{error}"
+        );
         assert!(error.contains("edr.api_url must be an absolute"), "{error}");
     }
 }

@@ -176,7 +176,9 @@ async fn refusals_answer_with_their_codes() {
         .unwrap()
         .to_owned();
     admin
-        .get(&format!("/api/integrations/slack/callback?state={state}&code=bad"))
+        .get(&format!(
+            "/api/integrations/slack/callback?state={state}&code=bad"
+        ))
         .send()
         .await
         .assert_error(400, "Slack refused the connection: invalid_code")
@@ -208,7 +210,9 @@ async fn refusals_answer_with_their_codes() {
     h.fake.on_code("slack", "good", FakeGrant::new());
     h.app
         .acting_as(principal(DEPUTY))
-        .get(&format!("/api/integrations/slack/callback?state={state}&code=good"))
+        .get(&format!(
+            "/api/integrations/slack/callback?state={state}&code=good"
+        ))
         .send()
         .await
         .assert_error_code(400, "invalid_state");
@@ -329,7 +333,9 @@ async fn a_workspace_uses_its_organizations_connection_but_cannot_remove_it() {
         .assert_error_code(404, "connection_not_found");
 
     // A workspace connection of its own comes first.
-    let own = h.connect_microsoft(Owner::Workspace(acme.id), "contoso.onmicrosoft.com").await;
+    let own = h
+        .connect_microsoft(Owner::Workspace(acme.id), "contoso.onmicrosoft.com")
+        .await;
     let integrations = h.integrations().await;
     let used = integrations
         .connection(Owner::Workspace(acme.id), "microsoft", "default")
@@ -395,7 +401,12 @@ async fn keys_are_uploaded_over_the_api() {
         .await
         .assert_status(201)
         .assert_json_path("kind", json!("api_key"));
-    let all = h.integrations().await.connections(Owner::App).await.unwrap();
+    let all = h
+        .integrations()
+        .await
+        .connections(Owner::App)
+        .await
+        .unwrap();
     assert_eq!(all.len(), 2);
 }
 
@@ -435,7 +446,12 @@ async fn the_routes_are_in_the_openapi_document() {
         assert!(paths.contains_key(path), "{path} is missing");
     }
     let schemas = document["components"]["schemas"].as_object().unwrap();
-    for schema in ["ConnectionInfo", "ProviderInfo", "ConnectRedirect", "Health"] {
+    for schema in [
+        "ConnectionInfo",
+        "ProviderInfo",
+        "ConnectRedirect",
+        "Health",
+    ] {
         assert!(schemas.contains_key(schema), "{schema} is missing");
     }
 }

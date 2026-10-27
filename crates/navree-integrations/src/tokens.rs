@@ -11,9 +11,9 @@ use navree_orm::{Model as _, Record};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::model::IntegrationConnection as Row;
 use crate::entry::{Probe, ProviderEntry};
 use crate::events::{ConnectionRestored, ConnectionUnhealthy};
+use crate::model::IntegrationConnection as Row;
 use crate::oauth::{Exchange, Grant};
 use crate::runtime::Runtime;
 use crate::types::StoredCredentials;
@@ -36,10 +36,7 @@ pub(crate) enum Want {
 
 impl Runtime {
     /// The row `id`.
-    pub(crate) async fn load(
-        &self,
-        id: Uuid,
-    ) -> Result<Row, IntegrationsError> {
+    pub(crate) async fn load(&self, id: Uuid) -> Result<Row, IntegrationsError> {
         Row::find(&self.db, id)
             .await?
             .map(Record::into_inner)
@@ -47,11 +44,7 @@ impl Runtime {
     }
 
     /// The cached token of `model`, when `want` accepts it.
-    fn cached(
-        &self,
-        model: &Row,
-        want: &Want,
-    ) -> Result<Option<String>, IntegrationsError> {
+    fn cached(&self, model: &Row, want: &Want) -> Result<Option<String>, IntegrationsError> {
         let Some(encrypted) = &model.access_token else {
             return Ok(None);
         };
@@ -130,7 +123,10 @@ impl Runtime {
         let wait = Duration::from_secs(self.options.lock_timeout_secs);
         let _guard = self
             .locks
-            .lock(&format!("integrations:token:{id}"), wait + Duration::from_secs(15))
+            .lock(
+                &format!("integrations:token:{id}"),
+                wait + Duration::from_secs(15),
+            )
             .block(wait)
             .await
             .map_err(IntegrationsError::from)?;
@@ -145,7 +141,9 @@ impl Runtime {
                 self.save_grant(&model, &credentials, &grant).await?;
                 Ok(grant.access_token)
             }
-            Err(error) if error.is_refusal() => Err(TokenFailure::Connection(Box::new(model), error)),
+            Err(error) if error.is_refusal() => {
+                Err(TokenFailure::Connection(Box::new(model), error))
+            }
             Err(error) => Err(TokenFailure::Other(error)),
         }
     }
@@ -161,8 +159,8 @@ impl Runtime {
     ) -> Result<String, IntegrationsError> {
         let key = (model.id, subject.to_owned());
         let usable = |(token, expires): &(String, Option<DateTime<Utc>>)| {
-            let fresh = expires
-                .is_none_or(|at| at > self.now() + TimeDelta::seconds(FRESH_MARGIN_SECS));
+            let fresh =
+                expires.is_none_or(|at| at > self.now() + TimeDelta::seconds(FRESH_MARGIN_SECS));
             let rejected = matches!(want, Want::Replace(stale) if stale == token);
             (fresh && !rejected && *want != Want::Fresh).then(|| token.clone())
         };
@@ -246,9 +244,7 @@ impl Runtime {
     ) -> Result<(), IntegrationsError> {
         let now = self.now();
         let token = self.encrypter.encrypt_string(&grant.access_token)?;
-        let expires = grant
-            .expires_in
-            .map(|secs| now + TimeDelta::seconds(secs));
+        let expires = grant.expires_in.map(|secs| now + TimeDelta::seconds(secs));
         let rotated = match (credentials, &grant.refresh_token) {
             (StoredCredentials::OAuth { refresh_token }, Some(new))
                 if refresh_token.as_deref() != Some(new.as_str()) =>
@@ -288,7 +284,10 @@ impl Runtime {
                 ]);
             }
             // No change event: the row holds encrypted credentials.
-            Row::query().where_(Row::ID.eq(id)).update(&uow, sets).await?;
+            Row::query()
+                .where_(Row::ID.eq(id))
+                .update(&uow, sets)
+                .await?;
             if let Some(event) = event {
                 self.emit_after_commit(&uow, event).await;
             }
@@ -323,7 +322,8 @@ impl Runtime {
         let owner = Owner::from_columns(&model.owner_type, model.owner_id);
         let id = model.id;
         let failures_u32 = u32::try_from(failures.max(0)).unwrap_or(u32::MAX);
-        let unhealthy = (before == ConnectionStatus::Healthy && status == ConnectionStatus::Unhealthy)
+        let unhealthy = (before == ConnectionStatus::Healthy
+            && status == ConnectionStatus::Unhealthy)
             .then(|| ConnectionUnhealthy {
                 connection_id: id,
                 owner,
@@ -332,7 +332,8 @@ impl Runtime {
                 error: error.clone().unwrap_or_default(),
                 failures: failures_u32,
             });
-        let restored = (before == ConnectionStatus::Unhealthy && status == ConnectionStatus::Healthy)
+        let restored = (before == ConnectionStatus::Unhealthy
+            && status == ConnectionStatus::Healthy)
             .then(|| ConnectionRestored {
                 connection_id: id,
                 owner,
@@ -353,7 +354,10 @@ impl Runtime {
             if changed {
                 sets.push(Row::UPDATED_AT.set(now));
             }
-            Row::query().where_(Row::ID.eq(id)).update(&uow, sets).await?;
+            Row::query()
+                .where_(Row::ID.eq(id))
+                .update(&uow, sets)
+                .await?;
             if let Some(event) = unhealthy {
                 self.emit_after_commit(&uow, event).await;
             }

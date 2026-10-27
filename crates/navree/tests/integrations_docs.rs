@@ -11,9 +11,9 @@
 use navree::access::{AbilityCtx, AccessOptions, Rules};
 use navree::axum::http::Method;
 use navree::contracts::{AuthVia, Principal};
+use navree::db::Db;
 use navree::events::{Listener, ModuleBuilderEventsExt};
 use navree::http_client::FakeResponse;
-use navree::db::Db;
 use navree::integrations::{
     ConnectCallback, ConnectOptions, Connection, ConnectionUnhealthy, GoogleWorkspace,
     IntegrationClient, IntegrationConnection, Integrations, IntegrationsError, MicrosoftGraph,
@@ -52,10 +52,8 @@ async fn the_directory_is_read_from_the_connected_tenant() {
         .connect_url(Owner::App, "microsoft", ConnectOptions::default())
         .await
         .unwrap();
-    let callback = ConnectCallback::admin_consent(
-        redirect.state,
-        "9188040d-6c67-4c5b-b112-36a304b66dad",
-    );
+    let callback =
+        ConnectCallback::admin_consent(redirect.state, "9188040d-6c67-4c5b-b112-36a304b66dad");
     integrations
         .complete(Owner::App, "microsoft", &callback, None)
         .await
@@ -64,8 +62,7 @@ async fn the_directory_is_read_from_the_connected_tenant() {
     fake.api().on(
         Method::GET,
         "https://graph.microsoft.com/v1.0/users*",
-        FakeResponse::new(200)
-            .json(&json!({ "value": [{ "id": "u1", "mail": "ada@acme.test" }] })),
+        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "ada@acme.test" }] })),
     );
     let graph = integrations
         .client_for::<MicrosoftGraph>(Owner::App)

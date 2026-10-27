@@ -24,7 +24,9 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
         .connect_url(
             owner,
             "microsoft",
-            ConnectOptions::default().return_to("/settings/integrations").user(ADMIN),
+            ConnectOptions::default()
+                .return_to("/settings/integrations")
+                .user(ADMIN),
         )
         .await
         .unwrap();
@@ -48,7 +50,10 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
         query_param(&redirect.url, "scope").as_deref(),
         Some("https://graph.microsoft.com/.default")
     );
-    assert_eq!(query_param(&redirect.url, "state"), Some(redirect.state.clone()));
+    assert_eq!(
+        query_param(&redirect.url, "state"),
+        Some(redirect.state.clone())
+    );
     assert_eq!(query_param(&redirect.url, "code_challenge"), None);
 
     let completed = integrations
@@ -60,7 +65,10 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
         )
         .await
         .unwrap();
-    assert_eq!(completed.return_to.as_deref(), Some("/settings/integrations"));
+    assert_eq!(
+        completed.return_to.as_deref(),
+        Some("/settings/integrations")
+    );
     let connection = completed.connection;
     assert_eq!(connection.owner_type, OwnerType::Workspace);
     assert_eq!(connection.owner_id, Some(acme.id));
@@ -91,7 +99,10 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
         Some("0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f")
     );
     // ...and cached until they expire.
-    assert_eq!(integrations.token(connection.id).await.unwrap().expose(), token.expose());
+    assert_eq!(
+        integrations.token(connection.id).await.unwrap().expose(),
+        token.expose()
+    );
     assert_eq!(h.fake.minted().len(), 1);
 
     // The state works once.
@@ -103,7 +114,10 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
             Some(ADMIN),
         )
         .await;
-    assert!(matches!(again, Err(IntegrationsError::InvalidState)), "{again:?}");
+    assert!(
+        matches!(again, Err(IntegrationsError::InvalidState)),
+        "{again:?}"
+    );
 }
 
 #[tokio::test]
@@ -121,7 +135,10 @@ async fn the_state_is_bound_to_its_provider_owner_admin_and_lifetime() {
         }
     };
     let refused = |result: Result<_, IntegrationsError>| {
-        assert!(matches!(result, Err(IntegrationsError::InvalidState)), "{result:?}");
+        assert!(
+            matches!(result, Err(IntegrationsError::InvalidState)),
+            "{result:?}"
+        );
     };
 
     // Another owner.
@@ -187,7 +204,13 @@ async fn the_state_is_bound_to_its_provider_owner_admin_and_lifetime() {
             )
             .await,
     );
-    assert!(integrations.connections(Owner::App).await.unwrap().is_empty());
+    assert!(
+        integrations
+            .connections(Owner::App)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -209,7 +232,10 @@ async fn a_declined_consent_is_refused() {
         .complete(Owner::App, "microsoft", &declined, None)
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "Microsoft 365 consent was not granted: access_denied");
+    assert_eq!(
+        error.to_string(),
+        "Microsoft 365 consent was not granted: access_denied"
+    );
 
     let state = integrations
         .connect_url(Owner::App, "microsoft", ConnectOptions::default())
@@ -248,7 +274,11 @@ async fn a_slack_install_stores_the_team_and_its_bot_token() {
         .connect_url(Owner::App, "slack", ConnectOptions::default())
         .await
         .unwrap();
-    assert!(redirect.url.starts_with("https://slack.com/oauth/v2/authorize?"));
+    assert!(
+        redirect
+            .url
+            .starts_with("https://slack.com/oauth/v2/authorize?")
+    );
     assert_eq!(
         query_param(&redirect.url, "scope").as_deref(),
         Some("chat:write,users:read")
@@ -270,7 +300,10 @@ async fn a_slack_install_stores_the_team_and_its_bot_token() {
     assert_eq!(connection.external_id.as_deref(), Some("T0123ABCD"));
     assert_eq!(connection.display_name.as_deref(), Some("Acme"));
     assert_eq!(connection.scopes, vec!["chat:write", "users:read"]);
-    assert_eq!(h.fake.exchanged(), vec![("slack".to_owned(), "slack-code".to_owned())]);
+    assert_eq!(
+        h.fake.exchanged(),
+        vec![("slack".to_owned(), "slack-code".to_owned())]
+    );
     // A token without an expiry is used as it is, for as long as it works.
     h.advance(Duration::from_secs(30 * 24 * 3600));
     assert_eq!(
@@ -286,10 +319,18 @@ async fn a_slack_install_stores_the_team_and_its_bot_token() {
         .unwrap()
         .state;
     let error = integrations
-        .complete(Owner::App, "slack", &ConnectCallback::code(state, "nope"), None)
+        .complete(
+            Owner::App,
+            "slack",
+            &ConnectCallback::code(state, "nope"),
+            None,
+        )
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "Slack refused the connection: invalid_grant");
+    assert_eq!(
+        error.to_string(),
+        "Slack refused the connection: invalid_grant"
+    );
 }
 
 #[tokio::test]
@@ -308,8 +349,15 @@ async fn oauth2_providers_use_pkce_and_keep_rotated_refresh_tokens() {
         .connect_url(Owner::App, "hubspot", ConnectOptions::default())
         .await
         .unwrap();
-    assert!(redirect.url.starts_with("https://app.hubspot.com/oauth/authorize?"));
-    assert_eq!(query_param(&redirect.url, "response_type").as_deref(), Some("code"));
+    assert!(
+        redirect
+            .url
+            .starts_with("https://app.hubspot.com/oauth/authorize?")
+    );
+    assert_eq!(
+        query_param(&redirect.url, "response_type").as_deref(),
+        Some("code")
+    );
     assert_eq!(
         query_param(&redirect.url, "code_challenge_method").as_deref(),
         Some("S256")
@@ -376,8 +424,16 @@ async fn connecting_again_replaces_the_credentials() {
         .connect_microsoft(Owner::App, "contoso.onmicrosoft.com")
         .await;
     assert_eq!(first.id, second.id);
-    assert_eq!(second.external_id.as_deref(), Some("contoso.onmicrosoft.com"));
-    let all = h.integrations().await.connections(Owner::App).await.unwrap();
+    assert_eq!(
+        second.external_id.as_deref(),
+        Some("contoso.onmicrosoft.com")
+    );
+    let all = h
+        .integrations()
+        .await
+        .connections(Owner::App)
+        .await
+        .unwrap();
     assert_eq!(all.len(), 1);
 }
 
@@ -388,7 +444,11 @@ async fn scope_sets_are_connected_apart_with_their_own_app_registration() {
 
     let providers = integrations.providers().unwrap();
     let microsoft = providers.iter().find(|p| p.key == "microsoft").unwrap();
-    let names: Vec<&str> = microsoft.scope_sets.iter().map(|s| s.name.as_str()).collect();
+    let names: Vec<&str> = microsoft
+        .scope_sets
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
     assert_eq!(names, vec!["default", "directory", "mail_send"]);
     assert_eq!(microsoft.kinds, vec![CredentialKind::AppOnly]);
     let slack = providers.iter().find(|p| p.key == "slack").unwrap();
@@ -404,7 +464,9 @@ async fn scope_sets_are_connected_apart_with_their_own_app_registration() {
         .unwrap();
     assert_eq!(
         query_param(&directory.url, "scope").as_deref(),
-        Some("https://graph.microsoft.com/User.Read.All https://graph.microsoft.com/Group.Read.All")
+        Some(
+            "https://graph.microsoft.com/User.Read.All https://graph.microsoft.com/Group.Read.All"
+        )
     );
     let mail = integrations
         .connect_url(
@@ -414,7 +476,10 @@ async fn scope_sets_are_connected_apart_with_their_own_app_registration() {
         )
         .await
         .unwrap();
-    assert_eq!(query_param(&mail.url, "client_id").as_deref(), Some("ms-mail-app"));
+    assert_eq!(
+        query_param(&mail.url, "client_id").as_deref(),
+        Some("ms-mail-app")
+    );
 
     for state in [directory.state, mail.state] {
         integrations
@@ -437,20 +502,23 @@ async fn scope_sets_are_connected_apart_with_their_own_app_registration() {
         .await
         .unwrap();
     integrations.token(mail_connection.id).await.unwrap();
-    assert_eq!(
-        h.fake.minted()[0].client_id.as_deref(),
-        Some("ms-mail-app")
-    );
+    assert_eq!(h.fake.minted()[0].client_id.as_deref(), Some("ms-mail-app"));
     // The default scope set was never connected.
     assert!(matches!(
-        integrations.connection(Owner::App, "microsoft", "default").await,
+        integrations
+            .connection(Owner::App, "microsoft", "default")
+            .await,
         Err(IntegrationsError::NotConnected { .. })
     ));
 
     // Unknown scope sets, and sets a provider doesn't support.
     for (provider, set) in [("microsoft", "billing"), ("slack", "directory")] {
         let error = integrations
-            .connect_url(Owner::App, provider, ConnectOptions::default().scope_set(set))
+            .connect_url(
+                Owner::App,
+                provider,
+                ConnectOptions::default().scope_set(set),
+            )
             .await
             .unwrap_err();
         assert!(

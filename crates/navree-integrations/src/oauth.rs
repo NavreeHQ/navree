@@ -455,10 +455,12 @@ fn slack_grant(entry: &ProviderEntry, response: &Response) -> Result<Grant, Inte
             message: format!("oauth.v2.access answered {}", status.as_u16()),
         });
     }
-    let body: Value = response.json().map_err(|_| IntegrationsError::Unavailable {
-        provider: entry.name.clone(),
-        message: "oauth.v2.access answered without JSON".to_owned(),
-    })?;
+    let body: Value = response
+        .json()
+        .map_err(|_| IntegrationsError::Unavailable {
+            provider: entry.name.clone(),
+            message: "oauth.v2.access answered without JSON".to_owned(),
+        })?;
     slack_body(entry, &body)
 }
 
@@ -532,11 +534,18 @@ mod tests {
     #[test]
     fn microsoft_admin_consent_urls_ask_for_the_scope_set() {
         let ms = entry("microsoft", |_| {});
-        let url = authorize_url(&ms, "default", &[], "https://app/cb/microsoft", "nvi1.s", None)
-            .unwrap();
-        assert!(url.starts_with(
-            "https://login.microsoftonline.com/organizations/v2.0/adminconsent?"
-        ));
+        let url = authorize_url(
+            &ms,
+            "default",
+            &[],
+            "https://app/cb/microsoft",
+            "nvi1.s",
+            None,
+        )
+        .unwrap();
+        assert!(
+            url.starts_with("https://login.microsoftonline.com/organizations/v2.0/adminconsent?")
+        );
         let q = query(&url);
         assert_eq!(q["client_id"], "client-1");
         assert_eq!(q["scope"], "https://graph.microsoft.com/.default");
@@ -551,7 +560,10 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(query(&scoped)["scope"], "https://graph.microsoft.com/User.Read.All");
+        assert_eq!(
+            query(&scoped)["scope"],
+            "https://graph.microsoft.com/User.Read.All"
+        );
     }
 
     #[test]
@@ -664,6 +676,9 @@ mod tests {
         assert_eq!(claims["iss"], "navree@acme-prod.iam.gserviceaccount.com");
         assert_eq!(claims["sub"], "admin@acme.test");
         assert_eq!(claims["aud"], "https://oauth2.googleapis.com/token");
-        assert_eq!(claims["exp"].as_i64().unwrap() - claims["iat"].as_i64().unwrap(), 3600);
+        assert_eq!(
+            claims["exp"].as_i64().unwrap() - claims["iat"].as_i64().unwrap(),
+            3600
+        );
     }
 }

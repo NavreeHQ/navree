@@ -31,7 +31,12 @@ async fn slack(h: &Harness) -> uuid::Uuid {
         .unwrap()
         .state;
     integrations
-        .complete(Owner::App, "slack", &ConnectCallback::code(state, "code"), None)
+        .complete(
+            Owner::App,
+            "slack",
+            &ConnectCallback::code(state, "code"),
+            None,
+        )
         .await
         .unwrap()
         .connection
@@ -136,7 +141,10 @@ async fn due_connections_are_checked_once_per_interval() {
 
     // Never checked: due.
     let summary = integrations.check_due().await.unwrap();
-    assert_eq!((summary.checked, summary.healthy, summary.unhealthy), (1, 1, 0));
+    assert_eq!(
+        (summary.checked, summary.healthy, summary.unhealthy),
+        (1, 1, 0)
+    );
     h.advance(Duration::from_secs(30 * 60));
     assert_eq!(integrations.check_due().await.unwrap().checked, 0);
     h.advance(Duration::from_secs(31 * 60));

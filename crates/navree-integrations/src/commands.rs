@@ -34,7 +34,11 @@ async fn check(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
             "--due" => due = true,
             "--id" => {
                 let value = args.next().ok_or("--id needs a connection id")?;
-                id = Some(value.parse().map_err(|_| format!("`{value}` is not a UUID"))?);
+                id = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("`{value}` is not a UUID"))?,
+                );
             }
             other => return Err(format!("unknown argument `{other}`").into()),
         }

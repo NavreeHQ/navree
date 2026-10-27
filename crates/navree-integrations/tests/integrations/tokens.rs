@@ -27,7 +27,12 @@ async fn hubspot(h: &Harness, expires_in: i64) -> uuid::Uuid {
         .unwrap()
         .state;
     integrations
-        .complete(Owner::App, "hubspot", &ConnectCallback::code(state, "code"), None)
+        .complete(
+            Owner::App,
+            "hubspot",
+            &ConnectCallback::code(state, "code"),
+            None,
+        )
         .await
         .unwrap()
         .connection
@@ -78,7 +83,10 @@ async fn a_refused_refresh_turns_the_connection_unhealthy_until_it_works_again()
     h.advance(Duration::from_secs(60));
 
     let error = integrations.token(id).await.unwrap_err();
-    assert!(matches!(error, IntegrationsError::Reauthorize { .. }), "{error:?}");
+    assert!(
+        matches!(error, IntegrationsError::Reauthorize { .. }),
+        "{error:?}"
+    );
     assert_eq!(error.to_string(), "HubSpot needs to be connected again");
     let connection = integrations.find(id).await.unwrap();
     assert_eq!(connection.status, ConnectionStatus::Unhealthy);
@@ -109,7 +117,10 @@ async fn an_unreachable_provider_is_not_a_refusal() {
     h.fake.fail_tokens("hubspot");
     h.advance(Duration::from_secs(60));
     let error = integrations.token(id).await.unwrap_err();
-    assert!(matches!(error, IntegrationsError::Unavailable { .. }), "{error:?}");
+    assert!(
+        matches!(error, IntegrationsError::Unavailable { .. }),
+        "{error:?}"
+    );
     assert_eq!(
         integrations.find(id).await.unwrap().status,
         ConnectionStatus::Healthy
@@ -148,7 +159,12 @@ async fn an_expired_token_without_a_refresh_token_needs_a_new_connection() {
         .unwrap()
         .state;
     let id = integrations
-        .complete(Owner::App, "hubspot", &ConnectCallback::code(state, "short"), None)
+        .complete(
+            Owner::App,
+            "hubspot",
+            &ConnectCallback::code(state, "short"),
+            None,
+        )
         .await
         .unwrap()
         .connection
