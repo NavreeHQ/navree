@@ -140,7 +140,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels), a signed relay for other processes, and a backplane (Redis with navree-redis) for several serving processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L4 | `navree-session` | Encrypted session cookies, memory, database and Redis stores, CSRF (optional; the CRM doesn't use it) |
-| L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules |
+| L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules, international input (E.164 `Phone`, `SafeHtml`, names and digits in any script, `Country`, `Locale`) |
 | L4 | `navree-queue` | Database, memory and Redis job queues (the `QueueStore` driver trait), workers, retries with backoff, unique and delayed jobs |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
 | L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |

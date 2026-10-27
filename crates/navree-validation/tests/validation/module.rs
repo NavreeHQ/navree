@@ -24,6 +24,7 @@ async fn messages_are_overridable_via_options() {
             ),
         ]),
         attributes: BTreeMap::from([("tags".to_owned(), "labels".to_owned())]),
+        ..ValidationOptions::default()
     };
     let app = TestApp::builder()
         .module(ValidationModule::with_options(options))

@@ -183,3 +183,32 @@ async fn non_json_content_type_is_415() {
             "Expected request with `Content-Type: application/json`",
         );
 }
+
+#[tokio::test]
+async fn bodies_over_the_limit_are_413() {
+    let app = navree_testing::TestApp::builder()
+        .config("http.per_ip_rate_limit", serde_json::Value::Null)
+        .config("http.body_limit_bytes", 80)
+        .module(crate::support::ValidationTestModule)
+        .build()
+        .await;
+
+    app.client()
+        .post("/v/users")
+        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .send()
+        .await
+        .assert_status(200);
+    app.client()
+        .post("/v/users")
+        .json(&json!({ "name": "A".repeat(100), "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .send()
+        .await
+        .assert_error(413, None);
+    app.client()
+        .post("/v/subscribe")
+        .form(&[("email", "a".repeat(100))])
+        .send()
+        .await
+        .assert_error(413, None);
+}

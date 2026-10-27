@@ -1,6 +1,6 @@
 ---
 name: navree-validation
-description: "Validates request input in Navree with garde DTOs and the `Valid` and `ValidAsync` extractors, including Navree's extra rules, required fields, nested data, database `unique`/`exists` rules, custom rules and messages, manual `ValidationErrors` and the 400 response shape. Use when writing a request body or query DTO, adding or customizing validation rules or messages, checking uniqueness against the database, or when a test expects a 400 with `errors`."
+description: "Validates request input in Navree with garde DTOs and the `Valid` and `ValidAsync` extractors, including Navree's extra rules, required fields, nested data, database `unique`/`exists` rules, international input (E.164 `Phone`, sanitized `SafeHtml` rich text, names in any script, native digits with `Folded`, `Country`, `Locale`), custom rules and messages, manual `ValidationErrors` and the 400 response shape. Use when writing a request body or query DTO, adding or customizing validation rules or messages, accepting phone numbers, rich text, non-Latin names or digits, checking uniqueness against the database, or when a test expects a 400 with `errors`."
 ---
 
 # Validation
@@ -107,7 +107,9 @@ path (`address.city`, `tags.1`) to its messages. Malformed JSON is
   `prefix`, `suffix`, `ip`, `matches(other)`, `dive`, `inner(..)`,
   `custom(f)`, `skip`.
 - `navree::validation::rules` (use with `custom(..)`; `None` passes):
-  `rules::one_of(&[..])`, `rules::uuid`, `rules::date_ymd`.
+  `rules::one_of(&[..])`, `rules::uuid`, `rules::date_ymd`,
+  `rules::unicode_name`, `rules::country`, `rules::locale`, `rules::phone`
+  (see International input below).
 - `navree::validation::confirmed`:
   `#[garde(length(min = 8), custom(confirmed(&self.password_confirmation)))]`
   with `#[garde(skip)] pub password_confirmation: String`.
@@ -116,6 +118,55 @@ path (`address.city`, `tags.1`) to its messages. Malformed JSON is
   the fields `Option` with `required`, as `CreateDeal` above.
 - `#[serde(deny_unknown_fields)]` turns unknown keys into
   `property x should not exist`.
+
+## International input
+
+Names in Arabic or Devanagari, codes typed with Arabic-Indic digits, phone
+numbers in any format, rich text from an editor: use these types and rules,
+which normalize the value while the extractor deserializes it.
+
+```rust
+use garde::Validate;
+use navree::validation::{rules, Country, Folded, Locale, Phone, SafeHtml};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateContact {
+    #[garde(length(chars, min = 1, max = 100), custom(rules::unicode_name))]
+    pub name: String,          // "अमृतपाल सिंह", "مُحَمَّد" pass; "<b>", "😀", "١٢٣" fail
+    #[garde(skip)]
+    pub phone: Phone,          // "+٩٧١ ٥٠ ١٢٣ ٤٥٦٧" -> "+971501234567" (E.164)
+    #[garde(skip)]
+    pub country: Country,      // "gb" -> "GB" (ISO 3166-1 alpha-2)
+    #[garde(skip)]
+    pub locale: Option<Locale>, // "en-gb" -> "en-GB" (BCP 47)
+    #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    pub code: Folded<String>,  // "٦٥٤٣٢١" -> "654321" before the rules run
+    #[garde(length(chars, max = 20_000))]
+    pub notes: SafeHtml,       // sanitized: no script, on* handler or javascript: link
+}
+```
+
+- A number without a country code (`07400 123456`) needs a default region:
+  `[validation.phone] default_region = "GB"`, or per request a
+  `RegionSource` registered with `m.region_source::<T>()` (the tenant's or
+  the user's country). Without either it is `phone must be a valid phone
+  number`. Store `phone.as_str()` (E.164); `extension()` is not part of it.
+- `Folded<u32>` (any `T: FromStr`) parses native digits and JSON numbers;
+  `fold_digits(text)` folds any string.
+- `SafeHtml` never fails on a string; it removes what the policy doesn't
+  allow, and rules measure the sanitized HTML. The policy is
+  `[validation.html]` (`tags`, `generic_attributes`, `tag_attributes`,
+  `url_schemes`, `link_rel`); allowing `script` or `style` fails the boot.
+- To check a `String` and keep it as sent: `custom(rules::phone)`,
+  `custom(rules::country)`, `custom(rules::locale)`.
+- `Phone` needs the facade feature `validation-phone`, `SafeHtml`
+  `validation-html` (both in `full`).
+- Message keys: `phone`, `country`, `locale`, `unicode_name`.
+- Outside the extractors (a job), deserialize inside the app's
+  `InputContext` (`ctx.get::<InputContext>().await?.scope(|| ..)`), or the
+  defaults apply (no default region, the default HTML policy).
+- In a `ToSchema` DTO, mark these fields `#[schema(value_type = String)]`.
 
 ## Custom rules
 
@@ -223,6 +274,10 @@ app.acting_as(principal(Uuid::now_v7()))
 
 - A field with no `#[garde(..)]` attribute (compile error): add `skip`.
 - `length(max = 255)` on text with accents counts bytes: use `length(chars, max = 255)`.
+- Storing rich text as a `String` and rendering it as HTML (stored XSS): use `SafeHtml`.
+- A `String` phone field compared or deduplicated as typed: use `Phone` and store E.164.
+- `pattern(r"^[0-9]+$")` on a code typed with Arabic-Indic digits: wrap the field in `Folded`.
+- An ASCII-only name rule (`alphanumeric`, `[A-Za-z]`): use `rules::unicode_name`.
 - Taking `Json<T>` without `Valid`: nothing is checked.
 - Putting `Valid<Json<T>>` before another extractor: the body extractor must be last.
 - Expecting a 422: Navree answers every input error with 400.

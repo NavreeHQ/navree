@@ -20,6 +20,9 @@ use crate::{Messages, ValidationErrors};
 /// Starts an encoded rule message: `MARK key (SEP name=value)*`.
 const MARK: &str = "\u{1f}navree\u{1f}";
 const SEP: char = '\u{1f}';
+/// Ends an encoded rule inside a serde error, whose message may go on
+/// (serde_json appends the position).
+const END: char = '\u{1e}';
 
 /// One failed rule on one field.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,6 +63,12 @@ thread_local! {
 
 /// Runs `f` (synchronous garde validation) with navree's message encoding.
 pub(crate) fn scope<R>(f: impl FnOnce() -> R) -> R {
+    encoding(|| garde::with_i18n(NavreeI18n, f))
+}
+
+/// Runs `f` (deserializing input) with navree's message encoding, so the
+/// international types report their rule key (see [`serde_error`]).
+pub(crate) fn encoding<R>(f: impl FnOnce() -> R) -> R {
     struct Reset(bool);
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -67,7 +76,19 @@ pub(crate) fn scope<R>(f: impl FnOnce() -> R) -> R {
         }
     }
     let _reset = Reset(ACTIVE.with(|active| active.replace(true)));
-    garde::with_i18n(NavreeI18n, f)
+    f()
+}
+
+/// A serde error for a value that fails `rule` while deserializing (a
+/// phone number, a country code): inside the extractors it carries the rule
+/// key, so the failure renders from the app's message table at the field's
+/// path; elsewhere it is `plain`.
+pub(crate) fn serde_error<E: serde::de::Error>(rule: &str, plain: impl Display) -> E {
+    if ACTIVE.with(Cell::get) {
+        E::custom(format_args!("{}{END}", encode(rule, &[])))
+    } else {
+        E::custom(plain)
+    }
 }
 
 /// A garde error for `rule` with `params`, rendered from the app's message
@@ -246,9 +267,18 @@ fn dotted(path: &garde::Path) -> String {
 /// path), a `null` is `required`, a wrong type names the expected type
 /// (`string`, `integer`, `numeric`, `boolean`, `array`, `object`), an
 /// unknown enum variant is `in` (listing the variants as `:values`), a bad
-/// UUID `uuid`, a bad date `date`; anything else is `invalid`.
+/// UUID `uuid`, a bad date `date`; a type that reports its own rule
+/// ([`serde_error`]) gets that rule; anything else is `invalid`.
 pub(crate) fn from_serde(path: &serde_path_to_error::Path, message: &str) -> Failure {
     let base = serde_path(path);
+    if let Some(start) = message.find(MARK) {
+        let encoded = &message[start..];
+        let encoded = encoded.split(END).next().unwrap_or(encoded);
+        return Failure {
+            path: base,
+            rule: decode(encoded),
+        };
+    }
     if let Some(field) = backticked(message, "missing field `") {
         return Failure::keyed(join(&base, field), "required");
     }
@@ -563,6 +593,37 @@ mod tests {
                 key: "in".into(),
                 params: vec![("values".into(), "lead, won, lost".into())],
             }
+        );
+    }
+
+    #[test]
+    fn serde_errors_carry_their_rule_inside_the_extractors() {
+        fn fail<'de, D: serde::Deserializer<'de>>(_: D) -> Result<(), D::Error> {
+            Err(serde_error("phone", "not a phone number"))
+        }
+        #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
+        struct Contact {
+            #[serde(deserialize_with = "fail")]
+            phone: (),
+        }
+        let input = r#"{"phone": "x"}"#;
+
+        // From text, serde_json appends the position after the encoding.
+        let error = encoding(|| {
+            let mut json = serde_json::Deserializer::from_str(input);
+            serde_path_to_error::deserialize::<_, Contact>(&mut json).unwrap_err()
+        });
+        assert!(error.inner().to_string().contains(" at line 1"));
+        assert_eq!(
+            from_serde(error.path(), &error.inner().to_string()),
+            Failure::keyed("phone", "phone")
+        );
+
+        let error = serde_json::from_str::<Contact>(input).unwrap_err();
+        assert!(
+            error.to_string().starts_with("not a phone number"),
+            "{error}"
         );
     }
 

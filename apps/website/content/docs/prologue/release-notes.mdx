@@ -26,7 +26,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 ### HTTP
 
 - **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error" }`, validation failures as 400 with `errors`).
-- **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with one readable message per broken rule and async `unique` and `exists` rules.
+- **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region, rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, a docs UI at `/api/docs`, `openapi:export`, and API resource helpers.
 - **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection for single-page apps that use cookies.
 
