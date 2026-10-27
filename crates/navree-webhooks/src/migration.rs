@@ -4,7 +4,8 @@
 
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
-    Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
+    Hypertable, KeyStrategy, Migration, MigrationContext, Schema, SchemaError, SchemaMigration,
+    SchemaResult,
 };
 use sea_orm::DbErr;
 use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
@@ -89,8 +90,26 @@ impl Migration for ConvertDeliveriesToHypertables {
                 .await?;
         }
         for (table, hypertable) in hypertables() {
-            if !schema.is_hypertable(table).await? {
-                schema.convert_to_hypertable(table, hypertable).await?;
+            if schema.is_hypertable(table).await? {
+                continue;
+            }
+            match schema.convert_to_hypertable(table, hypertable).await {
+                // Pretending (`migrate --pretend`), the foreign key dropped
+                // above still points at the deliveries in the database the
+                // plan is read from, so TimescaleDB's conversion of them
+                // cannot be planned yet: say what the real run does.
+                Err(SchemaError::Hypertable { .. })
+                    if to_delivery.is_some()
+                        && table == DELIVERIES_TABLE
+                        && schema.is_pretending() =>
+                {
+                    if let Some(cx) = MigrationContext::current() {
+                        cx.notice(format!(
+                            "`{DELIVERIES_TABLE}` becomes a hypertable once the foreign key of `{ATTEMPTS_TABLE}` points at `webhook_endpoints`, which a pretended run only plans"
+                        ));
+                    }
+                }
+                converted => converted?,
             }
         }
         Ok(())
