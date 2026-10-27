@@ -114,7 +114,10 @@ impl Documents {
             let mut typst = crate::TypstEngine::new(templates.clone())
                 .bundled_fonts(options.typst.bundled_fonts)
                 .font_dirs(options.typst.font_dirs.clone())
-                .packages_dir(options.typst.packages_dir.clone());
+                .packages_dir(options.typst.packages_dir.clone())
+                .timeout(std::time::Duration::from_secs(
+                    options.typst.timeout_secs.max(1),
+                ));
             if let Some(clock) = clock {
                 typst = typst.clock(clock);
             }

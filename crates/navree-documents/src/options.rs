@@ -21,6 +21,7 @@ use crate::print::PrintOptions;
 /// bundled_fonts = true      # Noto Sans, Noto Sans Arabic, Noto Sans Devanagari
 /// font_dirs = ["resources/fonts"]
 /// packages_dir = "resources/typst-packages"
+/// timeout_secs = 60
 ///
 /// [documents.chrome]
 /// path = "/usr/bin/chromium"   # default: NAVREE_BROWSER_CHROME, then the usual install paths
@@ -82,6 +83,8 @@ pub struct TypstOptions {
     /// Local Typst packages, as `<namespace>/<name>/<version>` (default
     /// none: package imports fail).
     pub packages_dir: Option<PathBuf>,
+    /// Time limit for one render, in seconds (default 60).
+    pub timeout_secs: u64,
 }
 
 impl Default for TypstOptions {
@@ -90,6 +93,7 @@ impl Default for TypstOptions {
             bundled_fonts: true,
             font_dirs: Vec::new(),
             packages_dir: None,
+            timeout_secs: 60,
         }
     }
 }
@@ -183,6 +187,7 @@ mod tests {
         assert_eq!(options.engine, EngineKind::Typst);
         assert_eq!(options.disk, None);
         assert!(options.typst.bundled_fonts);
+        assert_eq!(options.typst.timeout_secs, 60);
         assert_eq!(options.chrome.pool_size, 2);
         assert_eq!(options.chrome.timeout_secs, 30);
         assert!(!options.chrome.no_sandbox);

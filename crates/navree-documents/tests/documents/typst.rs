@@ -379,3 +379,25 @@ async fn renders_run_concurrently() {
         assert!(handle.await.unwrap().contains(&format!("Document {i}")));
     }
 }
+
+#[tokio::test]
+async fn a_render_over_the_time_limit_times_out() {
+    let error = engine()
+        .timeout(std::time::Duration::ZERO)
+        .render(&Render::typst(
+            "#for i in range(2000) [Page #i #pagebreak()]",
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            DocumentsError::Timeout {
+                engine: "typst",
+                ..
+            }
+        ),
+        "{error:?}"
+    );
+    assert_eq!(error.status(), http::StatusCode::SERVICE_UNAVAILABLE);
+}

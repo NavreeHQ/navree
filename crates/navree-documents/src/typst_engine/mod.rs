@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
 use navree_contracts::{Clock, SystemClock};
 use typst::diag::{Severity, SourceDiagnostic, Warned};
@@ -27,6 +28,9 @@ use crate::{DocumentsError, Pdf};
 
 /// How many compilations a cached intermediate result survives unused.
 const CACHE_MAX_AGE: usize = 10;
+
+/// The default time limit of one render.
+pub(crate) const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 /// PDF from Typst templates, compiled in process by the embedded Typst
 /// compiler: no external program, no network.
@@ -50,7 +54,10 @@ const CACHE_MAX_AGE: usize = 10;
 ///
 /// Compilation runs on Tokio's blocking pool. The fonts load on the first
 /// render, and the compiler keeps intermediate results across renders, so
-/// rendering the same template again is faster.
+/// rendering the same template again is faster. A render that takes longer
+/// than the engine's [`timeout`](TypstEngine::timeout) (60 seconds by
+/// default) is [`DocumentsError::Timeout`]; the compilation finishes in the
+/// background and its result is dropped.
 ///
 /// ```
 /// use navree_documents::{Render, Templates, TypstEngine};
@@ -79,6 +86,7 @@ pub struct TypstEngine {
     font_dirs: Vec<PathBuf>,
     packages_dir: Option<PathBuf>,
     clock: Arc<dyn Clock>,
+    timeout: Duration,
     state: Arc<State>,
 }
 
@@ -110,6 +118,7 @@ impl TypstEngine {
             font_dirs: Vec::new(),
             packages_dir: None,
             clock: Arc::new(SystemClock),
+            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
             state: Arc::default(),
         }
     }
@@ -141,6 +150,12 @@ impl TypstEngine {
         self
     }
 
+    /// The time limit of one render (default 60 seconds).
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     /// The templates.
     pub fn templates(&self) -> &Templates {
         &self.templates
@@ -156,8 +171,13 @@ impl TypstEngine {
     pub async fn render(&self, render: &Render) -> Result<Pdf, DocumentsError> {
         let engine = self.clone();
         let render = render.clone();
-        tokio::task::spawn_blocking(move || engine.render_blocking(&render))
+        let compile = tokio::task::spawn_blocking(move || engine.render_blocking(&render));
+        tokio::time::timeout(self.timeout, compile)
             .await
+            .map_err(|_| DocumentsError::Timeout {
+                engine: "typst",
+                secs: self.timeout.as_secs().max(1),
+            })?
             .map_err(|error| DocumentsError::Engine {
                 engine: "typst",
                 message: format!("the compiler stopped: {error}"),

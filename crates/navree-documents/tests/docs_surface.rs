@@ -90,7 +90,8 @@ fn the_documented_api_exists() {
     let _ = TypstEngine::new(templates)
         .bundled_fonts(true)
         .font_dirs(vec![])
-        .packages_dir(None);
+        .packages_dir(None)
+        .timeout(std::time::Duration::from_secs(60));
 
     assert_eq!(CHROME_ENV, "NAVREE_BROWSER_CHROME");
     assert_eq!(DOCUMENT_ORIGIN, "https://documents.navree.invalid");
@@ -203,6 +204,7 @@ fn every_documented_configuration_key_deserializes() {
             "bundled_fonts": true,
             "font_dirs": ["resources/fonts"],
             "packages_dir": "resources/typst-packages",
+            "timeout_secs": 60,
         },
         "chrome": {
             "path": "/usr/bin/chromium",
