@@ -1,0 +1,308 @@
+/*
+ * @navree/theme: navree.com's dark theme for Tailwind CSS 4.
+ *
+ *   @import "tailwindcss";
+ *   @import "@navree/theme/theme.css";
+ *   @import "@navree/theme/fonts.css";   (or next/font, see the docs)
+ *
+ * Dark only. Ink: near-black surfaces with a faint sea-green cast, stepping up
+ * for raised elements. One accent, "starboard" green, for the primary action,
+ * focus rings and positive data; navigation, selection and hover use the ink
+ * steps. Text tokens meet WCAG AA on every ink step (fg-3 is 5.4:1 on ink-3
+ * at worst). shadcn/ui and shadcn-vue semantic colors are mapped onto the
+ * same tokens, so both component kits look like navree.com.
+ */
+
+/* Dark only: `dark:` utilities (used by shadcn/ui and shadcn-vue) always apply under `.dark`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-ink-0: #040605;
+  --color-ink-1: #0a0e0c;
+  --color-ink-2: #111714;
+  --color-ink-3: #16201b;
+  --color-line: #1c2420;
+  --color-line-2: #2a3530;
+  --color-fg: #e9efeb;
+  --color-fg-1: #cfd8d3;
+  --color-fg-2: #a9b5ae;
+  --color-fg-3: #8a968f;
+  --color-accent: #3dff8f;
+  --color-accent-ink: #03130a;
+  --color-amber: #ffbf5e;
+  --color-danger: #ff6b6b;
+  --color-bar: #5b6862;
+
+  /* Display type: page titles and big figures (Mona Sans, semi-expanded). Fluid between 390 px and 1440 px. */
+  --text-display-2xl: clamp(2.75rem, 1.9rem + 3.6vw, 5rem);
+  --text-display-2xl--line-height: 1;
+  --text-display-2xl--letter-spacing: -0.038em;
+  --text-display-xl: clamp(2.375rem, 1.8rem + 2.4vw, 3.75rem);
+  --text-display-xl--line-height: 1.04;
+  --text-display-xl--letter-spacing: -0.034em;
+  --text-display-lg: clamp(2rem, 1.6rem + 1.7vw, 3rem);
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-md: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.024em;
+  --text-display-sm: 1.25rem;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--letter-spacing: -0.016em;
+  /* An app's page title: one size on every screen. */
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.022em;
+  /* A key figure (KPI tiles, record figures). */
+  --text-figure: 1.75rem;
+  --text-figure--line-height: 1;
+  --text-figure--letter-spacing: -0.03em;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.14em;
+
+  /* Glows: green light, never a dark drop shadow. */
+  --shadow-glow-sm: 0 0 10px rgb(61 255 143 / 0.3);
+  --shadow-glow: 0 0 18px rgb(61 255 143 / 0.35);
+  --shadow-glow-lg: 0 0 60px -12px rgb(61 255 143 / 0.45);
+  --shadow-bezel: inset 0 1px 0 0 rgb(233 239 235 / 0.05);
+  --shadow-float: 0 30px 80px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(61 255 143 / 0.04);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Loading placeholders: a faint light sweeping across ink (stopped under reduced motion). */
+  --animate-shimmer: shimmer 1.8s var(--ease-out-quint) infinite;
+
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
+/*
+ * Fonts and the shadcn semantic colors, mapped onto the tokens. `accent` stays
+ * Navree green: hover and highlighted surfaces use `ink-2`/`ink-3`, never
+ * `bg-accent`.
+ */
+@theme inline {
+  --font-sans:
+    var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display--font-variation-settings: "wdth" 112;
+  --font-heading: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-heading--font-variation-settings: "wdth" 112;
+  --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--color-accent-ink);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /*
+   * App UI corners: 4px for controls (buttons, inputs, menu items, badges,
+   * tabs, avatars), 6px for surfaces (cards, popovers, dialogs, sheets). The
+   * scale is pinned to those two values so anything the shadcn CLI adds lands
+   * inside the rules: `rounded-sm`/`md`/`lg` are 4px and `rounded-xl` and up
+   * 6px. No pills: `rounded-full` is for status dots only.
+   */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
+}
+
+:root {
+  color-scheme: dark;
+  --radius: 6px;
+  /* The top bar of an app shell. */
+  --header-h: 3rem;
+
+  --background: var(--color-ink-0);
+  --foreground: var(--color-fg);
+  --card: var(--color-ink-1);
+  --card-foreground: var(--color-fg);
+  --popover: var(--color-ink-1);
+  --popover-foreground: var(--color-fg);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-ink);
+  --secondary: var(--color-ink-2);
+  --secondary-foreground: var(--color-fg);
+  --muted: var(--color-ink-2);
+  --muted-foreground: var(--color-fg-2);
+  --destructive: var(--color-danger);
+  --warning: var(--color-amber);
+  --success: var(--color-accent);
+  --border: var(--color-line);
+  --input: var(--color-line-2);
+  --ring: var(--color-accent);
+
+  /* The sidebar is an ink-1 surface. Navigation uses the ink steps, never the green. */
+  --sidebar: var(--color-ink-1);
+  --sidebar-foreground: var(--color-fg-2);
+  --sidebar-primary: var(--color-fg);
+  --sidebar-primary-foreground: var(--color-ink-0);
+  --sidebar-accent: var(--color-ink-2);
+  --sidebar-accent-foreground: var(--color-fg);
+  --sidebar-border: var(--color-line);
+  --sidebar-ring: var(--color-accent);
+
+  /* Charts: slate to pale mint, then the accent for the one series that matters. */
+  --chart-1: #5b6862;
+  --chart-2: #6f8f7f;
+  --chart-3: #8db8a0;
+  --chart-4: #b9e3c9;
+  --chart-5: var(--color-accent);
+}
+
+@layer base {
+  /* Components draw borders without naming a color. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  html {
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--color-line-2) var(--color-ink-0);
+  }
+
+  body {
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 112;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: rgb(61 255 143 / 0.28);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings:
+      "calt" 1,
+      "liga" 0;
+  }
+
+  /* Date and time pickers draw their own icons: keep them visible on ink. */
+  input::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Tabular, lining figures for amounts, counts and dates. */
+@utility figures {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* One oversized word at most. */
+@utility font-display-wide {
+  font-variation-settings: "wdth" 125;
+}
+
+/* A thin scrollbar for sidebars, boards and lists. */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-2) transparent;
+}
+
+/* A raised surface (cards, panels, tables): ink-1, a 1px line, 6px corners. */
+@utility surface {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-ink-1);
+}
+
+/* Column headings for tables and table-like lists: 12px, medium, fg-3, sentence case. */
+@utility th-label {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  color: var(--color-fg-3);
+}
+
+/* The small label above a heading: quiet fg-3 text in sentence case (app UI has no mono caps). */
+@utility eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: var(--color-fg-3);
+}
