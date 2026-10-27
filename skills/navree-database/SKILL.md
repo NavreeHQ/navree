@@ -1,23 +1,31 @@
 ---
 name: navree-database
-description: "Works with the database in a Navree app: SeaORM entities with UUID v7 keys, `Repo` writes with change events, the per-request unit of work (`Uow`), transactions in jobs and commands, module-owned migrations, seeders, factories, offset and cursor pagination, soft deletes, TimescaleDB (the default) and its hypertables, PostgreSQL, MySQL/MariaDB and SQLite. Use when adding a table, entity, column, migration, query, seeder, factory or paginated list, writing data outside a request, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
+description: "Works with the database layer of a Navree app: the `database` configuration and its databases (TimescaleDB by default, PostgreSQL, MySQL/MariaDB, SQLite), the per-request unit of work (`Uow`), transactions in jobs and commands, SeaORM entities with UUID v7 keys and `Repo` writes with change events, seeders and `db:seed`, `navree::db::paginate`, soft deletes by hand, and TimescaleDB hypertables. Models and queries are the `navree-orm` skill, migrations the `navree-migrations` skill. Use when configuring the database, writing data outside a request, working with SeaORM entities or `Repo`, writing a seeder, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
 ---
 
 # The database
 
-Navree uses SeaORM 2 on SQLx. TimescaleDB (PostgreSQL with hypertables for
+Apps work with their data through the ORM (`#[derive(Model)]` models: load
+the `navree-orm` skill) and write migrations with the schema builder (the
+`navree-migrations` skill). Both run on navree-db, which this skill covers.
+TimescaleDB (PostgreSQL with hypertables for
 time series) is the default database: `navree new` writes its URL and turns
 on the `postgres` feature of `navree`, and `navree dock up` runs it. Plain
 PostgreSQL uses the same feature; MySQL and MariaDB the `mysql` feature
 (`mysql://` or `mariadb://` URLs; MySQL 8's default accounts sign in over
 TLS); SQLite is compiled in (tests, `navree new --database sqlite`, and the
-fallback when `database.url` is unset). What Navree adds: a
-connection pool from the `database` section, a **unit of work** per request
-(one lazy transaction, committed when the response status is below 400),
-`Repo<E>` writes that record **change events** (the audit log), module-owned
-migrations, seeders, factories and pagination.
+fallback when `database.url` is unset). navree-db provides: a
+connection pool from the `database` section (SeaORM 2 on SQLx), a **unit of
+work** per request (one lazy transaction, committed when the response status
+is below 400), the migrator, seeders and pagination, and for SeaORM entities
+`Repo<E>` writes that record **change events** (the audit log; models record
+the same events).
 
 ## Steps: a new table
+
+For a new table, write a model: `navree make:model posts Tag --migration`
+(the `navree-orm` skill). The steps below are for a SeaORM entity, which
+Navree's own modules and older app code use.
 
 1. `navree make:entity posts tag` writes `src/modules/posts/entities/tag.rs`
    (id, `created_at`, `updated_at`) and prints the next command;
@@ -169,48 +177,33 @@ mail and notifications already wait for the commit.
 
 ## Migrations
 
-```rust
-// src/modules/posts/migrations/mod.rs
-use navree::db::MigrationSet;
-use navree::schema::migration;
-
-mod m20261026_090000_create_posts_table;
-
-pub fn migrations() -> MigrationSet {
-    MigrationSet::new("posts")          // stable, unique name; recorded in navree_migrations
-        .after(["auth"])                // run after these sets (foreign keys to users)
-        .migration(migration!(m20261026_090000_create_posts_table))
-}
-// registered in the module's wire: m.migrations(migrations::migrations());
-```
-
-A migration implements `navree::schema::Migration` (`async fn up` and
-`down` taking `&Schema`) and is written with the schema builder
-(`schema.create("posts", |t| { t.uuid_primary(); ... })`), which writes the
-right SQL for PostgreSQL/TimescaleDB, MySQL and SQLite (on MySQL DDL
-commits on its own, so a migration runs outside a transaction); see
-`references/migrations.md` for a create-table, an alteration, indexes,
-foreign keys and the commands, and `references/timescaledb.md` for
-time-series tables (hypertables). Never edit a migration that has run
-anywhere: add a new one.
+Load the `navree-migrations` skill to write or run migrations. In short: a
+migration implements `navree::schema::Migration` (`async fn up` and `down`
+taking `&Schema`), written with the schema builder; each module registers
+one `MigrationSet` (`m.migrations(migrations::migrations())`), ordered with
+`.after([..])`. `references/migrations.md` has a summary and
+`references/timescaledb.md` time-series tables (hypertables). Never edit a
+migration that has run anywhere: add a new one.
 
 ```sh
 navree migrate               # pending migrations, as one batch (--step, --pretend, --seed)
-navree migrate:status        # --pending
 navree migrate:rollback      # the last batch; --step N, --batch N (APP_DATABASE__MIGRATE_ON_BOOT=false first)
-navree migrate:refresh       # reset + migrate; checks every down
 navree migrate:fresh --seed  # drops EVERY table; development only
-navree schema:dump           # database/schema/<driver>-schema.sql, loaded into empty databases
 ```
 
 ## Seeders, factories and pagination
 
 See `references/seeding-and-pagination.md` for a `Seeder` (`db:seed`), a
-`Factory` (`create`, `create_many`) and cursor pagination. In short:
-`m.seeder::<PostSeeder>()` registers a seeder; `navree::db::Factory` (named
-`ModelFactory` in the prelude) builds active models; `paginate(select, conn,
-PageQuery)` returns `Page<T>` (`{data, meta}`), `cursor_paginate_desc(select,
-Column::Id, conn, CursorQuery)` returns `CursorPage<T>` (`{data, next_cursor}`).
+SeaORM entity `Factory` (`create`, `create_many`) and cursor pagination. In
+short: `navree make:seeder posts demo_posts` writes and registers a seeder
+(`m.seeder::<DemoPostsSeeder>()`); a root seeder (`is_root() -> true`) runs
+the others with `ctx.call::<S>()`; seeders fill tables with model factories
+(`Post::factory().count(10).create(db)`, the `navree-orm` skill), or, for
+entities, `navree::db::Factory` (named `ModelFactory` in the prelude), which
+builds active models; `paginate(select, conn, PageQuery)` returns `Page<T>`
+(`{data, meta}`), `cursor_paginate_desc(select, Column::Id, conn,
+CursorQuery)` returns `CursorPage<T>` (`{data, next_cursor}`). Models
+paginate with `query.paginate(&uow, page)`.
 
 ## Configuration
 
@@ -233,9 +226,11 @@ strict = true                              # strict SQL mode plus ONLY_FULL_GROU
 
 On MySQL the unit of work sets `@navree_actor` and `@navree_request_id`
 (cleared before commit or rollback) where PostgreSQL uses `set_config`
-(neither when `transaction_settings = false`), ids
-are `BINARY(16)`, and workspace isolation is query scoping only (no
-row-level security): every workspace query must go through `WorkspaceRepo`.
+(neither when `transaction_settings = false`), the UUIDs models and
+entities write are 16 bytes, for `BINARY(16)` columns (the schema builder's
+`uuid` columns are `CHAR(36)` there: see `navree-migrations`), and workspace
+isolation is query scoping only (no row-level security): every workspace
+query must go through `WorkspaceRepo` or a `#[model(workspace)]` model.
 
 Override in production with `APP_DATABASE__URL` (an environment variable,
 not `.env`, since `config/app.toml` sets it). `Arc<Db>` is injectable
@@ -262,9 +257,12 @@ chunks go on a hypertable, one `DELETE` elsewhere. See
   with "its transaction is still in use".
 - In-memory SQLite (`sqlite::memory:`): each pool connection sees a
   different database. Tests use temp files.
-- Soft deletes are manual: a `deleted_at` column, filter every list, return
-  404 for deleted rows, and check it in `#[can(.., from = "id")]` handlers.
-- Expecting `exists` validation or record checks to skip soft-deleted rows.
+- On SeaORM entities, soft deletes are manual: a `deleted_at` column, filter
+  every list, return 404 for deleted rows, and check it in
+  `#[can(.., from = "id")]` handlers. Models do all of it with
+  `#[model(soft_deletes)]`.
+- Expecting navree-validation's `exists` or entity record checks to skip
+  soft-deleted rows (the ORM's `exists` rule does).
 - Running app commands (`migrate`, `key:generate`) before `navree dock up`:
   the app can't connect to TimescaleDB.
 - A foreign key to a hypertable's `id`: its key is `(id, time)`, so the
@@ -277,7 +275,8 @@ chunks go on a hypertable, one `DELETE` elsewhere. See
 - https://navree.com/docs/database/entities-and-repositories/
 - https://navree.com/docs/database/unit-of-work/
 - https://navree.com/docs/database/migrations/
-- https://navree.com/docs/database/schema-builder/
+- https://navree.com/docs/database/running-migrations/
 - https://navree.com/docs/database/timescaledb/
 - https://navree.com/docs/database/seeding-and-factories/
 - https://navree.com/docs/database/pagination/
+- https://navree.com/docs/orm/getting-started/

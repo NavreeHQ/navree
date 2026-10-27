@@ -1,0 +1,310 @@
+---
+title: "Casts and accessors"
+description: "Store fields in another form: enums, JSON, fixed-scale decimals, formatted dates, encrypted and hashed secrets, binary ids, vectors, your own casts and fields across several columns; computed values with accessors, and mutators."
+---
+
+A field's Rust type and its column don't have to match. A cast converts between them: a `Stage` enum stored as `'won'`, a struct stored as JSON, a token stored encrypted. You choose one with `#[model(cast = ..)]`, and the ORM applies it everywhere the field goes: reading rows, saving, dirty tracking, [mass assignment](/docs/orm/models/#mass-assignment), serialization, and conditions, so `Deal::STAGE.eq(Stage::Won)` binds `'won'`.
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps)]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,                     // 'won'
+    #[model(cast = "int_enum")]
+    pub priority: Priority,               // 2
+    #[model(cast = "json")]
+    pub meta: Option<DealMeta>,           // {"source":"referral","tags":["vip"]}, NULL as None
+    #[model(cast = "decimal(2)")]
+    pub amount: Decimal,                  // 1234.57
+    #[model(cast = "datetime_format(\"%Y-%m-%d %H:%M\")")]
+    pub follow_up_at: Option<DateTime<Utc>>, // '2026-11-02 09:30'
+    #[model(cast = "unix_timestamp")]
+    pub synced_at: Option<DateTime<Utc>>, // 1793102400
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+A cast on an `Option<T>` field casts the inner value, and `NULL` stays `None`. Fields without a cast are read and written as their type ([the field types](/docs/orm/models/#tables-and-columns)).
+
+## Built-in casts
+
+| `cast =` | Field type | Stored as |
+|---|---|---|
+| `"string_enum"` | a unit enum | its serde name, as text |
+| `"int_enum"` | a `Copy` enum with `Into<i64>` and `TryFrom<i64>` (a `#[repr]` enum) | an integer |
+| `"json"` | any `Serialize + DeserializeOwned` type: structs, `Vec`, maps, sets of enums | JSON |
+| `"decimal(N)"` | `Decimal` | a decimal, rounded half away from zero to `N` places (at most 28) when written |
+| `"datetime_format(\"..\")"` | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text in that format (checked when the model compiles), and serialized in it too |
+| `"unix_timestamp"`, `"unix_timestamp_ms"` | `DateTime<Utc>`, `NaiveDateTime` | integer seconds or milliseconds |
+| `"encrypted"` | `String`, `Vec<u8>` | an encrypted payload |
+| `"encrypted_json"` | any serde type | encrypted JSON |
+| `"hashed"` | `String` | an Argon2id hash |
+| `"binary_uuid"`, `"binary_ulid"` | `Uuid`, `Ulid` | 16 bytes; ULIDs big-endian, so the bytes sort by time |
+| `"vector"` | `Vec<f32>` | a vector: pgvector's `vector` on PostgreSQL (with the `postgres` feature), little-endian `f32` bytes on MySQL 9, MariaDB 11.7 and SQLite (their vector format, and what sqlite-vec reads) |
+
+A string enum reads and writes the names its serde attributes give it (`#[serde(rename_all = "snake_case")]`), and a name the enum doesn't have is an `OrmError::Cast` naming the column. Values a cast rounds or normalizes (decimals, Unix timestamps) are stored as the record holds them after a save, so the record and the row agree.
+
+## Encrypted and hashed fields
+
+`"encrypted"` encrypts a field with the app's key (AES-256-GCM, navree-crypto's `Encrypter`, from `CryptoModule` and `APP_KEY`), so the database only ever holds the payload:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "integrations", hidden(api_token, webhook_secret))]
+pub struct Integration {
+    pub id: Uuid,
+    pub name: String,
+    #[model(cast = "encrypted")]
+    pub api_token: String,                    // 'v1.3aXp0AHx.vxVuYvqa...'
+    #[model(cast = "encrypted_json")]
+    pub credentials: Option<serde_json::Value>,
+    #[model(cast = "hashed")]
+    pub webhook_secret: String,               // '$argon2id$v=19$m=19456,t=2,p=1$...'
+}
+```
+
+- The record holds the plain value: you read and assign `integration.api_token` as text. Because of that, a serialized record holds it too, so **hide encrypted fields** from responses (`hidden(..)`, [serialization](/docs/orm/serialization/#hiding-fields)).
+- Every encryption of the same text differs, so encrypted fields are compared by their plain value for dirty tracking. A payload written under a previous key (after a key rotation, with the old key in `app.previous_keys`) reads fine and is rewritten with the current key the next time the record is saved.
+- `#[model(encrypter = "name")]` picks a named encrypter for the model's encrypted fields.
+- An encrypted column can't be searched by value: there is no condition on its plain text.
+
+`"hashed"` stores an Argon2id hash. Assign the plain value: it is hashed before the record is written, off the async threads, and the record holds the hash after the save. A value that already is an Argon2 hash is kept as it is; a bcrypt or scrypt hash, or a malformed Argon2 string, is refused. Check a password against the stored hash with navree-crypto's `Hasher::verify`.
+
+Both need the app's services. Queries and saves through `&Db` or `&Uow` find them in the executor's app. Code with a pool opened by hand, such as a script or a test, sets them with a `CastContext`:
+
+```rust
+use navree::crypto::{AppKey, Encrypter};
+use navree::orm::attributes::CastContext;
+
+let context = CastContext::new().with_encrypter(Encrypter::new(AppKey::generate()));
+context.scope(async { /* reads and writes of encrypted models */ }).await;
+```
+
+A cast that misses its service fails with an error saying what to register. `CastContext::set_default` installs a context for the whole process.
+
+## Your own casts
+
+A cast implements `Cast<T>`: how the stored form becomes the field, and back.
+
+```rust
+use navree::orm::cast::{Cast, CastError};
+
+/// Cents stored as text, for a legacy column.
+pub struct CentsAsText;
+
+impl Cast<i64> for CentsAsText {
+    type Stored = String;
+
+    fn get(stored: String) -> Result<i64, CastError> {
+        stored
+            .parse()
+            .map_err(|_| CastError::new(format!("`{stored}` is not a number of cents")))
+    }
+
+    fn set(value: &i64) -> Result<String, CastError> {
+        Ok(value.to_string())
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "invoices")]
+pub struct Invoice {
+    pub id: Uuid,
+    #[model(cast = CentsAsText)]
+    pub legacy_total: i64,
+}
+```
+
+`Stored` is any type the ORM reads and writes directly (text, an integer, JSON, ...). `get` and `set` are all a cast must write; the trait's other methods refine how the field is treated, each with a default:
+
+| Method | For |
+|---|---|
+| `CONTEXT`, `get_with`, `set_with` | Casts that need app services (an encrypter, the clock, the configuration) from the `CastContext`. |
+| `eq_stored`, `same` | Dirty tracking: when two values count as the same. |
+| `from_json` | Mass assignment: the field from untyped input. |
+| `serialize` | The value in serialized records. |
+| `increment`, `decrement` | `record.increment_cast(..)`. |
+| `prepare` | Asynchronous work before a write (hashing). |
+| `is_stale` | Stored values to rewrite at the next save (old encryption keys). |
+
+### Types that pick their own cast
+
+A value type can name its cast once, with `Castable`, so fields of that type only write `#[model(cast)]`:
+
+```rust
+use navree::orm::cast::Castable;
+
+/// An amount and a currency, stored as "12.50 EUR".
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Money {
+    pub cents: i64,
+    pub currency: String,
+}
+
+impl Castable for Money {
+    type Cast = MoneyText; // a Cast<Money> with Stored = String
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "invoices")]
+pub struct Invoice {
+    pub id: Uuid,
+    #[model(cast)]
+    pub total: Money,
+}
+```
+
+A cast with const generic parameters takes them in the attribute: `#[model(cast(Scaled, 100))]` is `Scaled<100>`. A type can also implement `Field` itself, which makes it usable in rows, plucks and untyped conditions too.
+
+### Transforming values on the way in
+
+An inbound cast changes a value when it is written and reads it back as stored: trimming, lower-casing, slugifying.
+
+```rust
+use navree::orm::cast::InboundCast;
+
+/// Stores emails trimmed and lower-cased.
+pub struct NormalizedEmail;
+
+impl InboundCast<String> for NormalizedEmail {
+    fn set(value: &String) -> Result<String, CastError> {
+        Ok(value.trim().to_lowercase())
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "invoices")]
+pub struct Invoice {
+    pub id: Uuid,
+    #[model(inbound = NormalizedEmail)]
+    pub billing_email: String,
+}
+```
+
+The transformation runs whenever the field is encoded (saves, dirty checks, conditions), and the record holds the transformed value after a save. Make it idempotent: transforming a transformed value must change nothing.
+
+### One field, several columns
+
+A `MultiColumnCast` stores one field in several columns, such as money in an amount and a currency column:
+
+```rust
+use navree::orm::cast::MultiColumnCast;
+
+pub struct MoneyColumns;
+
+impl MultiColumnCast<Money> for MoneyColumns {
+    type Stored = (i64, String);
+
+    fn get((cents, currency): (i64, String)) -> Result<Money, CastError> {
+        Ok(Money { cents, currency })
+    }
+
+    fn set(money: &Money) -> Result<(i64, String), CastError> {
+        Ok((money.cents, money.currency.clone()))
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "invoices")]
+pub struct Invoice {
+    pub id: Uuid,
+    #[model(cast = MoneyColumns, columns(price_cents: i64, price_currency: String))]
+    pub price: Money,
+}
+
+Invoice::query().where_(Invoice::PRICE_CURRENCY.eq("EUR")).where_(Invoice::PRICE_CENTS.gte(10_000));
+```
+
+Each column gets its own typed constant, its own dirty tracking and its own key in `fill`; the record serializes the field under its own name. An `Option<Money>` field is `None` when every column is `NULL`. Two to eight columns, as a tuple in the order of `columns(..)`.
+
+## Accessors
+
+An accessor is a computed value of a model that serialized records can include. Mark methods `#[accessor]` in an `#[accessors]` block:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "people", appends(initials))]
+pub struct Person {
+    pub id: Uuid,
+    pub full_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+}
+
+#[accessors]
+impl Person {
+    /// "AL" for Ada Lovelace.
+    #[accessor]
+    pub fn initials(&self) -> String {
+        self.first_name.chars().take(1).chain(self.last_name.chars().take(1)).collect()
+    }
+
+    #[accessor(name = "display_name", schema = String)]
+    pub fn label(&self) -> String {
+        format!("{} <{}>", self.full_name, self.email)
+    }
+}
+```
+
+An accessor returns any `Serialize` type and stays a plain method (`person.initials()`). `appends(..)` adds it to every serialized record; a name there that isn't an accessor is a compile error. `record.append(["display_name"])` adds one to a single record. `#[accessor(name = "..")]` renames its key, and `schema = Type` gives its [OpenAPI schema](/docs/orm/serialization/#openapi-schemas).
+
+## Mutators
+
+A mutator runs when a field is set from input: `fill`, `set_attribute`, and the setter the derive generates. Name a function `fn(&mut Model, T)` with `set_with`:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "people", fillable(full_name, email))]
+pub struct Person {
+    pub id: Uuid,
+    #[model(set_with = split_name)]
+    pub full_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+}
+
+/// Sets the full name and the names it splits into.
+fn split_name(person: &mut Person, full_name: String) {
+    let full_name = full_name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let (first, last) = full_name.split_once(' ').unwrap_or((&full_name, ""));
+    person.first_name = first.to_owned();
+    person.last_name = last.to_owned();
+    person.full_name = full_name;
+}
+
+person.set_full_name("Ada   Lovelace".to_owned()); // the generated setter
+person.fill(attrs! { "full_name" => "Grace Hopper" })?;
+```
+
+Assigning the field directly (`person.full_name = ..`) bypasses the mutator: it is plain Rust.
+
+## Query-time casts
+
+Extra columns a query selects (`select_raw`, aggregates) are read by type when you ask for them (`record.extra::<Decimal>("gross")`). To convert one as it is read, so it also serializes in that form, name its cast on the query:
+
+```rust
+use navree::orm::attributes::ExtraCast;
+
+let deals = Deal::query()
+    .select_raw("amount * 1.21 AS gross", [] as [i64; 0])
+    .with_casts([("gross", ExtraCast::Decimal(Some(2)))])
+    .get(&db)
+    .await?;
+```
+
+`ExtraCast` has `Bool`, `Integer`, `Float`, `Decimal` (with an optional scale), `String`, `Json`, `DateTime`, `Date`, `Uuid` and `Custom(fn)`, which smooths over databases that return a sum as a decimal or a comparison as `0`/`1`.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/serialization/" title="Serialization">
+    Hidden fields, appended accessors and API resources.
+  </LinkCard>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    The app key, key rotation and Argon2id.
+  </LinkCard>
+</LinkCards>

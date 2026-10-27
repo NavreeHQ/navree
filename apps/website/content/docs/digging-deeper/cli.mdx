@@ -44,6 +44,9 @@ Commands:
   make:agent         Generate an AI agent with one tool in a module (agents/NAME.rs)
   make:test          Generate a test in a module (tests/NAME.rs)
   make:mcp           Generate an MCP server with one tool in a module (mcp/NAME.rs)
+  make:model         Generate an ORM model in a module (models/NAME.rs), with its migration, factory, seeder, controller and policy on request
+  make:factory       Generate a model factory in a module (factories/NAME.rs)
+  make:seeder        Generate a seeder in a module (seeders/NAME.rs), registered for db:seed
   make:resource      Generate a Helm admin-panel resource for an entity of a module (resources/ENTITY.rs)
   dev                Serve the app, rebuilding and restarting it when the code changes
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
@@ -161,6 +164,9 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 |---|---|---|
 | `make:controller posts admin` | `controllers/admin.rs`, `AdminController` | the controller, in `wire` |
 | `make:service posts pricing` | `services/pricing.rs`, `PricingService` | `m.provider::<..>()`, in `wire` |
+| `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`; `--migration`, `--factory`, `--seeder`, `--controller` and `--policy` (or `--all`) add those, each referring to the others | `m.model::<..>()` and each companion's registration, in `wire` |
+| `make:factory posts tag` | `factories/tag.rs`, a [model factory](/docs/orm/factories/) (`--model <model>` when its name differs) | nothing; `#[model(factory = ..)]` links it |
+| `make:seeder posts demo_data` | `seeders/demo_data.rs`, a [seeder](/docs/database/seeding-and-factories/) named `demo_data` | the seeder, in `wire` |
 | `make:entity posts tag` | `entities/tag.rs`, a SeaORM entity for `tags` | nothing; prints the `make:migration` to run next |
 | `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` | adds it to the module's migration set. A `create_<table>_table` name generates a table-creating migration |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, a job named `posts.publish_post` | the job, in `wire` |

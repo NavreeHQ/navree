@@ -1,0 +1,485 @@
+---
+title: "Query builder"
+description: "Typed conditions, groups, JSON and full-text search, selects, joins, aggregates, unions, row locks, mass updates, bulk inserts and upserts, queries without a model and raw SQL."
+---
+
+`Deal::query()` returns a `Builder<Deal>`. Every method that shapes the query takes the builder and returns it, so calls chain; the methods that run it take the executor first and are `async`. Nothing touches the database until one of those runs.
+
+```rust
+let deals = Deal::query()
+    .where_(Deal::STAGE.is_in([Stage::Proposal, Stage::Negotiation]))
+    .where_(Deal::AMOUNT_CENTS.gte(10_000))
+    .latest()
+    .limit(20)
+    .get(&uow)
+    .await?;
+```
+
+Builders are plain values: clone one to run two variations of a query, or build one in a function and finish it elsewhere. Values are always bound, never written into the SQL, and the SQL is generated for the database the executor talks to: PostgreSQL (with TimescaleDB), MySQL, MariaDB or SQLite.
+
+## Retrieving records
+
+| Method | Returns |
+|---|---|
+| `get(exec)` | Every matching record, as a `Collection<M>`. |
+| `first(exec)` | The first record, if any (`Option<Record<M>>`). |
+| `first_or_fail(exec)` | The first record, or `ModelNotFound`: a 404 when a handler returns it. |
+| `sole(exec)` | The only matching record; `ModelNotFound` when there is none, `MultipleRecordsFound` when there are more. |
+| `find(exec, key)`, `find_or_fail(exec, key)`, `find_many(exec, keys)` | The records with these keys, if the query matches them. |
+
+```rust
+let deals = Deal::query().get(&db).await?;
+let newest = Deal::query().latest().first(&db).await?;
+let renewal = Deal::where_(Deal::TITLE.eq("Acme renewal")).first_or_fail(&db).await?;
+let open = Deal::query().where_(Deal::STAGE.ne(Stage::Lost)).find(&db, id).await?;
+```
+
+A [collection](/docs/orm/collections/) dereferences to a slice of records, so `deals[0]`, `deals.len()` and `for deal in &deals` work as on a `Vec`. For large results, read [in chunks or as a stream](/docs/orm/pagination-and-streaming/#chunks-and-streams) instead of all at once.
+
+### Values and existence
+
+When you need a column rather than records, ask for it. These read only what they need:
+
+```rust
+let title: Option<String> = Deal::query().where_key(id).value(&db, Deal::TITLE).await?;
+let titles: Vec<String> = Deal::query().latest().pluck(&db, Deal::TITLE).await?;
+let by_id = Deal::query().pluck_keyed(&db, Deal::TITLE, Deal::ID).await?; // IndexMap<Uuid, String>
+let any_won: bool = Deal::where_(Deal::STAGE.eq(Stage::Won)).exists(&db).await?;
+```
+
+A typed column comes back as its type, cast included; a column name (`"title"`) or an expression comes back as a `Value`. `doesnt_exist` is the opposite of `exists`. `where_key(key)`, `where_key_not`, `where_key_in` and `where_key_not_in` filter by the model's key.
+
+### Aggregates
+
+```rust
+let open = Deal::where_(Deal::STAGE.eq(Stage::Lead));
+let count: u64 = open.clone().count(&db).await?;
+let pipeline: i64 = open.clone().sum(&db, Deal::AMOUNT_CENTS).await?;
+let average: Option<Decimal> = open.clone().avg(&db, Deal::AMOUNT_CENTS).await?;
+let largest: Option<i64> = open.max(&db, Deal::AMOUNT_CENTS).await?;
+let companies: u64 = Deal::query().count_distinct(&db, Deal::COMPANY_ID).await?;
+```
+
+You choose the type the result is read as: `sum::<i64>`, `avg::<f64>` or, exactly, `avg::<Decimal>`. `sum` is zero when nothing matches; `avg`, `min` and `max` are `None`. `count_column` counts the rows where a column isn't `NULL`. A grouped query's `count` counts its groups.
+
+## Conditions
+
+`where_` adds a condition, joined with `AND`. Conditions come from the model's [typed columns](/docs/orm/models/#column-constants), which take values of the column's type:
+
+```rust
+Deal::query()
+    .where_(Deal::COMPANY_ID.eq(company_id))
+    .where_(Deal::AMOUNT_CENTS.gte(10_000))
+    .where_(Deal::STAGE.is_in([Stage::Proposal, Stage::Negotiation]))
+    .where_(Deal::CLOSED_AT.is_null())
+    .where_(Deal::CREATED_AT.gt(since))
+    .where_(Deal::TITLE.like("%renewal%"))
+```
+
+| Column method | SQL |
+|---|---|
+| `eq`, `ne`, `gt`, `gte`, `lt`, `lte` | `=`, `<>`, `>`, `>=`, `<`, `<=` |
+| `op("<>", value)` | any comparison operator, by its SQL spelling |
+| `is_in([..])`, `not_in([..])` | `IN (..)`, `NOT IN (..)`; an empty list matches nothing (or everything) |
+| `in_subquery(query)`, `not_in_subquery(query)` | `IN (SELECT ..)` |
+| `is_null()`, `is_not_null()` | `IS NULL`, `IS NOT NULL` |
+| `between(low, high)`, `not_between(..)` | `BETWEEN` |
+| `like(pattern)`, `not_like(..)` | a `LIKE` that ignores case: `ILIKE` on PostgreSQL; `LIKE` on MySQL (case-insensitive under its default collations) and SQLite (for ASCII letters) |
+| `like_case_sensitive(pattern)` | a `LIKE` that matches case: `LIKE` on PostgreSQL, `LIKE BINARY` on MySQL, `GLOB` on SQLite |
+| `ilike(pattern)` | ignores case on every database (`LOWER(..) LIKE LOWER(..)` on MySQL) |
+| `regex`, `regex_case_insensitive`, `not_regex` | `~` and `~*` on PostgreSQL, `REGEXP_LIKE` on MySQL, `REGEXP` on SQLite (which needs a `regexp` function registered on the connection) |
+| `similar_to(pattern)` | PostgreSQL's `SIMILAR TO` |
+| `null_safe_eq(value)`, `is_distinct_from(value)` | equality where `NULL` equals `NULL`, and its opposite |
+| `eq_column(&other)`, `op_column(op, &other)` | compares two columns |
+| `contains(value)`, `contained_by(value)`, `overlaps(values)`, `has_key(key)` | JSON containment (`@>` on PostgreSQL, `json_contains` on MySQL) and key existence |
+
+A condition on a [cast](/docs/orm/casts-and-accessors/) field compares the stored form: `Deal::STAGE.eq(Stage::Won)` binds `'won'`.
+
+### OR, NOT and groups
+
+`or_where` joins a condition with `OR`, `where_not` and `or_where_not` negate one. A closure builds a parenthesized group:
+
+```rust
+// WHERE closed_at IS NULL AND (stage = 'negotiation' OR amount_cents >= 1000000)
+Deal::query()
+    .where_(Deal::CLOSED_AT.is_null())
+    .where_group(|q| {
+        q.where_(Deal::STAGE.eq(Stage::Negotiation))
+            .or_where(Deal::AMOUNT_CENTS.gte(1_000_000))
+    })
+```
+
+Conditions combine as values too: `a.and(b)`, `a.or(b)`, `a.not()`, `Filter::all([..])` and `Filter::any([..])`:
+
+```rust
+Deal::query().where_(Filter::any([Deal::STAGE.eq(Stage::Won), Deal::STAGE.eq(Stage::Lost)]))
+```
+
+`or_where_group` and `where_not_group` add a group with `OR` or `NOT`; an empty group adds nothing. [Scopes](/docs/orm/scopes-and-soft-deletes/) never change the meaning of your conditions: a scope's conditions are grouped whenever an `OR` is involved.
+
+### Shortcut methods
+
+Each condition has a method form that reads well when you write it out:
+
+```rust
+Deal::query()
+    .where_in(Deal::STAGE, [Stage::Won, Stage::Lost])
+    .where_not_in(Deal::ID, ids)
+    .where_null(Deal::CLOSED_AT)
+    .where_not_null(Deal::CONTACT_ID)
+    .where_between(Deal::AMOUNT_CENTS, 10_000, 50_000)
+    .where_column(Deal::UPDATED_AT, ">", Deal::CREATED_AT)
+    .where_like(Deal::TITLE, "acme%")
+```
+
+Every one of them has an `or_` form (`or_where_in`, `or_where_null`, ...) and most a `not` form (`where_not_between`, `where_not_like`). `where_like_case_sensitive` matches case.
+
+### Dates and times
+
+`where_date`, `where_time`, `where_day`, `where_month` and `where_year` compare a part of a date-time column, written for each database (`CAST`, `EXTRACT`, `strftime`):
+
+```rust
+Deal::query()
+    .where_date(Deal::CREATED_AT, "=", "2026-10-27")
+    .where_month(Deal::CREATED_AT, "=", 10)
+    .where_year(Deal::CREATED_AT, ">=", 2026)
+    .where_time(Deal::CREATED_AT, "<", "12:00:00")
+```
+
+### JSON
+
+A column name with `->` reaches inside a JSON column (`->`/`->>` on PostgreSQL, `json_extract` on MySQL and SQLite):
+
+```rust
+Deal::query()
+    .where_(col("meta->source").eq("referral"))
+    .where_json_contains("meta->tags", "vip")
+    .where_json_length("meta->tags", ">", 2)
+    .where_json_contains_key("meta->priority")
+```
+
+`Deal::META.json("source")` starts the same path from the typed column. `where_json_doesnt_contain`, `where_json_overlaps`, `where_json_doesnt_overlap` and `where_json_doesnt_contain_key` complete the set.
+
+### Full-text search
+
+`where_full_text` searches text columns with the database's full-text engine: `to_tsvector(..) @@ plainto_tsquery(..)` on PostgreSQL, `MATCH .. AGAINST` on MySQL. `where_full_text_with` takes a `FullText` with a mode and a language:
+
+```rust
+use navree::orm::ir::FullText;
+
+Deal::query().where_full_text([Deal::TITLE], "renewal pricing");
+Deal::query().where_full_text_with([Deal::TITLE], "\"annual renewal\" -cancelled", FullText::websearch());
+```
+
+`FullText::phrase()`, `websearch()`, `boolean()` and `raw()` pick the mode, `.language("german")` the text-search configuration (checked against a list, never written into the SQL as you pass it), and `.vectors()` searches `tsvector` columns. Index the columns with a [full-text index](/docs/database/indexes-and-foreign-keys/#full-text-and-spatial-indexes). SQLite has no full-text operator: the query fails with `OrmError::Unsupported`, and an FTS5 table is queried with `where_raw`.
+
+### Conditional clauses
+
+Build a query from optional filters without breaking the chain:
+
+```rust
+Deal::query()
+    .when_some(filter.stage, |q, stage| q.where_(Deal::STAGE.eq(stage)))
+    .when_some(filter.search, |q, term| q.where_like(Deal::TITLE, format!("%{term}%")))
+    .when(filter.mine, |q| q.where_(Deal::OWNER_ID.eq(me)))
+```
+
+`when(condition, f)` applies `f` when `condition` is true, `unless` when it is false, `when_some(option, f)` when the option holds a value, and `when_else(condition, f, g)` one or the other.
+
+### Subqueries
+
+A builder goes wherever a query is expected, so subqueries are queries:
+
+```rust
+// Companies with at least one won deal.
+Company::query().where_exists(
+    Deal::query()
+        .where_column(Deal::COMPANY_ID, "=", Company::ID)
+        .where_(Deal::STAGE.eq(Stage::Won)),
+);
+
+// The same, with IN.
+Company::query().where_in_sub(
+    Company::ID,
+    Deal::query().select([Deal::COMPANY_ID]).where_(Deal::STAGE.eq(Stage::Won)),
+);
+
+// Each company with its number of deals, as an extra column.
+Company::query().select_sub(
+    Deal::query()
+        .select([Expr::count_all()])
+        .where_column(Deal::COMPANY_ID, "=", Company::ID),
+    "deals_count",
+);
+```
+
+For subqueries over relationships, `where_has`, `with_count` and their relatives write these for you: see [relationship existence](/docs/orm/relationships/#querying-relationship-existence) and [counting related records](/docs/orm/eager-loading/#counting-related-records).
+
+### Raw conditions
+
+SQL you write yourself takes `?` placeholders, one per value, on every database (`$1`, `$2` are written for PostgreSQL), and `??` for a literal `?`:
+
+```rust
+Deal::query().where_raw("amount_cents > ? * 100", [500]);
+Deal::query().where_(raw("lower(title) = ?", ["acme renewal"]));
+```
+
+A placeholder count that doesn't match the values fails with `OrmError::InvalidQuery` before anything runs. Never format input into the SQL string: bind it.
+
+### Columns without a model
+
+`col("deals.title")` names any column, typed as a `Value`; `col_as::<i64>("total")` gives it a type. Both have the same methods as model columns, for joined tables, aliases and JSON paths.
+
+## Selecting columns
+
+A model query selects the model's columns, qualified with its table. `select` replaces the list, and the other methods add to it:
+
+```rust
+Deal::query().select([Deal::ID.expr(), Deal::TITLE.expr()]);
+Deal::query()
+    .select_expr(Expr::col("amount_cents").mul(2), "doubled")
+    .select_expr(Expr::lower(Expr::col("title")), "lower_title")
+    .select_raw("amount_cents / 100 AS amount", [] as [i64; 0])
+    .distinct();
+```
+
+A select item is a typed column, a column name (`"title"`, `"companies.name"`, `"title as name"`), an `Expr`, a `Raw`, or an `(item, alias)` pair. `Expr` has constructors for what SQL offers: `Expr::col`, `Expr::val`, `Expr::raw`, `Expr::func("coalesce", [..])`, `lower`, `upper`, `coalesce`, the aggregates (`count_all`, `count`, `count_distinct`, `sum`, `avg`, `min`, `max`), arithmetic (`.add`, `.sub`, `.mul`, `.div`) and `Expr::subquery`. `distinct_on([..])` is PostgreSQL's `DISTINCT ON`.
+
+Selected columns that aren't model columns become the record's **extras**, read by name and type:
+
+```rust
+let deals = Deal::query()
+    .select_raw("amount_cents / 100 AS amount", [] as [i64; 0])
+    .get(&db)
+    .await?;
+let amount: Option<i64> = deals[0].extra("amount")?;
+```
+
+Extras serialize with the record. `with_casts([("total", ExtraCast::Decimal(Some(2)))])` converts an extra as it is read ([casts](/docs/orm/casts-and-accessors/#query-time-casts)).
+
+<Callout type="note" title="Partial selects in strict mode">
+
+When `select` leaves out a model column, the records can't be fully read. In [strict mode](/docs/orm/getting-started/#configuration) (development, by default) that is an `OrmError::MissingAttribute` naming the model, the column and the columns selected; in lenient mode the field gets its type's default. Fields marked `#[model(default)]` may always be missing. For a few columns, use `pluck`, `value` or a [table query](#queries-without-a-model) instead.
+
+</Callout>
+
+## Joins
+
+```rust
+Deal::query()
+    .join("companies", Deal::COMPANY_ID, "=", Company::ID)
+    .where_(Company::NAME.like("Acme%"))
+    .add_select([("companies.name", "company_name")]);
+
+Deal::query().left_join_on("activities", |join| {
+    join.on(Activity::DEAL_ID, "=", Deal::ID)
+        .where_(Activity::COMPLETED_AT.is_null())
+});
+```
+
+`join`, `left_join` and `right_join` take the table and one comparison; the `_on` forms take a closure that adds `on`, `or_on` and any condition. `cross_join` adds a cross join. `join_sub(query, alias, ..)`, `left_join_sub`, `right_join_sub` and `cross_join_sub` join a subquery, and `join_lateral` / `left_join_lateral` a lateral one (PostgreSQL, MySQL 8.0.14 and later). Because the model's own columns are qualified, a join never shadows them; to load related records, [eager loading](/docs/orm/eager-loading/) is usually simpler than a join.
+
+## Grouping
+
+```rust
+table("deals")
+    .select(["stage"])
+    .select_expr(Expr::count_all(), "deals")
+    .select_expr(Expr::sum(Expr::col("amount_cents")), "amount_cents")
+    .group_by(["stage"])
+    .having(Expr::count_all().gte(5))
+    .order_by("stage");
+```
+
+`group_by_raw`, `having_raw` and `or_having` complete the set. `group_limit(n, column)` keeps the first `n` rows of each group, by the query's order, through `ROW_NUMBER()`: the three newest deals of each company in one query.
+
+## Ordering, limits and offsets
+
+| Method | Does |
+|---|---|
+| `order_by(column)`, `order_by_desc(column)` | Ascending, descending. |
+| `order(column.desc())`, `order_by_dir(column, direction)` | An order built as a value. |
+| `latest()`, `oldest()` | By the creation timestamp, newest or oldest first. A model without `timestamps` fails when the query runs: use `latest_by(column)`. |
+| `latest_by(column)`, `oldest_by(column)` | By another column. |
+| `order_by_raw(sql, values)` | SQL you write; a trailing `ASC`, `DESC` or `NULLS LAST` is kept. |
+| `in_random_order()` | A random order. |
+| `reorder()`, `reorder_by(column)` | Drops the orders so far (and adds one). |
+| `limit(n)` / `take(n)`, `offset(n)` / `skip(n)` | `LIMIT` and `OFFSET`. |
+| `for_page(page, per_page)` | The limit and offset of a page. For responses, use [pagination](/docs/orm/pagination-and-streaming/). |
+
+## Unions
+
+```rust
+let won = Deal::query().where_(Deal::STAGE.eq(Stage::Won));
+let big = Deal::query().where_(Deal::AMOUNT_CENTS.gte(1_000_000));
+let deals = won.union(big).latest().limit(10).get(&db).await?;
+```
+
+`union` removes duplicates, `union_all` keeps them. Orders and limits added after a union apply to the whole result, and `count`, `exists`, `pluck` and pagination read a union as a derived table.
+
+## Locking rows
+
+Inside a unit of work, a locking read keeps other transactions from changing the rows until it commits:
+
+```rust
+let mut deal = Deal::query().lock_for_update().find_or_fail(&uow, id).await?;
+
+// A work queue: the oldest lead nobody else holds.
+let next = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Lead))
+    .oldest()
+    .lock_for_update()
+    .skip_locked()
+    .first(&uow)
+    .await?;
+```
+
+`lock_for_update` is `FOR UPDATE`, `shared_lock` is `FOR SHARE` (`LOCK IN SHARE MODE` on MySQL unless it skips or refuses to wait), and `lock(LockMode::NoKeyUpdate)` or `LockMode::KeyShare` pick PostgreSQL's weaker modes. `skip_locked` skips rows another transaction holds; `no_wait` fails at once instead of waiting. A locking read through `&Db` joins the task's unit of work, since a lock outside a transaction would end with the statement. SQLite has no row locks: its write transactions already run one at a time, so the lock clauses are left out there. `record.refresh_for_update(&uow)` rereads a record you already have, under a lock.
+
+## Updating and deleting many records
+
+A query can write every row it matches in one statement:
+
+```rust
+let cutoff = Utc::now() - Duration::days(90);
+
+let lost: u64 = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Lead))
+    .where_(Deal::UPDATED_AT.lt(cutoff))
+    .update(&uow, [Deal::STAGE.set(Stage::Lost), Deal::CLOSED_AT.set(Utc::now())])
+    .await?;
+
+let removed: u64 = Activity::query()
+    .where_(Activity::COMPLETED_AT.lt(cutoff))
+    .delete(&uow)
+    .await?;
+```
+
+`update` takes assignments built with `Column::set` (`set_null`, `set_expr(..)` for an expression) and sets `updated_at` too. `delete` on a soft-deleting model sets `deleted_at`; `force_delete` removes the rows. `increment(&uow, Deal::AMOUNT_CENTS, 100)`, `decrement` (and their `_with` forms, which set more columns) and `touch` complete the set. Each returns the number of rows it changed.
+
+An assignment to a JSON path changes one value inside the column: `col("meta->priority").set(1)` is `jsonb_set` on PostgreSQL, `JSON_SET` on MySQL and `json_set` on SQLite.
+
+<Callout type="warning" title="Mass writes skip events">
+
+Mass updates and deletes write rows, not records: no [model events](/docs/orm/events-and-observers/) run and no change events reach the [audit log](/docs/security/audit-log/). When observers or the audit trail matter, load the records and save them one by one.
+
+</Callout>
+
+A query with joins, groups, a limit or an offset writes the rows it selects, by key (`WHERE id IN (SELECT id FROM (..))`), so `.oldest().limit(100).delete(..)` deletes exactly a hundred rows on every database.
+
+## Inserting many rows
+
+The bulk writes insert many rows in one statement, also without events:
+
+```rust
+// Generated keys and timestamps, like `create`, in one INSERT.
+let inserted: u64 = Deal::fill_and_insert(&uow, deals).await?;
+
+// Tags by name: new ones are inserted, existing ones skipped...
+Tag::insert_or_ignore(&uow, tags.clone()).await?;
+// ...or updated with the new color.
+Tag::upsert(&uow, tags, [Tag::NAME], [Tag::COLOR]).await?;
+```
+
+| Method | Writes |
+|---|---|
+| `insert(exec, models)` | The models as they are: keys and timestamps you didn't set stay empty. |
+| `fill_and_insert(exec, models)` | The models with generated keys and filled timestamps, as `save` would. `fill_and_insert_or_ignore` and `fill_and_insert_get_id` too. |
+| `insert_or_ignore(exec, models)` | The rows that conflict with no unique index (`ON CONFLICT DO NOTHING`, `INSERT IGNORE` on MySQL). |
+| `upsert(exec, models, unique_by, update)` | New rows, and an update of the rows they conflict with on `unique_by` (`ON CONFLICT .. DO UPDATE`, `ON DUPLICATE KEY UPDATE` on MySQL). `update` names columns, `ConflictUpdate::All` every inserted column. |
+| `update_from(exec, ..)` | `UPDATE .. FROM` (a joined update on MySQL). |
+| `truncate(exec)` | Every row, and the key sequence (`TRUNCATE .. RESTART IDENTITY`; SQLite deletes and resets its sequence). |
+
+The inserts and upserts return the number of rows written. [Table queries](#queries-without-a-model) add `insert_get_id`, `insert_or_ignore_returning`, `insert_using` (`INSERT INTO .. SELECT ..`), `insert_or_ignore_using` and `update_or_insert` (an update of the matching rows, or a new row). A statement whose values exceed the database's bind limit (65,535 on PostgreSQL and MySQL, 32,766 on SQLite) is split, and the parts run in one transaction, so the insert stays all or nothing. On MySQL, `INSERT IGNORE` also turns errors such as a value too long for its column into warnings, and `ON DUPLICATE KEY UPDATE` checks every unique index, whatever `unique_by` names.
+
+To insert one record through its events but skip it when it conflicts, `record.save_or_ignore(&uow)` does both.
+
+## Queries without a model
+
+`table("deal_tag")` starts a `TableBuilder`: the same conditions and clauses, over any table, returning `Row`s:
+
+```rust
+use navree::orm::Row;
+
+let rows: Vec<Row> = table("deal_tag").where_(col("deal_id").eq(deal_id)).get(&db).await?;
+for row in &rows {
+    let tag_id: i64 = row.get("tag_id")?;
+}
+
+table("deal_tag")
+    .insert_or_ignore(&uow, [[("deal_id", Value::from(deal_id)), ("tag_id", Value::from(tag_id))]])
+    .await?;
+table("deal_tag").where_(col("deal_id").eq(deal_id)).delete(&uow).await?;
+```
+
+`"deals as d"` aliases the table. `TableBuilder::from_sub(query, alias)` reads from a derived table and `from_function` / `from_raw` from a table function such as `generate_series`. A table builder has `get`, `first`, `value`, `pluck`, `exists`, the aggregates and `paginate`, and writes with `insert`, `update`, `delete`, `increment`, `decrement` and the bulk methods above. Its writes take plain conditions: a `Row` has no hooks, casts or change events.
+
+## Raw SQL
+
+For a statement the builder can't express, run SQL you write, with the same `?` placeholders:
+
+```rust
+use navree::orm::{affecting_statement, raw, scalar, select};
+
+let open: Option<i64> = scalar(&db, raw("SELECT COUNT(*) FROM deals WHERE stage = ?", ["lead"])).await?;
+let rows = select(&db, raw("SELECT id, title FROM deals ORDER BY created_at DESC LIMIT ?", [10])).await?;
+let changed: u64 = affecting_statement(
+    &uow,
+    raw("UPDATE deals SET stage = ? WHERE closed_at < ?", [
+        Value::from("lost"),
+        Value::from(Utc::now() - Duration::days(365)),
+    ]),
+)
+.await?;
+```
+
+| Function | Runs | Returns |
+|---|---|---|
+| `select(exec, raw(..))` | a query | its rows |
+| `select_one(exec, raw(..))` | a query | its first row |
+| `scalar::<T>(exec, raw(..))` | a query | the first column of its first row |
+| `statement`, `affecting_statement` | any statement | the rows it changed |
+| `unprepared(exec, sql)` | statements without values, `;`-separated | nothing |
+| `cursor(exec, raw(..))` | a query | its rows [as a stream](/docs/orm/pagination-and-streaming/#cursors) |
+
+Reads go where the executor reads and statements where it writes, so through a `Uow` they run in its transaction. `raw(..)` is also an expression and a condition: it goes into `where_`, `select_expr` and `order_by`.
+
+## Inspecting queries
+
+`to_sql(dialect)` returns the SQL a query would run, with its values, without running it:
+
+```rust
+let statement = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))
+    .where_(Deal::AMOUNT_CENTS.gte(100_000))
+    .latest()
+    .to_sql(Dialect::Postgres)?;
+```
+
+```sql title="statement.sql"
+SELECT "deals"."id", "deals"."company_id", "deals"."title", ..., "deals"."updated_at"
+FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."amount_cents" >= $2
+ORDER BY "deals"."created_at" DESC
+```
+
+`statement.values` holds `["won", 100000]`. To see what a piece of code actually ran, `navree::db::QueryLog::capture(future)` returns its output with every statement it ran, timed, and [Logbook](/docs/tools/logbook/) shows each request's queries with N+1 warnings. `database.log_queries = true` logs every statement.
+
+### Timeouts
+
+`timeout(Duration::from_secs(2))` stops a read that runs too long: MySQL's `MAX_EXECUTION_TIME`, PostgreSQL's `statement_timeout` in a transaction or savepoint of its own (a stopped read leaves your transaction usable). The query then fails with an error whose `is_timeout()` is true. SQLite has no statement timeout: there the query fails with `OrmError::Unsupported`.
+
+## Time series and vectors
+
+On [TimescaleDB](/docs/database/timescaledb/#time-bucket-queries), `select_time_bucket`, `select_first` and `select_last` (or `Expr::time_bucket`, `Expr::first` and `Expr::last`) aggregate by time; fixed-width buckets are emulated on the other databases. With a `vector` column (pgvector, MySQL 9, MariaDB 11.7), `where_vector_similar_to`, `where_vector_distance_less_than`, `select_vector_distance` and `order_by_vector_distance` search by similarity.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/relationships/" title="Relationships">
+    Related records, and conditions on them.
+  </LinkCard>
+  <LinkCard href="/docs/orm/pagination-and-streaming/" title="Pagination and streaming">
+    Pages for responses, chunks and streams for large results.
+  </LinkCard>
+  <LinkCard href="/docs/orm/scopes-and-soft-deletes/" title="Scopes and soft deletes">
+    Conditions you reuse, and conditions every query applies.
+  </LinkCard>
+</LinkCards>
