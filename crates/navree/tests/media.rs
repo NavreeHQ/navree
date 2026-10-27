@@ -157,11 +157,11 @@ fn multipart(field: &str, file_name: &str, bytes: &[u8]) -> (String, Vec<u8>) {
 }
 
 fn storage() -> StorageOptions {
-    let mut options = StorageOptions::default();
-    options.default = "media".into();
-    options.disks.clear();
-    options.disks.insert("media".into(), DiskConfig::Memory);
-    options
+    StorageOptions {
+        default: "media".into(),
+        disks: [("media".into(), DiskConfig::Memory)].into_iter().collect(),
+        ..StorageOptions::default()
+    }
 }
 
 #[tokio::test]
