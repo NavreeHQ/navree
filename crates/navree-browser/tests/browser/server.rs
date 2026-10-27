@@ -45,7 +45,10 @@ async fn it_runs_every_layer_of_the_router() {
     )
     .await;
     assert!(response.starts_with("HTTP/1.1 404"), "{response}");
-    assert!(response.to_ascii_lowercase().contains("x-request-id:"), "{response}");
+    assert!(
+        response.to_ascii_lowercase().contains("x-request-id:"),
+        "{response}"
+    );
     assert!(response.contains("\"statusCode\":404"), "{response}");
     // Cookies set by the app reach the client.
     let body = "email=rep1%40navree.test&password=password123";
@@ -75,5 +78,8 @@ async fn dropping_the_server_stops_it() {
 async fn an_app_without_http_cannot_be_served() {
     let app = navree_kernel::Navree::app().boot().await.unwrap();
     let error = TestServer::start(app.ctx()).await.unwrap_err();
-    assert!(error.to_string().contains("cannot build the app's router"), "{error}");
+    assert!(
+        error.to_string().contains("cannot build the app's router"),
+        "{error}"
+    );
 }

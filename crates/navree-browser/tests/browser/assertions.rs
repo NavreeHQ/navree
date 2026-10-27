@@ -27,7 +27,10 @@ async fn assert_see_waits_for_visible_text_only() {
         message.starts_with("assert_see(\"Secret text\") failed after"),
         "{message}"
     );
-    assert!(message.contains("the text is not visible on http://127.0.0.1:"), "{message}");
+    assert!(
+        message.contains("the text is not visible on http://127.0.0.1:"),
+        "{message}"
+    );
 }
 
 #[tokio::test]
@@ -56,11 +59,17 @@ async fn path_query_and_title() {
 
     let quick = page.with_timeout(Duration::from_millis(200));
     let error = quick.assert_path_is("/deals").await.unwrap_err();
-    assert!(error.to_string().contains(r#"the path is "/second""#), "{error}");
+    assert!(
+        error.to_string().contains(r#"the path is "/second""#),
+        "{error}"
+    );
     let error = quick.assert_query_has("stage", "lost").await.unwrap_err();
     assert!(error.to_string().contains("?stage=won&page=2"), "{error}");
     let error = quick.assert_title("Deals").await.unwrap_err();
-    assert!(error.to_string().contains(r#"the title is "Second page""#), "{error}");
+    assert!(
+        error.to_string().contains(r#"the title is "Second page""#),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -72,24 +81,45 @@ async fn values_visibility_counts_and_enabled_state() {
     page.assert_missing("@spinner").await.unwrap(); // removed after 500 ms
     page.assert_count("@card", 3).await.unwrap();
     page.assert_enabled("Later").await.unwrap(); // enabled after 500 ms
-    page.assert_see_in("[data-stage=won]", "Gamma renewal").await.unwrap();
+    page.assert_see_in("[data-stage=won]", "Gamma renewal")
+        .await
+        .unwrap();
 
     let quick = page.with_timeout(Duration::from_millis(200));
     let error = quick.assert_value("Memo", "Other").await.unwrap_err();
-    assert!(error.to_string().contains(r#"its value is "Call""#), "{error}");
+    assert!(
+        error.to_string().contains(r#"its value is "Call""#),
+        "{error}"
+    );
     let error = quick.assert_count("@card", 5).await.unwrap_err();
-    assert!(error.to_string().contains("3 visible elements match"), "{error}");
+    assert!(
+        error.to_string().contains("3 visible elements match"),
+        "{error}"
+    );
     let error = quick.assert_visible("Secret text").await.unwrap_err();
-    assert!(error.to_string().contains(r#""Secret text" is not visible"#), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains(r#""Secret text" is not visible"#),
+        "{error}"
+    );
     let error = quick.assert_visible("@nothing").await.unwrap_err();
-    assert!(error.to_string().contains(r#"no element matches "@nothing""#), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains(r#"no element matches "@nothing""#),
+        "{error}"
+    );
     let error = quick.assert_missing("Playground").await.unwrap_err();
     assert!(error.to_string().contains("is still visible"), "{error}");
     let error = quick
         .assert_see_in("[data-stage=won]", "Alpha renewal")
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("does not show the text"), "{error}");
+    assert!(
+        error.to_string().contains("does not show the text"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -104,12 +134,24 @@ async fn console_errors_and_uncaught_exceptions_fail_the_check() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     let started = Instant::now();
     let error = broken.assert_no_console_errors().await.unwrap_err();
-    assert!(started.elapsed() < Duration::from_secs(4), "it does not wait");
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "it does not wait"
+    );
     let message = error.to_string();
-    assert!(message.starts_with("assert_no_console_errors() failed: 2 console errors"), "{message}");
-    assert!(message.contains("console.error: the widget failed"), "{message}");
+    assert!(
+        message.starts_with("assert_no_console_errors() failed: 2 console errors"),
+        "{message}"
+    );
+    assert!(
+        message.contains("console.error: the widget failed"),
+        "{message}"
+    );
     assert!(message.contains("kaboom"), "{message}");
-    assert!(!message.contains("missing.json"), "failed requests are only logged: {message}");
+    assert!(
+        !message.contains("missing.json"),
+        "failed requests are only logged: {message}"
+    );
 
     let page = browser.visit(site.url("/playground")).await.unwrap();
     page.press("Log error").await.unwrap();

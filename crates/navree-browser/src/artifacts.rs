@@ -56,9 +56,8 @@ impl Artifacts {
 
     /// Writes `bytes` to `<dir>/<file>`, creating the folder.
     pub(crate) fn write(&self, file: &str, bytes: &[u8]) -> Result<PathBuf, BrowserError> {
-        std::fs::create_dir_all(&self.dir).map_err(|e| {
-            BrowserError::io(format!("cannot create {}", self.dir.display()), e)
-        })?;
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|e| BrowserError::io(format!("cannot create {}", self.dir.display()), e))?;
         let path = self.dir.join(file);
         std::fs::write(&path, bytes)
             .map_err(|e| BrowserError::io(format!("cannot write {}", path.display()), e))?;
@@ -87,7 +86,13 @@ pub(crate) fn test_folder(test: &str) -> PathBuf {
                 })
                 .collect::<String>()
         })
-        .map(|part| if part == ".." || part == "." { "_".to_owned() } else { part })
+        .map(|part| {
+            if part == ".." || part == "." {
+                "_".to_owned()
+            } else {
+                part
+            }
+        })
         .collect()
 }
 
@@ -126,7 +131,10 @@ mod tests {
             test_folder("actions::types_into_fields"),
             PathBuf::from("actions").join("types_into_fields")
         );
-        assert_eq!(test_folder("weird name/..\\x"), PathBuf::from("weird_name_.._x"));
+        assert_eq!(
+            test_folder("weird name/..\\x"),
+            PathBuf::from("weird_name_.._x")
+        );
         assert_eq!(test_folder("::.."), PathBuf::from("_"));
         assert_eq!(test_folder(""), PathBuf::from("unnamed"));
         assert_eq!(test_folder("main"), PathBuf::from("unnamed"));

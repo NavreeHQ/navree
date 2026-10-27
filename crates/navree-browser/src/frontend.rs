@@ -367,7 +367,9 @@ struct Proxy {
 
 type Upstream = Arc<RwLock<Option<SocketAddr>>>;
 
-fn write(upstream: &RwLock<Option<SocketAddr>>) -> std::sync::RwLockWriteGuard<'_, Option<SocketAddr>> {
+fn write(
+    upstream: &RwLock<Option<SocketAddr>>,
+) -> std::sync::RwLockWriteGuard<'_, Option<SocketAddr>> {
     upstream.write().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -479,10 +481,18 @@ async fn answers(url: &str) -> bool {
         return false;
     };
     let port = uri.port_u16().unwrap_or(80);
-    let host = host.trim_start_matches('[').trim_end_matches(']').to_owned();
-    let path = uri.path_and_query().map_or("/", |pq| pq.as_str()).to_owned();
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
+    let path = uri
+        .path_and_query()
+        .map_or("/", |pq| pq.as_str())
+        .to_owned();
     let attempt = async move {
-        let stream = tokio::net::TcpStream::connect((host.as_str(), port)).await.ok()?;
+        let stream = tokio::net::TcpStream::connect((host.as_str(), port))
+            .await
+            .ok()?;
         let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
             .await
             .ok()?;
@@ -502,7 +512,10 @@ async fn answers(url: &str) -> bool {
 }
 
 /// Reads a child's output on a thread into `lines` (the last 40 kept).
-fn drain_into(stream: Option<impl std::io::Read + Send + 'static>, lines: &Arc<Mutex<VecDeque<String>>>) {
+fn drain_into(
+    stream: Option<impl std::io::Read + Send + 'static>,
+    lines: &Arc<Mutex<VecDeque<String>>>,
+) {
     use std::io::BufRead;
     let Some(stream) = stream else {
         return;
@@ -549,7 +562,9 @@ pub(crate) fn resolve_program(program: &OsStr) -> Option<PathBuf> {
             let mut name = program.to_owned();
             name.push(ext);
             let candidate = dir.join(&name);
-            if candidate.is_file() && (!cfg!(windows) || !ext.is_empty() || has_extension(&candidate)) {
+            if candidate.is_file()
+                && (!cfg!(windows) || !ext.is_empty() || has_extension(&candidate))
+            {
                 return Some(candidate);
             }
         }
@@ -568,9 +583,15 @@ mod tests {
 
     #[test]
     fn a_front_end_needs_a_command_and_an_http_url() {
-        let error = FrontEnd::new("web").url("http://127.0.0.1:3100").check().unwrap_err();
+        let error = FrontEnd::new("web")
+            .url("http://127.0.0.1:3100")
+            .check()
+            .unwrap_err();
         assert!(error.to_string().contains(".command"), "{error}");
-        let error = FrontEnd::new("web").command("node", ["x"]).check().unwrap_err();
+        let error = FrontEnd::new("web")
+            .command("node", ["x"])
+            .check()
+            .unwrap_err();
         assert!(error.to_string().contains(".url"), "{error}");
         let error = FrontEnd::new("web")
             .command("node", ["x"])

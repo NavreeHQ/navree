@@ -106,7 +106,8 @@ async fn actions_assertions_waits_and_reading() -> Result<(), BrowserError> {
     // Assertions.
     page.assert_see("Dropped in won").await?;
     page.assert_dont_see("Something went wrong").await?;
-    page.assert_see_in("[data-stage=won]", "Beta launch").await?;
+    page.assert_see_in("[data-stage=won]", "Beta launch")
+        .await?;
     page.assert_path_is("/playground").await?;
     page.assert_title("Playground · Fixture").await?;
     page.assert_value("Name", "Lovelace renewal").await?;

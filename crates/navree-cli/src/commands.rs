@@ -60,8 +60,10 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             &mut std::io::stdout(),
         ),
         Command::BrowserInstall(args) => {
-            let options =
-                browser::InstallOptions::for_this_machine(args.chrome_version.as_deref(), args.force)?;
+            let options = browser::InstallOptions::for_this_machine(
+                args.chrome_version.as_deref(),
+                args.force,
+            )?;
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()

@@ -71,7 +71,10 @@ pub(crate) fn key(name: &str) -> Option<Key> {
 pub(crate) fn character(c: char) -> Option<Key> {
     let text = Some(c.to_string());
     let (code, key_code) = match c {
-        'a'..='z' => (format!("Key{}", c.to_ascii_uppercase()), c.to_ascii_uppercase() as u32),
+        'a'..='z' => (
+            format!("Key{}", c.to_ascii_uppercase()),
+            c.to_ascii_uppercase() as u32,
+        ),
         'A'..='Z' => (format!("Key{c}"), c as u32),
         '0'..='9' => (format!("Digit{c}"), c as u32),
         ' ' => ("Space".to_owned(), 32),
@@ -176,18 +179,19 @@ pub(crate) fn combination(combo: &str) -> Result<Vec<Value>, String> {
         events.push(event);
         down.push(k);
     }
-    let name = if last.trim().is_empty() { *last } else { last.trim() };
+    let name = if last.trim().is_empty() {
+        *last
+    } else {
+        last.trim()
+    };
     let mut k = key(name).ok_or_else(|| unknown(last))?;
     // A letter's `key` is lower-case unless Shift is held: `Control+K`
     // reports `k`, as a keyboard does.
     if k.key.chars().count() == 1 && k.key.chars().all(|c| c.is_ascii_alphabetic()) {
-        let shifted = modifiers & 8 != 0;
-        let case = |s: &str| {
-            if shifted {
-                s.to_uppercase()
-            } else {
-                s.to_lowercase()
-            }
+        let case: fn(&str) -> String = if modifiers & 8 != 0 {
+            str::to_uppercase
+        } else {
+            str::to_lowercase
         };
         k.key = case(&k.key);
         k.text = k.text.as_deref().map(case);

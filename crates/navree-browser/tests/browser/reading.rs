@@ -19,7 +19,12 @@ async fn text_and_value_read_the_first_visible_match() {
         .text("@nothing")
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("no element matches \"@nothing\""), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("no element matches \"@nothing\""),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -29,7 +34,8 @@ async fn script_runs_a_function_body_and_deserializes_its_result() {
         width: u32,
         height: u32,
     }
-    let (browser, site) = browser_or_skip!("script_runs_a_function_body_and_deserializes_its_result");
+    let (browser, site) =
+        browser_or_skip!("script_runs_a_function_body_and_deserializes_its_result");
     let page = browser.visit(site.url("/playground")).await.unwrap();
     let title: String = page.script("return document.title").await.unwrap();
     assert_eq!(title, "Playground · Fixture");
@@ -37,7 +43,13 @@ async fn script_runs_a_function_body_and_deserializes_its_result() {
         .script("return { width: innerWidth, height: innerHeight }")
         .await
         .unwrap();
-    assert_eq!(size, Size { width: 1440, height: 900 });
+    assert_eq!(
+        size,
+        Size {
+            width: 1440,
+            height: 900
+        }
+    );
     let awaited: u32 = page
         .script("await new Promise(r => setTimeout(r, 10)); return 42")
         .await
@@ -47,7 +59,10 @@ async fn script_runs_a_function_body_and_deserializes_its_result() {
 
     let error = page.script::<u32>("return 'text'").await.unwrap_err();
     assert!(error.to_string().contains("is not a u32"), "{error}");
-    let error = page.script::<()>("throw new Error('nope')").await.unwrap_err();
+    let error = page
+        .script::<()>("throw new Error('nope')")
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("nope"), "{error}");
 }
 

@@ -159,7 +159,7 @@ pub(crate) fn format_duration(d: Duration) -> String {
         return format!("{millis}ms");
     }
     let tenths = (millis + 50) / 100;
-    if tenths % 10 == 0 {
+    if tenths.is_multiple_of(10) {
         format!("{}s", tenths / 10)
     } else {
         format!("{}.{}s", tenths / 10, tenths % 10)

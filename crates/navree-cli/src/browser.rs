@@ -40,13 +40,14 @@ impl InstallOptions {
     /// platform, the cache directory and download URL from the environment.
     pub fn for_this_machine(version: Option<&str>, force: bool) -> anyhow::Result<InstallOptions> {
         let env = |name: &str| std::env::var_os(name);
-        let platform = platform(std::env::consts::OS, std::env::consts::ARCH).with_context(|| {
-            format!(
-                "Chrome for Testing has no build for {} {}",
-                std::env::consts::OS,
-                std::env::consts::ARCH
-            )
-        })?;
+        let platform =
+            platform(std::env::consts::OS, std::env::consts::ARCH).with_context(|| {
+                format!(
+                    "Chrome for Testing has no build for {} {}",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                )
+            })?;
         let cache = cache_dir(std::env::consts::OS, &env).context(
             "cannot find a cache directory: set NAVREE_CACHE_DIR (or HOME / LOCALAPPDATA)",
         )?;
@@ -130,18 +131,24 @@ pub fn binary_in(dir: &Path, platform: &str) -> PathBuf {
 pub async fn install(options: &InstallOptions, out: &mut dyn Write) -> anyhow::Result<PathBuf> {
     let dir = options.dir();
     let binary = options.binary();
-    let label = format!("Chrome for Testing {} ({})", options.version, options.platform);
+    let label = format!(
+        "Chrome for Testing {} ({})",
+        options.version, options.platform
+    );
     if binary.is_file() && !options.force {
         writeln!(out, "{label} is already installed in {}", shown(&dir))?;
         return Ok(binary);
     }
     writeln!(out, "Downloading {label} from {}", options.url())?;
     let root = options.cache.join("chrome");
-    std::fs::create_dir_all(&root)
-        .with_context(|| format!("cannot create {}", root.display()))?;
+    std::fs::create_dir_all(&root).with_context(|| format!("cannot create {}", root.display()))?;
     let archive = root.join(format!(".{}-{}.zip", options.version, std::process::id()));
     let downloaded = download(&options.url(), &archive).await;
-    let partial = root.join(format!(".{}.partial-{}", options.version, std::process::id()));
+    let partial = root.join(format!(
+        ".{}.partial-{}",
+        options.version,
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&partial);
     let unpacked = downloaded.and_then(|()| {
         unpack(&archive, &partial)
@@ -161,7 +168,8 @@ pub async fn install(options: &InstallOptions, out: &mut dyn Write) -> anyhow::R
         );
     }
     if dir.exists() {
-        std::fs::remove_dir_all(&dir).with_context(|| format!("cannot replace {}", dir.display()))?;
+        std::fs::remove_dir_all(&dir)
+            .with_context(|| format!("cannot replace {}", dir.display()))?;
     }
     std::fs::rename(&partial, &dir)
         .with_context(|| format!("cannot move the browser to {}", dir.display()))?;

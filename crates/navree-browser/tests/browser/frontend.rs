@@ -44,10 +44,14 @@ fn node_front_end(name: &str, port: u16) -> FrontEnd {
 async fn get(url: &str) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let rest = url.strip_prefix("http://").unwrap();
-    let (host, path) = rest.split_once('/').map_or((rest, "/".to_owned()), |(h, p)| (h, format!("/{p}")));
+    let (host, path) = rest
+        .split_once('/')
+        .map_or((rest, "/".to_owned()), |(h, p)| (h, format!("/{p}")));
     let mut stream = tokio::net::TcpStream::connect(host).await.unwrap();
     stream
-        .write_all(format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n").as_bytes())
+        .write_all(
+            format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
         .await
         .unwrap();
     let mut response = Vec::new();
@@ -85,7 +89,10 @@ async fn one_process_serves_each_test_s_app_in_turn() {
     let check_first = async {
         tokio::time::sleep(Duration::from_millis(300)).await;
         let page = get(&first.url("/")).await;
-        assert!(page.contains("Serving first"), "still the first app: {page}");
+        assert!(
+            page.contains("Serving first"),
+            "still the first app: {page}"
+        );
         drop(first);
     };
     let (_, second) = tokio::join!(check_first, web.serve(second_app.ctx()));
@@ -128,7 +135,10 @@ async fn a_front_end_that_never_answers_times_out() {
         .await
         .unwrap_err();
     let message = error.to_string();
-    assert!(message.contains("did not answer at http://127.0.0.1:"), "{message}");
+    assert!(
+        message.contains("did not answer at http://127.0.0.1:"),
+        "{message}"
+    );
     assert!(message.contains("within 800ms"), "{message}");
 }
 
@@ -139,7 +149,10 @@ async fn a_front_end_that_exits_is_reported_with_its_output() {
     }
     let app = support::app().await;
     let error = FrontEnd::new("fake-web-crash")
-        .command("node", ["-e", "console.error('missing build'); process.exit(3)"])
+        .command(
+            "node",
+            ["-e", "console.error('missing build'); process.exit(3)"],
+        )
         .url(format!("http://127.0.0.1:{}", free_port()))
         .serve(app.ctx())
         .await
@@ -159,7 +172,10 @@ async fn a_missing_program_is_reported() {
         .serve(app.ctx())
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("was not found on PATH"), "{error}");
+    assert!(
+        error.to_string().contains("was not found on PATH"),
+        "{error}"
+    );
 }
 
 #[tokio::test]

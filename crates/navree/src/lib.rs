@@ -241,10 +241,10 @@ pub use navree_lighthouse as lighthouse;
 pub use navree_search as search;
 
 // Tools (opt-in)
-#[cfg(feature = "dock")]
-pub use navree_dock as dock;
 #[cfg(feature = "browser")]
 pub use navree_browser as browser;
+#[cfg(feature = "dock")]
+pub use navree_dock as dock;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

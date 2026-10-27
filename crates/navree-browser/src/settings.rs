@@ -28,7 +28,11 @@ impl Settings {
     /// The settings from `NAVREE_BROWSER_*` variables read through `env`;
     /// invalid values are errors naming the variable.
     pub(crate) fn from_env(env: &dyn Fn(&str) -> Option<String>) -> Result<Settings, BrowserError> {
-        let var = |name: &str| env(name).map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+        let var = |name: &str| {
+            env(name)
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty())
+        };
         let headless = match var("NAVREE_BROWSER_HEADLESS") {
             None => true,
             Some(value) => parse_bool(&value).ok_or_else(|| {
@@ -109,9 +113,10 @@ pub(crate) fn default_artifacts() -> PathBuf {
 /// The Cargo target directory containing `exe`: the nearest ancestor with
 /// Cargo's marker files, else the parent of `<profile>/deps`.
 pub(crate) fn target_dir_of(exe: &Path) -> Option<PathBuf> {
-    let marked = exe.ancestors().skip(1).find(|dir| {
-        dir.join(".rustc_info.json").is_file() || dir.join("CACHEDIR.TAG").is_file()
-    });
+    let marked = exe
+        .ancestors()
+        .skip(1)
+        .find(|dir| dir.join(".rustc_info.json").is_file() || dir.join("CACHEDIR.TAG").is_file());
     if let Some(dir) = marked {
         return Some(dir.to_path_buf());
     }
@@ -163,8 +168,16 @@ mod tests {
         assert!(s.artifacts.is_absolute());
         assert!(s.artifacts.ends_with("out/browser"));
         assert_eq!(s.chrome, Some(PathBuf::from("/opt/chrome/chrome")));
-        assert!(settings(&[("NAVREE_BROWSER_HEADLESS", "0")]).unwrap().headless == false);
-        assert!(settings(&[("NAVREE_BROWSER_HEADLESS", " TRUE ")]).unwrap().headless);
+        assert!(
+            !settings(&[("NAVREE_BROWSER_HEADLESS", "0")])
+                .unwrap()
+                .headless
+        );
+        assert!(
+            settings(&[("NAVREE_BROWSER_HEADLESS", " TRUE ")])
+                .unwrap()
+                .headless
+        );
     }
 
     #[test]

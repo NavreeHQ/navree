@@ -14,9 +14,13 @@ async fn type_into_clears_and_append_keeps() {
     page.type_into("Mail", "rep1@navree.test").await.unwrap();
     page.assert_value("Mail", "rep1@navree.test").await.unwrap();
     page.append("Memo", " back Monday.").await.unwrap();
-    page.assert_value("Memo", "Call back Monday.").await.unwrap();
+    page.assert_value("Memo", "Call back Monday.")
+        .await
+        .unwrap();
     page.type_into("Notes", "line one\nline two").await.unwrap();
-    page.assert_value("Notes", "line one\nline two").await.unwrap();
+    page.assert_value("Notes", "line one\nline two")
+        .await
+        .unwrap();
     page.type_into("Name", "Zoë Ångström").await.unwrap();
     page.assert_value("Name", "Zoë Ångström").await.unwrap();
     page.type_into("Name", "").await.unwrap();
@@ -105,7 +109,10 @@ async fn attach_puts_a_file_in_a_hidden_file_input() {
     page.attach("Logo", &logo).await.unwrap();
     page.assert_see("acme.png").await.unwrap();
 
-    let error = page.attach("Logo", dir.path().join("missing.png")).await.unwrap_err();
+    let error = page
+        .attach("Logo", dir.path().join("missing.png"))
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("is not a file"), "{error}");
     let error = page
         .with_timeout(Duration::from_millis(300))
@@ -129,17 +136,23 @@ async fn press_waits_for_a_button_to_be_enabled_and_uncovered() {
 
 #[tokio::test]
 async fn a_button_that_stays_covered_or_disabled_fails_with_the_reason() {
-    let (browser, site) = browser_or_skip!("a_button_that_stays_covered_or_disabled_fails_with_the_reason");
+    let (browser, site) =
+        browser_or_skip!("a_button_that_stays_covered_or_disabled_fails_with_the_reason");
     let page = browser.visit(site.url("/playground")).await.unwrap();
     page.wait_until_missing("#overlay").await.unwrap(); // gone after 400 ms
     let quick = page.with_timeout(Duration::from_millis(150));
     let error = quick.press("Blocked").await.unwrap_err();
     assert!(
-        error.to_string().contains(r#""Blocked" is covered by <span id="blocker">"#),
+        error
+            .to_string()
+            .contains(r#""Blocked" is covered by <span id="blocker">"#),
         "{error}"
     );
     let error = quick.press("Never").await.unwrap_err();
-    assert!(error.to_string().contains(r#""Never" is disabled"#), "{error}");
+    assert!(
+        error.to_string().contains(r#""Never" is disabled"#),
+        "{error}"
+    );
     page.assert_enabled("Save").await.unwrap();
     let error = quick.assert_enabled("Never").await.unwrap_err();
     assert!(error.to_string().contains("is disabled"), "{error}");
@@ -166,12 +179,17 @@ async fn keys_press_named_keys_and_combinations() {
 
 #[tokio::test]
 async fn drag_moves_cards_with_pointer_events_and_native_drag_and_drop() {
-    let (browser, site) = browser_or_skip!("drag_moves_cards_with_pointer_events_and_native_drag_and_drop");
+    let (browser, site) =
+        browser_or_skip!("drag_moves_cards_with_pointer_events_and_native_drag_and_drop");
     let page = browser.visit(site.url("/playground")).await.unwrap();
     let alpha = Target::from("@card").containing("Alpha renewal");
     page.drag(alpha.clone(), "[data-stage=won]").await.unwrap();
-    page.assert_see_in("@toast", "Dropped in won").await.unwrap();
-    page.assert_see_in("[data-stage=won]", "Alpha renewal").await.unwrap();
+    page.assert_see_in("@toast", "Dropped in won")
+        .await
+        .unwrap();
+    page.assert_see_in("[data-stage=won]", "Alpha renewal")
+        .await
+        .unwrap();
     page.within("[data-stage=won]")
         .await
         .unwrap()
@@ -180,8 +198,12 @@ async fn drag_moves_cards_with_pointer_events_and_native_drag_and_drop() {
         .unwrap();
 
     page.drag("Native card", "#native-to").await.unwrap();
-    page.assert_see_in("@toast", "Native dropped").await.unwrap();
-    page.assert_see_in("#native-to", "Native card").await.unwrap();
+    page.assert_see_in("@toast", "Native dropped")
+        .await
+        .unwrap();
+    page.assert_see_in("#native-to", "Native card")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -190,8 +212,12 @@ async fn drag_grabs_a_card_beside_its_link() {
     let page = browser.visit(site.url("/playground")).await.unwrap();
     // Pressing on the link would start the browser's own drag of the URL.
     page.drag("@linked-card", "[data-stage=won]").await.unwrap();
-    page.assert_see_in("@toast", "Dropped in won").await.unwrap();
-    page.assert_see_in("[data-stage=won]", "Linked deal").await.unwrap();
+    page.assert_see_in("@toast", "Dropped in won")
+        .await
+        .unwrap();
+    page.assert_see_in("[data-stage=won]", "Linked deal")
+        .await
+        .unwrap();
     page.assert_path_is("/playground").await.unwrap();
 }
 
@@ -240,6 +266,9 @@ async fn visiting_an_unreachable_url_fails() {
     let (browser, _site) = browser_or_skip!("visiting_an_unreachable_url_fails");
     let error = browser.visit("http://127.0.0.1:1/").await.unwrap_err();
     let message = error.to_string();
-    assert!(message.starts_with("visit(\"http://127.0.0.1:1/\") failed"), "{message}");
+    assert!(
+        message.starts_with("visit(\"http://127.0.0.1:1/\") failed"),
+        "{message}"
+    );
     assert!(message.contains("could not be loaded"), "{message}");
 }
