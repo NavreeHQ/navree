@@ -66,10 +66,10 @@ When an [ORM model](/docs/orm/models/) maps the table, pick the column for the f
 
 | Model field | Column |
 |---|---|
-| `Uuid` key | `uuid_primary()` |
+| `Uuid` key | `uuid_primary()` (on MySQL, [a binary](#uuid-columns-on-mysql)) |
 | `i64` key the database assigns | `id()` |
 | `Ulid` key | `ulid_primary()` |
-| `Uuid` foreign key | `foreign_uuid("company_id")` |
+| `Uuid` foreign key | `foreign_uuid("company_id")` (on MySQL, a binary) |
 | `String` | `string`, `text`, `char` |
 | `i32`, `i64` | `integer`, `big_integer` |
 | `bool` | `boolean` |
@@ -79,6 +79,31 @@ When an [ORM model](/docs/orm/models/) maps the table, pick the column for the f
 | JSON casts, `serde_json::Value` | `json` (`jsonb` on PostgreSQL) |
 | string enum cast | `string` with a `.length(..)`, or `enumeration` |
 | `Option<T>` | the same, `.nullable()` |
+
+### UUID columns on MySQL
+
+A model writes a `Uuid` field as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. SQLite stores those bytes in any column, but on MySQL `uuid_primary()`, `uuid` and `foreign_uuid` are `CHAR(36)`, which refuses them: the insert fails with error 1366, "Incorrect string value". Declare the UUID columns of models as 16-byte binaries there, `BINARY(16)`, and on MariaDB, which models reach through the same driver. A migration that runs on several databases asks the schema which one it is talking to:
+
+```rust
+use navree::schema::Dialect;
+
+let mysql = schema.target().await?.dialect() == Dialect::MySql; // MariaDB too
+schema
+    .create("deals", |t| {
+        if mysql {
+            t.binary("id").length(16).fixed().primary();
+            t.binary("company_id").length(16).fixed();
+            t.foreign("company_id").references("id").on("companies").cascade_on_delete();
+        } else {
+            t.uuid_primary();
+            t.foreign_uuid("company_id").constrained().cascade_on_delete();
+        }
+        t.string("title");
+    })
+    .await?;
+```
+
+On PostgreSQL a binary column would be `BYTEA`, which a model's `Uuid` doesn't fit, so keep `uuid_primary()` there.
 
 ## Helpers
 

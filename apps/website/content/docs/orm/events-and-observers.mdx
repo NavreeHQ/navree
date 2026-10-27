@@ -1,6 +1,6 @@
 ---
 title: "Events and observers"
-description: "Model events from `retrieved` to `restored`: observers, closure listeners, typed application events and real-time broadcasts, when each hears an event inside a unit of work, cancelling writes, quiet operations, custom events and testing with `ModelEventFake`."
+description: "Model events from `retrieved` to `restored`: observers, closure listeners, typed application events and real-time broadcasts, when each hears an event inside a unit of work, canceling writes, quiet operations, custom events and testing with `ModelEventFake`."
 ---
 
 Every save, delete and read of a record goes through a fixed series of steps, and each step is a **model event** your code can hear: `creating` before a new record is inserted, `created` after, `saving` around both inserts and updates, and so on. Listeners use them to keep data tidy, refuse a write, notify someone after a deal is won, or push the change to open browsers.
@@ -186,9 +186,9 @@ Observers, closure listeners, application events and broadcasts hear nothing; th
 
 [Mass updates and deletes](/docs/orm/query-builder/#updating-and-deleting-many-records) never fire events: they write rows without reading them.
 
-## Behaviours
+## Behaviors
 
-A type that implements `ModelHook<M>` directly, with `before` and `after` methods taking the event, is a **behaviour**: it runs at once for every event, in quiet operations too. The ORM's own features are behaviours (touching parents, filling a [workspace](/docs/orm/workspaces-and-access/#workspace-scoping) column), so they hold however a write happens. Write one when a rule must never be skipped; write an observer otherwise.
+A type that implements `ModelHook<M>` directly, with `before` and `after` methods taking the event, is a **behavior**: it runs at once for every event, in quiet operations too. The ORM's own features are behaviors (touching parents, filling a [workspace](/docs/orm/workspaces-and-access/#workspace-scoping) column), so they hold however a write happens. Write one when a rule must never be skipped; write an observer otherwise.
 
 ## Custom events
 
@@ -205,7 +205,7 @@ Custom events run where they are fired, at once; a listener may cancel. Built-in
 
 ## Testing
 
-`ModelEventFake` stands in for every listener: put it in the test app, and the events listeners would have heard are recorded instead, at the moment they would have heard them. Behaviours still run.
+`ModelEventFake` stands in for every listener: put it in the test app, and the events listeners would have heard are recorded instead, at the moment they would have heard them. Behaviors still run.
 
 ```rust
 use navree::orm::events::ModelEventFake;

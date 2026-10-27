@@ -28,7 +28,7 @@ assert_eq!(Some(new.workspace_id), uow.workspace());            // filled in
 ```
 
 - **Reads** get `workspace_id = <current>` as a global scope: queries, finds, counts, pages, plucks, mass updates and deletes, existence and `IN` subqueries, eager loads and [route bindings](/docs/orm/route-model-binding/) (another workspace's record is a 404).
-- **Writes** go through a behaviour every workspace-scoped model has, which runs in quiet operations too: a new record gets the current workspace (creating one without a current workspace fails, and one set to another workspace is refused); a stored record's workspace never changes; saving, deleting or restoring another workspace's record answers `ModelNotFound`, a 404. Mass updates can't set the workspace column.
+- **Writes** go through a behavior every workspace-scoped model has, which runs in quiet operations too: a new record gets the current workspace (creating one without a current workspace fails, and one set to another workspace is refused); a stored record's workspace never changes; saving, deleting or restoring another workspace's record answers `ModelNotFound`, a 404. Mass updates can't set the workspace column.
 
 The current workspace is the one a task runs with (`navree::orm::workspace::scope`), else the one the executor's unit of work entered (`uow.workspace()`; `Workspaces::enter` enters one for jobs and commands), else the current unit of work's. With none, a query of a workspace-scoped model **fails**: it never falls back to every workspace. System work names one or opts out explicitly:
 

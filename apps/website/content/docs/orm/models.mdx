@@ -173,7 +173,7 @@ assert!(deal.exists());
 assert!(deal.was_recently_created());
 ```
 
-`save` inserts a new record and updates a stored one. Both run the [model events](/docs/orm/events-and-observers/), and through a unit of work they record a change event for the audit log. `save` returns `false` when a `saving` or `creating` observer cancelled it.
+`save` inserts a new record and updates a stored one. Both run the [model events](/docs/orm/events-and-observers/), and through a unit of work they record a change event for the audit log. `save` returns `false` when a `saving` or `creating` observer canceled it.
 
 To insert many rows in one statement, without events, use the [bulk writes](/docs/orm/query-builder/#inserting-many-rows) of the query builder.
 
@@ -273,7 +273,7 @@ deal.delete(&uow).await?;                   // one record, with its events
 let deleted: u64 = Deal::destroy(&uow, ids).await?;
 ```
 
-`delete` returns `false` for a record that isn't stored, or when a `deleting` observer cancelled it. On a model with `soft_deletes` it sets `deleted_at` instead; `force_delete` removes the row. `destroy` loads the records with these keys and deletes them one by one, so each one's events run. Deleting by a query, in one statement, is a [mass delete](/docs/orm/query-builder/#updating-and-deleting-many-records).
+`delete` returns `false` for a record that isn't stored, or when a `deleting` observer canceled it. On a model with `soft_deletes` it sets `deleted_at` instead; `force_delete` removes the row. `destroy` loads the records with these keys and deletes them one by one, so each one's events run. Deleting by a query, in one statement, is a [mass delete](/docs/orm/query-builder/#updating-and-deleting-many-records).
 
 ## Dirty tracking
 

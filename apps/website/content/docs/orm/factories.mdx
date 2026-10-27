@@ -84,7 +84,7 @@ Keys and timestamps left empty are filled when a record is saved. `ctx.belongs_t
 | `make()`, `make_one()`, `make_many(n)` | Unsaved records: no database, parents left empty. |
 | `raw()`, `raw_one()` | The generated values by column, as `Attributes` (a request body for an HTTP test). |
 | `create(exec)`, `create_one(exec)`, `create_many(exec, n)` | Stored records, with their parents, children and attachments, saved one by one through their events. |
-| `create_quietly(exec)` and the other `_quietly` forms | The same without model events (the model's behaviours, such as workspace filling, still run). |
+| `create_quietly(exec)` and the other `_quietly` forms | The same without model events (the model's behaviors, such as workspace filling, still run). |
 | `insert(exec)` | One bulk `INSERT` of the records, without events; returns how many. |
 
 ```rust
