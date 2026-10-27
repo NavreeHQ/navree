@@ -302,7 +302,14 @@ async fn instances_sharing_a_cache_store_see_a_change_at_once() {
 
     // The second instance caches "off" for an hour...
     assert!(!flags_two.active::<NewPipeline>(acme).await.unwrap());
-    assert!(two.app.get::<Cache>().await.has("flags:states").await.unwrap());
+    assert!(
+        two.app
+            .get::<Cache>()
+            .await
+            .has("flags:states")
+            .await
+            .unwrap()
+    );
 
     // ...and a change on the first clears the shared entries, so the
     // second sees it on its next check.
