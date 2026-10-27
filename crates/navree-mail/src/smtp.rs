@@ -3,6 +3,7 @@
 use std::fmt;
 use std::sync::OnceLock;
 
+use lettre::message::header::{HeaderName, HeaderValue};
 use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::AsyncSmtpTransportBuilder;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -128,6 +129,27 @@ impl MailTransport for SmtpTransport {
             Ok(())
         })
     }
+
+    fn name(&self) -> &'static str {
+        "smtp"
+    }
+
+    /// Connects and authenticates (no message is sent).
+    fn check(&self) -> BoxFuture<'_, Result<(), MailError>> {
+        Box::pin(async move {
+            match self.transport().test_connection().await {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(MailError::Unusable(format!(
+                    "the SMTP server at {}:{} did not accept the connection",
+                    self.host, self.port
+                ))),
+                Err(error) => Err(MailError::Unusable(format!(
+                    "cannot connect to the SMTP server at {}:{}: {error}",
+                    self.host, self.port
+                ))),
+            }
+        })
+    }
 }
 
 impl fmt::Debug for SmtpTransport {
@@ -160,6 +182,14 @@ fn to_lettre(message: &Message) -> Result<lettre::Message, MailError> {
     }
     if let Some(reply_to) = &message.reply_to {
         builder = builder.reply_to(mailbox("reply_to", reply_to)?);
+    }
+    for (name, value) in &message.headers {
+        let header_name =
+            HeaderName::new_from_ascii(name.clone()).map_err(|_| MailError::Header {
+                name: name.clone(),
+                reason: "a header name is printable ASCII without `:` or spaces",
+            })?;
+        builder = builder.raw_header(HeaderValue::new(header_name, value.clone()));
     }
     let built = match (&message.html, &message.text) {
         (Some(html), Some(text)) => builder.multipart(MultiPart::alternative_plain_html(

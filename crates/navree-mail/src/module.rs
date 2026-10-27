@@ -143,9 +143,13 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 let transport = r.get::<dyn MailTransport>().await?;
                 let views = r.get::<Views>().await?;
                 let telemetry = Telemetry::from_app(&r.app()).await;
-                let mailer = Mailer::new(transport, views, options.from.clone())
+                let mut mailer = Mailer::new(transport, views, options.from.clone())
                     .queued_through(r.app().downgrade(), options.queue.clone())
+                    .with_render(options.render.clone())
                     .with_telemetry(telemetry);
+                for (name, config) in &options.transports {
+                    mailer = mailer.with_transport(name.clone(), config.build()?);
+                }
                 Ok(Arc::new(mailer))
             })
             .deps(vec![

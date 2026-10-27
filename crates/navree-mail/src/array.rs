@@ -83,6 +83,10 @@ impl MailTransport for ArrayTransport {
         self.messages().push(message.clone());
         Box::pin(async { Ok(()) })
     }
+
+    fn name(&self) -> &'static str {
+        "array"
+    }
 }
 
 /// `[to: subject], ...` for assertion messages.

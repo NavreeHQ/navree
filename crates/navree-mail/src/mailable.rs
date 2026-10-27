@@ -38,12 +38,70 @@ pub trait Mailable: Send + Sync {
     /// Renders the message. Leave `from` unset to use the mailer's default
     /// sender.
     fn build(&self, views: &Views) -> Result<Message, MailError>;
+
+    /// The template this mailable renders, for the delivery log
+    /// (`mail/welcome`); `None` by default. [`TemplateMail`] returns its
+    /// `template`.
+    fn template(&self) -> Option<&str> {
+        None
+    }
+
+    /// This mailable, held for approval: the [`Mailer`](crate::Mailer)
+    /// stores it in the outbox with `reason` instead of sending it, and an
+    /// admin releases or discards it (needs `mail.delivery.enabled`).
+    ///
+    /// ```
+    /// use navree_mail::{Mailable, TemplateMail};
+    ///
+    /// let mail = TemplateMail::new("all@acme.test", "Quarterly results", "mail/results")
+    ///     .hold("Mail to every employee needs approval");
+    /// assert_eq!(mail.reason(), "Mail to every employee needs approval");
+    /// ```
+    fn hold(self, reason: impl Into<String>) -> Held<Self>
+    where
+        Self: Sized,
+    {
+        Held {
+            mailable: self,
+            reason: reason.into(),
+        }
+    }
 }
 
 /// A message is already built.
 impl Mailable for Message {
     fn build(&self, _views: &Views) -> Result<Message, MailError> {
         Ok(self.clone())
+    }
+}
+
+/// A mailable held for approval ([`Mailable::hold`]): it builds the inner
+/// mailable's message with [`Message::hold`] set.
+#[derive(Clone, Debug)]
+pub struct Held<M> {
+    mailable: M,
+    reason: String,
+}
+
+impl<M> Held<M> {
+    /// Why the mail is held.
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// The held mailable.
+    pub fn into_inner(self) -> M {
+        self.mailable
+    }
+}
+
+impl<M: Mailable> Mailable for Held<M> {
+    fn build(&self, views: &Views) -> Result<Message, MailError> {
+        Ok(self.mailable.build(views)?.hold(self.reason.clone()))
+    }
+
+    fn template(&self) -> Option<&str> {
+        self.mailable.template()
     }
 }
 
@@ -133,7 +191,17 @@ impl Mailable for TemplateMail {
             subject: self.subject.clone(),
             html,
             text,
+            locale: self
+                .context
+                .get("locale")
+                .and_then(Value::as_str)
+                .filter(|locale| !locale.is_empty())
+                .map(str::to_owned),
             ..Message::default()
         })
+    }
+
+    fn template(&self) -> Option<&str> {
+        Some(&self.template)
     }
 }

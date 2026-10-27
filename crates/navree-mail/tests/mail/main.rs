@@ -3,9 +3,12 @@
 
 mod log;
 mod mailer;
+mod message;
 mod module;
+mod named;
 mod options;
 mod queue;
+mod render;
 mod smtp;
 mod support;
 mod telemetry;
