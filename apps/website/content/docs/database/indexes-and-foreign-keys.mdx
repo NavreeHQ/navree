@@ -1,0 +1,135 @@
+---
+title: "Indexes and foreign keys"
+description: "Primary keys, unique, plain, partial, expression, full-text and spatial indexes with their options per database, foreign keys with their actions, conventional names, and dropping and renaming them."
+---
+
+Indexes make queries fast and keep values unique; foreign keys keep references between tables valid. Both are declared on the blueprint, in `schema.create` or `schema.table`, next to the [columns](/docs/database/columns/) they cover.
+
+```rust
+schema
+    .create("members", |t| {
+        t.id();
+        t.foreign_uuid("workspace_id").constrained().cascade_on_delete();
+        t.foreign_uuid("user_id").constrained_on("users", "id").cascade_on_delete();
+        t.string("email");
+        t.string("role").length(32).index();
+        t.timestamps_tz();
+        t.unique(["workspace_id", "email"]);
+    })
+    .await?;
+```
+
+## Indexes
+
+An index is declared on a column, or on the blueprint for several columns:
+
+```rust
+t.string("email").unique();                       // on the column
+t.string("stage").index();
+t.primary(["workspace_id", "user_id"]);           // on the blueprint
+t.unique(["workspace_id", "email"]).name("members_email");
+t.index(["stage", "created_at"]);
+t.index("deleted_at").where_raw("deleted_at IS NULL");
+t.raw_index("lower(email)", "users_email_lower_index");
+```
+
+| Method | Creates |
+|---|---|
+| `t.primary(columns)`, `.primary()` | The primary key (one per table). |
+| `t.unique(columns)`, `.unique()`, `.unique_named(name)` | A unique index (a unique constraint on PostgreSQL). |
+| `t.index(columns)`, `.index()`, `.index_named(name)` | A plain index. |
+| `t.fulltext(columns)`, `.fulltext()` | A full-text index ([below](#full-text-and-spatial-indexes)). |
+| `t.spatial_index(columns)`, `.spatial_index()` | A spatial index. |
+| `t.raw_index(expression, name)` | An index on an expression, written as SQL. |
+
+`columns` is one name (`"email"`) or an array (`["workspace_id", "email"]`). Column indexes are created after the table and in the order declared; in `table`, every command runs in order, so `t.string("slug")` followed by `t.unique(["slug"])` adds the column first.
+
+### Index options
+
+The blueprint methods return an index builder:
+
+| Option | Does |
+|---|---|
+| `.name("members_email")` | Names the index instead of the [conventional name](#names). |
+| `.algorithm("gin")` | The index method, written as `USING ..`: `btree`, `hash`, `gin`, `gist`, `brin` on PostgreSQL. |
+| `.operator_class("text_pattern_ops")` | A PostgreSQL operator class (`text_pattern_ops` for prefix `LIKE`, `vector_cosine_ops` for vectors). |
+| `.where_raw("deleted_at IS NULL")` | A partial index over the matching rows (PostgreSQL and SQLite; MySQL refuses it). |
+| `.nulls_not_distinct()` | A unique index where `NULL`s are equal, so at most one row may be `NULL` (PostgreSQL 15 and later). |
+| `.online()` | `CREATE INDEX CONCURRENTLY`, which doesn't block writes (PostgreSQL; run the migration [outside a transaction](/docs/database/migrations/#transactions)). |
+| `.deferrable()`, `.initially_deferred()`, `.initially_immediate()` | A deferrable unique constraint, checked at commit (PostgreSQL). |
+| `.lock("none")`, `.inplace()` | MySQL's DDL lock mode and `ALGORITHM=INPLACE`. |
+| `.language("english")` | The text-search configuration of a PostgreSQL full-text index. |
+
+A partial unique index lets soft-deleted rows keep their values without blocking new ones: `t.unique(["email"]).where_raw("deleted_at IS NULL")` creates `CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email") WHERE deleted_at IS NULL`.
+
+### Full-text and spatial indexes
+
+```rust
+t.fulltext(["title", "body"]).language("english");
+t.spatial_index("location");
+```
+
+A full-text index is `GIN` over `to_tsvector` on PostgreSQL, so the ORM's [`where_full_text`](/docs/orm/query-builder/#full-text-search) uses it, and `FULLTEXT` on MySQL. SQLite has no full-text index: the builder refuses it and points to an FTS5 virtual table. Spatial indexes are `GIST` on PostGIS columns and `SPATIAL` on MySQL.
+
+### Names
+
+Indexes are named `{table}_{columns}_{kind}`, with `primary`, `unique`, `index`, `fulltext`, `spatialindex` or `foreign` as the kind, lower-cased, with `-` and `.` replaced by `_`: `deals_stage_created_at_index`, `members_workspace_id_email_unique`, `deals_company_id_foreign`. A name longer than 63 bytes (PostgreSQL's limit) is shortened to 54 bytes plus `_` and an 8-digit hash, the same way on every database, so a drop by columns finds it. `Schema::index_name(table, kind, columns)` computes one.
+
+## Foreign keys
+
+A foreign key column usually references the conventional table, by `constrained()`:
+
+```rust
+t.foreign_uuid("company_id").constrained().cascade_on_delete();     // companies.id
+t.foreign_id("user_id").nullable().constrained().null_on_delete();  // users.id
+t.foreign_uuid("owner_id").constrained_on("users", "id");
+t.foreign("currency").references("code").on("currencies").restrict_on_delete();
+```
+
+`constrained()` takes the table from the column's name, `company_id` referencing `companies.id` (the part before `_id`, plural). `constrained_on(table, column)` names both. `t.foreign(columns).references(columns).on(table)` declares one on the blueprint, for any columns, composite keys included.
+
+| Option | Does |
+|---|---|
+| `.cascade_on_delete()` | Deletes the referencing rows with the referenced row. |
+| `.restrict_on_delete()` | Refuses to delete a referenced row. |
+| `.null_on_delete()` | Sets the referencing column to `NULL` (make the column `nullable`). |
+| `.no_action_on_delete()` | `ON DELETE NO ACTION`, the SQL default. |
+| `.cascade_on_update()`, `.restrict_on_update()`, `.null_on_update()`, `.no_action_on_update()` | The same, when the referenced key changes. |
+| `.on_delete(ReferentialAction::SetDefault)`, `.on_update(..)` | Any action, as a value. |
+| `.name("deals_company_fk")` | Names the constraint instead of `{table}_{columns}_foreign`. |
+| `.deferrable()`, `.initially_deferred()` | A constraint checked at commit (PostgreSQL). |
+| `.not_valid()` | Added without checking existing rows (PostgreSQL; validate later with `ALTER TABLE .. VALIDATE CONSTRAINT`). |
+
+```sql title="PostgreSQL"
+ALTER TABLE "deals" ADD CONSTRAINT "deals_company_id_foreign"
+  FOREIGN KEY ("company_id") REFERENCES "companies" ("id") ON DELETE CASCADE
+```
+
+A foreign key needs the referenced table, so order the [migration sets](/docs/database/migrations/#ordering): a deals set that references companies runs `.after(["companies"])`, and a table referencing `users` runs after `"auth"`. On SQLite, foreign keys are part of the table, and adding or dropping one later rebuilds it. Navree's time-series tables are hypertables on TimescaleDB whose keys include the time column, so nothing may reference their `id` alone ([TimescaleDB](/docs/database/timescaledb/)).
+
+Foreign key violations answer 409 over HTTP, like unique violations ([database errors](/docs/database/getting-started/#database-errors)).
+
+## Dropping and renaming
+
+```rust
+schema
+    .table("deals", |t| {
+        t.drop_index(["stage", "created_at"]);     // by columns: the conventional name
+        t.drop_unique("deals_code_unique");          // by name
+        t.drop_foreign(["company_id"]);
+        t.drop_constrained_foreign_id("owner_id");   // the foreign key and its column
+        t.rename_index("deals_title_index", "deals_by_title");
+    })
+    .await?;
+```
+
+Drops take a name or the columns, which give the conventional name: `drop_index`, `drop_unique`, `drop_fulltext`, `drop_spatial_index`, `drop_foreign`, `drop_primary()` (the conventional primary key) and `drop_primary_named(name)`. `drop_constrained_foreign_id` drops a foreign key and then its column. To check before dropping, `schema.has_index(table, name_or_columns, kind)` and `schema.has_foreign_key(table, ..)` read the live schema.
+
+<LinkCards>
+  <LinkCard href="/docs/database/columns/" title="Columns">
+    Column types, modifiers and changes.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Ordering sets so foreign keys find their tables.
+  </LinkCard>
+</LinkCards>
