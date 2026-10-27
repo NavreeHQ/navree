@@ -36,7 +36,7 @@
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
-//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, demo workspaces |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |

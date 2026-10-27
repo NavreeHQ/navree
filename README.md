@@ -148,7 +148,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
-| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation, demo workspaces |
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |

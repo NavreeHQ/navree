@@ -54,7 +54,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
-| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation, [demo workspaces](/docs/workspaces/demo-workspaces/) |
 | L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
@@ -88,7 +88,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
-| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
+| `navree-workspace` | kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, schedule |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
