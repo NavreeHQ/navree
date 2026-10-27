@@ -612,38 +612,38 @@ impl MongoMigrator {
                 "batch": batch,
                 "applied_at": bson::DateTime::now(),
             };
-            let records = self.records();
-            let recorded = match (&uow, up) {
-                (Some(uow), true) => {
-                    let driver = crate::MongoExecutor::mongo_driver(uow)?;
-                    driver
-                        .run_command(doc! {
-                            "insert": self.db.options().migrations.clone(),
-                            "documents": [record],
-                        })
-                        .await
-                        .map(drop)
+            let recorded = match &uow {
+                // In the migration's transaction: commands in its session.
+                Some(uow) => {
+                    let collection = self.db.options().migrations.clone();
+                    let command = if up {
+                        doc! { "insert": collection, "documents": [record] }
+                    } else {
+                        doc! { "delete": collection, "deletes": [{ "q": { "_id": label.clone() }, "limit": 1 }] }
+                    };
+                    match crate::MongoExecutor::mongo_driver(uow)?.run_command(command).await {
+                        Ok(reply) => match crate::schema::write_problem(&reply) {
+                            Some(problem) => Err(MongoError::Migrations(format!(
+                                "recording `{label}` in the migrations collection failed: {problem}"
+                            ))),
+                            None => Ok(()),
+                        },
+                        Err(error) => Err(error),
+                    }
                 }
-                (Some(uow), false) => {
-                    let driver = crate::MongoExecutor::mongo_driver(uow)?;
-                    driver
-                        .run_command(doc! {
-                            "delete": self.db.options().migrations.clone(),
-                            "deletes": [{ "q": { "_id": label.clone() }, "limit": 1 }],
-                        })
-                        .await
-                        .map(drop)
-                }
-                (None, true) => records.insert_one(record).await.map(drop).map_err(MongoError::from),
-                (None, false) => records
+                None if up => self.records().insert_one(record).await.map(drop).map_err(MongoError::from),
+                None => self
+                    .records()
                     .delete_one(doc! { "_id": label.clone() })
                     .await
                     .map(drop)
                     .map_err(MongoError::from),
             };
             if let Err(error) = recorded {
-                if let Some(uow) = &uow {
-                    let _ = uow.rollback().await;
+                if let Some(uow) = &uow
+                    && let Err(rollback) = uow.rollback().await
+                {
+                    tracing::warn!(target: "navree_mongo::migrate", error = %rollback, "rolling back a migration whose record failed failed too");
                 }
                 return Err(error);
             }
