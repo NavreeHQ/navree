@@ -54,7 +54,7 @@ struct DataList<T> {
 /// | `GET /operations?limit=20` | `{data: [Operation]}`: the user's own operations, newest first |
 /// | `GET /operations/{id}` | the operation |
 /// | `GET /operations/{id}/events` | `text/event-stream`: an `operation` event now and after every change; ends after the finished state |
-/// | `DELETE /operations/{id}` | the operation, cancelled (owner or `operations.cancel`; 409 once finished) |
+/// | `DELETE /operations/{id}` | the operation, cancelled (owner or `operations.cancel`; 409 `operation_finished` once finished) |
 pub struct OperationsController {
     operations: Option<Arc<Operations>>,
     poll: Duration,
@@ -179,7 +179,8 @@ impl Controller for OperationsController {
                     return Err(AppError::forbidden());
                 }
                 if record.is_finished() {
-                    return Err(AppError::conflict("The operation has already finished."));
+                    return Err(AppError::conflict("The operation has already finished.")
+                        .with_code("operation_finished"));
                 }
                 let record = ops
                     .cancel(record.id)

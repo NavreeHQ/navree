@@ -308,7 +308,8 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
         .header("x-test-pin", ws.id.to_string().as_str())
         .send()
         .await
-        .assert_error(403, "This token is limited to a workspace.");
+        .assert_error(403, "This token is limited to a workspace.")
+        .assert_error_code(403, "token_limited_to_workspace");
 }
 
 #[tokio::test]

@@ -182,7 +182,7 @@ With `workspace.routes` and `workspace.partitions.enabled` on, the workspace rou
 | `GET /api/workspaces/{workspace}/members/{user}/partitions` | `workspace.members.read` | `{"user_id": "...", "partitions": "all"}` |
 | `PUT /api/workspaces/{workspace}/members/{user}/partitions` `{partitions}` | `workspace.members.update` | The same shape |
 
-`{partition}` is a slug or an id, and `partitions` is `"all"` or an array of partition ids. With partitions on, the built-in roles gain `workspace.partitions.*` (`admin`) and `workspace.partitions.read` (`member`, `viewer`); the `WorkspacePartition` subject has the prefix `workspace.partitions`. Creating, renaming and deleting partitions also takes seeing every partition, and a member limited to some partitions grants only those: anything else is a 403.
+`{partition}` is a slug or an id, and `partitions` is `"all"` or an array of partition ids. With partitions on, the built-in roles gain `workspace.partitions.*` (`admin`) and `workspace.partitions.read` (`member`, `viewer`); the `WorkspacePartition` subject has the prefix `workspace.partitions`. Creating, renaming and deleting partitions also takes seeing every partition (else a 403 with the code `partition_manager_required`), and a member limited to some partitions grants only those (else a 403, `partition_grant_forbidden`).
 
 ## Events
 
