@@ -4922,6 +4922,7 @@ dependencies = [
  "navree-macros",
  "navree-mail",
  "navree-mcp",
+ "navree-media",
  "navree-micro",
  "navree-mongo",
  "navree-navigator",

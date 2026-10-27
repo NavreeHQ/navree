@@ -13,8 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`,
-## `micro`, `i18n`, `dock`, `navigator`, `browser`).
+## `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`,
+## `redis`, `micro`, `i18n`, `dock`, `navigator`, `browser`).
 full = [
     "access",
     "api",
@@ -468,6 +468,23 @@ helm = [
     "access",
     "auth",
 ]
+## L7 (opt-in, not in `full`: the image codecs, resvg and the document
+## readers add to the build)
+## Media: files attached to models in collections, image conversions and
+## responsive variants, safe remote downloads, zip archives, text from PDF,
+## DOCX and HTML (navree-media).
+media = [
+    "dep:navree-media",
+    "http",
+    "http-client",
+    "db",
+    "orm",
+    "storage",
+    "queue",
+]
+## Video and audio for `media` through an FFmpeg sidecar: probe, poster
+## frames and transcodes. Needs `ffmpeg` and `ffprobe` on the server.
+media-ffmpeg = ["media", "navree-media/ffmpeg"]
 ## L7 (in `full`)
 ## Workflows: durable workflows in code (steps replayed on resume, timers,
 ## event waits, versions) and end-user automations (triggers, conditions and
@@ -547,6 +564,7 @@ navree-log = { workspace = true, optional = true }
 navree-logbook = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-mcp = { workspace = true, optional = true }
+navree-media = { workspace = true, optional = true }
 navree-micro = { workspace = true, optional = true }
 navree-mongo = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
