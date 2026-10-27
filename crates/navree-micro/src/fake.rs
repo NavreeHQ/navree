@@ -10,6 +10,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use http::header::{CONTENT_TYPE, HeaderValue};
 use http::{HeaderMap, StatusCode};
+use navree_telemetry::TracePolicy;
 use navree_contracts::Principal;
 use navree_http::AppError;
 use navree_kernel::BoxFuture;
@@ -501,6 +502,7 @@ impl FakeClient {
             forward_auth: false,
             outbox: None,
             local,
+            trace: TracePolicy::default(),
         })
     }
 

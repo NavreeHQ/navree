@@ -18,6 +18,7 @@ use navree_http::{AppError, CurrentPrincipal, Guard, Result};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, message_handlers};
 use navree_micro::{MessageContext, ModuleBuilderMicroExt, Payload, ServiceClient};
+use navree_telemetry::TelemetryContext;
 use navree_testing::TestApp;
 use navree_validation::Valid;
 use sea_orm::sea_query::{ColumnDef, Table};
@@ -245,6 +246,14 @@ impl DealsHandlers {
             "attempt": msg.attempt(),
             "deadline": msg.deadline().is_some(),
             "traceparent": msg.header("traceparent"),
+            // The telemetry context the handler runs in.
+            "trace_id": TelemetryContext::current()
+                .and_then(|context| context.trace().map(|trace| trace.trace_id.to_string())),
+            "parent_span_id": TelemetryContext::current().and_then(|context| {
+                context.trace().and_then(|trace| trace.parent_span_id.map(|span| span.to_string()))
+            }),
+            "request_id_seen": TelemetryContext::current()
+                .and_then(|context| context.request_id().map(str::to_owned)),
         }))
     }
 

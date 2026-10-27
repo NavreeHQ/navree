@@ -12,6 +12,7 @@ use http::StatusCode;
 use navree_contracts::RequestId;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
+use navree_telemetry::{TelemetryContext, TraceContext, TracePolicy};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -21,7 +22,7 @@ use crate::context::CallContext;
 use crate::envelope::{LocalContext, headers, now_millis};
 use crate::store::Store;
 use crate::{
-    Codec, Envelope, MicroError, MicroTransport, RemoteError, TraceContext, check_pattern,
+    Codec, Envelope, MicroError, MicroTransport, RemoteError, check_pattern,
 };
 
 /// The first pause between retries of `send(..).retries(n)`; it doubles.
@@ -53,6 +54,9 @@ pub(crate) struct ClientCore {
     pub(crate) outbox: Option<Outbox>,
     /// In-process extras for every message (`MicroFake` clients).
     pub(crate) local: Option<Arc<LocalContext>>,
+    /// How a message sent outside any trace starts one
+    /// (`observe.tracing`).
+    pub(crate) trace: TracePolicy,
 }
 
 impl ServiceClient {
@@ -168,17 +172,33 @@ fn base_envelope(core: &ClientCore, pattern: &str, payload: Bytes, message_id: &
         .and_then(|call| call.request_id.clone())
         .unwrap_or_else(|| RequestId::generate().as_str().to_owned());
     envelope.set_header(headers::REQUEST_ID, request_id);
-    let trace = call
-        .and_then(|call| call.trace.as_ref())
-        .map_or_else(TraceContext::new_root, TraceContext::child);
-    envelope.set_header(headers::TRACEPARENT, trace.traceparent());
-    if let Some(state) = trace.tracestate() {
-        envelope.set_header(headers::TRACESTATE, state);
+    if let Some(span) = message_span(core, call) {
+        envelope.set_header(headers::TRACEPARENT, span.traceparent());
+        if let Some(state) = &span.trace_state {
+            envelope.set_header(headers::TRACESTATE, state.clone());
+        }
     }
     if let Some(workspace) = call.and_then(|call| call.workspace.as_deref()) {
         envelope.set_header(headers::WORKSPACE, workspace);
     }
     envelope
+}
+
+/// The span a message is sent in: a child of the current
+/// `TelemetryContext`'s span (the HTTP request, job or message being
+/// handled), else of the call context's, else a new trace (sampled as
+/// `observe.tracing.sample_ratio` says); none when tracing is off.
+fn message_span(core: &ClientCore, call: Option<&CallContext>) -> Option<TraceContext> {
+    let parent = TelemetryContext::with_current(|context| context.trace().cloned())
+        .flatten()
+        .or_else(|| call.and_then(|call| call.trace.clone()));
+    match parent {
+        Some(parent) => Some(parent.child()),
+        None => core
+            .trace
+            .enabled
+            .then(|| TraceContext::root_sampled(core.trace.sample_ratio)),
+    }
 }
 
 /// Which credentials a request carries.

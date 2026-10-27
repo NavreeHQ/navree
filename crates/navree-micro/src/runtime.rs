@@ -8,6 +8,7 @@ use std::time::Duration;
 use navree_contracts::{HealthCheck, HealthStatus};
 use navree_db::Db;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
+use navree_telemetry::{Telemetry, TracePolicy};
 use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -30,6 +31,10 @@ pub(crate) struct MicroRuntime {
     pub(crate) client: Arc<ServiceClient>,
     pub(crate) store: Option<Store>,
     pub(crate) dead_letter: DeadLetterMode,
+    /// `observe.tracing`: how a handled message's trace starts.
+    pub(crate) trace: TracePolicy,
+    /// The app's telemetry, for the context handlers run in.
+    pub(crate) telemetry: Telemetry,
     app: WeakAppContext,
     router: OnceCell<Arc<MessageRouter>>,
     listening: AtomicBool,
@@ -60,6 +65,8 @@ impl MicroRuntime {
             .clone()
             .filter(|_| options.outbox)
             .map(Outbox::new);
+        let trace = trace_policy(&ctx).await?;
+        let telemetry = Telemetry::from_app(&ctx).await;
         let client = Arc::new(ServiceClient::new(ClientCore {
             transport: transport.clone(),
             service: service.clone(),
@@ -69,6 +76,7 @@ impl MicroRuntime {
             forward_auth: options.forward_auth,
             outbox,
             local: None,
+            trace,
         }));
         Ok(Self {
             options,
@@ -78,6 +86,8 @@ impl MicroRuntime {
             client,
             store,
             dead_letter,
+            trace,
+            telemetry,
             app: ctx.downgrade(),
             router: OnceCell::new(),
             listening: AtomicBool::new(false),
@@ -100,6 +110,8 @@ impl MicroRuntime {
                     event_timeout: Duration::from_secs(self.options.events.timeout_secs),
                     wildcards: self.transport.supports_wildcards(),
                     transport: self.transport.name(),
+                    trace: self.trace,
+                    telemetry: self.telemetry.clone(),
                 };
                 MessageRouter::build(ctx, &settings).await.map(Arc::new)
             })
@@ -129,6 +141,7 @@ impl MicroRuntime {
             forward_auth: merged.forward_auth,
             outbox: None,
             local: None,
+            trace: self.trace,
         }))
     }
 
@@ -181,6 +194,19 @@ impl std::fmt::Debug for MicroRuntime {
             .field("instance", &self.instance)
             .field("transport", &self.transport.name())
             .finish_non_exhaustive()
+    }
+}
+
+/// `observe.tracing.enabled`, `trust_incoming` and `sample_ratio` (the
+/// ratio falls back to `OTEL_TRACES_SAMPLER_ARG`), as navree-http reads
+/// them; the defaults without configuration.
+async fn trace_policy(ctx: &AppContext) -> Result<TracePolicy, BoxError> {
+    match ctx.try_get::<navree_config::Config>().await {
+        Some(config) => Ok(TracePolicy::from_settings(
+            |key| config.get_string(key),
+            |name| std::env::var(name).ok(),
+        )?),
+        None => Ok(TracePolicy::default()),
     }
 }
 
