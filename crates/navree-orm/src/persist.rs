@@ -23,7 +23,10 @@ use crate::column::{Assignment, Column};
 use crate::error::{OrmError, Result};
 use crate::exec::{ExecContext, Target};
 use crate::hooks::{Flow, Hooks, ModelEvent};
-use crate::ir::{ArithmeticOp, ColumnRef, DeleteIr, Expr, InsertIr, Operator, TableRef, UpdateIr, Where, WhereClause};
+use crate::ir::{
+    ArithmeticOp, ColumnRef, DeleteIr, Expr, InsertIr, Operator, TableRef, UpdateIr, Where,
+    WhereClause,
+};
 use crate::model::{KeyKind, Model, PrimaryKey};
 use crate::query::Builder;
 use crate::record::Record;
@@ -182,7 +185,13 @@ async fn insert<M: Model>(
     record.previous.clear();
     let key = record.model.key();
     let stored = record.model.values()?;
-    record_change::<M>(target, &key, ChangeOp::Created, None, Some(json_object(&stored)));
+    record_change::<M>(
+        target,
+        &key,
+        ChangeOp::Created,
+        None,
+        Some(json_object(&stored)),
+    );
     hooks.after(ModelEvent::Created, ctx, record).await?;
     Ok(true)
 }
@@ -257,9 +266,10 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
             }
             let mut sets = Vec::with_capacity(columns.len());
             for column in &columns {
-                let value = record.model.value(column)?.ok_or_else(|| {
-                    crate::model::derive_support::unknown_column::<M>(column)
-                })?;
+                let value = record
+                    .model
+                    .value(column)?
+                    .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(column))?;
                 sets.push((Cow::Borrowed(*column), Expr::Value(value)));
             }
             let update = UpdateIr {
@@ -269,7 +279,13 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
             };
             target.update(&update).await?;
             record.sync_original_on(columns)?;
-            record_change::<M>(target, &key, ChangeOp::Deleted, Some(json_object(&before)), None);
+            record_change::<M>(
+                target,
+                &key,
+                ChangeOp::Deleted,
+                Some(json_object(&before)),
+                None,
+            );
             hooks.after(ModelEvent::Deleted, &ctx, record).await?;
             hooks.after(ModelEvent::Trashed, &ctx, record).await?;
         }
@@ -280,7 +296,13 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
             };
             target.delete(&delete).await?;
             record.exists = false;
-            record_change::<M>(target, &key, ChangeOp::Deleted, Some(json_object(&before)), None);
+            record_change::<M>(
+                target,
+                &key,
+                ChangeOp::Deleted,
+                Some(json_object(&before)),
+                None,
+            );
             hooks.after(ModelEvent::Deleted, &ctx, record).await?;
         }
     }
@@ -392,7 +414,11 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
         next.ok_or_else(|| {
             OrmError::invalid(format!(
                 "{} `{name}` would overflow {}",
-                if decrement { "decrementing" } else { "incrementing" },
+                if decrement {
+                    "decrementing"
+                } else {
+                    "incrementing"
+                },
                 T::type_name()
             ))
         })?
@@ -427,7 +453,10 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
     {
         let now = ctx.now().await;
         record.model.touch_timestamp(updated_at, now)?;
-        let value = record.model.value(updated_at)?.unwrap_or(Value::String(None));
+        let value = record
+            .model
+            .value(updated_at)?
+            .unwrap_or(Value::String(None));
         sets.push((Cow::Borrowed(updated_at), Expr::Value(value)));
         written.push(updated_at.to_owned());
     }

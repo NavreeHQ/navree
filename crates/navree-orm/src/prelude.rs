@@ -6,8 +6,8 @@
 
 pub use crate::hooks::{Flow, ModelEvent, ModelHook};
 pub use crate::{
-    AsExpr, Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect,
-    Executor, Expr, Field, Filter, GlobalScope, JoinClause, Model, OrmError, PageRequest, Record,
+    Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect, Executor,
+    Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, OrmError, PageRequest, Record,
     Scoped, SimplePage, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as, scopes,
     table,
 };

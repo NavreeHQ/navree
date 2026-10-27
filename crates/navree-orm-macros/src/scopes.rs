@@ -54,7 +54,11 @@ impl VisitMut for ReplaceSelf<'_> {
     fn visit_type_mut(&mut self, ty: &mut Type) {
         if let Type::Path(path) = ty
             && path.qself.is_none()
-            && path.path.segments.first().is_some_and(|segment| segment.ident == "Self")
+            && path
+                .path
+                .segments
+                .first()
+                .is_some_and(|segment| segment.ident == "Self")
         {
             let model = self.model;
             let krate = self.krate;
@@ -106,18 +110,27 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
     }
     let model = (*block.self_ty).clone();
     let Type::Path(model_path) = &model else {
-        return Err(syn::Error::new(model.span(), "#[scopes] needs a model type"));
+        return Err(syn::Error::new(
+            model.span(),
+            "#[scopes] needs a model type",
+        ));
     };
-    let Some(model_ident) = model_path.path.segments.last().map(|segment| segment.ident.clone()) else {
-        return Err(syn::Error::new(model.span(), "#[scopes] needs a model type"));
+    let Some(model_ident) = model_path
+        .path
+        .segments
+        .last()
+        .map(|segment| segment.ident.clone())
+    else {
+        return Err(syn::Error::new(
+            model.span(),
+            "#[scopes] needs a model type",
+        ));
     };
     let krate = paths::orm(model_ident.span())?;
     let trait_name = options
         .name
         .unwrap_or_else(|| format_ident!("{model_ident}Scopes", span = model_ident.span()));
-    let vis = options
-        .vis
-        .unwrap_or_else(|| syn::parse_quote!(pub));
+    let vis = options.vis.unwrap_or_else(|| syn::parse_quote!(pub));
 
     let mut errors = Errors::default();
     let mut methods = Vec::new();
@@ -125,7 +138,11 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
         let ImplItem::Fn(function) = item else {
             continue;
         };
-        let Some(index) = function.attrs.iter().position(|attr| attr.path().is_ident("scope")) else {
+        let Some(index) = function
+            .attrs
+            .iter()
+            .position(|attr| attr.path().is_ident("scope"))
+        else {
             continue;
         };
         let attr = function.attrs.remove(index);

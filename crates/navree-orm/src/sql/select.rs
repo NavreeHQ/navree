@@ -105,7 +105,10 @@ pub fn compile_exists(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
 fn split_direction(sql: &str) -> (&str, sea_query::Order, Option<NullOrdering>) {
     let mut body = sql.trim_end();
     let mut nulls = None;
-    for (suffix, placement) in [(" nulls first", NullOrdering::First), (" nulls last", NullOrdering::Last)] {
+    for (suffix, placement) in [
+        (" nulls first", NullOrdering::First),
+        (" nulls last", NullOrdering::Last),
+    ] {
         if ends_with_ignore_case(body, suffix) {
             body = body[..body.len() - suffix.len()].trim_end();
             nulls = Some(placement);
@@ -113,7 +116,10 @@ fn split_direction(sql: &str) -> (&str, sea_query::Order, Option<NullOrdering>) 
         }
     }
     let mut direction = sea_query::Order::Asc;
-    for (suffix, order) in [(" desc", sea_query::Order::Desc), (" asc", sea_query::Order::Asc)] {
+    for (suffix, order) in [
+        (" desc", sea_query::Order::Desc),
+        (" asc", sea_query::Order::Asc),
+    ] {
         if ends_with_ignore_case(body, suffix) {
             body = body[..body.len() - suffix.len()].trim_end();
             direction = order;

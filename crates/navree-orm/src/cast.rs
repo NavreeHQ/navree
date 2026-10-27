@@ -131,11 +131,13 @@ impl<T: Serialize + DeserializeOwned> Cast<T> for AsJson {
     type Stored = serde_json::Value;
 
     fn get(stored: serde_json::Value) -> Result<T, CastError> {
-        serde_json::from_value(stored).map_err(|error| CastError::new(format!("invalid JSON: {error}")))
+        serde_json::from_value(stored)
+            .map_err(|error| CastError::new(format!("invalid JSON: {error}")))
     }
 
     fn set(value: &T) -> Result<serde_json::Value, CastError> {
-        serde_json::to_value(value).map_err(|error| CastError::new(format!("cannot encode as JSON: {error}")))
+        serde_json::to_value(value)
+            .map_err(|error| CastError::new(format!("cannot encode as JSON: {error}")))
     }
 }
 
@@ -166,8 +168,12 @@ impl<T: Serialize + DeserializeOwned> Cast<T> for StringEnum {
     type Stored = String;
 
     fn get(stored: String) -> Result<T, CastError> {
-        serde_json::from_value(serde_json::Value::String(stored.clone()))
-            .map_err(|_| CastError::new(format!("`{stored}` is not a variant of {}", short_type_name::<T>())))
+        serde_json::from_value(serde_json::Value::String(stored.clone())).map_err(|_| {
+            CastError::new(format!(
+                "`{stored}` is not a variant of {}",
+                short_type_name::<T>()
+            ))
+        })
     }
 
     fn set(value: &T) -> Result<String, CastError> {
@@ -267,7 +273,10 @@ mod tests {
             "point".into(),
             Value::from(serde_json::json!({"x": 5})),
         )]);
-        assert_eq!(decode::<AsJson, Point>(&row, "point").unwrap(), Point { x: 5 });
+        assert_eq!(
+            decode::<AsJson, Point>(&row, "point").unwrap(),
+            Point { x: 5 }
+        );
         assert!(matches!(
             decode::<AsJson, Point>(&row, "missing"),
             Err(FieldError::Missing)
@@ -277,6 +286,9 @@ mod tests {
     #[test]
     fn string_enums_reject_structs() {
         let error = <StringEnum as Cast<Point>>::set(&Point { x: 1 }).unwrap_err();
-        assert!(error.to_string().contains("does not serialize as a string"), "{error}");
+        assert!(
+            error.to_string().contains("does not serialize as a string"),
+            "{error}"
+        );
     }
 }

@@ -213,7 +213,10 @@ mod tests {
         );
         assert!(relations.take::<u8>("owner").is_none());
         assert_eq!(
-            relations.take::<Option<String>>("owner").unwrap().as_deref(),
+            relations
+                .take::<Option<String>>("owner")
+                .unwrap()
+                .as_deref(),
             Some("linus")
         );
         assert!(relations.is_empty());

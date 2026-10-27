@@ -90,7 +90,8 @@ pub trait DocumentDriver: Send + Sync + 'static {
     }
 
     /// Inserts documents; generated keys come back as returned rows.
-    fn insert<'a>(&'a self, insert: &'a InsertIr) -> BoxFuture<'a, Result<InsertOutcome, OrmError>>;
+    fn insert<'a>(&'a self, insert: &'a InsertIr)
+    -> BoxFuture<'a, Result<InsertOutcome, OrmError>>;
 
     /// Updates the matching documents; returns how many changed.
     fn update<'a>(&'a self, update: &'a UpdateIr) -> BoxFuture<'a, Result<u64, OrmError>>;

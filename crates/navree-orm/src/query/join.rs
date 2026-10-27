@@ -1,6 +1,6 @@
 //! [`JoinClause`]: the `ON` conditions of a join, built in a closure.
 
-use crate::column::AsExpr;
+use crate::column::IntoExpr;
 use crate::ir::{Boolean, Join, JoinKind, Operator, TableRef, Where, WhereClause};
 use crate::query::filters::{HasWheres, filters};
 
@@ -49,26 +49,37 @@ impl JoinClause {
         }
     }
 
-    fn compare(mut self, boolean: Boolean, first: impl AsExpr, op: impl Into<Operator>, second: impl AsExpr) -> Self {
+    fn compare(
+        mut self,
+        boolean: Boolean,
+        first: impl IntoExpr,
+        op: impl Into<Operator>,
+        second: impl IntoExpr,
+    ) -> Self {
         self.on.push(WhereClause {
             boolean,
             negated: false,
             filter: Where::Compare {
-                left: first.as_expr(),
+                left: first.into_expr(),
                 op: op.into(),
-                right: second.as_expr(),
+                right: second.into_expr(),
             },
         });
         self
     }
 
     /// `AND first op second`, comparing two columns.
-    pub fn on(self, first: impl AsExpr, op: impl Into<Operator>, second: impl AsExpr) -> Self {
+    pub fn on(self, first: impl IntoExpr, op: impl Into<Operator>, second: impl IntoExpr) -> Self {
         self.compare(Boolean::And, first, op, second)
     }
 
     /// `OR first op second`, comparing two columns.
-    pub fn or_on(self, first: impl AsExpr, op: impl Into<Operator>, second: impl AsExpr) -> Self {
+    pub fn or_on(
+        self,
+        first: impl IntoExpr,
+        op: impl Into<Operator>,
+        second: impl IntoExpr,
+    ) -> Self {
         self.compare(Boolean::Or, first, op, second)
     }
 

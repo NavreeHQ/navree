@@ -33,25 +33,40 @@ impl Controller for DealsController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
-            RouteDef::on(Method::GET, "/{id}", |uow: Uow, Path(id): Path<Uuid>| async move {
-                let deal = Deal::find_or_fail(&uow, id).await?;
-                Ok::<_, AppError>(Json(deal))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/{id}",
+                |uow: Uow, Path(id): Path<Uuid>| async move {
+                    let deal = Deal::find_or_fail(&uow, id).await?;
+                    Ok::<_, AppError>(Json(deal))
+                },
+            )
             .public(),
             RouteDef::on(Method::GET, "/", |uow: Uow, page: PageQuery| async move {
-                let page: Page<Record<Deal>> = Deal::query().order_by(Deal::TITLE).paginate(&uow, page).await?;
+                let page: Page<Record<Deal>> = Deal::query()
+                    .order_by(Deal::TITLE)
+                    .paginate(&uow, page)
+                    .await?;
                 Ok::<_, AppError>(page)
             })
             .public(),
-            RouteDef::on(Method::POST, "/titled/{title}", |uow: Uow, Path(title): Path<String>| async move {
-                let deal = Deal::create(&uow, Deal::new(&title, 100)).await?;
-                Ok::<_, AppError>((StatusCode::CREATED, Json(deal)))
-            })
+            RouteDef::on(
+                Method::POST,
+                "/titled/{title}",
+                |uow: Uow, Path(title): Path<String>| async move {
+                    let deal = Deal::create(&uow, Deal::new(&title, 100)).await?;
+                    Ok::<_, AppError>((StatusCode::CREATED, Json(deal)))
+                },
+            )
             .public(),
-            RouteDef::on(Method::POST, "/titled/{title}/fail", |uow: Uow, Path(title): Path<String>| async move {
-                Deal::create(&uow, Deal::new(&title, 100)).await?;
-                Err::<(), _>(AppError::bad_request("changed my mind"))
-            })
+            RouteDef::on(
+                Method::POST,
+                "/titled/{title}/fail",
+                |uow: Uow, Path(title): Path<String>| async move {
+                    Deal::create(&uow, Deal::new(&title, 100)).await?;
+                    Err::<(), _>(AppError::bad_request("changed my mind"))
+                },
+            )
             .public(),
         ]
     }
@@ -68,7 +83,11 @@ impl Injectable for FeedController {
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
-        Box::pin(async move { Ok(FeedController { db: r.get::<Db>().await? }) })
+        Box::pin(async move {
+            Ok(FeedController {
+                db: r.get::<Db>().await?,
+            })
+        })
     }
 }
 
@@ -143,14 +162,21 @@ async fn records_and_pages_serialize_in_navrees_shapes() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("meta", json!({"current_page": 1, "per_page": 2, "total": 3, "last_page": 2}))
+        .assert_json_path(
+            "meta",
+            json!({"current_page": 1, "per_page": 2, "total": 3, "last_page": 2}),
+        )
         .assert_json_path("data.0.title", json!("A"));
 }
 
 #[tokio::test]
 async fn writes_commit_or_roll_back_with_the_request() {
     let (app, db, _clock) = app(vec![Box::new(Routes)]).await;
-    app.client().post("/api/deals/titled/Kept").send().await.assert_status(201);
+    app.client()
+        .post("/api/deals/titled/Kept")
+        .send()
+        .await
+        .assert_status(201);
     app.client()
         .post("/api/deals/titled/Dropped/fail")
         .send()
@@ -163,11 +189,23 @@ async fn writes_commit_or_roll_back_with_the_request() {
 async fn cursor_requests_reject_malformed_cursors() {
     let (app, db, _clock) = app(vec![Box::new(Routes)]).await;
     for name in ["A", "B", "C"] {
-        Company::create(&*db, Company { name: name.into(), ..Company::default() })
-            .await
-            .unwrap();
+        Company::create(
+            &*db,
+            Company {
+                name: name.into(),
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
     }
-    let first = app.client().get("/api/feed?limit=2").send().await.assert_status(200).json_value();
+    let first = app
+        .client()
+        .get("/api/feed?limit=2")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
     assert_eq!(first["data"].as_array().unwrap().len(), 2);
     assert!(first["prev_cursor"].is_null());
     let next = first["next_cursor"].as_str().unwrap().to_owned();

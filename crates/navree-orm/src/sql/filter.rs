@@ -68,7 +68,11 @@ impl Compiler {
             Where::Compare { left, op, right } => self.compare(left, op, right)?,
             Where::Null { expr, not } => {
                 let expr = self.expr(expr)?;
-                if *not { expr.is_not_null() } else { expr.is_null() }
+                if *not {
+                    expr.is_not_null()
+                } else {
+                    expr.is_null()
+                }
             }
             Where::In { expr, values, not } => self.in_(expr, values, *not)?,
             Where::Between {
@@ -138,7 +142,12 @@ impl Compiler {
         Ok(Condition::all().add(expr))
     }
 
-    fn compare(&self, left: &Expr, op: &Operator, right: &Expr) -> Result<sea_query::Expr, OrmError> {
+    fn compare(
+        &self,
+        left: &Expr,
+        op: &Operator,
+        right: &Expr,
+    ) -> Result<sea_query::Expr, OrmError> {
         let l = self.expr(left)?;
         let r = match (self.dialect, left, right) {
             // PostgreSQL's `->>` gives text, and a bound number or boolean
@@ -173,7 +182,9 @@ impl Compiler {
                 Dialect::Postgres => l.binary(BinOper::Custom("#"), r),
                 Dialect::MySql => l.binary(BinOper::Custom("^"), r),
                 // SQLite has no XOR: (a | b) - (a & b).
-                Dialect::Sqlite => self.custom("(({} | {}) - ({} & {}))", vec![l.clone(), r.clone(), l, r]),
+                Dialect::Sqlite => {
+                    self.custom("(({} | {}) - ({} & {}))", vec![l.clone(), r.clone(), l, r])
+                }
             },
             Operator::ShiftLeft => l.binary(BinOper::LShift, r),
             Operator::ShiftRight => l.binary(BinOper::RShift, r),
@@ -241,7 +252,11 @@ impl Compiler {
             (Dialect::MySql, true) => {
                 let right = self.expr(pattern)?;
                 left.binary(
-                    BinOper::Custom(if not { "NOT LIKE BINARY" } else { "LIKE BINARY" }),
+                    BinOper::Custom(if not {
+                        "NOT LIKE BINARY"
+                    } else {
+                        "LIKE BINARY"
+                    }),
                     right,
                 )
             }
@@ -255,7 +270,10 @@ impl Compiler {
                     other => other.clone(),
                 };
                 let right = self.expr(&pattern)?;
-                left.binary(BinOper::Custom(if not { "NOT GLOB" } else { "GLOB" }), right)
+                left.binary(
+                    BinOper::Custom(if not { "NOT GLOB" } else { "GLOB" }),
+                    right,
+                )
             }
         })
     }
@@ -272,7 +290,11 @@ impl Compiler {
                     .iter()
                     .map(|value| self.expr(value))
                     .collect::<Result<Vec<_>, _>>()?;
-                if not { left.is_not_in(list) } else { left.is_in(list) }
+                if not {
+                    left.is_not_in(list)
+                } else {
+                    left.is_in(list)
+                }
             }
             InValues::Subquery(query) => {
                 let select = self.select(query)?;
@@ -307,8 +329,12 @@ impl Compiler {
             (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![column]),
             (Dialect::Postgres, DatePart::Time) => self.custom("CAST({} AS TIME)", vec![column]),
             (Dialect::Postgres, DatePart::Day) => self.custom("EXTRACT(DAY FROM {})", vec![column]),
-            (Dialect::Postgres, DatePart::Month) => self.custom("EXTRACT(MONTH FROM {})", vec![column]),
-            (Dialect::Postgres, DatePart::Year) => self.custom("EXTRACT(YEAR FROM {})", vec![column]),
+            (Dialect::Postgres, DatePart::Month) => {
+                self.custom("EXTRACT(MONTH FROM {})", vec![column])
+            }
+            (Dialect::Postgres, DatePart::Year) => {
+                self.custom("EXTRACT(YEAR FROM {})", vec![column])
+            }
             (Dialect::MySql, DatePart::Date) => function("DATE", column),
             (Dialect::MySql, DatePart::Time) => function("TIME", column),
             (Dialect::MySql, DatePart::Day) => function("DAY", column),
@@ -385,7 +411,9 @@ impl Compiler {
                     })?,
                 };
                 match self.dialect {
-                    Dialect::Sqlite if part == DatePart::Year => Value::from(format!("{number:04}")),
+                    Dialect::Sqlite if part == DatePart::Year => {
+                        Value::from(format!("{number:04}"))
+                    }
                     Dialect::Sqlite => Value::from(format!("{number:02}")),
                     Dialect::Postgres | Dialect::MySql => Value::from(number),
                 }
@@ -425,7 +453,10 @@ impl Compiler {
                 let target = self.json_value(column);
                 self.custom(
                     "({})::jsonb @> {}",
-                    vec![target, sea_query::Expr::val(Value::Json(Some(Box::new(value.clone()))))],
+                    vec![
+                        target,
+                        sea_query::Expr::val(Value::Json(Some(Box::new(value.clone())))),
+                    ],
                 )
             }
             Dialect::MySql => {
@@ -435,7 +466,10 @@ impl Compiler {
                     self.custom("json_contains({}, {})", vec![base, encoded])
                 } else {
                     self.custom(
-                        &format!("json_contains({{}}, {{}}, {})", json_path_literal(&column.path)),
+                        &format!(
+                            "json_contains({{}}, {{}}, {})",
+                            json_path_literal(&column.path)
+                        ),
                         vec![base, encoded],
                     )
                 }
@@ -450,9 +484,8 @@ impl Compiler {
                     },
                     serde_json::Value::Null => Value::String(None),
                     _ => {
-                        return Err(self.unsupported(
-                            "a JSON containment check for an object or array value",
-                        ));
+                        return Err(self
+                            .unsupported("a JSON containment check for an object or array value"));
                     }
                 };
                 let base = self.plain_column(column);
@@ -500,7 +533,10 @@ impl Compiler {
                     self.custom("json_array_length({})", vec![base])
                 } else {
                     self.custom(
-                        &format!("json_array_length({{}}, {})", json_path_literal(&column.path)),
+                        &format!(
+                            "json_array_length({{}}, {})",
+                            json_path_literal(&column.path)
+                        ),
                         vec![base],
                     )
                 }
@@ -574,7 +610,8 @@ impl Compiler {
                     FullTextMode::Websearch | FullTextMode::Boolean => "websearch_to_tsquery",
                     _ => "plainto_tsquery",
                 };
-                let vectors = vec![format!("to_tsvector('{language}', {{}})"); compiled.len()].join(" || ");
+                let vectors =
+                    vec![format!("to_tsvector('{language}', {{}})"); compiled.len()].join(" || ");
                 let mut exprs = compiled;
                 exprs.push(search);
                 Ok(self.custom(
@@ -593,9 +630,8 @@ impl Compiler {
                 exprs.push(search);
                 Ok(self.custom(&format!("MATCH ({markers}) AGAINST ({{}} {mode})"), exprs))
             }
-            Dialect::Sqlite => Err(self.unsupported(
-                "a full-text condition (query an FTS5 table with where_raw instead)",
-            )),
+            Dialect::Sqlite => Err(self
+                .unsupported("a full-text condition (query an FTS5 table with where_raw instead)")),
         }
     }
 }

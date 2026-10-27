@@ -5,7 +5,7 @@
 
 use std::borrow::Cow;
 
-use crate::column::{AsExpr, Column, IntoQuery};
+use crate::column::{Column, IntoExpr, IntoQuery};
 use crate::ir::{ColumnRef, Expr, QueryIr, SelectItem};
 
 /// A builder with a query (implemented by every builder).
@@ -62,11 +62,11 @@ impl IntoSelect for &str {
         let lower = self.to_ascii_lowercase();
         match lower.rfind(" as ") {
             Some(at) => SelectItem {
-                expr: self[..at].trim().as_expr(),
+                expr: self[..at].trim().into_expr(),
                 alias: Some(Cow::Owned(self[at + 4..].trim().to_owned())),
             },
             None => SelectItem {
-                expr: self.as_expr(),
+                expr: self.into_expr(),
                 alias: None,
             },
         }
@@ -104,10 +104,10 @@ impl IntoSelect for SelectItem {
 }
 
 /// `(item, alias)`: the item named `alias`.
-impl<E: AsExpr, A: Into<Cow<'static, str>>> IntoSelect for (E, A) {
+impl<E: IntoExpr, A: Into<Cow<'static, str>>> IntoSelect for (E, A) {
     fn into_select(self) -> SelectItem {
         SelectItem {
-            expr: self.0.as_expr(),
+            expr: self.0.into_expr(),
             alias: Some(self.1.into()),
         }
     }
@@ -122,7 +122,10 @@ pub(crate) fn aliased(expr: Expr, alias: impl Into<Cow<'static, str>>) -> Select
 }
 
 /// A subquery as a select item.
-pub(crate) fn subquery_item(query: impl IntoQuery, alias: impl Into<Cow<'static, str>>) -> SelectItem {
+pub(crate) fn subquery_item(
+    query: impl IntoQuery,
+    alias: impl Into<Cow<'static, str>>,
+) -> SelectItem {
     aliased(Expr::Subquery(Box::new(query.into_query())), alias)
 }
 
@@ -146,14 +149,24 @@ macro_rules! clauses {
 
         /// Adds `items` to the select list (a model builder keeps the
         /// model's columns).
-        pub fn add_select<S: $crate::IntoSelect>(mut self, items: impl IntoIterator<Item = S>) -> Self {
-            let items = items.into_iter().map($crate::IntoSelect::into_select).collect();
+        pub fn add_select<S: $crate::IntoSelect>(
+            mut self,
+            items: impl IntoIterator<Item = S>,
+        ) -> Self {
+            let items = items
+                .into_iter()
+                .map($crate::IntoSelect::into_select)
+                .collect();
             $crate::query::clauses::HasQuery::push_select(&mut self, items);
             self
         }
 
         /// Adds `expr AS alias` to the select list.
-        pub fn select_expr(mut self, expr: impl Into<$crate::Expr>, alias: impl Into<std::borrow::Cow<'static, str>>) -> Self {
+        pub fn select_expr(
+            mut self,
+            expr: impl Into<$crate::Expr>,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
             let item = $crate::query::clauses::aliased(expr.into(), alias);
             $crate::query::clauses::HasQuery::push_select(&mut self, vec![item]);
             self
@@ -170,13 +183,20 @@ macro_rules! clauses {
             sql: impl Into<std::borrow::Cow<'static, str>>,
             values: impl IntoIterator<Item = impl Into<$crate::Value>>,
         ) -> Self {
-            let item = $crate::ir::SelectItem { expr: $crate::Expr::raw(sql, values), alias: None };
+            let item = $crate::ir::SelectItem {
+                expr: $crate::Expr::raw(sql, values),
+                alias: None,
+            };
             $crate::query::clauses::HasQuery::push_select(&mut self, vec![item]);
             self
         }
 
         /// Adds `(subquery) AS alias` to the select list.
-        pub fn select_sub(mut self, query: impl $crate::IntoQuery, alias: impl Into<std::borrow::Cow<'static, str>>) -> Self {
+        pub fn select_sub(
+            mut self,
+            query: impl $crate::IntoQuery,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
             let item = $crate::query::clauses::subquery_item(query, alias);
             $crate::query::clauses::HasQuery::push_select(&mut self, vec![item]);
             self
@@ -188,22 +208,28 @@ macro_rules! clauses {
         pub fn select_time_bucket(
             self,
             width: impl Into<String>,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             alias: impl Into<std::borrow::Cow<'static, str>>,
         ) -> Self {
-            self.select_expr($crate::Expr::time_bucket(width, $crate::AsExpr::as_expr(column)), alias)
+            self.select_expr(
+                $crate::Expr::time_bucket(width, $crate::IntoExpr::into_expr(column)),
+                alias,
+            )
         }
 
         /// Adds TimescaleDB's `first(value, time) AS alias`: per group, the
         /// value at the earliest time.
         pub fn select_first(
             self,
-            value: impl $crate::AsExpr,
-            time: impl $crate::AsExpr,
+            value: impl $crate::IntoExpr,
+            time: impl $crate::IntoExpr,
             alias: impl Into<std::borrow::Cow<'static, str>>,
         ) -> Self {
             self.select_expr(
-                $crate::Expr::first($crate::AsExpr::as_expr(value), $crate::AsExpr::as_expr(time)),
+                $crate::Expr::first(
+                    $crate::IntoExpr::into_expr(value),
+                    $crate::IntoExpr::into_expr(time),
+                ),
                 alias,
             )
         }
@@ -212,27 +238,39 @@ macro_rules! clauses {
         /// value at the latest time.
         pub fn select_last(
             self,
-            value: impl $crate::AsExpr,
-            time: impl $crate::AsExpr,
+            value: impl $crate::IntoExpr,
+            time: impl $crate::IntoExpr,
             alias: impl Into<std::borrow::Cow<'static, str>>,
         ) -> Self {
             self.select_expr(
-                $crate::Expr::last($crate::AsExpr::as_expr(value), $crate::AsExpr::as_expr(time)),
+                $crate::Expr::last(
+                    $crate::IntoExpr::into_expr(value),
+                    $crate::IntoExpr::into_expr(time),
+                ),
                 alias,
             )
         }
 
         /// `SELECT DISTINCT`.
         pub fn distinct(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).distinct = $crate::ir::Distinct::Yes;
+            $crate::query::clauses::HasQuery::query_mut(&mut self).distinct =
+                $crate::ir::Distinct::Yes;
             self
         }
 
         /// PostgreSQL's `SELECT DISTINCT ON (columns)`: the first row of
         /// each distinct combination (by the query's order).
-        pub fn distinct_on<C: $crate::AsExpr>(mut self, columns: impl IntoIterator<Item = C>) -> Self {
+        pub fn distinct_on<C: $crate::IntoExpr>(
+            mut self,
+            columns: impl IntoIterator<Item = C>,
+        ) -> Self {
             $crate::query::clauses::HasQuery::query_mut(&mut self).distinct =
-                $crate::ir::Distinct::On(columns.into_iter().map($crate::AsExpr::as_expr).collect());
+                $crate::ir::Distinct::On(
+                    columns
+                        .into_iter()
+                        .map($crate::IntoExpr::into_expr)
+                        .collect(),
+                );
             self
         }
 
@@ -245,13 +283,15 @@ macro_rules! clauses {
         pub fn join(
             self,
             table: &str,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
-            self.push_join($crate::ir::JoinKind::Inner, $crate::query::filters::parse_table(table), |join| {
-                join.on(first, op, second)
-            })
+            self.push_join(
+                $crate::ir::JoinKind::Inner,
+                $crate::query::filters::parse_table(table),
+                |join| join.on(first, op, second),
+            )
         }
 
         /// `INNER JOIN table ON ...` with the conditions built in `on`.
@@ -259,49 +299,81 @@ macro_rules! clauses {
         /// ```ignore
         /// Deal::query().join_on("companies", |j| j.on(Deal::COMPANY_ID, "=", Company::ID).where_(Company::ACTIVE.eq(true)))
         /// ```
-        pub fn join_on(self, table: &str, on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause) -> Self {
-            self.push_join($crate::ir::JoinKind::Inner, $crate::query::filters::parse_table(table), on)
+        pub fn join_on(
+            self,
+            table: &str,
+            on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause,
+        ) -> Self {
+            self.push_join(
+                $crate::ir::JoinKind::Inner,
+                $crate::query::filters::parse_table(table),
+                on,
+            )
         }
 
         /// `LEFT JOIN table ON first op second`.
         pub fn left_join(
             self,
             table: &str,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
-            self.push_join($crate::ir::JoinKind::Left, $crate::query::filters::parse_table(table), |join| {
-                join.on(first, op, second)
-            })
+            self.push_join(
+                $crate::ir::JoinKind::Left,
+                $crate::query::filters::parse_table(table),
+                |join| join.on(first, op, second),
+            )
         }
 
         /// `LEFT JOIN table ON ...` with the conditions built in `on`.
-        pub fn left_join_on(self, table: &str, on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause) -> Self {
-            self.push_join($crate::ir::JoinKind::Left, $crate::query::filters::parse_table(table), on)
+        pub fn left_join_on(
+            self,
+            table: &str,
+            on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause,
+        ) -> Self {
+            self.push_join(
+                $crate::ir::JoinKind::Left,
+                $crate::query::filters::parse_table(table),
+                on,
+            )
         }
 
         /// `RIGHT JOIN table ON first op second`.
         pub fn right_join(
             self,
             table: &str,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
-            self.push_join($crate::ir::JoinKind::Right, $crate::query::filters::parse_table(table), |join| {
-                join.on(first, op, second)
-            })
+            self.push_join(
+                $crate::ir::JoinKind::Right,
+                $crate::query::filters::parse_table(table),
+                |join| join.on(first, op, second),
+            )
         }
 
         /// `RIGHT JOIN table ON ...` with the conditions built in `on`.
-        pub fn right_join_on(self, table: &str, on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause) -> Self {
-            self.push_join($crate::ir::JoinKind::Right, $crate::query::filters::parse_table(table), on)
+        pub fn right_join_on(
+            self,
+            table: &str,
+            on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause,
+        ) -> Self {
+            self.push_join(
+                $crate::ir::JoinKind::Right,
+                $crate::query::filters::parse_table(table),
+                on,
+            )
         }
 
         /// `CROSS JOIN table`.
         pub fn cross_join(self, table: &str) -> Self {
-            self.push_join($crate::ir::JoinKind::Cross, $crate::query::filters::parse_table(table), |join| join)
+            self.push_join(
+                $crate::ir::JoinKind::Cross,
+                $crate::query::filters::parse_table(table),
+                |join| join,
+            )
         }
 
         /// `INNER JOIN (subquery) AS alias ON first op second`.
@@ -314,12 +386,14 @@ macro_rules! clauses {
             self,
             query: impl $crate::IntoQuery,
             alias: impl Into<std::borrow::Cow<'static, str>>,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
             let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
-            self.push_join($crate::ir::JoinKind::Inner, table, |join| join.on(first, op, second))
+            self.push_join($crate::ir::JoinKind::Inner, table, |join| {
+                join.on(first, op, second)
+            })
         }
 
         /// `LEFT JOIN (subquery) AS alias ON first op second`.
@@ -327,12 +401,14 @@ macro_rules! clauses {
             self,
             query: impl $crate::IntoQuery,
             alias: impl Into<std::borrow::Cow<'static, str>>,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
             let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
-            self.push_join($crate::ir::JoinKind::Left, table, |join| join.on(first, op, second))
+            self.push_join($crate::ir::JoinKind::Left, table, |join| {
+                join.on(first, op, second)
+            })
         }
 
         /// `INNER JOIN (subquery) AS alias ON ...` with the conditions built
@@ -354,15 +430,20 @@ macro_rules! clauses {
             on: impl FnOnce($crate::JoinClause) -> $crate::JoinClause,
         ) -> Self {
             let join = on($crate::JoinClause::new(kind, table)).into_join();
-            $crate::query::clauses::HasQuery::query_mut(&mut self).joins.push(join);
+            $crate::query::clauses::HasQuery::query_mut(&mut self)
+                .joins
+                .push(join);
             self
         }
 
         /// `GROUP BY columns` (added to earlier groups).
-        pub fn group_by<C: $crate::AsExpr>(mut self, columns: impl IntoIterator<Item = C>) -> Self {
+        pub fn group_by<C: $crate::IntoExpr>(
+            mut self,
+            columns: impl IntoIterator<Item = C>,
+        ) -> Self {
             $crate::query::clauses::HasQuery::query_mut(&mut self)
                 .groups
-                .extend(columns.into_iter().map($crate::AsExpr::as_expr));
+                .extend(columns.into_iter().map($crate::IntoExpr::into_expr));
             self
         }
 
@@ -414,20 +495,28 @@ macro_rules! clauses {
         }
 
         /// Orders by `column`, ascending (after earlier orders).
-        pub fn order_by(self, column: impl $crate::AsExpr) -> Self {
-            self.order($crate::ir::Order::asc($crate::AsExpr::as_expr(column)))
+        pub fn order_by(self, column: impl $crate::IntoExpr) -> Self {
+            self.order($crate::ir::Order::asc($crate::IntoExpr::into_expr(column)))
         }
 
         /// Orders by `column`, descending.
-        pub fn order_by_desc(self, column: impl $crate::AsExpr) -> Self {
-            self.order($crate::ir::Order::desc($crate::AsExpr::as_expr(column)))
+        pub fn order_by_desc(self, column: impl $crate::IntoExpr) -> Self {
+            self.order($crate::ir::Order::desc($crate::IntoExpr::into_expr(column)))
         }
 
         /// Orders by `column` in `direction`.
-        pub fn order_by_dir(self, column: impl $crate::AsExpr, direction: $crate::ir::Direction) -> Self {
+        pub fn order_by_dir(
+            self,
+            column: impl $crate::IntoExpr,
+            direction: $crate::ir::Direction,
+        ) -> Self {
             self.order(match direction {
-                $crate::ir::Direction::Asc => $crate::ir::Order::asc($crate::AsExpr::as_expr(column)),
-                $crate::ir::Direction::Desc => $crate::ir::Order::desc($crate::AsExpr::as_expr(column)),
+                $crate::ir::Direction::Asc => {
+                    $crate::ir::Order::asc($crate::IntoExpr::into_expr(column))
+                }
+                $crate::ir::Direction::Desc => {
+                    $crate::ir::Order::desc($crate::IntoExpr::into_expr(column))
+                }
             })
         }
 
@@ -443,17 +532,19 @@ macro_rules! clauses {
 
         /// Adds an order item: `.order(Deal::CLOSED_AT.desc().nulls_last())`.
         pub fn order(mut self, order: impl Into<$crate::ir::Order>) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).orders.push(order.into());
+            $crate::query::clauses::HasQuery::query_mut(&mut self)
+                .orders
+                .push(order.into());
             self
         }
 
         /// Newest first by `column`.
-        pub fn latest_by(self, column: impl $crate::AsExpr) -> Self {
+        pub fn latest_by(self, column: impl $crate::IntoExpr) -> Self {
             self.order_by_desc(column)
         }
 
         /// Oldest first by `column`.
-        pub fn oldest_by(self, column: impl $crate::AsExpr) -> Self {
+        pub fn oldest_by(self, column: impl $crate::IntoExpr) -> Self {
             self.order_by(column)
         }
 
@@ -464,12 +555,18 @@ macro_rules! clauses {
 
         /// Removes every order.
         pub fn reorder(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).orders.clear();
+            $crate::query::clauses::HasQuery::query_mut(&mut self)
+                .orders
+                .clear();
             self
         }
 
         /// Replaces every order with `column` in `direction`.
-        pub fn reorder_by(self, column: impl $crate::AsExpr, direction: $crate::ir::Direction) -> Self {
+        pub fn reorder_by(
+            self,
+            column: impl $crate::IntoExpr,
+            direction: $crate::ir::Direction,
+        ) -> Self {
             self.reorder().order_by_dir(column, direction)
         }
 
@@ -498,38 +595,45 @@ macro_rules! clauses {
         /// The rows of page `page` (1-based) of `per_page` rows.
         pub fn for_page(self, page: u64, per_page: u64) -> Self {
             let per_page = per_page.max(1);
-            self.offset((page.max(1) - 1).saturating_mul(per_page)).limit(per_page)
+            self.offset((page.max(1) - 1).saturating_mul(per_page))
+                .limit(per_page)
         }
 
         /// `UNION` with `query` (duplicates removed).
         pub fn union(mut self, query: impl $crate::IntoQuery) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).unions.push($crate::ir::Union {
-                query: Box::new($crate::IntoQuery::into_query(query)),
-                all: false,
-            });
+            $crate::query::clauses::HasQuery::query_mut(&mut self)
+                .unions
+                .push($crate::ir::Union {
+                    query: Box::new($crate::IntoQuery::into_query(query)),
+                    all: false,
+                });
             self
         }
 
         /// `UNION ALL` with `query`.
         pub fn union_all(mut self, query: impl $crate::IntoQuery) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).unions.push($crate::ir::Union {
-                query: Box::new($crate::IntoQuery::into_query(query)),
-                all: true,
-            });
+            $crate::query::clauses::HasQuery::query_mut(&mut self)
+                .unions
+                .push($crate::ir::Union {
+                    query: Box::new($crate::IntoQuery::into_query(query)),
+                    all: true,
+                });
             self
         }
 
         /// Locks the selected rows for update until the transaction ends
         /// (`FOR UPDATE`; SQLite serialises write transactions instead).
         pub fn lock_for_update(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock = Some($crate::ir::Lock::Update);
+            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
+                Some($crate::ir::Lock::Update);
             self
         }
 
         /// Locks the selected rows against changes until the transaction
         /// ends (`FOR SHARE`, `LOCK IN SHARE MODE` on MySQL).
         pub fn shared_lock(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock = Some($crate::ir::Lock::Share);
+            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
+                Some($crate::ir::Lock::Share);
             self
         }
     };

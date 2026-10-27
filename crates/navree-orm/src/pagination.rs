@@ -346,7 +346,10 @@ fn tag(value: &Value) -> serde_json::Value {
 fn untag(tagged: &serde_json::Value) -> Result<Value> {
     let invalid = || OrmError::invalid("the pagination cursor is invalid");
     let parts = tagged.as_array().ok_or_else(invalid)?;
-    let name = parts.first().and_then(serde_json::Value::as_str).ok_or_else(invalid)?;
+    let name = parts
+        .first()
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(invalid)?;
     if name == "null" {
         return Ok(Value::String(None));
     }
@@ -369,14 +372,11 @@ fn untag(tagged: &serde_json::Value) -> Result<Value> {
         "f32" => Value::Float(Some(raw.as_f64().ok_or_else(invalid)? as f32)),
         "f64" => Value::Double(Some(raw.as_f64().ok_or_else(invalid)?)),
         "s" => Value::String(Some(text()?.to_owned())),
-        "date" => Value::ChronoDate(Some(
-            text()?.parse::<NaiveDate>().map_err(|_| invalid())?,
-        )),
-        "time" => Value::ChronoTime(Some(
-            text()?.parse::<NaiveTime>().map_err(|_| invalid())?,
-        )),
+        "date" => Value::ChronoDate(Some(text()?.parse::<NaiveDate>().map_err(|_| invalid())?)),
+        "time" => Value::ChronoTime(Some(text()?.parse::<NaiveTime>().map_err(|_| invalid())?)),
         "naive" => Value::ChronoDateTime(Some(
-            NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f").map_err(|_| invalid())?,
+            NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f")
+                .map_err(|_| invalid())?,
         )),
         "utc" => Value::ChronoDateTimeUtc(Some(
             DateTime::parse_from_rfc3339(text()?)
@@ -426,7 +426,11 @@ fn after(columns: &[(ColumnRef, Direction)], values: &[Value], towards: Towards)
         let ascending = (*direction == Direction::Asc) == (towards == Towards::Next);
         clauses.push(WhereClause::and(Where::Compare {
             left: Expr::Column(column.clone()),
-            op: if ascending { Operator::Gt } else { Operator::Lt },
+            op: if ascending {
+                Operator::Gt
+            } else {
+                Operator::Lt
+            },
             right: Expr::Value(values[index].clone()),
         }));
         alternatives.push(WhereClause {
@@ -527,7 +531,10 @@ impl<M: Model> Builder<M> {
             .iter()
             .map(cursor_column)
             .collect::<Result<Vec<_>>>()?;
-        let names: Vec<String> = columns.iter().map(|(column, _)| column.name.to_string()).collect();
+        let names: Vec<String> = columns
+            .iter()
+            .map(|(column, _)| column.name.to_string())
+            .collect();
 
         let cursor = request.cursor.as_deref().map(Cursor::decode).transpose()?;
         if let Some(cursor) = &cursor {
@@ -556,7 +563,9 @@ impl<M: Model> Builder<M> {
             .into_vec();
         let has_more = data.len() as u64 > per_page;
         data.truncate(usize::try_from(per_page).unwrap_or(usize::MAX));
-        let backwards = cursor.as_ref().is_some_and(|c| c.towards == Towards::Previous);
+        let backwards = cursor
+            .as_ref()
+            .is_some_and(|c| c.towards == Towards::Previous);
         if backwards {
             data.reverse();
         }
@@ -617,7 +626,12 @@ mod tests {
             .with_timezone(&Utc);
         let cursor = Cursor {
             towards: Towards::Previous,
-            columns: vec!["created_at".into(), "id".into(), "score".into(), "amount".into()],
+            columns: vec![
+                "created_at".into(),
+                "id".into(),
+                "score".into(),
+                "amount".into(),
+            ],
             values: vec![
                 Value::ChronoDateTimeUtc(Some(at)),
                 Value::Uuid(Some(Uuid::nil())),
@@ -626,13 +640,21 @@ mod tests {
             ],
         };
         let text = cursor.encode();
-        assert!(text.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            text.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
         assert_eq!(Cursor::decode(&text).unwrap(), cursor);
     }
 
     #[test]
     fn malformed_cursors_are_rejected() {
-        for text in ["", "!!", "e30", &URL_SAFE_NO_PAD.encode(r#"{"d":"n","c":["a"],"v":[]}"#)] {
+        for text in [
+            "",
+            "!!",
+            "e30",
+            &URL_SAFE_NO_PAD.encode(r#"{"d":"n","c":["a"],"v":[]}"#),
+        ] {
             assert!(Cursor::decode(text).is_err(), "{text}");
         }
         let forged = URL_SAFE_NO_PAD.encode(r#"{"d":"n","c":["a"],"v":[["utc","yesterday"]]}"#);
@@ -641,8 +663,20 @@ mod tests {
 
     #[test]
     fn page_requests_default_to_the_model_page_size() {
-        assert_eq!(PageRequest::from(3).resolve(25), PageQuery { page: 3, per_page: 25 });
-        assert_eq!(PageRequest::from((2, 10)).resolve(25), PageQuery { page: 2, per_page: 10 });
+        assert_eq!(
+            PageRequest::from(3).resolve(25),
+            PageQuery {
+                page: 3,
+                per_page: 25
+            }
+        );
+        assert_eq!(
+            PageRequest::from((2, 10)).resolve(25),
+            PageQuery {
+                page: 2,
+                per_page: 10
+            }
+        );
         assert_eq!(PageRequest::from(0).resolve(25).page, 1);
     }
 }

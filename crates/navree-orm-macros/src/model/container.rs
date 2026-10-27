@@ -93,13 +93,18 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
             on: true,
             created_at: Some("created_at".to_owned()),
             updated_at: Some("updated_at".to_owned()),
-            span: Some(path.get_ident().map_or_else(Span::call_site, syn::Ident::span)),
+            span: Some(
+                path.get_ident()
+                    .map_or_else(Span::call_site, syn::Ident::span),
+            ),
         };
         if meta.input.peek(syn::token::Paren) {
             meta.parse_nested_meta(|inner| parse_timestamp(&mut container.timestamps, &inner))?;
         }
     } else if path.is_ident("soft_deletes") {
-        let span = path.get_ident().map_or_else(Span::call_site, syn::Ident::span);
+        let span = path
+            .get_ident()
+            .map_or_else(Span::call_site, syn::Ident::span);
         let column = if meta.input.peek(Token![=]) {
             non_empty(meta.value()?.parse()?)?.value()
         } else {
@@ -112,7 +117,10 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         let per_page: LitInt = meta.value()?.parse()?;
         let value: u64 = per_page.base10_parse()?;
         if value == 0 {
-            return Err(syn::Error::new(per_page.span(), "per_page must be at least 1"));
+            return Err(syn::Error::new(
+                per_page.span(),
+                "per_page must be at least 1",
+            ));
         }
         container.per_page = Some(per_page);
     } else if path.is_ident("global_scopes") {

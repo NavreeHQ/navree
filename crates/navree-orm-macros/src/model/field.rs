@@ -46,7 +46,10 @@ fn parse_key(field: &mut FieldAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<
     if path.is_ident("column") {
         let column: LitStr = meta.value()?.parse()?;
         if column.value().trim().is_empty() {
-            return Err(syn::Error::new(column.span(), "the column name cannot be empty"));
+            return Err(syn::Error::new(
+                column.span(),
+                "the column name cannot be empty",
+            ));
         }
         field.column = Some(column);
     } else if path.is_ident("cast") {
@@ -70,7 +73,10 @@ fn parse_key(field: &mut FieldAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<
                     // A cast is a type: its name starts with a capital
                     // letter; a lowercase word is a misspelled built-in.
                     let is_type = path.segments.last().is_some_and(|segment| {
-                        segment.ident.to_string().starts_with(|c: char| c.is_ascii_uppercase())
+                        segment
+                            .ident
+                            .to_string()
+                            .starts_with(|c: char| c.is_ascii_uppercase())
                     });
                     if !is_type {
                         return Err(unknown());
@@ -81,14 +87,20 @@ fn parse_key(field: &mut FieldAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<
             (cast, text.span())
         } else {
             let cast: syn::Path = value.parse()?;
-            let span = cast.segments.last().map_or_else(Span::call_site, |s| s.ident.span());
+            let span = cast
+                .segments
+                .last()
+                .map_or_else(Span::call_site, |s| s.ident.span());
             (Cast::Path(cast), span)
         };
         field.cast = Some(cast);
     } else if path.is_ident("default") {
         field.default = true;
     } else if path.is_ident("skip") {
-        field.skip = Some(path.get_ident().map_or_else(Span::call_site, syn::Ident::span));
+        field.skip = Some(
+            path.get_ident()
+                .map_or_else(Span::call_site, syn::Ident::span),
+        );
     } else {
         let key = key_name(path);
         let hint = suggestion(&key, KEYS)

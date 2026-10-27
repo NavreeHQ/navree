@@ -15,7 +15,10 @@ async fn cast_fields_round_trip() {
         Deal {
             stage: Stage::ClosedWon,
             priority: Priority::High,
-            meta: DealMeta { source: "partner".into(), score: 9 },
+            meta: DealMeta {
+                source: "partner".into(),
+                score: 9,
+            },
             tags: vec!["a".into(), "b".into()],
             ..Deal::new("Casts", 1)
         },
@@ -25,7 +28,13 @@ async fn cast_fields_round_trip() {
     let stored = Deal::find_or_fail(&t.db, deal.id).await.unwrap();
     assert_eq!(stored.stage, Stage::ClosedWon);
     assert_eq!(stored.priority, Priority::High);
-    assert_eq!(stored.meta, DealMeta { source: "partner".into(), score: 9 });
+    assert_eq!(
+        stored.meta,
+        DealMeta {
+            source: "partner".into(),
+            score: 9
+        }
+    );
     assert_eq!(stored.tags, ["a", "b"]);
 
     let raw = navree_orm::table("deals")
@@ -38,8 +47,22 @@ async fn cast_fields_round_trip() {
     assert_eq!(raw.get::<i64>("priority").unwrap(), 3);
 
     // Conditions take the field's type and encode it as stored.
-    assert_eq!(Deal::query().where_(Deal::STAGE.eq(Stage::ClosedWon)).count(&t.db).await.unwrap(), 1);
-    assert_eq!(Deal::query().where_(Deal::PRIORITY.gte(Priority::Normal)).count(&t.db).await.unwrap(), 1);
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::STAGE.eq(Stage::ClosedWon))
+            .count(&t.db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::PRIORITY.gte(Priority::Normal))
+            .count(&t.db)
+            .await
+            .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -49,7 +72,10 @@ async fn custom_and_nullable_casts() {
         &t.db,
         Invoice {
             total: 1250,
-            lines: Some(vec![Line { item: "seat".into(), cents: 1250 }]),
+            lines: Some(vec![Line {
+                item: "seat".into(),
+                cents: 1250,
+            }]),
             previous_stage: None,
             discount: Some(50),
             ..Invoice::default()
@@ -59,7 +85,11 @@ async fn custom_and_nullable_casts() {
     .unwrap();
     let stored = Invoice::find_or_fail(&t.db, invoice.id).await.unwrap();
     assert_eq!(*stored, *invoice);
-    let raw = navree_orm::table("invoices").first(&t.db).await.unwrap().unwrap();
+    let raw = navree_orm::table("invoices")
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(raw.get::<String>("total").unwrap(), "1250");
     assert_eq!(raw.get::<Option<String>>("previous_stage").unwrap(), None);
     assert_eq!(raw.get::<String>("discount").unwrap(), "50");
@@ -71,8 +101,22 @@ async fn custom_and_nullable_casts() {
     let again = Invoice::find_or_fail(&t.db, invoice.id).await.unwrap();
     assert_eq!(again.previous_stage, Some(Stage::Qualified));
     assert!(again.lines.is_none());
-    assert_eq!(Invoice::query().where_(Invoice::PREVIOUS_STAGE.eq(Stage::Qualified)).count(&t.db).await.unwrap(), 1);
-    assert_eq!(Invoice::query().where_(Invoice::LINES.eq(None)).count(&t.db).await.unwrap(), 1);
+    assert_eq!(
+        Invoice::query()
+            .where_(Invoice::PREVIOUS_STAGE.eq(Stage::Qualified))
+            .count(&t.db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Invoice::query()
+            .where_(Invoice::LINES.eq(None))
+            .count(&t.db)
+            .await
+            .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]

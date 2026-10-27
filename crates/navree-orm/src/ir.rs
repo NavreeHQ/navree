@@ -125,10 +125,7 @@ fn parse_json_path(path: &str) -> Vec<JsonSegment> {
                 Err(_) => segments.push(JsonSegment::Key(key.to_owned())),
             }
         }
-        for index in indexes
-            .split(['[', ']'])
-            .filter(|piece| !piece.is_empty())
-        {
+        for index in indexes.split(['[', ']']).filter(|piece| !piece.is_empty()) {
             match index.trim().parse::<i64>() {
                 Ok(index) => segments.push(JsonSegment::Index(index)),
                 Err(_) => segments.push(JsonSegment::Key(index.to_owned())),
@@ -358,7 +355,11 @@ const POSTGRES_OPERATORS: [&str; 13] = [
 
 impl From<&str> for Operator {
     fn from(text: &str) -> Self {
-        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+        let normalized = text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
         match normalized.as_str() {
             "=" | "==" => Operator::Eq,
             "!=" | "<>" => Operator::Ne,
@@ -679,7 +680,10 @@ impl TableRef {
     }
 
     /// The table `name` as `alias`.
-    pub fn aliased(name: impl Into<Cow<'static, str>>, alias: impl Into<Cow<'static, str>>) -> Self {
+    pub fn aliased(
+        name: impl Into<Cow<'static, str>>,
+        alias: impl Into<Cow<'static, str>>,
+    ) -> Self {
         TableRef {
             name: name.into(),
             alias: Some(alias.into()),
@@ -988,7 +992,10 @@ mod tests {
 
     #[test]
     fn column_refs_parse_tables_and_json_paths() {
-        assert_eq!(ColumnRef::parse("title"), ColumnRef::new(None::<&str>, "title"));
+        assert_eq!(
+            ColumnRef::parse("title"),
+            ColumnRef::new(None::<&str>, "title")
+        );
         assert_eq!(
             ColumnRef::parse("deals.title"),
             ColumnRef::new(Some("deals"), "title")

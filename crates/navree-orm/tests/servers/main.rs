@@ -18,7 +18,10 @@ async fn postgres_records_round_trip() {
 
 #[tokio::test]
 async fn postgres_queries() {
-    run(Server::Postgres, |db| scenarios::queries(db, Server::Postgres)).await;
+    run(Server::Postgres, |db| {
+        scenarios::queries(db, Server::Postgres)
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -33,12 +36,18 @@ async fn postgres_pagination() {
 
 #[tokio::test]
 async fn postgres_unit_of_work() {
-    run(Server::Postgres, |db| scenarios::unit_of_work(db, Server::Postgres)).await;
+    run(Server::Postgres, |db| {
+        scenarios::unit_of_work(db, Server::Postgres)
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn timescaledb_time_buckets() {
-    run(Server::Postgres, |db| scenarios::time_buckets(db, Server::Postgres)).await;
+    run(Server::Postgres, |db| {
+        scenarios::time_buckets(db, Server::Postgres)
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -63,10 +72,16 @@ async fn mysql_pagination() {
 
 #[tokio::test]
 async fn mysql_unit_of_work() {
-    run(Server::MySql, |db| scenarios::unit_of_work(db, Server::MySql)).await;
+    run(Server::MySql, |db| {
+        scenarios::unit_of_work(db, Server::MySql)
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn mysql_time_buckets() {
-    run(Server::MySql, |db| scenarios::time_buckets(db, Server::MySql)).await;
+    run(Server::MySql, |db| {
+        scenarios::time_buckets(db, Server::MySql)
+    })
+    .await;
 }

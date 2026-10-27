@@ -75,7 +75,10 @@ fn plural(word: &str) -> String {
     if word.ends_with("is") && word.len() > 3 {
         return format!("{}es", &word[..word.len() - 2]);
     }
-    if ["s", "x", "z", "ch", "sh"].iter().any(|suffix| word.ends_with(suffix)) {
+    if ["s", "x", "z", "ch", "sh"]
+        .iter()
+        .any(|suffix| word.ends_with(suffix))
+    {
         return format!("{word}es");
     }
     format!("{word}s")

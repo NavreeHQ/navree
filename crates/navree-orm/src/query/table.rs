@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 use indexmap::IndexMap;
 
-use crate::column::{AsExpr, Assignment, IntoQuery};
+use crate::column::{Assignment, IntoExpr, IntoQuery};
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, Target};
 use crate::ir::{
@@ -107,7 +107,11 @@ impl TableBuilder {
         Ok(self.limit(1).get(exec).await?.into_iter().next())
     }
 
-    async fn select_rows(mut self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
+    async fn select_rows(
+        mut self,
+        target: &Target<'_>,
+        items: Vec<SelectItem>,
+    ) -> Result<Vec<Row>> {
         self.ir.columns = items;
         target.fetch(&self.ir).await
     }
@@ -223,41 +227,61 @@ impl TableBuilder {
     pub async fn sum<T: Field + Default>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<T> {
-        self.aggregate::<T>(exec, AggregateFunction::Sum, Some(column.as_expr()), false)
-            .await
-            .map(Option::unwrap_or_default)
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Sum,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
+        .map(Option::unwrap_or_default)
     }
 
     /// The average of `column`; `None` when there are no rows.
     pub async fn avg<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Avg, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Avg,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// The smallest value of `column`.
     pub async fn min<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Min, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Min,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// The largest value of `column`.
     pub async fn max<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Max, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Max,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// An aggregate of the rows read as `T`; `None` when the database
@@ -277,9 +301,8 @@ impl TableBuilder {
             distinct,
         };
         let value = target.aggregate(&self.ir, &aggregate).await?;
-        <Option<T>>::from_value(value).map_err(|error| {
-            decode_error(name, function.sql_name(), T::type_name(), &error)
-        })
+        <Option<T>>::from_value(value)
+            .map_err(|error| decode_error(name, function.sql_name(), T::type_name(), &error))
     }
 
     /// Page `page` of the rows and their total (15 rows per page for a
@@ -345,7 +368,11 @@ impl TableBuilder {
     /// ```ignore
     /// table("deal_tag").insert(&uow, [[("deal_id", Value::from(deal)), ("tag_id", Value::from(tag))]]).await?;
     /// ```
-    pub async fn insert<E, R, C, V>(self, exec: &E, rows: impl IntoIterator<Item = R>) -> Result<u64>
+    pub async fn insert<E, R, C, V>(
+        self,
+        exec: &E,
+        rows: impl IntoIterator<Item = R>,
+    ) -> Result<u64>
     where
         E: Executor + ?Sized,
         R: IntoIterator<Item = (C, V)>,
@@ -414,7 +441,13 @@ impl TableBuilder {
             .collect::<Result<Vec<_>>>()?;
         let (table, wheres) = self.write_target("update")?;
         let target = exec.target(Access::Write).await?;
-        target.update(&UpdateIr { table, sets, wheres }).await
+        target
+            .update(&UpdateIr {
+                table,
+                sets,
+                wheres,
+            })
+            .await
     }
 
     /// Deletes every matching row; returns how many were deleted.
@@ -431,7 +464,8 @@ impl TableBuilder {
         column: &str,
         amount: impl Into<Value>,
     ) -> Result<u64> {
-        self.step(exec, column, amount.into(), ArithmeticOp::Add).await
+        self.step(exec, column, amount.into(), ArithmeticOp::Add)
+            .await
     }
 
     /// Subtracts `amount` from `column` on every matching row.
@@ -441,7 +475,8 @@ impl TableBuilder {
         column: &str,
         amount: impl Into<Value>,
     ) -> Result<u64> {
-        self.step(exec, column, amount.into(), ArithmeticOp::Sub).await
+        self.step(exec, column, amount.into(), ArithmeticOp::Sub)
+            .await
     }
 
     async fn step<E: Executor + ?Sized>(
@@ -462,7 +497,13 @@ impl TableBuilder {
         )];
         let (table, wheres) = self.write_target("update")?;
         let target = exec.target(Access::Write).await?;
-        target.update(&UpdateIr { table, sets, wheres }).await
+        target
+            .update(&UpdateIr {
+                table,
+                sets,
+                wheres,
+            })
+            .await
     }
 }
 

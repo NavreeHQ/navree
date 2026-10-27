@@ -556,7 +556,9 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     }
 
     /// Every record.
-    fn all<E: Executor + ?Sized>(exec: &E) -> impl Future<Output = Result<Collection<Self>>> + Send {
+    fn all<E: Executor + ?Sized>(
+        exec: &E,
+    ) -> impl Future<Output = Result<Collection<Self>>> + Send {
         Self::query().get(exec)
     }
 
@@ -808,7 +810,10 @@ pub mod derive_support {
     }
 
     /// Converts a stored value into a cast field.
-    pub fn convert_cast<M: Model, C: Cast<T>, T>(column: &str, value: Value) -> Result<T, OrmError> {
+    pub fn convert_cast<M: Model, C: Cast<T>, T>(
+        column: &str,
+        value: Value,
+    ) -> Result<T, OrmError> {
         let stored = convert::<M, C::Stored>(column, value)?;
         C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
     }
@@ -828,10 +833,7 @@ pub mod derive_support {
 
     /// The error for a column the model does not have.
     pub fn unknown_column<M: Model>(column: &str) -> OrmError {
-        OrmError::InvalidQuery(format!(
-            "{} has no column `{column}`",
-            M::meta().name()
-        ))
+        OrmError::InvalidQuery(format!("{} has no column `{column}`", M::meta().name()))
     }
 
     /// The error for a column that is not one of the model's timestamps.

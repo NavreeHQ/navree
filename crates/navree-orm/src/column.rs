@@ -5,9 +5,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
-use crate::ir::{
-    Boolean, ColumnRef, Expr, InValues, Operator, Order, QueryIr, Where, WhereClause,
-};
+use crate::ir::{Boolean, ColumnRef, Expr, InValues, Operator, Order, QueryIr, Where, WhereClause};
 use crate::row::Row;
 use crate::value::{Field, FieldError, Value, ValueFor, is_null};
 
@@ -69,7 +67,9 @@ impl<M, T> Clone for Column<M, T> {
 
 impl<M, T> fmt::Debug for Column<M, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Column").field(&self.column_ref().to_string()).finish()
+        f.debug_tuple("Column")
+            .field(&self.column_ref().to_string())
+            .finish()
     }
 }
 
@@ -710,10 +710,14 @@ impl Assignment {
             column.table = table.map(Cow::Borrowed);
         }
         match &self.value {
-            AssignedValue::Value(value) => {
-                Filter::compare(Expr::Column(column), Operator::Eq, Expr::Value(value.clone()))
+            AssignedValue::Value(value) => Filter::compare(
+                Expr::Column(column),
+                Operator::Eq,
+                Expr::Value(value.clone()),
+            ),
+            AssignedValue::Expr(expr) => {
+                Filter::compare(Expr::Column(column), Operator::Eq, expr.clone())
             }
-            AssignedValue::Expr(expr) => Filter::compare(Expr::Column(column), Operator::Eq, expr.clone()),
             AssignedValue::Invalid(error) => Filter(Where::Invalid(error.clone())),
         }
     }
@@ -789,43 +793,43 @@ impl ColumnOf<Value> for String {
 /// [`Column`], a column name (`"title"`, `"deals.title"`,
 /// `"meta->status"`), or an [`Expr`]. Select lists, orders and groups take
 /// these.
-pub trait AsExpr {
+pub trait IntoExpr {
     /// The expression.
-    fn as_expr(self) -> Expr;
+    fn into_expr(self) -> Expr;
 }
 
-impl<M, T> AsExpr for Column<M, T> {
-    fn as_expr(self) -> Expr {
+impl<M, T> IntoExpr for Column<M, T> {
+    fn into_expr(self) -> Expr {
         self.expr()
     }
 }
 
-impl<M, T> AsExpr for &Column<M, T> {
-    fn as_expr(self) -> Expr {
+impl<M, T> IntoExpr for &Column<M, T> {
+    fn into_expr(self) -> Expr {
         self.expr()
     }
 }
 
-impl AsExpr for &str {
-    fn as_expr(self) -> Expr {
+impl IntoExpr for &str {
+    fn into_expr(self) -> Expr {
         column_or_all(Cow::Owned(self.to_owned()))
     }
 }
 
-impl AsExpr for String {
-    fn as_expr(self) -> Expr {
+impl IntoExpr for String {
+    fn into_expr(self) -> Expr {
         column_or_all(Cow::Owned(self))
     }
 }
 
-impl AsExpr for Expr {
-    fn as_expr(self) -> Expr {
+impl IntoExpr for Expr {
+    fn into_expr(self) -> Expr {
         self
     }
 }
 
-impl AsExpr for ColumnRef {
-    fn as_expr(self) -> Expr {
+impl IntoExpr for ColumnRef {
+    fn into_expr(self) -> Expr {
         Expr::Column(self)
     }
 }
@@ -882,6 +886,6 @@ impl<M, T> From<Column<M, T>> for Order {
 
 impl From<&str> for Order {
     fn from(column: &str) -> Self {
-        Order::asc(column.as_expr())
+        Order::asc(column.into_expr())
     }
 }

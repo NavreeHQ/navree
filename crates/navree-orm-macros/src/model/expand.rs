@@ -301,7 +301,12 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         );
         let ty = &column.ty;
         let init = &codec.constant;
-        let doc = format!("The `{}` column (`{}.{}`).", plain_name(&column.ident), model.table, column.name);
+        let doc = format!(
+            "The `{}` column (`{}.{}`).",
+            plain_name(&column.ident),
+            model.table,
+            column.name
+        );
         quote! {
             #[doc = #doc]
             #vis const #constant: #krate::Column<Self, #ty> = #init;

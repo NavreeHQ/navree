@@ -112,7 +112,7 @@ mod value;
 
 pub use collection::Collection;
 pub use column::{
-    AsExpr, Assignment, Column, ColumnName, ColumnOf, Decoder, Encoder, Filter, IntoQuery,
+    Assignment, Column, ColumnName, ColumnOf, Decoder, Encoder, Filter, IntoExpr, IntoQuery,
     Untyped, col, col_as,
 };
 pub use driver::{DocumentDriver, InsertOutcome};
@@ -121,8 +121,7 @@ pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target}
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
 pub use pagination::{
-    CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage,
-    SimplePageMeta,
+    CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
 pub use query::{
     Builder, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder, WhereGroup,

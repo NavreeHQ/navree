@@ -107,7 +107,11 @@ pub(crate) fn group_scope_wheres(ir: &mut QueryIr, before: usize) {
 }
 
 fn group_slice(slice: Vec<WhereClause>) -> Vec<WhereClause> {
-    if !slice.iter().skip(1).any(|clause| clause.boolean == Boolean::Or) {
+    if !slice
+        .iter()
+        .skip(1)
+        .any(|clause| clause.boolean == Boolean::Or)
+    {
         return slice;
     }
     let boolean = slice.first().map_or(Boolean::And, |clause| clause.boolean);
@@ -140,7 +144,10 @@ mod tests {
             .iter()
             .map(|c| match &c.filter {
                 Where::Group(inner) => format!("{:?}({})", c.boolean, shape(inner)),
-                Where::Compare { left: Expr::Column(column), .. } => {
+                Where::Compare {
+                    left: Expr::Column(column),
+                    ..
+                } => {
                     format!("{:?}:{}", c.boolean, column.name)
                 }
                 other => format!("{other:?}"),

@@ -116,7 +116,10 @@ impl fmt::Display for Statement {
 }
 
 /// Builds a sea-query statement for `dialect`.
-pub(crate) fn build<S: sea_query::QueryStatementBuilder>(statement: &S, dialect: Dialect) -> Statement {
+pub(crate) fn build<S: sea_query::QueryStatementBuilder>(
+    statement: &S,
+    dialect: Dialect,
+) -> Statement {
     let (sql, values) = match dialect {
         Dialect::Postgres => statement.build_any(&PostgresQueryBuilder),
         Dialect::MySql => statement.build_any(&MysqlQueryBuilder),
@@ -134,7 +137,9 @@ pub(crate) fn compile_filter(filter: &Where, dialect: Dialect) -> Result<Stateme
     let compiler = Compiler::new(dialect);
     let condition = compiler.where_(filter)?;
     let mut select = sea_query::Query::select();
-    select.expr(sea_query::Expr::cust("1")).cond_where(condition);
+    select
+        .expr(sea_query::Expr::cust("1"))
+        .cond_where(condition);
     let statement = build(&select, dialect);
     let sql = statement
         .sql
@@ -155,7 +160,10 @@ impl Compiler {
         Compiler { dialect }
     }
 
-    pub(crate) fn unsupported(&self, feature: impl Into<std::borrow::Cow<'static, str>>) -> OrmError {
+    pub(crate) fn unsupported(
+        &self,
+        feature: impl Into<std::borrow::Cow<'static, str>>,
+    ) -> OrmError {
         OrmError::unsupported(feature, self.dialect.name())
     }
 
@@ -307,7 +315,10 @@ impl Compiler {
                 origin,
             } => {
                 let expr = self.expr(expr)?;
-                let origin = origin.as_deref().map(|origin| self.expr(origin)).transpose()?;
+                let origin = origin
+                    .as_deref()
+                    .map(|origin| self.expr(origin))
+                    .transpose()?;
                 self.time_bucket(width, expr, origin)?
             }
             Expr::First { value, time } => self.first_last("first", value, time)?,
@@ -323,9 +334,9 @@ impl Compiler {
 /// Whether `name` is a plain (optionally schema-qualified) SQL identifier.
 pub(crate) fn is_identifier(name: &str) -> bool {
     !name.is_empty()
-        && name
-            .split('.')
-            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        && name.split('.').all(|part| {
+            !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
         && !name.starts_with(|c: char| c.is_ascii_digit())
 }
 
@@ -421,15 +432,41 @@ mod tests {
 
     #[test]
     fn raw_placeholders_are_portable() {
-        assert_eq!(raw_sql("a = ? AND b = ?", 2, Dialect::Postgres).unwrap(), "a = $1 AND b = $2");
-        assert_eq!(raw_sql("a = ? AND b = ?", 2, Dialect::Sqlite).unwrap(), "a = ? AND b = ?");
-        assert_eq!(raw_sql("data ?? 'k' AND x = ?", 1, Dialect::Postgres).unwrap(), "data ? 'k' AND x = $1");
-        assert_eq!(raw_sql("data ?? 'k'", 0, Dialect::MySql).unwrap(), "data ?? 'k'");
-        assert_eq!(raw_sql("name = '?' AND x = ?", 1, Dialect::Postgres).unwrap(), "name = '?' AND x = $1");
-        assert_eq!(raw_sql("price > 5$", 0, Dialect::Postgres).unwrap(), "price > 5$$");
-        assert_eq!(raw_sql("'it''s ?' = ?", 1, Dialect::Sqlite).unwrap(), "'it''s ?' = ?");
-        let error = raw_sql("a = ?", 2, Dialect::Sqlite).unwrap_err().to_string();
-        assert_eq!(error, "invalid query: the raw SQL `a = ?` has 1 placeholder(s) but 2 value(s)");
+        assert_eq!(
+            raw_sql("a = ? AND b = ?", 2, Dialect::Postgres).unwrap(),
+            "a = $1 AND b = $2"
+        );
+        assert_eq!(
+            raw_sql("a = ? AND b = ?", 2, Dialect::Sqlite).unwrap(),
+            "a = ? AND b = ?"
+        );
+        assert_eq!(
+            raw_sql("data ?? 'k' AND x = ?", 1, Dialect::Postgres).unwrap(),
+            "data ? 'k' AND x = $1"
+        );
+        assert_eq!(
+            raw_sql("data ?? 'k'", 0, Dialect::MySql).unwrap(),
+            "data ?? 'k'"
+        );
+        assert_eq!(
+            raw_sql("name = '?' AND x = ?", 1, Dialect::Postgres).unwrap(),
+            "name = '?' AND x = $1"
+        );
+        assert_eq!(
+            raw_sql("price > 5$", 0, Dialect::Postgres).unwrap(),
+            "price > 5$$"
+        );
+        assert_eq!(
+            raw_sql("'it''s ?' = ?", 1, Dialect::Sqlite).unwrap(),
+            "'it''s ?' = ?"
+        );
+        let error = raw_sql("a = ?", 2, Dialect::Sqlite)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "invalid query: the raw SQL `a = ?` has 1 placeholder(s) but 2 value(s)"
+        );
     }
 
     #[test]
@@ -440,7 +477,10 @@ mod tests {
             JsonSegment::Key("it's \"x\"".into()),
         ];
         assert_eq!(json_path_literal(&path), r#"'$."a"[2]."it''s \"x\""'"#);
-        assert_eq!(postgres_path_segment(&JsonSegment::Key("o'k".into())), "'o''k'");
+        assert_eq!(
+            postgres_path_segment(&JsonSegment::Key("o'k".into())),
+            "'o''k'"
+        );
     }
 
     #[test]
