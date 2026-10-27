@@ -15,7 +15,10 @@ use serde_json::json;
 use crate::support::{FROM, MailTemplates, array_options, dispatcher, view_module};
 
 fn hello() -> Message {
-    Message::new().to("ada@example.com").subject("Hi").text("Hi")
+    Message::new()
+        .to("ada@example.com")
+        .subject("Hi")
+        .text("Hi")
 }
 
 async fn boot(options: navree_mail::MailOptions) -> App {
@@ -93,10 +96,9 @@ async fn named_transports_come_from_config() {
 #[tokio::test]
 async fn an_invalid_named_transport_fails_the_boot_naming_its_key() {
     let mut options = array_options();
-    options.transports.insert(
-        "broken".to_owned(),
-        TransportConfig::Failover(Vec::new()),
-    );
+    options
+        .transports
+        .insert("broken".to_owned(), TransportConfig::Failover(Vec::new()));
 
     let error = Navree::app()
         .module(view_module())
@@ -114,8 +116,10 @@ async fn deliver_reports_the_default_transport() {
     let mailer = app.ctx().get::<Mailer>().await.expect("mailer");
 
     let report = mailer
-        .deliver(&TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-            .context(json!({ "name": "Ada" })))
+        .deliver(
+            &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
+                .context(json!({ "name": "Ada" })),
+        )
         .await
         .expect("deliver");
 
@@ -188,7 +192,10 @@ async fn queued_mail_keeps_its_scope_transport_and_template() {
     run_job(&app, envelope.payload).await;
     let simulation = array_of(mailer.named_transport("simulation").expect("named"));
     assert_eq!(simulation.sent()[0].html, job.message.html);
-    mailer.array_transport().expect("default").assert_nothing_sent();
+    mailer
+        .array_transport()
+        .expect("default")
+        .assert_nothing_sent();
 }
 
 /// Runs the `mail.send` registration on `payload`.

@@ -220,18 +220,24 @@ impl Outbox {
     pub async fn release(&self, id: Uuid, by: Option<Uuid>) -> Result<SendReport, MailError> {
         let model = self.model(id).await?;
         let message = self.message(id).await?;
-        let mailer = self.store.app()?.get::<Mailer>().await.map_err(|error| {
-            MailError::Store {
+        let mailer = self
+            .store
+            .app()?
+            .get::<Mailer>()
+            .await
+            .map_err(|error| MailError::Store {
                 source: Box::new(error),
-            }
-        })?;
+            })?;
         let store = self.store.clone();
         self.store
             .in_uow(|uow| async move {
                 let now = store.now().await;
                 let tx = uow.tx().await?;
                 let claimed = outbox::Entity::update_many()
-                    .col_expr(outbox::Column::Status, Expr::value(OutboxStatus::Released.as_str()))
+                    .col_expr(
+                        outbox::Column::Status,
+                        Expr::value(OutboxStatus::Released.as_str()),
+                    )
                     .col_expr(outbox::Column::DecidedBy, Expr::value(by))
                     .col_expr(outbox::Column::DecidedAt, Expr::value(now))
                     .col_expr(outbox::Column::UpdatedAt, Expr::value(now))
@@ -281,7 +287,10 @@ impl Outbox {
                 let now = store.now().await;
                 let tx = uow.tx().await?;
                 let claimed = outbox::Entity::update_many()
-                    .col_expr(outbox::Column::Status, Expr::value(OutboxStatus::Discarded.as_str()))
+                    .col_expr(
+                        outbox::Column::Status,
+                        Expr::value(OutboxStatus::Discarded.as_str()),
+                    )
                     .col_expr(outbox::Column::DecidedBy, Expr::value(by))
                     .col_expr(outbox::Column::DecidedAt, Expr::value(now))
                     .col_expr(outbox::Column::UpdatedAt, Expr::value(now))

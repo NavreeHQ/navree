@@ -214,9 +214,7 @@ impl DkimSigner {
         };
         match self.algorithm {
             DkimAlgorithm::Ed25519Sha256 => STANDARD.encode(decode(&jwk.x)),
-            DkimAlgorithm::RsaSha256 => {
-                STANDARD.encode(rsa_spki(&decode(&jwk.n), &decode(&jwk.e)))
-            }
+            DkimAlgorithm::RsaSha256 => STANDARD.encode(rsa_spki(&decode(&jwk.n), &decode(&jwk.e))),
         }
     }
 
@@ -395,7 +393,10 @@ fn rsa_spki(n: &[u8], e: &[u8]) -> Vec<u8> {
     let algorithm = der(
         0x30,
         &[
-            der(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]),
+            der(
+                0x06,
+                &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01],
+            ),
             vec![0x05, 0x00],
         ]
         .concat(),
@@ -426,7 +427,10 @@ fn der(tag: u8, content: &[u8]) -> Vec<u8> {
         out.push(len as u8);
     } else {
         let bytes = len.to_be_bytes();
-        let start = bytes.iter().position(|b| *b != 0).unwrap_or(bytes.len() - 1);
+        let start = bytes
+            .iter()
+            .position(|b| *b != 0)
+            .unwrap_or(bytes.len() - 1);
         out.push(0x80 | (bytes.len() - start) as u8);
         out.extend_from_slice(&bytes[start..]);
     }

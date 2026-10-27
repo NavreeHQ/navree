@@ -31,8 +31,7 @@ use uuid::Uuid;
 use crate::mailer::SendOptions;
 use crate::message::bare_address;
 use crate::{
-    DeliveryStatus, MailError, MailOptions, MailTransport, Message, SendReport, Sent,
-    TransportTier,
+    DeliveryStatus, MailError, MailOptions, MailTransport, Message, SendReport, Sent, TransportTier,
 };
 use entity::delivery;
 use outbox::Outbox;

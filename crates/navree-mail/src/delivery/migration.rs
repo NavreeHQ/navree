@@ -73,9 +73,27 @@ impl MigrationTrait for CreateMailTables {
                     .to_owned(),
             )
             .await?;
-        index(manager, "mail_transports", "mail_transports_workspace_index", &["workspace_id"]).await?;
-        index(manager, "mail_transports", "mail_transports_organization_index", &["organization_id"]).await?;
-        index(manager, "mail_transports", "mail_transports_domain_index", &["domain"]).await?;
+        index(
+            manager,
+            "mail_transports",
+            "mail_transports_workspace_index",
+            &["workspace_id"],
+        )
+        .await?;
+        index(
+            manager,
+            "mail_transports",
+            "mail_transports_organization_index",
+            &["organization_id"],
+        )
+        .await?;
+        index(
+            manager,
+            "mail_transports",
+            "mail_transports_domain_index",
+            &["domain"],
+        )
+        .await?;
 
         manager
             .create_table(
@@ -101,7 +119,13 @@ impl MigrationTrait for CreateMailTables {
                     .to_owned(),
             )
             .await?;
-        index(manager, "mail_deliveries", "mail_deliveries_provider_id_index", &["provider_id"]).await?;
+        index(
+            manager,
+            "mail_deliveries",
+            "mail_deliveries_provider_id_index",
+            &["provider_id"],
+        )
+        .await?;
         index(
             manager,
             "mail_deliveries",
@@ -109,8 +133,20 @@ impl MigrationTrait for CreateMailTables {
             &["workspace_id", "created_at"],
         )
         .await?;
-        index(manager, "mail_deliveries", "mail_deliveries_recipient_index", &["recipient_hash"]).await?;
-        index(manager, "mail_deliveries", "mail_deliveries_created_at_index", &["created_at"]).await?;
+        index(
+            manager,
+            "mail_deliveries",
+            "mail_deliveries_recipient_index",
+            &["recipient_hash"],
+        )
+        .await?;
+        index(
+            manager,
+            "mail_deliveries",
+            "mail_deliveries_created_at_index",
+            &["created_at"],
+        )
+        .await?;
 
         manager
             .create_table(
@@ -136,7 +172,13 @@ impl MigrationTrait for CreateMailTables {
                     .to_owned(),
             )
             .await?;
-        index(manager, "mail_events", "mail_events_delivery_index", &["delivery_id"]).await?;
+        index(
+            manager,
+            "mail_events",
+            "mail_events_delivery_index",
+            &["delivery_id"],
+        )
+        .await?;
 
         manager
             .create_table(
@@ -182,7 +224,13 @@ impl MigrationTrait for CreateMailTables {
                     .to_owned(),
             )
             .await?;
-        index(manager, "mail_outbox", "mail_outbox_status_index", &["status", "created_at"]).await
+        index(
+            manager,
+            "mail_outbox",
+            "mail_outbox_status_index",
+            &["status", "created_at"],
+        )
+        .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {

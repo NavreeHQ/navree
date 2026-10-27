@@ -88,7 +88,11 @@ impl MailgunTransport {
     fn form(message: &Message) -> Result<Vec<(String, String)>, MailError> {
         let from = message.from.as_deref().ok_or(MailError::MissingSender)?;
         let mut form = vec![("from".to_owned(), address("from", from)?)];
-        for (field, list) in [("to", &message.to), ("cc", &message.cc), ("bcc", &message.bcc)] {
+        for (field, list) in [
+            ("to", &message.to),
+            ("cc", &message.cc),
+            ("bcc", &message.bcc),
+        ] {
             for recipient in list {
                 form.push((field.to_owned(), address(field, recipient)?));
             }

@@ -112,7 +112,11 @@ pub struct ProviderEvent {
 impl ProviderEvent {
     /// An event of `kind` from `provider` about the message with
     /// `provider_id`.
-    pub fn new(provider: impl Into<String>, provider_id: impl Into<String>, kind: MailEventKind) -> Self {
+    pub fn new(
+        provider: impl Into<String>,
+        provider_id: impl Into<String>,
+        kind: MailEventKind,
+    ) -> Self {
         Self {
             provider: provider.into(),
             provider_id: Some(provider_id.into()),
@@ -210,20 +214,21 @@ impl ProviderEvent {
                 })
                 .unwrap_or_default()
         };
-        let each = |kind: MailEventKind, section: &Value, recipients: Vec<(String, Option<String>)>| {
-            let template = base(kind, section);
-            if recipients.is_empty() {
-                return vec![template];
-            }
-            recipients
-                .into_iter()
-                .map(|(recipient, detail)| ProviderEvent {
-                    recipient: Some(recipient),
-                    detail,
-                    ..template.clone()
-                })
-                .collect()
-        };
+        let each =
+            |kind: MailEventKind, section: &Value, recipients: Vec<(String, Option<String>)>| {
+                let template = base(kind, section);
+                if recipients.is_empty() {
+                    return vec![template];
+                }
+                recipients
+                    .into_iter()
+                    .map(|(recipient, detail)| ProviderEvent {
+                        recipient: Some(recipient),
+                        detail,
+                        ..template.clone()
+                    })
+                    .collect()
+            };
         match kind {
             "Delivery" => {
                 let section = &event["delivery"];
@@ -269,17 +274,25 @@ impl ProviderEvent {
             }
             "Open" => {
                 let section = &event["open"];
-                each(MailEventKind::Opened, section, addresses(&mail["destination"], None))
+                each(
+                    MailEventKind::Opened,
+                    section,
+                    addresses(&mail["destination"], None),
+                )
             }
             "Click" => {
                 let section = &event["click"];
-                each(MailEventKind::Clicked, section, addresses(&mail["destination"], None))
-                    .into_iter()
-                    .map(|mut e| {
-                        e.url = section["link"].as_str().map(str::to_owned);
-                        e
-                    })
-                    .collect()
+                each(
+                    MailEventKind::Clicked,
+                    section,
+                    addresses(&mail["destination"], None),
+                )
+                .into_iter()
+                .map(|mut e| {
+                    e.url = section["link"].as_str().map(str::to_owned);
+                    e
+                })
+                .collect()
             }
             _ => Vec::new(),
         }
@@ -399,7 +412,11 @@ impl ProviderEvent {
             occurred_at: time(&payload["created_at"]),
         };
         let recipients: Vec<String> = match &data["to"] {
-            Value::Array(list) => list.iter().filter_map(Value::as_str).map(str::to_owned).collect(),
+            Value::Array(list) => list
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect(),
             Value::String(one) => vec![one.clone()],
             _ => Vec::new(),
         };

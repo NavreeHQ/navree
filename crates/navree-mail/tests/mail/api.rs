@@ -65,7 +65,9 @@ async fn ses_sends_simple_content_signed_with_sigv4() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v2/email/outbound-emails"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "MessageId": "0100018c-abc" })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "MessageId": "0100018c-abc" })),
+        )
         .mount(&server)
         .await;
 
@@ -79,7 +81,9 @@ async fn ses_sends_simple_content_signed_with_sigv4() {
         authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"),
         "{authorization}"
     );
-    assert!(authorization.contains("/eu-west-1/ses/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature="));
+    assert!(authorization.contains(
+        "/eu-west-1/ses/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature="
+    ));
     assert_eq!(header_value(&request, "x-amz-date").len(), 16);
     assert_eq!(
         json_body(&request),
@@ -245,7 +249,10 @@ async fn postmark_posts_json_with_the_server_token() {
         .mount(&server)
         .await;
 
-    let sent = postmark(&server).deliver(&message()).await.expect("deliver");
+    let sent = postmark(&server)
+        .deliver(&message())
+        .await
+        .expect("deliver");
 
     assert_eq!(sent.provider_id.as_deref(), Some("b7bc2f4a-e38e"));
     assert_eq!(
@@ -372,7 +379,9 @@ fn api_transports_read_their_shorthands() {
         })
     );
     assert_eq!(
-        parse(json!("postmark://token-1@api.postmarkapp.com?stream=broadcast")),
+        parse(json!(
+            "postmark://token-1@api.postmarkapp.com?stream=broadcast"
+        )),
         TransportConfig::Postmark(PostmarkConfig {
             server_token: Secret::new("token-1".to_owned()),
             message_stream: Some("broadcast".to_owned()),
@@ -386,8 +395,9 @@ fn api_transports_read_their_shorthands() {
             endpoint: None,
         })
     );
-    let error = serde_json::from_value::<TransportConfig>(json!("mailgun://k@mg.acme.test?region=asia"))
-        .unwrap_err();
+    let error =
+        serde_json::from_value::<TransportConfig>(json!("mailgun://k@mg.acme.test?region=asia"))
+            .unwrap_err();
     assert!(error.to_string().contains("`us` or `eu`"), "{error}");
 }
 
@@ -412,7 +422,9 @@ fn api_transports_read_their_tables() {
 #[test]
 fn the_json_form_round_trips_with_its_credentials() {
     for config in [
-        parse(json!("ses://AKID:secret@eu-west-1?configuration_set=events")),
+        parse(json!(
+            "ses://AKID:secret@eu-west-1?configuration_set=events"
+        )),
         parse(json!("mailgun://key-1@mg.acme.test")),
         parse(json!("postmark://token-1@api.postmarkapp.com")),
         parse(json!("resend://re_1@api.resend.com")),

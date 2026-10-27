@@ -14,8 +14,8 @@ use http::{HeaderMap, Method, StatusCode, Uri, header};
 use navree_contracts::{Clock, SystemClock};
 use navree_db::PageQuery;
 use navree_http::{
-    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef,
-    UrlSigner, schema_fn,
+    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef, UrlSigner,
+    schema_fn,
 };
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
@@ -48,9 +48,9 @@ const SIGNATURE_TOLERANCE_SECS: i64 = 15 * 60;
 
 /// A transparent 1x1 GIF.
 const PIXEL: &[u8] = &[
-    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
-    0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
 ];
 
 /// The body of `POST /mail/suppressions`.
@@ -339,11 +339,21 @@ impl MailController {
     }
 
     /// SES events through SNS: the URL token, the topic, then the message.
-    async fn ses(&self, query: &HashMap<String, String>, body: &[u8]) -> Result<NoContent, AppError> {
+    async fn ses(
+        &self,
+        query: &HashMap<String, String>,
+        body: &[u8],
+    ) -> Result<NoContent, AppError> {
         let options = &self.options.webhooks.ses;
-        let expected = options.token.as_ref().map(|t| t.expose().as_str()).unwrap_or_default();
+        let expected = options
+            .token
+            .as_ref()
+            .map(|t| t.expose().as_str())
+            .unwrap_or_default();
         let given = query.get("token").map(String::as_str).unwrap_or_default();
-        if expected.is_empty() || !navree_crypto::constant_time_eq(given.as_bytes(), expected.as_bytes()) {
+        if expected.is_empty()
+            || !navree_crypto::constant_time_eq(given.as_bytes(), expected.as_bytes())
+        {
             return Err(invalid_signature());
         }
         let envelope: Value = serde_json::from_slice(body)
@@ -439,7 +449,10 @@ impl MailController {
             .and_then(|value| value.strip_prefix("Basic "))
             .and_then(|encoded| STANDARD.decode(encoded.trim()).ok())
             .and_then(|decoded| String::from_utf8(decoded).ok())
-            .and_then(|pair| pair.split_once(':').map(|(_, password)| password.to_owned()))
+            .and_then(|pair| {
+                pair.split_once(':')
+                    .map(|(_, password)| password.to_owned())
+            })
             .is_some_and(|password| navree_crypto::constant_time_eq(password.as_bytes(), token))
     }
 
@@ -475,9 +488,9 @@ impl MailController {
         signed.extend_from_slice(body);
         let expected = STANDARD.encode(navree_crypto::hmac_sha256(&key, &signed));
         signatures.split_whitespace().any(|candidate| {
-            candidate
-                .strip_prefix("v1,")
-                .is_some_and(|sig| navree_crypto::constant_time_eq(sig.as_bytes(), expected.as_bytes()))
+            candidate.strip_prefix("v1,").is_some_and(|sig| {
+                navree_crypto::constant_time_eq(sig.as_bytes(), expected.as_bytes())
+            })
         })
     }
 
@@ -573,7 +586,11 @@ impl MailController {
             let deliveries = deliveries.clone();
             async move {
                 let status = match query.status.as_deref() {
-                    Some(status) => Some(status.parse::<DeliveryStatus>().map_err(AppError::bad_request)?),
+                    Some(status) => Some(
+                        status
+                            .parse::<DeliveryStatus>()
+                            .map_err(AppError::bad_request)?,
+                    ),
                     None => None,
                 };
                 let filter = DeliveryFilter {
@@ -606,22 +623,24 @@ impl MailController {
             }
         };
         let suppressions = self.suppressions.clone();
-        let add_suppression = move |uow: navree_db::Uow, uri: Uri, Json(input): Json<AddSuppressionInput>| {
-            let suppressions = suppressions.clone();
-            async move {
-                let suppression = suppressions
-                    .add(
-                        &uow,
-                        input.workspace_id,
-                        &input.email,
-                        input.reason.unwrap_or(SuppressionReason::Manual),
-                        input.detail,
-                    )
-                    .await?;
-                let location = format!("{}/{}", uri.path().trim_end_matches('/'), suppression.id);
-                Ok::<_, AppError>(Created(location, suppression))
-            }
-        };
+        let add_suppression =
+            move |uow: navree_db::Uow, uri: Uri, Json(input): Json<AddSuppressionInput>| {
+                let suppressions = suppressions.clone();
+                async move {
+                    let suppression = suppressions
+                        .add(
+                            &uow,
+                            input.workspace_id,
+                            &input.email,
+                            input.reason.unwrap_or(SuppressionReason::Manual),
+                            input.detail,
+                        )
+                        .await?;
+                    let location =
+                        format!("{}/{}", uri.path().trim_end_matches('/'), suppression.id);
+                    Ok::<_, AppError>(Created(location, suppression))
+                }
+            };
         let suppressions = self.suppressions.clone();
         let remove_suppression = move |uow: navree_db::Uow, Path(id): Path<Uuid>| {
             let suppressions = suppressions.clone();
@@ -637,7 +656,11 @@ impl MailController {
                 let status = match query.status.as_deref() {
                     None => Some(OutboxStatus::Held),
                     Some("all") => None,
-                    Some(status) => Some(status.parse::<OutboxStatus>().map_err(AppError::bad_request)?),
+                    Some(status) => Some(
+                        status
+                            .parse::<OutboxStatus>()
+                            .map_err(AppError::bad_request)?,
+                    ),
                 };
                 Ok::<_, AppError>(Json(outbox.list(status, query.workspace_id, page).await?))
             }
@@ -653,9 +676,7 @@ impl MailController {
         let outbox = self.outbox.clone();
         let discard = move |CurrentPrincipal(principal), Path(id): Path<Uuid>| {
             let outbox = outbox.clone();
-            async move {
-                Ok::<_, AppError>(Json(outbox.discard(id, Some(principal.user_id)).await?))
-            }
+            async move { Ok::<_, AppError>(Json(outbox.discard(id, Some(principal.user_id)).await?)) }
         };
         let resolver = self.resolver.clone();
         let usable = move |Json(config): Json<TransportConfig>| {
@@ -682,12 +703,16 @@ impl MailController {
                     response: Some(schema_fn::<DeliveryWithEvents>),
                     ..api("Show a delivery and its events", &[401, 403, 404])
                 }),
-            route(RouteDef::on(Method::GET, "/suppressions", list_suppressions))
-                .name("mail.suppressions.index")
-                .api(ApiMeta {
-                    response: Some(schema_fn::<Suppression>),
-                    ..api("List suppressed addresses", &[401, 403])
-                }),
+            route(RouteDef::on(
+                Method::GET,
+                "/suppressions",
+                list_suppressions,
+            ))
+            .name("mail.suppressions.index")
+            .api(ApiMeta {
+                response: Some(schema_fn::<Suppression>),
+                ..api("List suppressed addresses", &[401, 403])
+            }),
             route(RouteDef::on(Method::POST, "/suppressions", add_suppression))
                 .name("mail.suppressions.store")
                 .api(ApiMeta {
@@ -696,9 +721,13 @@ impl MailController {
                     response: Some(schema_fn::<Suppression>),
                     ..api("Suppress an address", &[400, 401, 403])
                 }),
-            route(RouteDef::on(Method::DELETE, "/suppressions/{id}", remove_suppression))
-                .name("mail.suppressions.destroy")
-                .api(api("Remove a suppression", &[401, 403, 404])),
+            route(RouteDef::on(
+                Method::DELETE,
+                "/suppressions/{id}",
+                remove_suppression,
+            ))
+            .name("mail.suppressions.destroy")
+            .api(api("Remove a suppression", &[401, 403, 404])),
             route(RouteDef::on(Method::GET, "/outbox", list_outbox))
                 .name("mail.outbox.index")
                 .api(ApiMeta {
@@ -721,7 +750,10 @@ impl MailController {
                 .name("mail.transports.usable")
                 .api(ApiMeta {
                     response: Some(schema_fn::<UsableTransport>),
-                    ..api("Check that transport settings work, without saving them", &[400, 401, 403, 422])
+                    ..api(
+                        "Check that transport settings work, without saving them",
+                        &[400, 401, 403, 422],
+                    )
                 }),
         ]
     }

@@ -233,8 +233,8 @@ mod tests {
     /// AWS's IAM `ListUsers` example of a signed request.
     #[test]
     fn signature_matches_the_aws_iam_example() {
-        let url = Url::parse("https://iam.amazonaws.com/?Action=ListUsers&Version=2010-05-08")
-            .unwrap();
+        let url =
+            Url::parse("https://iam.amazonaws.com/?Action=ListUsers&Version=2010-05-08").unwrap();
         let headers = sign(
             "GET",
             &url,
@@ -259,7 +259,14 @@ mod tests {
     #[test]
     fn signature_matches_the_get_vanilla_vector() {
         let url = Url::parse("https://example.amazonaws.com/").unwrap();
-        let headers = sign("GET", &url, &[], b"", (&credentials(), "us-east-1", "service"), at());
+        let headers = sign(
+            "GET",
+            &url,
+            &[],
+            b"",
+            (&credentials(), "us-east-1", "service"),
+            at(),
+        );
         assert_eq!(
             authorization(&headers),
             "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, \
@@ -272,7 +279,14 @@ mod tests {
     #[test]
     fn signature_matches_the_post_vanilla_vector() {
         let url = Url::parse("https://example.amazonaws.com/").unwrap();
-        let headers = sign("POST", &url, &[], b"", (&credentials(), "us-east-1", "service"), at());
+        let headers = sign(
+            "POST",
+            &url,
+            &[],
+            b"",
+            (&credentials(), "us-east-1", "service"),
+            at(),
+        );
         assert!(
             authorization(&headers).ends_with(
                 "Signature=5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b"
@@ -286,9 +300,15 @@ mod tests {
     /// parameters are sorted.
     #[test]
     fn signature_sorts_query_parameters() {
-        let url =
-            Url::parse("https://example.amazonaws.com/?Param2=value2&Param1=value1").unwrap();
-        let headers = sign("GET", &url, &[], b"", (&credentials(), "us-east-1", "service"), at());
+        let url = Url::parse("https://example.amazonaws.com/?Param2=value2&Param1=value1").unwrap();
+        let headers = sign(
+            "GET",
+            &url,
+            &[],
+            b"",
+            (&credentials(), "us-east-1", "service"),
+            at(),
+        );
         assert!(
             authorization(&headers).ends_with(
                 "Signature=b97d918cfa904a5beff61c982a1b6f458b799221646efd99d3219ec94cdf2500"
@@ -300,18 +320,33 @@ mod tests {
 
     #[test]
     fn temporary_credentials_sign_the_security_token() {
-        let url = Url::parse("https://email.eu-west-1.amazonaws.com/v2/email/outbound-emails")
-            .unwrap();
+        let url =
+            Url::parse("https://email.eu-west-1.amazonaws.com/v2/email/outbound-emails").unwrap();
         let mut credentials = credentials();
         credentials.session_token = Some("session".to_owned());
-        let headers = sign("POST", &url, &[], b"{}", (&credentials, "eu-west-1", "ses"), at());
-        assert!(authorization(&headers).contains("SignedHeaders=host;x-amz-date;x-amz-security-token"));
+        let headers = sign(
+            "POST",
+            &url,
+            &[],
+            b"{}",
+            (&credentials, "eu-west-1", "ses"),
+            at(),
+        );
+        assert!(
+            authorization(&headers).contains("SignedHeaders=host;x-amz-date;x-amz-security-token")
+        );
         assert!(headers.contains(&("x-amz-security-token".to_owned(), "session".to_owned())));
     }
 
     #[test]
     fn the_host_header_keeps_a_non_default_port() {
-        assert_eq!(host_header(&Url::parse("http://127.0.0.1:8080/x").unwrap()), "127.0.0.1:8080");
-        assert_eq!(host_header(&Url::parse("https://example.com:443/x").unwrap()), "example.com");
+        assert_eq!(
+            host_header(&Url::parse("http://127.0.0.1:8080/x").unwrap()),
+            "127.0.0.1:8080"
+        );
+        assert_eq!(
+            host_header(&Url::parse("https://example.com:443/x").unwrap()),
+            "example.com"
+        );
     }
 }

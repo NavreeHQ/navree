@@ -49,7 +49,12 @@ async fn a_ready_domain_passes_every_check() {
     );
     assert_eq!(report.dkim.len(), 1);
     assert_eq!(report.dkim[0].selector, "mail");
-    assert_eq!(report.dkim[0].check.status, CheckStatus::Pass, "{:?}", report.dkim);
+    assert_eq!(
+        report.dkim[0].check.status,
+        CheckStatus::Pass,
+        "{:?}",
+        report.dkim
+    );
     assert_eq!(report.dmarc.status, CheckStatus::Pass, "{:?}", report.dmarc);
     assert!(report.ready());
 }
@@ -73,7 +78,10 @@ async fn missing_records_fail() {
 async fn spf_problems() {
     let check = |record: &'static str| async move {
         domains(StaticResolver::new().record("acme.test", record))
-            .check("acme.test", &DomainExpectations::new().spf_include("amazonses.com"))
+            .check(
+                "acme.test",
+                &DomainExpectations::new().spf_include("amazonses.com"),
+            )
             .await
             .expect("check")
             .spf
@@ -81,7 +89,10 @@ async fn spf_problems() {
 
     let missing = check("v=spf1 include:mailgun.org -all").await;
     assert_eq!(missing.status, CheckStatus::Fail);
-    assert_eq!(missing.problems, ["the record does not include `include:amazonses.com`"]);
+    assert_eq!(
+        missing.problems,
+        ["the record does not include `include:amazonses.com`"]
+    );
 
     let open = check("v=spf1 include:amazonses.com +all").await;
     assert_eq!(open.status, CheckStatus::Fail);
@@ -102,7 +113,11 @@ async fn spf_problems() {
     )
     .await;
     assert_eq!(many.status, CheckStatus::Fail);
-    assert!(many.problems[0].contains("11 DNS lookups"), "{:?}", many.problems);
+    assert!(
+        many.problems[0].contains("11 DNS lookups"),
+        "{:?}",
+        many.problems
+    );
 
     let two = domains(
         StaticResolver::new()
@@ -140,10 +155,9 @@ async fn dkim_problems() {
     let garbage = check("v=DKIM1; p=not base64!".to_owned()).await;
     assert_eq!(garbage.status, CheckStatus::Fail);
 
-    let ed25519 = check(
-        "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=".to_owned(),
-    )
-    .await;
+    let ed25519 =
+        check("v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=".to_owned())
+            .await;
     assert_eq!(ed25519.status, CheckStatus::Pass, "{:?}", ed25519.problems);
 }
 

@@ -103,8 +103,8 @@ impl ConfigSection for MailOptions {
             );
         }
         if let Some(base) = self.tracking.base_url.as_deref().filter(|b| !b.is_empty()) {
-            let url = url::Url::parse(base)
-                .map_err(|error| format!("`tracking.base_url`: {error}"))?;
+            let url =
+                url::Url::parse(base).map_err(|error| format!("`tracking.base_url`: {error}"))?;
             if !matches!(url.scheme(), "http" | "https") {
                 return Err("`tracking.base_url` must be an http(s) URL".to_owned());
             }
@@ -285,4 +285,3 @@ pub struct ResendWebhookOptions {
     /// The webhook's signing secret (`whsec_...`).
     pub secret: Option<Secret<String>>,
 }
-

@@ -30,8 +30,18 @@ use crate::{
 ///   boot, so the app must include `ConfigModule`.
 ///
 /// The app must include `ViewModule` (mailables render with its `Views`).
-/// Invalid options (sender, SMTP URL, empty failover) fail the boot. The
-/// transport is built at boot but connects on the first send.
+/// Invalid options (sender, SMTP URL, API credentials, empty failover) fail
+/// the boot. The transport is built at boot but connects on the first send.
+///
+/// The module also provides and exports [`Deliveries`], [`Suppressions`],
+/// [`Outbox`], [`TransportResolver`], [`SendingDomains`] and
+/// `dyn DnsResolver`, and contributes the `mail` migrations, the
+/// [`MailController`](crate::MailController) routes, the commands
+/// `mail:test`, `mail:suppressions` and `mail:domains`, and the mapping of
+/// [`MailError`]s to error responses. With `mail.delivery.enabled` the
+/// mailer logs, suppresses, holds and resolves tenant transports, which
+/// needs `DatabaseModule` (a boot error otherwise); tracking also needs the
+/// app's `UrlSigner` (`HttpModule`) and a base URL.
 ///
 /// ```no_run
 /// use navree_config::{ConfigModule, ConfigSources};
@@ -225,7 +235,9 @@ fn register(m: &mut ModuleBuilder, source: Source) {
         }))
         .factory(
             Factory::<SendingDomains>::new(|r| async move {
-                Ok(Arc::new(SendingDomains::new(r.get::<dyn DnsResolver>().await?)))
+                Ok(Arc::new(SendingDomains::new(
+                    r.get::<dyn DnsResolver>().await?,
+                )))
             })
             .deps(vec![ProviderKey::of::<dyn DnsResolver>()]),
         )
@@ -248,9 +260,10 @@ async fn pipeline(r: &Resolver, options: &MailOptions) -> Result<Pipeline, BoxEr
         return Err("`mail.delivery.enabled` needs DatabaseModule (the mail tables)".into());
     }
     let tracking = if options.tracking.is_on() {
-        let signer = app.try_get::<UrlSigner>().await.ok_or(
-            "mail tracking needs HttpModule: its UrlSigner signs the tracked links",
-        )?;
+        let signer = app
+            .try_get::<UrlSigner>()
+            .await
+            .ok_or("mail tracking needs HttpModule: its UrlSigner signs the tracked links")?;
         let base = match options
             .tracking
             .base_url

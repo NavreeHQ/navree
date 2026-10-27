@@ -14,13 +14,10 @@ use uuid::Uuid;
 use crate::harness::{MailApp, mail_app, principal};
 
 fn promo(to: &str) -> Message {
-    Message::new()
-        .to(to)
-        .subject("Spring offer")
-        .html(
-            "<html><body><p><a href=\"https://acme.test/promo?a=1&amp;b=2\">See the offer</a></p>\
+    Message::new().to(to).subject("Spring offer").html(
+        "<html><body><p><a href=\"https://acme.test/promo?a=1&amp;b=2\">See the offer</a></p>\
              <p><a href=\"mailto:help@acme.test\">Help</a></p></body></html>",
-        )
+    )
 }
 
 /// The first `attribute="..."` value in `html` (unescaped).
@@ -46,7 +43,12 @@ async fn tracked() -> MailApp {
 #[tokio::test]
 async fn clicks_go_through_a_signed_redirect() {
     let mail = tracked().await;
-    let report = mail.mailer().await.deliver(&promo("ada@example.com")).await.unwrap();
+    let report = mail
+        .mailer()
+        .await
+        .deliver(&promo("ada@example.com"))
+        .await
+        .unwrap();
     let id = report.delivery_id.unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
 
@@ -58,7 +60,10 @@ async fn clicks_go_through_a_signed_redirect() {
         )),
         "{link}"
     );
-    assert!(html.contains("href=\"mailto:help@acme.test\""), "other links stay");
+    assert!(
+        html.contains("href=\"mailto:help@acme.test\""),
+        "other links stay"
+    );
     let path = link.strip_prefix("https://links.acme.test").unwrap();
 
     let response = mail.app.client().get(path).send().await;
@@ -69,28 +74,46 @@ async fn clicks_go_through_a_signed_redirect() {
     assert!(delivery.opened_at.is_some());
     let events = mail.get::<Deliveries>().await.events(id).await.unwrap();
     assert_eq!(events[0].provider, "tracking");
-    assert_eq!(events[0].url.as_deref(), Some("https://acme.test/promo?a=1&b=2"));
+    assert_eq!(
+        events[0].url.as_deref(),
+        Some("https://acme.test/promo?a=1&b=2")
+    );
 }
 
 #[tokio::test]
 async fn the_redirect_goes_to_the_original_link() {
     let mail = tracked().await;
-    mail.mailer().await.send_message(promo("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send_message(promo("ada@example.com"))
+        .await
+        .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
     let path = attribute(&html, "href").replace("https://links.acme.test", "");
 
     let response = mail.app.client().get(&path).send().await;
 
-    assert_eq!(response.header("location"), Some("https://acme.test/promo?a=1&b=2"));
+    assert_eq!(
+        response.header("location"),
+        Some("https://acme.test/promo?a=1&b=2")
+    );
 }
 
 #[tokio::test]
 async fn the_open_image_records_an_open() {
     let mail = tracked().await;
-    let report = mail.mailer().await.deliver(&promo("ada@example.com")).await.unwrap();
+    let report = mail
+        .mailer()
+        .await
+        .deliver(&promo("ada@example.com"))
+        .await
+        .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
     let image = &html[html.find("<img").unwrap()..];
-    assert!(html.find("<img").unwrap() < html.find("</body>").unwrap(), "{html}");
+    assert!(
+        html.find("<img").unwrap() < html.find("</body>").unwrap(),
+        "{html}"
+    );
     let path = attribute(image, "src").replace("https://links.acme.test", "");
 
     let response = mail.app.client().get(&path).send().await;
@@ -109,21 +132,40 @@ async fn the_open_image_records_an_open() {
 #[tokio::test]
 async fn tampered_tracking_links_are_not_found() {
     let mail = tracked().await;
-    mail.mailer().await.send_message(promo("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send_message(promo("ada@example.com"))
+        .await
+        .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
     let path = attribute(&html, "href").replace("https://links.acme.test", "");
 
     let other_target = path.replace("acme.test%2Fpromo", "evil.test%2Fpromo");
-    mail.app.client().get(&other_target).send().await.assert_status(404);
+    mail.app
+        .client()
+        .get(&other_target)
+        .send()
+        .await
+        .assert_status(404);
     let bad_signature = format!("{}0", &path[..path.len() - 1]);
-    mail.app.client().get(&bad_signature).send().await.assert_status(404);
+    mail.app
+        .client()
+        .get(&bad_signature)
+        .send()
+        .await
+        .assert_status(404);
     let unsigned = path[..path.find("&expires").unwrap()].to_owned();
-    mail.app.client().get(&unsigned).send().await.assert_status(404);
+    mail.app
+        .client()
+        .get(&unsigned)
+        .send()
+        .await
+        .assert_status(404);
 }
 
 #[tokio::test]
 async fn tracking_needs_a_base_url() {
-    let error = navree_testing::TestApp::builder()
+    let Err(error) = navree_testing::TestApp::builder()
         .temp_database()
         .config("mail.delivery.enabled", true)
         .config("mail.tracking.opens", true)
@@ -132,21 +174,23 @@ async fn tracking_needs_a_base_url() {
         .module(navree_mail::MailModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("the boot should fail");
+    };
     assert!(error.to_string().contains("base_url"), "{error}");
 }
 
 #[tokio::test]
 async fn tracking_needs_the_delivery_log() {
-    let error = navree_testing::TestApp::builder()
+    let Err(error) = navree_testing::TestApp::builder()
         .config("mail.tracking.clicks", true)
         .module(crate::support::view_module())
         .module(navree_mail::MailModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("the boot should fail");
+    };
     assert!(error.to_string().contains("delivery.enabled"), "{error}");
 }
 
@@ -157,7 +201,10 @@ async fn tracking_needs_the_delivery_log() {
 async fn sent_to_ada(mail: &MailApp) -> Uuid {
     mail.mailer()
         .await
-        .deliver(&TemplateMail::new("ada@example.com", "Welcome", "mail/welcome").context(json!({ "name": "Ada" })))
+        .deliver(
+            &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
+                .context(json!({ "name": "Ada" })),
+        )
         .await
         .unwrap()
         .delivery_id
@@ -165,7 +212,12 @@ async fn sent_to_ada(mail: &MailApp) -> Uuid {
 }
 
 async fn status(mail: &MailApp, id: Uuid) -> DeliveryStatus {
-    mail.get::<Deliveries>().await.find(id).await.unwrap().status
+    mail.get::<Deliveries>()
+        .await
+        .find(id)
+        .await
+        .unwrap()
+        .status
 }
 
 fn mailgun_body(key: &str, timestamp: i64) -> Value {
@@ -216,7 +268,12 @@ async fn mailgun_events_are_verified_and_recorded() {
 
     assert_eq!(status(&mail, id).await, DeliveryStatus::Bounced);
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(suppressions.is_suppressed(None, "ada@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .is_suppressed(None, "ada@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -247,8 +304,14 @@ async fn resend_events_are_verified_with_their_svix_signature() {
             .body(body.clone())
     };
 
-    post("v1,bm90IGl0".to_owned()).send().await.assert_status(401);
-    post(format!("v1,bm90IGl0 v1,{signature}")).send().await.assert_status(204);
+    post("v1,bm90IGl0".to_owned())
+        .send()
+        .await
+        .assert_status(401);
+    post(format!("v1,bm90IGl0 v1,{signature}"))
+        .send()
+        .await
+        .assert_status(204);
 
     assert_eq!(status(&mail, id).await, DeliveryStatus::Complained);
 }
@@ -263,7 +326,8 @@ async fn postmark_events_need_the_token() {
         "Recipient": "ada@example.com",
         "DeliveredAt": "2026-10-27T10:00:00Z",
     });
-    let basic = |password: &str| format!("Basic {}", STANDARD.encode(format!("postmark:{password}")));
+    let basic =
+        |password: &str| format!("Basic {}", STANDARD.encode(format!("postmark:{password}")));
 
     mail.app
         .client()
@@ -286,7 +350,9 @@ async fn postmark_events_need_the_token() {
     mail.app
         .client()
         .post("/api/mail/webhooks/postmark?token=pm-token")
-        .json(&json!({ "RecordType": "Open", "MessageID": "fake-1", "Recipient": "ada@example.com" }))
+        .json(
+            &json!({ "RecordType": "Open", "MessageID": "fake-1", "Recipient": "ada@example.com" }),
+        )
         .send()
         .await
         .assert_status(204);
@@ -297,8 +363,10 @@ async fn postmark_events_need_the_token() {
 #[tokio::test]
 async fn ses_events_arrive_through_sns() {
     let mail = mail_app(|b| {
-        b.config("mail.webhooks.ses.token", "ses-token")
-            .config("mail.webhooks.ses.topic_arns", json!(["arn:aws:sns:eu-west-1:123456789012:ses"]))
+        b.config("mail.webhooks.ses.token", "ses-token").config(
+            "mail.webhooks.ses.topic_arns",
+            json!(["arn:aws:sns:eu-west-1:123456789012:ses"]),
+        )
     })
     .await;
     let id = sent_to_ada(&mail).await;
@@ -353,7 +421,10 @@ async fn ses_events_arrive_through_sns() {
 
     assert_eq!(status(&mail, id).await, DeliveryStatus::Bounced);
     let events = mail.get::<Deliveries>().await.events(id).await.unwrap();
-    assert_eq!(events[0].detail.as_deref(), Some("smtp; 550 5.1.1 user unknown"));
+    assert_eq!(
+        events[0].detail.as_deref(),
+        Some("smtp; 550 5.1.1 user unknown")
+    );
 }
 
 #[tokio::test]
@@ -385,7 +456,10 @@ async fn admin() -> (MailApp, Uuid) {
 async fn the_delivery_log_is_listed_and_shown() {
     let (mail, user) = admin().await;
     let id = sent_to_ada(&mail).await;
-    mail.fake.bounce(mail.app.ctx(), "ada@example.com").await.unwrap();
+    mail.fake
+        .bounce(mail.app.ctx(), "ada@example.com")
+        .await
+        .unwrap();
     let client = mail.app.client().acting_as(principal(user));
 
     let page = client
@@ -457,7 +531,12 @@ async fn suppressions_are_managed() {
         .await
         .assert_status(204);
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(!suppressions.is_suppressed(Some(workspace), "eve@example.com").await.unwrap());
+    assert!(
+        !suppressions
+            .is_suppressed(Some(workspace), "eve@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -467,7 +546,10 @@ async fn held_mail_is_released_or_discarded_by_an_admin() {
     for subject in ["First", "Second"] {
         mailer
             .send(&navree_mail::Mailable::hold(
-                Message::new().to("all@acme.test").subject(subject).text("Hi"),
+                Message::new()
+                    .to("all@acme.test")
+                    .subject(subject)
+                    .text("Hi"),
                 "Needs approval",
             ))
             .await
@@ -483,7 +565,10 @@ async fn held_mail_is_released_or_discarded_by_an_admin() {
         .json_value();
     let held = page["data"].as_array().unwrap().clone();
     assert_eq!(held.len(), 2);
-    let (second, first) = (held[0]["id"].as_str().unwrap(), held[1]["id"].as_str().unwrap());
+    let (second, first) = (
+        held[0]["id"].as_str().unwrap(),
+        held[1]["id"].as_str().unwrap(),
+    );
 
     let released = client
         .post(&format!("/api/mail/outbox/{first}/release"))
@@ -509,12 +594,20 @@ async fn held_mail_is_released_or_discarded_by_an_admin() {
 
     mail.fake.assert_sent(|m| m.subject == "First");
     assert_eq!(mail.fake.sent().len(), 1);
-    let all = client.get("/api/mail/outbox?status=all").send().await.json_value();
+    let all = client
+        .get("/api/mail/outbox?status=all")
+        .send()
+        .await
+        .json_value();
     assert_eq!(all["data"].as_array().unwrap().len(), 2);
     let outbox = mail.get::<Outbox>().await;
     assert!(
         outbox
-            .list(Some(navree_mail::OutboxStatus::Held), None, PageQuery::new(1, 10))
+            .list(
+                Some(navree_mail::OutboxStatus::Held),
+                None,
+                PageQuery::new(1, 10)
+            )
             .await
             .unwrap()
             .data
@@ -548,9 +641,22 @@ async fn admin_routes_need_the_manage_permission() {
     let (mail, _) = admin().await;
     let stranger = mail.app.client().acting_as(principal(Uuid::now_v7()));
 
-    stranger.get("/api/mail/deliveries").send().await.assert_status(403);
-    stranger.get("/api/mail/outbox").send().await.assert_status(403);
-    mail.app.client().get("/api/mail/suppressions").send().await.assert_status(401);
+    stranger
+        .get("/api/mail/deliveries")
+        .send()
+        .await
+        .assert_status(403);
+    stranger
+        .get("/api/mail/outbox")
+        .send()
+        .await
+        .assert_status(403);
+    mail.app
+        .client()
+        .get("/api/mail/suppressions")
+        .send()
+        .await
+        .assert_status(401);
 }
 
 #[tokio::test]

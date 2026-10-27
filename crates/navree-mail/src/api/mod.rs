@@ -37,7 +37,9 @@ pub(crate) fn endpoint(
 ) -> Result<Url, MailError> {
     let raw = configured.filter(|e| !e.is_empty()).unwrap_or(default);
     let url = Url::parse(raw.trim_end_matches('/')).map_err(|error| {
-        MailError::Config(format!("invalid `endpoint` for the {transport} transport: {error}"))
+        MailError::Config(format!(
+            "invalid `endpoint` for the {transport} transport: {error}"
+        ))
     })?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(MailError::Config(format!(
