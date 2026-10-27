@@ -14,11 +14,16 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 
+use crate::backplane::{Backplane, BackplaneHandler};
 use crate::channel::{ChannelKind, ChannelPattern, is_valid_name, unprefixed};
+use crate::cluster::{
+    Change, Envelope, HEARTBEAT, MemberEntry, Message, NODE_TIMEOUT, RESYNC_EVERY, RemotePresence,
+};
 use crate::module::{ChannelAuthorizer, ChannelRegistration};
 use crate::protocol::{self, ClientMessage, frame};
 use crate::relay::{self, RelayClient, RelayMessage};
@@ -63,6 +68,11 @@ pub enum RealtimeError {
 /// commands) reach them through the relay (`realtime.relay_url`): their
 /// `dyn Broadcaster` posts each broadcast to the serving process's
 /// `POST /apps/{app_id}/events`.
+///
+/// With a [`Backplane`] (`realtime.backplane`), every process of the app
+/// shares broadcasts, presence members and user disconnections, so several
+/// `serve` processes can sit behind a load balancer and workers broadcast
+/// without the relay.
 pub struct Realtime {
     options: RealtimeOptions,
     secret: Secret<Vec<u8>>,
@@ -73,6 +83,38 @@ pub struct Realtime {
     shutdown: CancellationToken,
     tracker: TaskTracker,
     relay: Relay,
+    cluster: Option<Cluster>,
+}
+
+/// This process on the backplane: its node id, the topic and what the
+/// other processes report.
+pub(crate) struct Cluster {
+    node: String,
+    topic: String,
+    backplane: Arc<dyn Backplane>,
+    remote: Mutex<RemotePresence>,
+}
+
+impl Cluster {
+    /// A new node of app `app_id` on `backplane` (topic `realtime:{app_id}`).
+    fn new(backplane: Arc<dyn Backplane>, app_id: &str) -> Self {
+        Self {
+            node: Uuid::new_v4().simple().to_string(),
+            topic: format!("realtime:{app_id}"),
+            backplane,
+            remote: Mutex::new(RemotePresence::default()),
+        }
+    }
+
+    fn publish(&self, message: Message) {
+        let envelope = Envelope::new(&self.node, message);
+        self.backplane
+            .publish(&self.topic, envelope.encode().into());
+    }
+
+    fn remote(&self) -> std::sync::MutexGuard<'_, RemotePresence> {
+        self.remote.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 /// The relay settings of a process (see [`crate::relay`]).
@@ -156,6 +198,7 @@ impl Realtime {
             shutdown,
             tracker,
             relay: Relay::default(),
+            cluster: None,
         })
     }
 
@@ -163,6 +206,216 @@ impl Realtime {
     pub(crate) fn with_relay(mut self, relay: Relay) -> Self {
         self.relay = relay;
         self
+    }
+
+    /// Joins the app's other processes on `backplane` (started by
+    /// [`start_backplane`](Realtime::start_backplane)).
+    pub(crate) fn with_backplane(mut self, backplane: Arc<dyn Backplane>) -> Self {
+        self.cluster = Some(Cluster::new(backplane, &self.options.app_id));
+        self
+    }
+
+    /// Subscribes to the backplane, greets the other processes and starts
+    /// the heartbeat, which says goodbye when the app shuts down. Nothing
+    /// to do without a backplane.
+    pub(crate) async fn start_backplane(self: &Arc<Self>) -> Result<(), BoxError> {
+        let Some(cluster) = &self.cluster else {
+            return Ok(());
+        };
+        let hub = Arc::downgrade(self);
+        let handler: BackplaneHandler = Arc::new(move |message| {
+            if let Some(hub) = hub.upgrade() {
+                hub.receive_backplane(&message);
+            }
+        });
+        cluster
+            .backplane
+            .subscribe(&cluster.topic, handler, self.shutdown.clone())
+            .await
+            .map_err(|error| format!("cannot subscribe to the realtime backplane: {error}"))?;
+        cluster.publish(Message::Hello);
+
+        let hub = Arc::downgrade(self);
+        let shutdown = self.shutdown.clone();
+        self.tracker.spawn(async move {
+            let mut beats = tokio::time::interval(HEARTBEAT);
+            beats.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut ticks: u32 = 0;
+            loop {
+                tokio::select! {
+                    () = shutdown.cancelled() => {
+                        if let Some(hub) = hub.upgrade()
+                            && let Some(cluster) = &hub.cluster
+                        {
+                            cluster.publish(Message::Goodbye);
+                        }
+                        break;
+                    }
+                    _ = beats.tick() => {
+                        let Some(hub) = hub.upgrade() else { break };
+                        ticks = ticks.wrapping_add(1);
+                        hub.heartbeat(ticks % RESYNC_EVERY == 0);
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// One heartbeat: says this node is alive (with all its presence
+    /// members when `resync`) and forgets nodes that went silent.
+    fn heartbeat(&self, resync: bool) {
+        let Some(cluster) = &self.cluster else {
+            return;
+        };
+        if resync {
+            cluster.publish(Message::State {
+                members: self.local_members(),
+            });
+        } else {
+            cluster.publish(Message::Heartbeat);
+        }
+        let changes = cluster.remote().expire(Instant::now(), NODE_TIMEOUT);
+        self.apply_remote(changes);
+    }
+
+    /// Handles a message from another process on the backplane.
+    pub(crate) fn receive_backplane(&self, bytes: &[u8]) {
+        let Some(cluster) = &self.cluster else {
+            return;
+        };
+        let Some(Envelope { node, message, .. }) = Envelope::decode(bytes) else {
+            tracing::debug!(target: "navree::realtime", "ignoring a malformed backplane message");
+            return;
+        };
+        if node == cluster.node {
+            return;
+        }
+        if message == Message::Goodbye {
+            let changes = cluster.remote().forget(&node);
+            self.apply_remote(changes);
+            return;
+        }
+        cluster.remote().seen(&node, Instant::now());
+        match message {
+            Message::Broadcast {
+                channels,
+                event,
+                data,
+            } => {
+                self.deliver(&channels, &event, &data);
+            }
+            Message::DisconnectUser { user_id } => {
+                self.close_user(&user_id, CloseReason::DISCONNECTED);
+            }
+            Message::EndUserSubscriptions { user_id } => {
+                self.close_user(&user_id, CloseReason::RESUBSCRIBE);
+            }
+            Message::MemberAdded {
+                channel,
+                user_id,
+                user_info,
+            } => {
+                let change = cluster.remote().add(&node, &channel, &user_id, user_info);
+                self.apply_remote(change);
+            }
+            Message::MemberRemoved { channel, user_id } => {
+                let change = cluster.remote().remove(&node, &channel, &user_id);
+                self.apply_remote(change);
+            }
+            Message::Hello => cluster.publish(Message::State {
+                members: self.local_members(),
+            }),
+            Message::State { members } => {
+                let changes = cluster.remote().replace(&node, members);
+                self.apply_remote(changes);
+            }
+            Message::Heartbeat | Message::Goodbye => {}
+        }
+    }
+
+    /// Announces remote presence changes to this process's subscribers,
+    /// unless a local connection of the user keeps them present.
+    fn apply_remote(&self, changes: impl IntoIterator<Item = Change>) {
+        for change in changes {
+            let (channel, user_id, frame_event, data) = match change {
+                Change::Added {
+                    channel,
+                    user_id,
+                    user_info,
+                } => {
+                    let data = json!({ "user_id": user_id, "user_info": user_info });
+                    (channel, user_id, "pusher_internal:member_added", data)
+                }
+                Change::Removed { channel, user_id } => {
+                    let data = json!({ "user_id": user_id });
+                    (channel, user_id, "pusher_internal:member_removed", data)
+                }
+            };
+            let Some(state) = self.channels.get(&channel) else {
+                continue;
+            };
+            if state.has_user(&user_id) {
+                continue;
+            }
+            let message = Utf8Bytes::from(frame(frame_event, Some(&channel), &data.to_string()));
+            for subscriber in state.subscribers.values() {
+                subscriber.connection.push(message.clone());
+            }
+        }
+    }
+
+    /// Every presence member of this process's connections.
+    fn local_members(&self) -> Vec<MemberEntry> {
+        let mut members = Vec::new();
+        for entry in &self.channels {
+            let mut seen = HashSet::new();
+            for subscriber in entry.value().subscribers.values() {
+                if let Some(member) = &subscriber.member
+                    && seen.insert(member.user_id.clone())
+                {
+                    members.push(MemberEntry {
+                        channel: entry.key().clone(),
+                        user_id: member.user_id.clone(),
+                        user_info: member.user_info.clone(),
+                    });
+                }
+            }
+        }
+        members
+    }
+
+    /// The user ids present on presence channel `channel`, sorted: this
+    /// process's members and, with a backplane, the other processes'.
+    pub fn members(&self, channel: &str) -> Vec<String> {
+        let mut ids: HashSet<String> = self
+            .channels
+            .get(channel)
+            .map(|state| {
+                state
+                    .subscribers
+                    .values()
+                    .filter_map(|s| s.member.as_ref().map(|m| m.user_id.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(cluster) = &self.cluster {
+            ids.extend(
+                cluster
+                    .remote()
+                    .members(channel)
+                    .into_iter()
+                    .map(|(id, _)| id),
+            );
+        }
+        let mut ids: Vec<String> = ids.into_iter().collect();
+        ids.sort();
+        ids
+    }
+
+    /// Whether this process is on a backplane.
+    pub fn has_backplane(&self) -> bool {
+        self.cluster.is_some()
     }
 
     /// Where this process's broadcasts go when it does not deliver them
@@ -221,43 +474,71 @@ impl Realtime {
     {
         check_event(event)?;
         let data = serde_json::to_string(&data)?;
+        let channels: Vec<String> = channels
+            .into_iter()
+            .map(|channel| channel.as_ref().to_owned())
+            .collect();
+        let delivered = self.deliver(&channels, event, &data);
+        if let Some(cluster) = &self.cluster {
+            cluster.publish(Message::Broadcast {
+                channels,
+                event: event.to_owned(),
+                data,
+            });
+        }
+        Ok(delivered)
+    }
+
+    /// Queues `event` with `data` (JSON text) for this process's
+    /// subscribers of `channels`; returns the number of deliveries.
+    fn deliver(&self, channels: &[String], event: &str, data: &str) -> usize {
         let mut delivered = 0;
         for channel in channels {
-            let channel = channel.as_ref();
             let Some(state) = self.channels.get(channel) else {
                 continue;
             };
-            let message = Utf8Bytes::from(frame(event, Some(channel), &data));
+            let message = Utf8Bytes::from(frame(event, Some(channel), data));
             for subscriber in state.subscribers.values() {
                 if subscriber.connection.push(message.clone()) {
                     delivered += 1;
                 }
             }
         }
-        Ok(delivered)
+        delivered
     }
 
     /// Closes every connection of the user `user_id` (code 4009, "You got
     /// disconnected by the app."; clients do not reconnect on their own).
-    /// Returns the number of connections closed.
+    /// Returns the number of connections closed in this process; with a
+    /// backplane the app's other processes close theirs too.
     ///
     /// A connection belongs to a user once the auth endpoint signed a
     /// channel for it on their behalf, it joined a presence channel as them,
     /// or its handshake request was authenticated.
     pub fn disconnect_user(&self, user_id: impl fmt::Display) -> usize {
-        self.close_user(&user_id.to_string(), CloseReason::DISCONNECTED)
+        let user_id = user_id.to_string();
+        let closed = self.close_user(&user_id, CloseReason::DISCONNECTED);
+        if let Some(cluster) = &self.cluster {
+            cluster.publish(Message::DisconnectUser { user_id });
+        }
+        closed
     }
 
-    /// Ends every subscription of the user `user_id` in this process: their
-    /// connections close with code 4200 ("reconnect"), so clients connect
-    /// again and authorize each private channel with their current
-    /// credentials; channels they may no longer join stay closed. Used
-    /// when a user's roles change or they sign out
-    /// (`Broadcaster::end_user_subscriptions`, which also reaches the
-    /// serving process from workers). Returns the number of connections
-    /// closed.
+    /// Ends every subscription of the user `user_id`: their connections
+    /// close with code 4200 ("reconnect"), so clients connect again and
+    /// authorize each private channel with their current credentials;
+    /// channels they may no longer join stay closed. Used when a user's
+    /// roles change or they sign out (`Broadcaster::end_user_subscriptions`,
+    /// which also reaches the serving process from workers). Returns the
+    /// number of connections closed in this process; with a backplane the
+    /// app's other processes close theirs too.
     pub fn end_user_subscriptions(&self, user_id: impl fmt::Display) -> usize {
-        self.close_user(&user_id.to_string(), CloseReason::RESUBSCRIBE)
+        let user_id = user_id.to_string();
+        let closed = self.close_user(&user_id, CloseReason::RESUBSCRIBE);
+        if let Some(cluster) = &self.cluster {
+            cluster.publish(Message::EndUserSubscriptions { user_id });
+        }
+        closed
     }
 
     fn close_user(&self, user_id: &str, reason: CloseReason) -> usize {
@@ -534,7 +815,14 @@ impl Realtime {
             );
         }
         let data = match ChannelKind::of(channel) {
-            ChannelKind::Presence => state.presence().to_string(),
+            ChannelKind::Presence => {
+                let remote = self
+                    .cluster
+                    .as_ref()
+                    .map(|cluster| cluster.remote().members(channel))
+                    .unwrap_or_default();
+                state.presence(remote).to_string()
+            }
             _ => "{}".to_owned(),
         };
         connection.push(
@@ -546,15 +834,27 @@ impl Realtime {
             .into(),
         );
         if let Some(member) = added {
-            let data = json!({ "user_id": member.user_id, "user_info": member.user_info });
-            let message = Utf8Bytes::from(frame(
-                "pusher_internal:member_added",
-                Some(channel),
-                &data.to_string(),
-            ));
-            for (socket_id, subscriber) in &state.subscribers {
-                if *socket_id != connection.socket_id {
-                    subscriber.connection.push(message.clone());
+            // The user's first connection here: other processes learn of
+            // it; local subscribers do unless another process had them.
+            let remote = self.cluster.as_ref().is_some_and(|cluster| {
+                cluster.publish(Message::MemberAdded {
+                    channel: channel.to_owned(),
+                    user_id: member.user_id.clone(),
+                    user_info: member.user_info.clone(),
+                });
+                cluster.remote().has(channel, &member.user_id)
+            });
+            if !remote {
+                let data = json!({ "user_id": member.user_id, "user_info": member.user_info });
+                let message = Utf8Bytes::from(frame(
+                    "pusher_internal:member_added",
+                    Some(channel),
+                    &data.to_string(),
+                ));
+                for (socket_id, subscriber) in &state.subscribers {
+                    if *socket_id != connection.socket_id {
+                        subscriber.connection.push(message.clone());
+                    }
                 }
             }
         }
@@ -572,14 +872,25 @@ impl Realtime {
         if let Some(member) = removed.member
             && !entry.get().has_user(&member.user_id)
         {
-            let data = json!({ "user_id": member.user_id });
-            let message = Utf8Bytes::from(frame(
-                "pusher_internal:member_removed",
-                Some(channel),
-                &data.to_string(),
-            ));
-            for subscriber in entry.get().subscribers.values() {
-                subscriber.connection.push(message.clone());
+            // The user's last connection here: other processes learn of it;
+            // local subscribers do unless another process still has them.
+            let remote = self.cluster.as_ref().is_some_and(|cluster| {
+                cluster.publish(Message::MemberRemoved {
+                    channel: channel.to_owned(),
+                    user_id: member.user_id.clone(),
+                });
+                cluster.remote().has(channel, &member.user_id)
+            });
+            if !remote {
+                let data = json!({ "user_id": member.user_id });
+                let message = Utf8Bytes::from(frame(
+                    "pusher_internal:member_removed",
+                    Some(channel),
+                    &data.to_string(),
+                ));
+                for subscriber in entry.get().subscribers.values() {
+                    subscriber.connection.push(message.clone());
+                }
             }
         }
         if entry.get().subscribers.is_empty() {
@@ -671,9 +982,11 @@ impl Realtime {
     }
 }
 
-/// In the process serving the sockets (or without a relay), events go to
-/// this process's subscribers; elsewhere (`queue:work`, `schedule:work`,
-/// commands) they are posted to the serving process through the relay.
+/// With a backplane, events go to this process's subscribers and, through
+/// the backplane, to every other process's. Without one, in the process
+/// serving the sockets (or without a relay) they go to this process's
+/// subscribers; elsewhere (`queue:work`, `schedule:work`, commands) they
+/// are posted to the serving process through the relay.
 impl Broadcaster for Realtime {
     fn broadcast(
         &self,
@@ -683,6 +996,11 @@ impl Broadcaster for Realtime {
     ) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
             check_event(&event)?;
+            if self.cluster.is_some() {
+                return Realtime::broadcast(self, channels, &event, data)
+                    .map(drop)
+                    .map_err(BoxError::from);
+            }
             match self.relay_target() {
                 Some(relay) => {
                     relay
@@ -702,6 +1020,10 @@ impl Broadcaster for Realtime {
 
     fn end_user_subscriptions(&self, user_id: Uuid) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
+            if self.cluster.is_some() {
+                Realtime::end_user_subscriptions(self, user_id);
+                return Ok(());
+            }
             match self.relay_target() {
                 Some(relay) => {
                     relay
@@ -737,6 +1059,7 @@ impl fmt::Debug for Realtime {
             .field("channel_patterns", &self.authorizers.len())
             .field("connections", &self.connections.len())
             .field("channels", &self.channels.len())
+            .field("backplane", &self.cluster.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -886,15 +1209,14 @@ impl ChannelState {
             .any(|s| s.member.as_ref().is_some_and(|m| m.user_id == user_id))
     }
 
-    /// `{"presence": {"ids", "hash", "count"}}`: one entry per user.
-    fn presence(&self) -> Value {
-        let hash: BTreeMap<&str, &Value> = self
-            .subscribers
-            .values()
-            .filter_map(|s| s.member.as_ref())
-            .map(|m| (m.user_id.as_str(), &m.user_info))
-            .collect();
-        let ids: Vec<&str> = hash.keys().copied().collect();
+    /// `{"presence": {"ids", "hash", "count"}}`: one entry per user, the
+    /// local subscribers' and the `remote` members other processes report.
+    fn presence(&self, remote: Vec<(String, Value)>) -> Value {
+        let mut hash: BTreeMap<String, Value> = remote.into_iter().collect();
+        for member in self.subscribers.values().filter_map(|s| s.member.as_ref()) {
+            hash.insert(member.user_id.clone(), member.user_info.clone());
+        }
+        let ids: Vec<&String> = hash.keys().collect();
         json!({ "presence": { "ids": ids, "hash": hash, "count": ids.len() } })
     }
 }

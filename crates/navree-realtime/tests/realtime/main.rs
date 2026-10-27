@@ -2,6 +2,7 @@
 //! app served by `axum::serve` on 127.0.0.1:0.
 
 mod auth;
+mod backplane;
 mod channels;
 mod connection;
 mod lifecycle;
