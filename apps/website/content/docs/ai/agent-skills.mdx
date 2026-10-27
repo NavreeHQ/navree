@@ -23,7 +23,9 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-controllers-and-routing` | Add controllers, routes, extractors, responses and access attributes, and debug 401, 403, 404, 405 or 415 on a route |
 | `navree-validation` | Validate bodies and query strings with garde DTOs, `unique` and `exists` rules, custom rules and messages |
 | `navree-errors-and-responses` | Return errors in Navree's JSON shape, map your error types to statuses, and shape responses, headers and downloads |
-| `navree-database` | Entities, `Repo`, the unit of work, transactions in jobs, migrations, seeders, factories and pagination |
+| `navree-orm` | Models with `#[derive(Model)]`, the query builder, records, relationships and eager loading, scopes and soft deletes, casts, events and observers, factories, `#[navree::test]` databases, route model binding, and workspace and access scoping |
+| `navree-migrations` | Migrations with the schema builder: tables, columns per database, indexes and foreign keys, migration sets and their order, `migrate`, `--pretend`, rollbacks, `migrate:fresh` and `schema:dump` |
+| `navree-database` | Database configuration, the unit of work, transactions in jobs, SeaORM entities and `Repo`, seeders and `db:seed`, pagination and TimescaleDB |
 | `navree-auth` | Sign-in with JWT and rotating refresh tokens, the current user, account flows, two-factor and its policy, sessions and step-up, impersonation, magic links, emailed codes, passkeys, platform sign-in, token exchange and API keys |
 | `navree-access-control` | Roles, permissions, ability rules, record checks with `Authorized` and per-user list filters with `Accessible` |
 | `navree-workspaces` | Workspaces, members, roles and invitations, `CurrentWorkspace` and isolation by row, schema or database |

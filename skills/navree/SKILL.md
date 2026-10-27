@@ -10,18 +10,20 @@ in Rust, on Tokio and Axum. Features live in **modules**; modules declare
 what they import, provide and export; a **dependency-injection** container
 wires them when the app boots and refuses to start if anything is missing.
 Around that structure sits a standard library for backends: routing,
-validation, an ORM layer on SeaORM, JWT auth, roles and abilities, queues,
-scheduling, mail, notifications, storage, real time, OpenAPI, health checks
-and a CLI with generators.
+validation, an ORM (`#[derive(Model)]` models, typed queries,
+relationships) with migrations on a schema builder, JWT auth, roles and
+abilities, queues, scheduling, mail, notifications, storage, real time,
+OpenAPI, health checks and a CLI with generators.
 
 ## Recognize a Navree app
 
-- `Cargo.toml` depends on `navree` (plus `serde`, `sea-orm`,
-  `sea-orm-migration` and `garde`, whose derives name their own crates).
+- `Cargo.toml` depends on `navree` (plus `serde`, `garde` and `sea-orm`,
+  whose derives name their own crates, and `chrono` and `uuid`).
 - `src/app.rs` builds the root with `Navree::app().module(..)` and a
   `// navree:modules` marker; `src/main.rs` calls `app(ConfigSources::defaults()).run()`.
 - Feature code lives in `src/modules/<name>/` (`mod.rs`, `controller.rs`,
-  `service.rs`, `entity.rs`, `dto.rs`, `migrations/`, `tests/`).
+  `service.rs`, `models/`, `dto.rs`, `migrations/`, `tests/`; older code
+  and Navree's own modules have SeaORM entities in `entity.rs`).
 - An `AGENTS.md` at the root holds the project's conventions. Read it first.
 
 ```text
@@ -51,9 +53,10 @@ tests/                 tests that boot the whole app
    error is `{ "statusCode", "message", "error", "code" }`, plus `errors`
    for validation failures. A refusal users see gets its own `code`
    (`.with_code("campaign_already_running")`), which front ends translate.
-6. **The request is a unit of work.** Services take `&Uow`; writes go
-   through `Repo::<E>::insert/update/delete`; everything commits when the
-   response status is below 400 and rolls back otherwise.
+6. **The request is a unit of work.** Services take `&Uow` and pass it to
+   models (`Deal::create(&uow, ..)`, `deal.save(&uow)`; SeaORM entities
+   write through `Repo::<E>::insert/update/delete`); everything commits when
+   the response status is below 400 and rolls back otherwise.
 7. **Test every change** with `navree::testing::TestApp`, then run
    `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test`.
 
@@ -65,10 +68,14 @@ tests/                 tests that boot the whole app
 `Path`, `Query`, `Created`, `NoContent`, `Uow`, `Repo`, `Page`, `PageQuery`,
 `Valid`, `ValidAsync`, the access markers (`Read`, `Create`, `Update`,
 `Delete`, `Manage`, `Accessible`, `Authorized`, `Abilities`, `Subject`),
-`CurrentUser`, every `*Module` and every `ModuleBuilder` extension (`m.job`,
-`m.listen`, `m.migrations`, `m.schedule`, `m.templates`, ...). Test helpers
-(`navree::testing`) are not in the prelude. Name the error type when it is
-not `AppError`: `Result<(), BoxError>`.
+`CurrentUser`, the ORM's `Model` (trait and derive), `Record`, `Collection`,
+`Builder`, `Attributes` and `attrs!`, every `*Module` and every
+`ModuleBuilder` extension (`m.job`, `m.listen`, `m.migrations`, `m.model`,
+`m.schedule`, `m.templates`, ...). Model files also
+`use navree::orm::prelude::*;` for `#[relations]`, `#[scopes]` and the
+relation types. Test helpers (`navree::testing`, `navree::orm::testing`)
+are not in the prelude. Name the error type when it is not `AppError`:
+`Result<(), BoxError>`.
 
 ## Commands
 
@@ -94,7 +101,9 @@ navree list                                 # every command of the app
 | Add an endpoint, controller, path/query parameter, response type; 401/403/404/405 on a route | `navree-controllers-and-routing` |
 | Request DTOs, validation rules, `unique`/`exists`, custom messages | `navree-validation` |
 | Return a status or error, map an error type, headers, downloads, API resources | `navree-errors-and-responses` |
-| Tables, entities, queries, `Repo`, transactions, migrations, seeders, factories, pagination | `navree-database` |
+| Models, queries, relationships, eager loading, scopes, soft deletes, casts, observers, factories, model tests, route model binding; N+1 or lazy-loading errors | `navree-orm` |
+| Migrations: tables, columns, indexes, foreign keys, `migrate`, rollbacks, `--pretend`, `schema:dump` | `navree-migrations` |
+| Database configuration, the unit of work, transactions in jobs and commands, SeaORM entities and `Repo`, seeders, TimescaleDB hypertables | `navree-database` |
 | Sign-in, tokens, current user, password reset, email verification, two-factor, sessions, step-up, impersonation, magic links, passkeys, platform admins, token exchange, API keys | `navree-auth` |
 | Roles, permissions, ability rules, record checks, per-user list filters | `navree-access-control` |
 | Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
@@ -141,8 +150,11 @@ navree list                                 # every command of the app
   the type. Use the generators.
 - Depending on another module's service without importing that module (or
   without the other module exporting it).
-- Building SQL strings or writing through `db.conn()` inside a request: use
-  `uow.tx()` and `Repo`, or the request's writes escape its rollback.
+- Building SQL strings or writing through `db.conn()` inside a request:
+  pass `&uow` to models (or use `uow.tx()` and `Repo` for entities), or the
+  request's writes escape its rollback.
+- Reading a relation inside a loop over records: eager load it with
+  `with("relation")`; in development the ORM refuses the lazy load.
 - Using `Utc::now()` where tests need a fixed time: inject `Arc<dyn Clock>`.
 - Setting a key in `.env` that `config/app.toml` also sets: `.env` only
   fills keys the TOML file leaves out. Real environment variables win.
