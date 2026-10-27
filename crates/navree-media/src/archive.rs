@@ -220,10 +220,7 @@ impl Archive {
                 message: format!("{path}: {error}"),
             })?;
         if out.len() as u64 > cap {
-            return Err(ArchiveError::EntryTooLarge {
-                path,
-                max: cap,
-            });
+            return Err(ArchiveError::EntryTooLarge { path, max: cap });
         }
         Ok(Bytes::from(out))
     }
@@ -231,7 +228,11 @@ impl Archive {
     /// Writes every file under `prefix` on `disk` (directories are
     /// implied by the paths) and returns what was written. The total is
     /// checked again against `max_total_bytes` while unpacking.
-    pub async fn extract_to(mut self, disk: &Disk, prefix: &str) -> Result<ExtractReport, MediaError> {
+    pub async fn extract_to(
+        mut self,
+        disk: &Disk,
+        prefix: &str,
+    ) -> Result<ExtractReport, MediaError> {
         let prefix = prefix.trim_matches('/');
         let mut report = ExtractReport::default();
         for position in 0..self.entries.len() {
@@ -295,13 +296,15 @@ impl ZipBuilder {
 
     /// Adds a file at `path` (checked like the entries [`Archive::open`]
     /// reads).
-    pub fn file(&mut self, path: &str, contents: impl AsRef<[u8]>) -> Result<&mut Self, MediaError> {
+    pub fn file(
+        &mut self,
+        path: &str,
+        contents: impl AsRef<[u8]>,
+    ) -> Result<&mut Self, MediaError> {
         let path = self.claim(path)?;
         let contents = contents.as_ref();
         let options = Self::options().large_file(contents.len() as u64 >= u64::from(u32::MAX));
-        self.writer
-            .start_file(path, options)
-            .map_err(|error| invalid(error))?;
+        self.writer.start_file(path, options).map_err(invalid)?;
         self.writer
             .write_all(contents)
             .map_err(|error| ArchiveError::Invalid {
@@ -381,7 +384,9 @@ mod tests {
         assert_eq!(safe_path("./a//b/").as_deref(), Some("a/b"));
         assert_eq!(safe_path("a\\b.txt").as_deref(), Some("a/b.txt"));
         assert_eq!(safe_path("..hidden").as_deref(), Some("..hidden"));
-        for bad in ["", "/", "../a", "a/..", "/abs", "C:/x", "c:x", "a/\0b", "..."] {
+        for bad in [
+            "", "/", "../a", "a/..", "/abs", "C:/x", "c:x", "a/\0b", "...",
+        ] {
             assert_eq!(safe_path(bad), None, "{bad:?}");
         }
     }

@@ -502,6 +502,9 @@ mod tests {
                 .iter()
                 .all(|job| job.as_ref().is_some_and(|job| job.options.queue == "media"))
         );
-        assert_eq!(Batch::new("plain").push(Ping).jobs[0].options.queue, "default");
+        assert_eq!(
+            Batch::new("plain").push(Ping).jobs[0].options.queue,
+            "default"
+        );
     }
 }

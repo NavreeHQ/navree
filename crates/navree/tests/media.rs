@@ -10,13 +10,13 @@
 use std::io::Write;
 
 use navree::axum::extract::Multipart;
+use navree::db::Db;
 use navree::media::archive::{Archive, ArchiveLimits};
 use navree::media::images::{self, ImageOptions};
 use navree::media::{
     Conversion, Fit, HasMedia, MediaCollections, MediaFake, MediaRecord, MediaResource,
     MediaSource, OutputFormat, Regenerate, text,
 };
-use navree::db::Db;
 use navree::prelude::*;
 use navree::storage::{DiskConfig, StorageModule, StorageOptions};
 use navree::testing::TestApp;
@@ -55,9 +55,7 @@ impl HasMedia for Course {
             .collection("attachments")
             .accepts(["application/pdf", "image/*", "text/*"])
             .max_size(10 * 1024 * 1024);
-        collections
-            .collection("scorm")
-            .accepts(["application/zip"]);
+        collections.collection("scorm").accepts(["application/zip"]);
     }
 }
 
@@ -108,7 +106,11 @@ impl CourseMediaController {
         let bytes = field.bytes().await?;
         let item = self
             .media
-            .add(course.model(), "thumbnail", MediaSource::bytes(file_name, bytes))
+            .add(
+                course.model(),
+                "thumbnail",
+                MediaSource::bytes(file_name, bytes),
+            )
             .property("alt", course.title.clone())
             .save(&uow)
             .await?;
@@ -126,11 +128,9 @@ pub struct CoursesModule;
 
 impl CoursesModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(
-            MigrationSet::new("courses")
-                .after(["media"])
-                .migration(navree::schema::migration!(m20261027_000001_create_courses_table)),
-        );
+        m.migrations(MigrationSet::new("courses").after(["media"]).migration(
+            navree::schema::migration!(m20261027_000001_create_courses_table),
+        ));
     }
 }
 
@@ -291,7 +291,13 @@ async fn the_fake_replaces_media_in_tests() {
     fake.assert_added("Course", "thumbnail");
     fake.assert_added_with(|item| item.has_conversion("card"));
     let item = &fake.added()[0];
-    assert!(fake.storage().default_disk().exists(&item.path).await.unwrap());
+    assert!(
+        fake.storage()
+            .default_disk()
+            .exists(&item.path)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -303,7 +309,10 @@ async fn archives_text_and_images_on_their_own() {
     let bytes = zip.finish().unwrap();
     let mut package = Archive::open(bytes.clone(), &ArchiveLimits::default()).unwrap();
     assert!(package.contains("imsmanifest.xml"));
-    assert_eq!(&package.read("imsmanifest.xml").unwrap()[..], b"<manifest/>");
+    assert_eq!(
+        &package.read("imsmanifest.xml").unwrap()[..],
+        b"<manifest/>"
+    );
     assert_eq!(package.files().count(), 2);
 
     let fake = MediaFake::new();
@@ -331,19 +340,29 @@ async fn archives_text_and_images_on_their_own() {
 
     // Text for a search index.
     let notes = media
-        .add(&course, "attachments", MediaSource::bytes("notes.html", "<h1>Policy</h1><p>Lock your screen.</p>"))
+        .add(
+            &course,
+            "attachments",
+            MediaSource::bytes("notes.html", "<h1>Policy</h1><p>Lock your screen.</p>"),
+        )
         .save(None)
         .await
         .unwrap();
     let document = media.extract_text(&notes).await.unwrap();
     assert_eq!(document.text, "Policy\n\nLock your screen.");
-    assert_eq!(text::extract(b"plain", "text/plain").unwrap().pages, vec!["plain"]);
+    assert_eq!(
+        text::extract(b"plain", "text/plain").unwrap().pages,
+        vec!["plain"]
+    );
 
     // Images without a model.
     let options = ImageOptions::default();
     let upload = png(600, 400);
     let info = images::probe(&upload).unwrap();
-    assert_eq!((info.width, info.height, info.mime_type), (600, 400, "image/png"));
+    assert_eq!(
+        (info.width, info.height, info.mime_type),
+        (600, 400, "image/png")
+    );
     let logo = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50"/></svg>"#;
     let rendered = images::rasterize_svg(logo, Some(512), None, &options).unwrap();
     assert_eq!(images::probe(&rendered).unwrap().width, 512);
@@ -356,6 +375,12 @@ async fn archives_text_and_images_on_their_own() {
         &options,
     )
     .unwrap();
-    assert_eq!((avatar.width, avatar.height, avatar.mime_type), (256, 256, "image/webp"));
-    assert_eq!(images::strip_metadata(&upload, info.mime_type, &options).unwrap(), None);
+    assert_eq!(
+        (avatar.width, avatar.height, avatar.mime_type),
+        (256, 256, "image/webp")
+    );
+    assert_eq!(
+        images::strip_metadata(&upload, info.mime_type, &options).unwrap(),
+        None
+    );
 }

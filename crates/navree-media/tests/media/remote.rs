@@ -65,7 +65,11 @@ async fn remote_files_are_downloaded_and_named() {
     assert_eq!((item.width, item.height), (Some(120), Some(40)));
 
     let item = media
-        .add(&course, "attachments", MediaSource::url(format!("{}/download", server.uri())))
+        .add(
+            &course,
+            "attachments",
+            MediaSource::url(format!("{}/download", server.uri())),
+        )
         .save(None)
         .await
         .unwrap();
@@ -84,7 +88,11 @@ async fn private_addresses_and_other_schemes_are_refused() {
     let (media, _dir) = media(None, MediaOptions::default());
     let course = Course { id: 1 };
     let error = media
-        .add_from_url(&course, "attachments", format!("{}/secret.txt?token=abc", server.uri()))
+        .add_from_url(
+            &course,
+            "attachments",
+            format!("{}/secret.txt?token=abc", server.uri()),
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -120,7 +128,11 @@ async fn redirects_to_private_addresses_are_refused() {
         .await;
     let (media, _dir) = media(Some(local_client()), MediaOptions::default());
     let error = media
-        .add_from_url(&Course { id: 1 }, "attachments", format!("{}/logo.png", server.uri()))
+        .add_from_url(
+            &Course { id: 1 },
+            "attachments",
+            format!("{}/logo.png", server.uri()),
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -163,7 +175,10 @@ async fn downloads_are_capped_in_size_status_and_time() {
         .save(None)
         .await
         .unwrap_err();
-    assert!(matches!(error, MediaError::TooLarge { max: 65536 }), "{error}");
+    assert!(
+        matches!(error, MediaError::TooLarge { max: 65536 }),
+        "{error}"
+    );
 
     let error = media
         .add_from_url(&course, "attachments", format!("{}/gone.txt", server.uri()))
@@ -171,10 +186,17 @@ async fn downloads_are_capped_in_size_status_and_time() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("404"), "{error}");
-    assert_eq!((error.status(), error.code()), (400, "remote_file_unavailable"));
+    assert_eq!(
+        (error.status(), error.code()),
+        (400, "remote_file_unavailable")
+    );
 
     let error = media
-        .add_from_url(&course, "attachments", format!("{}/slow.txt?token=abc", server.uri()))
+        .add_from_url(
+            &course,
+            "attachments",
+            format!("{}/slow.txt?token=abc", server.uri()),
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -184,7 +206,11 @@ async fn downloads_are_capped_in_size_status_and_time() {
     // Nothing listens on port 9: the client's error names the URL, and
     // the message shows it without its query string.
     let error = media
-        .add_from_url(&course, "attachments", "http://127.0.0.1:9/a.txt?signature=s3cr3t")
+        .add_from_url(
+            &course,
+            "attachments",
+            "http://127.0.0.1:9/a.txt?signature=s3cr3t",
+        )
         .save(None)
         .await
         .unwrap_err();

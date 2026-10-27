@@ -26,11 +26,18 @@ fn lists_entries_and_reads_files() {
         .collect();
     assert_eq!(
         paths,
-        vec![("imsmanifest.xml", false), ("content", true), ("content/index.html", false)]
+        vec![
+            ("imsmanifest.xml", false),
+            ("content", true),
+            ("content/index.html", false)
+        ]
     );
     assert_eq!(archive.entries()[2].size, 15);
     assert!(archive.contains("content/index.html"));
-    assert_eq!(&archive.read("content/index.html").unwrap()[..], b"<h1>Lesson</h1>");
+    assert_eq!(
+        &archive.read("content/index.html").unwrap()[..],
+        b"<h1>Lesson</h1>"
+    );
     assert_eq!(
         archive.read("missing.txt").unwrap_err(),
         ArchiveError::NotFound {
@@ -88,7 +95,11 @@ fn symbolic_links_are_refused() {
     use std::io::Cursor;
     let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
     writer
-        .add_symlink("link", "/etc/passwd", zip::write::SimpleFileOptions::default())
+        .add_symlink(
+            "link",
+            "/etc/passwd",
+            zip::write::SimpleFileOptions::default(),
+        )
         .unwrap();
     let bytes = writer.finish().unwrap().into_inner();
     let err = Archive::open(bytes, &limits()).unwrap_err();
@@ -147,8 +158,10 @@ fn other_files_are_invalid_archives() {
 
 #[tokio::test]
 async fn extract_to_writes_every_file_under_the_prefix() {
-    let mut options = StorageOptions::default();
-    options.default = "memory".into();
+    let mut options = StorageOptions {
+        default: "memory".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("memory".into(), DiskConfig::Memory);
     let storage = Storage::new(&options, b"key").unwrap();
@@ -175,10 +188,10 @@ async fn extract_to_writes_every_file_under_the_prefix() {
 #[test]
 fn zip_builder_round_trips_and_refuses_unsafe_names() {
     let mut zip = ZipBuilder::new();
-    zip.file("report.csv", b"region,total\n".to_vec()).unwrap();
-    zip.file("charts/q1.svg", b"<svg/>".to_vec()).unwrap();
+    zip.file("report.csv", b"region,total\n").unwrap();
+    zip.file("charts/q1.svg", b"<svg/>").unwrap();
     assert!(matches!(
-        zip.file("../escape.txt", b"no".to_vec()),
+        zip.file("../escape.txt", b"no"),
         Err(MediaError::Archive(ArchiveError::UnsafePath { .. }))
     ));
     let bytes = zip.finish().unwrap();

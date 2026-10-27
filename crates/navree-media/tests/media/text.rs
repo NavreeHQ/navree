@@ -10,8 +10,16 @@ fn pdf_text_comes_page_by_page() {
     let bytes = pdf(&["Phishing awareness", "Report suspicious mail"]);
     let out = text::extract(&bytes, "application/pdf").unwrap();
     assert_eq!(out.pages.len(), 2);
-    assert!(out.pages[0].contains("Phishing awareness"), "{:?}", out.pages);
-    assert!(out.pages[1].contains("Report suspicious mail"), "{:?}", out.pages);
+    assert!(
+        out.pages[0].contains("Phishing awareness"),
+        "{:?}",
+        out.pages
+    );
+    assert!(
+        out.pages[1].contains("Report suspicious mail"),
+        "{:?}",
+        out.pages
+    );
     assert!(out.text.contains("Phishing awareness"));
     assert!(out.text.contains("Report suspicious mail"));
     assert_eq!(out.mime_type, "application/pdf");

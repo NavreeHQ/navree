@@ -101,20 +101,18 @@ impl Loader<'_> {
     pub(crate) async fn load(&self, source: MediaSource) -> Result<Loaded, MediaError> {
         let loaded = match source.kind {
             Kind::Bytes { file_name, bytes } => Loaded { file_name, bytes },
-            Kind::Url(url) => {
-                match tokio::time::timeout(self.timeout, self.download(&url)).await {
-                    Ok(result) => result?,
-                    Err(_) => {
-                        return Err(MediaError::Download {
-                            url: display_url(&url),
-                            reason: format!(
-                                "the download took longer than {} s",
-                                self.timeout.as_secs()
-                            ),
-                        });
-                    }
+            Kind::Url(url) => match tokio::time::timeout(self.timeout, self.download(&url)).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(MediaError::Download {
+                        url: display_url(&url),
+                        reason: format!(
+                            "the download took longer than {} s",
+                            self.timeout.as_secs()
+                        ),
+                    });
                 }
-            }
+            },
             Kind::Disk { disk, path } => {
                 let disk = self.storage.disk(&disk)?;
                 if disk.size(&path).await? > self.max {
@@ -225,11 +223,18 @@ fn http_error(error: HttpClientError, url: &str) -> MediaError {
 pub(crate) fn scrub_urls(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(start) = rest.find("http://").into_iter().chain(rest.find("https://")).min() {
+    while let Some(start) = rest
+        .find("http://")
+        .into_iter()
+        .chain(rest.find("https://"))
+        .min()
+    {
         out.push_str(&rest[..start]);
         let tail = &rest[start..];
         let end = tail
-            .find(|c: char| c.is_whitespace() || matches!(c, ')' | '(' | '`' | '"' | '\'' | '<' | '>'))
+            .find(|c: char| {
+                c.is_whitespace() || matches!(c, ')' | '(' | '`' | '"' | '\'' | '<' | '>')
+            })
             .unwrap_or(tail.len());
         out.push_str(&display_url(&tail[..end]));
         rest = &tail[end..];
@@ -254,7 +259,10 @@ pub(crate) fn display_url(url: &str) -> String {
 
 /// The last segment of a path.
 fn base_name(path: &str) -> String {
-    path.rsplit(['/', '\\']).next().unwrap_or_default().to_owned()
+    path.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// The file name a URL's path ends with, percent-decoded.
@@ -332,7 +340,10 @@ mod tests {
     fn file_names_are_sanitized() {
         assert_eq!(sanitize_file_name("cover.png", "png"), "cover.png");
         assert_eq!(sanitize_file_name("../../etc/passwd", "bin"), "passwd");
-        assert_eq!(sanitize_file_name("C:\\Users\\me\\a:b?.txt", "txt"), "a-b-.txt");
+        assert_eq!(
+            sanitize_file_name("C:\\Users\\me\\a:b?.txt", "txt"),
+            "a-b-.txt"
+        );
         assert_eq!(sanitize_file_name(".htaccess", "txt"), "htaccess");
         assert_eq!(sanitize_file_name("", "pdf"), "file.pdf");
         assert_eq!(sanitize_file_name("...", "pdf"), "file.pdf");
@@ -360,7 +371,9 @@ mod tests {
             "https://cdn.example.com/a.png"
         );
         assert_eq!(
-            scrub_urls("request to https://cdn.example.com/a.png?sig=abc timed out (http://x.test/?k=1)"),
+            scrub_urls(
+                "request to https://cdn.example.com/a.png?sig=abc timed out (http://x.test/?k=1)"
+            ),
             "request to https://cdn.example.com/a.png timed out (http://x.test/)"
         );
         assert_eq!(scrub_urls("no url here"), "no url here");

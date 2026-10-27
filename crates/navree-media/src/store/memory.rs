@@ -26,7 +26,9 @@ impl MemoryStore {
     }
 
     fn rows(&self) -> MutexGuard<'_, BTreeMap<Uuid, MediaItem>> {
-        self.rows.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.rows
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 

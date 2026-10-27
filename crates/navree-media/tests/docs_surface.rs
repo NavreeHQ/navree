@@ -13,14 +13,14 @@ use navree_media::archive::{Archive, ArchiveEntry, ArchiveLimits, ExtractReport,
 use navree_media::images::{self, ConvertedImage, ImageInfo, ImageOptions};
 use navree_media::text::{self, ExtractedText};
 use navree_media::video::{
-    Ffmpeg, FfmpegCall, FfmpegFake, FfmpegOptions, FfmpegRunner, Probe, ProbeStream,
-    ProcessRunner, Transcode,
+    Ffmpeg, FfmpegCall, FfmpegFake, FfmpegOptions, FfmpegRunner, Probe, ProbeStream, ProcessRunner,
+    Transcode,
 };
 use navree_media::{
     ArchiveError, Conversion, DEFAULT_QUALITY, DatabaseStore, Fit, GenerateConversions,
     GeneratedConversion, HasMedia, MEDIA_MIGRATIONS, MEDIA_TABLE, Media, MediaBuilder,
-    MediaCollection, MediaCollections, MediaError, MediaFake, MediaItem, MediaModule,
-    MediaOptions, MediaQuery, MediaRecord, MediaResource, MediaSource, MediaStore, MemoryStore,
+    MediaCollection, MediaCollections, MediaError, MediaFake, MediaItem, MediaModule, MediaOptions,
+    MediaQuery, MediaRecord, MediaResource, MediaSource, MediaStore, MemoryStore,
     ModuleBuilderMediaExt, OutputFormat, PendingMedia, Regenerate, RegenerateReport,
     ResponsiveVariant, StoreKind,
 };
@@ -60,7 +60,11 @@ impl HasMedia for Course {
 async fn media_methods(media: &Media, uow: &Uow, item: MediaItem) -> Result<(), MediaError> {
     let course = Course;
     let pending: PendingMedia = media
-        .add(&course, "thumbnail", MediaSource::bytes("a.png", Bytes::new()))
+        .add(
+            &course,
+            "thumbnail",
+            MediaSource::bytes("a.png", Bytes::new()),
+        )
         .name("A")
         .file_name("a.png")
         .property("alt", "x");
@@ -110,7 +114,7 @@ async fn media_methods(media: &Media, uow: &Uow, item: MediaItem) -> Result<(), 
     let _: ExtractedText = media.extract_text(&item).await?;
     let _: Archive = media.open_archive(&item).await?;
     let _: ExtractReport = media.unpack(&item, "public", "scorm/1").await?;
-    let _: Bytes = media.zip(&[item.clone()]).await?;
+    let _: Bytes = media.zip(std::slice::from_ref(&item)).await?;
     let _: Arc<MediaCollections> = media.register::<Course>()?;
     let _: &MediaOptions = media.options();
     let _ = media.storage();
@@ -143,8 +147,14 @@ fn item_fields(item: &MediaItem) {
         variant.width,
         generated.generated_at,
     );
-    let _ = (&item.metadata, &item.custom_properties, item.created_at, item.updated_at);
-    let _: bool = item.has_conversion("card") && item.is_image() && item.is_video() && item.is_audio();
+    let _ = (
+        &item.metadata,
+        &item.custom_properties,
+        item.created_at,
+        item.updated_at,
+    );
+    let _: bool =
+        item.has_conversion("card") && item.is_image() && item.is_video() && item.is_audio();
     let _ = item.property("alt");
 }
 
@@ -155,8 +165,16 @@ async fn functions(bytes: &[u8], disk: &Disk) -> Result<(), MediaError> {
     let options = ImageOptions::default();
     let info: ImageInfo = images::probe(bytes)?;
     let _: (u32, u32, &str) = (info.width, info.height, info.mime_type);
-    let converted: ConvertedImage = images::convert(bytes, "image/png", &Conversion::new("x"), &options)?;
-    let _ = (converted.bytes, converted.mime_type, converted.extension, converted.width, converted.height, converted.variants);
+    let converted: ConvertedImage =
+        images::convert(bytes, "image/png", &Conversion::new("x"), &options)?;
+    let _ = (
+        converted.bytes,
+        converted.mime_type,
+        converted.extension,
+        converted.width,
+        converted.height,
+        converted.variants,
+    );
     let _: Option<Vec<u8>> = images::strip_metadata(bytes, "image/jpeg", &options)?;
     let _: Vec<u8> = images::rasterize_svg(bytes, Some(512), None, &options)?;
 
@@ -179,17 +197,30 @@ async fn functions(bytes: &[u8], disk: &Disk) -> Result<(), MediaError> {
     let _: Option<&ProbeStream> = probe.video();
     let _ = (probe.duration, probe.dimensions(), probe.audio());
     ffmpeg
-        .frame(std::path::Path::new("in.mp4"), 1.0, std::path::Path::new("poster.png"))
+        .frame(
+            std::path::Path::new("in.mp4"),
+            1.0,
+            std::path::Path::new("poster.png"),
+        )
         .await?;
     ffmpeg
         .transcode(
             std::path::Path::new("in.mp4"),
             std::path::Path::new("out.mp4"),
-            &Transcode::mp4().height(720).crf(23).preset("fast").audio_bitrate("96k").max_duration(10),
+            &Transcode::mp4()
+                .height(720)
+                .crf(23)
+                .preset("fast")
+                .audio_bitrate("96k")
+                .max_duration(10),
         )
         .await?;
     let _: String = ffmpeg.version().await?;
-    let _ = (Transcode::webm().without_audio().arg("-an"), Transcode::mp3(), Transcode::m4a());
+    let _ = (
+        Transcode::webm().without_audio().arg("-an"),
+        Transcode::mp3(),
+        Transcode::m4a(),
+    );
     let _: Arc<dyn FfmpegRunner> = Arc::new(ProcessRunner);
     let fake = FfmpegFake::new().probe_json(json!({})).fail("x");
     let _: Vec<FfmpegCall> = fake.calls();
@@ -232,7 +263,13 @@ fn modules(m: &mut ModuleBuilder, storage: Arc<navree_storage::Storage>, db: nav
     let fake = MediaFake::new().register::<Course>();
     let _ = MediaFake::with_options(MediaOptions::default());
     let _: Media = fake.media();
-    let _ = (fake.storage(), fake.http(), fake.ffmpeg(), fake.added(), fake.deleted());
+    let _ = (
+        fake.storage(),
+        fake.http(),
+        fake.ffmpeg(),
+        fake.added(),
+        fake.deleted(),
+    );
     fake.assert_nothing_added();
     let _ = |id| fake.assert_deleted(id);
     let _ = || fake.assert_added("Course", "thumbnail");
@@ -266,7 +303,10 @@ fn every_configuration_key_is_read() {
     assert_eq!(options.max_file_size, 1024);
     assert!(!options.queue_conversions && !options.strip_metadata && !options.delete_with_model);
     assert_eq!(options.queue, "media");
-    assert_eq!((options.url_ttl_secs, options.download_timeout_secs), (60, 5));
+    assert_eq!(
+        (options.url_ttl_secs, options.download_timeout_secs),
+        (60, 5)
+    );
     assert_eq!(options.images.max_pixels, 100);
     assert_eq!(options.images.responsive_widths, vec![480, 960]);
     assert_eq!(
@@ -280,28 +320,48 @@ fn every_configuration_key_is_read() {
     );
     assert_eq!(options.ffmpeg.ffmpeg, "/usr/bin/ffmpeg");
     assert_eq!(options.ffmpeg.ffprobe, "/usr/bin/ffprobe");
-    assert_eq!((options.ffmpeg.timeout_secs, options.ffmpeg.threads), (7, 2));
+    assert_eq!(
+        (options.ffmpeg.timeout_secs, options.ffmpeg.threads),
+        (7, 2)
+    );
 }
 
 #[test]
 fn the_defaults_are_as_documented() {
     let options = MediaOptions::default();
     assert_eq!(options.store, StoreKind::Database);
-    assert_eq!((options.disk.clone(), options.conversions_disk.clone()), (None, None));
+    assert_eq!(
+        (options.disk.clone(), options.conversions_disk.clone()),
+        (None, None)
+    );
     assert_eq!(options.prefix, "media");
     assert_eq!(options.max_file_size, 26_214_400);
     assert!(options.queue_conversions && options.strip_metadata && options.delete_with_model);
     assert_eq!(options.queue, "default");
-    assert_eq!((options.url_ttl_secs, options.download_timeout_secs), (3600, 30));
+    assert_eq!(
+        (options.url_ttl_secs, options.download_timeout_secs),
+        (3600, 30)
+    );
     assert_eq!(options.images.max_pixels, 50_000_000);
-    assert_eq!(options.images.responsive_widths, vec![320, 640, 960, 1280, 1920, 2560]);
+    assert_eq!(
+        options.images.responsive_widths,
+        vec![320, 640, 960, 1280, 1920, 2560]
+    );
     let archives = ArchiveLimits::default();
     assert_eq!(
-        (archives.max_entries, archives.max_entry_bytes, archives.max_total_bytes, archives.max_ratio),
+        (
+            archives.max_entries,
+            archives.max_entry_bytes,
+            archives.max_total_bytes,
+            archives.max_ratio
+        ),
         (10_000, 536_870_912, 2_147_483_648, 200)
     );
     let ffmpeg = FfmpegOptions::default();
-    assert_eq!((ffmpeg.ffmpeg.as_str(), ffmpeg.ffprobe.as_str()), ("ffmpeg", "ffprobe"));
+    assert_eq!(
+        (ffmpeg.ffmpeg.as_str(), ffmpeg.ffprobe.as_str()),
+        ("ffmpeg", "ffprobe")
+    );
     assert_eq!((ffmpeg.timeout_secs, ffmpeg.threads), (600, 0));
     assert_eq!(DEFAULT_QUALITY, 82);
 }
@@ -348,59 +408,158 @@ fn the_documented_error_codes() {
     let id = Uuid::nil();
     let cases: Vec<(MediaError, u16, &str)> = vec![
         (
-            MediaError::UnknownCollection { model_type: "C".into(), collection: "x".into() },
+            MediaError::UnknownCollection {
+                model_type: "C".into(),
+                collection: "x".into(),
+            },
             400,
             "unknown_media_collection",
         ),
         (
-            MediaError::TypeNotAllowed { collection: "x".into(), mime_type: "a/b".into() },
+            MediaError::TypeNotAllowed {
+                collection: "x".into(),
+                mime_type: "a/b".into(),
+            },
             400,
             "file_type_not_allowed",
         ),
         (MediaError::TooLarge { max: 1 }, 413, "payload_too_large"),
         (MediaError::Empty, 400, "empty_file"),
         (
-            MediaError::Download { url: "u".into(), reason: "r".into() },
+            MediaError::Download {
+                url: "u".into(),
+                reason: "r".into(),
+            },
             400,
             "remote_file_unavailable",
         ),
         (
-            MediaError::Blocked { url: "u".into(), reason: "r".into() },
+            MediaError::Blocked {
+                url: "u".into(),
+                reason: "r".into(),
+            },
             400,
             "remote_file_blocked",
         ),
-        (MediaError::Image { message: "m".into() }, 400, "invalid_image"),
-        (MediaError::Text { message: "m".into() }, 400, "invalid_document"),
         (
-            MediaError::Unsupported { operation: "text extraction", mime_type: "a/b".into() },
+            MediaError::Image {
+                message: "m".into(),
+            },
+            400,
+            "invalid_image",
+        ),
+        (
+            MediaError::Text {
+                message: "m".into(),
+            },
+            400,
+            "invalid_document",
+        ),
+        (
+            MediaError::Unsupported {
+                operation: "text extraction",
+                mime_type: "a/b".into(),
+            },
             415,
             "unsupported_media_type",
         ),
         (MediaError::NotFound { id }, 404, "media_not_found"),
         (
-            MediaError::MissingConversion { id, conversion: "c".into() },
+            MediaError::MissingConversion {
+                id,
+                conversion: "c".into(),
+            },
             404,
             "conversion_not_found",
         ),
-        (MediaError::NoPublicUrl { disk: "d".into() }, 500, "internal_error"),
-        (MediaError::Ffmpeg { message: "m".into() }, 500, "internal_error"),
-        (MediaError::File { path: "p".into(), message: "m".into() }, 500, "internal_error"),
-        (MediaError::Queue { message: "m".into() }, 500, "internal_error"),
+        (
+            MediaError::NoPublicUrl { disk: "d".into() },
+            500,
+            "internal_error",
+        ),
+        (
+            MediaError::Ffmpeg {
+                message: "m".into(),
+            },
+            500,
+            "internal_error",
+        ),
+        (
+            MediaError::File {
+                path: "p".into(),
+                message: "m".into(),
+            },
+            500,
+            "internal_error",
+        ),
+        (
+            MediaError::Queue {
+                message: "m".into(),
+            },
+            500,
+            "internal_error",
+        ),
     ];
     for (error, status, code) in cases {
         assert_eq!((error.status(), error.code()), (status, code), "{error}");
     }
     let archive: Vec<(ArchiveError, u16, &str)> = vec![
-        (ArchiveError::Invalid { message: "m".into() }, 400, "invalid_archive"),
-        (ArchiveError::UnsafePath { path: "../x".into() }, 400, "unsafe_archive"),
-        (ArchiveError::Symlink { path: "x".into() }, 400, "unsafe_archive"),
-        (ArchiveError::Encrypted { path: "x".into() }, 400, "unsafe_archive"),
-        (ArchiveError::Duplicate { path: "x".into() }, 400, "unsafe_archive"),
-        (ArchiveError::TooManyEntries { max: 1 }, 413, "archive_too_large"),
-        (ArchiveError::EntryTooLarge { path: "x".into(), max: 1 }, 413, "archive_too_large"),
+        (
+            ArchiveError::Invalid {
+                message: "m".into(),
+            },
+            400,
+            "invalid_archive",
+        ),
+        (
+            ArchiveError::UnsafePath {
+                path: "../x".into(),
+            },
+            400,
+            "unsafe_archive",
+        ),
+        (
+            ArchiveError::Symlink { path: "x".into() },
+            400,
+            "unsafe_archive",
+        ),
+        (
+            ArchiveError::Encrypted { path: "x".into() },
+            400,
+            "unsafe_archive",
+        ),
+        (
+            ArchiveError::Duplicate { path: "x".into() },
+            400,
+            "unsafe_archive",
+        ),
+        (
+            ArchiveError::TooManyEntries { max: 1 },
+            413,
+            "archive_too_large",
+        ),
+        (
+            ArchiveError::EntryTooLarge {
+                path: "x".into(),
+                max: 1,
+            },
+            413,
+            "archive_too_large",
+        ),
         (ArchiveError::TooLarge { max: 1 }, 413, "archive_too_large"),
-        (ArchiveError::Ratio { path: "x".into(), max: 1 }, 413, "archive_too_large"),
-        (ArchiveError::NotFound { path: "x".into() }, 404, "not_found"),
+        (
+            ArchiveError::Ratio {
+                path: "x".into(),
+                max: 1,
+            },
+            413,
+            "archive_too_large",
+        ),
+        (
+            ArchiveError::NotFound { path: "x".into() },
+            404,
+            "not_found",
+        ),
     ];
     for (error, status, code) in archive {
         assert_eq!((error.status(), error.code()), (status, code), "{error}");
@@ -422,5 +581,7 @@ async fn the_command_is_registered() {
         .module(MediaModule::from_config())
         .build()
         .await;
-    app.run_command("media:regenerate", &["--missing"]).await.unwrap();
+    app.run_command("media:regenerate", &["--missing"])
+        .await
+        .unwrap();
 }

@@ -56,7 +56,9 @@ pub(crate) fn parse_regenerate_args(args: &[String]) -> Result<RegenerateArgs, B
             "--missing" => parsed.filter.missing_only = true,
             "--queue" => parsed.queue = true,
             other => {
-                return Err(format!("media:regenerate: unexpected argument `{other}`; {USAGE}").into());
+                return Err(
+                    format!("media:regenerate: unexpected argument `{other}`; {USAGE}").into(),
+                );
             }
         }
     }
@@ -72,7 +74,11 @@ async fn regenerate(ctx: AppContext, args: Vec<String>) -> Result<String, BoxErr
             Some(batch) => format!(
                 "Queued {} media {} in batch {}",
                 batch.total_jobs,
-                if batch.total_jobs == 1 { "item" } else { "items" },
+                if batch.total_jobs == 1 {
+                    "item"
+                } else {
+                    "items"
+                },
                 batch.id
             ),
             None => "Nothing to regenerate".to_owned(),
@@ -82,7 +88,11 @@ async fn regenerate(ctx: AppContext, args: Vec<String>) -> Result<String, BoxErr
     let mut out = format!(
         "Generated {} {} of {} media {}",
         report.conversions,
-        if report.conversions == 1 { "conversion" } else { "conversions" },
+        if report.conversions == 1 {
+            "conversion"
+        } else {
+            "conversions"
+        },
         report.media,
         if report.media == 1 { "item" } else { "items" },
     );
@@ -125,7 +135,10 @@ mod tests {
         assert_eq!(parsed.filter.conversions, vec!["card", "hero"]);
         assert!(parsed.filter.missing_only);
         assert!(parsed.queue);
-        assert_eq!(parse_regenerate_args(&[]).unwrap(), RegenerateArgs::default());
+        assert_eq!(
+            parse_regenerate_args(&[]).unwrap(),
+            RegenerateArgs::default()
+        );
     }
 
     #[test]

@@ -5,7 +5,9 @@ use http::Method;
 use image::ImageFormat;
 use navree_http_client::FakeResponse;
 use navree_media::video::Transcode;
-use navree_media::{Conversion, Fit, HasMedia, MediaCollections, MediaFake, MediaSource, OutputFormat};
+use navree_media::{
+    Conversion, Fit, HasMedia, MediaCollections, MediaFake, MediaSource, OutputFormat,
+};
 use serde_json::json;
 
 use crate::models::Course;
@@ -79,12 +81,25 @@ async fn the_fake_records_adds_and_deletes() {
     fake.assert_added("Course", "thumbnail");
     fake.assert_added_with(|added| added.id == item.id && added.width == Some(200));
     fake.assert_added_count(1);
-    assert!(fake.storage().default_disk().exists(&item.path).await.unwrap());
+    assert!(
+        fake.storage()
+            .default_disk()
+            .exists(&item.path)
+            .await
+            .unwrap()
+    );
     assert!(fake.deleted().is_empty());
 
     media.delete(None, item.id).await.unwrap();
     fake.assert_deleted(item.id);
-    assert!(fake.storage().default_disk().list("media").await.unwrap().is_empty());
+    assert!(
+        fake.storage()
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -103,7 +118,11 @@ async fn remote_files_come_from_the_fake_server() {
     );
     let item = fake
         .media()
-        .add_from_url(&Course { id: 1 }, "gallery", "https://cdn.example.com/a/team.png")
+        .add_from_url(
+            &Course { id: 1 },
+            "gallery",
+            "https://cdn.example.com/a/team.png",
+        )
         .save(None)
         .await
         .unwrap();
@@ -114,7 +133,11 @@ async fn remote_files_come_from_the_fake_server() {
 
     let error = fake
         .media()
-        .add_from_url(&Course { id: 1 }, "gallery", "https://elsewhere.example.com/x.png")
+        .add_from_url(
+            &Course { id: 1 },
+            "gallery",
+            "https://elsewhere.example.com/x.png",
+        )
         .save(None)
         .await
         .unwrap_err();
@@ -126,7 +149,11 @@ async fn videos_are_probed_framed_and_transcoded() {
     let fake = MediaFake::new();
     let item = fake
         .media()
-        .add(&Lesson, "videos", MediaSource::bytes("intro.mp4", mp4_bytes()))
+        .add(
+            &Lesson,
+            "videos",
+            MediaSource::bytes("intro.mp4", mp4_bytes()),
+        )
         .save(None)
         .await
         .unwrap();
@@ -140,10 +167,16 @@ async fn videos_are_probed_framed_and_transcoded() {
     let poster = &item.conversions["poster"];
     assert_eq!((poster.width, poster.height), (Some(320), Some(180)));
     assert_eq!(poster.mime_type, "image/jpeg");
-    assert_eq!(poster.path, format!("media/{}/conversions/intro-poster.jpg", item.id));
+    assert_eq!(
+        poster.path,
+        format!("media/{}/conversions/intro-poster.jpg", item.id)
+    );
     let web = &item.conversions["web"];
     assert_eq!(web.mime_type, "video/mp4");
-    assert_eq!(web.path, format!("media/{}/conversions/intro-web.mp4", item.id));
+    assert_eq!(
+        web.path,
+        format!("media/{}/conversions/intro-web.mp4", item.id)
+    );
     assert_eq!((web.width, web.height), (Some(1280), Some(720)));
     assert!(item.is_video());
 
@@ -162,7 +195,11 @@ async fn frames_of_short_videos_come_from_the_middle() {
         "streams": [{ "index": 0, "codec_type": "video", "codec_name": "vp9", "width": 640, "height": 360 }]
     }));
     fake.media()
-        .add(&Lesson, "videos", MediaSource::bytes("clip.mp4", mp4_bytes()))
+        .add(
+            &Lesson,
+            "videos",
+            MediaSource::bytes("clip.mp4", mp4_bytes()),
+        )
         .save(None)
         .await
         .unwrap();
@@ -175,7 +212,11 @@ async fn audio_gets_transcodes_and_no_image_conversions() {
     let fake = MediaFake::new();
     let item = fake
         .media()
-        .add(&Lesson, "recordings", MediaSource::bytes("talk.mp3", mp3_bytes()))
+        .add(
+            &Lesson,
+            "recordings",
+            MediaSource::bytes("talk.mp3", mp3_bytes()),
+        )
         .save(None)
         .await
         .unwrap();
@@ -191,15 +232,35 @@ async fn a_failing_conversion_keeps_nothing() {
     fake.ffmpeg().clone().fail("ffmpeg was not found");
     let error = fake
         .media()
-        .add(&Lesson, "videos", MediaSource::bytes("intro.mp4", mp4_bytes()))
+        .add(
+            &Lesson,
+            "videos",
+            MediaSource::bytes("intro.mp4", mp4_bytes()),
+        )
         .save(None)
         .await
         .unwrap_err();
     // The probe failure is only logged; the poster frame, generated at
     // once without a queue, fails the add.
-    assert!(matches!(error, navree_media::MediaError::Ffmpeg { .. }), "{error}");
+    assert!(
+        matches!(error, navree_media::MediaError::Ffmpeg { .. }),
+        "{error}"
+    );
     assert_eq!(error.status(), 500);
-    assert!(fake.storage().default_disk().list("media").await.unwrap().is_empty());
-    assert!(fake.media().list(&Default::default()).await.unwrap().is_empty());
+    assert!(
+        fake.storage()
+            .default_disk()
+            .list("media")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fake.media()
+            .list(&Default::default())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     fake.assert_nothing_added();
 }

@@ -55,9 +55,14 @@ impl MediaQuery {
     }
 
     pub(crate) fn matches(&self, item: &MediaItem) -> bool {
-        self.model_type.as_ref().is_none_or(|t| *t == item.model_type)
+        self.model_type
+            .as_ref()
+            .is_none_or(|t| *t == item.model_type)
             && self.model_id.as_ref().is_none_or(|k| *k == item.model_id)
-            && self.collection.as_ref().is_none_or(|c| *c == item.collection)
+            && self
+                .collection
+                .as_ref()
+                .is_none_or(|c| *c == item.collection)
             && self.ids.as_ref().is_none_or(|ids| ids.contains(&item.id))
             && self.after.is_none_or(|after| item.id > after)
     }

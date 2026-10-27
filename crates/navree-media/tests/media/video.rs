@@ -63,15 +63,25 @@ async fn frames_and_transcodes_run_ffmpeg_with_the_right_arguments() {
     let ffmpeg = fake.ffmpeg();
 
     let frame = dir.path().join("poster.png");
-    ffmpeg.frame(Path::new("in.mp4"), 1.5, &frame).await.unwrap();
+    ffmpeg
+        .frame(Path::new("in.mp4"), 1.5, &frame)
+        .await
+        .unwrap();
     let png = std::fs::read(&frame).unwrap();
     let img = image::load_from_memory(&png).unwrap();
-    assert_eq!((img.width(), img.height()), (1280, 720), "the fake's default video");
+    assert_eq!(
+        (img.width(), img.height()),
+        (1280, 720),
+        "the fake's default video"
+    );
 
     let out = dir.path().join("out.mp4");
     let mp4 = Transcode::mp4().height(720).crf(26);
     assert_eq!((mp4.mime_type(), mp4.extension()), ("video/mp4", "mp4"));
-    ffmpeg.transcode(Path::new("in.mov"), &out, &mp4).await.unwrap();
+    ffmpeg
+        .transcode(Path::new("in.mov"), &out, &mp4)
+        .await
+        .unwrap();
     assert!(out.exists());
 
     let calls = fake.calls();
@@ -124,7 +134,11 @@ async fn a_missing_binary_is_reported() {
         ..FfmpegOptions::default()
     });
     let err = ffmpeg.probe(Path::new("in.mp4")).await.unwrap_err();
-    assert!(err.to_string().contains("navree-no-such-ffprobe was not found"), "{err}");
+    assert!(
+        err.to_string()
+            .contains("navree-no-such-ffprobe was not found"),
+        "{err}"
+    );
 }
 
 #[tokio::test]
@@ -132,7 +146,11 @@ async fn the_process_runner_kills_a_tool_that_runs_too_long() {
     let (program, args): (&str, Vec<String>) = if cfg!(windows) {
         (
             "powershell",
-            vec!["-NoProfile".into(), "-Command".into(), "Start-Sleep -Seconds 20".into()],
+            vec![
+                "-NoProfile".into(),
+                "-Command".into(),
+                "Start-Sleep -Seconds 20".into(),
+            ],
         )
     } else {
         ("sleep", vec!["20".into()])
@@ -158,8 +176,16 @@ async fn real_ffmpeg_when_installed() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("source.mp4");
     let args: Vec<String> = [
-        "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-        "testsrc=duration=2:size=320x240:rate=10", "-pix_fmt", "yuv420p",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=duration=2:size=320x240:rate=10",
+        "-pix_fmt",
+        "yuv420p",
     ]
     .iter()
     .map(|s| s.to_string())

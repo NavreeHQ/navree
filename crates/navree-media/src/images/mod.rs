@@ -42,8 +42,8 @@ pub use metadata::strip_metadata;
 pub(crate) use svg::looks_like_svg;
 pub use svg::rasterize_svg;
 
-use crate::conversion::{Conversion, Fit, OutputFormat};
 use crate::MediaError;
+use crate::conversion::{Conversion, Fit, OutputFormat};
 
 /// Image settings (configuration section `media.images`).
 ///
@@ -196,7 +196,9 @@ pub(crate) fn render(
     let mut img = normalize(img);
     let (width, height) = target_size(img.width(), img.height(), conversion);
     if (width, height) != (img.width(), img.height()) {
-        let crop = conversion.fit == Fit::Cover && conversion.width.is_some() && conversion.height.is_some();
+        let crop = conversion.fit == Fit::Cover
+            && conversion.width.is_some()
+            && conversion.height.is_some();
         img = resize(&img, width, height, crop)?;
     }
     if conversion.greyscale {
@@ -256,8 +258,8 @@ fn reader(bytes: &[u8]) -> Result<ImageReader<Cursor<&[u8]>>, MediaError> {
 
 /// The format of `bytes`, or an error for anything the codecs cannot read.
 fn guess(bytes: &[u8]) -> Result<ImageFormat, MediaError> {
-    let format = image::guess_format(bytes)
-        .map_err(|_| MediaError::image("unrecognized image format"))?;
+    let format =
+        image::guess_format(bytes).map_err(|_| MediaError::image("unrecognized image format"))?;
     match format {
         ImageFormat::Png
         | ImageFormat::Jpeg
@@ -360,8 +362,7 @@ fn resize(
     crop: bool,
 ) -> Result<DynamicImage, MediaError> {
     let mut target = DynamicImage::new(width, height, img.color());
-    let mut options =
-        ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3));
+    let mut options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3));
     if crop {
         options = options.fit_into_destination(Some((0.5, 0.5)));
     }
