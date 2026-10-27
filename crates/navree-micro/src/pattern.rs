@@ -35,9 +35,10 @@ pub fn check_pattern(pattern: &str, wildcards: bool) -> Result<(), String> {
             ">" if i == last => {}
             ">" => return Err("`>` may only be the last segment".to_owned()),
             segment => {
-                if !segment.bytes().all(|b| {
-                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
-                }) {
+                if !segment
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+                {
                     return Err(format!(
                         "segment `{segment}` may only hold lower-case letters, digits, `_` and `-`"
                     ));
@@ -50,7 +51,9 @@ pub fn check_pattern(pattern: &str, wildcards: bool) -> Result<(), String> {
 
 /// Whether `pattern` has a wildcard segment.
 pub fn has_wildcard(pattern: &str) -> bool {
-    pattern.split('.').any(|segment| segment == "*" || segment == ">")
+    pattern
+        .split('.')
+        .any(|segment| segment == "*" || segment == ">")
 }
 
 /// Whether the subscription pattern `subscribed` (which may hold `*` and a
@@ -164,7 +167,10 @@ mod tests {
         ]);
         assert_eq!(route_for(&routes, "deals.move"), Some(&"deals:4000"));
         assert_eq!(route_for(&routes, "deals.get"), Some(&"reader:4000"));
-        assert_eq!(route_for(&routes, "deals.reports.build"), Some(&"reports:4000"));
+        assert_eq!(
+            route_for(&routes, "deals.reports.build"),
+            Some(&"reports:4000")
+        );
         assert_eq!(route_for(&routes, "dealsx.get"), None);
         assert_eq!(route_for(&routes, "users.get"), None);
         assert!(route_matches("deals.*", "deals"));

@@ -50,7 +50,13 @@ impl MicroRuntime {
         let service = resolve_service(&ctx, &options.service).await;
         options.service.clone_from(&service);
         let instance = format!("{service}-{}", &Uuid::new_v4().simple().to_string()[..8]);
-        let transport = connect(&options.transport, options.transport_url(), &options, &service, &instance)?;
+        let transport = connect(
+            &options.transport,
+            options.transport_url(),
+            &options,
+            &service,
+            &instance,
+        )?;
         let db = ctx.try_get::<Db>().await;
         let store = db.map(|db| Store::new((*db).clone()));
         let dead_letter = options.events.dead_letter.unwrap_or(if store.is_some() {
@@ -59,12 +65,11 @@ impl MicroRuntime {
             DeadLetterMode::Transport
         });
         if dead_letter == DeadLetterMode::Database && store.is_none() {
-            return Err("micro.events.dead_letter = \"database\" needs DatabaseModule in the app".into());
+            return Err(
+                "micro.events.dead_letter = \"database\" needs DatabaseModule in the app".into(),
+            );
         }
-        let outbox = store
-            .clone()
-            .filter(|_| options.outbox)
-            .map(Outbox::new);
+        let outbox = store.clone().filter(|_| options.outbox).map(Outbox::new);
         let trace = trace_policy(&ctx).await?;
         let telemetry = Telemetry::from_app(&ctx).await;
         let client = Arc::new(ServiceClient::new(ClientCore {
@@ -122,12 +127,18 @@ impl MicroRuntime {
     /// A client for `micro.clients.<name>`.
     pub(crate) fn named_client(&self, name: &str) -> Result<ServiceClient, BoxError> {
         let client = self.options.clients.get(name).ok_or_else(|| {
-            format!("no client named `{name}`: add a [micro.clients.{name}] section with its transport")
+            format!(
+                "no client named `{name}`: add a [micro.clients.{name}] section with its transport"
+            )
         })?;
         let merged = merge_client(&self.options, client);
         let transport = connect(
             &client.transport,
-            client.transport.url().map(str::to_owned).or_else(|| client.url.clone()),
+            client
+                .transport
+                .url()
+                .map(str::to_owned)
+                .or_else(|| client.url.clone()),
             &merged,
             &self.service,
             &self.instance,
@@ -225,7 +236,10 @@ async fn resolve_service(ctx: &AppContext, configured: &str) -> String {
     }
     let binary = std::env::current_exe()
         .ok()
-        .and_then(|path| path.file_stem().map(|stem| stem.to_string_lossy().into_owned()))
+        .and_then(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
         .unwrap_or_default();
     let name = sanitize(&binary);
     if name.is_empty() {
@@ -239,7 +253,13 @@ async fn resolve_service(ctx: &AppContext, configured: &str) -> String {
 fn sanitize(name: &str) -> String {
     name.trim()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .to_owned()
@@ -326,13 +346,15 @@ pub(crate) fn connect(
             connect_timeout,
         )?)),
         #[cfg(feature = "rabbitmq")]
-        TransportKind::Rabbitmq => Ok(Arc::new(crate::transport::rabbitmq::RabbitmqTransport::new(
-            url.unwrap_or_else(|| "amqp://guest:guest@127.0.0.1:5672/%2f".to_owned()),
-            &options.rabbitmq,
-            service,
-            instance,
-            connect_timeout,
-        )?)),
+        TransportKind::Rabbitmq => Ok(Arc::new(
+            crate::transport::rabbitmq::RabbitmqTransport::new(
+                url.unwrap_or_else(|| "amqp://guest:guest@127.0.0.1:5672/%2f".to_owned()),
+                &options.rabbitmq,
+                service,
+                instance,
+                connect_timeout,
+            )?,
+        )),
         #[cfg(feature = "mqtt")]
         TransportKind::Mqtt => Ok(Arc::new(crate::transport::mqtt::MqttTransport::new(
             url.unwrap_or_else(|| "mqtt://127.0.0.1:1883".to_owned()),

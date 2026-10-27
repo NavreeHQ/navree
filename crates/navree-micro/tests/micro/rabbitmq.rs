@@ -57,7 +57,11 @@ impl Harness for RabbitHarness {
         }
     }
 
-    fn instance<'a>(&'a self, service: &'a str, _patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        service: &'a str,
+        _patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move { self.transport(service) })
     }
 
@@ -80,7 +84,9 @@ fn broker() -> Option<String> {
     match std::env::var("NAVREE_TEST_RABBITMQ_URL") {
         Ok(url) => Some(url),
         Err(_) => {
-            eprintln!("SKIPPED: set NAVREE_TEST_RABBITMQ_URL to run the RabbitMQ transport against RabbitMQ");
+            eprintln!(
+                "SKIPPED: set NAVREE_TEST_RABBITMQ_URL to run the RabbitMQ transport against RabbitMQ"
+            );
             None
         }
     }
@@ -88,7 +94,10 @@ fn broker() -> Option<String> {
 
 #[tokio::test]
 async fn an_unreachable_broker_is_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let unused = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
     let transport = RabbitmqTransport::new(
         format!("amqp://guest:guest@{unused}/%2f"),
         &RabbitmqOptions::default(),
@@ -103,7 +112,10 @@ async fn an_unreachable_broker_is_a_transport_error() {
         .unwrap_err();
     assert!(matches!(error, MicroError::Transport(_)), "{error:?}");
     assert_eq!(transport.name(), "rabbitmq");
-    assert!(transport.supports_wildcards(), "topic exchanges route `*` and `#`");
+    assert!(
+        transport.supports_wildcards(),
+        "topic exchanges route `*` and `#`"
+    );
 }
 
 #[tokio::test]
@@ -121,7 +133,14 @@ async fn setup_declares_the_exchanges_queues_and_bindings() {
     };
     let options = run_options();
     let exchange = options.exchange.clone();
-    let transport = RabbitmqTransport::new(url, &options, "notifications", "notifications-1", Duration::from_secs(5)).unwrap();
+    let transport = RabbitmqTransport::new(
+        url,
+        &options,
+        "notifications",
+        "notifications-1",
+        Duration::from_secs(5),
+    )
+    .unwrap();
     let subscription = Subscription {
         pattern: "deal.won".into(),
         kind: PatternKind::Event,

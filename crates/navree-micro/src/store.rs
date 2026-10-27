@@ -220,7 +220,12 @@ impl Store {
     }
 
     /// Writes `envelope` to the outbox in the transaction of `uow`.
-    pub(crate) async fn outbox_insert(&self, uow: &Uow, envelope: &Envelope, seq: i64) -> Result<String, DbErr> {
+    pub(crate) async fn outbox_insert(
+        &self,
+        uow: &Uow,
+        envelope: &Envelope,
+        seq: i64,
+    ) -> Result<String, DbErr> {
         let id = envelope
             .message_id()
             .map_or_else(|| uuid::Uuid::now_v7().to_string(), str::to_owned);
@@ -511,7 +516,8 @@ fn dead_letter_of(row: &QueryResult) -> Result<DeadLetter, DbErr> {
         pattern: row.try_get("", "pattern")?,
         handler_pattern: row.try_get("", "handler_pattern")?,
         message_id: row.try_get("", "message_id")?,
-        headers: serde_json::from_str(&headers).map_err(|error| DbErr::Custom(error.to_string()))?,
+        headers: serde_json::from_str(&headers)
+            .map_err(|error| DbErr::Custom(error.to_string()))?,
         payload: payload.into(),
         attempts: u32::try_from(attempts).unwrap_or(u32::MAX),
         error: row.try_get("", "error")?,
@@ -549,7 +555,11 @@ mod tests {
 
     #[test]
     fn postgres_placeholders_are_numbered() {
-        let statement = statement(DbBackend::Postgres, "a = ? AND b = ?", vec![1.into(), 2.into()]);
+        let statement = statement(
+            DbBackend::Postgres,
+            "a = ? AND b = ?",
+            vec![1.into(), 2.into()],
+        );
         assert_eq!(statement.sql, "a = $1 AND b = $2");
         let sqlite = super::statement(DbBackend::Sqlite, "a = ?", vec![1.into()]);
         assert_eq!(sqlite.sql, "a = ?");

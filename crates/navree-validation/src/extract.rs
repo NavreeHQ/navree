@@ -212,11 +212,9 @@ where
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
         let Some(input) = E::read(req).await? else {
-            return Err(
-                Invalid::new(vec![Failure::keyed("", "json")], None, "body")
-                    .reject(ctx.as_ref())
-                    .await,
-            );
+            return Err(Invalid::new(vec![Failure::keyed("", "json")], None, "body")
+                .reject(ctx.as_ref())
+                .await);
         };
         let value = match serde_path_to_error::deserialize::<_, E::Target>(&input) {
             Ok(value) => value,
@@ -247,8 +245,8 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let (mut parts, body) = req.into_parts();
         let request = RuleRequest::of(&mut parts, state).await;
-        let Valid(input) = Valid::<Checked<E>>::from_request(Request::from_parts(parts, body), state)
-            .await?;
+        let Valid(input) =
+            Valid::<Checked<E>>::from_request(Request::from_parts(parts, body), state).await?;
         request.check(input.0.async_rules()).await?;
         Ok(ValidAsync(E::wrap(input.0)))
     }

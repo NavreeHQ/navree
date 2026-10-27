@@ -156,7 +156,11 @@ mod tests {
             ("application/x-msgpack", Some(Codec::Msgpack)),
             ("text/plain", None),
         ] {
-            assert_eq!(Codec::from_content_type(content_type), codec, "{content_type}");
+            assert_eq!(
+                Codec::from_content_type(content_type),
+                codec,
+                "{content_type}"
+            );
         }
     }
 

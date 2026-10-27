@@ -23,8 +23,7 @@ use kafka_protocol::messages::{
 };
 use kafka_protocol::protocol::{Decodable, Encodable, Request, StrBytes};
 use kafka_protocol::records::{
-    Compression, Record, RecordBatchDecoder, RecordBatchEncoder, RecordEncodeOptions,
-    TimestampType,
+    Compression, Record, RecordBatchDecoder, RecordBatchEncoder, RecordEncodeOptions, TimestampType,
 };
 use rustls::pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -81,7 +80,10 @@ const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The text of a Kafka error code.
 pub(crate) fn describe(code: i16) -> String {
-    ResponseError::try_from_code(code).map_or_else(|| "no error".to_owned(), |error| format!("{error} ({code})"))
+    ResponseError::try_from_code(code).map_or_else(
+        || "no error".to_owned(),
+        |error| format!("{error} ({code})"),
+    )
 }
 
 trait Io: AsyncRead + AsyncWrite + Send + Unpin {}
@@ -93,7 +95,8 @@ type Waiters = Arc<Mutex<HashMap<i32, oneshot::Sender<BytesMut>>>>;
 /// One connection to a broker; requests are pipelined and matched to their
 /// responses by correlation id.
 pub(crate) struct Conn {
-    writer: tokio::sync::Mutex<FramedWrite<tokio::io::WriteHalf<Box<dyn Io>>, LengthDelimitedCodec>>,
+    writer:
+        tokio::sync::Mutex<FramedWrite<tokio::io::WriteHalf<Box<dyn Io>>, LengthDelimitedCodec>>,
     waiters: Waiters,
     next: AtomicI32,
     client_id: StrBytes,
@@ -104,26 +107,33 @@ impl Conn {
     /// Opens a connection to `addr`, with TLS and SASL when configured.
     pub(crate) async fn open(addr: &str, settings: &ConnSettings) -> Result<Arc<Conn>, MicroError> {
         let opening = async {
-            let tcp = TcpStream::connect(addr)
-                .await
-                .map_err(|error| MicroError::transport(format!("cannot connect to Kafka at {addr}: {error}")))?;
+            let tcp = TcpStream::connect(addr).await.map_err(|error| {
+                MicroError::transport(format!("cannot connect to Kafka at {addr}: {error}"))
+            })?;
             let _ = tcp.set_nodelay(true);
             let io: Box<dyn Io> = match &settings.tls {
                 Some(connector) => {
-                    let host = addr.rsplit_once(':').map_or(addr, |(host, _)| host).trim_matches(['[', ']']);
-                    let name = ServerName::try_from(host.to_owned())
-                        .map_err(|error| MicroError::transport(format!("bad TLS server name {host}: {error}")))?;
-                    Box::new(
-                        connector
-                            .connect(name, tcp)
-                            .await
-                            .map_err(|error| MicroError::transport(format!("the TLS handshake with {addr} failed: {error}")))?,
-                    )
+                    let host = addr
+                        .rsplit_once(':')
+                        .map_or(addr, |(host, _)| host)
+                        .trim_matches(['[', ']']);
+                    let name = ServerName::try_from(host.to_owned()).map_err(|error| {
+                        MicroError::transport(format!("bad TLS server name {host}: {error}"))
+                    })?;
+                    Box::new(connector.connect(name, tcp).await.map_err(|error| {
+                        MicroError::transport(format!(
+                            "the TLS handshake with {addr} failed: {error}"
+                        ))
+                    })?)
                 }
                 None => Box::new(tcp),
             };
             let (read, write) = tokio::io::split(io);
-            let codec = || LengthDelimitedCodec::builder().max_frame_length(MAX_FRAME).new_codec();
+            let codec = || {
+                LengthDelimitedCodec::builder()
+                    .max_frame_length(MAX_FRAME)
+                    .new_codec()
+            };
             let reader = FramedRead::new(read, codec());
             let writer = FramedWrite::new(write, codec());
             let waiters: Waiters = Arc::default();
@@ -156,8 +166,14 @@ impl Conn {
 
     /// Sends `request` (at `version`) and decodes its response, waiting up
     /// to `extra` beyond the usual response time.
-    pub(crate) async fn send<R: Request>(&self, request: &R, version: i16, extra: Duration) -> Result<R::Response, MicroError> {
-        let api_key = ApiKey::try_from(R::KEY).map_err(|_| MicroError::transport("an unknown Kafka API"))?;
+    pub(crate) async fn send<R: Request>(
+        &self,
+        request: &R,
+        version: i16,
+        extra: Duration,
+    ) -> Result<R::Response, MicroError> {
+        let api_key =
+            ApiKey::try_from(R::KEY).map_err(|_| MicroError::transport("an unknown Kafka API"))?;
         let correlation = self.next.fetch_add(1, Ordering::SeqCst);
         let header = RequestHeader::default()
             .with_request_api_key(R::KEY)
@@ -168,7 +184,11 @@ impl Conn {
         header
             .encode(&mut buf, api_key.request_header_version(version))
             .and_then(|()| request.encode(&mut buf, version))
-            .map_err(|error| MicroError::transport(format!("encoding a Kafka {api_key:?} request failed: {error}")))?;
+            .map_err(|error| {
+                MicroError::transport(format!(
+                    "encoding a Kafka {api_key:?} request failed: {error}"
+                ))
+            })?;
         let (sender, response) = oneshot::channel();
         lock(&self.waiters).insert(correlation, sender);
         {
@@ -176,7 +196,9 @@ impl Conn {
             if let Err(error) = writer.send(buf.freeze()).await {
                 lock(&self.waiters).remove(&correlation);
                 self.alive.store(false, Ordering::SeqCst);
-                return Err(MicroError::transport(format!("the Kafka connection broke: {error}")));
+                return Err(MicroError::transport(format!(
+                    "the Kafka connection broke: {error}"
+                )));
             }
         }
         let mut frame = match tokio::time::timeout(RESPONSE_TIMEOUT + extra, response).await {
@@ -184,13 +206,17 @@ impl Conn {
             Ok(Err(_)) => return Err(MicroError::transport("the Kafka connection broke")),
             Err(_) => {
                 lock(&self.waiters).remove(&correlation);
-                return Err(MicroError::transport(format!("Kafka did not answer a {api_key:?} request in time")));
+                return Err(MicroError::transport(format!(
+                    "Kafka did not answer a {api_key:?} request in time"
+                )));
             }
         };
-        ResponseHeader::decode(&mut frame, api_key.response_header_version(version))
-            .map_err(|error| MicroError::transport(format!("a malformed Kafka response header: {error}")))?;
-        R::Response::decode(&mut frame, version)
-            .map_err(|error| MicroError::transport(format!("a malformed Kafka {api_key:?} response: {error}")))
+        ResponseHeader::decode(&mut frame, api_key.response_header_version(version)).map_err(
+            |error| MicroError::transport(format!("a malformed Kafka response header: {error}")),
+        )?;
+        R::Response::decode(&mut frame, version).map_err(|error| {
+            MicroError::transport(format!("a malformed Kafka {api_key:?} response: {error}"))
+        })
     }
 }
 
@@ -327,7 +353,10 @@ impl Cluster {
     }
 
     /// Refreshes the metadata of `topics`; returns those that exist.
-    pub(crate) async fn refresh(&self, topics: &[String]) -> Result<HashMap<String, TopicMeta>, MicroError> {
+    pub(crate) async fn refresh(
+        &self,
+        topics: &[String],
+    ) -> Result<HashMap<String, TopicMeta>, MicroError> {
         let request = MetadataRequest::default()
             .with_topics(Some(
                 topics
@@ -337,7 +366,9 @@ impl Cluster {
             ))
             .with_allow_auto_topic_creation(false);
         let conn = self.any().await?;
-        let response = conn.send(&request, version::METADATA, Duration::ZERO).await?;
+        let response = conn
+            .send(&request, version::METADATA, Duration::ZERO)
+            .await?;
         let mut meta = lock(&self.meta);
         for broker in response.brokers {
             meta.brokers
@@ -391,17 +422,22 @@ impl Cluster {
     }
 
     /// A connection to the leader of `topic`/`partition`.
-    pub(crate) async fn leader(&self, topic: &str, partition: i32) -> Result<(i32, Arc<Conn>), MicroError> {
-        let meta = self
-            .topic(topic)
-            .await?
-            .ok_or_else(|| MicroError::transport(format!("the Kafka topic {topic} does not exist")))?;
+    pub(crate) async fn leader(
+        &self,
+        topic: &str,
+        partition: i32,
+    ) -> Result<(i32, Arc<Conn>), MicroError> {
+        let meta = self.topic(topic).await?.ok_or_else(|| {
+            MicroError::transport(format!("the Kafka topic {topic} does not exist"))
+        })?;
         let leader = meta
             .partitions
             .iter()
             .find(|p| p.partition == partition)
             .map(|p| p.leader)
-            .ok_or_else(|| MicroError::transport(format!("{topic} has no partition {partition}")))?;
+            .ok_or_else(|| {
+                MicroError::transport(format!("{topic} has no partition {partition}"))
+            })?;
         let addr = lock(&self.meta)
             .brokers
             .get(&leader)
@@ -427,7 +463,11 @@ impl Cluster {
 
     /// Produces one record; returns its partition and offset. Fails with
     /// [`ProduceError::NoTopic`] when the topic does not exist.
-    pub(crate) async fn produce(&self, topic: &str, record: OutRecord) -> Result<(i32, i64), ProduceError> {
+    pub(crate) async fn produce(
+        &self,
+        topic: &str,
+        record: OutRecord,
+    ) -> Result<(i32, i64), ProduceError> {
         let mut attempt = 0;
         loop {
             attempt += 1;
@@ -451,7 +491,9 @@ impl Cluster {
                     compression: Compression::None,
                 },
             )
-            .map_err(|error| MicroError::transport(format!("encoding a Kafka record failed: {error}")))?;
+            .map_err(|error| {
+                MicroError::transport(format!("encoding a Kafka record failed: {error}"))
+            })?;
             let request = ProduceRequest::default()
                 .with_acks(-1)
                 .with_timeout_ms(30_000)
@@ -464,7 +506,9 @@ impl Cluster {
                                 .with_records(Some(records.freeze())),
                         ]),
                 ]);
-            let response = conn.send(&request, version::PRODUCE, Duration::ZERO).await?;
+            let response = conn
+                .send(&request, version::PRODUCE, Duration::ZERO)
+                .await?;
             let outcome = response
                 .responses
                 .first()
@@ -472,24 +516,43 @@ impl Cluster {
                 .map(|partition| (partition.error_code, partition.base_offset));
             match outcome {
                 Some((0, offset)) => return Ok((partition, offset)),
-                Some((code::UNKNOWN_TOPIC_OR_PARTITION, _)) if attempt >= 3 => return Err(ProduceError::NoTopic),
-                Some((code::NOT_LEADER_OR_FOLLOWER | code::LEADER_NOT_AVAILABLE | code::UNKNOWN_TOPIC_OR_PARTITION, _))
-                    if attempt < 3 =>
-                {
+                Some((code::UNKNOWN_TOPIC_OR_PARTITION, _)) if attempt >= 3 => {
+                    return Err(ProduceError::NoTopic);
+                }
+                Some((
+                    code::NOT_LEADER_OR_FOLLOWER
+                    | code::LEADER_NOT_AVAILABLE
+                    | code::UNKNOWN_TOPIC_OR_PARTITION,
+                    _,
+                )) if attempt < 3 => {
                     self.forget(topic);
                     tokio::time::sleep(Duration::from_millis(100 * attempt)).await;
                 }
                 Some((error, _)) => {
-                    return Err(MicroError::transport(format!("Kafka refused the record for {topic}: {}", describe(error))).into());
+                    return Err(MicroError::transport(format!(
+                        "Kafka refused the record for {topic}: {}",
+                        describe(error)
+                    ))
+                    .into());
                 }
-                None => return Err(MicroError::transport("Kafka answered the produce request with nothing").into()),
+                None => {
+                    return Err(MicroError::transport(
+                        "Kafka answered the produce request with nothing",
+                    )
+                    .into());
+                }
             }
         }
     }
 
     /// The offset at `timestamp` ([`LATEST`] or [`EARLIEST`]) of each
     /// partition of `topic`.
-    pub(crate) async fn offsets(&self, topic: &str, partitions: &[i32], timestamp: i64) -> Result<HashMap<i32, i64>, MicroError> {
+    pub(crate) async fn offsets(
+        &self,
+        topic: &str,
+        partitions: &[i32],
+        timestamp: i64,
+    ) -> Result<HashMap<i32, i64>, MicroError> {
         let mut by_leader: HashMap<i32, Vec<i32>> = HashMap::new();
         for &partition in partitions {
             let (leader, _) = self.leader(topic, partition).await?;
@@ -501,19 +564,23 @@ impl Cluster {
             let request = ListOffsetsRequest::default()
                 .with_replica_id(BrokerId(-1))
                 .with_topics(vec![
-                    ListOffsetsTopic::default().with_name(topic_name(topic)).with_partitions(
-                        partitions
-                            .iter()
-                            .map(|&partition| {
-                                ListOffsetsPartition::default()
-                                    .with_partition_index(partition)
-                                    .with_current_leader_epoch(-1)
-                                    .with_timestamp(timestamp)
-                            })
-                            .collect(),
-                    ),
+                    ListOffsetsTopic::default()
+                        .with_name(topic_name(topic))
+                        .with_partitions(
+                            partitions
+                                .iter()
+                                .map(|&partition| {
+                                    ListOffsetsPartition::default()
+                                        .with_partition_index(partition)
+                                        .with_current_leader_epoch(-1)
+                                        .with_timestamp(timestamp)
+                                })
+                                .collect(),
+                        ),
                 ]);
-            let response = conn.send(&request, version::LIST_OFFSETS, Duration::ZERO).await?;
+            let response = conn
+                .send(&request, version::LIST_OFFSETS, Duration::ZERO)
+                .await?;
             for topic in response.topics {
                 for partition in topic.partitions {
                     if partition.error_code == 0 {
@@ -559,7 +626,11 @@ impl Cluster {
                 .with_partition_max_bytes(4 * 1024 * 1024);
             match topics.iter_mut().find(|t| t.topic.0.as_str() == topic) {
                 Some(existing) => existing.partitions.push(entry),
-                None => topics.push(FetchTopic::default().with_topic(topic_name(topic)).with_partitions(vec![entry])),
+                None => topics.push(
+                    FetchTopic::default()
+                        .with_topic(topic_name(topic))
+                        .with_partitions(vec![entry]),
+                ),
             }
         }
         let request = FetchRequest::default()
@@ -577,33 +648,42 @@ impl Cluster {
     /// Creates `topics` (name, partitions, replication factor, retention in
     /// milliseconds); returns each name with whether it was created (false:
     /// it existed).
-    pub(crate) async fn create_topics(&self, topics: &[(String, i32, i16, Option<u64>)]) -> Result<Vec<(String, bool)>, MicroError> {
+    pub(crate) async fn create_topics(
+        &self,
+        topics: &[(String, i32, i16, Option<u64>)],
+    ) -> Result<Vec<(String, bool)>, MicroError> {
         if topics.is_empty() {
             return Ok(Vec::new());
         }
-        let request = CreateTopicsRequest::default().with_timeout_ms(30_000).with_topics(
-            topics
-                .iter()
-                .map(|(name, partitions, replication, retention)| {
-                    let configs = retention
-                        .map(|millis| {
-                            vec![
-                                CreatableTopicConfig::default()
-                                    .with_name(StrBytes::from_static_str("retention.ms"))
-                                    .with_value(Some(StrBytes::from_string(millis.to_string()))),
-                            ]
-                        })
-                        .unwrap_or_default();
-                    CreatableTopic::default()
-                        .with_name(topic_name(name))
-                        .with_num_partitions(*partitions)
-                        .with_replication_factor(*replication)
-                        .with_configs(configs)
-                })
-                .collect(),
-        );
+        let request = CreateTopicsRequest::default()
+            .with_timeout_ms(30_000)
+            .with_topics(
+                topics
+                    .iter()
+                    .map(|(name, partitions, replication, retention)| {
+                        let configs = retention
+                            .map(|millis| {
+                                vec![
+                                    CreatableTopicConfig::default()
+                                        .with_name(StrBytes::from_static_str("retention.ms"))
+                                        .with_value(Some(StrBytes::from_string(
+                                            millis.to_string(),
+                                        ))),
+                                ]
+                            })
+                            .unwrap_or_default();
+                        CreatableTopic::default()
+                            .with_name(topic_name(name))
+                            .with_num_partitions(*partitions)
+                            .with_replication_factor(*replication)
+                            .with_configs(configs)
+                    })
+                    .collect(),
+            );
         let conn = self.any().await?;
-        let response = conn.send(&request, version::CREATE_TOPICS, Duration::ZERO).await?;
+        let response = conn
+            .send(&request, version::CREATE_TOPICS, Duration::ZERO)
+            .await?;
         let mut outcome = Vec::new();
         for topic in response.topics {
             let name = topic.name.0.to_string();
@@ -614,7 +694,10 @@ impl Cluster {
                     return Err(MicroError::transport(format!(
                         "creating the Kafka topic {name} failed: {}{}",
                         describe(error),
-                        topic.error_message.map(|m| format!(": {m}")).unwrap_or_default()
+                        topic
+                            .error_message
+                            .map(|m| format!(": {m}"))
+                            .unwrap_or_default()
                     )));
                 }
             }
@@ -692,7 +775,11 @@ pub(crate) fn records(data: Option<Bytes>, from: i64) -> Result<Vec<InRecord>, M
             Ok(set) => set,
             // A partial batch at the end of a fetch.
             Err(_) if !out.is_empty() => break,
-            Err(error) => return Err(MicroError::transport(format!("a Kafka record batch did not decode: {error}"))),
+            Err(error) => {
+                return Err(MicroError::transport(format!(
+                    "a Kafka record batch did not decode: {error}"
+                )));
+            }
         };
         for record in set.records {
             if record.control || record.offset < from {
@@ -771,10 +858,17 @@ pub(crate) fn murmur2(data: &[u8]) -> i32 {
 
 /// Sends a SASL handshake.
 pub(crate) async fn sasl_handshake(conn: &Conn, mechanism: &str) -> Result<(), MicroError> {
-    let request = SaslHandshakeRequest::default().with_mechanism(StrBytes::from_string(mechanism.to_owned()));
-    let response = conn.send(&request, version::SASL_HANDSHAKE, Duration::ZERO).await?;
+    let request =
+        SaslHandshakeRequest::default().with_mechanism(StrBytes::from_string(mechanism.to_owned()));
+    let response = conn
+        .send(&request, version::SASL_HANDSHAKE, Duration::ZERO)
+        .await?;
     if response.error_code != 0 {
-        let offered: Vec<String> = response.mechanisms.iter().map(ToString::to_string).collect();
+        let offered: Vec<String> = response
+            .mechanisms
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         return Err(MicroError::transport(format!(
             "Kafka refused SASL {mechanism}: {} (it offers {})",
             describe(response.error_code),
@@ -787,12 +881,17 @@ pub(crate) async fn sasl_handshake(conn: &Conn, mechanism: &str) -> Result<(), M
 /// One SASL round trip.
 pub(crate) async fn sasl_authenticate(conn: &Conn, bytes: Bytes) -> Result<Bytes, MicroError> {
     let request = SaslAuthenticateRequest::default().with_auth_bytes(bytes);
-    let response = conn.send(&request, version::SASL_AUTHENTICATE, Duration::ZERO).await?;
+    let response = conn
+        .send(&request, version::SASL_AUTHENTICATE, Duration::ZERO)
+        .await?;
     if response.error_code != 0 {
         return Err(MicroError::transport(format!(
             "Kafka SASL authentication failed: {}{}",
             describe(response.error_code),
-            response.error_message.map(|m| format!(": {m}")).unwrap_or_default()
+            response
+                .error_message
+                .map(|m| format!(": {m}"))
+                .unwrap_or_default()
         )));
     }
     Ok(response.auth_bytes)
@@ -812,7 +911,10 @@ mod tests {
         assert_eq!(murmur2(b"foobar"), -790_332_482);
         assert_eq!(murmur2(b"a-little-bit-long-string"), -985_981_536);
         assert_eq!(murmur2(b"a-little-bit-longer-string"), -1_486_304_829);
-        assert_eq!(murmur2(b"lkjh234lh9fiuh90y23oiuhsafujhadof229phr9h19h89h8"), -58_897_971);
+        assert_eq!(
+            murmur2(b"lkjh234lh9fiuh90y23oiuhsafujhadof229phr9h19h89h8"),
+            -58_897_971
+        );
         assert_eq!(murmur2(b"abc"), 479_470_107);
     }
 

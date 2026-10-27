@@ -628,7 +628,10 @@ mod tests {
     #[test]
     fn the_transport_is_required() {
         let errors = MicroOptions::default().check().unwrap_err();
-        assert!(errors[0].starts_with("micro.transport is required"), "{errors:?}");
+        assert!(
+            errors[0].starts_with("micro.transport is required"),
+            "{errors:?}"
+        );
         assert!(MicroOptions::from(Transport::memory()).check().is_ok());
     }
 
@@ -656,7 +659,10 @@ mod tests {
         assert_eq!(options.tcp.routes["deals.*"], "deals.internal:4000");
         assert_eq!(options.events.backoff, Backoff::Fixed { secs: 2 });
         assert_eq!(options.events.dead_letter, Some(DeadLetterMode::Log));
-        assert_eq!(options.clients["billing"].url.as_deref(), Some("billing.internal:4000"));
+        assert_eq!(
+            options.clients["billing"].url.as_deref(),
+            Some("billing.internal:4000")
+        );
         assert!(options.check().is_ok(), "{:?}", options.check());
     }
 
@@ -670,7 +676,9 @@ mod tests {
         options.tcp.pool_size = 0;
         options.kafka.start_from = "middle".into();
         options.rabbitmq.queue_type = "stream".into();
-        options.clients.insert("billing".into(), ClientOptions::default());
+        options
+            .clients
+            .insert("billing".into(), ClientOptions::default());
         let errors = options.check().unwrap_err().join("\n");
         for key in [
             "micro.request_timeout_ms",
@@ -689,7 +697,9 @@ mod tests {
     #[cfg(not(feature = "nats"))]
     #[test]
     fn a_transport_without_its_feature_names_the_feature() {
-        let errors = MicroOptions::from(Transport::nats("nats://x")).check().unwrap_err();
+        let errors = MicroOptions::from(Transport::nats("nats://x"))
+            .check()
+            .unwrap_err();
         assert_eq!(
             errors,
             ["micro.transport = \"nats\" needs the `micro-nats` feature of navree"]

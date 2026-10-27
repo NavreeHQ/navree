@@ -53,7 +53,12 @@ pub struct Alerts {
 #[message_handlers]
 impl Alerts {
     #[event_pattern("note.added")]
-    async fn added(&self, uow: Uow, msg: MessageContext, Payload(note): Payload<NewNote>) -> Result<()> {
+    async fn added(
+        &self,
+        uow: Uow,
+        msg: MessageContext,
+        Payload(note): Payload<NewNote>,
+    ) -> Result<()> {
         insert_note(&uow, &note.body).await?;
         self.seen.push(format!(
             "added {} by {}",
@@ -113,7 +118,10 @@ impl Alerts {
     #[message_pattern("alerts.fail_loudly")]
     #[public]
     async fn fail_loudly(&self) -> Result<()> {
-        self.client.emit("security.alert", &json!({})).immediately().await?;
+        self.client
+            .emit("security.alert", &json!({}))
+            .immediately()
+            .await?;
         self.client.emit("security.quiet", &json!({})).await?;
         Err(AppError::conflict("rolled back"))
     }
@@ -127,7 +135,9 @@ impl Module for AlertsModule {
         m.value(Counter::default())
             .value(Seen::default())
             .value(Switch::default())
-            .migrations(navree_db::MigrationSet::new("deals").migration(crate::support::CreateTables))
+            .migrations(
+                navree_db::MigrationSet::new("deals").migration(crate::support::CreateTables),
+            )
             .message_handlers::<Alerts>();
     }
 }
@@ -136,7 +146,10 @@ async fn alerts_app(micro: &MicroFake) -> TestApp {
     alerts_app_with(micro, |options| options).await
 }
 
-async fn alerts_app_with(micro: &MicroFake, options: impl FnOnce(MicroOptions) -> MicroOptions) -> TestApp {
+async fn alerts_app_with(
+    micro: &MicroFake,
+    options: impl FnOnce(MicroOptions) -> MicroOptions,
+) -> TestApp {
     TestApp::builder()
         .temp_database()
         .module(DatabaseModule)
@@ -166,8 +179,14 @@ async fn events_reach_their_handler_with_the_actor() {
         .await
         .unwrap();
     // The handler's unit of work has the actor, and it committed.
-    assert_eq!(notes(&app).await, [("won".to_owned(), Some(rep.to_string()))]);
-    assert_eq!(app.get::<Seen>().await.all(), [format!("added won by {rep}")]);
+    assert_eq!(
+        notes(&app).await,
+        [("won".to_owned(), Some(rep.to_string()))]
+    );
+    assert_eq!(
+        app.get::<Seen>().await.all(),
+        [format!("added won by {rep}")]
+    );
     assert!(micro.dead_letters().is_empty());
     app.shutdown().await.unwrap();
 }
@@ -178,12 +197,22 @@ async fn a_redelivered_event_is_skipped_by_the_inbox() {
     let app = alerts_app(&micro).await;
     micro
         .client()
-        .emit("note.added", &NewNote { body: "once".into() })
+        .emit(
+            "note.added",
+            &NewNote {
+                body: "once".into(),
+            },
+        )
         .await
         .unwrap();
     micro
         .client()
-        .emit("note.added", &NewNote { body: "once".into() })
+        .emit(
+            "note.added",
+            &NewNote {
+                body: "once".into(),
+            },
+        )
         .redelivered()
         .await
         .unwrap();
@@ -191,7 +220,12 @@ async fn a_redelivered_event_is_skipped_by_the_inbox() {
     // A new message with the same payload is a new event.
     micro
         .client()
-        .emit("note.added", &NewNote { body: "once".into() })
+        .emit(
+            "note.added",
+            &NewNote {
+                body: "once".into(),
+            },
+        )
         .await
         .unwrap();
     assert_eq!(notes(&app).await.len(), 2);
@@ -204,7 +238,11 @@ async fn failed_events_are_retried_then_dead_lettered_and_retried_by_hand() {
     let app = alerts_app(&micro).await;
     micro.client().emit("jobs.flaky", &json!({})).await.unwrap();
     let seen = app.get::<Seen>().await;
-    assert_eq!(seen.all(), ["attempt 1", "attempt 2", "attempt 3"], "max_attempts = 3");
+    assert_eq!(
+        seen.all(),
+        ["attempt 1", "attempt 2", "attempt 3"],
+        "max_attempts = 3"
+    );
     let letters = micro.dead_letters();
     assert_eq!(letters.len(), 1);
     assert_eq!(letters[0].pattern, "jobs.flaky");
@@ -245,13 +283,25 @@ async fn events_that_cannot_succeed_are_dead_lettered_at_once() {
     let app = alerts_app(&micro).await;
     micro
         .client()
-        .emit("note.strict", &NewNote { body: String::new() })
+        .emit(
+            "note.strict",
+            &NewNote {
+                body: String::new(),
+            },
+        )
         .await
         .unwrap();
-    micro.client().emit("note.strict", &json!({ "nope": 1 })).await.unwrap();
+    micro
+        .client()
+        .emit("note.strict", &json!({ "nope": 1 }))
+        .await
+        .unwrap();
     let letters = micro.dead_letters();
     assert_eq!(letters.len(), 2);
-    assert!(letters.iter().all(|letter| letter.attempts == 1), "{letters:?}");
+    assert!(
+        letters.iter().all(|letter| letter.attempts == 1),
+        "{letters:?}"
+    );
     assert!(app.get::<Seen>().await.all().is_empty());
     app.shutdown().await.unwrap();
 }
@@ -265,8 +315,19 @@ async fn dead_letters_can_go_to_the_log_instead() {
     })
     .await;
     micro.client().emit("jobs.flaky", &json!({})).await.unwrap();
-    assert_eq!(micro.dead_letters().len(), 1, "the fake sees every dead letter");
-    assert!(app.get::<DeadLetters>().await.list().await.unwrap().is_empty());
+    assert_eq!(
+        micro.dead_letters().len(),
+        1,
+        "the fake sees every dead letter"
+    );
+    assert!(
+        app.get::<DeadLetters>()
+            .await
+            .list()
+            .await
+            .unwrap()
+            .is_empty()
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -277,7 +338,10 @@ async fn wildcard_handlers_see_the_actual_pattern() {
     for pattern in ["audit.login", "audit.logout", "audit.deep.nested"] {
         micro.client().emit(pattern, &json!({})).await.unwrap();
     }
-    assert_eq!(app.get::<Seen>().await.all(), ["audit.login", "audit.logout"]);
+    assert_eq!(
+        app.get::<Seen>().await.all(),
+        ["audit.login", "audit.logout"]
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -287,14 +351,23 @@ async fn instances_share_events_and_broadcast_reaches_each() {
     let one = alerts_app(&micro).await;
     let two = alerts_app(&micro).await;
 
-    micro.client().emit("cache.cleared", &json!({})).await.unwrap();
+    micro
+        .client()
+        .emit("cache.cleared", &json!({}))
+        .await
+        .unwrap();
     assert_eq!(one.get::<Seen>().await.all(), ["cache cleared"]);
     assert_eq!(two.get::<Seen>().await.all(), ["cache cleared"]);
 
     for n in 0..4 {
         micro
             .client()
-            .emit("note.added", &NewNote { body: format!("n{n}") })
+            .emit(
+                "note.added",
+                &NewNote {
+                    body: format!("n{n}"),
+                },
+            )
             .await
             .unwrap();
     }
@@ -397,7 +470,9 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    micro.assert_emitted("deal.renamed", |event: &DealRenamed| event.title == "Left behind");
+    micro.assert_emitted("deal.renamed", |event: &DealRenamed| {
+        event.title == "Left behind"
+    });
     let left = db
         .conn()
         .query_one_raw(Statement::from_string(
@@ -407,7 +482,11 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(left.try_get::<i64>("", "n").unwrap(), 0, "published rows are deleted");
+    assert_eq!(
+        left.try_get::<i64>("", "n").unwrap(),
+        0,
+        "published rows are deleted"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -418,7 +497,11 @@ pub struct LocalRenames {
 }
 
 impl Listener<DealRenamed> for LocalRenames {
-    fn handle<'a>(&'a self, event: &'a DealRenamed, _ctx: &'a AppContext) -> BoxFuture<'a, std::result::Result<(), BoxError>> {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DealRenamed,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, std::result::Result<(), BoxError>> {
         self.seen.push(format!("local {}", event.title));
         Box::pin(async { Ok(()) })
     }
@@ -431,11 +514,13 @@ struct BridgeModule {
 
 impl Module for BridgeModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.value(Seen::default()).listen::<DealRenamed, LocalRenames>();
+        m.value(Seen::default())
+            .listen::<DealRenamed, LocalRenames>();
         if self.keyed {
             m.forward_event_keyed::<DealRenamed, _, _>(|event| event.deal_id);
         } else {
-            m.forward_event::<DealRenamed>().receive_event::<DealRenamed>();
+            m.forward_event::<DealRenamed>()
+                .receive_event::<DealRenamed>();
         }
     }
 }
@@ -457,7 +542,9 @@ async fn in_process_events_are_forwarded_and_received() {
     })
     .await
     .unwrap();
-    micro.assert_emitted("deal.renamed", |event: &DealRenamed| event.deal_id == deal_id);
+    micro.assert_emitted("deal.renamed", |event: &DealRenamed| {
+        event.deal_id == deal_id
+    });
     assert_eq!(micro.emitted_envelopes("deal.renamed")[0].key(), None);
 
     // receive_event: an event published anywhere reaches the local bus.
@@ -473,7 +560,10 @@ async fn in_process_events_are_forwarded_and_received() {
         .await
         .unwrap();
     let seen = app.get::<Seen>().await.all();
-    assert!(seen.contains(&"local From elsewhere".to_owned()), "{seen:?}");
+    assert!(
+        seen.contains(&"local From elsewhere".to_owned()),
+        "{seen:?}"
+    );
     app.shutdown().await.unwrap();
 }
 

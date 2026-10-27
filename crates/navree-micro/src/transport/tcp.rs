@@ -304,7 +304,9 @@ impl MicroTransport for TcpTransport {
                 .is_err()
             {
                 conn.forget(id);
-                return Err(MicroError::transport(format!("the connection to {peer} closed")));
+                return Err(MicroError::transport(format!(
+                    "the connection to {peer} closed"
+                )));
             }
             let outcome = match envelope.remaining() {
                 Some(left) => match tokio::time::timeout(left, reply).await {
@@ -320,7 +322,9 @@ impl MicroTransport for TcpTransport {
                 None => reply.await,
             };
             outcome.unwrap_or_else(|_| {
-                Err(MicroError::transport(format!("the connection to {peer} closed")))
+                Err(MicroError::transport(format!(
+                    "the connection to {peer} closed"
+                )))
             })
         })
     }
@@ -453,7 +457,8 @@ async fn serve(
         match kind {
             Kind::Request => {
                 let index = subscriptions.iter().position(|s| {
-                    s.kind == PatternKind::Message && pattern_matches(&s.pattern, envelope.pattern())
+                    s.kind == PatternKind::Message
+                        && pattern_matches(&s.pattern, envelope.pattern())
                 });
                 match index {
                     Some(index) => {
@@ -486,7 +491,8 @@ async fn serve(
                     s.kind == PatternKind::Event && pattern_matches(&s.pattern, envelope.pattern())
                 }) {
                     // At most once: a failed handler is retried in this process.
-                    let delivery = LocalRetry::delivery(deliveries.clone(), envelope.clone(), index);
+                    let delivery =
+                        LocalRetry::delivery(deliveries.clone(), envelope.clone(), index);
                     if deliveries.send(delivery).await.is_err() {
                         break;
                     }
@@ -619,8 +625,9 @@ impl Conn {
 
 /// The TLS acceptor and connector from `micro.tcp.tls`.
 fn tls_setup(options: &TlsOptions, cert: &Path, key: &Path) -> Result<Tls, MicroError> {
-    let read_error =
-        |path: &Path, error: &dyn fmt::Display| MicroError::transport(format!("cannot read {}: {error}", path.display()));
+    let read_error = |path: &Path, error: &dyn fmt::Display| {
+        MicroError::transport(format!("cannot read {}: {error}", path.display()))
+    };
     let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(cert)
         .map_err(|error| read_error(cert, &error))?
         .collect::<Result<_, _>>()
@@ -633,12 +640,15 @@ fn tls_setup(options: &TlsOptions, cert: &Path, key: &Path) -> Result<Tls, Micro
     }
     let private_key = PrivateKeyDer::from_pem_file(key).map_err(|error| read_error(key, &error))?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let tls_error = |error: rustls::Error| MicroError::transport(format!("TLS setup failed: {error}"));
+    let tls_error =
+        |error: rustls::Error| MicroError::transport(format!("TLS setup failed: {error}"));
 
     let ca_roots = match &options.ca {
         Some(ca) => {
             let mut roots = RootCertStore::empty();
-            for certificate in CertificateDer::pem_file_iter(ca).map_err(|error| read_error(ca, &error))? {
+            for certificate in
+                CertificateDer::pem_file_iter(ca).map_err(|error| read_error(ca, &error))?
+            {
                 roots
                     .add(certificate.map_err(|error| read_error(ca, &error))?)
                     .map_err(tls_error)?;
@@ -653,9 +663,10 @@ fn tls_setup(options: &TlsOptions, cert: &Path, key: &Path) -> Result<Tls, Micro
         .map_err(tls_error)?;
     let server = match &ca_roots {
         Some(roots) => {
-            let verifier = WebPkiClientVerifier::builder_with_provider(roots.clone(), provider.clone())
-                .build()
-                .map_err(|error| MicroError::transport(format!("TLS setup failed: {error}")))?;
+            let verifier =
+                WebPkiClientVerifier::builder_with_provider(roots.clone(), provider.clone())
+                    .build()
+                    .map_err(|error| MicroError::transport(format!("TLS setup failed: {error}")))?;
             server.with_client_cert_verifier(verifier)
         }
         None => server.with_no_client_auth(),
@@ -715,8 +726,7 @@ mod tests {
             ]),
             ..TcpOptions::default()
         };
-        let transport =
-            TcpTransport::new(&options, None, 1024, Duration::from_secs(1)).unwrap();
+        let transport = TcpTransport::new(&options, None, 1024, Duration::from_secs(1)).unwrap();
         assert_eq!(transport.event_peers("deal.won"), ["a:1", "b:1"]);
         assert_eq!(transport.event_peers("company.renamed"), ["c:1"]);
         assert!(transport.event_peers("user.created").is_empty());

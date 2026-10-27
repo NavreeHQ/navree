@@ -14,12 +14,12 @@ use http::header::CONTENT_TYPE;
 use navree_events::{Event, EventBus, Listener, ModuleBuilderEventsExt};
 use navree_http::{AccessSpec, AppError, CanSpec, Guard};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, ProviderKey,
+    Resolver,
 };
 use serde::Serialize;
 
-use crate::{Codec, Payload, PatternKind, ServiceClient};
+use crate::{Codec, PatternKind, Payload, ServiceClient};
 
 /// A struct whose methods answer message and event patterns: what
 /// `#[message_handlers]` implements. Register it with
@@ -268,8 +268,9 @@ impl ReplyCodec {
                 );
                 response
             }
-            Err(error) => AppError::internal(format!("the reply does not encode: {error}"))
-                .into_response(),
+            Err(error) => {
+                AppError::internal(format!("the reply does not encode: {error}")).into_response()
+            }
         }
     }
 }
@@ -297,8 +298,9 @@ pub(crate) struct ResolvedHandlers {
     pub(crate) patterns: Vec<PatternDef>,
 }
 
-type ResolveHandlers =
-    Arc<dyn Fn(Resolver) -> BoxFuture<'static, Result<ResolvedHandlers, KernelError>> + Send + Sync>;
+type ResolveHandlers = Arc<
+    dyn Fn(Resolver) -> BoxFuture<'static, Result<ResolvedHandlers, KernelError>> + Send + Sync,
+>;
 
 /// Handlers registered by a module (a contribution).
 #[derive(Clone)]
@@ -449,7 +451,11 @@ impl<E: Event> Injectable for EventForwarder<E> {
 }
 
 impl<E: Event> Listener<E> for EventForwarder<E> {
-    fn handle<'a>(&'a self, event: &'a E, _ctx: &'a AppContext) -> BoxFuture<'a, Result<(), BoxError>> {
+    fn handle<'a>(
+        &'a self,
+        event: &'a E,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
             if !receiving() {
                 self.client.emit(E::NAME, event).await?;
@@ -484,7 +490,11 @@ impl<E: Event> Injectable for KeyedEventForwarder<E> {
 }
 
 impl<E: Event> Listener<E> for KeyedEventForwarder<E> {
-    fn handle<'a>(&'a self, event: &'a E, _ctx: &'a AppContext) -> BoxFuture<'a, Result<(), BoxError>> {
+    fn handle<'a>(
+        &'a self,
+        event: &'a E,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
             if !receiving() {
                 let key = (self.key.0)(event);

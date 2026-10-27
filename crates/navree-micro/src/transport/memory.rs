@@ -249,7 +249,8 @@ impl Done {
     }
 
     fn finish(&self) {
-        self.0.send_modify(|remaining| *remaining = remaining.saturating_sub(1));
+        self.0
+            .send_modify(|remaining| *remaining = remaining.saturating_sub(1));
     }
 }
 
@@ -275,7 +276,10 @@ impl Broker {
             .collect();
         {
             let mut state = self.state();
-            for subscription in subscriptions.iter().filter(|s| s.kind == PatternKind::Event) {
+            for subscription in subscriptions
+                .iter()
+                .filter(|s| s.kind == PatternKind::Event)
+            {
                 let group = state
                     .groups
                     .entry(GroupKey {
@@ -333,8 +337,16 @@ impl Broker {
                 instance
                     .subscriptions
                     .iter()
-                    .position(|s| s.kind == PatternKind::Message && pattern_matches(&s.pattern, &pattern))
-                    .map(|index| (*id, index, instance.subscriptions[index].group.name().to_owned()))
+                    .position(|s| {
+                        s.kind == PatternKind::Message && pattern_matches(&s.pattern, &pattern)
+                    })
+                    .map(|index| {
+                        (
+                            *id,
+                            index,
+                            instance.subscriptions[index].group.name().to_owned(),
+                        )
+                    })
             })
             .collect();
         let Some(group) = candidates.first().map(|(_, _, group)| group.clone()) else {
@@ -531,7 +543,10 @@ impl DeliveryActions for EventActions {
         Box::pin(async { Ok(()) })
     }
 
-    fn retry_in(mut self: Box<Self>, delay: Duration) -> BoxFuture<'static, Result<(), MicroError>> {
+    fn retry_in(
+        mut self: Box<Self>,
+        delay: Duration,
+    ) -> BoxFuture<'static, Result<(), MicroError>> {
         if let Some(mut copy) = self.copy.take() {
             copy.attempt += 1;
             let broker = Arc::clone(&self.broker);

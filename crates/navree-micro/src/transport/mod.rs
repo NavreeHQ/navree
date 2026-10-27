@@ -110,7 +110,10 @@ pub trait MicroTransport: Send + Sync + 'static {
     /// need (`micro:setup`, and `micro.auto_setup` when the listener
     /// starts); only adds what is missing. Returns one line per step for
     /// the command's output. The default declares nothing.
-    fn setup(&self, subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+    fn setup(
+        &self,
+        subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
         let _ = subscriptions;
         Box::pin(async { Ok(Vec::new()) })
     }
@@ -329,7 +332,11 @@ pub(crate) struct LocalRetry {
 
 impl LocalRetry {
     /// The first delivery of `envelope` for subscription `index`.
-    pub(crate) fn delivery(deliveries: mpsc::Sender<Delivery>, envelope: Envelope, index: usize) -> Delivery {
+    pub(crate) fn delivery(
+        deliveries: mpsc::Sender<Delivery>,
+        envelope: Envelope,
+        index: usize,
+    ) -> Delivery {
         let actions = LocalRetry {
             deliveries,
             envelope: envelope.clone(),
@@ -577,15 +584,30 @@ mod tests {
 
     #[test]
     fn constructors_set_kind_and_url() {
-        assert_eq!(Transport::tcp("127.0.0.1:4000").kind(), Some(TransportKind::Tcp));
+        assert_eq!(
+            Transport::tcp("127.0.0.1:4000").kind(),
+            Some(TransportKind::Tcp)
+        );
         assert_eq!(
             Transport::kafka(["kafka-1:9092", "kafka-2:9092"]).url(),
             Some("kafka-1:9092,kafka-2:9092")
         );
-        assert_eq!(Transport::nats("nats://x:4222").url(), Some("nats://x:4222"));
-        assert_eq!(Transport::rabbitmq("amqp://x").kind(), Some(TransportKind::Rabbitmq));
-        assert_eq!(Transport::redis("redis://x").kind(), Some(TransportKind::Redis));
-        assert_eq!(Transport::mqtt("mqtt://x").kind(), Some(TransportKind::Mqtt));
+        assert_eq!(
+            Transport::nats("nats://x:4222").url(),
+            Some("nats://x:4222")
+        );
+        assert_eq!(
+            Transport::rabbitmq("amqp://x").kind(),
+            Some(TransportKind::Rabbitmq)
+        );
+        assert_eq!(
+            Transport::redis("redis://x").kind(),
+            Some(TransportKind::Redis)
+        );
+        assert_eq!(
+            Transport::mqtt("mqtt://x").kind(),
+            Some(TransportKind::Mqtt)
+        );
         assert!(Transport::memory().instance().is_some());
         assert_eq!(Transport::default().kind(), None);
     }
@@ -598,7 +620,10 @@ mod tests {
         let memory: Transport = serde_json::from_value(serde_json::json!("memory")).unwrap();
         assert!(memory.instance().is_some());
         let error = serde_json::from_value::<Transport>(serde_json::json!("sqs")).unwrap_err();
-        assert!(error.to_string().contains("unknown transport `sqs`"), "{error}");
+        assert!(
+            error.to_string().contains("unknown transport `sqs`"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -32,12 +32,12 @@ use kafka_protocol::messages::offset_fetch_response::{
 use kafka_protocol::messages::produce_response::{PartitionProduceResponse, TopicProduceResponse};
 use kafka_protocol::messages::{
     ApiKey, BrokerId, ConsumerGroupHeartbeatRequest, ConsumerGroupHeartbeatResponse,
-    CreateTopicsRequest, CreateTopicsResponse, FetchRequest, FetchResponse,
-    FindCoordinatorRequest, FindCoordinatorResponse, ListOffsetsRequest, ListOffsetsResponse,
-    MetadataRequest, MetadataResponse, OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse, ProduceRequest, ProduceResponse, RequestHeader,
-    ResponseHeader, SaslAuthenticateRequest, SaslAuthenticateResponse, SaslHandshakeRequest,
-    SaslHandshakeResponse, TopicName,
+    CreateTopicsRequest, CreateTopicsResponse, FetchRequest, FetchResponse, FindCoordinatorRequest,
+    FindCoordinatorResponse, ListOffsetsRequest, ListOffsetsResponse, MetadataRequest,
+    MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
+    OffsetFetchResponse, ProduceRequest, ProduceResponse, RequestHeader, ResponseHeader,
+    SaslAuthenticateRequest, SaslAuthenticateResponse, SaslHandshakeRequest, SaslHandshakeResponse,
+    TopicName,
 };
 use kafka_protocol::protocol::{Decodable, Encodable, StrBytes};
 use kafka_protocol::records::{
@@ -86,17 +86,27 @@ enum RequestKind {
 impl RequestKind {
     /// Decodes the body of a request to `api` at `version`; `Ok(None)` for
     /// an API the broker does not serve.
-    fn decode(api: ApiKey, bytes: &mut Bytes, version: i16) -> Result<Option<RequestKind>, BoxError> {
+    fn decode(
+        api: ApiKey,
+        bytes: &mut Bytes,
+        version: i16,
+    ) -> Result<Option<RequestKind>, BoxError> {
         Ok(Some(match api {
             ApiKey::SaslHandshake => RequestKind::SaslHandshake(Decodable::decode(bytes, version)?),
-            ApiKey::SaslAuthenticate => RequestKind::SaslAuthenticate(Decodable::decode(bytes, version)?),
+            ApiKey::SaslAuthenticate => {
+                RequestKind::SaslAuthenticate(Decodable::decode(bytes, version)?)
+            }
             ApiKey::Metadata => RequestKind::Metadata(Decodable::decode(bytes, version)?),
             ApiKey::CreateTopics => RequestKind::CreateTopics(Decodable::decode(bytes, version)?),
             ApiKey::Produce => RequestKind::Produce(Decodable::decode(bytes, version)?),
             ApiKey::ListOffsets => RequestKind::ListOffsets(Decodable::decode(bytes, version)?),
             ApiKey::Fetch => RequestKind::Fetch(Decodable::decode(bytes, version)?),
-            ApiKey::FindCoordinator => RequestKind::FindCoordinator(Decodable::decode(bytes, version)?),
-            ApiKey::ConsumerGroupHeartbeat => RequestKind::ConsumerGroupHeartbeat(Decodable::decode(bytes, version)?),
+            ApiKey::FindCoordinator => {
+                RequestKind::FindCoordinator(Decodable::decode(bytes, version)?)
+            }
+            ApiKey::ConsumerGroupHeartbeat => {
+                RequestKind::ConsumerGroupHeartbeat(Decodable::decode(bytes, version)?)
+            }
             ApiKey::OffsetCommit => RequestKind::OffsetCommit(Decodable::decode(bytes, version)?),
             ApiKey::OffsetFetch => RequestKind::OffsetFetch(Decodable::decode(bytes, version)?),
             _ => return Ok(None),
@@ -202,11 +212,15 @@ impl MiniKafka {
 
     /// How topic `name` was created.
     pub fn topic(&self, name: &str) -> Option<TopicSettings> {
-        self.state.lock().topics.get(name).map(|topic| TopicSettings {
-            partitions: topic.partitions.len(),
-            replication_factor: topic.replication_factor,
-            retention_ms: topic.retention_ms.clone(),
-        })
+        self.state
+            .lock()
+            .topics
+            .get(name)
+            .map(|topic| TopicSettings {
+                partitions: topic.partitions.len(),
+                replication_factor: topic.replication_factor,
+                retention_ms: topic.retention_ms.clone(),
+            })
     }
 
     /// The records of `topic`, every partition, as (headers, value).
@@ -226,7 +240,9 @@ impl MiniKafka {
                     .map(|(name, value)| {
                         (
                             name.to_string(),
-                            value.as_ref().map_or_else(String::new, |v| String::from_utf8_lossy(v).into_owned()),
+                            value.as_ref().map_or_else(String::new, |v| {
+                                String::from_utf8_lossy(v).into_owned()
+                            }),
                         )
                     })
                     .collect();
@@ -258,7 +274,11 @@ impl MiniKafka {
 
     /// The members of `group`.
     pub fn members(&self, group: &str) -> usize {
-        self.state.lock().groups.get(group).map_or(0, |group| group.members.len())
+        self.state
+            .lock()
+            .groups
+            .get(group)
+            .map_or(0, |group| group.members.len())
     }
 
     /// Requests the broker did not understand, or refused to serve.
@@ -331,7 +351,9 @@ fn len_i32(len: usize) -> i32 {
 /// Serves one connection: one request at a time, in order.
 async fn serve(stream: TcpStream, addr: SocketAddr, state: Arc<State>, stop: CancellationToken) {
     let _ = stream.set_nodelay(true);
-    let codec = LengthDelimitedCodec::builder().max_frame_length(64 << 20).new_codec();
+    let codec = LengthDelimitedCodec::builder()
+        .max_frame_length(64 << 20)
+        .new_codec();
     let mut framed = Framed::new(stream, codec);
     let mut authenticated = state.sasl.is_none();
     loop {
@@ -352,7 +374,8 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Arc<State>, stop: Can
             state.problem(format!("unknown API key {key}"));
             return;
         };
-        let Ok(header) = RequestHeader::decode(&mut bytes, api.request_header_version(version)) else {
+        let Ok(header) = RequestHeader::decode(&mut bytes, api.request_header_version(version))
+        else {
             state.problem(format!("{api:?} v{version}: a malformed header"));
             return;
         };
@@ -381,7 +404,9 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Arc<State>, stop: Can
             .map_err(BoxError::from)
             .and_then(|()| response.encode(&mut out, version));
         if let Err(error) = encoded {
-            state.problem(format!("{api:?} v{version}: the response did not encode: {error}"));
+            state.problem(format!(
+                "{api:?} v{version}: the response did not encode: {error}"
+            ));
             return;
         }
         if framed.send(out.freeze()).await.is_err() {
@@ -402,7 +427,11 @@ async fn handle(
             let supported = state.sasl.is_some() && request.mechanism.as_str() == "PLAIN";
             Some(ResponseKind::SaslHandshake(
                 SaslHandshakeResponse::default()
-                    .with_error_code(if supported { 0 } else { UNSUPPORTED_SASL_MECHANISM })
+                    .with_error_code(if supported {
+                        0
+                    } else {
+                        UNSUPPORTED_SASL_MECHANISM
+                    })
                     .with_mechanisms(vec![StrBytes::from_static_str("PLAIN")]),
             ))
         }
@@ -413,7 +442,9 @@ async fn handle(
                 .map(|(username, password)| format!("\0{username}\0{password}"));
             if expected.as_deref().map(str::as_bytes) == Some(request.auth_bytes.as_ref()) {
                 *authenticated = true;
-                Some(ResponseKind::SaslAuthenticate(SaslAuthenticateResponse::default()))
+                Some(ResponseKind::SaslAuthenticate(
+                    SaslAuthenticateResponse::default(),
+                ))
             } else {
                 Some(ResponseKind::SaslAuthenticate(
                     SaslAuthenticateResponse::default()
@@ -428,17 +459,29 @@ async fn handle(
             state.problem("a request before SASL authentication".to_owned());
             None
         }
-        RequestKind::Metadata(request) => Some(ResponseKind::Metadata(metadata(state, addr, request))),
-        RequestKind::CreateTopics(request) => Some(ResponseKind::CreateTopics(create_topics(state, request))),
-        RequestKind::Produce(request) => Some(ResponseKind::Produce(produce(state, request))),
-        RequestKind::ListOffsets(request) => Some(ResponseKind::ListOffsets(list_offsets(state, request))),
-        RequestKind::Fetch(request) => Some(ResponseKind::Fetch(fetch(state, request).await)),
-        RequestKind::FindCoordinator(request) => Some(ResponseKind::FindCoordinator(find_coordinator(addr, request))),
-        RequestKind::ConsumerGroupHeartbeat(request) => {
-            Some(ResponseKind::ConsumerGroupHeartbeat(heartbeat(state, request)))
+        RequestKind::Metadata(request) => {
+            Some(ResponseKind::Metadata(metadata(state, addr, request)))
         }
-        RequestKind::OffsetCommit(request) => Some(ResponseKind::OffsetCommit(offset_commit(state, request))),
-        RequestKind::OffsetFetch(request) => Some(ResponseKind::OffsetFetch(offset_fetch(state, request))),
+        RequestKind::CreateTopics(request) => {
+            Some(ResponseKind::CreateTopics(create_topics(state, request)))
+        }
+        RequestKind::Produce(request) => Some(ResponseKind::Produce(produce(state, request))),
+        RequestKind::ListOffsets(request) => {
+            Some(ResponseKind::ListOffsets(list_offsets(state, request)))
+        }
+        RequestKind::Fetch(request) => Some(ResponseKind::Fetch(fetch(state, request).await)),
+        RequestKind::FindCoordinator(request) => Some(ResponseKind::FindCoordinator(
+            find_coordinator(addr, request),
+        )),
+        RequestKind::ConsumerGroupHeartbeat(request) => Some(ResponseKind::ConsumerGroupHeartbeat(
+            heartbeat(state, request),
+        )),
+        RequestKind::OffsetCommit(request) => {
+            Some(ResponseKind::OffsetCommit(offset_commit(state, request)))
+        }
+        RequestKind::OffsetFetch(request) => {
+            Some(ResponseKind::OffsetFetch(offset_fetch(state, request)))
+        }
     }
 }
 
@@ -566,7 +609,9 @@ fn produce(state: &State, request: ProduceRequest) -> ProduceResponse {
                 }
             }
             partitions.push(if corrupt {
-                response.with_error_code(CORRUPT_MESSAGE).with_base_offset(-1)
+                response
+                    .with_error_code(CORRUPT_MESSAGE)
+                    .with_base_offset(-1)
             } else {
                 response.with_base_offset(base)
             });
@@ -604,8 +649,14 @@ fn list_offsets(state: &State, request: ListOffsetsRequest) -> ListOffsetsRespon
                     });
                     match len {
                         // -2: the earliest offset; anything else, the end.
-                        Some(len) => response.with_offset(if asked.timestamp == -2 { 0 } else { len_i64(len) }),
-                        None => response.with_error_code(UNKNOWN_TOPIC_OR_PARTITION).with_offset(-1),
+                        Some(len) => response.with_offset(if asked.timestamp == -2 {
+                            0
+                        } else {
+                            len_i64(len)
+                        }),
+                        None => response
+                            .with_error_code(UNKNOWN_TOPIC_OR_PARTITION)
+                            .with_offset(-1),
                     }
                 })
                 .collect();
@@ -656,11 +707,15 @@ fn fetch_now(state: &State, request: &FetchRequest) -> (FetchResponse, bool) {
                             .and_then(|index| topic.partitions.get(index))
                     });
                     let Some(records) = records else {
-                        return data.with_error_code(UNKNOWN_TOPIC_OR_PARTITION).with_high_watermark(-1);
+                        return data
+                            .with_error_code(UNKNOWN_TOPIC_OR_PARTITION)
+                            .with_high_watermark(-1);
                     };
                     let high = len_i64(records.len());
                     if asked.fetch_offset < 0 || asked.fetch_offset > high {
-                        return data.with_error_code(OFFSET_OUT_OF_RANGE).with_high_watermark(high);
+                        return data
+                            .with_error_code(OFFSET_OUT_OF_RANGE)
+                            .with_high_watermark(high);
                     }
                     let from = usize::try_from(asked.fetch_offset).unwrap_or(0);
                     let batch: Vec<&Record> = records[from..].iter().take(500).collect();
@@ -712,13 +767,18 @@ fn find_coordinator(addr: SocketAddr, request: FindCoordinatorRequest) -> FindCo
 /// partitions are spread over the members subscribed to it, and a
 /// partition another member still owns is held back until it reports it
 /// released.
-fn heartbeat(state: &State, request: ConsumerGroupHeartbeatRequest) -> ConsumerGroupHeartbeatResponse {
+fn heartbeat(
+    state: &State,
+    request: ConsumerGroupHeartbeatRequest,
+) -> ConsumerGroupHeartbeatResponse {
     let mut inner = state.lock();
     let Inner { topics, groups, .. } = &mut *inner;
     let now = Instant::now();
     let group = groups.entry(request.group_id.0.to_string()).or_default();
     let before = group.members.len();
-    group.members.retain(|_, member| now.duration_since(member.seen) < SESSION_TIMEOUT);
+    group
+        .members
+        .retain(|_, member| now.duration_since(member.seen) < SESSION_TIMEOUT);
     if group.members.len() != before {
         group.epoch += 1;
     }
@@ -760,12 +820,20 @@ fn heartbeat(state: &State, request: ConsumerGroupHeartbeatRequest) -> ConsumerG
         if let Some(owned) = &request.topic_partitions {
             member.owned = owned
                 .iter()
-                .filter_map(|owned| topic_of(owned.topic_id).map(|name| (name, owned.partitions.clone())))
-                .flat_map(|(name, partitions)| partitions.into_iter().map(move |p| (name.clone(), p)))
+                .filter_map(|owned| {
+                    topic_of(owned.topic_id).map(|name| (name, owned.partitions.clone()))
+                })
+                .flat_map(|(name, partitions)| {
+                    partitions.into_iter().map(move |p| (name.clone(), p))
+                })
                 .collect();
         }
     }
-    let subscribed = group.members.get(&member_id).map(|m| m.topics.clone()).unwrap_or_default();
+    let subscribed = group
+        .members
+        .get(&member_id)
+        .map(|m| m.topics.clone())
+        .unwrap_or_default();
     let mut assigned: BTreeMap<String, Vec<i32>> = BTreeMap::new();
     for topic_name in subscribed {
         let Some(topic) = topics.get(&topic_name) else {
@@ -813,7 +881,10 @@ fn heartbeat(state: &State, request: ConsumerGroupHeartbeatRequest) -> ConsumerG
 
 fn offset_commit(state: &State, request: OffsetCommitRequest) -> OffsetCommitResponse {
     let mut inner = state.lock();
-    let group = inner.groups.entry(request.group_id.0.to_string()).or_default();
+    let group = inner
+        .groups
+        .entry(request.group_id.0.to_string())
+        .or_default();
     let known = group.members.contains_key(request.member_id.as_str());
     let topics = request
         .topics
@@ -824,12 +895,13 @@ fn offset_commit(state: &State, request: OffsetCommitRequest) -> OffsetCommitRes
                 .partitions
                 .into_iter()
                 .map(|partition| {
-                    let response =
-                        OffsetCommitResponsePartition::default().with_partition_index(partition.partition_index);
+                    let response = OffsetCommitResponsePartition::default()
+                        .with_partition_index(partition.partition_index);
                     if known {
-                        group
-                            .offsets
-                            .insert((topic_name.clone(), partition.partition_index), partition.committed_offset);
+                        group.offsets.insert(
+                            (topic_name.clone(), partition.partition_index),
+                            partition.committed_offset,
+                        );
                         response
                     } else {
                         response.with_error_code(UNKNOWN_MEMBER_ID)
@@ -850,7 +922,10 @@ fn offset_fetch(state: &State, request: OffsetFetchRequest) -> OffsetFetchRespon
         .groups
         .into_iter()
         .map(|asked| {
-            let offsets = inner.groups.get(asked.group_id.0.as_str()).map(|group| &group.offsets);
+            let offsets = inner
+                .groups
+                .get(asked.group_id.0.as_str())
+                .map(|group| &group.offsets);
             let topics = asked
                 .topics
                 .unwrap_or_default()
@@ -862,7 +937,9 @@ fn offset_fetch(state: &State, request: OffsetFetchRequest) -> OffsetFetchRespon
                         .iter()
                         .map(|partition| {
                             let committed = offsets
-                                .and_then(|offsets| offsets.get(&(topic_name.clone(), *partition)).copied())
+                                .and_then(|offsets| {
+                                    offsets.get(&(topic_name.clone(), *partition)).copied()
+                                })
                                 .unwrap_or(-1);
                             OffsetFetchResponsePartitions::default()
                                 .with_partition_index(*partition)

@@ -27,7 +27,11 @@ impl Harness for MemoryHarness {
         }
     }
 
-    fn instance<'a>(&'a self, _service: &'a str, _patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        _service: &'a str,
+        _patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move { Arc::new(self.broker.clone()) as Arc<dyn MicroTransport> })
     }
 
@@ -73,7 +77,11 @@ impl Harness for TcpHarness {
         }
     }
 
-    fn instance<'a>(&'a self, _service: &'a str, patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        _service: &'a str,
+        patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move {
             let transport = TcpTransport::new(
                 &self.options(self.tls.as_ref()),
@@ -82,10 +90,10 @@ impl Harness for TcpHarness {
                 Duration::from_secs(2),
             )
             .expect("tcp transport");
-            self.instances
-                .lock()
-                .unwrap()
-                .push((transport.clone(), patterns.iter().map(|p| (*p).to_owned()).collect()));
+            self.instances.lock().unwrap().push((
+                transport.clone(),
+                patterns.iter().map(|p| (*p).to_owned()).collect(),
+            ));
             Arc::new(transport) as Arc<dyn MicroTransport>
         })
     }
@@ -101,11 +109,17 @@ impl Harness for TcpHarness {
                 for pattern in patterns {
                     // Two instances with one pattern: the second gets the
                     // wildcard of its prefix, so both receive its events.
-                    let prefix = pattern.rsplit_once('.').map_or(pattern.as_str(), |(p, _)| p);
-                    let key = [pattern.clone(), format!("{prefix}.*"), format!("{prefix}.>")]
-                        .into_iter()
-                        .find(|key| !routes.contains_key(key))
-                        .expect("a free route key");
+                    let prefix = pattern
+                        .rsplit_once('.')
+                        .map_or(pattern.as_str(), |(p, _)| p);
+                    let key = [
+                        pattern.clone(),
+                        format!("{prefix}.*"),
+                        format!("{prefix}.>"),
+                    ]
+                    .into_iter()
+                    .find(|key| !routes.contains_key(key))
+                    .expect("a free route key");
                     routes.insert(key, format!("127.0.0.1:{}", addr.port()));
                 }
             }
@@ -113,8 +127,10 @@ impl Harness for TcpHarness {
                 routes,
                 ..self.options(self.client_tls.as_ref().or(self.tls.as_ref()))
             };
-            Arc::new(TcpTransport::new(&options, None, 1 << 20, Duration::from_secs(2)).expect("tcp client"))
-                as Arc<dyn MicroTransport>
+            Arc::new(
+                TcpTransport::new(&options, None, 1 << 20, Duration::from_secs(2))
+                    .expect("tcp client"),
+            ) as Arc<dyn MicroTransport>
         })
     }
 }
@@ -225,7 +241,10 @@ async fn mutual_tls_refuses_a_peer_without_a_trusted_certificate() {
     envelope.set_deadline(SystemTime::now() + Duration::from_secs(2));
     let outcome = client.request(envelope).await;
     assert!(
-        matches!(outcome, Err(MicroError::Transport(_) | MicroError::Timeout { .. })),
+        matches!(
+            outcome,
+            Err(MicroError::Transport(_) | MicroError::Timeout { .. })
+        ),
         "a stranger's certificate is refused: {outcome:?}"
     );
     listening.stop().await;
@@ -269,7 +288,10 @@ async fn tcp_frames_over_the_limit_drop_the_connection() {
     let addr = server.wait_bound().await;
     let client = TcpTransport::new(
         &TcpOptions {
-            routes: BTreeMap::from([("conf-big.*".to_owned(), format!("127.0.0.1:{}", addr.port()))]),
+            routes: BTreeMap::from([(
+                "conf-big.*".to_owned(),
+                format!("127.0.0.1:{}", addr.port()),
+            )]),
             ..TcpOptions::default()
         },
         None,
@@ -281,7 +303,10 @@ async fn tcp_frames_over_the_limit_drop_the_connection() {
     envelope.set_deadline(SystemTime::now() + Duration::from_secs(2));
     let outcome = client.request(envelope).await;
     assert!(
-        matches!(outcome, Err(MicroError::Transport(_) | MicroError::Timeout { .. })),
+        matches!(
+            outcome,
+            Err(MicroError::Transport(_) | MicroError::Timeout { .. })
+        ),
         "{outcome:?}"
     );
     listening.stop().await;
@@ -319,8 +344,13 @@ async fn tcp_unrouted_patterns_go_to_the_default_peer() {
     )
     .unwrap();
     let responder = tokio::spawn(async move {
-        let delivery = listening.next(Duration::from_secs(5)).await.expect("delivery");
-        let reply = delivery.envelope().reply(200, "application/json", "\"charged\"");
+        let delivery = listening
+            .next(Duration::from_secs(5))
+            .await
+            .expect("delivery");
+        let reply = delivery
+            .envelope()
+            .reply(200, "application/json", "\"charged\"");
         delivery.reply(reply).await.unwrap();
         listening
     });
@@ -358,7 +388,10 @@ async fn tcp_keeps_up_to_pool_size_connections_and_multiplexes_requests() {
     let client = Arc::new(
         TcpTransport::new(
             &TcpOptions {
-                routes: BTreeMap::from([("pool.*".to_owned(), format!("127.0.0.1:{}", addr.port()))]),
+                routes: BTreeMap::from([(
+                    "pool.*".to_owned(),
+                    format!("127.0.0.1:{}", addr.port()),
+                )]),
                 pool_size: 2,
                 ..TcpOptions::default()
             },
@@ -370,10 +403,15 @@ async fn tcp_keeps_up_to_pool_size_connections_and_multiplexes_requests() {
     );
     let responder = tokio::spawn(async move {
         for _ in 0..20 {
-            let delivery = listening.next(Duration::from_secs(5)).await.expect("delivery");
-            let reply = delivery
-                .envelope()
-                .reply(200, "application/json", delivery.envelope().payload().clone());
+            let delivery = listening
+                .next(Duration::from_secs(5))
+                .await
+                .expect("delivery");
+            let reply = delivery.envelope().reply(
+                200,
+                "application/json",
+                delivery.envelope().payload().clone(),
+            );
             delivery.reply(reply).await.unwrap();
         }
         listening
