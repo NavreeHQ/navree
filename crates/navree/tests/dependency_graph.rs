@@ -275,6 +275,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
     ]),
+    // Workflows: durable runs stored through navree-db, woken by
+    // navree-events listeners and the `workflows:tick` schedule
+    // (navree-schedule), with routes scoped to the request's workspace;
+    // run jobs go through the `dyn Dispatcher` contract.
+    rule("navree-workflows", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
+        "navree-db", "navree-schedule", "navree-workspace",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`,
@@ -362,6 +370,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-helm",
     "navree-i18n",
     "navree-i18n-macros",
+    "navree-workflows",
 ];
 
 /// Cargo dependency kind of an edge.
