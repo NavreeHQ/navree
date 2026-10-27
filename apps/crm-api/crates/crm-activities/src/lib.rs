@@ -56,7 +56,7 @@ pub use reminders::{
     TASKS_TODAY_URL, TaskReminders, TasksDueToday,
 };
 pub use resource::{
-    ACTIVITY_TYPE, ActivityPage, ActivityPageMeta, ActivityResource, MISSING_SUBJECT_LABEL, present,
+    ACTIVITY_TYPE, ActivityPage, ActivityPageMeta, ActivityResource, MISSING_SUBJECT_LABEL,
 };
 pub use service::ActivityService;
 

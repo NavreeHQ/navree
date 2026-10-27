@@ -3,22 +3,16 @@
 use std::sync::Arc;
 
 use chrono::NaiveDate;
-use crm_core::entities::{activity, company, contact, deal};
+use crm_core::models::{Company, Contact, Deal, DealScopes, User};
 use crm_core::subjects::DEAL;
-use crm_core::{DEAL_UPDATED, DEALS_CHANNEL, Deal, Move, Stage, SubjectType, owner_for};
+use crm_core::{DEAL_UPDATED, DEALS_CHANNEL, Move, Stage, owner_for};
 use navree::access::{Ability, Accessible, ActionMarker, Authorized, Read, Update};
-use navree::auth::user;
 use navree::contracts::{Broadcaster, Clock};
-use navree::db::{contains_ignore_case, paginate};
 use navree::events::EventBus;
+use navree::orm::access::AccessibleQuery;
+use navree::orm::{OrmError, Record};
 use navree::prelude::*;
 use navree::validation::ValidationErrors;
-use sea_orm::ActiveValue::Set;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter,
-    QueryOrder,
-};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -48,7 +42,7 @@ pub struct DealService {
 
 impl DealService {
     /// One page of the deals `scope` allows, newest first, matching
-    /// `filter`.
+    /// `filter`, with their embeds.
     pub async fn list(
         &self,
         uow: &Uow,
@@ -56,36 +50,24 @@ impl DealService {
         filter: DealFilter,
         page: PageQuery,
     ) -> Result<Page<DealResource>> {
-        let mut select = scope.apply(deal::Entity::find());
-        if let Some(stage) = filter.stage {
-            select = select.filter(deal::Column::Stage.eq(stage));
-        }
-        if let Some(owner) = filter.owner_id {
-            select = select.filter(deal::Column::OwnerId.eq(owner));
-        }
-        if let Some(company) = filter.company_id {
-            select = select.filter(deal::Column::CompanyId.eq(company));
-        }
-        if let Some(search) = filter.search.as_deref().map(str::trim)
-            && !search.is_empty()
-        {
-            // Case-insensitive for non-ASCII letters too (SQLite's own
-            // LOWER and LIKE fold ASCII only).
-            select = select.filter(contains_ignore_case(
-                uow.db().backend(),
-                Expr::col(deal::Column::Title),
-                search,
-            ));
-        }
-        let select = select
-            .order_by_desc(deal::Column::CreatedAt)
-            .order_by_desc(deal::Column::Id);
-        let tx = uow.tx().await?;
-        let page = paginate(select, &*tx, page).await?;
-        Ok(Page {
-            data: DealResource::load_many(&*tx, page.data).await?,
-            meta: page.meta,
-        })
+        let search = filter
+            .search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty());
+        let page = scope
+            .apply(Deal::query())
+            .when_some(filter.stage, |query, stage| query.in_stage(stage))
+            .when_some(filter.owner_id, |query, owner| query.owned_by(owner))
+            .when_some(filter.company_id, |query, company| {
+                query.of_company(company)
+            })
+            .when_some(search, |query, term| query.search(term))
+            .newest_first()
+            .with_all(DealResource::EMBEDS)
+            .paginate(uow, page)
+            .await?;
+        Ok(page.map(|deal| deal.to_resource::<DealResource>()))
     }
 
     /// The board: every stage with the deals `scope` allows (only
@@ -96,23 +78,20 @@ impl DealService {
         scope: Accessible<Deal, Read>,
         filter: BoardFilter,
     ) -> Result<DealBoard> {
-        let mut select = scope.apply(deal::Entity::find());
-        if let Some(owner) = filter.owner_id {
-            select = select.filter(deal::Column::OwnerId.eq(owner));
-        }
-        let select = select
-            .order_by_asc(deal::Column::Position)
-            .order_by_asc(deal::Column::CreatedAt)
-            .order_by_asc(deal::Column::Id);
-        let tx = uow.tx().await?;
-        let deals = select.all(&*tx).await?;
-        Ok(DealBoard::new(DealResource::load_many(&*tx, deals).await?))
+        let deals = scope
+            .apply(Deal::query())
+            .when_some(filter.owner_id, |query, owner| query.owned_by(owner))
+            .in_board_order()
+            .with_all(DealResource::EMBEDS)
+            .get(uow)
+            .await?;
+        Ok(DealBoard::new(deals.to_resource_collection()))
     }
 
-    /// The resource of `deal`.
-    pub async fn show(&self, uow: &Uow, deal: deal::Model) -> Result<DealResource> {
-        let tx = uow.tx().await?;
-        Ok(DealResource::load(&*tx, deal).await?)
+    /// The resource of `deal`, its embeds loaded.
+    pub async fn show(&self, uow: &Uow, mut deal: Record<Deal>) -> Result<DealResource> {
+        deal.load_all(uow, DealResource::EMBEDS).await?;
+        Ok(deal.to_resource())
     }
 
     /// Creates a deal for `me` (or for `input.owner_id`, which needs
@@ -136,16 +115,13 @@ impl DealService {
         let now = self.clock.now();
 
         let mut errors = ValidationErrors::new();
-        {
-            let tx = uow.tx().await?;
-            References {
-                company: Some(company_id),
-                contact: input.contact_id,
-                owner: (owner_id != me).then_some(owner_id),
-            }
-            .check(&*tx, &mut errors)
-            .await?;
+        References {
+            company: Some(company_id),
+            contact: input.contact_id,
+            owner: (owner_id != me).then_some(owner_id),
         }
+        .check(uow, &mut errors)
+        .await?;
         let expected_close_date = parse_date(input.expected_close_date.as_deref(), &mut errors);
         let closing = stages::close(None, stage, input.lost_reason.as_deref(), now)
             .map_err(|error| errors.merge(error))
@@ -155,24 +131,22 @@ impl DealService {
         };
 
         let placement = positions::insert(&positions::column(uow, stage, None).await?, None);
-        positions::apply(&*uow.tx().await?, &placement.shifts).await?;
-        let deal = Repo::<deal::Entity>::insert(
+        positions::apply(uow, &placement.shifts).await?;
+        let deal = Deal::create(
             uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set(title.trim().to_owned()),
-                amount_cents: Set(amount_cents),
-                currency: Set(currency(input.currency.as_deref())),
-                stage: Set(stage),
-                position: Set(placement.position),
-                expected_close_date: Set(expected_close_date),
-                closed_at: Set(closing.closed_at),
-                lost_reason: Set(closing.lost_reason),
-                company_id: Set(company_id),
-                contact_id: Set(input.contact_id),
-                owner_id: Set(owner_id),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Deal {
+                title: title.trim().to_owned(),
+                amount_cents,
+                currency: currency(input.currency.as_deref()),
+                stage,
+                position: placement.position,
+                expected_close_date,
+                closed_at: closing.closed_at,
+                lost_reason: closing.lost_reason,
+                company_id,
+                contact_id: input.contact_id,
+                owner_id,
+                ..Deal::default()
             },
         )
         .await?;
@@ -200,36 +174,34 @@ impl DealService {
             Some(deal.owner_id),
             input.owner_id,
         )?;
-        let current = deal.into_inner();
+        let mut deal = deal.into_inner();
+        let before = deal.clone();
         let now = self.clock.now();
 
         let mut errors = ValidationErrors::new();
-        {
-            let tx = uow.tx().await?;
-            // Only new references are checked: an edit form sending back a
-            // company deleted since stays valid.
-            References {
-                company: input.company_id.filter(|id| *id != current.company_id),
-                contact: input
-                    .contact_id
-                    .flatten()
-                    .filter(|id| Some(*id) != current.contact_id),
-                owner: (owner_id != current.owner_id).then_some(owner_id),
-            }
-            .check(&*tx, &mut errors)
-            .await?;
+        // Only new references are checked: an edit form sending back a
+        // company deleted since stays valid.
+        References {
+            company: input.company_id.filter(|id| *id != deal.company_id),
+            contact: input
+                .contact_id
+                .flatten()
+                .filter(|id| Some(*id) != deal.contact_id),
+            owner: (owner_id != deal.owner_id).then_some(owner_id),
         }
+        .check(uow, &mut errors)
+        .await?;
         let expected_close_date = input
             .expected_close_date
             .map(|date| parse_date(date.as_deref(), &mut errors));
-        let stage = moving.unwrap_or(current.stage);
+        let stage = moving.unwrap_or(deal.stage);
         let previous = Closing {
-            closed_at: current.closed_at,
-            lost_reason: current.lost_reason.clone(),
+            closed_at: deal.closed_at,
+            lost_reason: deal.lost_reason.clone(),
         };
         let closing = if moving.is_some() || (stage == Stage::Lost && input.lost_reason.is_some()) {
             stages::close(
-                Some((current.stage, &previous)),
+                Some((deal.stage, &previous)),
                 stage,
                 input.lost_reason.as_deref(),
                 now,
@@ -243,43 +215,39 @@ impl DealService {
             return Err(errors.into_app_error());
         };
 
-        let mut active = current.clone().into_active_model();
         if let Some(title) = input.title {
-            active.title = Set(title.trim().to_owned());
+            deal.title = title.trim().to_owned();
         }
         if let Some(company_id) = input.company_id {
-            active.company_id = Set(company_id);
+            deal.company_id = company_id;
         }
         if let Some(contact_id) = input.contact_id {
-            active.contact_id = Set(contact_id);
+            deal.contact_id = contact_id;
         }
         if let Some(amount_cents) = input.amount_cents {
-            active.amount_cents = Set(amount_cents);
+            deal.amount_cents = amount_cents;
         }
         if let Some(code) = input.currency.as_deref() {
-            active.currency = Set(currency(Some(code)));
+            deal.currency = currency(Some(code));
         }
         if let Some(date) = expected_close_date {
-            active.expected_close_date = Set(date);
+            deal.expected_close_date = date;
         }
         if let Some(stage) = moving {
-            let placement = positions::insert(
-                &positions::column(uow, stage, Some(current.id)).await?,
-                None,
-            );
-            positions::apply(&*uow.tx().await?, &placement.shifts).await?;
-            active.stage = Set(stage);
-            active.position = Set(placement.position);
+            let placement =
+                positions::insert(&positions::column(uow, stage, Some(deal.id)).await?, None);
+            positions::apply(uow, &placement.shifts).await?;
+            deal.stage = stage;
+            deal.position = placement.position;
         }
-        active.closed_at = Set(closing.closed_at);
-        active.lost_reason = Set(closing.lost_reason);
-        active.owner_id = Set(owner_id);
-        active.updated_at = Set(now);
-        let deal = Repo::<deal::Entity>::update(uow, active).await?;
+        deal.closed_at = closing.closed_at;
+        deal.lost_reason = closing.lost_reason;
+        deal.owner_id = owner_id;
+        deal.save(uow).await?;
         if moving.is_some() {
-            positions::close_gap(uow, current.stage).await?;
+            positions::close_gap(uow, before.stage).await?;
         }
-        self.changed(uow, me, Some(&current), deal).await
+        self.changed(uow, me, Some(&before), deal).await
     }
 
     /// Moves `deal` to `input.stage` at the 0-based `input.position` within
@@ -290,7 +258,7 @@ impl DealService {
         &self,
         uow: &Uow,
         me: Uuid,
-        deal: deal::Model,
+        mut deal: Record<Deal>,
         input: MoveDeal,
     ) -> Result<DealResource> {
         let Some(stage) = input.stage else {
@@ -314,15 +282,13 @@ impl DealService {
             .map(|position| usize::try_from(position).unwrap_or(usize::MAX));
         let placement =
             positions::insert(&positions::column(uow, stage, Some(deal.id)).await?, index);
-        positions::apply(&*uow.tx().await?, &placement.shifts).await?;
+        positions::apply(uow, &placement.shifts).await?;
         let before = deal.clone();
-        let mut active = deal.into_active_model();
-        active.stage = Set(stage);
-        active.position = Set(placement.position);
-        active.closed_at = Set(closing.closed_at);
-        active.lost_reason = Set(closing.lost_reason);
-        active.updated_at = Set(now);
-        let deal = Repo::<deal::Entity>::update(uow, active).await?;
+        deal.stage = stage;
+        deal.position = placement.position;
+        deal.closed_at = closing.closed_at;
+        deal.lost_reason = closing.lost_reason;
+        deal.save(uow).await?;
         if before.stage != stage {
             positions::close_gap(uow, before.stage).await?;
         }
@@ -331,21 +297,16 @@ impl DealService {
 
     /// Deletes `deal` with the activities attached to it (notes and tasks
     /// about a deal that is gone would point nowhere) and closes the gap it
-    /// leaves in its column; every row goes through `Repo`, so the audit
-    /// trail records each deletion. The broadcast carries its last state.
-    pub async fn delete(&self, uow: &Uow, deal: deal::Model) -> Result<()> {
+    /// leaves in its column. Every record is deleted through the model, so
+    /// the audit trail records each deletion. The broadcast carries its
+    /// last state.
+    pub async fn delete(&self, uow: &Uow, mut deal: Record<Deal>) -> Result<()> {
         let resource = self.show(uow, deal.clone()).await?;
-        let stage = deal.stage;
-        let activities = activity::Entity::find()
-            .filter(activity::Column::SubjectType.eq(SubjectType::Deal))
-            .filter(activity::Column::SubjectId.eq(deal.id))
-            .all(&*uow.tx().await?)
-            .await?;
-        for activity in activities {
-            Repo::<activity::Entity>::delete(uow, activity).await?;
+        for mut activity in deal.activities().get(uow).await? {
+            activity.delete(uow).await?;
         }
-        Repo::<deal::Entity>::delete(uow, deal).await?;
-        positions::close_gap(uow, stage).await?;
+        deal.delete(uow).await?;
+        positions::close_gap(uow, deal.stage).await?;
         self.broadcast(uow, &resource);
         Ok(())
     }
@@ -357,8 +318,8 @@ impl DealService {
         &self,
         uow: &Uow,
         me: Uuid,
-        before: Option<&deal::Model>,
-        after: deal::Model,
+        before: Option<&Record<Deal>>,
+        mut after: Record<Deal>,
     ) -> Result<DealResource> {
         let new_owner = before.is_none_or(|before| before.owner_id != after.owner_id);
         if new_owner && after.owner_id != me {
@@ -385,7 +346,8 @@ impl DealService {
                 })
                 .await?;
         }
-        let resource = self.show(uow, after).await?;
+        after.load_all(uow, DealResource::EMBEDS).await?;
+        let resource = after.to_resource::<DealResource>();
         self.broadcast(uow, &resource);
         Ok(resource)
     }
@@ -423,35 +385,23 @@ struct References {
 
 impl References {
     /// Adds a `<field> does not exist` error for each missing record
-    /// (soft-deleted companies and contacts count as missing).
-    async fn check<C: ConnectionTrait>(
-        &self,
-        conn: &C,
-        errors: &mut ValidationErrors,
-    ) -> Result<(), DbErr> {
-        if let Some(id) = self.company {
-            let found = company::Entity::find_by_id(id)
-                .filter(company::Column::DeletedAt.is_null())
-                .count(conn)
-                .await?;
-            if found == 0 {
-                errors.add("company_id", "company_id does not exist");
-            }
+    /// (deleted companies and contacts count as missing: the models leave
+    /// them out).
+    async fn check(&self, uow: &Uow, errors: &mut ValidationErrors) -> Result<(), OrmError> {
+        if let Some(id) = self.company
+            && Company::query().where_key(id).doesnt_exist(uow).await?
+        {
+            errors.add("company_id", "company_id does not exist");
         }
-        if let Some(id) = self.contact {
-            let found = contact::Entity::find_by_id(id)
-                .filter(contact::Column::DeletedAt.is_null())
-                .count(conn)
-                .await?;
-            if found == 0 {
-                errors.add("contact_id", "contact_id does not exist");
-            }
+        if let Some(id) = self.contact
+            && Contact::query().where_key(id).doesnt_exist(uow).await?
+        {
+            errors.add("contact_id", "contact_id does not exist");
         }
-        if let Some(id) = self.owner {
-            let found = user::Entity::find_by_id(id).count(conn).await?;
-            if found == 0 {
-                errors.add("owner_id", "owner_id does not exist");
-            }
+        if let Some(id) = self.owner
+            && User::query().where_key(id).doesnt_exist(uow).await?
+        {
+            errors.add("owner_id", "owner_id does not exist");
         }
         Ok(())
     }

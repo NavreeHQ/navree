@@ -1,13 +1,14 @@
-//! The API's activity shape (spec §7 `Activity`) and how models become it:
-//! the owner and assignee embeds and the label of the record each activity
-//! is attached to, loaded with one query per kind for a whole page.
-
-use std::collections::HashMap;
+//! The API's activity shape (spec §7 `Activity`), built from a record with
+//! its relations: the owner and assignee embeds and the label of the
+//! record it is attached to, each loaded with one query per relation (and
+//! per kind of record) for a whole page.
 
 use chrono::{DateTime, Utc};
-use crm_core::entities::{activity, deal};
-use crm_core::{ActivityKind, CompanyRef, ContactRef, OwnerRef, SubjectType};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect};
+use crm_core::models::{Activity, Company, Contact, Deal};
+use crm_core::{ActivityKind, OwnerRef, SubjectType};
+use navree::api::ApiResource;
+use navree::orm::Record;
+use navree::orm::attributes::Resource;
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -66,6 +67,62 @@ pub struct ActivityResource {
     pub created_at: DateTime<Utc>,
 }
 
+impl ActivityResource {
+    /// The relations an activity's resource embeds: load them with the
+    /// records (`Activity::query().with_all(ActivityResource::EMBEDS)`).
+    pub const EMBEDS: [&'static str; 3] = ["subject_record", "owner", "assignee"];
+}
+
+impl ApiResource for ActivityResource {
+    const TYPE: &'static str = ACTIVITY_TYPE;
+}
+
+impl Resource<Activity> for ActivityResource {
+    /// `activity` with its loaded subject record, owner and assignee.
+    fn from_record(activity: &Record<Activity>) -> Self {
+        ActivityResource {
+            resource_type: ACTIVITY_TYPE,
+            id: activity.id,
+            kind: activity.kind,
+            subject: activity.subject.clone(),
+            body: activity.body.clone(),
+            due_at: activity.due_at,
+            completed_at: activity.completed_at,
+            subject_type: activity.subject_type,
+            subject_id: activity.subject_id,
+            subject_label: subject_label(activity),
+            owner_id: activity.owner_id,
+            owner: OwnerRef::loaded(activity.loaded(Activity::owner), activity.owner_id),
+            assignee_id: activity.assignee_id,
+            assignee: activity
+                .assignee_id
+                .map(|id| OwnerRef::loaded(activity.loaded(Activity::assignee), id)),
+            created_at: activity.created_at,
+        }
+    }
+}
+
+/// The name of the record `activity` is attached to: the company's name,
+/// the contact's full name or the deal's title (deleted companies and
+/// contacts keep theirs); [`MISSING_SUBJECT_LABEL`] once it is gone.
+fn subject_label(activity: &Record<Activity>) -> String {
+    let Some(record) = activity
+        .loaded(Activity::subject_record)
+        .and_then(Option::as_ref)
+    else {
+        return MISSING_SUBJECT_LABEL.to_owned();
+    };
+    if let Some(company) = record.downcast_ref::<Company>() {
+        company.name.clone()
+    } else if let Some(contact) = record.downcast_ref::<Contact>() {
+        contact.full_name()
+    } else if let Some(deal) = record.downcast_ref::<Deal>() {
+        deal.title.clone()
+    } else {
+        MISSING_SUBJECT_LABEL.to_owned()
+    }
+}
+
 /// A page of activities as `GET /api/v1/activities` returns it (the
 /// OpenAPI schema of a `Page<ActivityResource>`): `{data, meta}`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
@@ -90,85 +147,4 @@ pub struct ActivityPageMeta {
     pub total: u64,
     /// The last page number (at least 1).
     pub last_page: u64,
-}
-
-/// The activities as resources, in the same order, with their embeds and
-/// subject labels read through `conn`.
-pub async fn present<C: ConnectionTrait>(
-    conn: &C,
-    activities: Vec<activity::Model>,
-) -> Result<Vec<ActivityResource>, DbErr> {
-    let user_ids: Vec<Uuid> = activities
-        .iter()
-        .flat_map(|activity| [Some(activity.owner_id), activity.assignee_id])
-        .flatten()
-        .collect();
-    let users = OwnerRef::load(conn, user_ids).await?;
-    let labels = subject_labels(conn, &activities).await?;
-    let user = |id: Uuid| {
-        users.get(&id).cloned().unwrap_or_else(|| OwnerRef {
-            id,
-            name: String::new(),
-        })
-    };
-    Ok(activities
-        .into_iter()
-        .map(|activity| ActivityResource {
-            resource_type: ACTIVITY_TYPE,
-            subject_label: labels
-                .get(&(activity.subject_type, activity.subject_id))
-                .cloned()
-                .unwrap_or_else(|| MISSING_SUBJECT_LABEL.to_owned()),
-            owner: user(activity.owner_id),
-            assignee: activity.assignee_id.map(user),
-            id: activity.id,
-            kind: activity.kind,
-            subject: activity.subject,
-            body: activity.body,
-            due_at: activity.due_at,
-            completed_at: activity.completed_at,
-            subject_type: activity.subject_type,
-            subject_id: activity.subject_id,
-            owner_id: activity.owner_id,
-            assignee_id: activity.assignee_id,
-            created_at: activity.created_at,
-        })
-        .collect())
-}
-
-/// The label of every record `activities` are attached to, by type and id
-/// (soft-deleted companies and contacts keep their names).
-async fn subject_labels<C: ConnectionTrait>(
-    conn: &C,
-    activities: &[activity::Model],
-) -> Result<HashMap<(SubjectType, Uuid), String>, DbErr> {
-    let ids = |kind: SubjectType| -> Vec<Uuid> {
-        activities
-            .iter()
-            .filter(|activity| activity.subject_type == kind)
-            .map(|activity| activity.subject_id)
-            .collect()
-    };
-    let mut labels = HashMap::new();
-    for (id, company) in CompanyRef::load(conn, ids(SubjectType::Company)).await? {
-        labels.insert((SubjectType::Company, id), company.name);
-    }
-    for (id, contact) in ContactRef::load(conn, ids(SubjectType::Contact)).await? {
-        labels.insert((SubjectType::Contact, id), contact.full_name);
-    }
-    let deal_ids = ids(SubjectType::Deal);
-    if !deal_ids.is_empty() {
-        let titles: Vec<(Uuid, String)> = deal::Entity::find()
-            .select_only()
-            .column(deal::Column::Id)
-            .column(deal::Column::Title)
-            .filter(deal::Column::Id.is_in(deal_ids))
-            .into_tuple()
-            .all(conn)
-            .await?;
-        for (id, title) in titles {
-            labels.insert((SubjectType::Deal, id), title);
-        }
-    }
-    Ok(labels)
 }

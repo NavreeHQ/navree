@@ -5,12 +5,9 @@
 //! same way the board shows them.
 
 use crm_core::Stage;
-use crm_core::entities::deal;
+use crm_core::models::{Deal, DealScopes};
 use navree::db::Uow;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-};
+use navree::orm::{Model, OrmError, table};
 use uuid::Uuid;
 
 /// One deal of a column: its id and stored position.
@@ -62,48 +59,40 @@ fn to_position(index: usize) -> i32 {
 }
 
 /// The deals of `stage` except `except`, in board order, locked for the
-/// rest of the unit of work where the database supports it.
+/// rest of the unit of work where the database locks rows (SQLite
+/// serialises writers instead).
 pub(crate) async fn column(
     uow: &Uow,
     stage: Stage,
     except: Option<Uuid>,
-) -> Result<Vec<Slot>, DbErr> {
-    let mut select = deal::Entity::find()
-        .select_only()
-        .column(deal::Column::Id)
-        .column(deal::Column::Position)
-        .filter(deal::Column::Stage.eq(stage));
-    if let Some(id) = except {
-        select = select.filter(deal::Column::Id.ne(id));
-    }
-    if uow.lock_for_update() {
-        select = select.lock_exclusive();
-    }
-    let select = select
-        .order_by_asc(deal::Column::Position)
-        .order_by_asc(deal::Column::CreatedAt)
-        .order_by_asc(deal::Column::Id);
-    let tx = uow.tx().await?;
-    select.into_tuple().all(&*tx).await
+) -> Result<Vec<Slot>, OrmError> {
+    let slots = Deal::query()
+        .in_stage(stage)
+        .when_some(except, |query, id| query.where_key_not(id))
+        .in_board_order()
+        .lock_for_update()
+        .pluck_keyed(uow, Deal::POSITION, Deal::ID)
+        .await?;
+    Ok(slots.into_iter().collect())
 }
 
-/// Writes the `shifts` (bookkeeping, so no change events and no audit).
-pub(crate) async fn apply<C: ConnectionTrait>(conn: &C, shifts: &[Slot]) -> Result<(), DbErr> {
+/// Writes the `shifts`. Positions are bookkeeping, so they are written to
+/// the table, not through the model: the neighbours keep their
+/// `updated_at`, and no change events reach the audit trail.
+pub(crate) async fn apply(uow: &Uow, shifts: &[Slot]) -> Result<(), OrmError> {
     for &(id, position) in shifts {
-        deal::Entity::update_many()
-            .col_expr(deal::Column::Position, Expr::value(position))
-            .filter(deal::Column::Id.eq(id))
-            .exec(conn)
+        table(Deal::table_name())
+            .where_(Deal::ID.eq(id))
+            .update(uow, [Deal::POSITION.set(position)])
             .await?;
     }
     Ok(())
 }
 
 /// Numbers the deals of `stage` `0..n` again (after one left it).
-pub(crate) async fn close_gap(uow: &Uow, stage: Stage) -> Result<(), DbErr> {
+pub(crate) async fn close_gap(uow: &Uow, stage: Stage) -> Result<(), OrmError> {
     let shifts = compact(&column(uow, stage, None).await?);
-    let tx = uow.tx().await?;
-    apply(&*tx, &shifts).await
+    apply(uow, &shifts).await
 }
 
 #[cfg(test)]
