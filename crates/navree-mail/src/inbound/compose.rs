@@ -343,9 +343,9 @@ impl Compose {
         }
         header(&mut out, "MIME-Version", "1.0");
 
-        let body = self.body_entity();
-        out.push_str(&body);
-        Bytes::from(out)
+        let mut bytes = out.into_bytes();
+        bytes.extend_from_slice(&self.body_entity());
+        Bytes::from(bytes)
     }
 
     /// Builds the [`Incoming`] (source `test` unless set).
@@ -374,7 +374,7 @@ impl Compose {
     }
 
     /// The body entity: its `Content-*` headers, a blank line and the body.
-    fn body_entity(&self) -> String {
+    fn body_entity(&self) -> Vec<u8> {
         let alternative = match (&self.text, &self.html) {
             (Some(text), Some(html)) => {
                 let boundary = boundary("alt");
@@ -393,19 +393,19 @@ impl Compose {
             (None, None) => text_entity("plain", ""),
         };
         if self.parts.is_empty() {
-            return alternative;
+            return alternative.into_bytes();
         }
         let boundary = boundary("mixed");
-        let mut entity = format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n");
-        let _ = write!(entity, "--{boundary}\r\n");
-        entity.push_str(&alternative);
-        entity.push_str("\r\n");
+        let mut entity = format!(
+            "Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n--{boundary}\r\n{alternative}\r\n"
+        )
+        .into_bytes();
         for part in &self.parts {
-            let _ = write!(entity, "--{boundary}\r\n");
-            entity.push_str(&part_entity(part));
-            entity.push_str("\r\n");
+            entity.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+            entity.extend_from_slice(&part_entity(part));
+            entity.extend_from_slice(b"\r\n");
         }
-        let _ = write!(entity, "--{boundary}--\r\n");
+        entity.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
         entity
     }
 }
@@ -426,8 +426,9 @@ fn text_entity(subtype: &str, body: &str) -> String {
     }
 }
 
-/// An attachment entity.
-fn part_entity(part: &Part) -> String {
+/// An attachment entity. A forwarded message is written as it is (its
+/// bytes need not be UTF-8); anything else in base64.
+fn part_entity(part: &Part) -> Vec<u8> {
     let mut entity = String::new();
     let filename = part.filename.as_deref().map(single_line);
     let content_type = single_line(&part.content_type);
@@ -461,13 +462,15 @@ fn part_entity(part: &Part) -> String {
     }
     if content_type.eq_ignore_ascii_case("message/rfc822") {
         entity.push_str("\r\n");
-        entity.push_str(&String::from_utf8_lossy(&part.content));
-        entity.push_str("\r\n");
+        let mut bytes = entity.into_bytes();
+        bytes.extend_from_slice(&part.content);
+        bytes.extend_from_slice(b"\r\n");
+        bytes
     } else {
         entity.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
         entity.push_str(&wrapped_base64(&part.content));
+        entity.into_bytes()
     }
-    entity
 }
 
 /// Base64 in 76-character lines, each ending in CRLF.

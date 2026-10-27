@@ -318,6 +318,8 @@ Each answers 200 with what became of the message:
 
 A secret that doesn't match is a 401 with code `invalid_signature`, a payload the provider doesn't send a 400 `invalid_inbound_mail`, a message over the limit a 413 `mail_too_large`, and a failing mailbox a 500.
 
+A provider posts every message from a handful of addresses, so its requests count against the [per-IP rate limit](/docs/basics/rate-limiting/#the-per-ip-limit) (`http.per_ip_rate_limit`, 600 requests a minute by default). Over it, the route answers 429 and the provider delivers the message again later; raise the limit if your volume needs more.
+
 ### Amazon SES
 
 Verify your receiving domain in SES and point its MX record at SES, then create a receipt rule for the addresses you receive (`in.acme.test`, or single addresses). Give the rule one of two actions:
