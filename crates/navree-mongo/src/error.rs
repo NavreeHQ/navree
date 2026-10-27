@@ -182,7 +182,12 @@ pub(crate) fn error_codes(error: &mongodb::error::Error) -> Vec<i32> {
                 .flatten()
                 .map(|write| write.code)
                 .collect();
-            codes.extend(insert.write_concern_error.iter().map(|concern| concern.code));
+            codes.extend(
+                insert
+                    .write_concern_error
+                    .iter()
+                    .map(|concern| concern.code),
+            );
             codes
         }
         ErrorKind::BulkWrite(bulk) => {
@@ -289,6 +294,9 @@ mod tests {
                 .into(),
         };
         let text = error.to_string();
-        assert!(text.contains("replica set") && text.contains("--replSet"), "{text}");
+        assert!(
+            text.contains("replica set") && text.contains("--replSet"),
+            "{text}"
+        );
     }
 }

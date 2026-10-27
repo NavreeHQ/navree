@@ -40,7 +40,10 @@ async fn the_app_boots_without_a_server_and_says_it_is_down() {
     match mongodb_health(&app).await {
         HealthStatus::Down(message) => {
             assert!(message.contains("does not answer"), "{message}");
-            assert!(!message.contains("s3cret"), "the password stays out: {message}");
+            assert!(
+                !message.contains("s3cret"),
+                "the password stays out: {message}"
+            );
         }
         other => panic!("expected Down, got {other:?}"),
     }
@@ -92,7 +95,10 @@ async fn invalid_options_fail_the_boot() {
         .await
         .err()
         .expect("the boot fails");
-    assert!(error.to_string().contains("invalid MongoDB options"), "{error}");
+    assert!(
+        error.to_string().contains("invalid MongoDB options"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -123,6 +129,10 @@ async fn the_app_reports_commands_without_their_values() {
     assert!(!query.failed);
     assert_eq!(query.rows, Some(1));
     assert!(query.connection.contains(&t.name), "{}", query.connection);
-    assert!(queries.iter().all(|query| !query.sql.contains("Top secret")));
+    assert!(
+        queries
+            .iter()
+            .all(|query| !query.sql.contains("Top secret"))
+    );
     t.cleanup().await;
 }

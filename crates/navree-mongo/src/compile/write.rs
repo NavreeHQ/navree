@@ -273,15 +273,24 @@ mod tests {
             table: Cow::Borrowed("deals"),
             columns: vec![Cow::Borrowed("_id"), Cow::Borrowed("title")],
             rows: vec![
-                vec![Expr::Value(Value::from(1_i64)), Expr::Value(Value::from("A"))],
-                vec![Expr::Value(Value::from(2_i64)), Expr::Value(Value::from("B"))],
+                vec![
+                    Expr::Value(Value::from(1_i64)),
+                    Expr::Value(Value::from("A")),
+                ],
+                vec![
+                    Expr::Value(Value::from(2_i64)),
+                    Expr::Value(Value::from("B")),
+                ],
             ],
             returning: Vec::new(),
         })
         .unwrap();
         assert_eq!(
             insert.documents,
-            [doc! { "_id": 1_i64, "title": "A" }, doc! { "_id": 2_i64, "title": "B" }]
+            [
+                doc! { "_id": 1_i64, "title": "A" },
+                doc! { "_id": 2_i64, "title": "B" }
+            ]
         );
     }
 
@@ -303,7 +312,10 @@ mod tests {
         };
         assert_eq!(pipeline.collection, "deals");
         assert!(pipeline.pipeline[0].contains_key("$lookup"));
-        assert_eq!(pipeline.pipeline.last(), Some(&doc! { "$project": { "_id": 1 } }));
+        assert_eq!(
+            pipeline.pipeline.last(),
+            Some(&doc! { "$project": { "_id": 1 } })
+        );
 
         let plain = vec![WhereClause::and(Where::Compare {
             left: Expr::Column(ColumnRef::parse("stage")),

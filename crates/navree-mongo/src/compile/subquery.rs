@@ -10,8 +10,7 @@ use std::borrow::Cow;
 use bson::{Bson, Document, doc};
 use navree_orm::OrmError;
 use navree_orm::ir::{
-    AggregateFunction, Boolean, ColumnRef, Expr, Operator, QueryIr, SelectItem, Where,
-    WhereClause,
+    AggregateFunction, Boolean, ColumnRef, Expr, Operator, QueryIr, SelectItem, Where, WhereClause,
 };
 
 use super::Pending;
@@ -56,7 +55,11 @@ fn lookup(
             if query.columns.len() != 1 {
                 return Err(invalid(format!(
                     "a subquery used as {} selects one column, not {}",
-                    if kind == Kind::Values { "a list of values" } else { "a value" },
+                    if kind == Kind::Values {
+                        "a list of values"
+                    } else {
+                        "a value"
+                    },
                     query.columns.len()
                 )));
             }

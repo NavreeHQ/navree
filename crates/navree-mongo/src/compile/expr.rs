@@ -2,8 +2,8 @@
 //! aggregates as `$group` accumulators.
 
 use bson::{Bson, Document, doc};
-use navree_orm::ir::{AggregateFunction, ArithmeticOp, Expr};
 use navree_orm::OrmError;
+use navree_orm::ir::{AggregateFunction, ArithmeticOp, Expr};
 
 use super::scope::{Cx, Scope};
 use super::{Pending, subquery};
@@ -148,7 +148,9 @@ pub(crate) fn function(name: &str, args: Vec<Bson>) -> Result<Bson, OrmError> {
         "substr" | "substring" => {
             let mut args = args.into_iter();
             let (Some(text), Some(start)) = (args.next(), args.next()) else {
-                return Err(invalid(format!("{name}() takes a text, a start and a length")));
+                return Err(invalid(format!(
+                    "{name}() takes a text, a start and a length"
+                )));
             };
             // SQL counts from 1, MongoDB from 0.
             let start = Bson::Document(doc! { "$subtract": [start, 1] });
@@ -314,9 +316,7 @@ pub(crate) fn accumulator(
     if distinct {
         let collected = doc! { "$addToSet": argument };
         let finish: fn(&str) -> Bson = match function {
-            AggregateFunction::Count => |field| {
-                Bson::Document(doc! { "$size": non_null(field) })
-            },
+            AggregateFunction::Count => |field| Bson::Document(doc! { "$size": non_null(field) }),
             AggregateFunction::Sum => |field| Bson::Document(doc! { "$sum": non_null(field) }),
             AggregateFunction::Avg => |field| Bson::Document(doc! { "$avg": non_null(field) }),
             AggregateFunction::Min => |field| Bson::Document(doc! { "$min": non_null(field) }),
@@ -388,16 +388,23 @@ mod tests {
         let monthly = time_bucket("3 months", Bson::String("$at".into()), None).unwrap();
         assert_eq!(
             monthly,
-            Bson::Document(doc! { "$dateTrunc": { "date": "$at", "unit": "month", "binSize": 3_i64 } })
+            Bson::Document(
+                doc! { "$dateTrunc": { "date": "$at", "unit": "month", "binSize": 3_i64 } }
+            )
         );
         let yearly = time_bucket("2 years", Bson::String("$at".into()), None).unwrap();
         assert_eq!(
             yearly,
-            Bson::Document(doc! { "$dateTrunc": { "date": "$at", "unit": "year", "binSize": 2_i64 } })
+            Bson::Document(
+                doc! { "$dateTrunc": { "date": "$at", "unit": "year", "binSize": 2_i64 } }
+            )
         );
         assert!(time_bucket("1 month", Bson::Null, Some(Bson::Null)).is_err());
         let error = time_bucket("fortnight", Bson::Null, None).unwrap_err();
-        assert!(error.to_string().contains("not a time bucket width"), "{error}");
+        assert!(
+            error.to_string().contains("not a time bucket width"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -409,7 +416,10 @@ mod tests {
     #[test]
     fn literals_protect_field_paths_and_documents() {
         assert_eq!(literal(Bson::Int32(3)), Bson::Int32(3));
-        assert_eq!(literal(Bson::String("plain".into())), Bson::String("plain".into()));
+        assert_eq!(
+            literal(Bson::String("plain".into())),
+            Bson::String("plain".into())
+        );
         assert_eq!(
             literal(Bson::String("$price".into())),
             Bson::Document(doc! { "$literal": "$price" })
@@ -423,7 +433,10 @@ mod tests {
     #[test]
     fn functions_map_to_operators() {
         let field = || Bson::String("$name".into());
-        assert_eq!(function("LOWER", vec![field()]).unwrap(), Bson::Document(doc! { "$toLower": "$name" }));
+        assert_eq!(
+            function("LOWER", vec![field()]).unwrap(),
+            Bson::Document(doc! { "$toLower": "$name" })
+        );
         assert!(function("lower", vec![]).is_err());
         assert_eq!(
             function("substr", vec![field(), Bson::Int32(2), Bson::Int32(3)]).unwrap(),
@@ -446,7 +459,9 @@ mod tests {
         assert_eq!(distinct.op, Bson::Document(doc! { "$addToSet": "$owner" }));
         assert_eq!(
             distinct.output("n"),
-            Bson::Document(doc! { "$size": { "$filter": { "input": "$n", "cond": { "$ne": ["$$this", Bson::Null] } } } })
+            Bson::Document(
+                doc! { "$size": { "$filter": { "input": "$n", "cond": { "$ne": ["$$this", Bson::Null] } } } }
+            )
         );
         assert!(accumulator(AggregateFunction::Sum, None, false).is_err());
     }

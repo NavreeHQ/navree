@@ -139,7 +139,10 @@ pub mod option_date_time {
                 Ok(None)
             }
 
-            fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+            fn visit_some<D: Deserializer<'de>>(
+                self,
+                deserializer: D,
+            ) -> Result<Self::Value, D::Error> {
                 super::date_time::deserialize(deserializer).map(Some)
             }
         }

@@ -286,9 +286,9 @@ mod tests {
         assert!(error.is_unique_violation());
         assert!(!error.is_not_found());
         assert!(
-            error
-                .to_string()
-                .ends_with("mongodb: E11000 duplicate key error collection: app.users index: email_1"),
+            error.to_string().ends_with(
+                "mongodb: E11000 duplicate key error collection: app.users index: email_1"
+            ),
             "{error}"
         );
         let source = error.source().unwrap().downcast_ref::<DbErr>().unwrap();

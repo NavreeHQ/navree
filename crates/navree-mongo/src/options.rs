@@ -171,9 +171,8 @@ impl MongoOptions {
         if let (Some(min), Some(max)) = (self.min_pool_size, self.max_pool_size)
             && min > max
         {
-            problems.push(
-                "database.mongodb.min_pool_size must not exceed max_pool_size".to_owned(),
-            );
+            problems
+                .push("database.mongodb.min_pool_size must not exceed max_pool_size".to_owned());
         }
         if self.max_pool_size == Some(0) {
             problems.push("database.mongodb.max_pool_size must be at least 1".to_owned());
@@ -200,7 +199,10 @@ impl MongoOptions {
                     .to_owned(),
             );
         }
-        for (key, name) in [("sequences", &self.sequences), ("migrations", &self.migrations)] {
+        for (key, name) in [
+            ("sequences", &self.sequences),
+            ("migrations", &self.migrations),
+        ] {
             if let Some(problem) = collection_problem(name) {
                 problems.push(format!("database.mongodb.{key} {problem}"));
             }
@@ -241,14 +243,14 @@ impl MongoOptions {
     /// The driver's options for connection string `url`, with these
     /// options applied over the URL's own.
     pub(crate) async fn client_options(&self, url: &str) -> Result<ClientOptions, MongoError> {
-        let mut client = ClientOptions::parse(url).await.map_err(|error| {
-            MongoError::Options {
+        let mut client = ClientOptions::parse(url)
+            .await
+            .map_err(|error| MongoError::Options {
                 problems: vec![format!(
                     "the MongoDB URL {} does not parse: {error}",
                     redact_url(url)
                 )],
-            }
-        })?;
+            })?;
         if let Some(app_name) = &self.app_name {
             client.app_name = Some(app_name.clone());
         }
@@ -343,7 +345,9 @@ pub(crate) fn redact_url(url: &str) -> String {
     let (authority, tail) = rest.split_at(host_end);
     match authority.rsplit_once('@') {
         Some((credentials, hosts)) => {
-            let user = credentials.split_once(':').map_or(credentials, |(user, _)| user);
+            let user = credentials
+                .split_once(':')
+                .map_or(credentials, |(user, _)| user);
             format!("{scheme}://{user}:***@{hosts}{tail}")
         }
         None => url.to_owned(),
@@ -391,14 +395,16 @@ fn collection_problem(name: &str) -> Option<String> {
 
 /// The read preference named `name` (camelCase or snake_case).
 fn read_preference(name: &str) -> Option<ReadPreference> {
-    Some(match name.trim().to_ascii_lowercase().replace('_', "").as_str() {
-        "primary" => ReadPreference::Primary,
-        "primarypreferred" => ReadPreference::PrimaryPreferred { options: None },
-        "secondary" => ReadPreference::Secondary { options: None },
-        "secondarypreferred" => ReadPreference::SecondaryPreferred { options: None },
-        "nearest" => ReadPreference::Nearest { options: None },
-        _ => return None,
-    })
+    Some(
+        match name.trim().to_ascii_lowercase().replace('_', "").as_str() {
+            "primary" => ReadPreference::Primary,
+            "primarypreferred" => ReadPreference::PrimaryPreferred { options: None },
+            "secondary" => ReadPreference::Secondary { options: None },
+            "secondarypreferred" => ReadPreference::SecondaryPreferred { options: None },
+            "nearest" => ReadPreference::Nearest { options: None },
+            _ => return None,
+        },
+    )
 }
 
 /// The read concern named `name`.
@@ -425,7 +431,6 @@ fn acknowledgment(w: &str) -> Acknowledgment {
         Acknowledgment::Custom(w.to_owned())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -454,12 +459,18 @@ mod tests {
         );
         let problems = options.check().unwrap_err();
         let text = problems.join("\n");
-        assert!(text.contains("database.mongodb.url must start with mongodb://"), "{text}");
+        assert!(
+            text.contains("database.mongodb.url must start with mongodb://"),
+            "{text}"
+        );
         assert!(text.contains("connect_timeout_ms"), "{text}");
         assert!(text.contains("`closest`"), "{text}");
         assert!(text.contains("min_pool_size"), "{text}");
         assert!(text.contains("`system.migrations`"), "{text}");
-        assert!(text.contains("`Bad Name` is not a connection name"), "{text}");
+        assert!(
+            text.contains("`Bad Name` is not a connection name"),
+            "{text}"
+        );
         assert!(text.contains("connections.Bad Name.database"), "{text}");
         assert!(!text.contains("hunter2"), "{text}");
     }
@@ -481,12 +492,18 @@ mod tests {
             read_preference("secondary_preferred"),
             Some(ReadPreference::SecondaryPreferred { .. })
         ));
-        assert!(matches!(read_preference("primaryPreferred"), Some(ReadPreference::PrimaryPreferred { .. })));
+        assert!(matches!(
+            read_preference("primaryPreferred"),
+            Some(ReadPreference::PrimaryPreferred { .. })
+        ));
         assert!(read_concern("MAJORITY").is_some());
         assert!(read_concern("eventual").is_none());
         assert_eq!(acknowledgment("majority"), Acknowledgment::Majority);
         assert_eq!(acknowledgment("2"), Acknowledgment::Nodes(2));
-        assert_eq!(acknowledgment("dc-east"), Acknowledgment::Custom("dc-east".into()));
+        assert_eq!(
+            acknowledgment("dc-east"),
+            Acknowledgment::Custom("dc-east".into())
+        );
     }
 
     #[tokio::test]
@@ -504,8 +521,14 @@ mod tests {
         assert_eq!(concern.w, Some(Acknowledgment::Majority));
         assert_eq!(concern.journal, Some(true));
         assert_eq!(MongoOptions::database_of(None, &client), "crm");
-        assert_eq!(MongoOptions::database_of(Some(&"other".to_owned()), &client), "other");
-        let error = options.client_options("mongodb://ada:pw@").await.unwrap_err();
+        assert_eq!(
+            MongoOptions::database_of(Some(&"other".to_owned()), &client),
+            "other"
+        );
+        let error = options
+            .client_options("mongodb://ada:pw@")
+            .await
+            .unwrap_err();
         assert!(!error.to_string().contains(":pw@"), "{error}");
     }
 }

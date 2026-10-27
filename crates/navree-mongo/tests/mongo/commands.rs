@@ -59,13 +59,20 @@ fn conditions_become_query_operators() {
     insta::assert_snapshot!(show(
         &table("deals")
             .where_json_contains("tags", ["vip", "renewal"])
-            .where_json_contains("meta", serde_json::json!({ "source": "web", "flags": { "hot": true } }))
+            .where_json_contains(
+                "meta",
+                serde_json::json!({ "source": "web", "flags": { "hot": true } })
+            )
             .where_json_length("tags", Operator::Gte, 2)
             .where_(col("meta").op("?", "labels"))
     ));
     insta::assert_snapshot!(show(
         &table("deals")
-            .where_date("closes_on", "=", NaiveDate::from_ymd_opt(2026, 6, 1).unwrap())
+            .where_date(
+                "closes_on",
+                "=",
+                NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
+            )
             .where_month("closes_on", ">=", 6)
             .where_year("closes_on", "=", 2026)
             .where_day("closes_on", "<", 15)
@@ -73,7 +80,9 @@ fn conditions_become_query_operators() {
     insta::assert_snapshot!(show(
         &table("deals")
             .where_column("amount", ">", "budget")
-            .where_group(|g| g.where_(col("stage").eq("won")).or_where(col("amount").gt(100)))
+            .where_group(|g| g
+                .where_(col("stage").eq("won"))
+                .or_where(col("amount").gt(100)))
             .or_where(col("pinned").eq(true))
     ));
     insta::assert_snapshot!(show(
@@ -86,7 +95,9 @@ fn conditions_become_query_operators() {
 #[test]
 fn global_scopes_join_the_filter() {
     let workspace = acme();
-    let scoped = WORKSPACE.sync_scope(workspace, || show(&Note::query().where_(Note::BODY.eq("hi"))));
+    let scoped = WORKSPACE.sync_scope(workspace, || {
+        show(&Note::query().where_(Note::BODY.eq("hi")))
+    });
     insta::assert_snapshot!(scoped);
 }
 
@@ -159,7 +170,12 @@ fn groups_become_group_stages() {
 
 #[test]
 fn distinct_values_group_on_what_is_selected() {
-    insta::assert_snapshot!(show(&table("deals").select(["stage"]).distinct().order_by("stage")));
+    insta::assert_snapshot!(show(
+        &table("deals")
+            .select(["stage"])
+            .distinct()
+            .order_by("stage")
+    ));
     insta::assert_snapshot!(show(
         &Deal::query()
             .distinct_on([Deal::COMPANY_ID])
@@ -193,7 +209,12 @@ fn joins_are_lookups() {
     // A self-join: the alias hides the name, and NULL keys join nothing.
     insta::assert_snapshot!(show(
         &table("companies")
-            .left_join("companies as twins", "twins.country", "=", "companies.country")
+            .left_join(
+                "companies as twins",
+                "twins.country",
+                "=",
+                "companies.country"
+            )
             .where_null("twins._id")
             .select(["companies.name"])
     ));
@@ -201,8 +222,11 @@ fn joins_are_lookups() {
     insta::assert_snapshot!(show(
         &table("deals")
             .join_on("companies", |on| {
-                on.on("companies.founded_on", "<", "deals.closes_on")
-                    .or_on("companies.employees", ">", "deals.amount")
+                on.on("companies.founded_on", "<", "deals.closes_on").or_on(
+                    "companies.employees",
+                    ">",
+                    "deals.amount",
+                )
             })
             .select(["deals.title"])
     ));
@@ -220,7 +244,9 @@ fn subqueries_are_correlated_lookups() {
     insta::assert_snapshot!(show(
         &Deal::query().where_in_sub(
             Deal::COMPANY_ID,
-            Company::query().select([Company::ID]).where_(Company::COUNTRY.eq("NO")),
+            Company::query()
+                .select([Company::ID])
+                .where_(Company::COUNTRY.eq("NO")),
         )
     ));
     insta::assert_snapshot!(show(
@@ -239,8 +265,16 @@ fn unions_append_pipelines() {
         &table("companies")
             .select(["name"])
             .where_(col("country").eq("NO"))
-            .union_all(table("deals").select(["title"]).where_(col("amount").lt(10_000)))
-            .union(table("companies").select(["name"]).where_(col("country").eq("US")))
+            .union_all(
+                table("deals")
+                    .select(["title"])
+                    .where_(col("amount").lt(10_000))
+            )
+            .union(
+                table("companies")
+                    .select(["name"])
+                    .where_(col("country").eq("US"))
+            )
             .order_by("name")
             .limit(5)
     ));
@@ -268,14 +302,27 @@ fn aggregates_counts_and_existence() {
         arg: arg.map(Expr::col),
         distinct,
     };
-    let count = compile::aggregate(&won, &aggregate(AggregateFunction::Count, None, false)).unwrap();
+    let count =
+        compile::aggregate(&won, &aggregate(AggregateFunction::Count, None, false)).unwrap();
     insta::assert_snapshot!(format!("{count:#}"));
-    let sum = compile::aggregate(&won, &aggregate(AggregateFunction::Sum, Some("amount"), false)).unwrap();
+    let sum = compile::aggregate(
+        &won,
+        &aggregate(AggregateFunction::Sum, Some("amount"), false),
+    )
+    .unwrap();
     insta::assert_snapshot!(format!("{sum:#}"));
-    let distinct = compile::aggregate(&won, &aggregate(AggregateFunction::Count, Some("stage"), true)).unwrap();
+    let distinct = compile::aggregate(
+        &won,
+        &aggregate(AggregateFunction::Count, Some("stage"), true),
+    )
+    .unwrap();
     insta::assert_snapshot!(format!("{distinct:#}"));
     let limited = Deal::query().order_by_desc(Deal::AMOUNT).limit(3).into_ir();
-    let top = compile::aggregate(&limited, &aggregate(AggregateFunction::Avg, Some("amount"), false)).unwrap();
+    let top = compile::aggregate(
+        &limited,
+        &aggregate(AggregateFunction::Avg, Some("amount"), false),
+    )
+    .unwrap();
     insta::assert_snapshot!(format!("{top:#}"));
     let exists = compile::exists(&won).unwrap();
     insta::assert_snapshot!(format!("{exists:#}"));
@@ -285,7 +332,9 @@ fn aggregates_counts_and_existence() {
 fn native_documents_and_stages() {
     insta::assert_snapshot!(show(
         &Deal::query()
-            .where_(Filter::document(doc! { "tags": { "$elemMatch": { "$eq": "vip" } } }))
+            .where_(Filter::document(
+                doc! { "tags": { "$elemMatch": { "$eq": "vip" } } }
+            ))
             .or_where(Deal::AMOUNT.gt(1_000_000))
     ));
     let pipeline = Deal::query()
@@ -322,11 +371,32 @@ fn what_mongodb_lacks_is_refused() {
         [
             refused(Deal::query().where_raw("amount > ?", [5]).to_mongo()),
             refused(Deal::query().lock_for_update().to_mongo()),
-            refused(table("deals").right_join("companies", "companies._id", "=", "deals.company_id").to_mongo()),
-            refused(Deal::query().order_by_raw("amount DESC", Vec::<navree_orm::Value>::new()).to_mongo()),
-            refused(table("deals").select_expr(Expr::raw("now()", Vec::<navree_orm::Value>::new()), "now").to_mongo()),
-            refused(table("deals").select([Expr::col("amount").mul(Expr::val(2))]).to_mongo()),
-            refused(table("deals").select(["title"]).union(table("companies").select(["name", "country"])).to_mongo()),
+            refused(
+                table("deals")
+                    .right_join("companies", "companies._id", "=", "deals.company_id")
+                    .to_mongo()
+            ),
+            refused(
+                Deal::query()
+                    .order_by_raw("amount DESC", Vec::<navree_orm::Value>::new())
+                    .to_mongo()
+            ),
+            refused(
+                table("deals")
+                    .select_expr(Expr::raw("now()", Vec::<navree_orm::Value>::new()), "now")
+                    .to_mongo()
+            ),
+            refused(
+                table("deals")
+                    .select([Expr::col("amount").mul(Expr::val(2))])
+                    .to_mongo()
+            ),
+            refused(
+                table("deals")
+                    .select(["title"])
+                    .union(table("companies").select(["name", "country"]))
+                    .to_mongo()
+            ),
         ]
         .join("\n")
     );

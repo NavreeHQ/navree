@@ -7,9 +7,7 @@ use std::collections::HashMap;
 use navree_config::Config;
 use navree_kernel::{AppContext, BoxError};
 
-use super::{
-    MongoMigrateOptions, MongoMigrationReport, MongoMigrator, MongoRollbackOptions,
-};
+use super::{MongoMigrateOptions, MongoMigrationReport, MongoMigrator, MongoRollbackOptions};
 
 /// What an option takes.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -290,10 +288,19 @@ mod tests {
 
     #[test]
     fn options_parse_and_mistakes_are_explained() {
-        let parsed = ROLLBACK.parse(&args(&["--step", "2", "--pretend"])).unwrap();
+        let parsed = ROLLBACK
+            .parse(&args(&["--step", "2", "--pretend"]))
+            .unwrap();
         assert_eq!(parsed.number("step").unwrap(), Some(2));
         assert!(parsed.flag("pretend"));
-        assert_eq!(ROLLBACK.parse(&args(&["--batch=3"])).unwrap().number("batch").unwrap(), Some(3));
+        assert_eq!(
+            ROLLBACK
+                .parse(&args(&["--batch=3"]))
+                .unwrap()
+                .number("batch")
+                .unwrap(),
+            Some(3)
+        );
         let message = |spec: &Spec, list: &[&str]| match spec.parse(&args(list)) {
             Ok(_) => String::new(),
             Err(error) => error.to_string(),

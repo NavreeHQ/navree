@@ -290,7 +290,14 @@ impl MongoUow {
                 return Ok(());
             }
         }
-        let aborted = self.inner.state.session.lock().await.abort_transaction().await;
+        let aborted = self
+            .inner
+            .state
+            .session
+            .lock()
+            .await
+            .abort_transaction()
+            .await;
         *lock(&self.inner.phase) = Phase::RolledBack;
         lock(&self.inner.changes.0).clear();
         lock(&self.inner.after_commit).clear();
@@ -299,7 +306,14 @@ impl MongoUow {
 
     /// Aborts after a failure, keeping the first error.
     async fn abort(&self, phase: Phase) {
-        let result = self.inner.state.session.lock().await.abort_transaction().await;
+        let result = self
+            .inner
+            .state
+            .session
+            .lock()
+            .await
+            .abort_transaction()
+            .await;
         if let Err(error) = result {
             tracing::debug!(target: "navree_mongo::uow", %error, "aborting the transaction after a failure failed");
         }

@@ -299,16 +299,25 @@ mod tests {
         assert!(matches!(document.get("amount"), Some(Bson::Decimal128(_))));
         // Read back as relaxed extended JSON.
         let back = from_bson(Bson::Document(document));
-        assert_eq!(navree_orm::to_json(&back)["owner"], serde_json::json!({ "$oid": id.to_hex() }));
+        assert_eq!(
+            navree_orm::to_json(&back)["owner"],
+            serde_json::json!({ "$oid": id.to_hex() })
+        );
         assert_eq!(navree_orm::to_json(&back)["plain"], "text");
     }
 
     #[test]
     fn decimals_beyond_rust_decimal_read_as_text() {
         let huge: Decimal128 = "1.234567890123456789012345678901234E+40".parse().unwrap();
-        assert!(matches!(from_bson(Bson::Decimal128(huge)), Value::String(Some(_))));
+        assert!(matches!(
+            from_bson(Bson::Decimal128(huge)),
+            Value::String(Some(_))
+        ));
         let nan: Decimal128 = "NaN".parse().unwrap();
-        assert_eq!(from_bson(Bson::Decimal128(nan)), Value::String(Some("NaN".into())));
+        assert_eq!(
+            from_bson(Bson::Decimal128(nan)),
+            Value::String(Some("NaN".into()))
+        );
     }
 
     #[test]

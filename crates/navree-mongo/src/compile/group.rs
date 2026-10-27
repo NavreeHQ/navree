@@ -60,7 +60,11 @@ impl Post<'_> {
     /// The field under `_id` of a group expression equal to `expr`.
     fn group_field(&self, expr: &Expr) -> Option<&str> {
         let key = format!("{expr:?}");
-        if let Some((_, field)) = self.groups.iter().find(|(group, _)| format!("{group:?}") == key) {
+        if let Some((_, field)) = self
+            .groups
+            .iter()
+            .find(|(group, _)| format!("{group:?}") == key)
+        {
             return Some(field);
         }
         // A column matches a grouped column of the same name and path,
@@ -254,14 +258,15 @@ impl Post<'_> {
                         let r = self.value(cx, scope, pending, right)?;
                         expr(filter::compared(operator, l, r))
                     }
-                    (None, Operator::Like | Operator::NotLike | Operator::ILike | Operator::NotILike) => {
-                        expr(like(
-                            l,
-                            right,
-                            matches!(op, Operator::ILike | Operator::NotILike),
-                            matches!(op, Operator::NotLike | Operator::NotILike),
-                        )?)
-                    }
+                    (
+                        None,
+                        Operator::Like | Operator::NotLike | Operator::ILike | Operator::NotILike,
+                    ) => expr(like(
+                        l,
+                        right,
+                        matches!(op, Operator::ILike | Operator::NotILike),
+                        matches!(op, Operator::NotLike | Operator::NotILike),
+                    )?),
                     (None, Operator::Invalid(op)) => {
                         return Err(invalid(format!("`{op}` is not a known operator")));
                     }

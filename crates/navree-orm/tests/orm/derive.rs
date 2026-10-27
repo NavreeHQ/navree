@@ -309,7 +309,11 @@ fn document_models_declare_their_collection_driver_and_object_id_key() {
     let meta = AuditEvent::meta();
     assert_eq!(meta.table(), "audit_events");
     assert_eq!(meta.driver_name(), Some("mongodb"));
-    assert_eq!(meta.key_column(), "_id", "the field `id` is stored as `_id`");
+    assert_eq!(
+        meta.key_column(),
+        "_id",
+        "the field `id` is stored as `_id`"
+    );
     assert_eq!(meta.key_kind(), KeyKind::ObjectId);
     assert_eq!(AuditEvent::ID.name(), "_id");
     assert_eq!(meta.column("_id").unwrap().field(), "id");

@@ -144,7 +144,10 @@ impl<M: Model> ModelPipeline<M> {
     }
 
     /// The records (fields the stages add are their extras).
-    pub async fn get<E: MongoExecutor + ?Sized>(&self, exec: &E) -> Result<Collection<M>, OrmError> {
+    pub async fn get<E: MongoExecutor + ?Sized>(
+        &self,
+        exec: &E,
+    ) -> Result<Collection<M>, OrmError> {
         let documents = self.documents(exec).await?;
         let rows: Vec<Row> = documents.into_iter().map(model_row::<M>).collect();
         let target = exec.target(Access::Read).await?;

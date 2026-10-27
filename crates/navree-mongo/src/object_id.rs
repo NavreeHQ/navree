@@ -206,8 +206,9 @@ fn object_id(value: Value) -> Result<ObjectId, FieldError> {
         return Err(FieldError::Null);
     }
     match value {
-        Value::Enum(OptionEnum::Some(id)) => ObjectId::parse(&id.value)
-            .map_err(|error| FieldError::Invalid(error.to_string())),
+        Value::Enum(OptionEnum::Some(id)) => {
+            ObjectId::parse(&id.value).map_err(|error| FieldError::Invalid(error.to_string()))
+        }
         Value::String(Some(text)) => {
             ObjectId::parse(&text).map_err(|error| FieldError::Invalid(error.to_string()))
         }
@@ -283,11 +284,17 @@ mod tests {
     fn values_carry_the_type() {
         let id = ObjectId::parse("65f1c0ffee0000000000002a").unwrap();
         let value = Field::to_value(&id);
-        assert_eq!(navree_orm::to_json(&value), serde_json::json!("65f1c0ffee0000000000002a"));
+        assert_eq!(
+            navree_orm::to_json(&value),
+            serde_json::json!("65f1c0ffee0000000000002a")
+        );
         assert_eq!(<ObjectId as Field>::from_value(value).unwrap(), id);
         assert!(navree_orm::is_null(&<ObjectId as Field>::null()));
         assert!(navree_orm::same_value(&id.to_value(), &id.to_value()));
-        assert!(!navree_orm::same_value(&id.to_value(), &ObjectId::new().to_value()));
+        assert!(!navree_orm::same_value(
+            &id.to_value(),
+            &ObjectId::new().to_value()
+        ));
     }
 
     #[test]

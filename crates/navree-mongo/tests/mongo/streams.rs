@@ -20,7 +20,12 @@ async fn cursors_stream_records_batch_by_batch() {
     table("tickets")
         .insert(
             mongo,
-            (1..=TICKETS).map(|n| [("_id", Value::from(n)), ("subject", Value::from(format!("#{n}")))]),
+            (1..=TICKETS).map(|n| {
+                [
+                    ("_id", Value::from(n)),
+                    ("subject", Value::from(format!("#{n}"))),
+                ]
+            }),
         )
         .await
         .unwrap();
@@ -32,7 +37,10 @@ async fn cursors_stream_records_batch_by_batch() {
         .await
         .unwrap();
     assert_eq!(subjects.len(), 250);
-    assert_eq!((subjects[0].as_str(), subjects[249].as_str()), ("#1", "#250"));
+    assert_eq!(
+        (subjects[0].as_str(), subjects[249].as_str()),
+        ("#1", "#250")
+    );
 
     // Filters, orders and limits stream; so do pipelines.
     let last: Vec<i64> = Ticket::query()
@@ -73,7 +81,12 @@ async fn a_unit_of_work_streams_in_its_session() {
     table("tickets")
         .insert(
             mongo,
-            (1..=TICKETS).map(|n| [("_id", Value::from(n)), ("subject", Value::from(format!("#{n}")))]),
+            (1..=TICKETS).map(|n| {
+                [
+                    ("_id", Value::from(n)),
+                    ("subject", Value::from(format!("#{n}"))),
+                ]
+            }),
         )
         .await
         .unwrap();
@@ -94,12 +107,30 @@ async fn a_unit_of_work_streams_in_its_session() {
         if seen == 150 {
             // Past the first batch: other commands run in the session
             // between the cursor's batches.
-            assert_eq!(Ticket::query().where_(Ticket::SUBJECT.eq("closed")).count(&uow).await.unwrap(), 50);
+            assert_eq!(
+                Ticket::query()
+                    .where_(Ticket::SUBJECT.eq("closed"))
+                    .count(&uow)
+                    .await
+                    .unwrap(),
+                50
+            );
         }
     }
     drop(tickets);
-    assert_eq!((seen, closed), (250, 50), "the cursor sees the unit of work's writes");
+    assert_eq!(
+        (seen, closed),
+        (250, 50),
+        "the cursor sees the unit of work's writes"
+    );
     uow.rollback().await.unwrap();
-    assert_eq!(Ticket::query().where_(Ticket::SUBJECT.eq("closed")).count(mongo).await.unwrap(), 0);
+    assert_eq!(
+        Ticket::query()
+            .where_(Ticket::SUBJECT.eq("closed"))
+            .count(mongo)
+            .await
+            .unwrap(),
+        0
+    );
     t.cleanup().await;
 }

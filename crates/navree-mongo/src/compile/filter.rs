@@ -230,7 +230,11 @@ pub(crate) fn condition(
         Where::JsonContains { column, value, not } => {
             let path = field_path_of(cx, scope, column, "a JSON containment check")?;
             let filter = contains(&path, value)?;
-            if *not { super::filter::not(filter) } else { filter }
+            if *not {
+                super::filter::not(filter)
+            } else {
+                filter
+            }
         }
         Where::JsonLength { column, op, length } => {
             let path = field_path_of(cx, scope, column, "a JSON length check")?;
@@ -449,7 +453,10 @@ fn compare(
             "the PostgreSQL operator `{op}` between computed values"
         ))),
         Operator::Invalid(op) => Err(unknown_operator(op)),
-        other => Err(unsupported(format!("the operator `{}`", operator_text(other)))),
+        other => Err(unsupported(format!(
+            "the operator `{}`",
+            operator_text(other)
+        ))),
     }
 }
 
@@ -495,7 +502,10 @@ fn field_compare(path: &str, op: &Operator, value: &Value) -> Result<Document, O
         )),
         Operator::Postgres(op) => postgres(path, op, value),
         Operator::Invalid(op) => Err(unknown_operator(op)),
-        other => Err(unsupported(format!("the operator `{}`", operator_text(other)))),
+        other => Err(unsupported(format!(
+            "the operator `{}`",
+            operator_text(other)
+        ))),
     }
 }
 
@@ -526,7 +536,9 @@ fn postgres(path: &str, op: &str, value: &Value) -> Result<Document, OrmError> {
     };
     let exists = |key: &str| -> Result<Document, OrmError> {
         if key.is_empty() || key.starts_with('$') || key.contains('.') {
-            return Err(invalid(format!("`{key}` is not a key MongoDB can look for")));
+            return Err(invalid(format!(
+                "`{key}` is not a key MongoDB can look for"
+            )));
         }
         Ok(doc! { format!("{path}.{key}"): { "$exists": true } })
     };
@@ -542,9 +554,8 @@ fn postgres(path: &str, op: &str, value: &Value) -> Result<Document, OrmError> {
             .collect::<Result<Vec<_>, _>>()?)),
         "@>" => {
             let json = match navree_orm::to_json(value) {
-                serde_json::Value::String(text) => serde_json::from_str(&text).map_err(|_| {
-                    invalid(format!("`@>` takes JSON, and `{text}` is not JSON"))
-                })?,
+                serde_json::Value::String(text) => serde_json::from_str(&text)
+                    .map_err(|_| invalid(format!("`@>` takes JSON, and `{text}` is not JSON")))?,
                 other => other,
             };
             contains(path, &json)
@@ -687,11 +698,14 @@ fn date_part(
 ) -> Result<Document, OrmError> {
     let Some(operator) = comparison(op) else {
         return Err(invalid(format!(
-            "a date-part condition compares with =, <>, <, <=, > or >=, not `{}`", operator_text(op)
+            "a date-part condition compares with =, <>, <, <=, > or >=, not `{}`",
+            operator_text(op)
         )));
     };
     let Expr::Value(value) = value else {
-        return Err(unsupported("a date-part condition against a computed value"));
+        return Err(unsupported(
+            "a date-part condition against a computed value",
+        ));
     };
     let date = expr::value(cx, scope, pending, expr)?;
     let (left, right) = match part {
@@ -787,7 +801,10 @@ fn contains(path: &str, value: &serde_json::Value) -> Result<Document, OrmError>
             doc! { path: { "$type": "array" } }
         }
         serde_json::Value::Array(items) => {
-            if items.iter().all(|item| !item.is_object() && !item.is_array()) {
+            if items
+                .iter()
+                .all(|item| !item.is_object() && !item.is_array())
+            {
                 let items = items
                     .iter()
                     .map(json_to_bson)
@@ -829,7 +846,8 @@ fn json_length(path: &str, op: &Operator, length: i64) -> Result<Document, OrmEr
     }
     let Some(operator) = comparison(op) else {
         return Err(invalid(format!(
-            "a JSON length compares with =, <>, <, <=, > or >=, not `{}`", operator_text(op)
+            "a JSON length compares with =, <>, <, <=, > or >=, not `{}`",
+            operator_text(op)
         )));
     };
     let field = format!("${path}");
@@ -894,7 +912,6 @@ fn full_text(query: &str, options: &FullText) -> Result<Document, OrmError> {
     Ok(doc! { "$text": text })
 }
 
-
 #[cfg(test)]
 mod tests {
     use navree_orm::ir::TableRef;
@@ -924,7 +941,10 @@ mod tests {
 
     #[test]
     fn comparisons_use_the_query_language() {
-        assert_eq!(compile(cmp("stage", "=", "won")).unwrap(), doc! { "stage": "won" });
+        assert_eq!(
+            compile(cmp("stage", "=", "won")).unwrap(),
+            doc! { "stage": "won" }
+        );
         assert_eq!(
             compile(cmp("deals.amount", ">=", 100_i64)).unwrap(),
             doc! { "amount": { "$gte": 100_i64 } }
@@ -937,7 +957,10 @@ mod tests {
             compile(cmp("closed_at", "=", Value::String(None))).unwrap(),
             doc! { "closed_at": Bson::Null }
         );
-        assert_eq!(compile(cmp("amount", ">", Value::BigInt(None))).unwrap(), nothing());
+        assert_eq!(
+            compile(cmp("amount", ">", Value::BigInt(None))).unwrap(),
+            nothing()
+        );
         assert_eq!(
             compile(cmp("meta->tags->0", "=", "vip")).unwrap(),
             doc! { "meta.tags.0": "vip" }
@@ -953,7 +976,10 @@ mod tests {
         );
         assert!(compile(cmp("flags", "<<", 1_i64)).is_err());
         let error = compile(cmp("stage", "=>", "x")).unwrap_err();
-        assert!(error.to_string().contains("not a known operator"), "{error}");
+        assert!(
+            error.to_string().contains("not a known operator"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1072,11 +1098,19 @@ mod tests {
     #[test]
     fn nulls_lists_and_ranges() {
         assert_eq!(
-            compile(Where::Null { expr: column("deleted_at"), not: false }).unwrap(),
+            compile(Where::Null {
+                expr: column("deleted_at"),
+                not: false
+            })
+            .unwrap(),
             doc! { "deleted_at": Bson::Null }
         );
         assert_eq!(
-            compile(Where::Null { expr: column("deleted_at"), not: true }).unwrap(),
+            compile(Where::Null {
+                expr: column("deleted_at"),
+                not: true
+            })
+            .unwrap(),
             doc! { "deleted_at": { "$ne": Bson::Null } }
         );
         let list = |not| Where::In {
@@ -1084,9 +1118,19 @@ mod tests {
             values: InValues::List(vec![Expr::Value("won".into()), Expr::Value("lost".into())]),
             not,
         };
-        assert_eq!(compile(list(false)).unwrap(), doc! { "stage": { "$in": ["won", "lost"] } });
-        assert_eq!(compile(list(true)).unwrap(), doc! { "stage": { "$nin": ["won", "lost"] } });
-        let empty = Where::In { expr: column("stage"), values: InValues::List(Vec::new()), not: false };
+        assert_eq!(
+            compile(list(false)).unwrap(),
+            doc! { "stage": { "$in": ["won", "lost"] } }
+        );
+        assert_eq!(
+            compile(list(true)).unwrap(),
+            doc! { "stage": { "$nin": ["won", "lost"] } }
+        );
+        let empty = Where::In {
+            expr: column("stage"),
+            values: InValues::List(Vec::new()),
+            not: false,
+        };
         assert_eq!(compile(empty).unwrap(), doc! { "stage": { "$in": [] } });
         let range = |not| Where::Between {
             expr: column("amount"),
@@ -1179,7 +1223,11 @@ mod tests {
             doc! { "meta.tags": { "$all": ["a", "b"] } }
         );
         assert_eq!(
-            compile(contains(serde_json::json!({ "level": 2, "by": "ada" }), true)).unwrap(),
+            compile(contains(
+                serde_json::json!({ "level": 2, "by": "ada" }),
+                true
+            ))
+            .unwrap(),
             doc! { "$nor": [{ "meta.tags.by": "ada", "meta.tags.level": 2 }] }
         );
         let length = |op: &str| Where::JsonLength {
@@ -1187,12 +1235,18 @@ mod tests {
             op: Operator::from(op),
             length: 2,
         };
-        assert_eq!(compile(length("=")).unwrap(), doc! { "meta.tags": { "$size": 2_i64 } });
+        assert_eq!(
+            compile(length("=")).unwrap(),
+            doc! { "meta.tags": { "$size": 2_i64 } }
+        );
         assert_eq!(
             compile(length(">")).unwrap(),
             doc! { "$expr": { "$gt": [{ "$cond": [{ "$isArray": "$meta.tags" }, { "$size": "$meta.tags" }, Bson::Null] }, 2_i64] } }
         );
-        assert_eq!(compile(cmp("meta", "?", "vip")).unwrap(), doc! { "meta.vip": { "$exists": true } });
+        assert_eq!(
+            compile(cmp("meta", "?", "vip")).unwrap(),
+            doc! { "meta.vip": { "$exists": true } }
+        );
     }
 
     #[test]
@@ -1219,11 +1273,18 @@ mod tests {
 
     #[test]
     fn raw_sql_and_foreign_native_filters_are_refused() {
-        let error = compile(Where::Raw { sql: "1 = 1".into(), values: Vec::new() }).unwrap_err();
+        let error = compile(Where::Raw {
+            sql: "1 = 1".into(),
+            values: Vec::new(),
+        })
+        .unwrap_err();
         assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
         assert!(error.to_string().contains("Filter::document"), "{error}");
         let native = navree_orm::ir::NativeFilter::new("mongodb", doc! { "$where": "x" });
-        assert_eq!(compile(Where::Native(native)).unwrap(), doc! { "$where": "x" });
+        assert_eq!(
+            compile(Where::Native(native)).unwrap(),
+            doc! { "$where": "x" }
+        );
         let other = navree_orm::ir::NativeFilter::new("memory", "x == 1".to_owned());
         assert!(compile(Where::Native(other)).is_err());
     }
