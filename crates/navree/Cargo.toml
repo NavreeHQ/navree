@@ -29,6 +29,7 @@ full = [
     "mail",
     "notify",
     "observe",
+    "orm",
     "queue",
     "realtime",
     "schedule",
@@ -70,6 +71,13 @@ queue = ["dep:navree-queue", "db"]
 schedule = ["dep:navree-schedule", "db"]
 access = ["dep:navree-access", "http", "db"]
 notify = ["dep:navree-notify", "http", "db", "mail"]
+## The ORM: `#[derive(Model)]` models, the query builder, records,
+## collections and pagination on navree-db's pool and unit of work.
+orm = [
+    "dep:navree-orm",
+    "db",
+    "http",
+]
 ## L5
 auth = [
     "dep:navree-auth",
@@ -204,6 +212,7 @@ navree-log = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
+navree-orm = { workspace = true, optional = true }
 navree-queue = { workspace = true, optional = true }
 navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
