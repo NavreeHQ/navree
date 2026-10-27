@@ -252,7 +252,7 @@ pub fn builder() -> TestAppBuilder {
         .module(MailModule::for_root(MailOptions {
             from: "Navree <hello@navree.test>".into(),
             transport: TransportConfig::Array,
-            queue: None,
+            ..MailOptions::default()
         }))
         .module(AccessModule::for_root(access()))
         .module(FixturesModule)

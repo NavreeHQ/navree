@@ -77,6 +77,12 @@ impl CurrentOrganization {
         &self.0.organization
     }
 
+    /// The scope to send this organization's mail with
+    /// (`mailer.for_scope(&organization.mail_scope())`).
+    pub fn mail_scope(&self) -> navree_mail::MailScope {
+        navree_mail::MailScope::organization(self.id())
+    }
+
     /// The signed-in user's membership.
     pub fn member(&self) -> &OrgMember {
         &self.0.member

@@ -3,6 +3,7 @@
 use std::fmt;
 use std::sync::OnceLock;
 
+use lettre::message::header::{HeaderName, HeaderValue};
 use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::AsyncSmtpTransportBuilder;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -10,7 +11,7 @@ use navree_kernel::BoxFuture;
 use url::Url;
 
 use crate::message::mailbox;
-use crate::{MailError, MailTransport, Message};
+use crate::{DkimSigner, MailError, MailTransport, Message};
 
 /// How an [`SmtpTransport`] secures its connection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +46,10 @@ pub enum SmtpTls {
 ///
 /// The connection (and the pool's background task) is created on the first
 /// send, so building the transport needs no network and no runtime.
+///
+/// With a [`DkimSigner`] ([`with_dkim`](SmtpTransport::with_dkim), or
+/// `dkim` in the transport's settings), mail whose sender is in the
+/// signing domain (or a subdomain) gets a `DKIM-Signature` header.
 pub struct SmtpTransport {
     builder: AsyncSmtpTransportBuilder,
     inner: OnceLock<AsyncSmtpTransport<Tokio1Executor>>,
@@ -52,6 +57,7 @@ pub struct SmtpTransport {
     port: u16,
     tls: SmtpTls,
     authenticated: bool,
+    dkim: Option<DkimSigner>,
 }
 
 impl SmtpTransport {
@@ -90,7 +96,49 @@ impl SmtpTransport {
             port: parsed.port().unwrap_or(default_port),
             tls,
             authenticated: !parsed.username().is_empty(),
+            dkim: None,
         })
+    }
+
+    /// This transport, DKIM-signing mail from `signer`'s domain.
+    #[must_use]
+    pub fn with_dkim(mut self, signer: DkimSigner) -> Self {
+        self.dkim = Some(signer);
+        self
+    }
+
+    /// The DKIM signer, if any.
+    pub fn dkim(&self) -> Option<&DkimSigner> {
+        self.dkim.as_ref()
+    }
+
+    /// The message as it goes on the wire: lettre's formatting, with a
+    /// `DKIM-Signature` header first when the sender's domain is signed.
+    /// `None` when nothing is signed (lettre then sends the message itself).
+    pub fn signed_bytes(&self, message: &Message) -> Result<Option<Vec<u8>>, MailError> {
+        self.sign_email(message, &to_lettre(message)?)
+    }
+
+    /// `email` (built from `message`) signed, when its sender's domain is.
+    fn sign_email(
+        &self,
+        message: &Message,
+        email: &lettre::Message,
+    ) -> Result<Option<Vec<u8>>, MailError> {
+        let Some(signer) = &self.dkim else {
+            return Ok(None);
+        };
+        if !message
+            .sender_domain()
+            .is_some_and(|domain| signer.applies_to(&domain))
+        {
+            return Ok(None);
+        }
+        let formatted = email.formatted();
+        let header = signer.sign(&formatted)?;
+        let mut bytes = header.into_bytes();
+        bytes.extend_from_slice(&formatted);
+        Ok(Some(bytes))
     }
 
     /// The server's host name.
@@ -118,14 +166,36 @@ impl MailTransport for SmtpTransport {
     fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<(), MailError>> {
         Box::pin(async move {
             let email = to_lettre(message)?;
-            self.transport()
-                .send(email)
-                .await
-                .map_err(|error| MailError::Transport {
-                    transport: "smtp",
-                    source: Box::new(error),
-                })?;
+            let result = match self.sign_email(message, &email)? {
+                Some(bytes) => self.transport().send_raw(email.envelope(), &bytes).await,
+                None => self.transport().send(email).await,
+            };
+            result.map_err(|error| MailError::Transport {
+                transport: "smtp",
+                source: Box::new(error),
+            })?;
             Ok(())
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "smtp"
+    }
+
+    /// Connects and authenticates (no message is sent).
+    fn check(&self) -> BoxFuture<'_, Result<(), MailError>> {
+        Box::pin(async move {
+            match self.transport().test_connection().await {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(MailError::Unusable(format!(
+                    "the SMTP server at {}:{} did not accept the connection",
+                    self.host, self.port
+                ))),
+                Err(error) => Err(MailError::Unusable(format!(
+                    "cannot connect to the SMTP server at {}:{}: {error}",
+                    self.host, self.port
+                ))),
+            }
         })
     }
 }
@@ -160,6 +230,14 @@ fn to_lettre(message: &Message) -> Result<lettre::Message, MailError> {
     }
     if let Some(reply_to) = &message.reply_to {
         builder = builder.reply_to(mailbox("reply_to", reply_to)?);
+    }
+    for (name, value) in &message.headers {
+        let header_name =
+            HeaderName::new_from_ascii(name.clone()).map_err(|_| MailError::Header {
+                name: name.clone(),
+                reason: "a header name is printable ASCII without `:` or spaces",
+            })?;
+        builder = builder.raw_header(HeaderValue::new(header_name, value.clone()));
     }
     let built = match (&message.html, &message.text) {
         (Some(html), Some(text)) => builder.multipart(MultiPart::alternative_plain_html(

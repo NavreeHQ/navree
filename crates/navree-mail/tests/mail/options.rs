@@ -101,6 +101,7 @@ fn options_read_environment_variables() {
             from: "Acme <billing@acme.test>".to_owned(),
             transport: TransportConfig::smtp("smtp://localhost:1025"),
             queue: Some("mail".to_owned()),
+            ..MailOptions::default()
         }
     );
 

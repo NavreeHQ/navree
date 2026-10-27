@@ -92,7 +92,16 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-api", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
-    rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view"]),
+    // Mail: API transports over navree-http-client; the delivery log,
+    // suppressions, the outbox and tenant transports in navree-db (a
+    // same-layer edge, like navree-queue -> navree-schedule), their routes
+    // on navree-http, events through navree-events, credentials sealed and
+    // DKIM signed with navree-crypto; navree-testing backs its tests.
+    rule("navree-mail", 3, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view",
+        "navree-http", "navree-crypto", "navree-events", "navree-http-client", "navree-db",
+        "navree-testing",
+    ]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     // Time zones: zones, local days, send windows, holidays; the
