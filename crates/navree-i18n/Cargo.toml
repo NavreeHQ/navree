@@ -15,15 +15,14 @@ axum = { workspace = true }
 chrono = { workspace = true }
 fixed_decimal = { workspace = true }
 fluent-bundle = { workspace = true }
-fluent-langneg = { workspace = true }
 fluent-syntax = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
+icu_calendar = { workspace = true }
 icu_datetime = { workspace = true }
 icu_decimal = { workspace = true }
 icu_locale_core = { workspace = true }
 intl-memoizer = { workspace = true }
-intl_pluralrules = { workspace = true }
 minijinja = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -49,7 +48,6 @@ uuid = { workspace = true }
 [dev-dependencies]
 garde = { workspace = true }
 navree-access = { workspace = true }
-navree-events = { workspace = true }
 navree-mail = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }

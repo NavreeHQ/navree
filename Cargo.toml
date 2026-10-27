@@ -285,20 +285,17 @@ rmcp = { version = "3.7.0", default-features = false, features = [
     "transport-streamable-http-server",
 ] }
 async-trait = "0.1.92"
-# Localization (navree-i18n): Fluent messages, locale negotiation, and
-# ICU4X decimal and date formatting with compiled data (pure Rust).
+# Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
+# formatting with compiled data (pure Rust; Gregorian dates only).
 fluent-bundle = "0.16.0"
 fluent-syntax = "0.12.0"
-# 0.13: 0.14 pulls in ICU4X 1.x; fluent-bundle 0.16 uses 0.13 itself.
-fluent-langneg = "0.13.1"
 unic-langid = "0.9.6"
 intl-memoizer = "0.5.3"
 icu_decimal = "2.4.0"
-icu_datetime = "2.4.0"
+icu_datetime = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+icu_calendar = { version = "2.4.0", default-features = false }
 icu_locale_core = "2.4.0"
 fixed_decimal = "0.7.3"
-# Plural rules of fluent-bundle, checked per locale at boot.
-intl_pluralrules = "7.0.2"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI
