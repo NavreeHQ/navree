@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use navree_schema::{
-    ContinuousAggregate, Hypertable, IndexKind, MigrationContext, ReferentialAction, Schema,
-    SchemaConnection, SchemaError, SchemaOptions, raw,
+    ContinuousAggregate, DumpOptions, Hypertable, IndexKind, MigrationContext, ReferentialAction,
+    Schema, SchemaConnection, SchemaError, SchemaOptions, raw,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 
@@ -580,6 +580,71 @@ async fn pretending_reads_the_database_and_changes_nothing() {
         .unwrap();
     assert_eq!(cx.statements(), ["ALTER TABLE \"notes\" DROP COLUMN \"body\""]);
     assert!(Schema::new(&conn).has_column("notes", "body").await.unwrap());
+}
+
+#[tokio::test]
+async fn dumps_load_into_an_empty_database_and_dump_the_same() {
+    let source = TempSqlite::new();
+    let conn = source.connect().await;
+    let schema = Schema::new(&conn);
+    schema
+        .create("companies", |t| {
+            t.id();
+            t.string("name").unique();
+        })
+        .await
+        .unwrap();
+    schema
+        .create("deals", |t| {
+            t.uuid_primary();
+            t.foreign_id("company_id").constrained().cascade_on_delete();
+            t.string("title");
+            t.integer("cents").stored_as("1 * 100");
+            t.index("title").where_raw("title <> ''");
+        })
+        .await
+        .unwrap();
+    schema
+        .create("navree_migrations", |t| {
+            t.string("module");
+            t.string("name");
+            t.big_integer("batch");
+            t.primary(["module", "name"]);
+        })
+        .await
+        .unwrap();
+    exec(
+        &conn,
+        "CREATE VIEW big_deals AS SELECT title FROM deals WHERE cents > 100;\n\
+         CREATE TRIGGER deals_stamp AFTER INSERT ON deals BEGIN UPDATE deals SET title = CASE WHEN new.title = '' THEN 'untitled' ELSE new.title END WHERE id = new.id; END;\n\
+         INSERT INTO companies (name) VALUES ('Acme ''Corp''');\n\
+         INSERT INTO navree_migrations VALUES ('crm', 'm0002_create_deals', 1), ('crm', 'm0001_create_companies', 1);",
+    )
+    .await;
+
+    let dump = schema
+        .dump(&DumpOptions::default().with_data("navree_migrations"))
+        .await
+        .unwrap();
+    insta::assert_snapshot!(dump);
+
+    let target = TempSqlite::new();
+    let fresh = target.connect().await;
+    let loaded = Schema::new(&fresh).load(&dump).await.unwrap();
+    assert_eq!(loaded, 9, "tables, indexes, the view, the trigger and two rows");
+    let again = Schema::new(&fresh)
+        .dump(&DumpOptions::default().with_data("navree_migrations"))
+        .await
+        .unwrap();
+    assert_eq!(again, dump, "loading a dump and dumping again gives the same script");
+    assert_eq!(
+        texts(rows(&fresh, "SELECT module, name, batch FROM navree_migrations ORDER BY name").await),
+        [["crm", "m0001_create_companies", "1"], ["crm", "m0002_create_deals", "1"]]
+    );
+    assert!(
+        rows(&fresh, "SELECT * FROM companies").await.is_empty(),
+        "only the named tables' rows are dumped"
+    );
 }
 
 #[tokio::test]

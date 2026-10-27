@@ -59,6 +59,7 @@
 mod blueprint;
 mod column;
 mod connection;
+mod dump;
 mod error;
 mod grammar;
 mod index;
@@ -69,6 +70,7 @@ mod naming;
 mod options;
 mod rebuild;
 mod schema;
+mod script;
 mod target;
 mod timescale;
 mod value;
@@ -76,6 +78,7 @@ mod value;
 pub use blueprint::{Blueprint, Command};
 pub use column::{ColumnBuilder, ColumnDefinition, ColumnType, FluentIndex, Identity};
 pub use connection::{BoxFuture, SchemaConnection};
+pub use dump::DumpOptions;
 pub use error::{SchemaError, SchemaResult};
 pub use index::{
     Columns, ForeignKeyBuilder, ForeignKeyDefinition, IndexBuilder, IndexDefinition, IndexKind,
@@ -86,6 +89,7 @@ pub use interval::{Interval, IntervalUnit};
 pub use migration::{Migration, MigrationContext, SchemaMigration};
 pub use options::{KeyStrategy, MorphKey, SchemaOptions, TimescaleMode};
 pub use schema::Schema;
+pub use script::split_statements;
 pub use target::{Dialect, Target, Version};
 pub use timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPolicy};
 pub use value::{DefaultValue, Expression, raw};

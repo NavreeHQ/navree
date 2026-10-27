@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::blueprint::Blueprint;
 use crate::connection::SchemaConnection;
+use crate::dump::{self, DumpOptions};
 use crate::error::{SchemaError, SchemaResult};
 use crate::grammar::{self, Compiled, Context, ident, sqlite, table, timescale};
 use crate::index::{IndexKind, IndexRef};
@@ -11,6 +12,7 @@ use crate::inspect::{self, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, Vie
 use crate::migration::MigrationContext;
 use crate::naming::index_name;
 use crate::options::SchemaOptions;
+use crate::script::split_statements;
 use crate::target::{Dialect, Target};
 use crate::timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPolicy};
 
@@ -744,6 +746,49 @@ impl<'c> Schema<'c> {
                 .await?;
         }
         Ok(())
+    }
+
+    // ----- dumps -------------------------------------------------------------
+
+    /// The schema of the database as an SQL script: what `navree
+    /// schema:dump` writes. It is read from the database's catalogs (no
+    /// `pg_dump` or `mysqldump` needed) and covers tables, keys, indexes,
+    /// views, functions, triggers, comments, PostgreSQL types, sequences and
+    /// row-level security, and TimescaleDB's hypertables, compression,
+    /// policies and continuous aggregates; the rows of
+    /// [`DumpOptions::data`] tables follow as `INSERT`s.
+    ///
+    /// ```no_run
+    /// # async fn dump(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// use navree_schema::{DumpOptions, Schema};
+    ///
+    /// let script = Schema::new(conn)
+    ///     .dump(&DumpOptions::default().with_data("navree_migrations"))
+    ///     .await?;
+    /// std::fs::write("database/schema/postgres-schema.sql", script).unwrap();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn dump(&self, options: &DumpOptions) -> SchemaResult<String> {
+        let conn = self.connection(|| "dumping the schema".to_owned())?;
+        let target = self.target().await?;
+        dump::dump(conn, &target, options).await
+    }
+
+    /// Runs the statements of `script` (a [dump](Schema::dump), or any SQL
+    /// script) in order, and returns how many ran. Run it inside a
+    /// transaction: dumps change session settings (PostgreSQL's
+    /// `check_function_bodies`, MySQL's `FOREIGN_KEY_CHECKS`) that must
+    /// apply to every statement, and a failed load then leaves nothing
+    /// behind (on MySQL, whose DDL commits implicitly, the transaction only
+    /// keeps the statements on one connection).
+    pub async fn load(&self, script: &str) -> SchemaResult<usize> {
+        let target = self.target().await?;
+        let statements = split_statements(target.dialect(), script);
+        for statement in &statements {
+            self.execute(statement).await?;
+        }
+        Ok(statements.len())
     }
 
     // ----- TimescaleDB -------------------------------------------------------

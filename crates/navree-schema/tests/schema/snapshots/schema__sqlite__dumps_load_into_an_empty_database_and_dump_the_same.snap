@@ -1,0 +1,27 @@
+---
+source: crates/navree-schema/tests/schema/sqlite.rs
+assertion_line: 629
+expression: dump
+---
+-- Schema of a SQLite database, written by `navree schema:dump`.
+-- `navree migrate` loads it into an empty database, in one transaction,
+-- then runs the migrations it does not record.
+
+-- Tables
+CREATE TABLE "companies" ("id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "name" VARCHAR NOT NULL);
+CREATE TABLE "deals" ("id" VARCHAR NOT NULL, "company_id" INTEGER NOT NULL, "title" VARCHAR NOT NULL, "cents" INTEGER AS (1 * 100) STORED, FOREIGN KEY ("company_id") REFERENCES "companies" ("id") ON DELETE CASCADE, PRIMARY KEY ("id"));
+CREATE TABLE "navree_migrations" ("module" VARCHAR NOT NULL, "name" VARCHAR NOT NULL, "batch" INTEGER NOT NULL, PRIMARY KEY ("module", "name"));
+
+-- Indexes
+CREATE UNIQUE INDEX "companies_name_unique" ON "companies" ("name");
+CREATE INDEX "deals_title_index" ON "deals" ("title") WHERE title <> '';
+
+-- Views
+CREATE VIEW big_deals AS SELECT title FROM deals WHERE cents > 100;
+
+-- Triggers
+CREATE TRIGGER deals_stamp AFTER INSERT ON deals BEGIN UPDATE deals SET title = CASE WHEN new.title = '' THEN 'untitled' ELSE new.title END WHERE id = new.id; END;
+
+-- Data
+INSERT INTO "navree_migrations" ("module", "name", "batch") VALUES ('crm', 'm0001_create_companies', 1);
+INSERT INTO "navree_migrations" ("module", "name", "batch") VALUES ('crm', 'm0002_create_deals', 1);
