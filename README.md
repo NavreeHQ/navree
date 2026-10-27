@@ -63,7 +63,8 @@ open source and free, documented on the
   Navigator (the MCP server for your coding agent).
 - **Packages:** search, the AI SDK, MCP servers, microservices, gRPC,
   GraphQL, an OAuth 2.1 server, social sign-in, billing, feature flags,
-  settings with inheritance, webhooks, localization and browser testing.
+  settings with inheritance, webhooks, CSV and Excel imports and exports,
+  localization and browser testing.
 - **Starter kits:** `navree new <name> --kit saas|api|micro`.
 - **Agent skills** for every common task, in [`skills/`](skills/).
 
@@ -111,7 +112,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
-L6  navree-social  navree-sso  navree-webhooks  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
+L6  navree-social  navree-sso  navree-webhooks  navree-sheets  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis  navree-mongo
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
@@ -165,6 +166,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-sso` | Single sign-on: SAML 2.0 and OpenID Connect connections per organization or workspace, verified email domains that route sign-in and can refuse passwords, just-in-time provisioning with group to role mapping; XML signatures verified on `ring` |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark) with their handshakes answered |
+| L6 | `navree-sheets` | CSV and Excel: `#[derive(Exportable)]` rows, downloads with a byte-order mark and formula escaping, XLSX with typed cells, named exports streamed or queued to a disk with a signed link; imports with encoding detection (UTF-16, Windows-1256 and the rest), CSV, XLSX, XLS and ODS reading, automatic and saved header mappings, garde validation per row, a staging preview, duplicate modes, batched apply with progress and error files |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
 | L6 | `navree-settings` | Typed settings: `#[derive(Settings)]` types stored per global, organization, workspace or user level and inherited field by field, with the source of every value; validated, audited and cached writes, `GET`/`PATCH /api/settings/{key}`, the `Setting<T>` extractor, `settings:*` commands, a Helm screen and `SettingsFake` (facade feature `settings`, in `full`) |

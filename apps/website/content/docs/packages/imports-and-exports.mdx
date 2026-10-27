@@ -1,0 +1,687 @@
+---
+title: "Imports and exports"
+description: "CSV and Excel exports from typed rows, streamed or queued to a disk with a signed link, and imports with encoding detection, header mapping, row validation, a staging preview, duplicate handling and error files."
+---
+
+## Introduction
+
+<Badge feature="sheets" /> Business apps live on spreadsheets. Customers export their contacts to Excel every Monday, and import ten thousand employees from a file someone saved in Excel on a Windows laptop set to Arabic. `navree-sheets` handles both directions.
+
+**Exports.** You describe a row with `#[derive(Exportable)]` and return a `Download` from a handler. CSV files start with a byte-order mark, so Excel opens Arabic, accented and Japanese text correctly, and text that a spreadsheet would run as a formula is escaped. XLSX files have typed cells, date formats and a bold, frozen, filtered header row. A named export can also run on the [queue](/docs/digging-deeper/queues/): it writes the file to a [disk](/docs/digging-deeper/storage/) and hands back a signed link.
+
+**Imports.** You describe a row with `#[derive(Deserialize, Validate, Importable)]` and say how a row is saved. Navree does the rest:
+
+1. The upload is stored, and its reading is queued as an operation the client follows.
+2. The text encoding is detected (UTF-8, UTF-16, Windows-1256, Shift_JIS and the others browsers know), and the CSV, TSV, XLSX, XLS or ODS file is read.
+3. The file's headers are matched to your columns: automatically, from a mapping saved for files with the same headers, or from one the user chooses.
+4. Every row is read into your type and validated with [garde](https://docs.rs/garde), in your app's validation wording. Rows that repeat an earlier row's key, and rows whose key your app already has, are found.
+5. The user previews the rows by status, then applies the import: valid rows are saved in queue batches, each in its own unit of work, and duplicates are skipped, updated or refused.
+6. An error file lists every row that was not saved, with the reason, ready to fix and upload again.
+
+## Installation
+
+The `sheets` feature of the `navree` facade is part of `full`, which is on by default. With `default-features = false`, turn it on:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["sheets"] }
+```
+
+It brings `navree::sheets` (with the `Exportable` and `Importable` derives) and puts `SheetsModule` in the prelude. Add the module to your app root. Downloads need nothing else; imports and queued exports need the database, the queue and a storage disk:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(QueueModule::from_config())
+    .module(StorageModule::from_config())
+    .module(SheetsModule::from_config()) // section `sheets`
+    // ...
+```
+
+The module contributes the migration set `sheets`, which creates `imports`, `import_rows` (the staged rows) and `import_mappings` (saved mappings). It runs on SQLite, PostgreSQL and MySQL. Everything is pure Rust: XLSX is written with [rust_xlsxwriter](https://docs.rs/rust_xlsxwriter) and read with [calamine](https://docs.rs/calamine), and encodings are decoded with [encoding_rs](https://docs.rs/encoding_rs) and guessed with [chardetng](https://docs.rs/chardetng).
+
+## Configuration
+
+```toml title="config/app.toml"
+[sheets.csv]
+bom = true                     # a UTF-8 byte-order mark, so Excel reads UTF-8
+delimiter = ","                # ";" for spreadsheets set to a European locale
+escape_formulas = true         # a leading ' on text starting with = + - @
+crlf = true                    # RFC 4180 line endings
+
+[sheets.exports]
+disk = ""                      # the disk of queued exports ("": the default disk)
+directory = "exports"
+link_ttl_secs = 86400          # how long the link of a queued export works
+page_size = 1000               # rows asked of an export at a time
+max_rows = 1000000             # the most rows one export writes
+routes = true                  # the /api/exports routes
+
+[sheets.imports]
+disk = ""                      # the disk of uploads and error files ("": the default disk)
+directory = "imports"
+max_upload_bytes = 20971520    # the largest upload (20 MiB)
+max_rows = 100000              # the most data rows one file may have
+chunk_size = 500               # rows per staging step and per apply job
+keep_days = 7                  # sheets:prune deletes imports older than this
+routes = true                  # the /api/imports routes
+```
+
+Every key also comes from the environment with the `APP_` prefix: `APP_SHEETS__IMPORTS__MAX_ROWS=250000`. `SheetsModule::for_root(SheetsOptions { .. })` configures the module in code. An invalid value (a delimiter that is not one ASCII character, a chunk size of 0) fails the boot and names the key.
+
+## Exports
+
+### Rows
+
+An export row is a struct. `#[derive(Exportable)]` turns its fields into columns, in order, and each value into a cell:
+
+```rust title="src/modules/contacts/export.rs"
+use navree::sheets::Exportable;
+
+#[derive(Exportable)]
+#[export(sheet = "Contacts")]
+struct ContactRow {
+    #[export(header = "Name")]
+    name: String,
+    #[export(header = "Email", width = 30)]
+    email: String,
+    company: Option<String>,
+    #[export(header = "VIP")]
+    vip: bool,
+}
+```
+
+A field without a `header` is headed by its name in sentence case: `company` is `Company`, `first_name` is `First name`.
+
+| Attribute | Effect |
+|---|---|
+| `#[export(sheet = "Contacts")]` (on the struct) | The XLSX sheet name (default `Sheet1`; cut to Excel's 31 characters) |
+| `#[export(header = "Email")]` | The header, or a translation key (see [translated headers](#translated-headers)) |
+| `#[export(format = "#,##0.00")]` | The Excel number format of the column's numbers and dates (XLSX) |
+| `#[export(width = 30)]` | The column width in characters, 1 to 255 (XLSX; otherwise fitted to the header and the first page, up to 60) |
+| `#[export(with = "cents_to_cell")]` | A `fn(&FieldType) -> Cell` instead of the field's `IntoCell` |
+| `#[export(skip)]` | Leaves the field out |
+
+Each field becomes a `Cell` (`Empty`, `Text`, `Int`, `Float`, `Bool`, `Date`, `DateTime`) through `IntoCell`, which is implemented for strings, integers, floats, `bool`, `chrono` dates, date-times and times, `Uuid`, `serde_json::Value`, and `Option<T>` (`None` is an empty cell). Implement `IntoCell` for your own types, or point a field at a function with `with`.
+
+### Downloads
+
+Return a `Download` from a handler. `Download::csv` and `Download::xlsx` write rows you have; `Download::csv_stream` writes rows as a stream yields them, so the response never holds the whole file:
+
+```rust title="src/modules/contacts/controller.rs"
+#[injectable]
+struct ContactsController {
+    exports: Arc<Exports>,
+    db: Arc<Db>,
+}
+
+#[controller("/contacts", version = "1")]
+impl ContactsController {
+    /// Every contact as CSV, with the app's `sheets.csv` options.
+    #[get("/export.csv")]
+    #[permissions("contacts.export")]
+    async fn export_csv(&self) -> Result<Download> {
+        let contacts = contact::Entity::find()
+            .order_by_asc(contact::Column::Email)
+            .all(self.db.conn())
+            .await?;
+        Ok(self
+            .exports
+            .csv("contacts", contacts.into_iter().map(ContactRow::from)))
+    }
+
+    /// The same as an Excel workbook.
+    #[get("/export.xlsx")]
+    #[permissions("contacts.export")]
+    async fn export_xlsx(&self) -> Result<Download> {
+        let contacts = contact::Entity::find()
+            .order_by_asc(contact::Column::Email)
+            .all(self.db.conn())
+            .await?;
+        Ok(Download::xlsx(
+            "contacts",
+            contacts.into_iter().map(ContactRow::from),
+        )?)
+    }
+}
+```
+
+The response is `200` with the file's content type, `Content-Disposition: attachment` with the file name (and its exact UTF-8 spelling in `filename*`, so `جهات الاتصال.csv` arrives intact), `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. A name without an extension gets `.csv` or `.xlsx`.
+
+The `Download` constructors use the default CSV options and the headers as declared. The `Exports` service, which `SheetsModule` provides, does the same with your `sheets.csv` options and [translated headers](#translated-headers): `exports.csv(..)`, `exports.xlsx(..)`, `exports.csv_stream(..)`, and `exports.file(format, ..)` for a format the client chose.
+
+What the files look like:
+
+- **CSV** starts with a UTF-8 byte-order mark and ends lines with CRLF. Fields are quoted only when they need it. Numbers and booleans are written as they print, dates as `2026-10-27` and date-times as `2026-10-27 14:30:00`.
+- **Formula escaping.** A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return (or the full-width `＝`, `＋`, `－`, `＠`) is run as a formula when someone opens the file in a spreadsheet, so a contact named `=HYPERLINK("http://evil")` is an attack. Text like that is written with a leading `'`. Numbers are never escaped, so `-5` stays a number.
+- **XLSX** has one sheet, named after the row type, with a bold, frozen and filtered header row. Numbers are numbers, booleans are booleans, and dates and date-times are Excel dates with a date format (`yyyy-mm-dd`, or the column's `format`). Text is always text, never a formula. Integers larger than 2<sup>53</sup> are written as text so no digit is lost, text longer than a cell holds (32,767 characters) is cut, and a sheet holds at most 1,048,575 data rows.
+
+A streamed CSV download that hits an error after it started (the database went away) stops there: the client gets a cut-off file, and the error is logged at target `navree::sheets`.
+
+### Translated headers
+
+A header can be a translation key. With a `HeaderCatalog`, register the texts in your module:
+
+```rust title="src/modules/contacts/mod.rs"
+use navree::sheets::HeaderCatalog;
+
+m.header_catalog(
+    HeaderCatalog::new("en")
+        .locale("en", [("contacts.email", "Email")])
+        .locale("ar", [("contacts.email", "البريد الإلكتروني")]),
+);
+```
+
+A header the catalog has no text for is written as it is. A regional locale falls back to its language (`ar-SA` to `ar`), then to the catalog's default. For headers from somewhere else, implement `HeaderTranslator` (`fn translate(&self, key, locale) -> Option<String>`) and register it as the app's `dyn HeaderTranslator`.
+
+With [localization](/docs/packages/localization/) (the `i18n` feature), headers come from your Fluent files without a catalog: `contacts.email` is the `email` attribute of the `contacts` message, in the request's locale.
+
+```text title="locales/fr/contacts.ftl"
+contacts =
+    .email = Adresse e-mail
+```
+
+Queued exports and imports run in the locale of the request that queued them, so a French user's queued export has French headers and their import's errors read "email doit être une adresse e-mail valide".
+
+### Named exports
+
+For exports that are big, or that a front end lists and runs by name, implement `Export`. It names the row type and the parameters, and fetches rows a page at a time:
+
+```rust title="src/modules/contacts/export.rs"
+use navree::sheets::{Export, ExportContext, ExportPage};
+
+/// The filters of the contacts export.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ContactFilter {
+    vip: Option<bool>,
+}
+
+#[injectable]
+struct ContactsExport {
+    db: Arc<Db>,
+}
+
+impl Export for ContactsExport {
+    const NAME: &'static str = "contacts";
+    type Row = ContactRow;
+    type Params = ContactFilter;
+
+    fn filename(&self, filter: &ContactFilter) -> String {
+        match filter.vip {
+            Some(true) => "vip-contacts".into(),
+            _ => "contacts".into(),
+        }
+    }
+
+    async fn rows(
+        &self,
+        _ctx: &ExportContext,
+        filter: &ContactFilter,
+        page: ExportPage,
+    ) -> Result<Vec<ContactRow>, BoxError> {
+        let mut query = contact::Entity::find().order_by_asc(contact::Column::Email);
+        if let Some(vip) = filter.vip {
+            query = query.filter(contact::Column::Vip.eq(vip));
+        }
+        let contacts = query
+            .offset(page.offset)
+            .limit(page.limit)
+            .all(self.db.conn())
+            .await?;
+        Ok(contacts.into_iter().map(ContactRow::from).collect())
+    }
+}
+```
+
+Register it in its module with `m.export::<ContactsExport>()`. It is a provider of that module, so it can hold services. A page shorter than `page.limit` (`sheets.exports.page_size`) is the last, so order the rows by something stable. `ExportContext` carries the app, the user, the workspace and the locale the export runs for.
+
+- **`permission()`** is `{NAME}.export` by default (`contacts.export`), checked app-wide or in the request's workspace. Return `None` to let every signed-in user run it.
+- **`count()`** (optional) says how many rows there are. An export above `sheets.exports.max_rows` is then refused before anything is written, and a queued export reports real progress. Without it, an export that goes past the limit stops there.
+- **`Params`** come from the query string of a download (`?vip=true`) and from `params` in the body of a queued export. Use `()` for an export without parameters.
+
+The routes run it:
+
+```http
+GET /api/exports/contacts?format=xlsx&vip=true
+```
+
+returns `vip-contacts.xlsx`, built page by page in constant memory; with `format=csv` (the default), the CSV is streamed page by page. To run it later instead, queue it:
+
+```http
+POST /api/exports/contacts
+Content-Type: application/json
+
+{ "format": "xlsx", "params": { "vip": true } }
+```
+
+The answer is `202` with an [operation](/docs/digging-deeper/batches-and-operations/#operations) of kind `export.contacts`. The client follows it at `GET /api/operations/{id}/events`. Its job (`sheets.export`) writes the file to `sheets.exports.disk` under `exports/<date>/<operation id>/`, and the operation finishes with an `ExportResult`:
+
+```json title="result"
+{
+  "url": "/storage/files/exports/2026-10-27/0192e1c4-.../vip-contacts.xlsx?expires=1761638400&signature=...",
+  "filename": "vip-contacts.xlsx",
+  "format": "xlsx",
+  "rows": 1840,
+  "bytes": 61273,
+  "expires_at": "2026-10-28T09:20:00Z",
+  "disk": "files",
+  "path": "exports/2026-10-27/0192e1c4-.../vip-contacts.xlsx"
+}
+```
+
+The link is signed and works for `sheets.exports.link_ttl_secs` without signing in: on cloud disks the provider signs it, on local and memory disks the storage module serves it. `disk` and `path` let your code attach the file to a mail instead. An export over the row limit fails its operation with "The export has more than 1000000 rows.".
+
+From code, `exports.download::<ContactsExport>(params, ExportRequest::new(SheetFormat::Xlsx).user(id))` returns the download, and `exports.queue::<ContactsExport>(&uow, params, request)` queues it as part of a unit of work and returns the operation.
+
+## Imports
+
+### Row types
+
+An import reads each row into a struct that serde deserializes and garde validates. `#[derive(Importable)]` declares its columns:
+
+```rust title="src/modules/contacts/import.rs"
+use navree::sheets::Importable;
+
+/// One row of a contacts file.
+#[derive(Deserialize, Validate, Importable)]
+struct ContactInput {
+    #[import(header = "Email", aliases = ["E-mail", "Email address"])]
+    #[garde(email)]
+    email: String,
+    #[garde(length(min = 1, max = 100))]
+    name: String,
+    #[import(aliases = ["Organization"])]
+    #[garde(length(max = 100))]
+    company: Option<String>,
+    #[serde(default)]
+    #[garde(skip)]
+    vip: bool,
+}
+```
+
+| Attribute | Effect |
+|---|---|
+| `#[import(header = "Email")]` | The header the template shows and automatic mapping looks for (default: the field in sentence case) |
+| `#[import(aliases = ["E-mail", "Email address"])]` | Other headers automatic mapping accepts |
+| `#[import(required)]`, `#[import(optional)]` | Whether the file must have the column (default: required unless the field is an `Option` or has `#[serde(default)]`) |
+| `#[import(skip)]` | Not a column (so is a field with `#[serde(skip)]`) |
+
+A column's field is the field's name, or its `#[serde(rename = "..")]`. `#[serde(rename_all)]` is a compile error: rename fields one by one.
+
+Cells are read the way people type them:
+
+- **Numbers** in any script's digits (`٣٦` is 36) and with a decimal comma when there is no point (`3,5` is 3.5). A whole number from a workbook (`36.0`) fills an integer field.
+- **Booleans** from `true`, `false`, `yes`, `no`, `y`, `n`, `1`, `0`, `on`, `off`, in any case.
+- **Dates** from workbook dates, or text in ISO 8601 (`2026-10-27`).
+- **Enums** by variant name, in any case; **lists** split on `,`, `;`, `|` or line breaks.
+- **Empty cells** are left out: `None` for an `Option`, the default for a field with `#[serde(default)]`, and "should not be empty" for anything else.
+
+A cell that doesn't fit gets the message of your app's [validation](/docs/basics/validation/) rules ("age must be an integer number"), then garde runs the struct's rules.
+
+### The importer
+
+`Import` says what a row is read into, how duplicates are found and how a row is saved:
+
+```rust title="src/modules/contacts/import.rs"
+use navree::sheets::{Import, ImportContext, RowRejected};
+
+#[injectable]
+struct ContactsImport {
+    db: Arc<Db>,
+}
+
+impl Import for ContactsImport {
+    const NAME: &'static str = "contacts";
+    type Row = ContactInput;
+
+    fn key(row: &ContactInput) -> Option<String> {
+        Some(row.email.trim().to_lowercase())
+    }
+
+    async fn existing(&self, _ctx: &ImportContext, keys: &[String]) -> Result<HashSet<String>, BoxError> {
+        let found = contact::Entity::find()
+            .filter(contact::Column::Email.is_in(keys.to_vec()))
+            .all(self.db.conn())
+            .await?;
+        Ok(found.into_iter().map(|contact| contact.email).collect())
+    }
+
+    async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
+        if row.email.ends_with("@competitor.example") {
+            return Err(RowRejected::new("Contacts at competitors are not imported").into());
+        }
+        let contact = contact::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            email: Set(row.email.trim().to_lowercase()),
+            name: Set(row.name),
+            company: Set(row.company),
+            vip: Set(row.vip),
+        };
+        Repo::<contact::Entity>::insert(uow, contact).await?;
+        Ok(())
+    }
+
+    async fn update(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
+        contact::Entity::update_many()
+            .col_expr(contact::Column::Name, Expr::value(row.name))
+            .col_expr(contact::Column::Company, Expr::value(row.company))
+            .filter(contact::Column::Email.eq(row.email.trim().to_lowercase()))
+            .exec(&*uow.tx().await?)
+            .await?;
+        Ok(())
+    }
+}
+```
+
+Register it with `m.importer::<ContactsImport>()`. The module wiring of this page's examples:
+
+```rust title="src/modules/contacts/mod.rs"
+#[module(controllers = [ContactsController], register = Self::wire)]
+struct ContactsModule;
+
+impl ContactsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(MigrationSet::new("contacts").migration(CreateContacts))
+            .importer::<ContactsImport>()
+            .export::<ContactsExport>();
+    }
+}
+```
+
+| Item | Meaning |
+|---|---|
+| `NAME` | The importer's name in uploads and routes: letters, digits, `-`, `_` and `.` |
+| `permission()` | `{NAME}.import` by default, checked app-wide or in the import's workspace; `None` lets every signed-in user import |
+| `key(row)` | The row's duplicate key (an email, an employee number), or `None` (the default) when rows are never duplicates |
+| `existing(ctx, keys)` | Which keys the app already has; asked once per chunk while staging |
+| `insert(ctx, uow, row)` | Saves a new row as part of `uow` |
+| `update(ctx, uow, row)` | Updates the record a duplicate stands for, when applying with `update`; by default duplicates cannot be updated |
+| `completed(ctx, import)` | Runs once the import is applied, with its counts (send a notification, refresh a cache) |
+
+Return `RowRejected::new("..")` from `insert` or `update` to refuse one row with a message for the error file. Any other error fails the row with "This row could not be saved" and is logged.
+
+### Uploading a file
+
+The client posts the file with the importer's name:
+
+```http
+POST /api/imports
+Content-Type: multipart/form-data; boundary=...
+
+importer=contacts, file=@contacts.csv
+```
+
+| Field | Meaning |
+|---|---|
+| `importer` | The importer's `NAME` (required) |
+| `file` | The file (required) |
+| `encoding` | The text encoding of a CSV file (`windows-1256`, `shift_jis`, `utf-16le`); detected when absent |
+| `sheet` | The workbook sheet to read; the first when absent |
+| `mapping` | A JSON object of field to header, to use instead of finding one |
+| `save_mapping` | `true` to keep `mapping` for later files with the same headers |
+
+The answer is `202` with the import (status `uploaded`) and its `operation_id`. The client follows the operation at `GET /api/operations/{id}/events`; when it finishes, `GET /api/imports/{id}` has the result. A file larger than `sheets.imports.max_upload_bytes` is `413`, an empty file or one that is plainly not a spreadsheet (a PDF, an image) is `400 unsupported_file`, and both happen before anything is stored.
+
+From code, `imports.upload(&uow, "contacts", Upload::new(name, bytes), UploadOptions::default().owner(user_id))` does the same as part of a unit of work.
+
+### Encodings and formats
+
+Spreadsheet programs save CSV in whatever encoding the computer uses. Navree finds it in this order:
+
+1. A byte-order mark: UTF-8, UTF-16LE or UTF-16BE (Excel's "Unicode Text" is UTF-16LE with tabs).
+2. UTF-16 without a byte-order mark, recognized by its zero bytes.
+3. Valid UTF-8.
+4. [chardetng](https://docs.rs/chardetng)'s guess among the legacy encodings browsers know: Windows-1250 to 1258 (Windows-1256 for Arabic), ISO-8859, Shift_JIS, EUC-JP, EUC-KR, GBK, Big5, KOI8 and the rest.
+
+The encoding found (or given with `encoding`) is the import's `encoding`. The delimiter is the most frequent of `,`, `;`, tab and `|` in the header line, outside quotes; `.tsv` and `.tab` files are always tab-separated.
+
+Workbooks are recognized by their content, whatever their name: XLSX (and XLSM and XLSB), XLS and ODS. Numbers, booleans and dates keep their types.
+
+The header row is the first row with a value; empty rows are skipped. A blank header is named `Column 3`, and a repeated one gets ` (2)`. Rows are numbered the way the spreadsheet shows them, so "row 14" in the preview is row 14 in Excel. A file with more than `sheets.imports.max_rows` data rows fails the import with "The file has more than 100000 rows.".
+
+### Mapping columns
+
+Staging needs to know which header each field reads. In order, it uses:
+
+1. **The mapping given** with the upload or chosen later.
+2. **A saved mapping** for this importer, workspace and set of headers. Files with the same headers in any order and case reuse it.
+3. **Automatic mapping.** Each column takes the first unused header that matches its header, its field name or one of its aliases, comparing only letters and digits in lower case: `E-mail Address`, `email_address` and `EMAIL ADDRESS` match.
+
+When a required column has no header, the import stops at `needs_mapping`, with the file's `headers`, the automatic `mapping` and the `missing` fields. The client shows the headers next to your columns and sends a mapping:
+
+```http
+PUT /api/imports/{id}/mapping
+Content-Type: application/json
+
+{ "mapping": { "email": "Mail", "name": "Full name" }, "save": true }
+```
+
+The import is staged again with it (`202`), and with `save` the next file with these headers maps itself. A mapping that names a field the importer lacks or a header the file lacks, reads one header twice, or leaves a required column unmapped is a `400` with the errors by field:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["email is mapped to `Email`, which is not a column of the file", "email should not be empty"],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "email": ["email is mapped to `Email`, which is not a column of the file", "email should not be empty"]
+  }
+}
+```
+
+### Previewing
+
+A staged import (`staged`) has its counts, and every row is in `import_rows` with its status, its values and its errors:
+
+```http
+GET /api/imports/{id}/rows?status=invalid&page=1&per_page=50
+```
+
+```json
+{
+  "data": [
+    {
+      "row": 14,
+      "status": "invalid",
+      "values": { "email": "ada@example", "name": "Ada Lovelace", "company": null },
+      "errors": { "email": ["email must be a valid email address"] }
+    }
+  ],
+  "meta": { "current_page": 1, "per_page": 50, "total": 3, "last_page": 1 }
+}
+```
+
+`per_page` is 50 by default and at most 500. Without `status`, every row is listed.
+
+| Row status | Meaning |
+|---|---|
+| `valid` | Read and validated; saved when the import is applied |
+| `invalid` | A cell doesn't fit or a rule failed; `errors` says which |
+| `duplicate` | Its key is one the app already has |
+| `repeated` | Its key repeats an earlier row of the file (`"row": ["Repeats row 3"]`) |
+| `created`, `updated` | Saved as a new record, or as an update of the existing one |
+| `skipped` | A duplicate, left alone |
+| `failed` | Saving it failed; `errors` says why |
+
+### Applying
+
+```http
+POST /api/imports/{id}/apply
+Content-Type: application/json
+
+{ "duplicates": "update" }
+```
+
+| `duplicates` | Duplicates are |
+|---|---|
+| `skip` (the default) | Left alone, and listed in the error file |
+| `update` | Saved with `update` |
+| `fail` | Refused: applying is `409 import_has_duplicates` while the file has duplicates or repeated rows |
+
+The answer is `202` (status `applying`) with a new operation. The rows to save are cut into jobs of `sheets.imports.chunk_size` rows (`sheets.import.apply`), dispatched as one [batch](/docs/digging-deeper/batches-and-operations/#batches) whose progress is the operation's. Each row is saved in its own unit of work, as the user who uploaded the file, so one failing row never rolls back another, and the row's new status commits with it. Repeated rows are never applied, whatever the mode.
+
+When the batch is done, its last job (`sheets.import.finish`) counts the rows, writes the error file, marks the import `completed` and calls `completed`. Cancelling the operation (`DELETE /api/operations/{id}`) stops it between rows: the import goes back to `staged` with an `error` saying how many rows were saved, and applying it again saves the rest.
+
+| Import status | Meaning |
+|---|---|
+| `uploaded` | Stored; reading it is queued |
+| `staging` | Being read and checked |
+| `needs_mapping` | A required column has no header: choose a mapping |
+| `staged` | Ready to preview and apply |
+| `applying` | Rows are being saved |
+| `completed` | Every row was saved, skipped or reported |
+| `failed` | The file could not be read; `error` says why |
+
+### Error files
+
+When rows are not saved, the import has an error file (`has_error_file`), written after staging and again after applying:
+
+```http
+GET /api/imports/{id}/errors
+```
+
+returns `contacts-errors.csv`: the row number, the mapped columns under the file's own headers, and the errors.
+
+```text title="contacts-errors.csv"
+Row,Email,Name,Errors
+3,ada@example,Ada,email must be a valid email address
+7,bob@competitor.example,Bob,Contacts at competitors are not imported
+9,grace@example.com,Grace,A record with this key already exists
+```
+
+Because the headers are the file's own, the user fixes the rows and uploads the file again; it maps the same way, and the extra `Row` and `Errors` columns are ignored.
+
+### Templates and the importers list
+
+`GET /api/imports/templates/{importer}` returns an empty file with the importer's headers (`contacts-template.csv`, or `.xlsx` with `?format=xlsx`). `GET /api/imports/importers` lists the importers the user may use, with their columns (`field`, `header`, `aliases`, `required`), so a front end can build the mapping screen.
+
+## Routes
+
+Both controllers mount under `{http.api_prefix}` (default `/api`) when their `routes` key is true and the app has an authenticator. Every route needs a signed-in user. In an app with [workspaces](/docs/workspaces/introduction/) they act in the request's workspace, and permissions are checked in it.
+
+| Route | Answer |
+|---|---|
+| `GET /exports` | `{data: [{name, columns: [{key, header}]}]}`: the exports the user may run |
+| `GET /exports/{name}?format=csv&...` | The file; the query string fills the parameters |
+| `POST /exports/{name}` `{format?, params?}` | `202`, the operation |
+| `GET /imports?limit=20` | `{data: [Import]}`: the user's own imports, newest first (at most 100) |
+| `POST /imports` (multipart) | `202`, the import |
+| `GET /imports/importers` | `{data: [{name, columns}]}` |
+| `GET /imports/templates/{importer}?format=csv` | The template |
+| `GET /imports/{id}` | The import |
+| `GET /imports/{id}/rows?status=&page=&per_page=` | A page of rows |
+| `PUT /imports/{id}/mapping` `{mapping, save?}` | `202`, the import, staged again |
+| `POST /imports/{id}/apply` `{duplicates?}` | `202`, the import |
+| `GET /imports/{id}/errors` | The error file, `404` when there is none |
+| `DELETE /imports/{id}` | `204`; `409` while it is being applied |
+
+An import is visible to the users who hold its importer's permission in its workspace, and is a `404` to everyone else (for an importer without a permission, to everyone but the uploader). The `Imports` service has the same operations for your own code: `upload`, `find`, `list`, `rows`, `map`, `apply`, `discard`, `error_file`, `template` and `columns`.
+
+## Testing
+
+Run imports and exports in tests with the memory queue and a memory disk. `run_pending` runs the queued staging, apply and export jobs:
+
+```rust title="tests/contacts.rs"
+let app = TestApp::builder()
+    .temp_database()
+    .config("queue.driver", "memory")
+    .config("storage", json!({ "default": "files", "disks": { "files": { "driver": "memory" } } }))
+    .module(DatabaseModule::from_config())
+    .module(QueueModule::from_config())
+    .module(StorageModule::from_config())
+    .module(SheetsModule::from_config())
+    .module(ContactsModule)
+    .build()
+    .await;
+let imports = app.get::<Imports>().await;
+let db = app.get::<Db>().await;
+
+let uow = db.uow(Some(ADMIN), None).await;
+let import = imports
+    .upload(
+        &uow,
+        "contacts",
+        Upload::new("contacts.csv", "Email address,Name\nada@example.com,Ada Lovelace\n"),
+        UploadOptions::default().owner(ADMIN),
+    )
+    .await?;
+uow.commit().await?;
+app.get::<Queue>().await.run_pending().await?;
+assert_eq!(imports.find(import.id).await?.status, ImportStatus::Staged);
+
+let uow = db.uow(Some(ADMIN), None).await;
+imports.apply(&uow, import.id, DuplicateMode::Update).await?;
+uow.commit().await?;
+app.get::<Queue>().await.run_pending().await?;
+assert_eq!(imports.find(import.id).await?.counts.created, 1);
+```
+
+Over HTTP, post a `multipart/form-data` body with `importer` and `file` fields. Encode test files in the encoding you want to check: `encoding_rs::WINDOWS_1256.encode(text)` for Arabic, or a byte-order mark followed by `text.encode_utf16()` for Excel's Unicode text.
+
+## Limits
+
+- Staging reads the whole file into memory, so `sheets.imports.max_upload_bytes` bounds its memory as well as its size.
+- Duplicates are found while staging. A record created between staging and applying is caught by your database's unique constraints: the row fails with your `insert`'s error.
+- The jobs run on the `default` queue.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `sheets.csv.bom` | `true` | Start CSV files with a UTF-8 byte-order mark |
+| `sheets.csv.delimiter` | `,` | The field delimiter (one ASCII character) |
+| `sheets.csv.escape_formulas` | `true` | A leading `'` on text a spreadsheet would run as a formula |
+| `sheets.csv.crlf` | `true` | CRLF line endings; `false` writes LF |
+| `sheets.exports.disk` | `""` | The disk of queued exports (`""`: the default disk) |
+| `sheets.exports.directory` | `exports` | Their directory on the disk |
+| `sheets.exports.link_ttl_secs` | `86400` | How long a queued export's link works; `sheets:prune` deletes older files |
+| `sheets.exports.page_size` | `1000` | Rows asked of an `Export` at a time |
+| `sheets.exports.max_rows` | `1000000` | The most rows one export writes |
+| `sheets.exports.routes` | `true` | Mounts the `/api/exports` routes |
+| `sheets.imports.disk` | `""` | The disk of uploads and error files |
+| `sheets.imports.directory` | `imports` | Their directory on the disk |
+| `sheets.imports.max_upload_bytes` | `20971520` | The largest upload |
+| `sheets.imports.max_rows` | `100000` | The most data rows one file may have |
+| `sheets.imports.chunk_size` | `500` | Rows per staging step and per apply job |
+| `sheets.imports.keep_days` | `7` | `sheets:prune` deletes imports last changed earlier |
+| `sheets.imports.routes` | `true` | Mounts the `/api/imports` routes |
+
+| Command | What it does |
+|---|---|
+| `sheets:prune` | Deletes imports (rows, upload and error file) older than `keep_days`, except those being applied, and export files whose link expired |
+
+| Job | What it does |
+|---|---|
+| `sheets.export` | Writes a queued export and finishes its operation |
+| `sheets.import.stage` | Reads, maps and checks an upload |
+| `sheets.import.apply` | Saves one chunk of an import's rows |
+| `sheets.import.finish` | Counts the rows, writes the error file and completes the import |
+
+| Error | Status | `code` |
+|---|---|---|
+| Unknown import, importer or export | 404 | `not_found` |
+| Not a spreadsheet, or an empty file | 400 | `unsupported_file` |
+| Larger than `max_upload_bytes` | 413 | `payload_too_large` |
+| An export above `max_rows` | 400 | `too_many_rows` |
+| Applying or mapping in the wrong status | 409 | `import_not_ready` |
+| Applying with `fail` while there are duplicates | 409 | `import_has_duplicates` |
+| An invalid mapping | 400 | `validation_failed` |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    The workers, batches and operations imports and exports run on.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/storage/" title="File storage">
+    The disks uploads and export files live on, and signed links.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    The rules and messages every imported row is checked with.
+  </LinkCard>
+  <LinkCard href="/docs/packages/localization/" title="Localization">
+    Headers and messages in each user's language.
+  </LinkCard>
+</LinkCards>
