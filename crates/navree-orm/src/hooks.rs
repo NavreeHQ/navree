@@ -221,10 +221,14 @@ pub(crate) struct Hooks<M: Model> {
 }
 
 impl<M: Model> Hooks<M> {
-    /// The hooks that apply in `ctx`. The app's hooks are skipped inside a
-    /// quiet operation (see `crate::quiet`).
+    /// The hooks that apply in `ctx`: the model's intrinsic behaviour
+    /// first (workspace scoping), then its own hooks, then the app's (which
+    /// are skipped inside a quiet operation, see `crate::quiet`).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
+        if M::meta().is_workspace_scoped() {
+            hooks.insert(0, Arc::new(crate::workspace::WorkspaceHook));
+        }
         if let Some(app) = ctx.app()
             && !crate::quiet::is_active()
         {

@@ -113,6 +113,7 @@ pub mod sql;
 pub mod testing;
 mod ulid;
 mod value;
+pub mod workspace;
 
 pub use collection::Collection;
 pub use column::{

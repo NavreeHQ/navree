@@ -17,7 +17,8 @@ use crate::value::Field;
 ///
 /// Empty keys are generated (UUIDs, ULIDs) or left to the database
 /// (incrementing keys: then every model must leave its key empty, or none);
-/// empty creation and update timestamps are set to `now`.
+/// empty creation and update timestamps are set to `now`; a
+/// workspace-scoped model gets the current workspace, as a save gives it.
 pub(crate) async fn insert_models<M: Model>(
     target: &Target<'_>,
     mut models: Vec<M>,
@@ -45,7 +46,9 @@ pub(crate) async fn insert_models<M: Model>(
         }
         _ => false,
     };
+    let ctx = target.context();
     for model in &mut models {
+        crate::workspace::fill_for_insert(&ctx, model)?;
         if model.key().is_empty() && !assigned_by_database {
             let kind = meta.key_kind();
             let key = M::Key::generate(kind).ok_or_else(|| {
