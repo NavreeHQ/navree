@@ -335,9 +335,13 @@ impl Organizations {
         if from == to {
             return Ok(current);
         }
-        let new_owner = self.core.org_member_in(&*tx, id, to).await?.ok_or_else(|| {
-            WorkspaceError::invalid("user_id", "user_id must be a member of the organization")
-        })?;
+        let new_owner = self
+            .core
+            .org_member_in(&*tx, id, to)
+            .await?
+            .ok_or_else(|| {
+                WorkspaceError::invalid("user_id", "user_id must be a member of the organization")
+            })?;
         let old_owner = self.core.org_member_in(&*tx, id, from).await?;
         drop(tx);
         let now = self.core.now();
@@ -507,7 +511,10 @@ impl Organizations {
     /// [`RlsPolicy::organizations`](crate::RlsPolicy::organizations) read.
     pub async fn enter(&self, uow: &Uow, id: Uuid) -> Result<(), WorkspaceError> {
         self.core.require_organizations()?;
-        self.core.isolation.apply_setting(uow, "navree.organization", id).await
+        self.core
+            .isolation
+            .apply_setting(uow, "navree.organization", id)
+            .await
     }
 }
 

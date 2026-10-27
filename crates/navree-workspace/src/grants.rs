@@ -11,11 +11,13 @@ use uuid::Uuid;
 
 use crate::core::Core;
 use crate::entity::{
-    Member, OrgMember, Workspace, member, organization_grant, organization_member,
-    partition_grant, workspace,
+    Member, OrgMember, Workspace, member, organization_grant, organization_member, partition_grant,
+    workspace,
 };
 use crate::org_role::{SCOPE_ALL, SCOPE_ONLY};
-use crate::{OrgRole, PartitionSelector, Selector, WorkspaceError, WorkspaceRole, WorkspaceSelector};
+use crate::{
+    OrgRole, PartitionSelector, Selector, WorkspaceError, WorkspaceRole, WorkspaceSelector,
+};
 
 /// The workspaces organization member `member` reaches: `All` for the
 /// owner and for `all` members, else the granted ones.

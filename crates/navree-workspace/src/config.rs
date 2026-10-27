@@ -499,7 +499,10 @@ impl ConfigSection for WorkspaceConfig {
 
 /// The non-empty segments of a path prefix.
 fn segments(prefix: &str) -> Vec<&str> {
-    prefix.split('/').filter(|segment| !segment.is_empty()).collect()
+    prefix
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect()
 }
 
 /// A resolver list: at least one, no repeats, and (for partitions) no
@@ -782,7 +785,10 @@ mod tests {
     fn organization_and_partition_options_are_read_from_config_and_environment() {
         let config = load(
             ConfigSources::new()
-                .set("workspace.roles.auditor.permissions", json!(["reports.read"]))
+                .set(
+                    "workspace.roles.auditor.permissions",
+                    json!(["reports.read"]),
+                )
                 .set(
                     "workspace.organizations.roles.partner.permissions",
                     json!(["organization.read"]),
@@ -795,7 +801,10 @@ mod tests {
                     "APP_",
                     [
                         ("APP_WORKSPACE__ORGANIZATIONS__ENABLED", "true"),
-                        ("APP_WORKSPACE__ORGANIZATIONS__RESOLVERS", "subdomain,header"),
+                        (
+                            "APP_WORKSPACE__ORGANIZATIONS__RESOLVERS",
+                            "subdomain,header",
+                        ),
                         ("APP_WORKSPACE__ORGANIZATIONS__HEADER", "X-Company"),
                         (
                             "APP_WORKSPACE__ORGANIZATIONS__BASE_DOMAIN",
@@ -814,7 +823,10 @@ mod tests {
         .unwrap();
         let orgs = &config.organizations;
         assert!(orgs.enabled);
-        assert_eq!(orgs.resolvers, [ResolverKind::Subdomain, ResolverKind::Header]);
+        assert_eq!(
+            orgs.resolvers,
+            [ResolverKind::Subdomain, ResolverKind::Header]
+        );
         assert_eq!(orgs.header, "X-Company");
         assert_eq!(orgs.base_domain.as_deref(), Some("partners.example.com"));
         assert_eq!(
@@ -829,7 +841,10 @@ mod tests {
         );
         let partitions = &config.partitions;
         assert!(partitions.enabled);
-        assert_eq!(partitions.resolvers, [ResolverKind::Path, ResolverKind::Header]);
+        assert_eq!(
+            partitions.resolvers,
+            [ResolverKind::Path, ResolverKind::Header]
+        );
         assert_eq!(partitions.header, "X-Domain");
     }
 
@@ -837,7 +852,10 @@ mod tests {
     fn invalid_organization_and_partition_options_fail_validation() {
         for (key, value) in [
             ("workspace.organizations.resolvers", json!([])),
-            ("workspace.organizations.resolvers", json!(["claim", "claim"])),
+            (
+                "workspace.organizations.resolvers",
+                json!(["claim", "claim"]),
+            ),
             ("workspace.organizations.header", json!("bad header")),
             ("workspace.organizations.base_domain", json!("https://x")),
             ("workspace.organizations.path_prefix", json!("o")),
@@ -869,10 +887,10 @@ mod tests {
             let result = load(ConfigSources::new().set(key, value.clone()));
             assert!(result.is_err(), "{key} = {value} should be rejected");
         }
-        let mapped = load(
-            ConfigSources::new()
-                .set("workspace.organizations.roles.partner.workspace_role", "viewer"),
-        );
+        let mapped = load(ConfigSources::new().set(
+            "workspace.organizations.roles.partner.workspace_role",
+            "viewer",
+        ));
         assert!(mapped.is_ok(), "{mapped:?}");
         let same_name = load(
             ConfigSources::new()

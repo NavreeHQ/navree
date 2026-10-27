@@ -111,7 +111,11 @@ pub struct OrgMemberResource {
 impl OrgMemberResource {
     /// The resource of `member` reaching `workspaces` (with `user` when
     /// known).
-    pub fn new(member: &OrgMember, workspaces: WorkspaceSelector, user: Option<UserSummary>) -> Self {
+    pub fn new(
+        member: &OrgMember,
+        workspaces: WorkspaceSelector,
+        user: Option<UserSummary>,
+    ) -> Self {
         Self {
             kind: "OrganizationMember".to_owned(),
             id: member.id,
@@ -547,37 +551,34 @@ impl Controller for OrganizationController {
             }
         };
         let members = self.members.clone();
-        let update_member = move |org: CurrentOrganization,
-                                  uow: Uow,
-                                  Path((_, user)): Path<(String, Uuid)>,
-                                  Json(input): Json<UpdateOrgMemberInput>| {
-            let members = members.clone();
-            async move {
-                check_member_reach(&members, &org, user).await?;
-                if let Some(workspaces) = &input.workspaces {
-                    check_reach(&org, workspaces)?;
+        let update_member =
+            move |org: CurrentOrganization,
+                  uow: Uow,
+                  Path((_, user)): Path<(String, Uuid)>,
+                  Json(input): Json<UpdateOrgMemberInput>| {
+                let members = members.clone();
+                async move {
+                    check_member_reach(&members, &org, user).await?;
+                    if let Some(workspaces) = &input.workspaces {
+                        check_reach(&org, workspaces)?;
+                    }
+                    let changed = members
+                        .update(&uow, org.id(), user, input.role, input.workspaces)
+                        .await?;
+                    let workspaces = members.selector(org.id(), user).await?.unwrap_or_default();
+                    Ok::<_, AppError>(Json(OrgMemberResource::new(&changed, workspaces, None)))
                 }
-                let changed = members
-                    .update(&uow, org.id(), user, input.role, input.workspaces)
-                    .await?;
-                let workspaces = members
-                    .selector(org.id(), user)
-                    .await?
-                    .unwrap_or_default();
-                Ok::<_, AppError>(Json(OrgMemberResource::new(&changed, workspaces, None)))
-            }
-        };
+            };
         let members = self.members.clone();
-        let remove_member = move |org: CurrentOrganization,
-                                  uow: Uow,
-                                  Path((_, user)): Path<(String, Uuid)>| {
-            let members = members.clone();
-            async move {
-                check_member_reach(&members, &org, user).await?;
-                members.remove(&uow, org.id(), user).await?;
-                Ok::<_, AppError>(NoContent)
-            }
-        };
+        let remove_member =
+            move |org: CurrentOrganization, uow: Uow, Path((_, user)): Path<(String, Uuid)>| {
+                let members = members.clone();
+                async move {
+                    check_member_reach(&members, &org, user).await?;
+                    members.remove(&uow, org.id(), user).await?;
+                    Ok::<_, AppError>(NoContent)
+                }
+            };
         let workspaces = self.workspaces.clone();
         let organizations = self.organizations.clone();
         let list_workspaces = move |org: CurrentOrganization| {
@@ -588,7 +589,10 @@ impl Controller for OrganizationController {
                     if !org.reaches(workspace.id) {
                         continue;
                     }
-                    let role = match workspaces.role_of(workspace.id, org.member().user_id).await? {
+                    let role = match workspaces
+                        .role_of(workspace.id, org.member().user_id)
+                        .await?
+                    {
                         Some((role, _)) => role,
                         None => continue,
                     };
@@ -599,24 +603,23 @@ impl Controller for OrganizationController {
         };
         let workspaces = self.workspaces.clone();
         let organizations = self.organizations.clone();
-        let attach = move |org: CurrentOrganization,
-                           uow: Uow,
-                           Json(input): Json<AttachWorkspaceInput>| {
-            let (workspaces, organizations) = (workspaces.clone(), organizations.clone());
-            async move {
-                let workspace = workspaces.resolve(input.workspace.trim()).await?;
-                if workspace.owner_id != org.member().user_id {
-                    return Err(AppError::forbidden().with_detail(
-                        "Only the workspace's owner can attach it to an organization.",
-                    ));
+        let attach =
+            move |org: CurrentOrganization, uow: Uow, Json(input): Json<AttachWorkspaceInput>| {
+                let (workspaces, organizations) = (workspaces.clone(), organizations.clone());
+                async move {
+                    let workspace = workspaces.resolve(input.workspace.trim()).await?;
+                    if workspace.owner_id != org.member().user_id {
+                        return Err(AppError::forbidden().with_detail(
+                            "Only the workspace's owner can attach it to an organization.",
+                        ));
+                    }
+                    let attached = organizations.attach(&uow, org.id(), workspace.id).await?;
+                    Ok::<_, AppError>(Json(WorkspaceResource::new(
+                        &attached,
+                        crate::WorkspaceRole::Owner,
+                    )))
                 }
-                let attached = organizations.attach(&uow, org.id(), workspace.id).await?;
-                Ok::<_, AppError>(Json(WorkspaceResource::new(
-                    &attached,
-                    crate::WorkspaceRole::Owner,
-                )))
-            }
-        };
+            };
         let workspaces = self.workspaces.clone();
         let organizations = self.organizations.clone();
         let detach = move |org: CurrentOrganization,
@@ -650,33 +653,34 @@ impl Controller for OrganizationController {
         };
         let requests = self.requests.clone();
         let organizations = self.organizations.clone();
-        let request_access = move |CurrentPrincipal(me): CurrentPrincipal,
-                                   uow: Uow,
-                                   uri: Uri,
-                                   Path(organization): Path<String>,
-                                   input: Option<Json<RequestAccessInput>>| {
-            let (requests, organizations) = (requests.clone(), organizations.clone());
-            async move {
-                let organization = organizations.resolve(&organization).await?;
-                let input = input.map(|Json(input)| input).unwrap_or_default();
-                let created = requests
-                    .request(
-                        &uow,
-                        organization.id,
-                        me.user_id,
-                        NewAccessRequest {
-                            workspace_id: input.workspace_id,
-                            message: input.message,
-                        },
-                    )
-                    .await?;
-                let location = format!("{}/{}", uri.path().trim_end_matches('/'), created.id);
-                Ok::<_, AppError>(Created(
-                    location,
-                    AccessRequestResource::new(&created, None),
-                ))
-            }
-        };
+        let request_access =
+            move |CurrentPrincipal(me): CurrentPrincipal,
+                  uow: Uow,
+                  uri: Uri,
+                  Path(organization): Path<String>,
+                  input: Option<Json<RequestAccessInput>>| {
+                let (requests, organizations) = (requests.clone(), organizations.clone());
+                async move {
+                    let organization = organizations.resolve(&organization).await?;
+                    let input = input.map(|Json(input)| input).unwrap_or_default();
+                    let created = requests
+                        .request(
+                            &uow,
+                            organization.id,
+                            me.user_id,
+                            NewAccessRequest {
+                                workspace_id: input.workspace_id,
+                                message: input.message,
+                            },
+                        )
+                        .await?;
+                    let location = format!("{}/{}", uri.path().trim_end_matches('/'), created.id);
+                    Ok::<_, AppError>(Created(
+                        location,
+                        AccessRequestResource::new(&created, None),
+                    ))
+                }
+            };
         let requests = self.requests.clone();
         let members = self.members.clone();
         let approve = move |org: CurrentOrganization,
@@ -825,24 +829,32 @@ impl Controller for OrganizationController {
                         Some(schema_fn::<OrgMemberResource>),
                     )
                 }),
-            RouteDef::on(Method::PATCH, "/{organization}/members/{user}", update_member)
-                .permissions(&["organization.members.update"])
-                .guard(guard())
-                .name("organizations.members.update")
-                .api(api(
-                    "Change a member's role or workspaces",
-                    &[400, 401, 403, 404, 409],
-                    Some(schema_fn::<UpdateOrgMemberInput>),
-                    Some(schema_fn::<OrgMemberResource>),
-                )),
-            RouteDef::on(Method::DELETE, "/{organization}/members/{user}", remove_member)
-                .permissions(&["organization.members.delete"])
-                .guard(guard())
-                .name("organizations.members.destroy")
-                .api(ApiMeta {
-                    success_status: 204,
-                    ..api("Remove a member", &[401, 403, 404, 409], None, None)
-                }),
+            RouteDef::on(
+                Method::PATCH,
+                "/{organization}/members/{user}",
+                update_member,
+            )
+            .permissions(&["organization.members.update"])
+            .guard(guard())
+            .name("organizations.members.update")
+            .api(api(
+                "Change a member's role or workspaces",
+                &[400, 401, 403, 404, 409],
+                Some(schema_fn::<UpdateOrgMemberInput>),
+                Some(schema_fn::<OrgMemberResource>),
+            )),
+            RouteDef::on(
+                Method::DELETE,
+                "/{organization}/members/{user}",
+                remove_member,
+            )
+            .permissions(&["organization.members.delete"])
+            .guard(guard())
+            .name("organizations.members.destroy")
+            .api(ApiMeta {
+                success_status: 204,
+                ..api("Remove a member", &[401, 403, 404, 409], None, None)
+            }),
             RouteDef::on(Method::GET, "/{organization}/workspaces", list_workspaces)
                 .permissions(&["organization.read"])
                 .guard(guard())

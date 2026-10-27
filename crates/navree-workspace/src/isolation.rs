@@ -270,9 +270,8 @@ impl RlsPolicy {
     pub fn create_sql(&self) -> String {
         let table = quote(&self.table);
         let column = quote(&self.column);
-        let workspace = format!(
-            "{column} = NULLIF(current_setting('navree.workspace', true), '')::uuid"
-        );
+        let workspace =
+            format!("{column} = NULLIF(current_setting('navree.workspace', true), '')::uuid");
         let mut using = workspace.clone();
         let mut check = workspace;
         if self.organizations {

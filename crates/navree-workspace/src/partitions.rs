@@ -203,7 +203,8 @@ impl Partitions {
         identifier: &str,
     ) -> Result<Partition, WorkspaceError> {
         self.core.require_partitions()?;
-        let mut select = partition::Entity::find().filter(partition::Column::WorkspaceId.eq(workspace));
+        let mut select =
+            partition::Entity::find().filter(partition::Column::WorkspaceId.eq(workspace));
         select = match Uuid::parse_str(identifier) {
             Ok(id) => select.filter(partition::Column::Id.eq(id)),
             Err(_) => select.filter(partition::Column::Slug.eq(identifier)),
@@ -303,7 +304,10 @@ impl Partitions {
     /// the workspace too ([`Workspaces::enter`](crate::Workspaces::enter)).
     pub async fn enter(&self, uow: &Uow, id: Uuid) -> Result<(), WorkspaceError> {
         self.core.require_partitions()?;
-        self.core.isolation.apply_setting(uow, "navree.partition", id).await
+        self.core
+            .isolation
+            .apply_setting(uow, "navree.partition", id)
+            .await
     }
 
     async fn partition_in<C: ConnectionTrait>(

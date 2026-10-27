@@ -41,7 +41,10 @@ async fn organizations_are_created_updated_listed_and_deleted() {
     assert!(!owner.is_limited());
     let drained = events.drain();
     assert_eq!(
-        drained.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>(),
+        drained
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>(),
         ["organization.created", "organization.member_added"]
     );
     assert_eq!(drained[0].1["slug"], json!("acme-group"));
@@ -53,15 +56,25 @@ async fn organizations_are_created_updated_listed_and_deleted() {
     let taken = world
         .work(|uow| async move {
             service
-                .create(&uow, ada, NewOrganization::named("Other").slug("acme-group"))
+                .create(
+                    &uow,
+                    ada,
+                    NewOrganization::named("Other").slug("acme-group"),
+                )
                 .await
         })
         .await;
-    assert!(matches!(taken, Err(WorkspaceError::Invalid { field: "slug", .. })));
+    assert!(matches!(
+        taken,
+        Err(WorkspaceError::Invalid { field: "slug", .. })
+    ));
     for (input, field) in [
         (NewOrganization::named("  "), "name"),
         (NewOrganization::named("X").country("Britain"), "country"),
-        (NewOrganization::named("X").timezone("not a zone"), "timezone"),
+        (
+            NewOrganization::named("X").timezone("not a zone"),
+            "timezone",
+        ),
     ] {
         let service = organizations.clone();
         let result = world
@@ -124,9 +137,16 @@ async fn organizations_are_created_updated_listed_and_deleted() {
     assert_eq!(cleared.country.as_deref(), Some("GB"));
 
     // Lookups.
-    assert_eq!(organizations.resolve("acme-group").await.unwrap().id, acme.id);
     assert_eq!(
-        organizations.resolve(&acme.id.to_string()).await.unwrap().id,
+        organizations.resolve("acme-group").await.unwrap().id,
+        acme.id
+    );
+    assert_eq!(
+        organizations
+            .resolve(&acme.id.to_string())
+            .await
+            .unwrap()
+            .id,
         acme.id
     );
     assert!(matches!(
@@ -135,7 +155,9 @@ async fn organizations_are_created_updated_listed_and_deleted() {
     ));
     let mine = organizations.for_user(ada).await.unwrap();
     assert_eq!(
-        mine.iter().map(|m| m.organization.name.as_str()).collect::<Vec<_>>(),
+        mine.iter()
+            .map(|m| m.organization.name.as_str())
+            .collect::<Vec<_>>(),
         ["Acme", "Acme Group"]
     );
     assert_eq!(mine[0].role, OrgRole::Owner);
@@ -200,7 +222,12 @@ async fn workspaces_are_attached_and_detached() {
 
     // Detaching drops the grants that named the workspace.
     world
-        .grant(acme.id, grace, "member", WorkspaceSelector::only([uk.id, de.id]))
+        .grant(
+            acme.id,
+            grace,
+            "member",
+            WorkspaceSelector::only([uk.id, de.id]),
+        )
         .await;
     let service = organizations.clone();
     world
@@ -275,7 +302,10 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
     assert_eq!(workspaces.role_of(de.id, linus).await.unwrap(), None);
     assert_eq!(
         workspaces.role_of(de.id, ken).await.unwrap(),
-        Some((WorkspaceRole::Viewer, via(OrgRole::Custom("partner".into()))))
+        Some((
+            WorkspaceRole::Viewer,
+            via(OrgRole::Custom("partner".into()))
+        ))
     );
     // Workspaces outside the organization are out of reach.
     assert_eq!(workspaces.role_of(outside.id, grace).await.unwrap(), None);
@@ -336,8 +366,16 @@ async fn organization_grants_do_nothing_while_organizations_are_off() {
     let acme = on.organization(ada, "Acme").await;
     let uk = on.workspace(ada, "Acme UK").await;
     on.attach(acme.id, uk.id).await;
-    on.grant(acme.id, grace, "admin", WorkspaceSelector::All).await;
-    assert!(on.workspaces().await.role_of(uk.id, grace).await.unwrap().is_some());
+    on.grant(acme.id, grace, "admin", WorkspaceSelector::All)
+        .await;
+    assert!(
+        on.workspaces()
+            .await
+            .role_of(uk.id, grace)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     let off = World::new().await;
     let ada = off.user("Ada", "ada@example.com").await;
@@ -351,13 +389,17 @@ async fn organization_grants_do_nothing_while_organizations_are_off() {
         .await;
     assert!(matches!(
         refused,
-        Err(WorkspaceError::FeatureDisabled("workspace.organizations.enabled"))
+        Err(WorkspaceError::FeatureDisabled(
+            "workspace.organizations.enabled"
+        ))
     ));
     let partitions = off.partitions().await;
     let ws = off.workspace(ada, "Acme").await;
     assert!(matches!(
         partitions.list(ws.id).await,
-        Err(WorkspaceError::FeatureDisabled("workspace.partitions.enabled"))
+        Err(WorkspaceError::FeatureDisabled(
+            "workspace.partitions.enabled"
+        ))
     ));
 }
 
@@ -383,7 +425,13 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     let added = world
         .work(|uow| async move {
             service
-                .add(&uow, acme.id, grace, OrgRole::Member, WorkspaceSelector::All)
+                .add(
+                    &uow,
+                    acme.id,
+                    grace,
+                    OrgRole::Member,
+                    WorkspaceSelector::All,
+                )
                 .await
         })
         .await
@@ -393,11 +441,20 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     let twice = world
         .work(|uow| async move {
             service
-                .add(&uow, acme.id, grace, OrgRole::Member, WorkspaceSelector::All)
+                .add(
+                    &uow,
+                    acme.id,
+                    grace,
+                    OrgRole::Member,
+                    WorkspaceSelector::All,
+                )
                 .await
         })
         .await;
-    assert!(matches!(twice, Err(WorkspaceError::AlreadyOrganizationMember)));
+    assert!(matches!(
+        twice,
+        Err(WorkspaceError::AlreadyOrganizationMember)
+    ));
 
     let service = members.clone();
     let changed = world
@@ -424,9 +481,17 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
 
     // Bad input.
     for (role, selector, field) in [
-        (OrgRole::Custom("ghost".into()), WorkspaceSelector::All, "role"),
+        (
+            OrgRole::Custom("ghost".into()),
+            WorkspaceSelector::All,
+            "role",
+        ),
         (OrgRole::Owner, WorkspaceSelector::All, "role"),
-        (OrgRole::Member, WorkspaceSelector::only([outside.id]), "workspaces"),
+        (
+            OrgRole::Member,
+            WorkspaceSelector::only([outside.id]),
+            "workspaces",
+        ),
     ] {
         let service = members.clone();
         let result = world
@@ -619,7 +684,13 @@ async fn access_requests_are_requested_approved_and_declined() {
     let declined = world
         .work(|uow| async move {
             service
-                .decline(&uow, acme.id, linus_asks.id, Some(ada), Some("Not yet.".into()))
+                .decline(
+                    &uow,
+                    acme.id,
+                    linus_asks.id,
+                    Some(ada),
+                    Some("Not yet.".into()),
+                )
                 .await
         })
         .await
@@ -636,7 +707,10 @@ async fn access_requests_are_requested_approved_and_declined() {
                 .await
         })
         .await;
-    assert!(matches!(unknown, Err(WorkspaceError::AccessRequestNotFound)));
+    assert!(matches!(
+        unknown,
+        Err(WorkspaceError::AccessRequestNotFound)
+    ));
 
     // After a decline, a new request can be made and approved for every
     // workspace with another role.
