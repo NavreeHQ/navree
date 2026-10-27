@@ -138,7 +138,7 @@ A person's preferences are one JSON document. Every field is optional, and what 
 | Field | Meaning |
 |---|---|
 | `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push` (`notify.preferences.channels`). |
-| `categories.<name>.channels` | Switches for one category. |
+| `categories.<name>.channels` | Switches for one category (up to 200 categories have choices of their own). |
 | `categories.<name>.digest` | The digest of one category's mail. |
 | `digest` | The digest of every category's mail. |
 | `quiet_hours` | `start` and `end`, local `HH:MM`. `22:00` to `07:00` spans midnight; a start equal to the end means no quiet hours. |
