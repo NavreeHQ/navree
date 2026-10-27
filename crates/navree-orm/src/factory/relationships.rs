@@ -423,6 +423,8 @@ struct Entry {
     kind: Kind,
     related: TypeId,
     related_name: &'static str,
+    /// The foreign key column, or the pivot table.
+    via: String,
     link: Arc<dyn Any + Send + Sync>,
 }
 
@@ -442,6 +444,27 @@ impl Kind {
             Kind::BelongsToMany => "a many-to-many relationship (use it with `has_attached`)",
         }
     }
+
+    fn key(self) -> &'static str {
+        match self {
+            Kind::BelongsTo => "belongs_to",
+            Kind::HasMany => "has_many",
+            Kind::BelongsToMany => "belongs_to_many",
+        }
+    }
+}
+
+/// A relationship a factory declares, as `model:show` lists it.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct RelationshipInfo {
+    /// The relationship's name (`company`).
+    pub name: &'static str,
+    /// `belongs_to`, `has_many` or `belongs_to_many`.
+    pub kind: &'static str,
+    /// The other model (`Company`).
+    pub related: &'static str,
+    /// The foreign key column (`company_id`), or the pivot table.
+    pub via: String,
 }
 
 impl<M: Model> Relationships<M> {
@@ -454,13 +477,20 @@ impl<M: Model> Relationships<M> {
         relationships
     }
 
-    fn push<O: Model>(&mut self, name: &'static str, kind: Kind, link: Arc<dyn Any + Send + Sync>) {
+    fn push<O: Model>(
+        &mut self,
+        name: &'static str,
+        kind: Kind,
+        via: String,
+        link: Arc<dyn Any + Send + Sync>,
+    ) {
         self.entries.retain(|entry| entry.name != name);
         self.entries.push(Entry {
             name,
             kind,
             related: TypeId::of::<O>(),
             related_name: O::meta().name(),
+            via,
             link,
         });
     }
@@ -473,7 +503,8 @@ impl<M: Model> Relationships<M> {
         link: impl Into<BelongsTo<M, P>>,
     ) -> &mut Self {
         let link = link.into();
-        self.push::<P>(name, Kind::BelongsTo, Arc::new(link));
+        let via = link.foreign_key().to_owned();
+        self.push::<P>(name, Kind::BelongsTo, via, Arc::new(link));
         self
     }
 
@@ -485,20 +516,35 @@ impl<M: Model> Relationships<M> {
         link: impl Into<HasMany<M, C>>,
     ) -> &mut Self {
         let link = link.into();
-        self.push::<C>(name, Kind::HasMany, Arc::new(link));
+        let via = link.foreign_key().to_owned();
+        self.push::<C>(name, Kind::HasMany, via, Arc::new(link));
         self
     }
 
     /// `name` are the `R` records attached to an `M` record through
     /// `pivot`.
     pub fn belongs_to_many<R: Model>(&mut self, name: &'static str, pivot: Pivot<M, R>) -> &mut Self {
-        self.push::<R>(name, Kind::BelongsToMany, Arc::new(pivot));
+        let via = pivot.table().to_owned();
+        self.push::<R>(name, Kind::BelongsToMany, via, Arc::new(pivot));
         self
     }
 
     /// The names, in declaration order.
     pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.entries.iter().map(|entry| entry.name)
+    }
+
+    /// Every relationship, in declaration order.
+    pub fn infos(&self) -> Vec<RelationshipInfo> {
+        self.entries
+            .iter()
+            .map(|entry| RelationshipInfo {
+                name: entry.name,
+                kind: entry.kind.key(),
+                related: entry.related_name,
+                via: entry.via.clone(),
+            })
+            .collect()
     }
 
     /// Relationship `name` as a link of type `L` to model `O`.

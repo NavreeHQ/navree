@@ -21,6 +21,11 @@ fn type_text(ty: &Type) -> String {
         .replace("& ", "&")
 }
 
+/// A path as written (`super::factories::DealFactory`).
+fn path_text(path: &syn::Path) -> String {
+    quote!(#path).to_string().replace(' ', "")
+}
+
 /// The path of a cast type.
 fn cast_type(cast: &Cast, krate: &TokenStream) -> TokenStream {
     match cast {
@@ -179,6 +184,17 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     }
     if let Some(workspace) = &model.workspace {
         meta = quote!(#meta.workspace(#workspace));
+    }
+    if let Some(factory) = &model.factory {
+        let name = path_text(factory);
+        meta = quote!(#meta.factory(#name, #krate::__private::factory_relationships::<#factory>));
+    }
+    if let Some((subject, _)) = &model.subject {
+        meta = quote!(#meta.subject(#subject));
+    }
+    if let Some(policy) = &model.policy {
+        let name = path_text(policy);
+        meta = quote!(#meta.policy(#name));
     }
 
     // from_row.

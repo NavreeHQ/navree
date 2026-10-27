@@ -1,0 +1,469 @@
+//! `model:show`: what the app knows about a model, from its metadata and
+//! its registrations: table, key, columns with their types and casts,
+//! timestamps, soft deletes, workspace, factory and the relationships it
+//! declares, access subject and policy, global scopes and hooks.
+//!
+//! Models are registered with [`ModuleBuilderOrmExt::model`] (`navree
+//! make:model` adds the line to the module's `wire`), which also imports
+//! [`OrmModule`], the module registering the command:
+//!
+//! ```text
+//! navree model:show              # the registered models
+//! navree model:show Deal         # one model (by name or table)
+//! navree model:show Deal --json  # as JSON
+//! ```
+//!
+//! ```
+//! # use navree_orm::__doc_factories::*;
+//! use navree_kernel::{Module, ModuleBuilder};
+//! use navree_orm::ModuleBuilderOrmExt;
+//! use navree_orm::show::ModelDescription;
+//!
+//! struct DealsModule;
+//!
+//! impl Module for DealsModule {
+//!     fn register(&self, m: &mut ModuleBuilder) {
+//!         m.model::<Deal>().model::<Company>();
+//!     }
+//! }
+//!
+//! let deal = ModelDescription::of::<Deal>(Vec::new());
+//! assert_eq!((deal.model, deal.table, deal.route_key), ("Deal", "deals", "slug"));
+//! assert_eq!(deal.factory, Some("DealFactory"));
+//! assert!(deal.render().contains("company_id"));
+//! ```
+
+use std::fmt::Write as _;
+
+use navree_kernel::{AppContext, BoxError, BoxFuture, CommandSpec, Module, ModuleBuilder};
+use serde::Serialize;
+
+use crate::factory::RelationshipInfo;
+use crate::hooks::ModelHook;
+use crate::model::{KeyKind, Model, ModelMeta};
+use crate::scope::SoftDeletes;
+
+/// The ORM's module: the `model:show` command. [`ModuleBuilderOrmExt::model`]
+/// imports it, so apps rarely add it themselves.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OrmModule;
+
+impl Module for OrmModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.command(CommandSpec::new(
+            "model:show",
+            "Show a model: table, key, columns and casts, relationships, scopes, hooks, policy (model:show [Model] [--json])",
+            |ctx, args| async move { run(&ctx, &args).await },
+        ));
+    }
+}
+
+/// Registers models with the app.
+pub trait ModuleBuilderOrmExt {
+    /// Registers model `M`: `model:show` describes it, with the hooks the
+    /// app registers for it. Imports [`OrmModule`].
+    fn model<M: Model>(&mut self) -> &mut Self;
+}
+
+impl ModuleBuilderOrmExt for ModuleBuilder {
+    fn model<M: Model>(&mut self) -> &mut Self {
+        self.import(OrmModule).contribute(ModelEntry::of::<M>())
+    }
+}
+
+/// A model registered with [`ModuleBuilderOrmExt::model`].
+struct ModelEntry {
+    meta: &'static ModelMeta,
+    describe: fn(AppContext) -> BoxFuture<'static, Result<ModelDescription, BoxError>>,
+}
+
+impl ModelEntry {
+    fn of<M: Model>() -> Self {
+        ModelEntry {
+            meta: M::meta(),
+            describe: describe::<M>,
+        }
+    }
+}
+
+/// `M`'s description, with the hooks `ctx` registers for it.
+fn describe<M: Model>(ctx: AppContext) -> BoxFuture<'static, Result<ModelDescription, BoxError>> {
+    Box::pin(async move {
+        let registered = ctx.get_all::<dyn ModelHook<M>>().await?;
+        let app_hooks = registered.iter().map(|hook| hook.name()).collect();
+        Ok(ModelDescription::of::<M>(app_hooks))
+    })
+}
+
+/// A model as `model:show` shows it (`--json` prints this).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct ModelDescription {
+    /// The model's name (`Deal`).
+    pub model: &'static str,
+    /// The table.
+    pub table: &'static str,
+    /// The named connection, if the model declares one.
+    pub connection: Option<&'static str>,
+    /// The key column.
+    pub key: &'static str,
+    /// How the key gets its value: `increments`, `uuid_v7`, `uuid_v4`,
+    /// `ulid` or `manual`.
+    pub key_type: &'static str,
+    /// The column route model binding looks records up by.
+    pub route_key: &'static str,
+    /// The creation timestamp column.
+    pub created_at: Option<&'static str>,
+    /// The update timestamp column.
+    pub updated_at: Option<&'static str>,
+    /// The soft-delete column.
+    pub deleted_at: Option<&'static str>,
+    /// The workspace column of a workspace-scoped model.
+    pub workspace: Option<&'static str>,
+    /// The default page size.
+    pub per_page: u64,
+    /// The factory, as written in `#[model(factory = ...)]`.
+    pub factory: Option<&'static str>,
+    /// The navree-access subject the records are.
+    pub subject: Option<&'static str>,
+    /// The attached policy, as written in `#[model(policy = ...)]`.
+    pub policy: Option<&'static str>,
+    /// The columns, in field order.
+    pub columns: Vec<ColumnDescription>,
+    /// The relationships the factory declares.
+    pub relationships: Vec<RelationshipInfo>,
+    /// The global scopes every query applies (soft deletes and the
+    /// workspace's included), by type.
+    pub global_scopes: Vec<&'static str>,
+    /// The model's own hooks (the workspace's included), by type.
+    pub hooks: Vec<&'static str>,
+    /// The hooks the app registers for the model, by type.
+    pub app_hooks: Vec<&'static str>,
+}
+
+/// A column of a [`ModelDescription`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct ColumnDescription {
+    /// The column.
+    pub name: &'static str,
+    /// The struct field.
+    pub field: &'static str,
+    /// The field's Rust type, as written.
+    pub rust_type: &'static str,
+    /// Whether the column holds NULLs.
+    pub nullable: bool,
+    /// The cast converting the column, if any.
+    pub cast: Option<&'static str>,
+}
+
+fn key_type(kind: KeyKind) -> &'static str {
+    match kind {
+        KeyKind::Increments => "increments",
+        KeyKind::UuidV7 => "uuid_v7",
+        KeyKind::UuidV4 => "uuid_v4",
+        KeyKind::Ulid => "ulid",
+        KeyKind::Manual => "manual",
+    }
+}
+
+impl ModelDescription {
+    /// Model `M` from its metadata, with `app_hooks`, the names of the
+    /// hooks the app registers for it.
+    pub fn of<M: Model>(app_hooks: Vec<&'static str>) -> Self {
+        let meta = M::meta();
+        let mut global_scopes: Vec<&'static str> =
+            M::global_scopes().iter().map(|scope| scope.name()).collect();
+        if meta.soft_deletes_enabled() {
+            global_scopes.push(std::any::type_name::<SoftDeletes>());
+        }
+        if meta.is_workspace_scoped() {
+            global_scopes.push(std::any::type_name::<crate::workspace::WorkspaceScope>());
+        }
+        let mut hooks: Vec<&'static str> = M::hooks().iter().map(|hook| hook.name()).collect();
+        if meta.is_workspace_scoped() {
+            hooks.insert(0, std::any::type_name::<crate::workspace::WorkspaceHook>());
+        }
+        ModelDescription {
+            model: meta.name(),
+            table: meta.table(),
+            connection: meta.connection_name(),
+            key: meta.key_column(),
+            key_type: key_type(meta.key_kind()),
+            route_key: meta.route_key_column(),
+            created_at: meta.created_at(),
+            updated_at: meta.updated_at(),
+            deleted_at: meta.deleted_at(),
+            workspace: meta.workspace_column(),
+            per_page: meta.default_per_page(),
+            factory: meta.factory_name(),
+            subject: meta.subject_name(),
+            policy: meta.policy_name(),
+            columns: meta
+                .all_columns()
+                .iter()
+                .map(|column| ColumnDescription {
+                    name: column.name(),
+                    field: column.field(),
+                    rust_type: column.rust_type(),
+                    nullable: column.is_nullable(),
+                    cast: column.cast_name(),
+                })
+                .collect(),
+            relationships: meta.factory_relationships(),
+            global_scopes,
+            hooks,
+            app_hooks,
+        }
+    }
+
+    /// The description as `model:show` prints it.
+    pub fn render(&self) -> String {
+        let none = "-";
+        let or_none = |value: Option<&str>| value.unwrap_or(none).to_owned();
+        let timestamps = match (self.created_at, self.updated_at) {
+            (None, None) => none.to_owned(),
+            (created, updated) => [created, updated]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(", "),
+        };
+        let mut out = format!("{} ({})\n", self.model, self.table);
+        let settings = [
+            ("key", format!("{} ({})", self.key, self.key_type)),
+            ("route key", self.route_key.to_owned()),
+            ("timestamps", timestamps),
+            ("soft deletes", or_none(self.deleted_at)),
+            ("workspace", or_none(self.workspace)),
+            ("connection", self.connection.unwrap_or("default").to_owned()),
+            ("per page", self.per_page.to_string()),
+            ("factory", or_none(self.factory)),
+            ("subject", or_none(self.subject)),
+            ("policy", or_none(self.policy)),
+        ];
+        table(&mut out, None, settings.iter().map(|(k, v)| [(*k).to_owned(), v.clone()]));
+
+        let columns = self.columns.iter().map(|column| {
+            let mut notes = Vec::new();
+            if column.nullable {
+                notes.push("nullable".to_owned());
+            }
+            if let Some(cast) = column.cast {
+                notes.push(format!("cast {cast}"));
+            }
+            [column.name.to_owned(), column.rust_type.to_owned(), notes.join(", ")]
+        });
+        table(&mut out, Some("columns"), columns);
+
+        if !self.relationships.is_empty() {
+            let relationships = self.relationships.iter().map(|relationship| {
+                [
+                    relationship.name.to_owned(),
+                    format!("{} {}", relationship.kind, relationship.related),
+                    format!("via {}", relationship.via),
+                ]
+            });
+            table(&mut out, Some("relationships (declared by the factory)"), relationships);
+        }
+        let list = |out: &mut String, title: &str, items: &[&'static str]| {
+            if !items.is_empty() {
+                table(out, Some(title), items.iter().map(|item| [(*item).to_owned()]));
+            }
+        };
+        list(&mut out, "global scopes", &self.global_scopes);
+        list(&mut out, "hooks", &self.hooks);
+        list(&mut out, "hooks registered by the app", &self.app_hooks);
+        out
+    }
+}
+
+/// Appends `rows` to `out`, under `title`, columns aligned.
+fn table<const N: usize>(
+    out: &mut String,
+    title: Option<&str>,
+    rows: impl Iterator<Item = [String; N]>,
+) {
+    let rows: Vec<[String; N]> = rows.collect();
+    let mut widths = [0; N];
+    for row in &rows {
+        for (width, cell) in widths.iter_mut().zip(row) {
+            *width = (*width).max(cell.chars().count());
+        }
+    }
+    if let Some(title) = title {
+        let _ = writeln!(out, "\n{title}");
+    }
+    for row in &rows {
+        let mut line = String::from("  ");
+        for (index, (cell, width)) in row.iter().zip(widths).enumerate() {
+            if index + 1 == N {
+                line.push_str(cell);
+            } else {
+                let _ = write!(line, "{cell:<width$}  ");
+            }
+        }
+        let _ = writeln!(out, "{}", line.trim_end());
+    }
+}
+
+/// The models the app registers ([`ModuleBuilderOrmExt::model`]), in
+/// module order, each once.
+pub fn registered(ctx: &AppContext) -> Vec<&'static ModelMeta> {
+    entries(ctx).iter().map(|entry| entry.meta).collect()
+}
+
+/// The registered model named `name` (in any case) or stored in table
+/// `name`, described with the hooks the app registers for it.
+pub async fn describe_model(ctx: &AppContext, name: &str) -> Result<ModelDescription, BoxError> {
+    let entries = entries(ctx);
+    let entry = entries
+        .iter()
+        .find(|entry| entry.meta.name().eq_ignore_ascii_case(name) || entry.meta.table() == name)
+        .ok_or_else(|| {
+            let known: Vec<&str> = entries.iter().map(|entry| entry.meta.name()).collect();
+            if known.is_empty() {
+                format!("no model `{name}`. {}", no_models())
+            } else {
+                format!(
+                    "no model `{name}`; the registered models are {}",
+                    known.join(", ")
+                )
+            }
+        })?;
+    (entry.describe)(ctx.clone()).await
+}
+
+/// The registrations, each model once.
+fn entries(ctx: &AppContext) -> Vec<std::sync::Arc<ModelEntry>> {
+    let mut entries: Vec<std::sync::Arc<ModelEntry>> = Vec::new();
+    for entry in ctx.contributions::<ModelEntry>() {
+        if !entries
+            .iter()
+            .any(|seen| std::ptr::eq(seen.meta, entry.value.meta))
+        {
+            entries.push(entry.value);
+        }
+    }
+    entries
+}
+
+/// `model:show [Model] [--json]`.
+async fn run(ctx: &AppContext, args: &[String]) -> Result<(), BoxError> {
+    let usage = "model:show [Model] [--json]";
+    if let Some(flag) = args
+        .iter()
+        .find(|arg| arg.starts_with("--") && *arg != "--json")
+    {
+        return Err(format!("model:show: unknown option `{flag}` ({usage})").into());
+    }
+    let json = args.iter().any(|arg| arg == "--json");
+    let names: Vec<&str> = args
+        .iter()
+        .map(String::as_str)
+        .filter(|arg| !arg.starts_with("--"))
+        .collect();
+    match names.as_slice() {
+        [] => {
+            let models = registered(ctx);
+            if json {
+                let list: Vec<serde_json::Value> = models
+                    .iter()
+                    .map(|meta| serde_json::json!({ "model": meta.name(), "table": meta.table() }))
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&list)?);
+            } else if models.is_empty() {
+                println!("{}", no_models());
+            } else {
+                let mut out = String::new();
+                let rows = models
+                    .iter()
+                    .map(|meta| [meta.name().to_owned(), meta.table().to_owned()]);
+                table(&mut out, None, rows);
+                print!("{out}");
+            }
+            Ok(())
+        }
+        [name] => {
+            let description = describe_model(ctx, name)
+                .await
+                .map_err(|error| format!("model:show: {error}"))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&description)?);
+            } else {
+                print!("{}", description.render());
+            }
+            Ok(())
+        }
+        _ => Err(format!("model:show takes one model ({usage})").into()),
+    }
+}
+
+fn no_models() -> &'static str {
+    "No models are registered: register one in its module's `wire` with \
+     `navree::orm::ModuleBuilderOrmExt::model::<Model>(m)`."
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::__doc_factories::{Company, Deal};
+
+    #[test]
+    fn descriptions_come_from_the_metadata() {
+        let deal = ModelDescription::of::<Deal>(vec!["app::LogDeals"]);
+        assert_eq!(deal.key, "id");
+        assert_eq!(deal.key_type, "uuid_v7");
+        assert_eq!(
+            (deal.created_at, deal.updated_at, deal.deleted_at),
+            (Some("created_at"), Some("updated_at"), Some("deleted_at"))
+        );
+        let stage = deal.columns.iter().find(|c| c.name == "stage").unwrap();
+        assert_eq!((stage.rust_type, stage.cast), ("Stage", Some("string_enum")));
+        let company_id = deal.columns.iter().find(|c| c.name == "company_id").unwrap();
+        assert!(company_id.nullable);
+        assert_eq!(deal.global_scopes, ["navree_orm::scope::SoftDeletes"]);
+        assert_eq!(deal.app_hooks, ["app::LogDeals"]);
+        let names: Vec<&str> = deal.relationships.iter().map(|r| r.name).collect();
+        assert_eq!(names, ["company", "activities", "tags"]);
+        assert_eq!(deal.relationships[0].via, "company_id");
+        assert_eq!(deal.relationships[2].via, "deal_tag");
+
+        let company = ModelDescription::of::<Company>(Vec::new());
+        assert_eq!((company.key_type, company.route_key), ("increments", "id"));
+        assert!(company.global_scopes.is_empty());
+        assert!(company.relationships.is_empty());
+    }
+
+    #[test]
+    fn the_text_lists_everything_aligned() {
+        let text = ModelDescription::of::<Deal>(Vec::new()).render();
+        assert!(text.starts_with("Deal (deals)\n"), "{text}");
+        assert!(text.contains("  key           id (uuid_v7)\n"), "{text}");
+        assert!(text.contains("  route key     slug\n"), "{text}");
+        assert!(text.contains("  soft deletes  deleted_at\n"), "{text}");
+        assert!(text.contains("  workspace     -\n"), "{text}");
+        assert!(text.contains("  connection    default\n"), "{text}");
+        assert!(text.contains("  factory       DealFactory\n"), "{text}");
+        assert!(text.contains("\ncolumns\n"), "{text}");
+        assert!(
+            text.contains("  company_id    Option<i64>            nullable\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  stage         Stage                  cast string_enum\n"),
+            "{text}"
+        );
+        assert!(text.contains("  title         String\n"), "{text}");
+        assert!(
+            text.contains("\nrelationships (declared by the factory)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  tags        belongs_to_many Tag  via deal_tag\n"),
+            "{text}"
+        );
+        assert!(text.contains("\nglobal scopes\n  navree_orm::scope::SoftDeletes\n"), "{text}");
+        assert!(!text.contains("hooks"), "{text}");
+    }
+}

@@ -14,6 +14,7 @@ use crate::collection::Collection;
 use crate::column::{Assignment, Filter};
 use crate::error::Result;
 use crate::exec::Executor;
+use crate::factory::RelationshipInfo;
 use crate::hooks::ModelHook;
 use crate::query::Builder;
 use crate::record::Record;
@@ -343,6 +344,10 @@ pub struct ModelMeta {
     per_page: u64,
     route_key: Option<&'static str>,
     workspace: Option<&'static str>,
+    factory: Option<&'static str>,
+    relationships: Option<fn() -> Vec<RelationshipInfo>>,
+    subject: Option<&'static str>,
+    policy: Option<&'static str>,
 }
 
 impl ModelMeta {
@@ -362,7 +367,65 @@ impl ModelMeta {
             per_page: 15,
             route_key: None,
             workspace: None,
+            factory: None,
+            relationships: None,
+            subject: None,
+            policy: None,
         }
+    }
+
+    /// The model's factory, as written in `#[model(factory = ...)]`, and
+    /// the relationships it declares (`model:show` lists both).
+    pub const fn factory(
+        self,
+        name: &'static str,
+        relationships: fn() -> Vec<RelationshipInfo>,
+    ) -> Self {
+        ModelMeta {
+            factory: Some(name),
+            relationships: Some(relationships),
+            ..self
+        }
+    }
+
+    /// The navree-access subject the model's records are
+    /// (`#[model(subject)]`).
+    pub const fn subject(self, subject: &'static str) -> Self {
+        ModelMeta {
+            subject: Some(subject),
+            ..self
+        }
+    }
+
+    /// The policy attached to the model, as written in
+    /// `#[model(policy = ...)]`.
+    pub const fn policy(self, policy: &'static str) -> Self {
+        ModelMeta {
+            policy: Some(policy),
+            ..self
+        }
+    }
+
+    /// The model's factory, as written in `#[model(factory = ...)]`.
+    pub const fn factory_name(&self) -> Option<&'static str> {
+        self.factory
+    }
+
+    /// The relationships the model's factory declares
+    /// ([`ModelFactory::relationships`](crate::factory::ModelFactory::relationships)),
+    /// in declaration order; none without a factory.
+    pub fn factory_relationships(&self) -> Vec<RelationshipInfo> {
+        self.relationships.map(|f| f()).unwrap_or_default()
+    }
+
+    /// The navree-access subject of the model's records, if it is one.
+    pub const fn subject_name(&self) -> Option<&'static str> {
+        self.subject
+    }
+
+    /// The policy attached to the model, as written.
+    pub const fn policy_name(&self) -> Option<&'static str> {
+        self.policy
     }
 
     /// The column route model binding looks records up by, when it is not
@@ -895,6 +958,15 @@ pub mod derive_support {
                 .map_err(|error| cast_error::<M>(column, error.to_string())),
             None => Ok(None),
         }
+    }
+
+    /// The relationships factory `F` declares, for [`ModelMeta::factory`]
+    /// (`#[model(factory = F)]`).
+    ///
+    /// [`ModelMeta::factory`]: crate::ModelMeta::factory
+    pub fn factory_relationships<F: crate::factory::ModelFactory>()
+    -> Vec<crate::factory::RelationshipInfo> {
+        crate::factory::Relationships::<F::Model>::of::<F>().infos()
     }
 
     /// The error for a column the model does not have.

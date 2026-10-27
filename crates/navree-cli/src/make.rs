@@ -619,19 +619,31 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
             "m",
             WIRE_INDENT,
         )),
-        // A model with a policy is a subject: its records load for
-        // `#[can(.., from = ..)]` routes and its policy joins every user's
-        // rules.
-        MakeKind::Model if ctx.with_policy => {
+        // Registered for `model:show`; a model with a policy is also a
+        // subject: its records load for `#[can(.., from = ..)]` routes and
+        // its policy joins every user's rules.
+        MakeKind::Model => {
             let model = format!("models::{stem}::{pascal}");
-            let feature = format!("navree::access::AccessModule::for_feature::<{model}>()");
-            Some(if feature.len() <= FN_CALL_WIDTH {
-                format!("m.import({feature});")
-            } else {
-                // As rustfmt lays out a wide last argument: broken at its
-                // generic arguments.
-                format!("m.import(navree::access::AccessModule::for_feature::<\n    {model},\n>());")
-            })
+            let mut block = generic_call(
+                "navree::orm::ModuleBuilderOrmExt::model",
+                std::slice::from_ref(&model),
+                "m",
+                WIRE_INDENT,
+            );
+            if ctx.with_policy {
+                let feature = format!("navree::access::AccessModule::for_feature::<{model}>()");
+                block.push('\n');
+                if feature.len() <= FN_CALL_WIDTH {
+                    block.push_str(&format!("m.import({feature});"));
+                } else {
+                    // As rustfmt lays out a wide last argument: broken at
+                    // its generic arguments.
+                    block.push_str(&format!(
+                        "m.import(navree::access::AccessModule::for_feature::<\n    {model},\n>());"
+                    ));
+                }
+            }
+            Some(block)
         }
         _ => None,
     }

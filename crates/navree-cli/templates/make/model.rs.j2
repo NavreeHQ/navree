@@ -11,7 +11,8 @@ use serde::Serialize;
 use uuid::Uuid;
 
 /// {{ a_title }}. Query it with `{{ pascal }}::query()`, create one with
-/// `{{ pascal }}::create(&uow, {{ pascal }} { .. })`.
+/// `{{ pascal }}::create(&uow, {{ pascal }} { .. })`; `navree model:show
+/// {{ pascal }}` describes it.
 #[derive(Model, Clone, Debug, Default, Serialize)]
 {% if with_factory or with_policy %}
 #[model(
