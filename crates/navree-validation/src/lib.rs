@@ -93,7 +93,7 @@ mod phone;
 pub mod rules;
 mod value;
 
-pub use async_rules::{AsyncRule, AsyncRules, RuleError};
+pub use async_rules::{AsyncRule, AsyncRules, RuleError, UowCheck};
 pub use context::{InputContext, RegionSource};
 pub use country::{Country, InvalidCountry};
 pub use digits::{Folded, fold_digits};

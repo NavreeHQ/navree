@@ -4,7 +4,9 @@
 //! A model's global scopes are, in the order they apply: the ones declared
 //! on it (`#[model(global_scopes(..))]`), the ones modules registered at
 //! boot (`m.global_scope::<Deal>("active", |q| ..)`), then
-//! [`SoftDeletes`] for a soft-deleting model.
+//! [`SoftDeletes`] for a soft-deleting model, then
+//! [`WorkspaceScope`](crate::workspace::WorkspaceScope) for a
+//! workspace-scoped one.
 //!
 //! Scopes apply where no executor is at hand (`to_sql`, subqueries), so the
 //! runtime registrations are process-wide: `OrmModule` installs them when
@@ -65,12 +67,17 @@ fn registered<M: Model>() -> Vec<Arc<dyn GlobalScope<M>>> {
 }
 
 /// Every global scope of `M`, in the order they apply: declared, registered
-/// at runtime, then [`SoftDeletes`] for a soft-deleting model.
+/// at runtime, then [`SoftDeletes`] for a soft-deleting model and
+/// [`WorkspaceScope`](crate::workspace::WorkspaceScope) for a
+/// workspace-scoped one.
 pub(crate) fn scopes_of<M: Model>() -> Vec<Arc<dyn GlobalScope<M>>> {
     let mut scopes = M::global_scopes();
     scopes.extend(registered::<M>());
     if M::meta().soft_deletes_enabled() {
         scopes.push(Arc::new(SoftDeletes));
+    }
+    if M::meta().is_workspace_scoped() {
+        scopes.push(Arc::new(crate::workspace::WorkspaceScope));
     }
     scopes
 }

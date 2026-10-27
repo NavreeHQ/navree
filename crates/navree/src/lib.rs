@@ -297,6 +297,13 @@ pub use axum;
 /// its route attributes.
 pub use navree_macros::{controller, delete, get, injectable, module, patch, post, put};
 
+/// `#[navree::test]`: an `async fn` test on a runtime of its own, given a
+/// database of its own when it takes one (`db: TestDb`, from a
+/// `navree::orm::testing::database::Template` or empty), with the `orm` and
+/// `testing` features.
+#[cfg(all(feature = "orm", feature = "testing"))]
+pub use navree_orm::test;
+
 /// `#[message_handlers]` and the pattern attributes it consumes
 /// (`#[message_pattern]`, `#[event_pattern]`), with the `micro` feature.
 #[cfg(feature = "micro")]

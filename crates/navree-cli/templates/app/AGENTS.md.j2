@@ -62,6 +62,8 @@ snake_case; module names are plural. Generators never overwrite a file.
 | A controller in a module | `navree make:controller posts admin` |
 | A service | `navree make:service posts pricing` |
 | An entity, then its table | `navree make:entity posts tag`, then `navree make:migration posts create_tags_table` |
+| An ORM model with its migration, factory, seeder, JSON controller and policy | `navree make:model posts Comment --all` (or any of `--migration --factory --seeder --controller --policy`); a many-to-many table: `navree make:model posts post_tag --pivot --all` |
+| A model factory, a seeder | `navree make:factory posts pinned_comment --model comment`, `navree make:seeder posts demo_posts` |
 | A migration | `navree make:migration posts add_slug_to_posts` |
 | A queued job | `navree make:job posts publish_post` |
 | An event and a listener | `navree make:event posts post_published`, then `navree make:listener posts notify_followers --event post_published` |

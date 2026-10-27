@@ -445,7 +445,10 @@ impl Target<'_> {
                     .map(Row::from_sql)
                     .collect())
             }
-            Target::Document(document) => document.driver.find(query).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.find(query).await
+            }
         }
     }
 
@@ -479,6 +482,7 @@ impl Target<'_> {
                 }
             }
             Target::Document(document) => {
+                crate::testing::note_statement();
                 let rows = document.driver.stream(query).await?;
                 Ok(rows)
             }
@@ -500,7 +504,10 @@ impl Target<'_> {
                     None => Ok(Value::BigInt(None)),
                 }
             }
-            Target::Document(document) => document.driver.aggregate(query, aggregate).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.aggregate(query, aggregate).await
+            }
         }
     }
 
@@ -519,7 +526,10 @@ impl Target<'_> {
                     None => Ok(false),
                 }
             }
-            Target::Document(document) => document.driver.exists(query).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.exists(query).await
+            }
         }
     }
 
@@ -550,7 +560,10 @@ impl Target<'_> {
                     })
                 }
             }
-            Target::Document(document) => document.driver.insert(insert).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.insert(insert).await
+            }
         }
     }
 
@@ -561,7 +574,10 @@ impl Target<'_> {
                 let statement = sql::compile_update(update, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
-            Target::Document(document) => document.driver.update(update).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.update(update).await
+            }
         }
     }
 
@@ -572,7 +588,10 @@ impl Target<'_> {
                 let statement = sql::compile_delete(delete, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
-            Target::Document(document) => document.driver.delete(delete).await,
+            Target::Document(document) => {
+                crate::testing::note_statement();
+                document.driver.delete(delete).await
+            }
         }
     }
 }
@@ -625,6 +644,7 @@ impl<'a> SqlTarget<'a> {
     pub async fn query_all(&self, statement: &Statement) -> Result<Vec<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         let rows = match &self.conn {
             SqlConn::Pool(conn) => {
@@ -645,6 +665,7 @@ impl<'a> SqlTarget<'a> {
     pub async fn query_one(&self, statement: &Statement) -> Result<Option<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         let row = match &self.conn {
             SqlConn::Pool(conn) => {
@@ -663,6 +684,7 @@ impl<'a> SqlTarget<'a> {
     pub async fn execute(&self, statement: &Statement) -> Result<ExecResult, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         let result = match &self.conn {
             SqlConn::Pool(conn) => conn.execute_raw(statement).await,
@@ -712,6 +734,7 @@ impl<'a> SqlTarget<'a> {
         let id = self.conn.transaction_id();
         ensure_free(id)?;
         self.announce(&statement.sql);
+        crate::testing::note_statement();
         let statement = statement.to_sea_orm();
         let rows: RowsStream<'_> = match &self.conn {
             SqlConn::Pool(conn) => conn
@@ -1099,8 +1122,11 @@ impl Executor for Target<'_> {
 }
 
 impl Target<'_> {
-    /// The same target, borrowed.
-    pub(crate) fn reborrow(&self) -> Target<'_> {
+    /// The same target, borrowed: the same connection or transaction, unit
+    /// of work and app. (A target is itself an [`Executor`] through this,
+    /// so code handed one, such as a factory's after-creating hook, keeps
+    /// writing in the same transaction.)
+    pub fn reborrow(&self) -> Target<'_> {
         match self {
             Target::Sql(sql) => Target::Sql(SqlTarget {
                 db: sql.db.clone(),

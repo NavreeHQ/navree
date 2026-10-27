@@ -16,12 +16,11 @@ use navree_http::{AppError, ClientIp, RouteAuthorizer, RouteMeta};
 use navree_kernel::{AppContext, BoxFuture};
 use serde_json::{Value, json};
 
-use sea_orm::EntityTrait;
-
 use crate::Authorized;
-use crate::engine::{Ability, ActionMarker, Subject};
+use crate::engine::{Ability, ActionMarker};
 use crate::extract::request_access;
 use crate::factory::{AbilityFactory, PrincipalAccess};
+use crate::records::SubjectRecords;
 
 /// A check of something that is not a route, such as a GraphQL field, put
 /// in the request extensions before calling the authorizer:
@@ -68,18 +67,17 @@ impl AuthorizedRecord {
         &self.json
     }
 
-    /// The typed record, or `None` when `E`'s subject or `A`'s action is not
-    /// the one that was checked (or the model is not `E`'s).
-    pub fn into_authorized<E, A>(self) -> Option<Authorized<E, A>>
+    /// The typed record, or `None` when `S`'s subject or `A`'s action is not
+    /// the one that was checked (or the record is not `S`'s).
+    pub fn into_authorized<S, A>(self) -> Option<Authorized<S, A>>
     where
-        E: EntityTrait + Subject,
-        E::Model: Sync,
+        S: SubjectRecords,
         A: ActionMarker,
     {
-        if self.subject != E::SUBJECT || self.action != A::NAME {
+        if self.subject != S::SUBJECT || self.action != A::NAME {
             return None;
         }
-        let model = self.model.downcast::<E::Model>().ok()?;
+        let model = self.model.downcast::<S::Record>().ok()?;
         Some(Authorized::from_parts(model, self.json, self.ability))
     }
 }

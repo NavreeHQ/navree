@@ -119,10 +119,15 @@ const HIERARCHY: &[Rule] = &[
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
-    // through navree-api (ORM brief §2, §3).
+    // through navree-api (ORM brief §2, §3). navree-access (same layer,
+    // optional feature `access`): models as subjects, abilities as query
+    // filters. navree-testing (optional feature `testing`): `TestApp`
+    // seeding. navree-validation (optional feature `validation`): rules
+    // that query models.
     rule("navree-orm", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-events", "navree-crypto", "navree-api", "navree-orm-macros",
+        "navree-access", "navree-testing", "navree-validation",
     ]),
     // Browser testing: a dev-dependency crate that serves an app's router
     // (navree-http) on a real port and drives Chrome over the DevTools

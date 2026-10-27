@@ -383,6 +383,8 @@ fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
         "navree make:migration posts create_tags_table",
         "navree make:job posts publish_post",
         "navree make:test posts publishing",
+        "navree make:model posts Comment --all",
+        "navree make:seeder posts demo_posts",
         // deny by default and the error shape
         "#[authenticated]",
         r#"{ "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }"#,

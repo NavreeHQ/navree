@@ -97,7 +97,7 @@ impl<M: Model> Builder<M> {
         let mut query = self.with_pending_default_counts();
         let eager = query.take_eager();
         let extra_casts = query.extra_casts.clone();
-        let ir = query.into_ir();
+        let ir = crate::workspace::with_target(target, || query.into_ir());
         let rows = target.fetch(&ir).await?;
         let ctx = target.context();
         // Rows decode inside the model's cast context (the app's encrypter,
@@ -133,7 +133,7 @@ impl<M: Model> Builder<M> {
     /// The rows of the query with `items` as its select list (global scopes
     /// applied).
     async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
-        let builder = self.apply_global_scopes();
+        let builder = crate::workspace::with_target(target, || self.apply_global_scopes());
         let defaults = crate::query::model_columns::<M>(builder.ir.table.qualifier());
         let query = crate::query::reading_values(builder.ir, items, defaults);
         target.fetch(&query).await
@@ -316,7 +316,8 @@ impl<M: Model> Builder<M> {
     /// Whether the query matches any record.
     pub async fn exists<E: Executor + ?Sized>(self, exec: &E) -> Result<bool> {
         let target = exec.target_routed(Access::Read, self.route()).await?;
-        target.exists(&self.into_ir()).await
+        let ir = crate::workspace::with_target(&target, || self.into_ir());
+        target.exists(&ir).await
     }
 
     /// Whether the query matches no record.
@@ -467,7 +468,7 @@ impl<M: Model> Builder<M> {
         };
         // Without the default columns: a grouped count selects only the
         // groups (PostgreSQL refuses ungrouped columns).
-        let ir = self.apply_global_scopes().ir;
+        let ir = crate::workspace::with_target(target, || self.apply_global_scopes()).ir;
         let value = target.aggregate(&ir, &aggregate).await?;
         <Option<T>>::from_value(value).map_err(|error| {
             decode_error(

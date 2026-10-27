@@ -221,6 +221,18 @@ impl TestAppBuilder {
             .config("database.migrate_on_boot", true)
     }
 
+    /// Points `database.url` at an in-memory SQLite database, migrated on
+    /// boot: the fastest database for tests, gone with the app. Its pool
+    /// keeps exactly one connection (every connection would open a
+    /// database of its own), so a unit of work holds the database until it
+    /// ends.
+    pub fn memory_database(self) -> Self {
+        self.config("database.url", "sqlite::memory:")
+            .config("database.max_connections", 1)
+            .config("database.min_connections", 1)
+            .config("database.migrate_on_boot", true)
+    }
+
     /// Replaces the unnamed provider of `T` with `value` wherever it is
     /// registered (or registers it globally); see `AppBuilder::override_value`.
     pub fn override_value<T: ?Sized + Send + Sync + 'static>(mut self, value: Arc<T>) -> Self {

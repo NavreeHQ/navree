@@ -482,18 +482,13 @@ impl RuleRequest {
             )
         })?;
         let mut failures = Vec::new();
-        {
-            // Dropped before the unit of work commits.
-            let tx = uow.tx().await.map_err(AppError::internal)?;
-            for rule in &rules {
-                let ignore = rule.ignore_for(&self.path_params);
-                if !rule
-                    .passes_ignoring(&*tx, ignore)
-                    .await
-                    .map_err(AppError::internal)?
-                {
-                    failures.push(Failure::keyed(rule.field(), rule.rule()));
-                }
+        for rule in &rules {
+            if !rule
+                .passes_for(&uow, &self.path_params)
+                .await
+                .map_err(AppError::internal)?
+            {
+                failures.push(Failure::keyed(rule.field(), rule.rule()));
             }
         }
         if failures.is_empty() {

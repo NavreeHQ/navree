@@ -167,6 +167,8 @@ struct UowInner {
     actor: Option<Uuid>,
     impersonator: Option<Uuid>,
     request_id: Option<String>,
+    /// The workspace the work is done in, once one was entered.
+    workspace: Mutex<Option<Uuid>>,
     tx: tokio::sync::Mutex<TxState>,
     changes: Mutex<Vec<Recorded>>,
     after_commit: Mutex<Vec<AfterCommit>>,
@@ -223,6 +225,7 @@ impl Uow {
                 actor,
                 impersonator,
                 request_id,
+                workspace: Mutex::new(None),
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 changes: Mutex::new(Vec::new()),
                 after_commit: Mutex::new(Vec::new()),
@@ -330,6 +333,38 @@ impl Uow {
     /// The request id, if any.
     pub fn request_id(&self) -> Option<&str> {
         self.inner.request_id.as_deref()
+    }
+
+    /// The workspace the work is done in: set when a workspace is entered
+    /// (navree-workspace does it for every workspace request and for
+    /// `Workspaces::enter`), `None` before. Workspace-scoped ORM models read
+    /// it to scope their queries and fill new records.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), sea_orm::DbErr> {
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let url = format!("sqlite://{}?mode=rwc", dir.path().join("w.db").display());
+    /// use navree_db::{Db, DbOptions};
+    ///
+    /// let db = Db::connect(&DbOptions { url, ..DbOptions::default() }).await?;
+    /// let uow = db.uow(None, None).await;
+    /// assert_eq!(uow.workspace(), None);
+    /// let acme = uuid::Uuid::now_v7();
+    /// uow.set_workspace(Some(acme));
+    /// assert_eq!(uow.workspace(), Some(acme));
+    /// # Ok(()) }
+    /// ```
+    pub fn workspace(&self) -> Option<Uuid> {
+        *lock(&self.inner.workspace)
+    }
+
+    /// Records the workspace the work is done in (`None` leaves it). This
+    /// only remembers the id: the database-side settings of a workspace
+    /// (PostgreSQL's `navree.workspace`, the `search_path`) are applied by
+    /// whoever enters it.
+    pub fn set_workspace(&self, workspace: Option<Uuid>) {
+        *lock(&self.inner.workspace) = workspace;
     }
 
     /// The database.
@@ -447,6 +482,54 @@ impl Uow {
         tx.commit().await.map(|()| true)
     }
 
+    /// Ends the unit of work as a commit would, except that the transaction
+    /// rolls back: the [`ChangeObserver`]s run inside it, it rolls back,
+    /// then the after-commit hooks run. The transaction-per-test strategy:
+    /// nothing a test wrote stays, and what a commit triggers (jobs, mail,
+    /// broadcasts) still happens, so the test can assert it. Hooks run
+    /// after the rollback and see what other connections see. Fails like
+    /// [`commit`](Uow::commit) when an `Arc` from [`tx`](Uow::tx) is still
+    /// held (the transaction then rolls back when the last holder drops it,
+    /// and the hooks are dropped); an observer error is returned after the
+    /// rollback, and the hooks are dropped. Ending a finished unit of work
+    /// does nothing.
+    pub async fn rollback_as_committed(&self) -> Result<(), DbErr> {
+        let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
+        let changes = std::mem::take(&mut *lock(&self.inner.changes));
+        let tx = match current {
+            TxState::Done => return Ok(()),
+            TxState::Open(tx) => Some(tx),
+            TxState::Idle if !changes.is_empty() => Some(Arc::new(self.begin().await?)),
+            TxState::Idle => None,
+        };
+        if let Some(tx) = tx {
+            let tx = match Arc::try_unwrap(tx) {
+                Ok(tx) => tx,
+                Err(shared) => {
+                    end_session_or_warn(&self.inner.db, &shared).await;
+                    lock(&self.inner.after_commit).clear();
+                    return Err(DbErr::Custom(
+                        "cannot end the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
+                            .to_owned(),
+                    ));
+                }
+            };
+            let observed = self.observe(&tx, &changes).await;
+            end_session_or_warn(&self.inner.db, &tx).await;
+            tx.rollback().await?;
+            if let Err(error) = observed {
+                lock(&self.inner.after_commit).clear();
+                return Err(error);
+            }
+        }
+        // Taken after the observers ran, so hooks they registered run too.
+        let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
+        for hook in hooks {
+            hook().await;
+        }
+        Ok(())
+    }
+
     /// Rolls back and drops recorded changes and after-commit hooks.
     /// Rolling back a finished unit of work does nothing. On MySQL the
     /// session variables are cleared first, also when the transaction is
@@ -558,6 +641,7 @@ impl fmt::Debug for Uow {
             .field("actor", &self.inner.actor)
             .field("impersonator", &self.inner.impersonator)
             .field("request_id", &self.inner.request_id)
+            .field("workspace", &self.workspace())
             .field("changes", &lock(&self.inner.changes).len())
             .finish_non_exhaustive()
     }

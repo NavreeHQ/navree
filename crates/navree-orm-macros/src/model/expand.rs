@@ -23,6 +23,11 @@ fn type_text(ty: &Type) -> String {
         .replace("& ", "&")
 }
 
+/// A path as written (`super::factories::DealFactory`).
+fn path_text(path: &syn::Path) -> String {
+    quote!(#path).to_string().replace(' ', "")
+}
+
 /// How one column is read, written, converted and typed.
 struct Codec {
     /// `row -> field` (reading a row); `None` for the columns of a
@@ -263,6 +268,23 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
     }
     let attribute_calls = attributes::meta_calls(model, krate);
     meta = quote!(#meta #attribute_calls);
+    if let Some(route_key) = &model.route_key {
+        meta = quote!(#meta.route_key(#route_key));
+    }
+    if let Some(workspace) = &model.workspace {
+        meta = quote!(#meta.workspace(#workspace));
+    }
+    if let Some(factory) = &model.factory {
+        let name = path_text(factory);
+        meta = quote!(#meta.factory(#name, #krate::__private::factory_relationships::<#factory>));
+    }
+    if let Some((subject, _)) = &model.subject {
+        meta = quote!(#meta.subject(#subject));
+    }
+    if let Some(policy) = &model.policy {
+        let name = path_text(policy);
+        meta = quote!(#meta.policy(#name));
+    }
 
     // from_row.
     let reads = model
@@ -383,6 +405,68 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
     let hook_entries = super::lifecycle::hook_entries(&model.lifecycle, krate);
     let hooks = super::lifecycle::hooks_fn(ident, &hook_entries, krate);
     let capabilities = super::lifecycle::capability_impls(ident, model.deleted_at.is_some(), krate);
+
+    // The factory: `HasFactory` and an inherent `factory()`.
+    let (factory_impl, factory_fn) = match &model.factory {
+        Some(factory) => {
+            let doc = format!("A factory building `{ident}` records (see `navree_orm::factory`).");
+            (
+                quote! {
+                    #[automatically_derived]
+                    impl #krate::factory::HasFactory for #ident {
+                        type Factory = #factory;
+                    }
+                },
+                quote! {
+                    #[doc = #doc]
+                    #vis fn factory() -> #krate::factory::Factory<#factory> {
+                        #krate::factory::Factory::<#factory>::new()
+                    }
+                },
+            )
+        }
+        None => (quote!(), quote!()),
+    };
+
+    // The navree-access subject (navree-orm's `access` feature).
+    let subject_impl = match &model.subject {
+        Some((subject, prefix)) => {
+            let support = quote!(#krate::access::derive_support);
+            let policy = model.policy.as_ref().map(|policy| {
+                quote! {
+                    fn policy() -> ::core::option::Option<fn(&#support::AbilityCtx, &mut #support::Rules)> {
+                        ::core::option::Option::Some(<#policy as #support::Policy>::define)
+                    }
+                }
+            });
+            quote! {
+                #[automatically_derived]
+                impl #support::Subject for #ident {
+                    const SUBJECT: &'static str = #subject;
+                    const PERMISSION_PREFIX: &'static str = #prefix;
+                }
+
+                #[automatically_derived]
+                impl #support::SubjectRecords for #ident {
+                    type Record = #krate::Record<Self>;
+
+                    fn load<'a>(
+                        uow: &'a #support::Uow,
+                        id: &'a str,
+                    ) -> #support::BoxFuture<'a, ::core::result::Result<::core::option::Option<#krate::Record<Self>>, #support::BoxError>> {
+                        #krate::access::load_record::<Self>(uow, id)
+                    }
+
+                    fn record_json(record: &#krate::Record<Self>) -> #support::Json {
+                        #krate::access::record_json(record)
+                    }
+
+                    #policy
+                }
+            }
+        }
+        None => quote!(),
+    };
 
     // Column constants: one per column, named after the field (after the
     // column for the columns of a multi-column field).
@@ -516,7 +600,13 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
             #(#constants)*
 
             #setters
+
+            #factory_fn
         }
+
+        #factory_impl
+
+        #subject_impl
 
         #module_items
     })

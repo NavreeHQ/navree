@@ -38,6 +38,12 @@
 //!   (`#[model(connection = "..")]`, `on_connection`, [`using_connection`])
 //!   and read from the writer when replicas exist (`use_write`,
 //!   [`using_writer`]); see [`Route`].
+//! - **In apps**: model [`factory`] builders for tests and seeders, the
+//!   database assertions and test databases of [`testing`], route model
+//!   [`binding`] (`Bound<Deal>`), [`workspace`] scoping
+//!   (`#[model(workspace)]`), access control (`#[model(subject, policy)]`,
+//!   feature `access`), validation rules on models (feature `validation`)
+//!   and `model:show` ([`OrmModule`]).
 //!
 //! ```
 //! use chrono::{DateTime, Utc};
@@ -108,7 +114,10 @@
 
 extern crate self as navree_orm;
 
+#[cfg(feature = "access")]
+pub mod access;
 pub mod attributes;
+pub mod binding;
 pub mod broadcast;
 pub mod cast;
 mod collection;
@@ -118,6 +127,7 @@ mod error;
 pub mod events;
 mod exec;
 mod expr;
+pub mod factory;
 mod global_scopes;
 pub mod hooks;
 pub mod ir;
@@ -137,12 +147,17 @@ mod record;
 pub mod relations;
 mod row;
 mod scope;
+pub mod show;
 mod soft_deletes;
 pub mod sql;
 pub mod streams;
 pub mod strict;
+pub mod testing;
 mod ulid;
+#[cfg(feature = "validation")]
+pub mod validation;
 mod value;
+pub mod workspace;
 
 pub use collection::Collection;
 pub use column::{
@@ -186,9 +201,10 @@ pub use value::{
     Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]`, `#[scopes]`, `#[relations]` and `#[accessors]` (see
-/// their documentation in navree-orm-macros).
-pub use navree_orm_macros::{Model, accessor, accessors, relations, scopes};
+/// `#[derive(Model)]`, `#[scopes]`, `#[relations]`, `#[accessors]` and
+/// `#[test]` (see their documentation in navree-orm-macros; `#[test]` needs
+/// the `testing` feature for its databases).
+pub use navree_orm_macros::{Model, accessor, accessors, relations, scopes, test};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
@@ -202,6 +218,7 @@ pub mod __private {
     pub use serde;
     pub use serde_json;
     pub use std::sync::{Arc, OnceLock};
+    pub use tokio;
     pub use utoipa;
 }
 
@@ -210,3 +227,15 @@ pub mod __private {
 #[doc(hidden)]
 #[path = "doc_models.rs"]
 pub mod __doc_models;
+
+/// The models and factories the factory, testing, binding and workspace
+/// examples use. Not part of the API.
+#[doc(hidden)]
+#[path = "doc_factories.rs"]
+pub mod __doc_factories;
+
+/// The model the access-control examples use. Not part of the API.
+#[cfg(feature = "access")]
+#[doc(hidden)]
+#[path = "doc_access.rs"]
+pub mod __doc_access;

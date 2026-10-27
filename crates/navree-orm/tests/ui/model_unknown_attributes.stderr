@@ -1,4 +1,4 @@
-error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, primary_key, key_type, timestamps, soft_deletes, connection, per_page, global_scopes, touches, morph_name, with, with_count, pivot, observers, dispatches, broadcasts, prunable, mass_prunable, fillable, guarded, unguarded, hidden, visible, appends, encrypter, serialize_dates_with, resource
+error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, primary_key, key_type, timestamps, soft_deletes, connection, per_page, global_scopes, touches, morph_name, with, with_count, pivot, factory, route_key, workspace, subject, permission_prefix, policy, observers, dispatches, broadcasts, prunable, mass_prunable, fillable, guarded, unguarded, hidden, visible, appends, encrypter, serialize_dates_with, resource
  --> tests/ui/model_unknown_attributes.rs:4:9
   |
 4 | #[model(tabel = "deals")]

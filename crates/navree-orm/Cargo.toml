@@ -19,6 +19,18 @@ postgres = ["navree-db/postgres", "sea-orm/postgres-vector"]
 ## `mariadb://` URLs). SQL for every dialect is generated without any
 ## feature.
 mysql = ["navree-db/mysql"]
+## Access control on models: `#[model(subject, policy)]`, navree-access's
+## abilities as query filters (`accessible`) and record checks
+## (`AbilityExt`), `Authorized<Model, A>` routes. The facade turns it on
+## when both `orm` and `access` are on.
+access = ["dep:navree-access"]
+## Testing helpers on navree-testing's `TestApp` (`app.seed::<S>()`). The
+## facade turns it on when both `orm` and `testing` are on.
+testing = ["dep:navree-testing"]
+## Validation rules that query models (`validation::unique`,
+## `validation::exists`) for navree-validation's `ValidAsync`. The facade
+## turns it on when both `orm` and `validation` are on.
+validation = ["dep:navree-validation"]
 
 [dependencies]
 # PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
@@ -31,6 +43,7 @@ futures = { workspace = true }
 heck = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
+navree-access = { workspace = true, optional = true }
 navree-api = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -41,6 +54,8 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm-macros = { workspace = true }
 navree-telemetry = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 # `stream`: cursors read rows as the database sends them.
 sea-orm = { workspace = true, features = ["with-rust_decimal", "stream"] }
@@ -49,8 +64,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 # Task-local scopes: quiet writes, suspended touching, scoped morph maps,
-# lazy-loading rules, cast services, guard suspension and the connection
-# of `using_connection`.
+# lazy-loading rules, cast services, guard suspension, the connection of
+# `using_connection` and the current workspace; the lazy factories'
+# once-cells.
 tokio = { workspace = true }
 tracing = { workspace = true }
 # `url::Url` fields (serialized as their text).
@@ -60,8 +76,14 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# `#[derive(garde::Validate)]` in the validation tests names `::garde`.
+garde = { workspace = true }
 insta = { workspace = true }
+# The crate's own tests use its `access`, `testing` and `validation`
+# features.
+navree-orm = { workspace = true, features = ["access", "testing", "validation"] }
 navree-testing = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }
 trybuild = { workspace = true }
 

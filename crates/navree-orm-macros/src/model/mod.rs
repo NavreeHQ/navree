@@ -72,6 +72,17 @@ pub(crate) struct Model {
     pub(crate) pivot: Option<(String, String)>,
     /// The attribute layer's view of the model.
     pub(crate) attributes: attributes::ModelAttrs,
+    /// The model's factory (`factory = DealFactory`).
+    pub(crate) factory: Option<syn::Path>,
+    /// The column route model binding looks records up by, when it is not
+    /// the key.
+    pub(crate) route_key: Option<String>,
+    /// The workspace column of a workspace-scoped model.
+    pub(crate) workspace: Option<String>,
+    /// The navree-access subject: its name and permission prefix.
+    pub(crate) subject: Option<(String, String)>,
+    /// The policy attached to the subject.
+    pub(crate) policy: Option<syn::Path>,
 }
 
 impl Model {
@@ -455,6 +466,34 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         &field_names,
         &mut errors,
     );
+    if let Some(route_key) = &attrs.route_key
+        && !columns
+            .iter()
+            .any(|column| column.name == route_key.value())
+    {
+        errors.push(syn::Error::new(
+            route_key.span(),
+            format!(
+                "{ident} has no column `{}` to bind routes by: name one of its columns",
+                route_key.value()
+            ),
+        ));
+    }
+    if let Some((name, span)) = &attrs.workspace {
+        match columns.iter().find(|candidate| &candidate.name == name) {
+            None => errors.push(syn::Error::new(
+                *span,
+                format!(
+                    "#[model(workspace)] needs a field for the `{name}` column (a `Uuid`), or name the column with workspace = \"...\""
+                ),
+            )),
+            Some(column) if column.cast.is_some() => errors.push(syn::Error::new(
+                column.ident.span(),
+                "the workspace field cannot have a cast: use a `Uuid` field",
+            )),
+            Some(_) => {}
+        }
+    }
     errors.finish()?;
 
     let table = attrs
@@ -468,6 +507,23 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         .as_ref()
         .map_or_else(|| snake.clone(), LitStr::value);
     let foreign_key = format!("{snake}_{key_name}");
+    // A policy makes the model a subject; the subject's name defaults to
+    // the model's and its permission prefix to the table.
+    let subject =
+        if attrs.subject.is_some() || attrs.policy.is_some() || attrs.permission_prefix.is_some() {
+            let name = attrs
+                .subject
+                .clone()
+                .flatten()
+                .map_or_else(|| ident.to_string(), |name| name.value());
+            let prefix = attrs
+                .permission_prefix
+                .as_ref()
+                .map_or_else(|| table.clone(), LitStr::value);
+            Some((name, prefix))
+        } else {
+            None
+        };
     Ok(Model {
         ident,
         vis: input.vis.clone(),
@@ -498,6 +554,11 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         with_count: attrs.relations.with_count,
         pivot,
         attributes: model_attrs,
+        factory: attrs.factory,
+        route_key: attrs.route_key.as_ref().map(LitStr::value),
+        workspace: attrs.workspace.map(|(column, _)| column),
+        subject,
+        policy: attrs.policy,
     })
 }
 

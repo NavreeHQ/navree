@@ -79,6 +79,11 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "make/test.rs",
     "make/mcp.rs",
     "make/resource.rs",
+    "make/model.rs",
+    "make/factory.rs",
+    "make/seeder.rs",
+    "make/model_controller.rs",
+    "make/model_policy.rs",
 ];
 
 /// A template failed to render (a bug in the template or its context).

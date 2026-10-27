@@ -65,6 +65,21 @@ pub(crate) struct Container {
     pub(crate) relations: super::relations::RelationAttrs,
     /// The attribute layer's keys.
     pub(crate) attributes: attributes::ContainerAttrs,
+    /// `factory = DealFactory`: the model's factory.
+    pub(crate) factory: Option<syn::Path>,
+    /// `route_key = "slug"`: the column route model binding looks records
+    /// up by.
+    pub(crate) route_key: Option<LitStr>,
+    /// `workspace` or `workspace = "team_id"`: the column holding the
+    /// workspace of a workspace-scoped model.
+    pub(crate) workspace: Option<(String, Span)>,
+    /// `subject` or `subject = "Deal"`: the model is a navree-access
+    /// subject (`None` inside: the model's name).
+    pub(crate) subject: Option<Option<LitStr>>,
+    /// `permission_prefix = "deals"`: the subject's permission prefix.
+    pub(crate) permission_prefix: Option<LitStr>,
+    /// `policy = DealPolicy`: the rules attached to the subject.
+    pub(crate) policy: Option<syn::Path>,
 }
 
 /// The keys `#[model(...)]` takes on a struct (the attribute layer's come
@@ -83,6 +98,12 @@ const KEYS: &[&str] = &[
     "with",
     "with_count",
     "pivot",
+    "factory",
+    "route_key",
+    "workspace",
+    "subject",
+    "permission_prefix",
+    "policy",
 ];
 
 /// Parses the `#[model(...)]` attributes of the struct.
@@ -148,6 +169,54 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         // A relation attribute.
     } else if attributes::parse_container_key(&mut container.attributes, meta)? {
         // An attribute-layer key.
+    } else if path.is_ident("factory") {
+        let value = meta.value()?;
+        let factory = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the factory must be the path of a type implementing `ModelFactory`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.factory = Some(factory);
+    } else if path.is_ident("route_key") {
+        container.route_key = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("workspace") {
+        let span = path
+            .get_ident()
+            .map_or_else(Span::call_site, syn::Ident::span);
+        let column = if meta.input.peek(Token![=]) {
+            non_empty(meta.value()?.parse()?)?.value()
+        } else {
+            "workspace_id".to_owned()
+        };
+        container.workspace = Some((column, span));
+    } else if path.is_ident("subject") {
+        container.subject = Some(if meta.input.peek(Token![=]) {
+            Some(non_empty(meta.value()?.parse()?)?)
+        } else {
+            None
+        });
+    } else if path.is_ident("permission_prefix") {
+        container.permission_prefix = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("policy") {
+        let value = meta.value()?;
+        let policy = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the policy must be the path of a type implementing `Policy`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.policy = Some(policy);
     } else {
         let key = key_name(path);
         let known: Vec<&str> = KEYS

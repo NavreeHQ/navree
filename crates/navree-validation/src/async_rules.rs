@@ -1,6 +1,11 @@
-//! Database rules: [`AsyncRules`], [`AsyncRule`] (`unique`, `exists`) and
-//! [`RuleError`].
+//! Database rules: [`AsyncRules`], [`AsyncRule`] (`unique`, `exists`, or a
+//! [`UowCheck`] of its own) and [`RuleError`].
 
+use std::fmt;
+use std::sync::Arc;
+
+use navree_db::Uow;
+use navree_kernel::{BoxError, BoxFuture};
 use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
 use sea_orm::{ConnectionTrait, DbErr, Value};
 use uuid::Uuid;
@@ -49,9 +54,84 @@ impl Kind {
     }
 }
 
+/// The check of a rule that runs its own queries in the unit of work:
+/// what rules on ORM models build on (navree-orm's `validation::unique`
+/// and `validation::exists`, whose queries keep the model's scopes, such
+/// as its workspace). Wrap one with [`AsyncRule::check`].
+///
+/// ```
+/// use navree_db::Uow;
+/// use navree_kernel::{BoxError, BoxFuture};
+/// use navree_validation::{AsyncRule, UowCheck};
+///
+/// /// Only even numbers (a check that needs no query).
+/// struct Even(i64);
+///
+/// impl UowCheck for Even {
+///     fn passes<'a>(&'a self, _uow: &'a Uow, _ignore: Option<&'a str>) -> BoxFuture<'a, Result<bool, BoxError>> {
+///         Box::pin(async move { Ok(self.0 % 2 == 0) })
+///     }
+/// }
+///
+/// let rule = AsyncRule::check("count", "even", Even(4));
+/// assert_eq!((rule.field(), rule.rule()), ("count", "even"));
+/// ```
+pub trait UowCheck: Send + Sync + 'static {
+    /// Whether the rule passes, checked in `uow`. `ignore` is the value of
+    /// the path parameter named by [`AsyncRule::ignore_path_param`] (under
+    /// [`ValidAsync`](crate::ValidAsync)), if any: the record being
+    /// updated, which a uniqueness check skips.
+    fn passes<'a>(
+        &'a self,
+        uow: &'a Uow,
+        ignore: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<bool, BoxError>>;
+}
+
+/// How a rule is checked.
+#[derive(Clone)]
+enum Check {
+    /// `unique` or `exists` on a table and column.
+    Table {
+        kind: Kind,
+        table: String,
+        column: String,
+        value: Value,
+        ignore_id: Option<Uuid>,
+    },
+    /// A check of its own, in the unit of work.
+    Uow {
+        rule: &'static str,
+        check: Arc<dyn UowCheck>,
+    },
+}
+
+impl fmt::Debug for Check {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Check::Table {
+                kind,
+                table,
+                column,
+                value,
+                ignore_id,
+            } => f
+                .debug_struct("Table")
+                .field("kind", kind)
+                .field("table", table)
+                .field("column", column)
+                .field("value", value)
+                .field("ignore_id", ignore_id)
+                .finish(),
+            Check::Uow { rule, .. } => f.debug_struct("Uow").field("rule", rule).finish(),
+        }
+    }
+}
+
 /// A database rule on one field: `unique` (no row has the value) or
 /// `exists` (some row has it), checked with a parameterised
-/// `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1`.
+/// `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1`; or a
+/// [`UowCheck`] of its own ([`AsyncRule::check`]).
 ///
 /// Table and column names must match `[a-z_][a-z0-9_]*`; anything else
 /// fails with [`RuleError::InvalidIdentifier`] before any SQL runs. A null
@@ -60,11 +140,8 @@ impl Kind {
 #[derive(Clone, Debug)]
 pub struct AsyncRule {
     field: String,
-    kind: Kind,
-    table: String,
-    column: String,
-    value: Value,
-    ignore_id: Option<Uuid>,
+    check: Check,
+    null: bool,
     ignore_path_param: Option<String>,
 }
 
@@ -78,15 +155,7 @@ impl AsyncRule {
         value: impl Into<Value>,
         ignore_id: Option<Uuid>,
     ) -> Self {
-        Self {
-            field: field.into(),
-            kind: Kind::Unique,
-            table: table.into(),
-            column: column.into(),
-            value: value.into(),
-            ignore_id,
-            ignore_path_param: None,
-        }
+        Self::table(Kind::Unique, field, table, column, value.into(), ignore_id)
     }
 
     /// `field` must exist in `table.column`.
@@ -96,21 +165,58 @@ impl AsyncRule {
         column: impl Into<String>,
         value: impl Into<Value>,
     ) -> Self {
+        Self::table(Kind::Exists, field, table, column, value.into(), None)
+    }
+
+    fn table(
+        kind: Kind,
+        field: impl Into<String>,
+        table: impl Into<String>,
+        column: impl Into<String>,
+        value: Value,
+        ignore_id: Option<Uuid>,
+    ) -> Self {
         Self {
             field: field.into(),
-            kind: Kind::Exists,
-            table: table.into(),
-            column: column.into(),
-            value: value.into(),
-            ignore_id: None,
+            null: !value.is_some(),
+            check: Check::Table {
+                kind,
+                table: table.into(),
+                column: column.into(),
+                value,
+                ignore_id,
+            },
             ignore_path_param: None,
         }
+    }
+
+    /// `field` passes when `check` does. `rule` is the rule key, which
+    /// names the error message (`"unique"`: "has already been taken").
+    pub fn check(field: impl Into<String>, rule: &'static str, check: impl UowCheck) -> Self {
+        Self {
+            field: field.into(),
+            check: Check::Uow {
+                rule,
+                check: Arc::new(check),
+            },
+            null: false,
+            ignore_path_param: None,
+        }
+    }
+
+    /// Marks the rule's value as null: the rule passes without running, so
+    /// optional fields stay optional (for [`check`](AsyncRule::check)
+    /// rules, whose value the rule cannot see).
+    pub fn skipped_when(mut self, null: bool) -> Self {
+        self.null = null;
+        self
     }
 
     /// For `unique` under [`ValidAsync`](crate::ValidAsync): ignore the row
     /// whose `id` is the route's path parameter `name` (`PATCH
     /// /users/{id}`), unless an explicit `ignore_id` was given. Has no effect
-    /// on [`passes`](AsyncRule::passes) or on `exists`.
+    /// on [`passes`](AsyncRule::passes) or on `exists`. A
+    /// [`check`](AsyncRule::check) rule receives the parameter's value.
     pub fn ignore_path_param(mut self, name: impl Into<String>) -> Self {
         self.ignore_path_param = Some(name.into());
         self
@@ -121,19 +227,89 @@ impl AsyncRule {
         &self.field
     }
 
-    /// The rule key: `unique` or `exists` (also the message key).
+    /// The rule key: `unique`, `exists` or a check's own (also the message
+    /// key).
     pub fn rule(&self) -> &'static str {
-        self.kind.rule()
+        match &self.check {
+            Check::Table { kind, .. } => kind.rule(),
+            Check::Uow { rule, .. } => rule,
+        }
     }
 
     /// Whether the rule passes on `conn` (a connection or a transaction).
+    /// A [`check`](AsyncRule::check) rule needs a unit of work
+    /// ([`passes_in`](AsyncRule::passes_in)): here it fails with
+    /// [`RuleError::NeedsUnitOfWork`].
     pub async fn passes<C: ConnectionTrait>(&self, conn: &C) -> Result<bool, RuleError> {
-        self.passes_ignoring(conn, self.ignore_id).await
+        let ignore_id = match &self.check {
+            Check::Table { ignore_id, .. } => *ignore_id,
+            Check::Uow { .. } => None,
+        };
+        self.passes_ignoring(conn, ignore_id).await
+    }
+
+    /// Whether the rule passes in `uow` (any rule).
+    pub async fn passes_in(&self, uow: &Uow) -> Result<bool, RuleError> {
+        match &self.check {
+            Check::Table { ignore_id, .. } => {
+                let tx = uow.tx().await.map_err(|source| self.database(source))?;
+                self.passes_ignoring(&*tx, *ignore_id).await
+            }
+            Check::Uow { check, .. } => self.run_check(check.as_ref(), uow, None).await,
+        }
+    }
+
+    /// Runs the rule in `uow` with the request's path parameters.
+    pub(crate) async fn passes_for(
+        &self,
+        uow: &Uow,
+        path_params: &[(String, String)],
+    ) -> Result<bool, RuleError> {
+        match &self.check {
+            Check::Table { .. } => {
+                // Dropped before the unit of work commits.
+                let tx = uow.tx().await.map_err(|source| self.database(source))?;
+                self.passes_ignoring(&*tx, self.ignore_for(path_params))
+                    .await
+            }
+            Check::Uow { check, .. } => {
+                let ignore = self.ignore_path_param.as_deref().and_then(|name| {
+                    path_params
+                        .iter()
+                        .find(|(key, _)| key == name)
+                        .map(|(_, value)| value.as_str())
+                });
+                self.run_check(check.as_ref(), uow, ignore).await
+            }
+        }
+    }
+
+    async fn run_check(
+        &self,
+        check: &dyn UowCheck,
+        uow: &Uow,
+        ignore: Option<&str>,
+    ) -> Result<bool, RuleError> {
+        if self.null {
+            return Ok(true);
+        }
+        check
+            .passes(uow, ignore)
+            .await
+            .map_err(|source| RuleError::Check {
+                rule: self.rule(),
+                field: self.field.clone(),
+                source,
+            })
     }
 
     /// The id to ignore given the request's path parameters.
     pub(crate) fn ignore_for(&self, path_params: &[(String, String)]) -> Option<Uuid> {
-        self.ignore_id.or_else(|| {
+        let explicit = match &self.check {
+            Check::Table { ignore_id, .. } => *ignore_id,
+            Check::Uow { .. } => None,
+        };
+        explicit.or_else(|| {
             let name = self.ignore_path_param.as_deref()?;
             let (_, value) = path_params.iter().find(|(key, _)| key == name)?;
             Uuid::try_parse(value).ok()
@@ -142,14 +318,24 @@ impl AsyncRule {
 
     /// Fails when the table or column name is not a plain identifier.
     pub(crate) fn check_identifiers(&self) -> Result<(), RuleError> {
-        self.identifier(&self.table)?;
-        self.identifier(&self.column)?;
+        if let Check::Table { table, column, .. } = &self.check {
+            self.identifier(table)?;
+            self.identifier(column)?;
+        }
         Ok(())
     }
 
     /// Whether the value is null (the rule then passes without a query).
     pub(crate) fn is_null(&self) -> bool {
-        !self.value.is_some()
+        self.null
+    }
+
+    fn database(&self, source: DbErr) -> RuleError {
+        RuleError::Database {
+            rule: self.rule(),
+            field: self.field.clone(),
+            source,
+        }
     }
 
     pub(crate) async fn passes_ignoring<C: ConnectionTrait>(
@@ -157,8 +343,21 @@ impl AsyncRule {
         conn: &C,
         ignore_id: Option<Uuid>,
     ) -> Result<bool, RuleError> {
-        let table = self.identifier(&self.table)?;
-        let column = self.identifier(&self.column)?;
+        let Check::Table {
+            kind,
+            table,
+            column,
+            value,
+            ..
+        } = &self.check
+        else {
+            return Err(RuleError::NeedsUnitOfWork {
+                rule: self.rule(),
+                field: self.field.clone(),
+            });
+        };
+        let table = self.identifier(table)?;
+        let column = self.identifier(column)?;
         if self.is_null() {
             return Ok(true);
         }
@@ -166,21 +365,17 @@ impl AsyncRule {
         select
             .expr(Expr::val(1))
             .from(Alias::new(table))
-            .and_where(Expr::col(Alias::new(column)).eq(self.value.clone()));
-        if let (Kind::Unique, Some(id)) = (self.kind, ignore_id) {
+            .and_where(Expr::col(Alias::new(column)).eq(value.clone()));
+        if let (Kind::Unique, Some(id)) = (kind, ignore_id) {
             select.and_where(Expr::col(Alias::new(ID_COLUMN)).ne(id));
         }
         select.limit(1);
         let found = conn
             .query_one(&select)
             .await
-            .map_err(|source| RuleError::Database {
-                rule: self.rule(),
-                field: self.field.clone(),
-                source,
-            })?
+            .map_err(|source| self.database(source))?
             .is_some();
-        Ok(match self.kind {
+        Ok(match kind {
             Kind::Unique => !found,
             Kind::Exists => found,
         })
@@ -232,6 +427,27 @@ pub enum RuleError {
         /// The database error.
         #[source]
         source: DbErr,
+    },
+    /// A [`UowCheck`] failed to run.
+    #[error("the `{rule}` rule on `{field}` could not be checked: {source}")]
+    Check {
+        /// The rule key.
+        rule: &'static str,
+        /// The validated field.
+        field: String,
+        /// What went wrong.
+        #[source]
+        source: BoxError,
+    },
+    /// A [`UowCheck`] rule was checked on a bare connection
+    /// ([`AsyncRule::passes`]); it runs in a unit of work
+    /// ([`AsyncRule::passes_in`]).
+    #[error("the `{rule}` rule on `{field}` runs in a unit of work: use `passes_in`")]
+    NeedsUnitOfWork {
+        /// The rule key.
+        rule: &'static str,
+        /// The validated field.
+        field: String,
     },
 }
 

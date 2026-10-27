@@ -10,6 +10,15 @@ impl navree::schema::Migration for Migration {
         schema
             .create("{{ table }}", |t| {
                 t.uuid_primary();
+{% if with_name_column %}
+                t.string("name");
+{% endif %}
+{% for key in pivot_keys %}
+                t.foreign_uuid("{{ key }}");
+{% endfor %}
+{% if pivot_keys %}
+                t.unique([{% for key in pivot_keys %}"{{ key }}"{% if not loop.last %}, {% endif %}{% endfor %}]);
+{% endif %}
                 t.timestamps_tz();
             })
             .await

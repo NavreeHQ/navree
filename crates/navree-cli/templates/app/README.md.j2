@@ -38,7 +38,9 @@ The app connects to MySQL (or MariaDB) at `{{ database_url }}`: point
 |---|---|
 | `navree dev` | Serves the app and restarts it when the code changes |
 | `navree make:module <name> --crud` | Adds a feature module under `src/modules/` |
-| `navree make:<kind> <module> <name>` | Adds a controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test to a module |
+| `navree make:<kind> <module> <name>` | Adds a controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, factory or seeder to a module |
+| `navree make:model <module> <Name> --all` | Adds an ORM model with its migration, factory, seeder, JSON controller and policy |
+| `navree model:show <Model>` | Shows a registered model: table, columns, casts, relationships, scopes, hooks, policy |
 | `navree migrate`, `navree migrate:fresh --seed` | Runs the migrations of every module |
 | `navree routes` | Lists every route with its access rule |
 | `navree check --graph` | Validates the module graph |

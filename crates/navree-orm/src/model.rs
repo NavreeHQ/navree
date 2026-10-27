@@ -17,6 +17,7 @@ use crate::collection::Collection;
 use crate::column::{Assignment, Filter};
 use crate::error::Result;
 use crate::exec::Executor;
+use crate::factory::RelationshipInfo;
 use crate::hooks::ModelHook;
 use crate::query::Builder;
 use crate::record::Record;
@@ -492,6 +493,12 @@ pub struct ModelMeta {
     encrypter: Option<&'static str>,
     cast_context: bool,
     date_serializer: Option<DateSerializer>,
+    route_key: Option<&'static str>,
+    workspace: Option<&'static str>,
+    factory: Option<&'static str>,
+    relationships: Option<fn() -> Vec<RelationshipInfo>>,
+    subject: Option<&'static str>,
+    policy: Option<&'static str>,
 }
 
 /// How a model writes its date-times in serialized records
@@ -532,6 +539,12 @@ impl ModelMeta {
             encrypter: None,
             cast_context: false,
             date_serializer: None,
+            route_key: None,
+            workspace: None,
+            factory: None,
+            relationships: None,
+            subject: None,
+            policy: None,
         }
     }
 
@@ -594,6 +607,79 @@ impl ModelMeta {
     pub const fn encrypter(self, name: &'static str) -> Self {
         ModelMeta {
             encrypter: Some(name),
+            ..self
+        }
+    }
+
+    /// The model's factory, as written in `#[model(factory = ...)]`, and
+    /// the relationships it declares (`model:show` lists both).
+    pub const fn factory(
+        self,
+        name: &'static str,
+        relationships: fn() -> Vec<RelationshipInfo>,
+    ) -> Self {
+        ModelMeta {
+            factory: Some(name),
+            relationships: Some(relationships),
+            ..self
+        }
+    }
+
+    /// The navree-access subject the model's records are
+    /// (`#[model(subject)]`).
+    pub const fn subject(self, subject: &'static str) -> Self {
+        ModelMeta {
+            subject: Some(subject),
+            ..self
+        }
+    }
+
+    /// The policy attached to the model, as written in
+    /// `#[model(policy = ...)]`.
+    pub const fn policy(self, policy: &'static str) -> Self {
+        ModelMeta {
+            policy: Some(policy),
+            ..self
+        }
+    }
+
+    /// The model's factory, as written in `#[model(factory = ...)]`.
+    pub const fn factory_name(&self) -> Option<&'static str> {
+        self.factory
+    }
+
+    /// The relationships the model's factory declares
+    /// ([`ModelFactory::relationships`](crate::factory::ModelFactory::relationships)),
+    /// in declaration order; none without a factory.
+    pub fn factory_relationships(&self) -> Vec<RelationshipInfo> {
+        self.relationships.map(|f| f()).unwrap_or_default()
+    }
+
+    /// The navree-access subject of the model's records, if it is one.
+    pub const fn subject_name(&self) -> Option<&'static str> {
+        self.subject
+    }
+
+    /// The policy attached to the model, as written.
+    pub const fn policy_name(&self) -> Option<&'static str> {
+        self.policy
+    }
+
+    /// The column route model binding looks records up by, when it is not
+    /// the key (`#[model(route_key = "slug")]`).
+    pub const fn route_key(self, column: &'static str) -> Self {
+        ModelMeta {
+            route_key: Some(column),
+            ..self
+        }
+    }
+
+    /// The column holding a workspace-scoped model's workspace
+    /// (`#[model(workspace)]`): queries see the current workspace's records
+    /// only, and new records get it.
+    pub const fn workspace(self, column: &'static str) -> Self {
+        ModelMeta {
+            workspace: Some(column),
             ..self
         }
     }
@@ -907,6 +993,25 @@ impl ModelMeta {
     pub fn column_named(&self, name: &str) -> Option<&'static ColumnMeta> {
         self.column(name).or_else(|| self.column_of_field(name))
     }
+
+    /// The column route model binding looks records up by: the declared
+    /// route key, else the key column.
+    pub const fn route_key_column(&self) -> &'static str {
+        match self.route_key {
+            Some(column) => column,
+            None => self.key,
+        }
+    }
+
+    /// The workspace column of a workspace-scoped model.
+    pub const fn workspace_column(&self) -> Option<&'static str> {
+        self.workspace
+    }
+
+    /// Whether the model is scoped to workspaces.
+    pub const fn is_workspace_scoped(&self) -> bool {
+        self.workspace.is_some()
+    }
 }
 
 /// `DealStage` → `deal_stage`, `HTTPRequest` → `http_request`.
@@ -1173,6 +1278,27 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     /// (`#[model(touches = [..])]`).
     fn touched_relations() -> &'static [&'static str] {
         Self::meta().touched_relations()
+    }
+
+    /// The model's table.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// assert_eq!(Company::table_name(), "companies");
+    /// ```
+    fn table_name() -> &'static str {
+        Self::meta().table()
+    }
+
+    /// The column route model binding looks records up by: the model's
+    /// `#[model(route_key = "...")]`, else its key column.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// assert_eq!(Deal::route_key_name(), "id");
+    /// ```
+    fn route_key_name() -> &'static str {
+        Self::meta().route_key_column()
     }
 
     /// A query of the model, with the model's default eager loads and
@@ -2088,6 +2214,15 @@ pub mod derive_support {
                 .collect(),
             _ => (0..C::Stored::COUNT).collect(),
         }
+    }
+
+    /// The relationships factory `F` declares, for [`ModelMeta::factory`]
+    /// (`#[model(factory = F)]`).
+    ///
+    /// [`ModelMeta::factory`]: crate::ModelMeta::factory
+    pub fn factory_relationships<F: crate::factory::ModelFactory>()
+    -> Vec<crate::factory::RelationshipInfo> {
+        crate::factory::Relationships::<F::Model>::of::<F>().infos()
     }
 
     /// The error for a column the model does not have.

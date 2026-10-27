@@ -869,7 +869,7 @@ impl<M: Model> Builder<M> {
                 let target = exec
                     .target_routed(crate::query::read_access(&self.ir), self.route())
                     .await?;
-                let ir = self.into_ir();
+                let ir = crate::workspace::with_target(&target, || self.into_ir());
                 let mut rows = target.stream(&ir).await?;
                 let ctx = target.context();
                 let hooks = Hooks::<M>::resolve(&ctx).await?;

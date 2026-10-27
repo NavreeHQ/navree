@@ -357,6 +357,7 @@ fn listener_with_event_subscribes_it() {
     .unwrap();
     let with_event = MakeOptions {
         event: Some(name("user_promoted")),
+        ..MakeOptions::default()
     };
     make_item(
         &root,

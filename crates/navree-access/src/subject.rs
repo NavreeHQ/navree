@@ -52,6 +52,15 @@ impl SubjectRegistration {
             ..Self::of::<E>()
         }
     }
+
+    /// A subject whose records `can(.., from = "id")` routes load through
+    /// [`SubjectRecords::load`](crate::SubjectRecords::load).
+    pub(crate) fn records<S: crate::SubjectRecords>() -> Self {
+        Self {
+            loader: Some(Arc::new(crate::records::RecordsLoader::<S>::new())),
+            ..Self::of::<S>()
+        }
+    }
 }
 
 impl fmt::Debug for SubjectRegistration {
@@ -281,12 +290,15 @@ impl<E: EntityTrait> SqlColumns for EntityColumns<E> {
     }
 }
 
-/// Every registered subject: permission prefixes and record loaders.
+/// Every registered subject: permission prefixes, record loaders and
+/// policies.
 #[derive(Default)]
 pub(crate) struct Subjects {
     /// Permission prefix → subject type.
     pub(crate) prefixes: Arc<BTreeMap<String, String>>,
     loaders: HashMap<String, Arc<dyn SubjectLoader>>,
+    /// The registered policies' rule definitions, in module order.
+    pub(crate) policies: Vec<fn(&crate::AbilityCtx, &mut crate::Rules)>,
 }
 
 impl Subjects {
@@ -323,9 +335,18 @@ impl Subjects {
                 loaders.insert(registration.subject.to_owned(), loader.clone());
             }
         }
+        let mut policies: Vec<fn(&crate::AbilityCtx, &mut crate::Rules)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for contributed in ctx.contributions::<crate::records::PolicyRegistration>() {
+            // A policy registered by two modules applies once.
+            if seen.insert(contributed.value.name) {
+                policies.push(contributed.value.define);
+            }
+        }
         Ok(Subjects {
             prefixes: Arc::new(prefixes),
             loaders,
+            policies,
         })
     }
 
