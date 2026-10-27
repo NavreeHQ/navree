@@ -180,6 +180,17 @@ pub fn from_bson(bson: Bson) -> Value {
 /// A document as a row: the `columns` asked for, in order (a missing field
 /// is NULL, as an absent column would be), or every field in document
 /// order.
+///
+/// ```
+/// use bson::doc;
+/// use navree_mongo::document_row;
+///
+/// let columns = ["title".to_owned(), "stage".to_owned()];
+/// let row = document_row(doc! { "title": "Renewal", "amount": 5 }, Some(&columns));
+/// assert_eq!(row.columns(), ["title", "stage"]);
+/// assert_eq!(row.get::<String>("title").unwrap(), "Renewal");
+/// assert_eq!(row.get::<Option<String>>("stage").unwrap(), None);
+/// ```
 pub fn document_row(mut document: Document, columns: Option<&[String]>) -> Row {
     match columns {
         Some(columns) => Row::from_values(

@@ -72,6 +72,20 @@ impl ToMongo for TableBuilder {
 /// Aggregation stages after a query's own: the query's filter, order,
 /// page and projection run first, then the stages (`$lookup`, `$unwind`,
 /// `$addFields`, `$facet`, ...; not `$geoNear`, which must come first).
+///
+/// ```
+/// use bson::doc;
+/// use navree_mongo::MongoQuery;
+/// use navree_orm::{col, table};
+///
+/// let sampled = table("deals")
+///     .where_(col("stage").eq("won"))
+///     .pipeline([doc! { "$sample": { "size": 5 } }]);
+/// assert_eq!(
+///     sampled.to_mongo().unwrap().to_string(),
+///     r#"db.deals.aggregate([{"$match": {"stage": "won"}}, {"$sample": {"size": 5}}])"#
+/// );
+/// ```
 pub trait MongoQuery: Sized {
     /// The query with the stages.
     type Pipeline;
@@ -166,6 +180,18 @@ impl<M: Model> ModelPipeline<M> {
 }
 
 /// A table query followed by aggregation stages (see [`MongoQuery`]).
+///
+/// ```no_run
+/// # use navree_mongo::{MongoDb, MongoQuery};
+/// # use navree_orm::table;
+/// # async fn demo(mongo: MongoDb) -> Result<(), navree_orm::OrmError> {
+/// // `[{_id: "won", count: 12}, {_id: "lead", count: 7}, ...]`
+/// let per_stage = table("deals")
+///     .pipeline([bson::doc! { "$sortByCount": "$stage" }])
+///     .get(&mongo)
+///     .await?;
+/// # let _ = per_stage; Ok(()) }
+/// ```
 #[derive(Clone, Debug)]
 pub struct RowPipeline {
     query: TableBuilder,

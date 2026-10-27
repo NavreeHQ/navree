@@ -97,7 +97,17 @@ pub struct MongoOptions {
     pub connections: BTreeMap<String, MongoConnectionOptions>,
 }
 
-/// A named connection: `database.mongodb.connections.<name>`.
+/// A named connection: `database.mongodb.connections.<name>`, opened on
+/// first use by [`MongoDb::connection`](crate::MongoDb::connection).
+///
+/// ```no_run
+/// # async fn demo(mongo: navree_mongo::MongoDb) -> navree_mongo::MongoResult {
+/// // [database.mongodb.connections.analytics]
+/// // url = "mongodb://10.0.0.9:27017/analytics"
+/// let analytics = mongo.connection("analytics").await?;
+/// analytics.ping().await?;
+/// # Ok(()) }
+/// ```
 #[derive(Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct MongoConnectionOptions {

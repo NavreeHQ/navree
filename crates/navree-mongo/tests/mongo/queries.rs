@@ -272,7 +272,7 @@ async fn conditions_become_filter_documents() {
     assert_eq!(
         titles(
             mongo,
-            q().where_(Deal::PRICE.gt(Decimal::new(119_999_99, 2)))
+            q().where_(Deal::PRICE.gt(Decimal::new(11_999_999, 2)))
         )
         .await,
         ["Enterprise plan", "Renewal"]
