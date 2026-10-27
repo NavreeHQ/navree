@@ -88,6 +88,7 @@
 
 extern crate self as navree_orm;
 
+pub mod attributes;
 pub mod cast;
 mod collection;
 mod column;
@@ -119,7 +120,9 @@ pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
-pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
+pub use model::{
+    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PrimaryKey, SchemaJson, Timestamp,
+};
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
@@ -133,7 +136,7 @@ pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
-    Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
+    Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
 /// `#[derive(Model)]` and `#[scopes]` (see their documentation in
@@ -143,9 +146,12 @@ pub use navree_orm_macros::{Model, scopes};
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::attributes::{CastContext, NoAccessors, has_accessor};
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
-    pub use chrono::{DateTime, Utc};
+    pub use chrono::{DateTime, FixedOffset, Utc};
+    pub use navree_kernel::BoxFuture;
+    pub use serde_json;
     pub use std::sync::Arc;
 }
 

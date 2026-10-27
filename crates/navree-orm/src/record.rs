@@ -6,6 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use serde::{Serialize, Serializer};
 
+use crate::attributes::state::RecordState;
 use crate::column::{Assignment, Column, ColumnName};
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor};
@@ -13,7 +14,7 @@ use crate::model::Model;
 use crate::persist;
 use crate::relations::Relations;
 use crate::row::Row;
-use crate::value::{Field, Numeric, Value, same_value, to_json};
+use crate::value::{Field, Numeric, Value, to_json};
 
 /// A model instance as the ORM knows it: the model itself (a `Record<M>`
 /// dereferences to `M`, so fields read and write directly), whether it is
@@ -43,6 +44,7 @@ pub struct Record<M: Model> {
     pub(crate) previous: Vec<(&'static str, Value)>,
     pub(crate) extras: Vec<(String, Value)>,
     pub(crate) relations: Relations,
+    pub(crate) attributes: RecordState,
 }
 
 impl<M: Model> Record<M> {
@@ -58,6 +60,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras: Vec::new(),
             relations: Relations::new(),
+            attributes: RecordState::default(),
         }
     }
 
@@ -82,6 +85,10 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras,
             relations: Relations::new(),
+            attributes: RecordState {
+                stale: M::stale_columns(row),
+                ..RecordState::default()
+            },
         })
     }
 
@@ -138,37 +145,60 @@ impl<M: Model> Record<M> {
     // ---------------------------------------------------------------------
 
     /// The columns whose values differ from the original (every column of
-    /// a record that was never saved), with their current values.
+    /// a record that was never saved), with their current stored values.
     ///
     /// Values are compared as stored: decimals numerically, floats within
-    /// a small tolerance, date-times by instant, JSON structurally.
+    /// a small tolerance, date-times by instant, JSON structurally, cast
+    /// fields as their cast compares them (encrypted fields by their plain
+    /// value). An encrypted column read under a previous key is dirty until
+    /// it is saved again (and so re-encrypted with the current key).
     pub fn get_dirty(&self) -> Result<Vec<(&'static str, Value)>> {
-        let current = self.model.values()?;
-        let Some(original) = &self.original else {
-            return Ok(current);
+        let columns = match &self.original {
+            Some(_) => self.dirty_columns()?,
+            None => return self.model.values(),
         };
-        let before = original.values()?;
-        Ok(current
+        columns
             .into_iter()
-            .zip(before)
-            .filter(|((_, now), (_, then))| !same_value(now, then))
-            .map(|(now, _)| now)
-            .collect())
+            .map(|column| {
+                let value = self.model.value(column)?.ok_or_else(|| {
+                    crate::model::derive_support::unknown_column::<M>(column)
+                })?;
+                Ok((column, value))
+            })
+            .collect()
+    }
+
+    /// The dirty columns, in field order, without encoding their values.
+    fn dirty_columns(&self) -> Result<Vec<&'static str>> {
+        let Some(original) = &self.original else {
+            return Ok(M::meta().all_columns().iter().map(|c| c.name()).collect());
+        };
+        let mut columns = self.model.changed_columns(original)?;
+        if !self.attributes.stale.is_empty() {
+            for &column in &self.attributes.stale {
+                if !columns.contains(&column) {
+                    columns.push(column);
+                }
+            }
+            let order = M::meta().all_columns();
+            columns.sort_by_key(|column| order.iter().position(|meta| meta.name() == *column));
+        }
+        Ok(columns)
     }
 
     /// Whether any column changed since the record was read or saved. A
-    /// column that cannot be encoded counts as changed (saving reports the
-    /// error).
+    /// column that cannot be compared counts as changed (saving reports
+    /// the error).
     pub fn is_dirty(&self) -> bool {
-        self.get_dirty().map_or(true, |dirty| !dirty.is_empty())
+        self.dirty_columns().map_or(true, |dirty| !dirty.is_empty())
     }
 
     /// Whether any of `columns` changed since the record was read or saved.
     pub fn is_dirty_on<C: ColumnName>(&self, columns: impl IntoIterator<Item = C>) -> bool {
-        match self.get_dirty() {
+        match self.dirty_columns() {
             Ok(dirty) => columns
                 .into_iter()
-                .any(|column| dirty.iter().any(|(name, _)| *name == column.column_name())),
+                .any(|column| dirty.iter().any(|name| *name == column.column_name())),
             Err(_) => true,
         }
     }
@@ -225,6 +255,7 @@ impl<M: Model> Record<M> {
     /// afterwards).
     pub fn sync_original(&mut self) {
         self.original = Some(self.model.clone());
+        self.attributes.stale.clear();
     }
 
     /// Accepts the current values of `columns` as their original ones.
@@ -240,6 +271,7 @@ impl<M: Model> Record<M> {
             if let Some(value) = self.model.value(&name)? {
                 original.set_value(&name, value)?;
             }
+            self.attributes.stale.retain(|stale| *stale != name);
         }
         Ok(())
     }
@@ -528,6 +560,7 @@ impl<M: Model> Clone for Record<M> {
             previous: self.previous.clone(),
             extras: self.extras.clone(),
             relations: self.relations.clone(),
+            attributes: self.attributes.clone(),
         }
     }
 }

@@ -6,6 +6,7 @@ use std::hash::Hash;
 
 use indexmap::IndexMap;
 
+use crate::attributes::in_model_scope;
 use crate::collection::Collection;
 use crate::column::{Column, IntoExpr};
 use crate::error::{OrmError, Result};
@@ -91,22 +92,30 @@ impl<M: Model> Builder<M> {
     /// Runs the query on `target` and reads its records (running the
     /// `Retrieved` hooks).
     pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
+        let extra_casts = self.extra_casts.clone();
         let ir = self.into_ir();
         let rows = target.fetch(&ir).await?;
-        let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
-            records.push(Record::<M>::from_row(row)?);
-        }
-        if !records.is_empty() {
-            let ctx = target.context();
-            let hooks = Hooks::<M>::resolve(&ctx).await?;
-            if !hooks.is_empty() {
-                for record in &mut records {
-                    hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+        let ctx = target.context();
+        // Rows decode inside the model's cast context (the app's encrypter,
+        // ...), and so do the `Retrieved` hooks that may read the records.
+        in_model_scope::<M, _, _>(&ctx, async {
+            let mut records = Vec::with_capacity(rows.len());
+            for row in &rows {
+                let mut record = Record::<M>::from_row(row)?;
+                extra_casts.apply(&mut record)?;
+                records.push(record);
+            }
+            if !records.is_empty() {
+                let hooks = Hooks::<M>::resolve(&ctx).await?;
+                if !hooks.is_empty() {
+                    for record in &mut records {
+                        hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+                    }
                 }
             }
-        }
-        Ok(Collection::from(records))
+            Ok(Collection::from(records))
+        })
+        .await
     }
 
     /// The rows of the query with `items` as its select list (global scopes
