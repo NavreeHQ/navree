@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use navree_graphql::{
     Context, ContextExt, EventStream, GraphqlModule, GraphqlOptions, GraphqlResolver,
-    GraphqlSchema, ModuleBuilderGraphqlExt, RequestLoader, Result, SharedLoader,
+    GraphqlSchema, Loader, ModuleBuilderGraphqlExt, RequestLoader, Result,
 };
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::TestApp;
@@ -74,9 +74,14 @@ fn builder_extension<R: GraphqlResolver + navree_kernel::Injectable>(m: &mut Mod
     m.resolver::<R>().dataloader::<R>();
 }
 
+/// The dataloader's methods, with the types the docs give them.
 #[allow(dead_code)]
-fn shared_loader(loader: Arc<()>) -> SharedLoader<()> {
-    SharedLoader::new(loader)
+async fn request_loader<L: Loader<u32>>(loader: Arc<L>) -> Result<(), L::Error> {
+    let loader = RequestLoader::new(loader);
+    let _: &Arc<L> = loader.loader();
+    let _: Option<L::Value> = loader.load_one(1).await?;
+    let _: std::collections::HashMap<u32, L::Value> = loader.load_many([1, 2]).await?;
+    Ok(())
 }
 
 #[tokio::test]

@@ -7,6 +7,10 @@ use navree_http::AppError;
 use navree_kernel::BoxError;
 use sea_orm::DbErr;
 
+/// The error code of a write refused by a read-only demo workspace
+/// (`AppError::code`).
+pub const DEMO_READ_ONLY: &str = navree_http::codes::DEMO_READ_ONLY;
+
 /// A workspace-module error. Returned from handlers with `?`, it becomes an
 /// error response in Navree's JSON error shape:
 ///
@@ -35,6 +39,8 @@ use sea_orm::DbErr;
 /// | `NoPartition` | 400 | `partition_required` | `The request names no partition.` |
 /// | `PartitionNotFound` | 404 | `partition_not_found` | `Partition not found.` |
 /// | `PartitionForbidden` | 403 | `partition_forbidden` | `You don't have access to this partition.` |
+/// | `DemoReadOnly` | 403 | `demo_read_only` | `Demo workspaces are read-only.` |
+/// | `NotDemo` | 409 | `not_a_demo_workspace` | `This workspace is not a demo workspace.` |
 /// | `FeatureDisabled` | 500 | `internal_error` | (the setting to turn on, in the log) |
 /// | `Db` | as navree-db maps it (404, 409) or 500 | | |
 /// | `Other` | 500 | `internal_error` | |
@@ -115,6 +121,13 @@ pub enum WorkspaceError {
     /// The member may not see this partition.
     #[error("the member may not see this partition")]
     PartitionForbidden,
+    /// A write to a read-only demo workspace (`workspace.demo.mode =
+    /// "read_only"`).
+    #[error("demo workspaces are read-only")]
+    DemoReadOnly,
+    /// The workspace (a slug or an id) is not a demo workspace.
+    #[error("workspace `{0}` is not a demo workspace")]
+    NotDemo(String),
     /// A service of a feature that is off was called; the value is the
     /// setting that turns it on (`workspace.organizations.enabled`).
     #[error("{0} is false: turn it on to use this")]
@@ -224,6 +237,11 @@ pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
         WorkspaceError::PartitionForbidden => AppError::forbidden()
             .with_code("partition_forbidden")
             .with_detail("You don't have access to this partition."),
+        WorkspaceError::DemoReadOnly => AppError::demo_read_only(),
+        WorkspaceError::NotDemo(_) => {
+            AppError::conflict("This workspace is not a demo workspace.")
+                .with_code("not_a_demo_workspace")
+        }
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
         WorkspaceError::FeatureDisabled(_) | WorkspaceError::Other(_) => return None,
     })
@@ -320,6 +338,12 @@ mod tests {
                 500,
                 "internal_error",
             ),
+            (WorkspaceError::DemoReadOnly, 403, "demo_read_only"),
+            (
+                WorkspaceError::NotDemo("acme".into()),
+                409,
+                "not_a_demo_workspace",
+            ),
             (
                 WorkspaceError::Db(DbErr::RecordNotFound("workspaces x".into())),
                 404,
@@ -339,5 +363,19 @@ mod tests {
         assert_eq!(body["errors"]["slug"][0], "slug has already been taken");
         let body = WorkspaceError::NotMember.to_app_error().body();
         assert_eq!(body["message"], "You are not a member of this workspace.");
+    }
+
+    #[test]
+    fn read_only_demos_refuse_with_their_code() {
+        let error = WorkspaceError::DemoReadOnly.to_app_error();
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "demo_read_only");
+        assert_eq!(error.body()["message"], "Demo workspaces are read-only.");
+        assert_eq!(error.body()["error"], "Forbidden");
+        let error = WorkspaceError::NotDemo("acme".into()).to_app_error();
+        assert_eq!(
+            error.body()["message"],
+            "This workspace is not a demo workspace."
+        );
     }
 }

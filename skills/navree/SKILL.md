@@ -113,7 +113,7 @@ navree list                                 # every command of the app
 | Security review before a release | `navree-security-checklist` |
 | Signing a JWT another service verifies, verifying a token against a provider's JWKS, publishing a JWKS, loading a `.p8` or PEM key | `navree-jose` |
 | Finishing or reviewing a module: `navree check`, cross-workspace isolation suites, `navree gate` before a push | `navree-module-conformity` |
-| Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
+| Multi-tenancy, workspaces, members, invitations and demo workspaces | `navree-workspaces` |
 | Time zones of users and workspaces, reports by local day, messages in working hours, holidays, schedules at local time | `navree-time-zones` |
 | Paid plans, subscriptions, trials, usage billing, invoices, Stripe or Paddle webhooks | `navree-billing` |
 | Production errors and slow requests: issues, reporting handled errors, alerts, the `/_lighthouse` dashboard, reading issues from a script or agent | `navree-lighthouse` |

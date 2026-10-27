@@ -11,8 +11,9 @@ publish.workspace = true
 workspace = true
 
 [features]
-## `Phone`: E.164 phone numbers (the phonenumber crate) and `rules::phone`.
-phone = ["dep:phonenumber"]
+## `Phone`: E.164 phone numbers (rlibphonenumber, a port of libphonenumber) and
+## `rules::phone`.
+phone = ["dep:rlibphonenumber"]
 ## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (ammonia).
 html = ["dep:ammonia"]
 
@@ -30,7 +31,7 @@ navree-config = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
-phonenumber = { workspace = true, optional = true }
+rlibphonenumber = { workspace = true, optional = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -27,7 +27,7 @@ The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm
 You need:
 
 - Rust 1.95 or newer (edition 2024). On Windows, the MSVC build tools, because SQLite is compiled from source.
-- [sccache](https://github.com/mozilla/sccache). The repository's `.cargo/config.toml` sets `rustc-wrapper = "sccache"`; remove that line if you don't want it.
+- Optional: [sccache](https://github.com/mozilla/sccache), to share compiled dependencies between target directories. The repository doesn't set a compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper = "sccache"` under `[build]` in a Cargo config outside the repository, such as `~/.cargo/config.toml`.
 - For `apps/crm-web` and `apps/website`: Node.js 20.9 or newer and pnpm 11.
 
 You don't need OpenSSL, CMake, NASM or a database server. TLS is rustls with the `ring` provider, and tests use SQLite.
@@ -75,7 +75,7 @@ While you work on one crate, test only that crate:
 cargo test -p navree-validation
 ```
 
-When several builds run at once (you, an editor, a second checkout), give each its own target directory and let sccache share the compiled dependencies. Cargo locks a target directory, so builds sharing one wait for each other:
+When several builds run at once (you, an editor, a second checkout), give each its own target directory (and, if you use it, let sccache share the compiled dependencies). Cargo locks a target directory, so builds sharing one wait for each other:
 
 ```sh
 CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http

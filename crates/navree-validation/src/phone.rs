@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 
-use phonenumber::{Mode, PhoneNumber};
+use rlibphonenumber::{PhoneNumber, PhoneNumberFormat, Region};
 use serde::de::{self, Deserializer, Visitor};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -69,17 +69,18 @@ impl Phone {
             return Err(invalid());
         }
         let folded = fold_digits(text);
-        let region = default_region.and_then(|country| country.as_str().parse().ok());
-        // The parser has panicked on odd input before; a panic here is just
-        // an invalid number.
+        // A country without numbering metadata (AQ) gives no region, so a
+        // national number in it is invalid.
+        let region = default_region.and_then(|country| Region::from_code(country.as_str()).ok());
+        // A panic in the parser on odd input is just an invalid number.
         let parsed = catch_unwind(AssertUnwindSafe(|| {
-            phonenumber::parse(region, folded.as_ref())
+            PhoneNumber::parse(folded.as_ref(), region)
                 .ok()
-                .filter(phonenumber::is_valid)
+                .filter(PhoneNumber::is_valid)
         }));
         let number = parsed.ok().flatten().ok_or_else(invalid)?;
         Ok(Phone {
-            e164: number.format().mode(Mode::E164).to_string(),
+            e164: number.format_as(PhoneNumberFormat::E164).into_owned(),
             number,
         })
     }
@@ -96,35 +97,43 @@ impl Phone {
 
     /// The country calling code (`44`).
     pub fn country_code(&self) -> u16 {
-        self.number.code().value()
+        // Calling codes have one to three digits.
+        u16::try_from(self.number.country_code).unwrap_or_default()
     }
 
     /// The national significant number (`7400123456`).
     pub fn national_number(&self) -> u64 {
-        self.number.national().value()
+        self.number.national_number
     }
 
     /// The region the number belongs to, when it is an ISO 3166-1 country
     /// (`None` for non-geographic numbers and areas such as Kosovo).
     pub fn region(&self) -> Option<Country> {
-        let id = self.number.country().id()?;
-        Country::parse(id.as_ref()).ok()
+        let region = self.number.get_region_code()?;
+        Country::parse(region.as_region_str().as_str()).ok()
     }
 
     /// The extension (`"12"` from `ext. 12`), which E.164 leaves out.
     pub fn extension(&self) -> Option<&str> {
-        self.number.extension().map(|extension| extension.as_ref())
+        self.number
+            .extension
+            .as_deref()
+            .filter(|extension| !extension.is_empty())
     }
 
     /// The international format (`"+44 7400 123456"`), with the extension
     /// if any (`" x12"`).
     pub fn international(&self) -> String {
-        self.number.format().mode(Mode::International).to_string()
+        self.number
+            .format_as(PhoneNumberFormat::International)
+            .into_owned()
     }
 
     /// The national format (`"07400 123456"`), with the extension if any.
     pub fn national(&self) -> String {
-        self.number.format().mode(Mode::National).to_string()
+        self.number
+            .format_as(PhoneNumberFormat::National)
+            .into_owned()
     }
 
     /// Whether `text` must be read in a region (no country code).
