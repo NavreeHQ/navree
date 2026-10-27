@@ -1,9 +1,11 @@
 //! The SCIM 2.0 server (RFC 7643 and RFC 7644): filters, PATCH, the
 //! resources and their routes.
 
+pub(crate) mod controller;
 pub mod filter;
 pub(crate) mod patch;
 pub(crate) mod resources;
+pub(crate) mod server;
 
 use axum::response::{IntoResponse, Response};
 use http::{HeaderValue, StatusCode, header};
