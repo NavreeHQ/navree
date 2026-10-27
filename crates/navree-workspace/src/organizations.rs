@@ -4,9 +4,11 @@
 use std::fmt;
 use std::sync::Arc;
 
+use navree_contracts::ZoneOwner;
 use navree_db::{Repo, Uow};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
+    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 use serde::Serialize;
 use uuid::Uuid;
@@ -22,7 +24,10 @@ use crate::events::{
 };
 use crate::grants::{attached, org_selector, reached, set_org_selector};
 use crate::org_role::SCOPE_ALL;
-use crate::workspaces::{check_name, check_slug, slugify_or};
+use crate::workspaces::{
+    check_country_code as check_country, check_name, check_slug, check_zone_name as check_timezone,
+    slugify_or,
+};
 use crate::{OrgRole, Selector, WorkspaceError, WorkspaceSelector};
 
 /// The input of [`Organizations::create`].
@@ -33,9 +38,13 @@ pub struct NewOrganization {
     /// The slug; derived from the name when `None` (`Acme Group` →
     /// `acme-group`, with `-2`, `-3`, ... when taken).
     pub slug: Option<String>,
-    /// An ISO 3166-1 alpha-2 country code (`GB`, any case).
+    /// An ISO 3166-1 alpha-2 country code (`GB`, any case), stored
+    /// upper-case.
     pub country: Option<String>,
-    /// An IANA time zone name (`Europe/London`).
+    /// An IANA time zone name (`Europe/London`, any case), stored under
+    /// its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`). The
+    /// organization's zone is the zone of its workspaces that have none
+    /// (navree-time).
     pub timezone: Option<String>,
 }
 
@@ -495,6 +504,28 @@ impl Organizations {
         Ok((selector, workspaces))
     }
 
+    /// Whether organizations are on (`workspace.organizations.enabled`).
+    pub(crate) fn enabled(&self) -> bool {
+        self.core.config.organizations.enabled
+    }
+
+    /// Every organization's id, time zone and country (for navree-time).
+    pub(crate) async fn zone_owners(&self) -> Result<Vec<ZoneOwner>, WorkspaceError> {
+        let rows: Vec<(Uuid, Option<String>, Option<String>)> = organization::Entity::find()
+            .select_only()
+            .column(organization::Column::Id)
+            .column(organization::Column::Timezone)
+            .column(organization::Column::Country)
+            .order_by_asc(organization::Column::CreatedAt)
+            .into_tuple()
+            .all(&self.core.db.reader().await)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, zone, country)| ZoneOwner { id, zone, country })
+            .collect())
+    }
+
     /// Every organization, by creation.
     pub async fn all(&self) -> Result<Vec<Organization>, WorkspaceError> {
         self.core.require_organizations()?;
@@ -552,46 +583,6 @@ pub(crate) async fn set_org_role(
     Ok(Repo::<organization_member::Entity>::update(uow, row).await?)
 }
 
-/// A trimmed, upper-cased ISO 3166-1 alpha-2 code (`None` for none or an
-/// empty value).
-fn check_country(country: Option<&str>) -> Result<Option<String>, WorkspaceError> {
-    let Some(country) = country.map(str::trim).filter(|c| !c.is_empty()) else {
-        return Ok(None);
-    };
-    if country.len() == 2 && country.chars().all(|c| c.is_ascii_alphabetic()) {
-        Ok(Some(country.to_ascii_uppercase()))
-    } else {
-        Err(WorkspaceError::invalid(
-            "country",
-            "country must be an ISO 3166-1 alpha-2 code such as GB",
-        ))
-    }
-}
-
-/// A trimmed IANA time zone name, checked for shape (`Europe/London`,
-/// `America/Argentina/Buenos_Aires`, `UTC`); `None` for none or an empty
-/// value.
-fn check_timezone(timezone: Option<&str>) -> Result<Option<String>, WorkspaceError> {
-    let Some(timezone) = timezone.map(str::trim).filter(|t| !t.is_empty()) else {
-        return Ok(None);
-    };
-    let valid = timezone.len() <= 64
-        && timezone.split('/').all(|part| {
-            part.starts_with(|c: char| c.is_ascii_alphabetic())
-                && part
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+'))
-        });
-    if valid {
-        Ok(Some(timezone.to_owned()))
-    } else {
-        Err(WorkspaceError::invalid(
-            "timezone",
-            "timezone must be an IANA time zone name such as Europe/London",
-        ))
-    }
-}
-
 async fn slug_taken<C: ConnectionTrait>(conn: &C, slug: &str) -> Result<bool, WorkspaceError> {
     Ok(organization::Entity::find()
         .filter(organization::Column::Slug.eq(slug))
@@ -624,12 +615,13 @@ mod tests {
         assert_eq!(check_country(Some(" gb ")).unwrap().as_deref(), Some("GB"));
         assert_eq!(check_country(None).unwrap(), None);
         assert_eq!(check_country(Some("")).unwrap(), None);
-        assert!(check_country(Some("GBR")).is_err());
-        assert!(check_country(Some("G1")).is_err());
+        for country in ["GBR", "G1", "XX", "Britain"] {
+            assert!(check_country(Some(country)).is_err(), "{country}");
+        }
     }
 
     #[test]
-    fn time_zones_are_iana_names() {
+    fn time_zones_are_iana_names_stored_under_their_current_name() {
         for zone in [
             "UTC",
             "Europe/London",
@@ -639,8 +631,19 @@ mod tests {
         ] {
             assert_eq!(check_timezone(Some(zone)).unwrap().as_deref(), Some(zone));
         }
+        assert_eq!(
+            check_timezone(Some(" asia/calcutta ")).unwrap().as_deref(),
+            Some("Asia/Kolkata")
+        );
         assert_eq!(check_timezone(Some("  ")).unwrap(), None);
-        for zone in ["not a zone", "/London", "Europe//London", "Europe/", "1/2"] {
+        for zone in [
+            "not a zone",
+            "/London",
+            "Europe//London",
+            "Europe/",
+            "1/2",
+            "Mars/Base",
+        ] {
             assert!(check_timezone(Some(zone)).is_err(), "{zone}");
         }
     }

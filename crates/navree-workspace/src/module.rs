@@ -36,7 +36,7 @@ use crate::permission_check::WorkspacePermissionCheck;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
 use crate::{
     AccessRequests, Invitations, Isolation, Members, OrgMembers, Organizations, Partitions,
-    WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
+    OrganizationZones, WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
 };
 
 /// Multi-tenancy at the workspace level.
@@ -56,8 +56,9 @@ use crate::{
 /// - a `dyn PermissionCheck`, so `navree_contracts::permitted` answers
 ///   questions about a workspace with the member's role there (evaluated
 ///   as behind [`InWorkspace`](crate::InWorkspace));
-/// - [`WorkspaceZones`], the workspaces' `dyn ZoneSource` (their
-///   `timezone` and `country`) for navree-time;
+/// - [`WorkspaceZones`] and [`OrganizationZones`], the `dyn ZoneSource`s
+///   of workspaces and organizations (their `timezone` and `country`) for
+///   navree-time;
 /// - a request layer that commits the workspace database's unit of work
 ///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation);
 /// - the commands `workspace:migrate` and `workspace:prune-invitations`;
@@ -310,6 +311,16 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
                     as Arc<dyn ZoneSource>)
             })
             .deps(vec![ProviderKey::of::<Workspaces>()]),
+        )
+        // Silent unless `workspace.organizations.enabled`.
+        .multi(
+            Factory::<dyn ZoneSource>::new(|r: Resolver| async move {
+                Ok(
+                    Arc::new(OrganizationZones::new(r.get::<Organizations>().await?))
+                        as Arc<dyn ZoneSource>,
+                )
+            })
+            .deps(vec![ProviderKey::of::<Organizations>()]),
         )
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()

@@ -8,10 +8,11 @@ use navree_contracts::ZoneLevel;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_time::{CurrentZone, TimeModule, Zones};
-use navree_workspace::WorkspaceError;
+use navree_workspace::{NewOrganization, OrganizationChanges, WorkspaceError, WorkspaceSelector};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
-use crate::support::{World, builder};
+use crate::support::{World, builder, org_builder};
 
 #[tokio::test]
 async fn new_workspaces_have_no_zone_or_country() {
@@ -266,7 +267,13 @@ async fn jobs_find_workspace_zones_and_every_owner() {
         .await
         .unwrap();
     let zones = world.app.get::<Zones>().await;
-    assert_eq!(zones.levels(), [ZoneLevel::Workspace]);
+    // The organization source is registered too, silent while
+    // organizations are off.
+    assert_eq!(
+        zones.levels(),
+        [ZoneLevel::Workspace, ZoneLevel::Organization]
+    );
+    assert_eq!(zones.owners(ZoneLevel::Organization).await.unwrap(), []);
     assert_eq!(
         zones
             .zone_of(ZoneLevel::Workspace, acme.id)
@@ -289,4 +296,219 @@ async fn jobs_find_workspace_zones_and_every_owner() {
     let mut expected = vec![(acme.id, "America/New_York"), (plain.id, "Europe/London")];
     expected.sort_by_key(|(id, _)| *id);
     assert_eq!(names, expected);
+}
+
+// -- Organizations ----------------------------------------------------------
+
+async fn zoned_org_world() -> World {
+    World::with(
+        org_builder()
+            .config("time.default_zone", "Europe/London")
+            .module(TimeModule::from_config())
+            .module(ZoneProbeModule),
+    )
+    .await
+}
+
+/// Sets organization `org`'s zone and country.
+async fn set_org_zone(world: &World, org: Uuid, timezone: Option<&str>, country: Option<&str>) {
+    let organizations = world.organizations().await;
+    let changes = OrganizationChanges {
+        timezone: Some(timezone.map(str::to_owned)),
+        country: Some(country.map(str::to_owned)),
+        ..OrganizationChanges::default()
+    };
+    world
+        .work(|uow| async move { organizations.update(&uow, org, changes).await })
+        .await
+        .unwrap();
+}
+
+/// `GET /api/zone-probe` with one header.
+async fn probe(client: navree_testing::TestClient, header: (&str, &str)) -> Value {
+    client
+        .get("/api/zone-probe")
+        .header(header.0, header.1)
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()
+}
+
+#[tokio::test]
+async fn organizations_store_checked_zones_and_countries() {
+    let world = World::with(org_builder()).await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let organizations = world.organizations().await;
+    let created = {
+        let organizations = organizations.clone();
+        world
+            .work(|uow| async move {
+                organizations
+                    .create(
+                        &uow,
+                        ada,
+                        NewOrganization::named("Acme Group")
+                            .timezone("asia/calcutta")
+                            .country("in"),
+                    )
+                    .await
+            })
+            .await
+            .unwrap()
+    };
+    assert_eq!(created.timezone.as_deref(), Some("Asia/Kolkata"));
+    assert_eq!(created.country.as_deref(), Some("IN"));
+
+    // Well-formed names that are not zones or countries are refused too.
+    for (input, field) in [
+        (NewOrganization::named("X").timezone("Mars/Base"), "timezone"),
+        (NewOrganization::named("X").country("XX"), "country"),
+    ] {
+        let organizations = organizations.clone();
+        let error = world
+            .work(|uow| async move { organizations.create(&uow, ada, input).await })
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&error, WorkspaceError::Invalid { field: f, .. } if *f == field),
+            "{error:?}"
+        );
+    }
+
+    set_org_zone(&world, created.id, Some("Europe/Kiev"), Some("ua")).await;
+    let stored = organizations.find(created.id).await.unwrap().unwrap();
+    assert_eq!(stored.timezone.as_deref(), Some("Europe/Kyiv"));
+    assert_eq!(stored.country.as_deref(), Some("UA"));
+    world
+        .as_user(ada)
+        .patch("/api/organizations/acme-group")
+        .json(&json!({ "timezone": "Mars/Base" }))
+        .send()
+        .await
+        .assert_validation_error("timezone");
+}
+
+#[tokio::test]
+async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
+    let world = zoned_org_world().await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let eve = world.user("Eve", "eve@example.com").await;
+    let group = world.organization(ada, "Acme Group").await;
+    let acme = world.workspace(ada, "Acme").await;
+    let paris = world.workspace(ada, "Paris").await;
+    world.attach(group.id, acme.id).await;
+    world.attach(group.id, paris.id).await;
+    set_org_zone(&world, group.id, Some("Asia/Kolkata"), None).await;
+    let workspaces = world.workspaces().await;
+    world
+        .work(|uow| async move {
+            workspaces
+                .set_time_zone(&uow, paris.id, Some("Europe/Paris"), None)
+                .await
+        })
+        .await
+        .unwrap();
+
+    // The workspace has no zone: its organization's.
+    let body = probe(world.as_user(ada), ("X-Workspace", "acme")).await;
+    assert_eq!(body["zone"], "Asia/Kolkata");
+    assert_eq!(body["level"], "organization");
+    assert_eq!(body["owner"], group.id.to_string());
+    // The workspace's own zone wins.
+    let body = probe(world.as_user(ada), ("X-Workspace", "paris")).await;
+    assert_eq!(body["zone"], "Europe/Paris");
+    assert_eq!(body["level"], "workspace");
+    // A request naming only the organization, by a member.
+    let body = probe(world.as_user(ada), ("X-Organization", "acme-group")).await;
+    assert_eq!(body["zone"], "Asia/Kolkata");
+    assert_eq!(body["level"], "organization");
+    // Not a member: the default zone.
+    let body = probe(world.as_user(eve), ("X-Organization", "acme-group")).await;
+    assert_eq!(body["zone"], "Europe/London");
+    assert_eq!(body["level"], Value::Null);
+}
+
+#[tokio::test]
+async fn an_organization_member_reaching_the_workspace_gets_the_organization_zone() {
+    let world = zoned_org_world().await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let bob = world.user("Bob", "bob@example.com").await;
+    let group = world.organization(ada, "Acme Group").await;
+    let acme = world.workspace(ada, "Acme").await;
+    world.attach(group.id, acme.id).await;
+    world
+        .grant(group.id, bob, "member", WorkspaceSelector::All)
+        .await;
+    set_org_zone(&world, group.id, None, Some("AE")).await;
+    let body = probe(world.as_user(bob), ("X-Workspace", "acme")).await;
+    assert_eq!(body["zone"], "Asia/Dubai");
+    assert_eq!(body["level"], "organization");
+}
+
+#[tokio::test]
+async fn jobs_inherit_the_organization_zone() {
+    let world = zoned_org_world().await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let group = world.organization(ada, "Acme Group").await;
+    let acme = world.workspace(ada, "Acme").await;
+    let tokyo = world.workspace(ada, "Tokyo").await;
+    let alone = world.workspace(ada, "Alone").await;
+    world.attach(group.id, acme.id).await;
+    world.attach(group.id, tokyo.id).await;
+    set_org_zone(&world, group.id, Some("America/New_York"), None).await;
+    let workspaces = world.workspaces().await;
+    world
+        .work(|uow| async move {
+            workspaces
+                .set_time_zone(&uow, tokyo.id, None, Some("JP"))
+                .await
+        })
+        .await
+        .unwrap();
+
+    let zones = world.app.get::<Zones>().await;
+    assert_eq!(
+        zones.levels(),
+        [ZoneLevel::Workspace, ZoneLevel::Organization]
+    );
+    let zone_of = async |level, id| zones.zone_of(level, id).await.unwrap().name();
+    assert_eq!(
+        zone_of(ZoneLevel::Organization, group.id).await,
+        "America/New_York"
+    );
+    // A workspace without a zone or a country follows its organization.
+    assert_eq!(
+        zone_of(ZoneLevel::Workspace, acme.id).await,
+        "America/New_York"
+    );
+    assert_eq!(zone_of(ZoneLevel::Workspace, tokyo.id).await, "Asia/Tokyo");
+    assert_eq!(
+        zone_of(ZoneLevel::Workspace, alone.id).await,
+        "Europe/London"
+    );
+
+    let mut owners: Vec<_> = zones
+        .owners(ZoneLevel::Workspace)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(id, zone)| (id, zone.name()))
+        .collect();
+    owners.sort();
+    let mut expected = vec![
+        (acme.id, "America/New_York"),
+        (tokyo.id, "Asia/Tokyo"),
+        (alone.id, "Europe/London"),
+    ];
+    expected.sort();
+    assert_eq!(owners, expected);
+    let organizations: Vec<_> = zones
+        .owners(ZoneLevel::Organization)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(id, zone)| (id, zone.name()))
+        .collect();
+    assert_eq!(organizations, [(group.id, "America/New_York")]);
 }
