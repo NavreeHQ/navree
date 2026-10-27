@@ -13,3 +13,4 @@ mod prune;
 mod single_node;
 mod telemetry;
 mod tick;
+mod zones;

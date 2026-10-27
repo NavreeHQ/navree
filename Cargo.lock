@@ -4910,6 +4910,7 @@ dependencies = [
  "navree-kernel",
  "navree-telemetry",
  "navree-testing",
+ "navree-time",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -4918,6 +4919,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
