@@ -5,8 +5,8 @@
 use navree_kernel::Module;
 use navree_workflows::{
     AUTOMATION_WORKFLOW, Automation, AutomationChanges, AutomationQuery, AutomationStatus,
-    AutomationTemplate, Automations, BlockKind, EnrollmentPolicy, ModuleBuilderWorkflowsExt,
-    NewAutomation, RunStatus, SimulateInput, WaitOutcome, WorkflowsError,
+    AutomationTemplate, BlockKind, EnrollmentPolicy, ModuleBuilderWorkflowsExt, NewAutomation,
+    RunStatus, SimulateInput, WaitOutcome, WorkflowsError,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -640,17 +640,12 @@ async fn an_invalid_template_fails_the_boot() {
     .module(BadTemplate)
     .try_build()
     .await;
-    // The engine is built lazily: resolving it reports the template.
-    let error = match result {
-        Err(error) => error.to_string(),
-        Ok(app) => app
-            .ctx()
-            .get::<Automations>()
-            .await
-            .map(|_| ())
-            .unwrap_err()
-            .to_string(),
+    // The engine is a singleton: the boot builds it and reports the
+    // template.
+    let Err(error) = result else {
+        panic!("an invalid template must fail the boot");
     };
+    let error = error.to_string();
     assert!(
         error.contains("automation template `broken` is invalid"),
         "{error}"
