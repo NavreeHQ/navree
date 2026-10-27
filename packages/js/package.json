@@ -8,7 +8,8 @@
     "build": "pnpm --filter @navree/client --filter @navree/bff --filter @navree/theme build && pnpm --filter @navree/next --filter @navree/nuxt build",
     "test": "pnpm build && pnpm -r test",
     "typecheck": "pnpm build && pnpm -r typecheck",
-    "check": "pnpm build && pnpm -r typecheck && pnpm -r test"
+    "check": "pnpm build && pnpm -r typecheck && pnpm -r test",
+    "smoke": "pnpm build && pnpm --filter @navree/next --filter @navree/nuxt smoke"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

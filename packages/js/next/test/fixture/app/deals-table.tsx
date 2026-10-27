@@ -1,0 +1,39 @@
+"use client";
+
+import { DataTable, useListQuery, type NavreeColumnMeta } from "@navree/next";
+import { AbilityProvider, Can } from "@navree/next/abilities";
+import { RealtimeProvider, useChannel } from "@navree/next/realtime";
+import type { ColumnDef } from "@tanstack/react-table";
+
+type Deal = { id: string; title: string };
+
+const columns: ColumnDef<Deal, unknown>[] = [
+  { accessorKey: "title", header: "Title", meta: { sortField: "title" } satisfies NavreeColumnMeta },
+];
+
+function Live() {
+  useChannel("crm.deals", "deal.updated", () => undefined);
+  return null;
+}
+
+export function DealsTable() {
+  const { query, setQuery } = useListQuery({ per_page: 25 });
+  return (
+    <AbilityProvider rules={[{ action: "read", subject: "Deal" }]}>
+      <RealtimeProvider enabled={false}>
+        <Live />
+        <Can I="read" a="Deal">
+          <p>can read</p>
+        </Can>
+        <DataTable<Deal>
+          columns={columns}
+          data={[{ id: "d1", title: "Acme renewal" }]}
+          meta={{ current_page: 1, per_page: 25, total: 1, last_page: 1 }}
+          query={query}
+          onQueryChange={setQuery}
+          getRowId={(row) => row.id}
+        />
+      </RealtimeProvider>
+    </AbilityProvider>
+  );
+}
