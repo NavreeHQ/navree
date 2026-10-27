@@ -3,8 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use navree_db::{
-    DatabaseModule, Db, Factory, MigrationSet, ModuleBuilderDbExt, Seeder, create, create_many,
-    run_seeders,
+    DatabaseModule, Db, Factory, MigrationSet, ModuleBuilderDbExt, Seeder, SeederCalls, create,
+    create_many, run_seeders,
 };
 use navree_kernel::{
     App, AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
@@ -176,6 +176,193 @@ async fn db_seed_runs_only_the_named_seeders() {
         .to_string();
     assert!(error.contains("nope"), "{error}");
     assert!(error.contains("base") && error.contains("notes"), "{error}");
+}
+
+/// The root seeder: calls the others.
+struct RootSeeder(Arc<SeedLog>);
+
+impl Injectable for RootSeeder {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<SeedLog>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move { Ok(Self(r.get::<SeedLog>().await?)) })
+    }
+}
+
+impl Seeder for RootSeeder {
+    fn name(&self) -> &'static str {
+        "root"
+    }
+
+    fn is_root(&self) -> bool {
+        true
+    }
+
+    fn run<'a>(&'a self, ctx: &'a AppContext, _db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            self.0.0.lock().unwrap().push("root");
+            ctx.call::<BaseSeeder>().await?;
+            ctx.call_once::<BaseSeeder>().await?;
+            ctx.call_silent::<QuietSeeder>().await?;
+            ctx.call_seeder(&CountSeeder {
+                log: self.0.clone(),
+                count: 2,
+            })
+            .await?;
+            Ok(())
+        })
+    }
+}
+
+/// Not registered (built for the call); runs without model events.
+struct QuietSeeder(Arc<SeedLog>);
+
+impl Injectable for QuietSeeder {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<SeedLog>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move { Ok(Self(r.get::<SeedLog>().await?)) })
+    }
+}
+
+impl Seeder for QuietSeeder {
+    fn name(&self) -> &'static str {
+        "quiet"
+    }
+
+    fn without_model_events(&self) -> bool {
+        true
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, _db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            assert!(navree_db::seeding_without_model_events());
+            self.0.0.lock().unwrap().push("quiet");
+            Ok(())
+        })
+    }
+}
+
+/// A seeder with a parameter, called as a value.
+struct CountSeeder {
+    log: Arc<SeedLog>,
+    count: usize,
+}
+
+impl Seeder for CountSeeder {
+    fn name(&self) -> &'static str {
+        "count"
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            assert!(!navree_db::seeding_without_model_events());
+            self.log.0.lock().unwrap().push("count");
+            create_many(&NoteFactory, db.conn(), self.count).await?;
+            Ok(())
+        })
+    }
+}
+
+struct RootModule;
+
+impl Module for RootModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(NotesModule).seeder::<RootSeeder>();
+    }
+}
+
+#[tokio::test]
+async fn a_root_seeder_runs_alone_and_calls_the_others() {
+    let temp = TempDb::new();
+    let mut options = temp.options();
+    options.migrate_on_boot = true;
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(options))
+        .module(RootModule)
+        .boot()
+        .await
+        .expect("boots");
+    app.run_command("db:seed", vec![]).await.expect("seeds");
+    assert_eq!(
+        seed_log(&app).await,
+        ["root", "base", "quiet", "count"],
+        "only the root ran by itself; base once; the notes seeder not at all"
+    );
+    let db = app.ctx().get::<Db>().await.unwrap();
+    assert_eq!(count(&db, "notes").await, 2);
+    // Named seeders still run on their own.
+    let ran = run_seeders(app.ctx(), &["base".to_owned()]).await.unwrap();
+    assert_eq!(ran, ["base"]);
+}
+
+/// A second database, named `archive`, with the notes table.
+struct Archive(String);
+
+impl Module for Archive {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let url = self.0.clone();
+        m.factory(
+            navree_kernel::Factory::<Db>::new(move |_| {
+                let url = url.clone();
+                async move {
+                    let db = Db::connect(&navree_db::DbOptions {
+                        url,
+                        ..navree_db::DbOptions::default()
+                    })
+                    .await?;
+                    let manager = sea_orm_migration::SchemaManager::new(db.conn());
+                    sea_orm_migration::MigrationTrait::up(&CreateNotes, &manager).await?;
+                    Ok(Arc::new(db))
+                }
+            })
+            .named("archive"),
+        );
+    }
+}
+
+#[tokio::test]
+async fn db_seed_seeds_a_named_database_and_guards_production() {
+    let temp = TempDb::new();
+    let archive = TempDb::new();
+    let mut options = temp.options();
+    options.migrate_on_boot = true;
+    let app = Navree::app()
+        .module(navree_config::ConfigModule::for_root(
+            navree_config::ConfigSources::new().set("env", "production"),
+        ))
+        .module(DatabaseModule::for_root(options))
+        .module(NotesModule)
+        .module(Archive(archive.options().url))
+        .boot()
+        .await
+        .expect("boots");
+    let refused = app
+        .run_command("db:seed", vec!["notes".into()])
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("pass --force"), "{refused}");
+    app.run_command(
+        "db:seed",
+        vec!["notes".into(), "--database".into(), "archive".into(), "--force".into()],
+    )
+    .await
+    .expect("seeds the archive");
+    let db = app.ctx().get::<Db>().await.unwrap();
+    assert_eq!(count(&db, "notes").await, 0);
+    let named = app.ctx().get_named::<Db>("archive").await.unwrap();
+    assert_eq!(count(&named, "notes").await, 3);
+    let unknown = app
+        .run_command("db:seed", vec!["--database=nowhere".into(), "--force".into()])
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(unknown.contains("no database connection named `nowhere`"), "{unknown}");
 }
 
 #[tokio::test]

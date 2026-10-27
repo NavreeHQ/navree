@@ -70,7 +70,13 @@ schema = ["dep:navree-schema"]
 ## L3
 db = ["dep:navree-db", "http", "schema"]
 ## With `workspace` on too, also `navree::workspace::testing` (isolation suites).
-testing = ["dep:navree-testing", "http", "navree-workspace?/testing"]
+## With `orm` on too, also `navree::orm::testing::TestAppExt` (`app.seed::<S>()`).
+testing = [
+    "dep:navree-testing",
+    "http",
+    "navree-workspace?/testing",
+    "navree-orm?/testing",
+]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
 mail = ["dep:navree-mail", "view", "telemetry"]
