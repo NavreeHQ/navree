@@ -82,7 +82,11 @@ pub(crate) async fn print(cdp: &Arc<Cdp>, job: PageJob) -> Result<Vec<u8>, Strin
     if let Some(locale) = &job.locale {
         // An unknown locale is not worth failing the document for.
         if let Err(error) = cdp
-            .call("Emulation.setLocaleOverride", json!({ "locale": locale }), on)
+            .call(
+                "Emulation.setLocaleOverride",
+                json!({ "locale": locale }),
+                on,
+            )
             .await
         {
             tracing::debug!(target: "navree_documents::chrome", %error, locale, "locale override refused");
@@ -137,8 +141,7 @@ async fn serve(
     while let Some(event) = events.recv().await {
         match event.method.as_str() {
             "Fetch.requestPaused" => {
-                let Some(request_id) = event.params.get("requestId").and_then(Value::as_str)
-                else {
+                let Some(request_id) = event.params.get("requestId").and_then(Value::as_str) else {
                     continue;
                 };
                 let url = event
@@ -177,7 +180,10 @@ enum Answer {
 }
 
 async fn answer(job: &PageJob, url: &str) -> Answer {
-    let Some(rest) = url.strip_prefix(DOCUMENT_ORIGIN).and_then(|r| r.strip_prefix('/')) else {
+    let Some(rest) = url
+        .strip_prefix(DOCUMENT_ORIGIN)
+        .and_then(|r| r.strip_prefix('/'))
+    else {
         return if job.allow_network {
             Answer::Continue
         } else {

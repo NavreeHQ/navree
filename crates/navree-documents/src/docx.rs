@@ -10,10 +10,10 @@ use docx_rs::{
     TableRow,
 };
 
+use crate::DocumentsError;
 use crate::download::{DOCX_CONTENT_TYPE, Download};
 use crate::print::{Margins, Paper};
 use crate::render::is_rtl;
-use crate::DocumentsError;
 
 /// Twips (1/20 of a point) per millimetre.
 const TWIPS_PER_MM: f64 = 1440.0 / 25.4;
@@ -80,7 +80,10 @@ enum FooterContent {
 enum Block {
     Heading(u8, Paragraph),
     Paragraph(Paragraph),
-    List { ordered: bool, items: Vec<Paragraph> },
+    List {
+        ordered: bool,
+        items: Vec<Paragraph>,
+    },
     Table(Table),
     Image(Image),
     PageBreak,
@@ -158,7 +161,8 @@ impl Docx {
     /// styles, so they appear in its navigation pane and tables of
     /// contents). Levels outside 1..=3 are clamped.
     pub fn heading(mut self, level: u8, text: impl Into<Paragraph>) -> Self {
-        self.blocks.push(Block::Heading(level.clamp(1, 3), text.into()));
+        self.blocks
+            .push(Block::Heading(level.clamp(1, 3), text.into()));
         self
     }
 
@@ -283,11 +287,8 @@ impl Docx {
         for block in &self.blocks {
             match block {
                 Block::Heading(level, paragraph) => {
-                    docx = docx.add_paragraph(
-                        paragraph
-                            .to_docx(rtl)
-                            .style(&format!("Heading{level}")),
-                    );
+                    docx = docx
+                        .add_paragraph(paragraph.to_docx(rtl).style(&format!("Heading{level}")));
                 }
                 Block::Paragraph(paragraph) => docx = docx.add_paragraph(paragraph.to_docx(rtl)),
                 Block::List { ordered, items } => {
@@ -308,7 +309,12 @@ impl Docx {
                                     LevelText::new(text),
                                     LevelJc::new("left"),
                                 )
-                                .indent(Some(720), Some(SpecialIndentType::Hanging(360)), None, None),
+                                .indent(
+                                    Some(720),
+                                    Some(SpecialIndentType::Hanging(360)),
+                                    None,
+                                    None,
+                                ),
                             ),
                         )
                         .add_numbering(Numbering::new(id, id));
@@ -322,13 +328,14 @@ impl Docx {
                 Block::Table(table) => docx = docx.add_table(table.to_docx(rtl)),
                 Block::Image(image) => {
                     let (width_px, height_px) = image.size()?;
-                    let mut pic = Pic::new_with_dimensions(image.bytes.to_vec(), width_px, height_px);
+                    let mut pic =
+                        Pic::new_with_dimensions(image.bytes.to_vec(), width_px, height_px);
                     if let Some(width_mm) = image.width_mm {
                         let height_mm = width_mm * f64::from(height_px) / f64::from(width_px);
                         pic = pic.size(emu(width_mm), emu(height_mm));
                     }
-                    let mut paragraph = docx_rs::Paragraph::new()
-                        .add_run(docx_rs::Run::new().add_image(pic));
+                    let mut paragraph =
+                        docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_image(pic));
                     if let Some(align) = image.align {
                         paragraph = paragraph.align(align.to_docx());
                     }
@@ -348,9 +355,15 @@ impl Docx {
             xml.document = replace_bytes(&xml.document, b"<w:tblPr>", b"<w:tblPr><w:bidiVisual />");
         }
         if let Some(title) = &self.title {
-            let element = format!("<dc:title>{}</dc:title></cp:coreProperties>", escape_xml(title));
-            xml.doc_props.core =
-                replace_bytes(&xml.doc_props.core, b"</cp:coreProperties>", element.as_bytes());
+            let element = format!(
+                "<dc:title>{}</dc:title></cp:coreProperties>",
+                escape_xml(title)
+            );
+            xml.doc_props.core = replace_bytes(
+                &xml.doc_props.core,
+                b"</cp:coreProperties>",
+                element.as_bytes(),
+            );
         }
         if let Some(author) = &self.author {
             let author = escape_xml(author);
@@ -718,9 +731,8 @@ impl Image {
 
     /// Width and height in pixels, read from the PNG or JPEG header.
     fn size(&self) -> Result<(u32, u32), DocumentsError> {
-        image_size(&self.bytes).ok_or_else(|| {
-            DocumentsError::Docx("an image must be a PNG or a JPEG file".into())
-        })
+        image_size(&self.bytes)
+            .ok_or_else(|| DocumentsError::Docx("an image must be a PNG or a JPEG file".into()))
     }
 }
 

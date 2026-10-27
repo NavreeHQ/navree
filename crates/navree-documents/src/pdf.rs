@@ -9,9 +9,9 @@ use http::header::{CONTENT_DISPOSITION, HeaderValue};
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
 
+use crate::DocumentsError;
 use crate::download::{Download, PDF_CONTENT_TYPE};
 use crate::stamp::{Pages, Position, Stamp};
-use crate::DocumentsError;
 use crate::text::decode_text_string;
 
 /// Decompressed content allowed per page while reading a PDF (64 MiB), so
@@ -67,6 +67,7 @@ impl Pdf {
     }
 
     /// Bytes an engine produced, not checked.
+    #[cfg(any(feature = "typst", feature = "chrome"))]
     pub(crate) fn from_engine(bytes: impl Into<Bytes>) -> Pdf {
         Pdf(bytes.into())
     }
@@ -296,9 +297,15 @@ impl Pdf {
             Ok(id) => document.get_dictionary(id).cloned().unwrap_or_default(),
             Err(_) => Dictionary::new(),
         };
-        info.set("Title", Object::String(utf16_text(title), StringFormat::Hexadecimal));
+        info.set(
+            "Title",
+            Object::String(utf16_text(title), StringFormat::Hexadecimal),
+        );
         if let Some(author) = author {
-            info.set("Author", Object::String(utf16_text(author), StringFormat::Hexadecimal));
+            info.set(
+                "Author",
+                Object::String(utf16_text(author), StringFormat::Hexadecimal),
+            );
         }
         let info_id = document.add_object(info);
         document.trailer.set("Info", info_id);
@@ -513,10 +520,7 @@ fn flatten_inherited(document: &mut Document) -> Result<(), DocumentsError> {
             page.set(key, value);
         }
         if !page.has(b"MediaBox") {
-            page.set(
-                "MediaBox",
-                vec![0.into(), 0.into(), 612.into(), 792.into()],
-            );
+            page.set("MediaBox", vec![0.into(), 0.into(), 612.into(), 792.into()]);
         }
     }
     Ok(())
@@ -566,10 +570,7 @@ fn page_resources_mut(
         .cloned()
         .unwrap_or_else(|_| Object::Dictionary(Dictionary::new()));
     let resolved = match current {
-        Object::Reference(id) => document
-            .get_dictionary(id)
-            .cloned()
-            .map_err(pdf_error)?,
+        Object::Reference(id) => document.get_dictionary(id).cloned().map_err(pdf_error)?,
         Object::Dictionary(dict) => dict,
         _ => Dictionary::new(),
     };
@@ -625,11 +626,7 @@ fn draw_over(
     };
     let open = document.add_object(Stream::new(Dictionary::new(), b"q\n".to_vec()));
     let mut close = b"\nQ\n".to_vec();
-    close.extend(
-        Content { operations }
-            .encode()
-            .map_err(pdf_error)?,
-    );
+    close.extend(Content { operations }.encode().map_err(pdf_error)?);
     let close = document.add_object(Stream::new(Dictionary::new(), close));
     let mut contents = vec![Object::Reference(open)];
     contents.extend(existing);
@@ -704,7 +701,10 @@ mod tests {
         assert!(text.contains("Wörld ?"), "{text:?}");
         let long = Pdf::from_lines((0..130).map(|i| format!("line {i}")));
         assert_eq!(long.page_count().unwrap(), 3);
-        assert_eq!(Pdf::from_lines(Vec::<String>::new()).page_count().unwrap(), 1);
+        assert_eq!(
+            Pdf::from_lines(Vec::<String>::new()).page_count().unwrap(),
+            1
+        );
     }
 
     #[test]

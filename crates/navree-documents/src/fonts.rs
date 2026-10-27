@@ -4,6 +4,7 @@
 
 /// One bundled font file.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(not(feature = "chrome"), allow(dead_code))]
 pub(crate) struct BundledFont {
     /// The file name (`NotoSans-Regular.ttf`).
     pub(crate) file: &'static str,
@@ -96,6 +97,7 @@ const fn font(
 
 /// The families text falls back through by default, in order: Latin,
 /// Greek and Cyrillic first, then Arabic, then Devanagari.
+#[cfg(feature = "typst")]
 pub(crate) const DEFAULT_FAMILIES: [&str; 3] =
     ["Noto Sans", "Noto Sans Arabic", "Noto Sans Devanagari"];
 
@@ -152,7 +154,9 @@ mod tests {
             "font-family: \"Noto Sans Arabic\"; src: url(\"/_navree/fonts/NotoSansArabic-Bold.ttf\") \
              format(\"truetype\"); font-weight: 700; font-style: normal;"
         ));
-        assert!(css.contains("NotoSans-BoldItalic.ttf\") format(\"truetype\"); font-weight: 700; font-style: italic;"));
+        assert!(css.contains(
+            "NotoSans-BoldItalic.ttf\") format(\"truetype\"); font-weight: 700; font-style: italic;"
+        ));
     }
 
     #[test]

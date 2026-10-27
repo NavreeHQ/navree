@@ -78,7 +78,13 @@ impl Download {
         let ascii: String = self
             .filename
             .chars()
-            .map(|c| if c.is_ascii() && !c.is_ascii_control() { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii() && !c.is_ascii_control() {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         if ascii == self.filename {
             format!("{kind}; filename=\"{ascii}\"")
@@ -159,7 +165,10 @@ mod tests {
     #[test]
     fn ascii_names_are_sent_once() {
         let download = Download::new(&b"%PDF"[..], PDF_CONTENT_TYPE, "invoice-42.pdf");
-        assert_eq!(download.disposition(), "attachment; filename=\"invoice-42.pdf\"");
+        assert_eq!(
+            download.disposition(),
+            "attachment; filename=\"invoice-42.pdf\""
+        );
         assert_eq!(
             download.clone().inline().disposition(),
             "inline; filename=\"invoice-42.pdf\""
@@ -190,7 +199,10 @@ mod tests {
         let headers = response.headers();
         assert_eq!(headers[CONTENT_TYPE], "application/pdf");
         assert_eq!(headers[CONTENT_LENGTH], "8");
-        assert_eq!(headers[CONTENT_DISPOSITION], "attachment; filename=\"a.pdf\"");
+        assert_eq!(
+            headers[CONTENT_DISPOSITION],
+            "attachment; filename=\"a.pdf\""
+        );
         assert_eq!(headers[CACHE_CONTROL], "private, no-store");
         assert_eq!(headers[X_CONTENT_TYPE_OPTIONS], "nosniff");
     }

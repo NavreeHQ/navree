@@ -13,8 +13,8 @@ use navree_view::{ViewError, ViewOptions, Views};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, OnceCell, Semaphore};
 
-pub use self::launch::CHROME_ENV;
 use self::cdp::Cdp;
+pub use self::launch::CHROME_ENV;
 use self::launch::{LaunchedChrome, find_chrome, launch, resolve_endpoint};
 pub use self::page::DOCUMENT_ORIGIN;
 use self::page::PageJob;
@@ -146,11 +146,7 @@ impl ChromeEngine {
     pub async fn render(&self, render: &Render) -> Result<Pdf, DocumentsError> {
         let (path, html) = self.document(render).await?;
         let options = &self.inner.options;
-        let print = render
-            .print
-            .as_ref()
-            .unwrap_or(&options.print)
-            .to_cdp();
+        let print = render.print.as_ref().unwrap_or(&options.print).to_cdp();
         let job = PageJob {
             path,
             html,
@@ -239,12 +235,8 @@ impl ChromeEngine {
                  install Chrome or Chromium, or set documents.chrome.endpoint"
             ))
         })?;
-        let launched = launch(&path, options, timeout)
-            .await
-            .map_err(unavailable)?;
-        let cdp = Cdp::connect(&launched.ws_url)
-            .await
-            .map_err(unavailable)?;
+        let launched = launch(&path, options, timeout).await.map_err(unavailable)?;
+        let cdp = Cdp::connect(&launched.ws_url).await.map_err(unavailable)?;
         tracing::info!(target: "navree_documents::chrome", path = %path.display(), "started Chrome");
         Ok(Browser {
             cdp: Arc::new(cdp),
@@ -275,7 +267,9 @@ impl ChromeEngine {
                 let lookup = path.clone();
                 let html = tokio::task::spawn_blocking(move || views.render(&lookup, context))
                     .await
-                    .map_err(|error| engine_error(format!("the template renderer stopped: {error}")))?
+                    .map_err(|error| {
+                        engine_error(format!("the template renderer stopped: {error}"))
+                    })?
                     .map_err(|error| view_error(name, error))?;
                 Ok((path, html))
             }
@@ -394,7 +388,9 @@ mod tests {
 
     #[test]
     fn template_variables_add_locale_and_direction() {
-        let render = Render::template("x").data(json!({"name": "Ada"})).locale("ar");
+        let render = Render::template("x")
+            .data(json!({"name": "Ada"}))
+            .locale("ar");
         assert_eq!(
             template_context(&render),
             json!({"name": "Ada", "locale": "ar", "dir": "rtl"})

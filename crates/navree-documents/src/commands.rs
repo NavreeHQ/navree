@@ -70,7 +70,9 @@ pub(crate) fn parse_render_args(args: &[String]) -> Result<RenderArgs, BoxError>
             }
             name if template.is_none() => template = Some(name.to_owned()),
             extra => {
-                return Err(format!("documents:render: unexpected argument `{extra}`; {USAGE}").into());
+                return Err(
+                    format!("documents:render: unexpected argument `{extra}`; {USAGE}").into(),
+                );
             }
         }
     }
@@ -98,11 +100,12 @@ async fn render(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> 
     let documents = ctx.get::<Documents>().await?;
     let mut render = Render::template(&args.template);
     if let Some(path) = &args.data {
-        let text = tokio::fs::read_to_string(path)
-            .await
-            .map_err(|error| format!("documents:render: cannot read {}: {error}", path.display()))?;
-        let data: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|error| format!("documents:render: {} is not JSON: {error}", path.display()))?;
+        let text = tokio::fs::read_to_string(path).await.map_err(|error| {
+            format!("documents:render: cannot read {}: {error}", path.display())
+        })?;
+        let data: serde_json::Value = serde_json::from_str(&text).map_err(|error| {
+            format!("documents:render: {} is not JSON: {error}", path.display())
+        })?;
         render = render.data(data);
     }
     if let Some(locale) = &args.locale {
@@ -119,7 +122,12 @@ async fn render(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> 
     let bytes = pdf.len();
     tokio::fs::write(&args.out, pdf.bytes())
         .await
-        .map_err(|error| format!("documents:render: cannot write {}: {error}", args.out.display()))?;
+        .map_err(|error| {
+            format!(
+                "documents:render: cannot write {}: {error}",
+                args.out.display()
+            )
+        })?;
     Ok(format!(
         "Rendered {} with {engine} to {} ({pages} {}, {bytes} bytes)",
         args.template,
@@ -136,7 +144,9 @@ async fn fonts(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
     let documents = ctx.get::<Documents>().await?;
     let families = documents.font_families().await?;
     if families.is_empty() {
-        return Ok("No fonts: documents.typst.bundled_fonts is off and no font directory has fonts".into());
+        return Ok(
+            "No fonts: documents.typst.bundled_fonts is off and no font directory has fonts".into(),
+        );
     }
     Ok(families.join("\n"))
 }

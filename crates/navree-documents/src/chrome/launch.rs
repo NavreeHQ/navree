@@ -179,7 +179,9 @@ pub(crate) async fn resolve_endpoint(endpoint: &str, timeout: Duration) -> Resul
     }
     let address = endpoint
         .strip_prefix("http://")
-        .ok_or_else(|| format!("documents.chrome.endpoint must be ws:// or http://, not {endpoint}"))?
+        .ok_or_else(|| {
+            format!("documents.chrome.endpoint must be ws:// or http://, not {endpoint}")
+        })?
         .trim_end_matches('/');
     let host = address.split('/').next().unwrap_or(address);
     let body = tokio::time::timeout(timeout, async {
@@ -210,8 +212,8 @@ pub(crate) async fn resolve_endpoint(endpoint: &str, timeout: Duration) -> Resul
         .map(|(_, body)| body)
         .and_then(|body| Some(&body[body.find('{')?..=body.rfind('}')?]))
         .ok_or_else(|| format!("{endpoint}/json/version: not a JSON response"))?;
-    let version: serde_json::Value = serde_json::from_str(json)
-        .map_err(|error| format!("{endpoint}/json/version: {error}"))?;
+    let version: serde_json::Value =
+        serde_json::from_str(json).map_err(|error| format!("{endpoint}/json/version: {error}"))?;
     let url = version
         .get("webSocketDebuggerUrl")
         .and_then(|v| v.as_str())

@@ -161,8 +161,19 @@ pub fn is_rtl(locale: &str) -> bool {
         .to_ascii_lowercase();
     matches!(
         language.as_str(),
-        "ar" | "arc" | "ckb" | "dv" | "fa" | "he" | "iw" | "ks" | "ku" | "ps" | "sd" | "ug"
-            | "ur" | "yi"
+        "ar" | "arc"
+            | "ckb"
+            | "dv"
+            | "fa"
+            | "he"
+            | "iw"
+            | "ks"
+            | "ku"
+            | "ps"
+            | "sd"
+            | "ug"
+            | "ur"
+            | "yi"
     )
 }
 
@@ -191,7 +202,10 @@ mod tests {
             .engine(EngineKind::Typst)
             .title("Certificate");
         let json = serde_json::to_value(&render).unwrap();
-        assert_eq!(json["source"], json!({"kind": "template", "value": "certificates/classic"}));
+        assert_eq!(
+            json["source"],
+            json!({"kind": "template", "value": "certificates/classic"})
+        );
         assert_eq!(json["engine"], "typst");
         let back: Render = serde_json::from_value(json).unwrap();
         assert_eq!(back, render);

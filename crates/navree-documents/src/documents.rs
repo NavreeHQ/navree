@@ -70,7 +70,12 @@ impl std::fmt::Debug for Documents {
             .field("default_engine", &self.inner.default_engine)
             .field(
                 "engines",
-                &self.inner.engines.iter().map(|e| e.kind()).collect::<Vec<_>>(),
+                &self
+                    .inner
+                    .engines
+                    .iter()
+                    .map(|e| e.kind())
+                    .collect::<Vec<_>>(),
             )
             .field("disk", &self.inner.disk)
             .field("queued", &self.inner.dispatcher.is_some())
@@ -140,7 +145,11 @@ impl Documents {
 
     /// The fake's documents: `engine` for every kind, recording into
     /// `state`.
-    pub(crate) fn fake(templates: Templates, engine: Arc<dyn PdfEngine>, state: Arc<FakeState>) -> Self {
+    pub(crate) fn fake(
+        templates: Templates,
+        engine: Arc<dyn PdfEngine>,
+        state: Arc<FakeState>,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 templates,
@@ -278,7 +287,11 @@ impl Documents {
 
     /// Renders `render` and writes the PDF to `path` on the documents disk
     /// (`documents.disk`, else the default disk).
-    pub async fn save(&self, render: &Render, path: &str) -> Result<StoredDocument, DocumentsError> {
+    pub async fn save(
+        &self,
+        render: &Render,
+        path: &str,
+    ) -> Result<StoredDocument, DocumentsError> {
         let disk = self.disk()?;
         let pdf = self.render(render).await?;
         let size = pdf.len() as u64;
@@ -392,10 +405,10 @@ impl Documents {
     }
 
     fn engine_of(&self, kind: EngineKind) -> Result<Arc<dyn PdfEngine>, DocumentsError> {
-        if self.inner.fake.is_some() {
-            if let Some(engine) = self.inner.engines.first() {
-                return Ok(engine.clone());
-            }
+        if self.inner.fake.is_some()
+            && let Some(engine) = self.inner.engines.first()
+        {
+            return Ok(engine.clone());
         }
         self.engine(kind)
             .ok_or_else(|| DocumentsError::EngineUnavailable {

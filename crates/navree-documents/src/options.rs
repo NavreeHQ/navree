@@ -143,7 +143,10 @@ impl Default for ChromeOptions {
 /// A list of paths, or one comma-separated string (what an environment
 /// variable holds).
 fn paths<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<PathBuf>, D::Error> {
-    Ok(strings(deserializer)?.into_iter().map(PathBuf::from).collect())
+    Ok(strings(deserializer)?
+        .into_iter()
+        .map(PathBuf::from)
+        .collect())
 }
 
 /// A list of strings, or one comma-separated string.
@@ -173,7 +176,10 @@ mod tests {
     #[test]
     fn defaults_match_the_documentation() {
         let options = DocumentsOptions::default();
-        assert_eq!(options.templates, vec![PathBuf::from("resources/documents")]);
+        assert_eq!(
+            options.templates,
+            vec![PathBuf::from("resources/documents")]
+        );
         assert_eq!(options.engine, EngineKind::Typst);
         assert_eq!(options.disk, None);
         assert!(options.typst.bundled_fonts);
@@ -192,7 +198,10 @@ mod tests {
             "chrome": {"args": "--lang=ar,--disable-gpu", "print": {"paper": "letter"}},
         }))
         .unwrap();
-        assert_eq!(options.templates, vec![PathBuf::from("a"), PathBuf::from("b")]);
+        assert_eq!(
+            options.templates,
+            vec![PathBuf::from("a"), PathBuf::from("b")]
+        );
         assert_eq!(options.engine, EngineKind::Chrome);
         assert_eq!(options.typst.font_dirs, vec![PathBuf::from("fonts")]);
         assert!(options.typst.bundled_fonts);

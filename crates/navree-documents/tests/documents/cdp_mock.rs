@@ -99,7 +99,11 @@ impl MockChrome {
 
     /// The methods called, in order.
     pub fn methods(&self) -> Vec<String> {
-        self.seen().calls.iter().map(|(m, _, _)| m.clone()).collect()
+        self.seen()
+            .calls
+            .iter()
+            .map(|(m, _, _)| m.clone())
+            .collect()
     }
 
     /// The params of every call of `method`.
@@ -130,7 +134,12 @@ impl Drop for MockChrome {
     }
 }
 
-async fn connection(stream: TcpStream, addr: SocketAddr, seen: Arc<Mutex<Seen>>, behavior: Behavior) {
+async fn connection(
+    stream: TcpStream,
+    addr: SocketAddr,
+    seen: Arc<Mutex<Seen>>,
+    behavior: Behavior,
+) {
     let mut head = [0u8; 64];
     let Ok(n) = stream.peek(&mut head).await else {
         return;
@@ -258,8 +267,10 @@ impl Browser {
 
     fn pause(&mut self, session: &str, url: &str, document: bool) {
         let request = self.id("request");
-        self.requests
-            .insert(request.clone(), (session.to_owned(), url.to_owned(), document));
+        self.requests.insert(
+            request.clone(),
+            (session.to_owned(), url.to_owned(), document),
+        );
         self.event(
             session,
             "Fetch.requestPaused",
@@ -285,7 +296,11 @@ impl Browser {
         match method.as_str() {
             "Target.createBrowserContext" => {
                 let context = self.id("context");
-                self.seen.lock().unwrap().open_contexts.insert(context.clone());
+                self.seen
+                    .lock()
+                    .unwrap()
+                    .open_contexts
+                    .insert(context.clone());
                 self.contexts.push(context.clone());
                 self.answer(id, on, json!({ "browserContextId": context }));
             }
@@ -330,7 +345,8 @@ impl Browser {
                     let mut seen = self.seen.lock().unwrap();
                     match method.as_str() {
                         "Fetch.fulfillRequest" if document => {
-                            seen.documents.push(String::from_utf8(body.clone()).unwrap());
+                            seen.documents
+                                .push(String::from_utf8(body.clone()).unwrap());
                         }
                         "Fetch.fulfillRequest" => {
                             let status = params["responseCode"].as_u64().unwrap() as u16;
@@ -366,7 +382,11 @@ impl Browser {
                 }
             }
             "Runtime.evaluate" => {
-                self.answer(id, on, json!({ "result": { "type": "boolean", "value": true } }));
+                self.answer(
+                    id,
+                    on,
+                    json!({ "result": { "type": "boolean", "value": true } }),
+                );
             }
             "Page.printToPDF" => {
                 {
@@ -380,7 +400,14 @@ impl Browser {
                     seen.printing += 1;
                     seen.max_printing = seen.max_printing.max(seen.printing);
                 }
-                let html = self.seen.lock().unwrap().documents.last().cloned().unwrap_or_default();
+                let html = self
+                    .seen
+                    .lock()
+                    .unwrap()
+                    .documents
+                    .last()
+                    .cloned()
+                    .unwrap_or_default();
                 let delay = self.behavior.print_delay;
                 let out = self.out.clone();
                 let seen = self.seen.clone();
@@ -451,7 +478,11 @@ fn asset_urls(html: &str, base: &str) -> Vec<String> {
 /// The visible text of `html`, one line per block, entities decoded.
 pub fn html_text(html: &str) -> Vec<String> {
     let mut text = html.to_owned();
-    for (open, close) in [("<head", "</head>"), ("<style", "</style>"), ("<script", "</script>")] {
+    for (open, close) in [
+        ("<head", "</head>"),
+        ("<style", "</style>"),
+        ("<script", "</script>"),
+    ] {
         while let Some(start) = text.find(open) {
             let end = text[start..]
                 .find(close)

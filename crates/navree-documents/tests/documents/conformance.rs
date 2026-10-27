@@ -54,10 +54,17 @@ async fn conformance(case: Case<'_>) {
     assert!(pdf.text().unwrap().contains(case.inline_text), "{kind}");
 
     // An unknown name names the file tried.
-    match engine.render(&Render::template("certificates/missing")).await {
+    match engine
+        .render(&Render::template("certificates/missing"))
+        .await
+    {
         Err(DocumentsError::TemplateNotFound { name, tried }) => {
             assert_eq!(name, "certificates/missing", "{kind}");
-            assert_eq!(tried, vec![format!("certificates/missing.{extension}")], "{kind}");
+            assert_eq!(
+                tried,
+                vec![format!("certificates/missing.{extension}")],
+                "{kind}"
+            );
         }
         other => panic!("{kind}: {other:?}"),
     }
@@ -75,7 +82,9 @@ async fn conformance(case: Case<'_>) {
     map.insert((1, 2), "tuple keys");
     assert!(
         matches!(
-            engine.render(&Render::template("certificates/classic").data(map)).await,
+            engine
+                .render(&Render::template("certificates/classic").data(map))
+                .await,
             Err(DocumentsError::Data(_))
         ),
         "{kind}"
@@ -83,10 +92,18 @@ async fn conformance(case: Case<'_>) {
 
     // The title lands in the metadata.
     let pdf = engine
-        .render(&Render::template("certificates/classic").data(&data).title("Certificate 7"))
+        .render(
+            &Render::template("certificates/classic")
+                .data(&data)
+                .title("Certificate 7"),
+        )
         .await
         .unwrap();
-    assert_eq!(pdf.title().unwrap().as_deref(), Some("Certificate 7"), "{kind}");
+    assert_eq!(
+        pdf.title().unwrap().as_deref(),
+        Some("Certificate 7"),
+        "{kind}"
+    );
 }
 
 #[cfg(feature = "typst")]
@@ -141,5 +158,9 @@ async fn the_fake_engine_conforms() {
         .await;
     }
     // Every render reached the fake's record.
-    assert!(fake.rendered().iter().any(|r| matches!(r.source, TemplateSource::Html(_))));
+    assert!(
+        fake.rendered()
+            .iter()
+            .any(|r| matches!(r.source, TemplateSource::Html(_)))
+    );
 }
