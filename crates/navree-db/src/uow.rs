@@ -12,7 +12,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::Db;
+use crate::{Db, mysql};
 
 /// What happened to a record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -99,10 +99,26 @@ enum TxState {
 /// otherwise). Elsewhere, create one with [`Db::uow`]. Services take
 /// `&Uow` as a parameter instead of having it injected.
 ///
-/// On SQLite the transaction starts with `BEGIN IMMEDIATE`, so concurrent
-/// units of work queue on the write lock (up to `busy_timeout`) instead of
-/// failing when a reader later writes. On PostgreSQL the actor and request id
-/// are set as `navree.actor` and `navree.request_id` for the transaction.
+/// **Per database.** On SQLite the transaction starts with `BEGIN
+/// IMMEDIATE`, so concurrent units of work queue on the write lock (up to
+/// `busy_timeout`) instead of failing when a reader later writes. On
+/// PostgreSQL the actor and request id are set as `navree.actor` and
+/// `navree.request_id` for the transaction (`set_config(.., true)`), which
+/// triggers and row-level security policies read with `current_setting`.
+/// On MySQL and MariaDB they are the session variables `@navree_actor` and
+/// `@navree_request_id` (text, `NULL` when absent): set right after `BEGIN`
+/// and cleared right before `COMMIT` or `ROLLBACK`, because a session
+/// variable outlives the transaction and the connection goes back to the
+/// pool. Read them in triggers (`NEW.updated_by = @navree_actor`, or
+/// `UUID_TO_BIN(@navree_actor)` for a `BINARY(16)` column); outside a unit
+/// of work they are `NULL`.
+///
+/// MySQL has no row-level security, so nothing in the database itself
+/// keeps one workspace's rows from another's: on MySQL, workspace isolation
+/// is query scoping (every query of a workspace-scoped repository filters
+/// on `workspace_id`), and only PostgreSQL can also enforce it with
+/// policies. Rows are locked with `SELECT ... FOR UPDATE` on PostgreSQL
+/// and MySQL ([`lock_for_update`](Uow::lock_for_update)).
 ///
 /// **Current unit of work.** While a request's handler runs (and inside
 /// [`Db::transaction`] or [`scope`](Uow::scope)), [`Uow::current`] returns
@@ -233,7 +249,9 @@ impl Uow {
     ///
     /// The unit of work counts as finished as soon as `commit` starts:
     /// observers write through the transaction they are given, and
-    /// [`tx`](Uow::tx) fails from then on.
+    /// [`tx`](Uow::tx) fails from then on. On MySQL the session variables
+    /// are cleared after the observers, right before `COMMIT`; if that
+    /// fails, the unit of work rolls back and the error is returned.
     pub async fn commit(&self) -> Result<(), DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
@@ -245,16 +263,24 @@ impl Uow {
             TxState::Idle => None,
         };
         if let Some(tx) = tx {
-            let tx = Arc::try_unwrap(tx).map_err(|_| {
-                DbErr::Custom(
-                    "cannot commit the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
-                        .to_owned(),
-                )
-            })?;
-            if let Err(error) = self.observe(&tx, &changes).await {
-                if let Err(rollback) = tx.rollback().await {
-                    tracing::warn!(target: "navree_db::uow", error = %rollback, "rollback after a change observer error failed");
+            let tx = match Arc::try_unwrap(tx) {
+                Ok(tx) => tx,
+                Err(shared) => {
+                    // Rolled back when the last holder drops it.
+                    end_session_or_warn(&shared).await;
+                    return Err(DbErr::Custom(
+                        "cannot commit the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
+                            .to_owned(),
+                    ));
                 }
+            };
+            if let Err(error) = self.observe(&tx, &changes).await {
+                end_session_or_warn(&tx).await;
+                rollback_or_warn(tx, "a change observer error").await;
+                return Err(error);
+            }
+            if let Err(error) = end_session(&tx).await {
+                rollback_or_warn(tx, "a failure to clear the session variables").await;
                 return Err(error);
             }
             tx.commit().await?;
@@ -266,24 +292,30 @@ impl Uow {
     }
 
     /// Rolls back and drops recorded changes and after-commit hooks.
-    /// Rolling back a finished unit of work does nothing.
+    /// Rolling back a finished unit of work does nothing. On MySQL the
+    /// session variables are cleared first, also when the transaction is
+    /// still held elsewhere (it then rolls back when the last holder drops
+    /// it).
     pub async fn rollback(&self) -> Result<(), DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         lock(&self.inner.changes).clear();
         lock(&self.inner.after_commit).clear();
         match current {
-            TxState::Open(tx) => match Arc::try_unwrap(tx) {
-                Ok(tx) => tx.rollback().await,
-                // Still held elsewhere: rolled back when the last holder drops it.
-                Err(_) => Ok(()),
-            },
+            TxState::Open(tx) => {
+                end_session_or_warn(&tx).await;
+                match Arc::try_unwrap(tx) {
+                    Ok(tx) => tx.rollback().await,
+                    // Still held elsewhere: rolled back when the last holder drops it.
+                    Err(_) => Ok(()),
+                }
+            }
             TxState::Idle | TxState::Done => Ok(()),
         }
     }
 
     /// Whether the backend supports `SELECT ... FOR UPDATE` (and `SKIP
-    /// LOCKED`): false on SQLite, where `BEGIN IMMEDIATE` already serialises
-    /// writers.
+    /// LOCKED`): true on PostgreSQL and MySQL, false on SQLite, where
+    /// `BEGIN IMMEDIATE` already serialises writers.
     pub fn lock_for_update(&self) -> bool {
         self.inner.db.backend() != DbBackend::Sqlite
     }
@@ -311,6 +343,20 @@ impl Uow {
                             .unwrap_or_default()
                             .into(),
                         self.inner.request_id.clone().unwrap_or_default().into(),
+                    ],
+                ))
+                .await?;
+                Ok(tx)
+            }
+            DbBackend::MySql => {
+                let tx = db.conn().begin().await?;
+                // A failure drops `tx`, which rolls it back.
+                tx.execute_raw(Statement::from_sql_and_values(
+                    DbBackend::MySql,
+                    mysql::SET_UOW_VARIABLES,
+                    [
+                        self.inner.actor.map(|a| a.to_string()).into(),
+                        self.inner.request_id.clone().into(),
                     ],
                 ))
                 .await?;
@@ -347,4 +393,29 @@ impl fmt::Debug for Uow {
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Undoes what [`Uow::begin`] set for the session, right before the
+/// transaction ends. Only MySQL needs it: its user variables belong to the
+/// connection, which goes back to the pool; PostgreSQL's `set_config(..,
+/// true)` ends with the transaction.
+async fn end_session(tx: &DatabaseTransaction) -> Result<(), DbErr> {
+    if tx.get_database_backend() == DbBackend::MySql {
+        tx.execute_unprepared(mysql::CLEAR_UOW_VARIABLES).await?;
+    }
+    Ok(())
+}
+
+/// [`end_session`] on a path that is already failing or rolling back.
+async fn end_session_or_warn(tx: &DatabaseTransaction) {
+    if let Err(error) = end_session(tx).await {
+        tracing::warn!(target: "navree_db::uow", %error, "clearing the unit of work's session variables failed");
+    }
+}
+
+/// Rolls `tx` back after `cause` stopped its commit.
+async fn rollback_or_warn(tx: DatabaseTransaction, cause: &str) {
+    if let Err(error) = tx.rollback().await {
+        tracing::warn!(target: "navree_db::uow", %error, cause, "rollback failed");
+    }
 }
