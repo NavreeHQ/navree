@@ -47,6 +47,7 @@ conventions, and says which skill to load for each task.
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
 | [`navree-harbor`](navree-harbor/SKILL.md) | Provision Ubuntu servers and ship zero-downtime releases with `navree deploy`: `harbor.toml`, secrets, rollbacks, several servers, `build:image`, GitHub Actions |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
+| [`navree-sso`](navree-sso/SKILL.md) | SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, provisioning |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [`navree-flags`](navree-flags/SKILL.md) | Feature flags: define, check, roll out by percentage or plan, kill, test |
 | [`navree-search`](navree-search/SKILL.md) | Full-text and vector search over entities, engines and index syncing |
