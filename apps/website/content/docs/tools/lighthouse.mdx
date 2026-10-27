@@ -1,11 +1,11 @@
 ---
 title: "Lighthouse"
-description: "Application monitoring inside your app: exceptions, slow requests and queries, failed jobs and outgoing HTTP, grouped into issues, with alerts, a dashboard and a JSON API for scripts and agents."
+description: "Application monitoring inside your app: exceptions, slow requests and queries, failed jobs and outgoing HTTP, grouped into issues, with alerts, a dashboard, a JSON API and MCP tools for agents."
 ---
 
 ## Introduction
 
-<Badge feature="lighthouse" /> Lighthouse watches your app in production and tells you what went wrong. It records every exception, slow request, slow query, failed job and failing outgoing call, groups them into **issues** by fingerprint, and shows them on a dashboard served by your own app at `/_lighthouse`. When something new breaks, it sends an alert to email, Slack or a webhook. Scripts and coding agents read and resolve issues through its JSON API, and your traces can also go to an OpenTelemetry collector through [ObserveModule](/docs/microservices/tracing/).
+<Badge feature="lighthouse" /> Lighthouse watches your app in production and tells you what went wrong. It records every exception, slow request, slow query, failed job and failing outgoing call, groups them into **issues** by fingerprint, and shows them on a dashboard served by your own app at `/_lighthouse`. When something new breaks, it sends an alert to email, Slack or a webhook. Scripts read and resolve issues through its JSON API, coding agents through its [MCP tools](#mcp-tools-for-agents), and your traces can also go to an OpenTelemetry collector through [ObserveModule](/docs/microservices/tracing/).
 
 Lighthouse runs inside your app and stores its data in your database. There is no agent to install, no service to host and no data leaving your servers unless you configure an alert or an export.
 
@@ -40,6 +40,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 | `MailModule` | Only for [email alerts](#email). |
 | `QueueModule` | Optional. Alerts are sent as `lighthouse.alert` jobs when the app has a queue, and at once from the background writer otherwise. |
 | `ScheduleModule` | Optional. Lighthouse schedules its own [pruning](#retention-and-pruning) when the app has a scheduler. |
+| `McpModule` | Optional, with the `mcp` feature. Lighthouse adds its [tools for agents](#mcp-tools-for-agents) to your app's MCP server. |
 
 The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms) and `alerts` (the alerts sent).
 
@@ -246,6 +247,44 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 
 A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues.
 
+## MCP tools for agents
+
+With the facade's `mcp` feature on next to `lighthouse` (`mcp` is opt-in, so name it next to the defaults) and [`McpModule`](/docs/ai/mcp-servers/) in the app, Lighthouse adds tools, a resource and a prompt to your app's MCP server at `/mcp`. There is nothing else to register: the facade turns on navree-lighthouse's own `mcp` feature, and `LighthouseModule` registers its server, `LighthouseMcp`.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+```
+
+```rust title="src/app.rs"
+Navree::app()
+    // ... database, auth, access
+    .module(LighthouseModule::from_config())
+    .module(McpModule::from_config()) // serves /mcp, with Lighthouse's tools
+```
+
+Each item checks the same abilities as the JSON API, so a client sees only the tools its user may call:
+
+| Tool | What it returns or does | Ability |
+|---|---|---|
+| `lighthouse_list_issues` | A page of issues, `{"data": [..], "meta": {..}}`, filtered by `status` (`open` by default, or `resolved`, `resolved_in_next_release`, `ignored`, `any`), `kind`, `level`, `release`, `environment`, `route`, `job`, `tag`, `user`, `workspace` and `search`, sorted by `sort` (`last_seen`, `first_seen`, `count`), with `page` and `per_page` (at most 100) | `view` |
+| `lighthouse_get_issue` | One issue (`issue_id`): the message, the source chain, the latest occurrence with its request, context and backtrace, the timeline and the alerts | `view` |
+| `lighthouse_list_occurrences` | An issue's stored occurrences, newest first (`issue_id`, `page`, `per_page`) | `view` |
+| `lighthouse_get_trace` | A stored trace with its spans (`trace_id`: an occurrence's `sample_id` or one of a route's slowest traces) | `view` |
+| `lighthouse_get_overview` | The overview's figures, timeline and latest occurrences (`period`: `1h`, `24h` or `7d`; `24h` by default) | `view` |
+| `lighthouse_list_routes`, `lighthouse_list_queries`, `lighthouse_list_jobs`, `lighthouse_list_outgoing` | The Requests, Queries, Jobs and Outgoing pages (`period`) | `view` |
+| `lighthouse_get_route` | One route's figures, timeline and slowest traces (`endpoint`, such as `GET /api/v1/deals/{id}`, and `period`) | `view` |
+| `lighthouse_list_alerts` | The latest alerts and whether they were delivered | `view` |
+| `lighthouse_resolve_issue` | Resolves an issue (`issue_id`, `in_next_release`, `comment`) | `resolve` |
+| `lighthouse_ignore_issue` | Ignores an issue forever, `until` a time or for `occurrences` more occurrences (`issue_id`, `comment`) | `resolve` |
+| `lighthouse_reopen_issue` | Reopens an issue (`issue_id`) | `resolve` |
+
+The read tools carry `readOnlyHint` and the status changes `idempotentHint`. A result is the JSON of the matching API route (a list also comes as `{"result": [..]}` in the structured content); an unknown id is a tool error with a 404 body, and invalid arguments a 400 with field messages.
+
+Each issue is also the resource `lighthouse://issues/{id}` (the JSON of `lighthouse_get_issue`). The prompt **Fix a Lighthouse issue** (`fix-lighthouse-issue`, with the argument `issue_id`, ability `view`) attaches that resource with instructions: find the cause, write a failing test, fix it, run the tests, then call `lighthouse_resolve_issue` with `in_next_release` and a comment naming the change.
+
+Connect your coding agent to the app the way any [MCP client connects](/docs/ai/mcp-servers/#connecting-clients), as a user with `lighthouse.view` to read and `lighthouse.resolve` to resolve, and ask it to fix the newest issue. Set `lighthouse.mcp = false` to keep Lighthouse off your MCP server; with `lighthouse.store = "off"` it offers nothing either.
+
 ## Alerts
 
 Lighthouse sends an alert when something needs a person. Each channel says which kinds of alert it wants:
@@ -437,6 +476,7 @@ Every key of the `lighthouse` section is optional. As environment variables: `AP
 | `lighthouse.store` | `database` | `database`, or `off` to record nothing and mount no dashboard. |
 | `lighthouse.database_url` | none | A separate database for Lighthouse's tables. |
 | `lighthouse.dashboard` | `true` | Mount the dashboard and its API. |
+| `lighthouse.mcp` | `true` | Offer the [MCP tools, resource and prompt](#mcp-tools-for-agents) on the app's MCP server (with the `mcp` feature and `McpModule`). |
 | `lighthouse.path` | `/_lighthouse` | Where the dashboard is served. |
 | `lighthouse.url` | `app.url` + `path` | The dashboard's public URL, for links in alerts. |
 | `lighthouse.environment` | `production` in release builds, `development` in debug builds | The environment label on every record. |

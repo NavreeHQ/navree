@@ -29,7 +29,7 @@ An MCP server offers three kinds of things:
 | **Resources** | Data the client can read and attach to a conversation, by URI | `#[mcp_resource]` |
 | **Prompts** | Templates the user picks from a menu, like "Draft a follow-up email" | `#[mcp_prompt]` |
 
-Your app serves them over **streamable HTTP** at `/mcp`, for remote clients such as Claude, ChatGPT and Cursor, and over **stdio**, for clients that start a local process. Every request is authenticated, every tool declares who may use it, and a client only sees what its user may do.
+Your app serves them over **streamable HTTP** at `/mcp`, for remote clients such as Claude, ChatGPT and Cursor, and over **stdio**, for clients that start a local process. Every request is authenticated, every tool declares who may use it, and a client only sees what its user may do. Navree's packages add servers of their own to the same endpoint: with [Lighthouse](/docs/tools/lighthouse/#mcp-tools-for-agents) in the app, agents read and resolve its issues.
 
 <Callout type="note" title="Navigator is a different server">
 
