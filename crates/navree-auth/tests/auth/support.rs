@@ -5,12 +5,18 @@
 #![allow(dead_code)]
 
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use axum::http::Method;
-use navree_auth::{AuthModule, AuthService, CurrentUser, User};
-use navree_contracts::{AuditEntry, AuditSink, AuthState, BoxError, BoxFuture};
+use navree_access::{AccessModule, AccessOptions, AccessService};
+use navree_auth::{
+    AuthModule, AuthService, ClientMeta, CurrentUser, User, not_while_impersonating,
+    platform_session, recent_auth,
+};
+use navree_contracts::{AuditEntry, AuditSink, AuthState, BoxError, BoxFuture, Clock, FixedClock};
 use navree_crypto::{CryptoModule, generate_key};
 use navree_db::DatabaseModule;
+use navree_db::Db;
 use navree_http::{Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
@@ -200,6 +206,14 @@ async fn current_user(CurrentUser(user): CurrentUser) -> Json<Value> {
     Json(json!({ "id": user.id, "email": user.email }))
 }
 
+async fn actor(actor: navree_auth::Actor) -> Json<Value> {
+    Json(json!({
+        "user_id": actor.user_id,
+        "impersonator_id": actor.impersonator_id,
+        "impersonating": actor.is_impersonating(),
+    }))
+}
+
 impl Controller for ProbeController {
     fn prefix(&self) -> &'static str {
         "/probe"
@@ -210,6 +224,30 @@ impl Controller for ProbeController {
             RouteDef::on(Method::GET, "/whoami", whoami).authenticated(),
             RouteDef::on(Method::GET, "/ping", ping).public(),
             RouteDef::on(Method::GET, "/user", current_user).authenticated(),
+            RouteDef::on(Method::GET, "/actor", actor).authenticated(),
+            RouteDef::on(Method::POST, "/sensitive", || async {
+                Json(json!({"ok": true}))
+            })
+            .authenticated()
+            .guard(recent_auth(Duration::from_secs(600))),
+            RouteDef::on(Method::POST, "/no-impersonation", || async {
+                Json(json!({"ok": true}))
+            })
+            .authenticated()
+            .guard(not_while_impersonating()),
+            RouteDef::on(Method::GET, "/platform", || async {
+                Json(json!({"ok": true}))
+            })
+            .authenticated()
+            .guard(platform_session()),
+            RouteDef::on(
+                Method::GET,
+                "/platform-admin",
+                |navree_auth::PlatformAdmin(admin): navree_auth::PlatformAdmin| async move {
+                    Json(json!({ "email": admin.email }))
+                },
+            )
+            .authenticated(),
         ]
     }
 }
@@ -221,4 +259,73 @@ impl Module for ProbeModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<ProbeController>();
     }
+}
+
+/// A fixed clock at the current time.
+pub fn clock() -> Arc<FixedClock> {
+    Arc::new(FixedClock::new(chrono::Utc::now()))
+}
+
+/// [`builder`] with `clock` as the app's clock.
+pub fn clocked(clock: &Arc<FixedClock>) -> TestAppBuilder {
+    builder().override_value::<dyn Clock>(clock.clone())
+}
+
+/// [`builder`] with `clock` and `AccessModule` (roles and permissions).
+pub fn with_access(clock: &Arc<FixedClock>) -> TestAppBuilder {
+    clocked(clock).module(AccessModule::for_root(AccessOptions::default()))
+}
+
+/// Creates `role` with `permissions` (when it does not exist) and gives it
+/// to `user`.
+pub async fn grant_role(app: &TestApp, user: uuid::Uuid, role: &str, permissions: &[&str]) {
+    let db = app.get::<Db>().await;
+    let access = app.get::<AccessService>().await;
+    let uow = db.uow(None, None).await;
+    if access.role(role).await.unwrap().is_none() {
+        access.create_role(&uow, role, None).await.unwrap();
+    }
+    for permission in permissions {
+        access.grant(&uow, role, permission).await.unwrap();
+    }
+    access.assign_role(&uow, user, role).await.unwrap();
+    uow.commit().await.unwrap();
+}
+
+/// The TOTP code of `secret` (base32) at `clock`'s time.
+pub fn totp_code(secret: &str, clock: &FixedClock) -> String {
+    totp_rs::Builder::new()
+        .with_secret(totp_rs::Secret::try_from_base32(secret).expect("a base32 secret"))
+        .build()
+        .expect("a valid TOTP")
+        .generate(u64::try_from(clock.now().timestamp()).unwrap())
+        .to_string()
+}
+
+/// Turns two-factor authentication on for `user` through the service; the
+/// TOTP secret. The clock moves to the next step (the code is used up).
+pub async fn enable_two_factor(app: &TestApp, clock: &FixedClock, user: &User) -> String {
+    let service = app.get::<AuthService>().await;
+    let meta = ClientMeta::default();
+    let setup = service.enable_two_factor(user.id, &meta).await.unwrap();
+    service
+        .confirm_two_factor(user.id, &totp_code(&setup.secret, clock), &meta)
+        .await
+        .unwrap();
+    clock.advance(Duration::from_secs(30));
+    setup.secret
+}
+
+/// The claims of an access token.
+pub fn claims_of(app_jwt: &navree_auth::JwtService, token: &str) -> navree_auth::Claims {
+    app_jwt
+        .verify_any(
+            token,
+            &[
+                navree_auth::TokenType::Access,
+                navree_auth::TokenType::TwoFactorSetup,
+                navree_auth::TokenType::Platform,
+            ],
+        )
+        .expect("a valid access token")
 }

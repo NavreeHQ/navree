@@ -25,7 +25,7 @@ conventions, and says which skill to load for each task.
 | [`navree-validation`](navree-validation/SKILL.md) | Validate request bodies and query strings |
 | [`navree-errors-and-responses`](navree-errors-and-responses/SKILL.md) | Return errors in Navree's JSON shape, map error types, shape responses |
 | [`navree-database`](navree-database/SKILL.md) | Entities, `Repo`, the unit of work, migrations, seeders, factories, pagination |
-| [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor |
+| [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor, sessions and step-up, impersonation, passwordless and passkeys, platform sign-in, token exchange |
 | [`navree-access-control`](navree-access-control/SKILL.md) | Roles, permissions, abilities, record checks and SQL list filters |
 | [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs, batches, operations with progress, and cron-style schedules |
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |

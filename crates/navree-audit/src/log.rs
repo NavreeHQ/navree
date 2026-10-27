@@ -46,8 +46,8 @@ pub enum AuditError {
 ///   entries written inside the unit of work's transaction, right before it
 ///   commits: a rolled-back change leaves no audit row. The action is
 ///   `<subject>.<created|updated|deleted>` (`deal.updated`), the subject the
-///   table's subject type (`Deal`), the actor and request id those of the
-///   unit of work; updates keep only the fields that changed.
+///   table's subject type (`Deal`), the actor, impersonator and request id
+///   those of the unit of work; updates keep only the fields that changed.
 /// - [`record`](AuditLog::record) (and `AuditSink::record`) writes an entry
 ///   on its own connection, outside any request transaction, so security
 ///   events (denied authorization, failed logins) survive the rollback that
@@ -124,10 +124,15 @@ impl AuditLog {
 
     /// Records `entry` on the log's own connection, outside any unit of
     /// work (queued; see [`flush`](AuditLog::flush)). The time and id are
-    /// taken now. Fails only when the queue is full.
-    pub async fn record(&self, entry: AuditEntry) -> Result<(), AuditError> {
+    /// taken now, and an entry without an impersonator gets the one of the
+    /// task's unit of work ([`Uow::current`]), if any. Fails only when the
+    /// queue is full.
+    pub async fn record(&self, mut entry: AuditEntry) -> Result<(), AuditError> {
         if !self.policy.enabled {
             return Ok(());
+        }
+        if entry.impersonator_id.is_none() {
+            entry.impersonator_id = Uow::current().and_then(|uow| uow.impersonator());
         }
         let row = self.row(entry);
         match self.queue.try_send(Message::Entry(Box::new(row))) {
@@ -147,14 +152,17 @@ impl AuditLog {
     }
 
     /// Records `entry` inside the transaction of `uow`, so it commits or
-    /// rolls back with the work. The actor and request id default to those
-    /// of the unit of work.
+    /// rolls back with the work. The actor, impersonator and request id
+    /// default to those of the unit of work.
     pub async fn record_in(&self, uow: &Uow, mut entry: AuditEntry) -> Result<(), DbErr> {
         if !self.policy.enabled {
             return Ok(());
         }
         if entry.actor_id.is_none() {
             entry.actor_id = uow.actor();
+        }
+        if entry.impersonator_id.is_none() {
+            entry.impersonator_id = uow.impersonator();
         }
         if entry.request_id.is_none() {
             entry.request_id = uow.request_id().map(str::to_owned);
@@ -211,6 +219,7 @@ impl AuditLog {
             kind: Set(kind_str(entry.kind).to_owned()),
             action: Set(entry.action),
             actor_id: Set(entry.actor_id),
+            impersonator_id: Set(entry.impersonator_id),
             subject_type: Set(entry.subject_type),
             subject_id: Set(entry.subject_id),
             old_values: Set(entry.old_values.map(strip)),
@@ -249,6 +258,7 @@ impl AuditLog {
             kind: Set(kind_str(AuditKind::Data).to_owned()),
             action: Set(format!("{}.{}", snake_case(&subject_type), change.op)),
             actor_id: Set(uow.actor()),
+            impersonator_id: Set(uow.impersonator()),
             subject_type: Set(Some(subject_type)),
             subject_id: Set(Some(change.id.clone())),
             old_values: Set(old.map(strip)),
