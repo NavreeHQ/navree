@@ -87,11 +87,21 @@ pub(crate) const SHEETS: RuntimeCrate = RuntimeCrate {
     facade_module: "sheets",
 };
 
+/// navree-workflows: `Workflow`, `WorkflowCtx`, `Trigger`, `Condition`,
+/// `Action` and `AutomationCtx` (`#[workflow]`, `#[trigger]`,
+/// `#[condition]`, `#[action]`). Its own tests name it
+/// `::navree_workflows` (`extern crate self`).
+pub(crate) const WORKFLOWS: RuntimeCrate = RuntimeCrate {
+    package: "navree-workflows",
+    facade_module: "workflows",
+};
+
 /// The crates named by their own name even from inside themselves (their
 /// integration tests and doctests are separate crates).
 const NAMED_FROM_INSIDE: &[(&str, &str)] = &[
     ("navree-mcp", "navree_mcp"),
     ("navree-sheets", "navree_sheets"),
+    ("navree-workflows", "navree_workflows"),
 ];
 
 /// navree-ai: `ToolSpec`, `ToolAccess` and the dispatch helpers (`#[agent]`).

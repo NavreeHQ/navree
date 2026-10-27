@@ -363,10 +363,12 @@ const HIERARCHY: &[Rule] = &[
     // Workflows: durable runs stored through navree-db, woken by
     // navree-events listeners and the `workflows:tick` schedule
     // (navree-schedule), with routes scoped to the request's workspace;
-    // run jobs go through the `dyn Dispatcher` contract.
+    // run jobs go through the `dyn Dispatcher` contract. `#[workflow]`,
+    // `#[trigger]`, `#[condition]` and `#[action]` come from navree-macros
+    // and are re-exported next to their traits.
     rule("navree-workflows", 7, &[
-        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-events",
-        "navree-db", "navree-schedule", "navree-workspace",
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-events", "navree-db", "navree-schedule", "navree-workspace",
     ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
