@@ -217,16 +217,18 @@ fn check_pattern(pattern: &str, wildcards: bool) -> Result<(), String> {
             "" => return Err("segments are separated by single dots".to_owned()),
             "*" | ">" if !wildcards => {
                 return Err(
-                    "a message pattern names exactly one handler, so it has no wildcards".to_owned(),
+                    "a message pattern names exactly one handler, so it has no wildcards"
+                        .to_owned(),
                 );
             }
             "*" => {}
             ">" if i == last => {}
             ">" => return Err("`>` may only be the last segment".to_owned()),
             segment => {
-                if !segment.bytes().all(|b| {
-                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
-                }) {
+                if !segment
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+                {
                     return Err(format!(
                         "segment `{segment}` may only hold lower-case letters, digits, `_` and `-`"
                     ));
@@ -402,7 +404,8 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> TokenStream {
         ));
     }
     let shared = Attrs::take(&mut item.attrs, Site::Impl, &mut errors);
-    if let (Some(_), Some((restriction, at))) = (&shared.access.public, shared.access.restriction()) {
+    if let (Some(_), Some((restriction, at))) = (&shared.access.public, shared.access.restriction())
+    {
         errors.push(at.error(format!(
             "the impl block is #[public] but also declares {restriction}: a public pattern needs no authentication or authorization; remove one of them"
         )));
@@ -424,9 +427,8 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> TokenStream {
 
 /// `#[message_pattern]` or `#[event_pattern]` outside `#[message_handlers]`.
 pub(crate) fn outside(name: &str, item: TokenStream) -> TokenStream {
-    let message = format!(
-        "#[{name}] only works on a method of an impl block marked #[message_handlers]"
-    );
+    let message =
+        format!("#[{name}] only works on a method of an impl block marked #[message_handlers]");
     let mut out = syn::Error::new(Span::call_site(), message).into_compile_error();
     out.extend(item);
     out

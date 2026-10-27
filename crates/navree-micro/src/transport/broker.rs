@@ -54,10 +54,17 @@ impl BrokerUrl {
         };
         let (scheme, rest) = match url.split_once("://") {
             Some((scheme, rest)) => (scheme.to_ascii_lowercase(), rest),
-            None => (schemes.first().map(|s| s.0).unwrap_or_default().to_owned(), url),
+            None => (
+                schemes.first().map(|s| s.0).unwrap_or_default().to_owned(),
+                url,
+            ),
         };
-        let Some(&(_, tls, default_port)) = schemes.iter().find(|(name, _, _)| *name == scheme) else {
-            let expected: Vec<String> = schemes.iter().map(|(name, _, _)| format!("{name}://")).collect();
+        let Some(&(_, tls, default_port)) = schemes.iter().find(|(name, _, _)| *name == scheme)
+        else {
+            let expected: Vec<String> = schemes
+                .iter()
+                .map(|(name, _, _)| format!("{name}://"))
+                .collect();
             return Err(invalid(&format!("expected {}", expected.join(" or "))));
         };
         let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
@@ -131,7 +138,9 @@ pub(crate) fn client_config(tls: &TlsOptions, key: &str) -> Result<Arc<ClientCon
     let mut roots = RootCertStore::empty();
     match &tls.ca {
         Some(ca) => {
-            for certificate in CertificateDer::pem_file_iter(ca).map_err(|error| read_error(ca, &error))? {
+            for certificate in
+                CertificateDer::pem_file_iter(ca).map_err(|error| read_error(ca, &error))?
+            {
                 roots
                     .add(certificate.map_err(|error| read_error(ca, &error))?)
                     .map_err(tls_error)?;
@@ -139,18 +148,22 @@ pub(crate) fn client_config(tls: &TlsOptions, key: &str) -> Result<Arc<ClientCon
         }
         None => roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
     }
-    let builder = ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()
-        .map_err(tls_error)?
-        .with_root_certificates(roots);
+    let builder =
+        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .map_err(tls_error)?
+            .with_root_certificates(roots);
     let config = match (&tls.cert, &tls.key) {
         (Some(cert), Some(private)) => {
             let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(cert)
                 .map_err(|error| read_error(cert, &error))?
                 .collect::<Result<_, _>>()
                 .map_err(|error| read_error(cert, &error))?;
-            let private_key = PrivateKeyDer::from_pem_file(private).map_err(|error| read_error(private, &error))?;
-            builder.with_client_auth_cert(chain, private_key).map_err(tls_error)?
+            let private_key = PrivateKeyDer::from_pem_file(private)
+                .map_err(|error| read_error(private, &error))?;
+            builder
+                .with_client_auth_cert(chain, private_key)
+                .map_err(tls_error)?
         }
         (None, None) => builder.with_no_client_auth(),
         _ => {
@@ -193,12 +206,17 @@ mod tests {
 
     #[test]
     fn bad_urls_are_refused_without_their_password() {
-        let error = BrokerUrl::parse("http://u:secret@x", MQTT).unwrap_err().to_string();
+        let error = BrokerUrl::parse("http://u:secret@x", MQTT)
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("expected mqtt:// or mqtts://"), "{error}");
         assert!(!error.contains("secret"), "{error}");
         assert!(BrokerUrl::parse("mqtt://x:port", MQTT).is_err());
         assert!(BrokerUrl::parse("mqtt://:1883", MQTT).is_err());
-        assert!(!format!("{:?}", BrokerUrl::parse("mqtt://u:secret@x", MQTT).unwrap()).contains("secret"));
+        assert!(
+            !format!("{:?}", BrokerUrl::parse("mqtt://u:secret@x", MQTT).unwrap())
+                .contains("secret")
+        );
     }
 
     #[test]
@@ -212,7 +230,12 @@ mod tests {
             "micro.mqtt",
         )
         .unwrap_err();
-        assert!(error.to_string().contains("micro.mqtt.tls.cert and micro.mqtt.tls.key"), "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains("micro.mqtt.tls.cert and micro.mqtt.tls.key"),
+            "{error}"
+        );
         let error = client_config(
             &TlsOptions {
                 ca: Some("missing-ca.pem".into()),

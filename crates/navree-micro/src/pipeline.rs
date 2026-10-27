@@ -18,7 +18,9 @@ use futures_util::FutureExt;
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, StatusCode};
-use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId};
+use navree_contracts::{
+    AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId,
+};
 use navree_db::Uow;
 use navree_http::{
     AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, RouteAuthorizer, RouteMeta,
@@ -57,11 +59,7 @@ impl Registered {
     fn label(&self) -> String {
         format!(
             "{} pattern `{}` (`{}` of {} in module `{}`)",
-            self.kind,
-            self.pattern,
-            self.meta.handler,
-            self.handlers,
-            self.module
+            self.kind, self.pattern, self.meta.handler, self.handlers, self.module
         )
     }
 
@@ -149,7 +147,10 @@ struct ActorOnly;
 impl MessageRouter {
     /// Collects and checks every registered handler, then builds the
     /// router. Every problem is reported at once.
-    pub(crate) async fn build(ctx: &AppContext, settings: &PipelineSettings) -> Result<Self, BoxError> {
+    pub(crate) async fn build(
+        ctx: &AppContext,
+        settings: &PipelineSettings,
+    ) -> Result<Self, BoxError> {
         let authenticator = ctx.try_get::<dyn Authenticator>().await;
         let authorizer = ctx.try_get::<dyn RouteAuthorizer>().await;
         let audit = ctx.try_get::<dyn AuditSink>().await;
@@ -187,7 +188,12 @@ impl MessageRouter {
                 handlers.push(def.handler);
             }
         }
-        check(&patterns, settings, authenticator.is_some(), authorizer.is_some())?;
+        check(
+            &patterns,
+            settings,
+            authenticator.is_some(),
+            authorizer.is_some(),
+        )?;
 
         let mut router = Router::new();
         for (registered, handler) in patterns.iter().zip(handlers) {
@@ -222,7 +228,9 @@ impl MessageRouter {
         let mut slots: Vec<(LayerSlot, usize, Option<&GlobalLayer>)> = contributed
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.value.slot != LayerSlot::Session && c.value.name != MICRO_CONTEXT_LAYER)
+            .filter(|(_, c)| {
+                c.value.slot != LayerSlot::Session && c.value.name != MICRO_CONTEXT_LAYER
+            })
             .map(|(i, c)| (c.value.slot, i + 1, Some(&*c.value)))
             .collect();
         slots.push((LayerSlot::AuthContext, 0, None));
@@ -259,7 +267,9 @@ impl MessageRouter {
         }
         envelope
             .header(headers::TRACEPARENT)
-            .and_then(|traceparent| TraceContext::continue_from(traceparent, envelope.header(headers::TRACESTATE)))
+            .and_then(|traceparent| {
+                TraceContext::continue_from(traceparent, envelope.header(headers::TRACESTATE))
+            })
             .or_else(|| Some(TraceContext::root_sampled(self.trace.sample_ratio)))
     }
 
@@ -291,11 +301,15 @@ impl MessageRouter {
                 .map(|trace| trace.trace_id.to_string())
                 .unwrap_or_default(),
         );
-        let mut telemetry = TelemetryContext::new(self.telemetry.clone()).with_request_id(request_id.as_str());
+        let mut telemetry =
+            TelemetryContext::new(self.telemetry.clone()).with_request_id(request_id.as_str());
         if let Some(trace) = trace {
             telemetry = telemetry.with_trace(trace);
         }
-        let call = telemetry.scope(tracing::Instrument::instrument(self.router.clone().oneshot(request), span));
+        let call = telemetry.scope(tracing::Instrument::instrument(
+            self.router.clone().oneshot(request),
+            span,
+        ));
         let mut response = match AssertUnwindSafe(call).catch_unwind().await {
             Ok(Ok(response)) => response,
             Ok(Err(never)) => match never {},
@@ -319,11 +333,12 @@ impl MessageRouter {
             }
         };
         if let Some(error) = AppError::take_from(&mut response) {
-            let error = if error.status == StatusCode::INTERNAL_SERVER_ERROR && error.source.is_some() {
-                ErrorMapper::apply(&self.mappers, &error).unwrap_or(error)
-            } else {
-                error
-            };
+            let error =
+                if error.status == StatusCode::INTERNAL_SERVER_ERROR && error.source.is_some() {
+                    ErrorMapper::apply(&self.mappers, &error).unwrap_or(error)
+                } else {
+                    error
+                };
             if error.status.is_server_error() {
                 tracing::error!(
                     target: "navree::micro",
@@ -481,10 +496,13 @@ fn check(
         let label = registered.label();
         let meta = &registered.meta;
         let access = &meta.access;
-        if let Err(reason) = check_pattern(&registered.pattern, registered.kind == PatternKind::Event) {
+        if let Err(reason) =
+            check_pattern(&registered.pattern, registered.kind == PatternKind::Event)
+        {
             errors.push(format!("{label} is not a valid pattern: {reason}"));
         }
-        if let Some(first) = seen.insert((registered.kind, registered.pattern.as_str()), registered) {
+        if let Some(first) = seen.insert((registered.kind, registered.pattern.as_str()), registered)
+        {
             errors.push(format!(
                 "{} pattern `{}` is handled twice: by `{}` of {} in module `{}` and by `{}` of {} in module `{}`",
                 registered.kind,
@@ -531,7 +549,9 @@ fn check(
                     (meta.broadcast, "broadcast"),
                 ] {
                     if set {
-                        errors.push(format!("{label}: `{option}` only applies to event patterns"));
+                        errors.push(format!(
+                            "{label}: `{option}` only applies to event patterns"
+                        ));
                     }
                 }
             }
@@ -551,7 +571,9 @@ fn check(
                     errors.push(format!("{label}: `max_attempts` must be at least 1"));
                 }
                 if meta.broadcast && meta.ordered {
-                    errors.push(format!("{label}: `broadcast` and `ordered` exclude each other"));
+                    errors.push(format!(
+                        "{label}: `broadcast` and `ordered` exclude each other"
+                    ));
                 }
                 if has_wildcard(&registered.pattern) && !settings.wildcards {
                     errors.push(format!(
@@ -610,11 +632,12 @@ impl HandlerRuntime {
         let Some(sink) = &self.audit else {
             return;
         };
-        let mut entry = AuditEntry::new(AuditKind::Security, "access.denied").metadata(serde_json::json!({
-            "check": "guard",
-            "method": self.registered.route.method,
-            "route": self.registered.pattern,
-        }));
+        let mut entry =
+            AuditEntry::new(AuditKind::Security, "access.denied").metadata(serde_json::json!({
+                "check": "guard",
+                "method": self.registered.route.method,
+                "route": self.registered.pattern,
+            }));
         if let Some(user) = user {
             entry = entry.actor(user);
         }
@@ -629,13 +652,11 @@ impl HandlerRuntime {
     /// The time limit of this run: the handler's, the events' default and
     /// what is left of the caller's deadline, whichever is shortest.
     fn limit(&self, message: Option<&MessageContext>) -> Option<Duration> {
-        let left = message
-            .and_then(MessageContext::deadline)
-            .map(|deadline| {
-                deadline
-                    .duration_since(std::time::SystemTime::now())
-                    .unwrap_or(Duration::ZERO)
-            });
+        let left = message.and_then(MessageContext::deadline).map(|deadline| {
+            deadline
+                .duration_since(std::time::SystemTime::now())
+                .unwrap_or(Duration::ZERO)
+        });
         [self.registered.meta.timeout, self.default_timeout, left]
             .into_iter()
             .flatten()
@@ -785,7 +806,9 @@ async fn authenticate(
             }
             None => AuthState(None),
         }
-    } else if let Some(LocalPrincipal(principal)) = parts.extensions.get::<LocalPrincipal>().cloned() {
+    } else if let Some(LocalPrincipal(principal)) =
+        parts.extensions.get::<LocalPrincipal>().cloned()
+    {
         AuthState(Some(principal))
     } else {
         match &authenticator {
@@ -836,11 +859,17 @@ mod tests {
 
     #[test]
     fn record_ids_come_from_top_level_fields() {
-        let envelope = Envelope::new("deals.get", r#"{"id":"0199c1d2-6f7e","n":7,"x":{"y":1},"s":"a b"}"#);
+        let envelope = Envelope::new(
+            "deals.get",
+            r#"{"id":"0199c1d2-6f7e","n":7,"x":{"y":1},"s":"a b"}"#,
+        );
         assert_eq!(record_id(&envelope, "id").unwrap(), "0199c1d2%2D6f7e");
         assert_eq!(record_id(&envelope, "n").unwrap(), "7");
         assert_eq!(record_id(&envelope, "s").unwrap(), "a%20b");
-        assert_eq!(record_id(&envelope, "x").unwrap_err().status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            record_id(&envelope, "x").unwrap_err().status,
+            StatusCode::BAD_REQUEST
+        );
         assert!(record_id(&envelope, "missing").is_err());
     }
 

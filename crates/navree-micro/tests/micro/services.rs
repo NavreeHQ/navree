@@ -37,7 +37,10 @@ use crate::support::{DealView, DealsModule, GetDeal, access, insert_deal};
 struct UuidBearer;
 
 impl Authenticator for UuidBearer {
-    fn authenticate<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
+    fn authenticate<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+    ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
         let user = parts
             .headers
             .get(AUTHORIZATION)
@@ -85,13 +88,20 @@ impl GatewayController {
     #[get("/anonymous")]
     #[public]
     async fn anonymous(&self) -> Result<Json<Value>> {
-        Ok(Json(self.client.send("deals.echo", &()).without_auth().await?))
+        Ok(Json(
+            self.client.send("deals.echo", &()).without_auth().await?,
+        ))
     }
 
     #[get("/as-service")]
     #[public]
     async fn as_service(&self) -> Result<Json<Value>> {
-        Ok(Json(self.client.send("deals.echo", &()).bearer("svc-token").await?))
+        Ok(Json(
+            self.client
+                .send("deals.echo", &())
+                .bearer("svc-token")
+                .await?,
+        ))
     }
 }
 
@@ -242,19 +252,30 @@ async fn routes_forward_the_request_context_and_map_remote_errors() {
         .get(&path)
         .bearer(&user.to_string())
         .header("x-workspace", "acme")
-        .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+        .header(
+            "traceparent",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        )
         .send()
         .await
         .assert_status(200)
         .assert_json_path("id", json!(id));
     let sent = &micro.sent_envelopes("deals.get")[0];
-    assert_eq!(sent.header("authorization"), Some(format!("Bearer {user}").as_str()));
+    assert_eq!(
+        sent.header("authorization"),
+        Some(format!("Bearer {user}").as_str())
+    );
     assert_eq!(sent.header("x-workspace"), Some("acme"));
     assert_eq!(sent.service(), Some("crm-api"));
-    assert_eq!(sent.header("x-request-id"), response.header("x-request-id"), "the request id travels");
+    assert_eq!(
+        sent.header("x-request-id"),
+        response.header("x-request-id"),
+        "the request id travels"
+    );
     let traceparent = sent.header("traceparent").expect("a traceparent");
     assert!(
-        traceparent.starts_with("00-4bf92f3577b34da6a3ce929d0e0e4736-") && !traceparent.contains("00f067aa0ba902b7"),
+        traceparent.starts_with("00-4bf92f3577b34da6a3ce929d0e0e4736-")
+            && !traceparent.contains("00f067aa0ba902b7"),
         "the trace continues with a new span: {traceparent}"
     );
     micro.assert_sent("deals.get", |payload: &GetDeal| payload.id == id);
@@ -262,9 +283,17 @@ async fn routes_forward_the_request_context_and_map_remote_errors() {
     // A remote 4xx passes through; a 5xx is a 502; no reply is a 504;
     // nobody listening is a 503.
     micro.on("deals.get", Reply::error(AppError::not_found()));
-    app.client().get(&path).send().await.assert_error(404, "Not Found");
+    app.client()
+        .get(&path)
+        .send()
+        .await
+        .assert_error(404, "Not Found");
     micro.on("deals.get", Reply::error(AppError::internal("db down")));
-    app.client().get(&path).send().await.assert_error(502, "Bad Gateway");
+    app.client()
+        .get(&path)
+        .send()
+        .await
+        .assert_error(502, "Bad Gateway");
     micro.on("deals.get", Reply::timeout());
     app.client().get(&path).send().await.assert_error(504, None);
     app.client()
@@ -311,7 +340,10 @@ async fn forward_auth_off_sends_no_credentials() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(micro.sent_envelopes("deals.get")[0].header("authorization"), None);
+    assert_eq!(
+        micro.sent_envelopes("deals.get")[0].header("authorization"),
+        None
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -323,7 +355,10 @@ async fn two_services_talk_over_tcp_with_the_users_credentials() {
     let deals_addr = free_addr();
     let deals = deals_on_tcp(&deals_addr, true).await;
     assert!(MicroModule::start_listener(deals.ctx()).await.unwrap());
-    assert!(!MicroModule::start_listener(deals.ctx()).await.unwrap(), "started once");
+    assert!(
+        !MicroModule::start_listener(deals.ctx()).await.unwrap(),
+        "started once"
+    );
     let rep = Uuid::now_v7();
     let deal = insert_deal(&deals, rep, "Acme renewal").await;
 
@@ -368,7 +403,11 @@ async fn two_services_talk_over_tcp_with_the_users_credentials() {
         .send()
         .await
         .assert_error(403, "Forbidden");
-    api.client().get(&path).send().await.assert_error(401, "Unauthorized");
+    api.client()
+        .get(&path)
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
     api.client()
         .get(&format!("/api/gateway/deals/{}", Uuid::now_v7()))
         .bearer(&rep.to_string())
@@ -388,12 +427,15 @@ async fn serve_starts_the_listener_next_to_the_http_server() {
     let addr = free_addr();
     let app = deals_on_tcp(&addr, true).await;
     let client = tcp_client(&addr);
-    let (served, answered) = tokio::join!(app.run_command("serve", &["--addr", "127.0.0.1:0"]), async {
-        app.get::<HttpServer>().await.wait_bound().await;
-        let answered = echo_until_answered(&client).await;
-        app.ctx().shutdown_token().cancel();
-        answered
-    });
+    let (served, answered) = tokio::join!(
+        app.run_command("serve", &["--addr", "127.0.0.1:0"]),
+        async {
+            app.get::<HttpServer>().await.wait_bound().await;
+            let answered = echo_until_answered(&client).await;
+            app.ctx().shutdown_token().cancel();
+            answered
+        }
+    );
     served.unwrap();
     assert_eq!(answered.unwrap().status(), Some(200));
     app.shutdown().await.unwrap();
@@ -404,15 +446,21 @@ async fn listen_with_serve_off_serves_http_only() {
     let addr = free_addr();
     let app = deals_on_tcp(&addr, false).await;
     let client = tcp_client(&addr);
-    let (served, outcome) = tokio::join!(app.run_command("serve", &["--addr", "127.0.0.1:0"]), async {
-        app.get::<HttpServer>().await.wait_bound().await;
-        tokio::time::sleep(Duration::from_millis(200)).await;
-        let outcome = client.request(request("deals.echo", "{}")).await;
-        app.ctx().shutdown_token().cancel();
-        outcome
-    });
+    let (served, outcome) = tokio::join!(
+        app.run_command("serve", &["--addr", "127.0.0.1:0"]),
+        async {
+            app.get::<HttpServer>().await.wait_bound().await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let outcome = client.request(request("deals.echo", "{}")).await;
+            app.ctx().shutdown_token().cancel();
+            outcome
+        }
+    );
     served.unwrap();
-    assert!(matches!(outcome, Err(MicroError::Transport(_))), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(MicroError::Transport(_))),
+        "{outcome:?}"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -430,7 +478,10 @@ async fn micro_listen_handles_messages_without_http() {
     let reply = answered.unwrap();
     let body: Value = serde_json::from_slice(reply.payload()).unwrap();
     assert_eq!(body["pattern"], "deals.echo");
-    assert!(app.get::<HttpServer>().await.local_addr().is_none(), "no HTTP port");
+    assert!(
+        app.get::<HttpServer>().await.local_addr().is_none(),
+        "no HTTP port"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -449,11 +500,20 @@ async fn the_commands_run_against_the_app() {
         .build()
         .await;
     app.run_command("micro:patterns", &[]).await.unwrap();
-    app.run_command("micro:patterns", &["--json"]).await.unwrap();
-    app.run_command("micro:send", &["deals.echo", r#"{"n":1}"#]).await.unwrap();
-    let refused = app.run_command("micro:send", &["deals.whoami", "null"]).await.unwrap_err();
+    app.run_command("micro:patterns", &["--json"])
+        .await
+        .unwrap();
+    app.run_command("micro:send", &["deals.echo", r#"{"n":1}"#])
+        .await
+        .unwrap();
+    let refused = app
+        .run_command("micro:send", &["deals.whoami", "null"])
+        .await
+        .unwrap_err();
     assert!(refused.to_string().contains("401"), "{refused}");
-    app.run_command("micro:emit", &["deal.won", r#"{"id":1}"#]).await.unwrap();
+    app.run_command("micro:emit", &["deal.won", r#"{"id":1}"#])
+        .await
+        .unwrap();
     micro.assert_emitted("deal.won", |event: &Value| event["id"] == 1);
     app.run_command("micro:setup", &[]).await.unwrap();
     app.run_command("micro:failed", &[]).await.unwrap();
@@ -509,8 +569,13 @@ async fn named_clients_send_through_their_own_transport() {
     assert_eq!(reply, json!({ "charged": true }));
     billing.assert_sent_times("billing.charge", 1);
     micro.assert_nothing_sent();
-    let deadline = billing.sent_envelopes("billing.charge")[0].remaining().unwrap();
-    assert!(deadline <= Duration::from_secs(2), "the client's request_timeout_ms");
+    let deadline = billing.sent_envelopes("billing.charge")[0]
+        .remaining()
+        .unwrap();
+    assert!(
+        deadline <= Duration::from_secs(2),
+        "the client's request_timeout_ms"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -524,8 +589,14 @@ async fn from_config_names_its_clients_in_code() {
         .build()
         .await;
     let invoices = app.get::<Invoices>().await;
-    let outcome = invoices.billing.send::<_, Value>("billing.charge", &()).await;
-    assert!(matches!(outcome, Err(MicroError::NoResponders { .. })), "{outcome:?}");
+    let outcome = invoices
+        .billing
+        .send::<_, Value>("billing.charge", &())
+        .await;
+    assert!(
+        matches!(outcome, Err(MicroError::NoResponders { .. })),
+        "{outcome:?}"
+    );
     app.shutdown().await.unwrap();
 
     // A client named in code without its section fails the boot.
@@ -535,7 +606,10 @@ async fn from_config_names_its_clients_in_code() {
         .try_build()
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("[micro.clients.billing]"), "{error}");
+    assert!(
+        error.to_string().contains("[micro.clients.billing]"),
+        "{error}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +635,11 @@ impl MicroTransport for Limited {
         self.broker.publish(envelope)
     }
 
-    fn listen(&self, subscriptions: Vec<Subscription>, deliveries: mpsc::Sender<Delivery>) -> BoxFuture<'_, Result<(), MicroError>> {
+    fn listen(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         self.broker.listen(subscriptions, deliveries)
     }
 
@@ -580,7 +658,10 @@ impl MicroTransport for Limited {
 
 async fn micro_health(app: &TestApp) -> HealthStatus {
     let checks = app.ctx().get_all::<dyn HealthCheck>().await.unwrap();
-    let check = checks.iter().find(|check| check.name() == "micro").expect("a micro check");
+    let check = checks
+        .iter()
+        .find(|check| check.name() == "micro")
+        .expect("a micro check");
     check.check().await
 }
 
@@ -630,9 +711,12 @@ pub struct HandWritten;
 impl MessageHandlers for HandWritten {
     fn patterns(self: Arc<Self>) -> Vec<PatternDef> {
         vec![
-            PatternDef::message("hand.open", |Payload(value): Payload<Value>| async move { Json(value) })
-                .handler_name("open"),
-            PatternDef::event("audit.*", || async { http::StatusCode::NO_CONTENT }).handler_name("audit"),
+            PatternDef::message("hand.open", |Payload(value): Payload<Value>| async move {
+                Json(value)
+            })
+            .handler_name("open"),
+            PatternDef::event("audit.*", || async { http::StatusCode::NO_CONTENT })
+                .handler_name("audit"),
         ]
     }
 }
@@ -662,8 +746,14 @@ async fn mistakes_in_the_handlers_fail_the_boot_naming_them() {
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains("message pattern `deals.echo` is handled twice"), "{error}");
-    assert!(error.contains("DealsHandlers") && error.contains("EchoAgain"), "{error}");
+    assert!(
+        error.contains("message pattern `deals.echo` is handled twice"),
+        "{error}"
+    );
+    assert!(
+        error.contains("DealsHandlers") && error.contains("EchoAgain"),
+        "{error}"
+    );
 
     let error = TestApp::builder()
         .module(MicroModule::for_root(Transport::custom(Limited {
@@ -676,7 +766,8 @@ async fn mistakes_in_the_handlers_fail_the_boot_naming_them() {
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains("message pattern `hand.open` (`open` of HandWritten") && error.contains("has no access declaration"),
+        error.contains("message pattern `hand.open` (`open` of HandWritten")
+            && error.contains("has no access declaration"),
         "{error}"
     );
     assert!(

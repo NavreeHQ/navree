@@ -328,7 +328,10 @@ mod tests {
         assert_eq!(envelope.header("x-request-id"), Some("abc"));
         assert_eq!(envelope.header("X-REQUEST-ID"), Some("abc"));
         assert_eq!(envelope.header(headers::PATTERN), Some("deals.get"));
-        assert_eq!(envelope.remove_header("X-Request-ID").as_deref(), Some("abc"));
+        assert_eq!(
+            envelope.remove_header("X-Request-ID").as_deref(),
+            Some("abc")
+        );
         assert_eq!(envelope.header("x-request-id"), None);
     }
 
@@ -380,8 +383,8 @@ mod tests {
 
     #[test]
     fn bytes_round_trip_and_reject_garbage() {
-        let envelope = Envelope::new("deal.won", vec![0u8, 159, 146, 150])
-            .with_header(headers::KEY, "42");
+        let envelope =
+            Envelope::new("deal.won", vec![0u8, 159, 146, 150]).with_header(headers::KEY, "42");
         let back = Envelope::from_bytes(envelope.to_bytes()).unwrap();
         assert_eq!(back.pattern(), "deal.won");
         assert_eq!(back.key(), Some("42"));

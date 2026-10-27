@@ -63,7 +63,12 @@ impl NatsTransport {
         if servers.is_empty() {
             return Err(MicroError::transport("micro.url names no NATS server"));
         }
-        if options.stream.is_empty() || !options.stream.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+        if options.stream.is_empty()
+            || !options
+                .stream
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
             return Err(MicroError::transport(format!(
                 "micro.nats.stream `{}` may only hold letters, digits, `_` and `-`",
                 options.stream
@@ -83,13 +88,21 @@ impl NatsTransport {
     async fn client(&self) -> Result<&async_nats::Client, MicroError> {
         self.client
             .get_or_try_init(|| async {
-                let options = connect_options(&self.options, &self.instance, self.connect_timeout).await?;
-                let tls = self.servers.iter().any(|server| server.starts_with("tls://"));
-                let options = options.require_tls(tls || self.options.tls.ca.is_some() || self.options.tls.cert.is_some());
+                let options =
+                    connect_options(&self.options, &self.instance, self.connect_timeout).await?;
+                let tls = self
+                    .servers
+                    .iter()
+                    .any(|server| server.starts_with("tls://"));
+                let options = options.require_tls(
+                    tls || self.options.tls.ca.is_some() || self.options.tls.cert.is_some(),
+                );
                 let connecting = options.connect(self.servers.clone());
                 match tokio::time::timeout(self.connect_timeout, connecting).await {
                     Ok(Ok(client)) => Ok(client),
-                    Ok(Err(error)) => Err(MicroError::transport(format!("cannot connect to NATS: {error}"))),
+                    Ok(Err(error)) => Err(MicroError::transport(format!(
+                        "cannot connect to NATS: {error}"
+                    ))),
                     Err(_) => Err(MicroError::transport(format!(
                         "connecting to NATS took longer than {:?}",
                         self.connect_timeout
@@ -109,7 +122,10 @@ impl NatsTransport {
     }
 
     /// The stream, created when missing; the line `micro:setup` prints.
-    async fn ensure_stream(&self, js: &jetstream::Context) -> Result<(stream::Stream, String), MicroError> {
+    async fn ensure_stream(
+        &self,
+        js: &jetstream::Context,
+    ) -> Result<(stream::Stream, String), MicroError> {
         let name = self.options.stream.clone();
         match js.get_stream(&name).await {
             Ok(stream) => Ok((stream, format!("stream {name} exists"))),
@@ -117,7 +133,9 @@ impl NatsTransport {
                 let stream = js
                     .create_stream(stream_config(&self.options))
                     .await
-                    .map_err(|error| MicroError::transport(format!("cannot create stream {name}: {error}")))?;
+                    .map_err(|error| {
+                        MicroError::transport(format!("cannot create stream {name}: {error}"))
+                    })?;
                 Ok((stream, format!("created stream {name}")))
             }
         }
@@ -135,7 +153,9 @@ impl NatsTransport {
         let consumer = stream
             .get_or_create_consumer(&name, config)
             .await
-            .map_err(|error| MicroError::transport(format!("cannot create consumer {name}: {error}")))?;
+            .map_err(|error| {
+                MicroError::transport(format!("cannot create consumer {name}: {error}"))
+            })?;
         let line = if exists {
             format!("consumer {name} exists ({})", subscription.pattern)
         } else {
@@ -150,7 +170,11 @@ impl fmt::Debug for NatsTransport {
         f.debug_struct("NatsTransport")
             .field(
                 "servers",
-                &self.servers.iter().map(|s| crate::options::redact_url(s)).collect::<Vec<_>>(),
+                &self
+                    .servers
+                    .iter()
+                    .map(|s| crate::options::redact_url(s))
+                    .collect::<Vec<_>>(),
             )
             .field("jetstream", &self.options.jetstream)
             .field("stream", &self.options.stream)
@@ -198,18 +222,22 @@ impl MicroTransport for NatsTransport {
                 let ack = js
                     .publish_with_headers(subject, headers, payload)
                     .await
-                    .map_err(|error| MicroError::transport(format!("the JetStream publish failed: {error}")))?;
-                ack.await
-                    .map_err(|error| MicroError::transport(format!("JetStream did not store the event: {error}")))?;
+                    .map_err(|error| {
+                        MicroError::transport(format!("the JetStream publish failed: {error}"))
+                    })?;
+                ack.await.map_err(|error| {
+                    MicroError::transport(format!("JetStream did not store the event: {error}"))
+                })?;
             } else {
                 client
                     .publish_with_headers(subject, headers, payload)
                     .await
-                    .map_err(|error| MicroError::transport(format!("the NATS publish failed: {error}")))?;
-                client
-                    .flush()
-                    .await
-                    .map_err(|error| MicroError::transport(format!("the NATS publish failed: {error}")))?;
+                    .map_err(|error| {
+                        MicroError::transport(format!("the NATS publish failed: {error}"))
+                    })?;
+                client.flush().await.map_err(|error| {
+                    MicroError::transport(format!("the NATS publish failed: {error}"))
+                })?;
             }
             Ok(())
         })
@@ -230,17 +258,33 @@ impl MicroTransport for NatsTransport {
                         let subscriber = client
                             .queue_subscribe(subscription.pattern.clone(), self.service.clone())
                             .await
-                            .map_err(|error| MicroError::transport(format!("cannot subscribe to {}: {error}", subscription.pattern)))?;
-                        tasks.spawn(requests(client.clone(), subscriber, index, deliveries.clone()));
+                            .map_err(|error| {
+                                MicroError::transport(format!(
+                                    "cannot subscribe to {}: {error}",
+                                    subscription.pattern
+                                ))
+                            })?;
+                        tasks.spawn(requests(
+                            client.clone(),
+                            subscriber,
+                            index,
+                            deliveries.clone(),
+                        ));
                     }
-                    PatternKind::Event if subscription.is_broadcast() || !self.options.jetstream => {
+                    PatternKind::Event
+                        if subscription.is_broadcast() || !self.options.jetstream =>
+                    {
                         let subject = self.event_subject(&subscription.pattern);
                         let subscriber = if subscription.is_broadcast() {
                             client.subscribe(subject.clone()).await
                         } else {
-                            client.queue_subscribe(subject.clone(), self.service.clone()).await
+                            client
+                                .queue_subscribe(subject.clone(), self.service.clone())
+                                .await
                         }
-                        .map_err(|error| MicroError::transport(format!("cannot subscribe to {subject}: {error}")))?;
+                        .map_err(|error| {
+                            MicroError::transport(format!("cannot subscribe to {subject}: {error}"))
+                        })?;
                         tasks.spawn(core_events(subscriber, index, deliveries.clone()));
                     }
                     PatternKind::Event => {
@@ -252,10 +296,12 @@ impl MicroTransport for NatsTransport {
                             continue;
                         };
                         let (consumer, _) = self.ensure_consumer(stream, subscription).await?;
-                        let messages = consumer
-                            .messages()
-                            .await
-                            .map_err(|error| MicroError::transport(format!("cannot read consumer of {}: {error}", subscription.pattern)))?;
+                        let messages = consumer.messages().await.map_err(|error| {
+                            MicroError::transport(format!(
+                                "cannot read consumer of {}: {error}",
+                                subscription.pattern
+                            ))
+                        })?;
                         tasks.spawn(durable_events(messages, index, deliveries.clone()));
                     }
                 }
@@ -267,7 +313,10 @@ impl MicroTransport for NatsTransport {
         })
     }
 
-    fn setup(&self, subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+    fn setup(
+        &self,
+        subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
         let durable: Vec<Subscription> = subscriptions
             .iter()
             .filter(|s| s.kind == PatternKind::Event && !s.is_broadcast())
@@ -275,7 +324,10 @@ impl MicroTransport for NatsTransport {
             .collect();
         Box::pin(async move {
             if !self.options.jetstream {
-                return Ok(vec!["core publish-subscribe (micro.nats.jetstream = false): nothing to set up".to_owned()]);
+                return Ok(vec![
+                    "core publish-subscribe (micro.nats.jetstream = false): nothing to set up"
+                        .to_owned(),
+                ]);
             }
             let client = self.client().await?;
             let js = self.jetstream(client);
@@ -309,14 +361,21 @@ impl MicroTransport for NatsTransport {
                     .jetstream(client)
                     .publish_with_headers(subject, headers, letter.payload.clone())
                     .await
-                    .map_err(|error| MicroError::transport(format!("the dead letter was not published: {error}")))?;
-                ack.await
-                    .map_err(|error| MicroError::transport(format!("JetStream did not store the dead letter: {error}")))?;
+                    .map_err(|error| {
+                        MicroError::transport(format!("the dead letter was not published: {error}"))
+                    })?;
+                ack.await.map_err(|error| {
+                    MicroError::transport(format!(
+                        "JetStream did not store the dead letter: {error}"
+                    ))
+                })?;
             } else {
                 client
                     .publish_with_headers(subject, headers, letter.payload.clone())
                     .await
-                    .map_err(|error| MicroError::transport(format!("the dead letter was not published: {error}")))?;
+                    .map_err(|error| {
+                        MicroError::transport(format!("the dead letter was not published: {error}"))
+                    })?;
             }
             Ok(())
         })
@@ -354,7 +413,9 @@ async fn connect_options(
         connect = connect.add_root_certificates(ca.clone());
     }
     match (&options.tls.cert, &options.tls.key) {
-        (Some(cert), Some(key)) => connect = connect.add_client_certificate(cert.clone(), key.clone()),
+        (Some(cert), Some(key)) => {
+            connect = connect.add_client_certificate(cert.clone(), key.clone())
+        }
         (None, None) => {}
         _ => {
             return Err(MicroError::transport(
@@ -367,7 +428,9 @@ async fn connect_options(
 
 /// Reconnect pauses: 100 ms doubling to 30 seconds.
 fn reconnect_delay(attempts: usize) -> Duration {
-    let exponent = u32::try_from(attempts.saturating_sub(1)).unwrap_or(u32::MAX).min(16);
+    let exponent = u32::try_from(attempts.saturating_sub(1))
+        .unwrap_or(u32::MAX)
+        .min(16);
     Duration::from_millis(100u64.saturating_mul(1u64 << exponent)).min(Duration::from_secs(30))
 }
 
@@ -415,7 +478,11 @@ fn stream_config(options: &NatsOptions) -> stream::Config {
 /// A durable pull consumer: explicit acks, redelivery after `ack_wait_secs`
 /// (or the handler's time limit when longer), no delivery cap (Navree
 /// counts attempts), one event in flight for `ordered` handlers.
-fn consumer_config(options: &NatsOptions, service: &str, subscription: &Subscription) -> consumer::pull::Config {
+fn consumer_config(
+    options: &NatsOptions,
+    service: &str,
+    subscription: &Subscription,
+) -> consumer::pull::Config {
     let name = consumer_name(service, &subscription.pattern);
     consumer::pull::Config {
         durable_name: Some(name.clone()),
@@ -515,7 +582,9 @@ impl DeliveryActions for NatsReply {
             self.client
                 .publish_with_headers(self.reply, to_nats(&reply), reply.payload().clone())
                 .await
-                .map_err(|error| MicroError::transport(format!("the reply was not sent: {error}")))?;
+                .map_err(|error| {
+                    MicroError::transport(format!("the reply was not sent: {error}"))
+                })?;
             self.client
                 .flush()
                 .await
@@ -525,7 +594,11 @@ impl DeliveryActions for NatsReply {
 }
 
 /// Hands the events of a core subscription to the listener (at most once).
-async fn core_events(mut subscriber: async_nats::Subscriber, index: usize, deliveries: mpsc::Sender<Delivery>) {
+async fn core_events(
+    mut subscriber: async_nats::Subscriber,
+    index: usize,
+    deliveries: mpsc::Sender<Delivery>,
+) {
     while let Some(message) = subscriber.next().await {
         let envelope = from_nats(&message.subject, message.headers.as_ref(), message.payload);
         if deliveries
@@ -558,7 +631,11 @@ async fn durable_events(
             .ok()
             .and_then(|info| u32::try_from(info.delivered).ok())
             .unwrap_or(1);
-        let envelope = from_nats(&message.subject, message.headers.as_ref(), message.payload.clone());
+        let envelope = from_nats(
+            &message.subject,
+            message.headers.as_ref(),
+            message.payload.clone(),
+        );
         let actions = JetStreamActions {
             message: Arc::new(message),
         };
@@ -580,10 +657,9 @@ struct JetStreamActions {
 impl DeliveryActions for JetStreamActions {
     fn ack(self: Box<Self>) -> BoxFuture<'static, Result<(), MicroError>> {
         Box::pin(async move {
-            self.message
-                .ack()
-                .await
-                .map_err(|error| MicroError::transport(format!("the acknowledgment failed: {error}")))
+            self.message.ack().await.map_err(|error| {
+                MicroError::transport(format!("the acknowledgment failed: {error}"))
+            })
         })
     }
 
@@ -592,7 +668,9 @@ impl DeliveryActions for JetStreamActions {
             self.message
                 .ack_with(AckKind::Nak(Some(delay)))
                 .await
-                .map_err(|error| MicroError::transport(format!("the negative acknowledgment failed: {error}")))
+                .map_err(|error| {
+                    MicroError::transport(format!("the negative acknowledgment failed: {error}"))
+                })
         })
     }
 
@@ -608,7 +686,10 @@ mod tests {
     #[test]
     fn subjects_and_consumers_are_named_after_the_pattern() {
         assert_eq!(event_subject("CRM", "deal.won"), "CRM.events.deal.won");
-        assert_eq!(consumer_name("notifications", "deal.won"), "notifications_deal_won");
+        assert_eq!(
+            consumer_name("notifications", "deal.won"),
+            "notifications_deal_won"
+        );
         assert_eq!(consumer_name("stats", "deal.*"), "stats_deal_any");
         assert_eq!(consumer_name("audit", "audit.>"), "audit_audit_all");
     }
@@ -651,9 +732,16 @@ mod tests {
             ack_wait: Duration::from_secs(120),
         };
         let consumer = consumer_config(&options, "notifications", &subscription);
-        assert_eq!(consumer.durable_name.as_deref(), Some("notifications_deal_won"));
+        assert_eq!(
+            consumer.durable_name.as_deref(),
+            Some("notifications_deal_won")
+        );
         assert_eq!(consumer.filter_subject, "CRM.events.deal.won");
-        assert_eq!(consumer.ack_wait, Duration::from_secs(120), "raised to the handler's limit");
+        assert_eq!(
+            consumer.ack_wait,
+            Duration::from_secs(120),
+            "raised to the handler's limit"
+        );
         assert_eq!(consumer.max_ack_pending, 1, "ordered");
         assert_eq!(consumer.max_deliver, -1);
     }
@@ -675,13 +763,21 @@ mod tests {
     #[test]
     fn bad_settings_are_refused() {
         let options = NatsOptions::default();
-        let error = NatsTransport::new(" ".into(), &options, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error = NatsTransport::new(" ".into(), &options, "s", "s-1", Duration::from_secs(1))
+            .unwrap_err();
         assert!(error.to_string().contains("no NATS server"), "{error}");
         let bad_stream = NatsOptions {
             stream: "a.b".into(),
             ..NatsOptions::default()
         };
-        let error = NatsTransport::new("nats://x:4222".into(), &bad_stream, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error = NatsTransport::new(
+            "nats://x:4222".into(),
+            &bad_stream,
+            "s",
+            "s-1",
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("micro.nats.stream"), "{error}");
     }
 }

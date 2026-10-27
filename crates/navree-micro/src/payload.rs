@@ -68,9 +68,9 @@ fn codec_of(req: &Request) -> Result<Codec, AppError> {
 }
 
 async fn bytes_of(req: Request) -> Result<Bytes, AppError> {
-    Bytes::from_request(req, &())
-        .await
-        .map_err(|rejection| AppError::from_status(rejection.status()).with_detail(rejection.body_text()))
+    Bytes::from_request(req, &()).await.map_err(|rejection| {
+        AppError::from_status(rejection.status()).with_detail(rejection.body_text())
+    })
 }
 
 impl<T, S> FromRequest<S> for Payload<T>

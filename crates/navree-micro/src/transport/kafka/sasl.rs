@@ -20,7 +20,11 @@ pub(crate) async fn authenticate(conn: &Conn, credentials: &SaslOptions) -> Resu
             Ok(())
         }
         "SCRAM-SHA-256" | "SCRAM-SHA-512" => {
-            let hash = if mechanism == "SCRAM-SHA-256" { Hash::Sha256 } else { Hash::Sha512 };
+            let hash = if mechanism == "SCRAM-SHA-256" {
+                Hash::Sha256
+            } else {
+                Hash::Sha512
+            };
             let nonce = uuid::Uuid::new_v4().simple().to_string();
             let mut scram = Scram::new(hash, &credentials.username, &credentials.password, &nonce);
             let server_first = sasl_authenticate(conn, Bytes::from(scram.client_first())).await?;
@@ -49,12 +53,14 @@ impl Hash {
     fn hmac(self, key: &[u8], data: &[u8]) -> Vec<u8> {
         match self {
             Hash::Sha256 => {
-                let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
+                let mut mac =
+                    <Hmac<Sha256> as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
                 mac.update(data);
                 mac.finalize().into_bytes().to_vec()
             }
             Hash::Sha512 => {
-                let mut mac = <Hmac<Sha512> as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
+                let mut mac =
+                    <Hmac<Sha512> as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
                 mac.update(data);
                 mac.finalize().into_bytes().to_vec()
             }
@@ -116,13 +122,17 @@ impl Scram {
         let server_first = std::str::from_utf8(server_first)
             .map_err(|_| MicroError::transport("Kafka sent a SCRAM message that is not UTF-8"))?;
         let field = |name: char| {
-            server_first
-                .split(',')
-                .find_map(|part| part.strip_prefix(name).and_then(|rest| rest.strip_prefix('=')))
+            server_first.split(',').find_map(|part| {
+                part.strip_prefix(name)
+                    .and_then(|rest| rest.strip_prefix('='))
+            })
         };
-        let nonce = field('r').ok_or_else(|| MicroError::transport("Kafka's SCRAM message has no nonce"))?;
+        let nonce = field('r')
+            .ok_or_else(|| MicroError::transport("Kafka's SCRAM message has no nonce"))?;
         if !nonce.starts_with(&self.nonce) {
-            return Err(MicroError::transport("Kafka's SCRAM nonce does not extend ours"));
+            return Err(MicroError::transport(
+                "Kafka's SCRAM nonce does not extend ours",
+            ));
         }
         let salt = field('s')
             .and_then(|salt| STANDARD.decode(salt).ok())
@@ -131,13 +141,19 @@ impl Scram {
             .and_then(|i| i.parse().ok())
             .filter(|i| *i > 0)
             .ok_or_else(|| MicroError::transport("Kafka's SCRAM message has no iteration count"))?;
-        let salted = self.hash.salted_password(self.password.as_bytes(), &salt, iterations);
+        let salted = self
+            .hash
+            .salted_password(self.password.as_bytes(), &salt, iterations);
         let client_key = self.hash.hmac(&salted, b"Client Key");
         let stored_key = self.hash.digest(&client_key);
         let without_proof = format!("c=biws,r={nonce}");
         let auth_message = format!("{},{server_first},{without_proof}", self.client_first_bare);
         let signature = self.hash.hmac(&stored_key, auth_message.as_bytes());
-        let proof: Vec<u8> = client_key.iter().zip(&signature).map(|(k, s)| k ^ s).collect();
+        let proof: Vec<u8> = client_key
+            .iter()
+            .zip(&signature)
+            .map(|(k, s)| k ^ s)
+            .collect();
         let server_key = self.hash.hmac(&salted, b"Server Key");
         self.server_signature = self.hash.hmac(&server_key, auth_message.as_bytes());
         Ok(format!("{without_proof},p={}", STANDARD.encode(proof)))
@@ -147,7 +163,9 @@ impl Scram {
     pub(crate) fn verify(&self, server_final: &[u8]) -> Result<(), MicroError> {
         let text = String::from_utf8_lossy(server_final);
         if let Some(error) = text.strip_prefix("e=") {
-            return Err(MicroError::transport(format!("Kafka refused the SCRAM credentials: {error}")));
+            return Err(MicroError::transport(format!(
+                "Kafka refused the SCRAM credentials: {error}"
+            )));
         }
         let signature = text
             .strip_prefix("v=")
@@ -156,7 +174,9 @@ impl Scram {
         if signature == self.server_signature {
             Ok(())
         } else {
-            Err(MicroError::transport("Kafka's SCRAM signature does not match: the server is not who it claims"))
+            Err(MicroError::transport(
+                "Kafka's SCRAM signature does not match: the server is not who it claims",
+            ))
         }
     }
 }
@@ -176,9 +196,17 @@ mod tests {
             client_final,
             "c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ="
         );
-        scram.verify(b"v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=").unwrap();
+        scram
+            .verify(b"v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=")
+            .unwrap();
         assert!(scram.verify(b"v=AAAA").is_err());
-        assert!(scram.verify(b"e=invalid-proof").unwrap_err().to_string().contains("invalid-proof"));
+        assert!(
+            scram
+                .verify(b"e=invalid-proof")
+                .unwrap_err()
+                .to_string()
+                .contains("invalid-proof")
+        );
     }
 
     #[test]

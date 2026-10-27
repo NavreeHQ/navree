@@ -40,7 +40,10 @@ impl MqttHarness {
                 self.url.clone(),
                 &self.options,
                 service,
-                &format!("{service}-{n}-{}", &uuid::Uuid::now_v7().simple().to_string()[24..]),
+                &format!(
+                    "{service}-{n}-{}",
+                    &uuid::Uuid::now_v7().simple().to_string()[24..]
+                ),
                 Duration::from_secs(2),
             )
             .expect("an MQTT transport"),
@@ -58,7 +61,11 @@ impl Harness for MqttHarness {
         }
     }
 
-    fn instance<'a>(&'a self, service: &'a str, _patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        service: &'a str,
+        _patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move { self.transport(service) })
     }
 
@@ -100,8 +107,14 @@ async fn two_apps_talk_over_mqtt() {
     };
     deals_answer_the_api_over(options(), options()).await;
     let topics = broker.published();
-    assert!(topics.iter().any(|topic| topic == "crm/deals/get"), "{topics:?}");
-    assert!(topics.iter().any(|topic| topic.starts_with("crm/replies/")), "{topics:?}");
+    assert!(
+        topics.iter().any(|topic| topic == "crm/deals/get"),
+        "{topics:?}"
+    );
+    assert!(
+        topics.iter().any(|topic| topic.starts_with("crm/replies/")),
+        "{topics:?}"
+    );
 }
 
 #[tokio::test]
@@ -111,10 +124,23 @@ async fn a_listener_gets_its_subscriptions_back_after_the_broker_restarts() {
     let url = first.url();
     let addr = url.trim_start_matches("mqtt://").to_owned();
     let harness = MqttHarness::new(url, MqttOptions::default());
-    let mut listening = Listening::start(harness.transport("billing"), vec![event("invoice.paid", "billing")]).await;
+    let mut listening = Listening::start(
+        harness.transport("billing"),
+        vec![event("invoice.paid", "billing")],
+    )
+    .await;
     let client = harness.transport("shop");
-    client.publish(published("invoice.paid", "1")).await.unwrap();
-    listening.next(Duration::from_secs(5)).await.expect("before").ack().await.unwrap();
+    client
+        .publish(published("invoice.paid", "1"))
+        .await
+        .unwrap();
+    listening
+        .next(Duration::from_secs(5))
+        .await
+        .expect("before")
+        .ack()
+        .await
+        .unwrap();
 
     drop(first);
     let second = MiniMqtt::start_on(&addr).await;
@@ -134,7 +160,10 @@ async fn a_listener_gets_its_subscriptions_back_after_the_broker_restarts() {
             got = Some(delivery);
             break;
         }
-        client.publish(published("invoice.paid", "2")).await.unwrap();
+        client
+            .publish(published("invoice.paid", "2"))
+            .await
+            .unwrap();
     }
     let delivery = got.expect("the listener subscribed again");
     assert_eq!(delivery.envelope().payload().as_ref(), b"2");
@@ -145,7 +174,10 @@ async fn a_listener_gets_its_subscriptions_back_after_the_broker_restarts() {
 
 #[tokio::test]
 async fn the_unreachable_broker_fails_calls_at_once() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let unused = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
     let transport = MqttTransport::new(
         format!("mqtt://{unused}"),
         &MqttOptions::default(),
@@ -154,20 +186,39 @@ async fn the_unreachable_broker_fails_calls_at_once() {
         Duration::from_millis(300),
     )
     .unwrap();
-    let error = transport.publish(published("deal.won", "{}")).await.unwrap_err();
+    let error = transport
+        .publish(published("deal.won", "{}"))
+        .await
+        .unwrap_err();
     assert!(matches!(error, MicroError::Transport(_)), "{error:?}");
     assert!(!transport.is_connected());
     let started = std::time::Instant::now();
-    let again = transport.publish(published("deal.won", "{}")).await.unwrap_err();
+    let again = transport
+        .publish(published("deal.won", "{}"))
+        .await
+        .unwrap_err();
     assert!(matches!(again, MicroError::Transport(_)), "{again:?}");
-    assert!(started.elapsed() < Duration::from_millis(250), "at once while down");
+    assert!(
+        started.elapsed() < Duration::from_millis(250),
+        "at once while down"
+    );
 }
 
 #[tokio::test]
 async fn setup_has_nothing_to_declare_and_dead_letters_go_to_a_topic() {
     let broker = MiniMqtt::start().await;
-    let transport = MqttTransport::new(broker.url(), &MqttOptions::default(), "stats", "stats-1", Duration::from_secs(1)).unwrap();
-    let lines = transport.setup(&[event("deal.won", "stats")]).await.unwrap();
+    let transport = MqttTransport::new(
+        broker.url(),
+        &MqttOptions::default(),
+        "stats",
+        "stats-1",
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    let lines = transport
+        .setup(&[event("deal.won", "stats")])
+        .await
+        .unwrap();
     assert_eq!(lines, ["topics need no declaration: nothing to set up"]);
     let letter = navree_micro::DeadLetter {
         id: "d1".into(),
@@ -192,7 +243,9 @@ async fn setup_has_nothing_to_declare_and_dead_letters_go_to_a_topic() {
 #[tokio::test]
 async fn a_real_broker_conforms() {
     let Ok(url) = std::env::var("NAVREE_TEST_MQTT_URL") else {
-        eprintln!("SKIPPED: set NAVREE_TEST_MQTT_URL to run the MQTT transport against an MQTT 5 broker");
+        eprintln!(
+            "SKIPPED: set NAVREE_TEST_MQTT_URL to run the MQTT transport against an MQTT 5 broker"
+        );
         return;
     };
     let prefix = format!("conf{}", &uuid::Uuid::now_v7().simple().to_string()[20..]);

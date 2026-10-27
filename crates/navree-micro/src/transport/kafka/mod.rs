@@ -11,8 +11,12 @@ use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use kafka_protocol::messages::consumer_group_heartbeat_request::TopicPartitions;
-use kafka_protocol::messages::offset_commit_request::{OffsetCommitRequestPartition, OffsetCommitRequestTopic};
-use kafka_protocol::messages::offset_fetch_request::{OffsetFetchRequestGroup, OffsetFetchRequestTopics};
+use kafka_protocol::messages::offset_commit_request::{
+    OffsetCommitRequestPartition, OffsetCommitRequestTopic,
+};
+use kafka_protocol::messages::offset_fetch_request::{
+    OffsetFetchRequestGroup, OffsetFetchRequestTopics,
+};
 use kafka_protocol::messages::{
     ConsumerGroupHeartbeatRequest, FindCoordinatorRequest, GroupId, OffsetCommitRequest,
     OffsetFetchRequest,
@@ -109,7 +113,13 @@ impl KafkaTransport {
             .split(',')
             .map(str::trim)
             .filter(|broker| !broker.is_empty())
-            .map(|broker| broker.strip_prefix("kafka://").unwrap_or(broker).trim_end_matches('/').to_owned())
+            .map(|broker| {
+                broker
+                    .strip_prefix("kafka://")
+                    .unwrap_or(broker)
+                    .trim_end_matches('/')
+                    .to_owned()
+            })
             .collect();
         if brokers.is_empty() {
             return Err(MicroError::transport("micro.url names no Kafka broker"));
@@ -126,7 +136,10 @@ impl KafkaTransport {
             ));
         }
         if let Some(sasl) = &options.sasl
-            && !matches!(sasl.mechanism.as_str(), "PLAIN" | "SCRAM-SHA-256" | "SCRAM-SHA-512")
+            && !matches!(
+                sasl.mechanism.as_str(),
+                "PLAIN" | "SCRAM-SHA-256" | "SCRAM-SHA-512"
+            )
         {
             return Err(MicroError::transport(format!(
                 "micro.kafka.sasl.mechanism must be PLAIN, SCRAM-SHA-256 or SCRAM-SHA-512, not `{}`",
@@ -134,7 +147,10 @@ impl KafkaTransport {
             )));
         }
         let tls = if options.tls {
-            Some(TlsConnector::from(client_config(&TlsOptions::default(), "micro.kafka")?))
+            Some(TlsConnector::from(client_config(
+                &TlsOptions::default(),
+                "micro.kafka",
+            )?))
         } else {
             None
         };
@@ -198,7 +214,11 @@ impl KafkaTransport {
             // Wait for the new topics' leaders.
             for _ in 0..50 {
                 let known = self.cluster.refresh(topics).await?;
-                if topics.iter().all(|topic| known.get(topic).is_some_and(|meta| !meta.partitions.is_empty())) {
+                if topics.iter().all(|topic| {
+                    known
+                        .get(topic)
+                        .is_some_and(|meta| !meta.partitions.is_empty())
+                }) {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -215,7 +235,9 @@ impl KafkaTransport {
                 self.ensure_topics(&[topic.to_owned()]).await?;
                 match self.cluster.produce(topic, record).await {
                     Ok(_) => Ok(()),
-                    Err(ProduceError::NoTopic) => Err(MicroError::transport(format!("the Kafka topic {topic} could not be created"))),
+                    Err(ProduceError::NoTopic) => Err(MicroError::transport(format!(
+                        "the Kafka topic {topic} could not be created"
+                    ))),
                     Err(ProduceError::Failed(error)) => Err(error),
                 }
             }
@@ -306,7 +328,10 @@ impl MicroTransport for KafkaTransport {
     }
 
     fn publish(&self, envelope: Envelope) -> BoxFuture<'_, Result<(), MicroError>> {
-        Box::pin(async move { self.produce_creating(envelope.pattern(), out_record(&envelope)).await })
+        Box::pin(async move {
+            self.produce_creating(envelope.pattern(), out_record(&envelope))
+                .await
+        })
     }
 
     fn listen(
@@ -355,16 +380,26 @@ impl MicroTransport for KafkaTransport {
             let stop = CancellationToken::new();
             let mut tasks = tokio::task::JoinSet::new();
             if !broadcast.is_empty() {
-                let topics: Vec<String> = broadcast.iter().map(|(_, s)| s.pattern.clone()).collect();
-                let by_topic: HashMap<String, usize> = broadcast.iter().map(|(i, s)| (s.pattern.clone(), *i)).collect();
+                let topics: Vec<String> =
+                    broadcast.iter().map(|(_, s)| s.pattern.clone()).collect();
+                let by_topic: HashMap<String, usize> = broadcast
+                    .iter()
+                    .map(|(i, s)| (s.pattern.clone(), *i))
+                    .collect();
                 let reader = Reader::start(self.cluster.clone(), topics).await?;
-                tasks.spawn(read_broadcast(reader, by_topic, deliveries.clone(), stop.clone()));
+                tasks.spawn(read_broadcast(
+                    reader,
+                    by_topic,
+                    deliveries.clone(),
+                    stop.clone(),
+                ));
             }
             let group = if grouped.is_empty() {
                 None
             } else {
                 let group = Arc::new(
-                    GroupConsumer::new(self, &grouped, retry_topic.clone(), deliveries.clone()).await?,
+                    GroupConsumer::new(self, &grouped, retry_topic.clone(), deliveries.clone())
+                        .await?,
                 );
                 tasks.spawn(group.clone().run_membership(stop.clone()));
                 tasks.spawn(group.clone().run_fetching(stop.clone()));
@@ -383,9 +418,15 @@ impl MicroTransport for KafkaTransport {
         })
     }
 
-    fn setup(&self, subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+    fn setup(
+        &self,
+        subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
         let mut topics: Vec<String> = subscriptions.iter().map(|s| s.pattern.clone()).collect();
-        if subscriptions.iter().any(|s| s.kind == PatternKind::Event && !s.is_broadcast()) {
+        if subscriptions
+            .iter()
+            .any(|s| s.kind == PatternKind::Event && !s.is_broadcast())
+        {
             topics.push(self.retry_topic());
             topics.push(self.dead_topic());
         }
@@ -421,7 +462,8 @@ impl MicroTransport for KafkaTransport {
             let mut envelope = letter.envelope();
             envelope.set_header("navree-error", single_line(&letter.error));
             envelope.set_header("navree-attempts", letter.attempts.to_string());
-            self.produce_creating(&format!("{}.dead", letter.service), out_record(&envelope)).await
+            self.produce_creating(&format!("{}.dead", letter.service), out_record(&envelope))
+                .await
         })
     }
 
@@ -435,7 +477,9 @@ impl MicroTransport for KafkaTransport {
 /// The record of an envelope: its key, headers and payload.
 fn out_record(envelope: &Envelope) -> OutRecord {
     OutRecord {
-        key: envelope.key().map(|key| Bytes::copy_from_slice(key.as_bytes())),
+        key: envelope
+            .key()
+            .map(|key| Bytes::copy_from_slice(key.as_bytes())),
         headers: envelope
             .headers()
             .iter()
@@ -452,7 +496,10 @@ fn from_record(topic: &str, record: &InRecord) -> Envelope {
         .headers
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(headers::PATTERN))
-        .map_or_else(|| topic.to_owned(), |(_, value)| String::from_utf8_lossy(value).into_owned());
+        .map_or_else(
+            || topic.to_owned(),
+            |(_, value)| String::from_utf8_lossy(value).into_owned(),
+        );
     let mut envelope = Envelope::new(pattern, record.value.clone());
     for (name, value) in &record.headers {
         envelope.set_header(name, String::from_utf8_lossy(value).into_owned());
@@ -486,7 +533,11 @@ impl Reader {
             let partitions: Vec<i32> = meta.partitions.iter().map(|p| p.partition).collect();
             let offsets = cluster.offsets(&topic, &partitions, LATEST).await?;
             for partition in partitions {
-                positions.push((topic.clone(), partition, offsets.get(&partition).copied().unwrap_or(0)));
+                positions.push((
+                    topic.clone(),
+                    partition,
+                    offsets.get(&partition).copied().unwrap_or(0),
+                ));
             }
         }
         let lane = cluster.lane();
@@ -512,7 +563,12 @@ impl Reader {
             .map(|(leader, positions)| {
                 let cluster = self.cluster.clone();
                 let lane = self.lane;
-                async move { (positions.clone(), cluster.fetch(leader, &positions, FETCH_WAIT, lane).await) }
+                async move {
+                    (
+                        positions.clone(),
+                        cluster.fetch(leader, &positions, FETCH_WAIT, lane).await,
+                    )
+                }
             })
             .collect::<Vec<_>>();
         let mut out = Vec::new();
@@ -584,7 +640,12 @@ async fn read_replies(mut reader: Reader, replies: Arc<Replies>, closed: Cancell
 }
 
 /// Hands broadcast events to this instance's listener, at most once.
-async fn read_broadcast(mut reader: Reader, by_topic: HashMap<String, usize>, deliveries: mpsc::Sender<Delivery>, stop: CancellationToken) {
+async fn read_broadcast(
+    mut reader: Reader,
+    by_topic: HashMap<String, usize>,
+    deliveries: mpsc::Sender<Delivery>,
+    stop: CancellationToken,
+) {
     let mut attempt = 0u32;
     loop {
         let next = tokio::select! {
@@ -599,7 +660,11 @@ async fn read_broadcast(mut reader: Reader, by_topic: HashMap<String, usize>, de
                         continue;
                     };
                     let envelope = from_record(&topic, &record);
-                    if deliveries.send(LocalRetry::delivery(deliveries.clone(), envelope, index)).await.is_err() {
+                    if deliveries
+                        .send(LocalRetry::delivery(deliveries.clone(), envelope, index))
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                 }
@@ -676,14 +741,22 @@ impl GroupConsumer {
     ) -> Result<GroupConsumer, MicroError> {
         let mut topics: Vec<String> = grouped.iter().map(|(_, s)| s.pattern.clone()).collect();
         topics.extend(retry_topic.clone());
-        let start_from = if transport.options.start_from == "earliest" { EARLIEST } else { LATEST };
+        let start_from = if transport.options.start_from == "earliest" {
+            EARLIEST
+        } else {
+            LATEST
+        };
         let mut start = HashMap::new();
         for topic in &topics {
             let Some(meta) = transport.cluster.topic(topic).await? else {
                 continue;
             };
             let partitions: Vec<i32> = meta.partitions.iter().map(|p| p.partition).collect();
-            for (partition, offset) in transport.cluster.offsets(topic, &partitions, start_from).await? {
+            for (partition, offset) in transport
+                .cluster
+                .offsets(topic, &partitions, start_from)
+                .await?
+            {
                 start.insert((topic.clone(), partition), offset);
             }
         }
@@ -692,7 +765,10 @@ impl GroupConsumer {
             group: transport.service.clone(),
             topics,
             retry_topic,
-            by_topic: grouped.iter().map(|(i, s)| (s.pattern.clone(), (*i, s.kind))).collect(),
+            by_topic: grouped
+                .iter()
+                .map(|(i, s)| (s.pattern.clone(), (*i, s.kind)))
+                .collect(),
             start_from,
             start,
             deliveries,
@@ -714,7 +790,12 @@ impl GroupConsumer {
         let request = FindCoordinatorRequest::default()
             .with_key_type(0)
             .with_coordinator_keys(vec![StrBytes::from_string(self.group.clone())]);
-        let response = self.cluster.any().await?.send(&request, version::FIND_COORDINATOR, Duration::ZERO).await?;
+        let response = self
+            .cluster
+            .any()
+            .await?
+            .send(&request, version::FIND_COORDINATOR, Duration::ZERO)
+            .await?;
         let coordinator = response
             .coordinators
             .into_iter()
@@ -729,7 +810,10 @@ impl GroupConsumer {
         }
         let conn = self
             .cluster
-            .conn(&client::address(coordinator.host.as_str(), coordinator.port))
+            .conn(&client::address(
+                coordinator.host.as_str(),
+                coordinator.port,
+            ))
             .await?;
         lock(&self.state).coordinator = Some(conn.clone());
         Ok(conn)
@@ -794,7 +878,11 @@ impl GroupConsumer {
                 continue;
             };
             partitions.sort_unstable();
-            owned_partitions.push(TopicPartitions::default().with_topic_id(meta.id).with_partitions(partitions));
+            owned_partitions.push(
+                TopicPartitions::default()
+                    .with_topic_id(meta.id)
+                    .with_partitions(partitions),
+            );
         }
         let request = ConsumerGroupHeartbeatRequest::default()
             .with_group_id(GroupId(StrBytes::from_string(self.group.clone())))
@@ -803,7 +891,9 @@ impl GroupConsumer {
             .with_rebalance_timeout_ms(REBALANCE_TIMEOUT_MS)
             .with_subscribed_topic_names(Some(self.topics.iter().map(|t| topic_name(t)).collect()))
             .with_topic_partitions(Some(owned_partitions));
-        let response = coordinator.send(&request, version::HEARTBEAT, Duration::ZERO).await?;
+        let response = coordinator
+            .send(&request, version::HEARTBEAT, Duration::ZERO)
+            .await?;
         match response.error_code {
             0 => {}
             code::UNKNOWN_MEMBER_ID | code::FENCED_MEMBER_EPOCH => {
@@ -814,7 +904,9 @@ impl GroupConsumer {
                 state.epoch = 0;
                 return Ok(None);
             }
-            code::NOT_COORDINATOR | code::COORDINATOR_NOT_AVAILABLE | code::COORDINATOR_LOAD_IN_PROGRESS => {
+            code::NOT_COORDINATOR
+            | code::COORDINATOR_NOT_AVAILABLE
+            | code::COORDINATOR_LOAD_IN_PROGRESS => {
                 lock(&self.state).coordinator = None;
                 return Err(MicroError::transport(describe(response.error_code)));
             }
@@ -823,7 +915,10 @@ impl GroupConsumer {
                 return Err(MicroError::transport(format!(
                     "the group coordinator refused the heartbeat: {}{}",
                     describe(other),
-                    response.error_message.map(|m| format!(": {m}")).unwrap_or_default()
+                    response
+                        .error_message
+                        .map(|m| format!(": {m}"))
+                        .unwrap_or_default()
                 )));
             }
         }
@@ -869,7 +964,11 @@ impl GroupConsumer {
                     part.revoking = Some(Instant::now());
                 }
             }
-            target.iter().filter(|key| !state.parts.contains_key(*key)).cloned().collect()
+            target
+                .iter()
+                .filter(|key| !state.parts.contains_key(*key))
+                .cloned()
+                .collect()
         };
         if added.is_empty() {
             return Ok(());
@@ -890,7 +989,10 @@ impl GroupConsumer {
                         .unwrap_or(0),
                 },
             };
-            starts.insert((topic.clone(), *partition), (start, committed.get(&(topic.clone(), *partition)).copied()));
+            starts.insert(
+                (topic.clone(), *partition),
+                (start, committed.get(&(topic.clone(), *partition)).copied()),
+            );
         }
         let mut state = lock(&self.state);
         for (key, (position, committed)) in starts {
@@ -913,7 +1015,10 @@ impl GroupConsumer {
     }
 
     /// The group's committed offsets of `partitions`.
-    async fn committed(&self, partitions: &[(String, i32)]) -> Result<HashMap<(String, i32), i64>, MicroError> {
+    async fn committed(
+        &self,
+        partitions: &[(String, i32)],
+    ) -> Result<HashMap<(String, i32), i64>, MicroError> {
         let coordinator = self.coordinator().await?;
         let (member_id, epoch) = {
             let state = lock(&self.state);
@@ -939,13 +1044,18 @@ impl GroupConsumer {
                         .collect(),
                 )),
         ]);
-        let response = coordinator.send(&request, version::OFFSET_FETCH, Duration::ZERO).await?;
+        let response = coordinator
+            .send(&request, version::OFFSET_FETCH, Duration::ZERO)
+            .await?;
         let mut offsets = HashMap::new();
         for group in response.groups {
             for topic in group.topics {
                 for partition in topic.partitions {
                     if partition.error_code == 0 {
-                        offsets.insert((topic.name.0.to_string(), partition.partition_index), partition.committed_offset);
+                        offsets.insert(
+                            (topic.name.0.to_string(), partition.partition_index),
+                            partition.committed_offset,
+                        );
                     }
                 }
             }
@@ -961,7 +1071,9 @@ impl GroupConsumer {
                 .parts
                 .iter()
                 .filter(|(_, part)| part.committed != Some(part.commit_position()))
-                .map(|((topic, partition), part)| (topic.clone(), *partition, part.commit_position()))
+                .map(|((topic, partition), part)| {
+                    (topic.clone(), *partition, part.commit_position())
+                })
                 .collect();
             (state.member_id.clone(), state.epoch, due)
         };
@@ -973,7 +1085,10 @@ impl GroupConsumer {
         };
         let mut by_topic: HashMap<String, Vec<(i32, i64)>> = HashMap::new();
         for (topic, partition, offset) in &due {
-            by_topic.entry(topic.clone()).or_default().push((*partition, *offset));
+            by_topic
+                .entry(topic.clone())
+                .or_default()
+                .push((*partition, *offset));
         }
         let request = OffsetCommitRequest::default()
             .with_group_id(GroupId(StrBytes::from_string(self.group.clone())))
@@ -983,21 +1098,26 @@ impl GroupConsumer {
                 by_topic
                     .into_iter()
                     .map(|(topic, partitions)| {
-                        OffsetCommitRequestTopic::default().with_name(topic_name(&topic)).with_partitions(
-                            partitions
-                                .into_iter()
-                                .map(|(partition, offset)| {
-                                    OffsetCommitRequestPartition::default()
-                                        .with_partition_index(partition)
-                                        .with_committed_offset(offset)
-                                        .with_committed_leader_epoch(-1)
-                                })
-                                .collect(),
-                        )
+                        OffsetCommitRequestTopic::default()
+                            .with_name(topic_name(&topic))
+                            .with_partitions(
+                                partitions
+                                    .into_iter()
+                                    .map(|(partition, offset)| {
+                                        OffsetCommitRequestPartition::default()
+                                            .with_partition_index(partition)
+                                            .with_committed_offset(offset)
+                                            .with_committed_leader_epoch(-1)
+                                    })
+                                    .collect(),
+                            )
                     })
                     .collect(),
             );
-        match coordinator.send(&request, version::OFFSET_COMMIT, Duration::ZERO).await {
+        match coordinator
+            .send(&request, version::OFFSET_COMMIT, Duration::ZERO)
+            .await
+        {
             Ok(response) => {
                 let mut state = lock(&self.state);
                 for topic in response.topics {
@@ -1007,14 +1127,19 @@ impl GroupConsumer {
                             continue;
                         }
                         let key = (topic.name.0.to_string(), partition.partition_index);
-                        let committed = due.iter().find(|(t, p, _)| *t == key.0 && *p == key.1).map(|(_, _, o)| *o);
+                        let committed = due
+                            .iter()
+                            .find(|(t, p, _)| *t == key.0 && *p == key.1)
+                            .map(|(_, _, o)| *o);
                         if let Some(part) = state.parts.get_mut(&key) {
                             part.committed = committed;
                         }
                     }
                 }
             }
-            Err(error) => tracing::debug!(target: "navree::micro", %error, "committing Kafka offsets failed"),
+            Err(error) => {
+                tracing::debug!(target: "navree::micro", %error, "committing Kafka offsets failed")
+            }
         }
     }
 
@@ -1028,8 +1153,9 @@ impl GroupConsumer {
                 .parts
                 .iter()
                 .filter(|(_, part)| {
-                    part.revoking
-                        .is_some_and(|since| part.pending.is_empty() || since.elapsed() >= REVOKE_TIMEOUT)
+                    part.revoking.is_some_and(|since| {
+                        part.pending.is_empty() || since.elapsed() >= REVOKE_TIMEOUT
+                    })
                 })
                 .map(|(key, _)| key.clone())
                 .collect()
@@ -1063,7 +1189,9 @@ impl GroupConsumer {
                 .parts
                 .iter()
                 .filter(|(_, part)| part.revoking.is_none())
-                .map(|((topic, partition), part)| (topic.clone(), *partition, part.position, part.generation))
+                .map(|((topic, partition), part)| {
+                    (topic.clone(), *partition, part.position, part.generation)
+                })
                 .collect();
             if positions.is_empty() {
                 tokio::select! {
@@ -1082,7 +1210,8 @@ impl GroupConsumer {
                         if !self.take(&topic, partition, generation, record.offset) {
                             continue;
                         }
-                        let Some(delivery) = self.delivery(&topic, partition, generation, &record) else {
+                        let Some(delivery) = self.delivery(&topic, partition, generation, &record)
+                        else {
                             continue;
                         };
                         match delivery {
@@ -1098,7 +1227,10 @@ impl GroupConsumer {
                             Handout::At(due, delivery) => {
                                 let deliveries = self.deliveries.clone();
                                 tokio::spawn(async move {
-                                    tokio::time::sleep(due.saturating_duration_since(Instant::now())).await;
+                                    tokio::time::sleep(
+                                        due.saturating_duration_since(Instant::now()),
+                                    )
+                                    .await;
                                     let _ = deliveries.send(delivery).await;
                                 });
                             }
@@ -1118,11 +1250,17 @@ impl GroupConsumer {
     }
 
     /// One fetch from every leader at once.
-    async fn fetch_round(&self, positions: &[(String, i32, i64, u64)]) -> Result<Vec<(String, i32, u64, InRecord)>, MicroError> {
+    async fn fetch_round(
+        &self,
+        positions: &[(String, i32, i64, u64)],
+    ) -> Result<Vec<(String, i32, u64, InRecord)>, MicroError> {
         let mut by_leader: HashMap<i32, Vec<(String, i32, i64)>> = HashMap::new();
         for (topic, partition, offset, _) in positions {
             let (leader, _) = self.cluster.leader(topic, *partition).await?;
-            by_leader.entry(leader).or_default().push((topic.clone(), *partition, *offset));
+            by_leader
+                .entry(leader)
+                .or_default()
+                .push((topic.clone(), *partition, *offset));
         }
         let fetches = by_leader
             .into_iter()
@@ -1139,7 +1277,10 @@ impl GroupConsumer {
                 let name = topic.topic.0.to_string();
                 for partition in topic.partitions {
                     let index = partition.partition_index;
-                    let Some((_, _, from, generation)) = positions.iter().find(|(t, p, _, _)| *t == name && *p == index) else {
+                    let Some((_, _, from, generation)) = positions
+                        .iter()
+                        .find(|(t, p, _, _)| *t == name && *p == index)
+                    else {
                         continue;
                     };
                     match partition.error_code {
@@ -1152,7 +1293,8 @@ impl GroupConsumer {
                                 .get(&index)
                                 .copied()
                                 .unwrap_or(0);
-                            if let Some(part) = lock(&self.state).parts.get_mut(&(name.clone(), index))
+                            if let Some(part) =
+                                lock(&self.state).parts.get_mut(&(name.clone(), index))
                                 && part.generation == *generation
                             {
                                 part.position = reset;
@@ -1178,7 +1320,11 @@ impl GroupConsumer {
     fn take(&self, topic: &str, partition: i32, generation: u64, offset: i64) -> bool {
         let mut state = lock(&self.state);
         match state.parts.get_mut(&(topic.to_owned(), partition)) {
-            Some(part) if part.generation == generation && part.revoking.is_none() && offset >= part.position => {
+            Some(part)
+                if part.generation == generation
+                    && part.revoking.is_none()
+                    && offset >= part.position =>
+            {
                 part.pending.insert(offset);
                 part.position = offset + 1;
                 true
@@ -1198,7 +1344,13 @@ impl GroupConsumer {
     }
 
     /// The delivery of a record, now or (a retried event) when it is due.
-    fn delivery(self: &Arc<Self>, topic: &str, partition: i32, generation: u64, record: &InRecord) -> Option<Handout> {
+    fn delivery(
+        self: &Arc<Self>,
+        topic: &str,
+        partition: i32,
+        generation: u64,
+        record: &InRecord,
+    ) -> Option<Handout> {
         let envelope = from_record(topic, record);
         let handle = Handle {
             group: self.clone(),
@@ -1220,14 +1372,19 @@ impl GroupConsumer {
                 .and_then(|due| due.parse::<i64>().ok())
                 .map(|due| due - crate::envelope::now_millis())
                 .filter(|left| *left > 0)
-                .map_or_else(Instant::now, |left| Instant::now() + Duration::from_millis(u64::try_from(left).unwrap_or(0)));
+                .map_or_else(Instant::now, |left| {
+                    Instant::now() + Duration::from_millis(u64::try_from(left).unwrap_or(0))
+                });
             let actions = EventActions {
                 handle,
                 envelope: envelope.clone(),
                 attempt,
                 retry_topic: self.retry_topic.clone(),
             };
-            return Some(Handout::At(due, Delivery::new(envelope, index, attempt, actions)));
+            return Some(Handout::At(
+                due,
+                Delivery::new(envelope, index, attempt, actions),
+            ));
         }
         let Some(&(index, kind)) = self.by_topic.get(topic) else {
             handle.done();
@@ -1272,7 +1429,8 @@ struct Handle {
 
 impl Handle {
     fn done(&self) {
-        self.group.done(&self.topic, self.partition, self.generation, self.offset);
+        self.group
+            .done(&self.topic, self.partition, self.generation, self.offset);
     }
 }
 
@@ -1298,16 +1456,25 @@ impl DeliveryActions for EventActions {
             };
             let mut envelope = self.envelope.clone();
             envelope.set_header(headers::ATTEMPT, (self.attempt + 1).to_string());
-            let due = crate::envelope::now_millis().saturating_add(i64::try_from(delay.as_millis()).unwrap_or(i64::MAX));
+            let due = crate::envelope::now_millis()
+                .saturating_add(i64::try_from(delay.as_millis()).unwrap_or(i64::MAX));
             envelope.set_header(DUE, due.to_string());
-            match self.handle.group.cluster.produce(retry_topic, out_record(&envelope)).await {
+            match self
+                .handle
+                .group
+                .cluster
+                .produce(retry_topic, out_record(&envelope))
+                .await
+            {
                 Ok(_) => {
                     self.handle.done();
                     Ok(())
                 }
                 // Left pending: it comes back after a restart or a
                 // rebalance rather than being lost.
-                Err(ProduceError::NoTopic) => Err(MicroError::transport(format!("the retry topic {retry_topic} does not exist"))),
+                Err(ProduceError::NoTopic) => Err(MicroError::transport(format!(
+                    "the retry topic {retry_topic} does not exist"
+                ))),
                 Err(ProduceError::Failed(error)) => Err(error),
             }
         })
@@ -1337,9 +1504,17 @@ impl DeliveryActions for RequestActions {
     fn reply(self: Box<Self>, reply: Envelope) -> BoxFuture<'static, Result<(), MicroError>> {
         Box::pin(async move {
             let outcome = match &self.reply_to {
-                Some(topic) => match self.handle.group.cluster.produce(topic, out_record(&reply)).await {
+                Some(topic) => match self
+                    .handle
+                    .group
+                    .cluster
+                    .produce(topic, out_record(&reply))
+                    .await
+                {
                     Ok(_) => Ok(()),
-                    Err(ProduceError::NoTopic) => Err(MicroError::transport(format!("the reply topic {topic} does not exist"))),
+                    Err(ProduceError::NoTopic) => Err(MicroError::transport(format!(
+                        "the reply topic {topic} does not exist"
+                    ))),
                     Err(ProduceError::Failed(error)) => Err(error),
                 },
                 None => Ok(()),
@@ -1410,7 +1585,14 @@ mod tests {
     #[test]
     fn settings_are_checked() {
         let options = KafkaOptions::default();
-        let transport = KafkaTransport::new(" kafka-1:9092, kafka://kafka-2:9092 ", &options, "deals", "deals-1", Duration::from_secs(1)).unwrap();
+        let transport = KafkaTransport::new(
+            " kafka-1:9092, kafka://kafka-2:9092 ",
+            &options,
+            "deals",
+            "deals-1",
+            Duration::from_secs(1),
+        )
+        .unwrap();
         assert_eq!(transport.brokers, ["kafka-1:9092", "kafka-2:9092"]);
         assert_eq!(transport.retry_topic(), "deals.retry");
         assert_eq!(transport.dead_topic(), "deals.dead");
@@ -1421,8 +1603,12 @@ mod tests {
             start_from: "middle".into(),
             ..KafkaOptions::default()
         };
-        let error = KafkaTransport::new("k:9092", &bad, "s", "s-1", Duration::from_secs(1)).unwrap_err();
-        assert!(error.to_string().contains("micro.kafka.start_from"), "{error}");
+        let error =
+            KafkaTransport::new("k:9092", &bad, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        assert!(
+            error.to_string().contains("micro.kafka.start_from"),
+            "{error}"
+        );
         let sasl = KafkaOptions {
             sasl: Some(crate::SaslOptions {
                 mechanism: "GSSAPI".into(),
@@ -1431,7 +1617,11 @@ mod tests {
             }),
             ..KafkaOptions::default()
         };
-        let error = KafkaTransport::new("k:9092", &sasl, "s", "s-1", Duration::from_secs(1)).unwrap_err();
-        assert!(error.to_string().contains("micro.kafka.sasl.mechanism"), "{error}");
+        let error =
+            KafkaTransport::new("k:9092", &sasl, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        assert!(
+            error.to_string().contains("micro.kafka.sasl.mechanism"),
+            "{error}"
+        );
     }
 }

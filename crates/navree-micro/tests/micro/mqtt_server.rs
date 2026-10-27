@@ -60,7 +60,12 @@ impl MiniMqtt {
                 tokio::spawn(serve(stream, shared.clone(), stopping.clone()));
             }
         });
-        MiniMqtt { addr, task, state, stop }
+        MiniMqtt {
+            addr,
+            task,
+            state,
+            stop,
+        }
     }
 
     /// `mqtt://127.0.0.1:<port>`.
@@ -75,7 +80,13 @@ impl MiniMqtt {
 
     /// The client ids connected now.
     pub fn clients(&self) -> Vec<String> {
-        self.state.clients.lock().unwrap().values().cloned().collect()
+        self.state
+            .clients
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect()
     }
 }
 
@@ -129,7 +140,10 @@ impl State {
         let mut groups: HashMap<String, Vec<&Sub>> = HashMap::new();
         for sub in subs.iter().filter(|sub| matches(&sub.filter, &topic)) {
             match &sub.group {
-                Some(group) => groups.entry(format!("{group}|{}", sub.filter)).or_default().push(sub),
+                Some(group) => groups
+                    .entry(format!("{group}|{}", sub.filter))
+                    .or_default()
+                    .push(sub),
                 None => chosen.push(sub),
             }
         }

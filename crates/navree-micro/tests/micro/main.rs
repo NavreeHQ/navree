@@ -7,10 +7,6 @@ mod services;
 mod support;
 mod transports;
 
-#[cfg(feature = "nats")]
-mod nats;
-#[cfg(feature = "nats")]
-mod nats_server;
 #[cfg(feature = "kafka")]
 mod kafka;
 #[cfg(feature = "kafka")]
@@ -19,6 +15,10 @@ mod kafka_server;
 mod mqtt;
 #[cfg(feature = "mqtt")]
 mod mqtt_server;
+#[cfg(feature = "nats")]
+mod nats;
+#[cfg(feature = "nats")]
+mod nats_server;
 #[cfg(feature = "rabbitmq")]
 mod rabbitmq;
 #[cfg(feature = "redis")]

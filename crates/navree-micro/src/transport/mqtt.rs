@@ -36,7 +36,12 @@ use crate::{
 };
 
 /// The URL schemes: `mqtt://` (1883) and `mqtts://` (TLS, 8883).
-const SCHEMES: &[(&str, bool, u16)] = &[("mqtt", false, 1883), ("mqtts", true, 8883), ("ssl", true, 8883), ("tcp", false, 1883)];
+const SCHEMES: &[(&str, bool, u16)] = &[
+    ("mqtt", false, 1883),
+    ("mqtts", true, 8883),
+    ("ssl", true, 8883),
+    ("tcp", false, 1883),
+];
 
 /// Unacknowledged messages the broker may send this client at once.
 const RECEIVE_MAXIMUM: u16 = 256;
@@ -129,7 +134,10 @@ impl MqttTransport {
         }
         let wants_tls = url.tls || options.tls.ca.is_some() || options.tls.cert.is_some();
         let tls = if wants_tls {
-            Some(TlsConnector::from(client_config(&options.tls, "micro.mqtt")?))
+            Some(TlsConnector::from(client_config(
+                &options.tls,
+                "micro.mqtt",
+            )?))
         } else {
             None
         };
@@ -159,7 +167,10 @@ impl MqttTransport {
 
     /// This instance's reply topic.
     fn reply_topic(&self) -> String {
-        join(&self.settings.prefix, &format!("replies/{}", self.settings.client_id))
+        join(
+            &self.settings.prefix,
+            &format!("replies/{}", self.settings.client_id),
+        )
     }
 
     /// The session, connected (or failing at once while the broker is
@@ -232,7 +243,9 @@ impl MicroTransport for MqttTransport {
                 }
                 Ok(reason) => {
                     forget();
-                    return Err(MicroError::transport(format!("the MQTT broker refused the request: {reason:?}")));
+                    return Err(MicroError::transport(format!(
+                        "the MQTT broker refused the request: {reason:?}"
+                    )));
                 }
                 Err(Unacknowledged) if wait.is_some() => {
                     forget();
@@ -243,11 +256,15 @@ impl MicroTransport for MqttTransport {
                 }
                 Err(Unacknowledged) => {
                     forget();
-                    return Err(MicroError::transport("the MQTT broker did not acknowledge the request"));
+                    return Err(MicroError::transport(
+                        "the MQTT broker did not acknowledge the request",
+                    ));
                 }
             }
             let outcome = match wait {
-                Some(wait) => tokio::time::timeout(wait.saturating_sub(started.elapsed()), reply).await.ok(),
+                Some(wait) => tokio::time::timeout(wait.saturating_sub(started.elapsed()), reply)
+                    .await
+                    .ok(),
                 None => Some(reply.await),
             };
             match outcome {
@@ -270,8 +287,12 @@ impl MicroTransport for MqttTransport {
             let publish = to_publish(&self.topic(envelope.pattern()), &envelope, None, None, None);
             match session.publish(publish, ACK_TIMEOUT).await {
                 Ok(PubAckReason::Success | PubAckReason::NoMatchingSubscribers) => Ok(()),
-                Ok(reason) => Err(MicroError::transport(format!("the MQTT broker refused the event: {reason:?}"))),
-                Err(Unacknowledged) => Err(MicroError::transport("the MQTT broker did not acknowledge the event")),
+                Ok(reason) => Err(MicroError::transport(format!(
+                    "the MQTT broker refused the event: {reason:?}"
+                ))),
+                Err(Unacknowledged) => Err(MicroError::transport(
+                    "the MQTT broker did not acknowledge the event",
+                )),
             }
         })
     }
@@ -322,7 +343,13 @@ impl MicroTransport for MqttTransport {
                 let Some(publish) = publish else {
                     break;
                 };
-                let Some(delivery) = deliver(&session, &entries, &self.settings.prefix, publish, &deliveries) else {
+                let Some(delivery) = deliver(
+                    &session,
+                    &entries,
+                    &self.settings.prefix,
+                    publish,
+                    &deliveries,
+                ) else {
                     continue;
                 };
                 if deliveries.send(delivery).await.is_err() {
@@ -337,8 +364,15 @@ impl MicroTransport for MqttTransport {
         })
     }
 
-    fn setup(&self, _subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
-        Box::pin(async { Ok(vec!["topics need no declaration: nothing to set up".to_owned()]) })
+    fn setup(
+        &self,
+        _subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+        Box::pin(async {
+            Ok(vec![
+                "topics need no declaration: nothing to set up".to_owned(),
+            ])
+        })
     }
 
     fn is_connected(&self) -> bool {
@@ -355,10 +389,17 @@ impl MicroTransport for MqttTransport {
                 &self.settings.prefix,
                 &format!("dead/{}/{}", letter.service, topic("", &letter.pattern)),
             );
-            match session.publish(to_publish(&topic, &envelope, None, None, None), ACK_TIMEOUT).await {
+            match session
+                .publish(to_publish(&topic, &envelope, None, None, None), ACK_TIMEOUT)
+                .await
+            {
                 Ok(PubAckReason::Success | PubAckReason::NoMatchingSubscribers) => Ok(()),
-                Ok(reason) => Err(MicroError::transport(format!("the MQTT broker refused the dead letter: {reason:?}"))),
-                Err(Unacknowledged) => Err(MicroError::transport("the MQTT broker did not acknowledge the dead letter")),
+                Ok(reason) => Err(MicroError::transport(format!(
+                    "the MQTT broker refused the dead letter: {reason:?}"
+                ))),
+                Err(Unacknowledged) => Err(MicroError::transport(
+                    "the MQTT broker did not acknowledge the dead letter",
+                )),
             }
         })
     }
@@ -432,7 +473,9 @@ impl State {
     fn next_pkid(&mut self) -> u16 {
         loop {
             self.last_pkid = self.last_pkid.wrapping_add(1).max(1);
-            if !self.inflight.contains_key(&self.last_pkid) && !self.subacks.contains_key(&self.last_pkid) {
+            if !self.inflight.contains_key(&self.last_pkid)
+                && !self.subacks.contains_key(&self.last_pkid)
+            {
                 return self.last_pkid;
             }
         }
@@ -475,7 +518,9 @@ impl Session {
     async fn connected(&self, wait: Duration) -> Result<(), MicroError> {
         let mut status = self.status.subscribe();
         let _ = tokio::time::timeout(wait, async {
-            let _ = status.wait_for(|status| *status != Status::Connecting).await;
+            let _ = status
+                .wait_for(|status| *status != Status::Connecting)
+                .await;
         })
         .await;
         let current = status.borrow().clone();
@@ -490,7 +535,11 @@ impl Session {
 
     /// Publishes with QoS 1 and waits for the broker's PUBACK, up to
     /// `limit`. Resent on reconnect until acknowledged or given up.
-    async fn publish(&self, mut publish: Publish, limit: Duration) -> Result<PubAckReason, Unacknowledged> {
+    async fn publish(
+        &self,
+        mut publish: Publish,
+        limit: Duration,
+    ) -> Result<PubAckReason, Unacknowledged> {
         let (sender, ack) = oneshot::channel();
         let pkid = {
             let mut state = self.lock();
@@ -538,8 +587,16 @@ impl Session {
         }
         let ack = tokio::time::timeout(ACK_TIMEOUT, ack)
             .await
-            .map_err(|_| MicroError::transport(format!("the MQTT broker did not acknowledge the subscription to {path}")))?
-            .map_err(|_| MicroError::transport(format!("the connection closed before the subscription to {path}")))?;
+            .map_err(|_| {
+                MicroError::transport(format!(
+                    "the MQTT broker did not acknowledge the subscription to {path}"
+                ))
+            })?
+            .map_err(|_| {
+                MicroError::transport(format!(
+                    "the connection closed before the subscription to {path}"
+                ))
+            })?;
         match ack.return_codes.first() {
             Some(SubscribeReasonCode::Success(_)) => Ok(()),
             other => Err(MicroError::transport(format!(
@@ -705,7 +762,9 @@ async fn run(session: Arc<Session>, settings: Arc<Settings>, closed: Cancellatio
                 session.on_connected(writer, ack.session_present);
                 tracing::debug!(target: "navree::micro", session = id, client_id = %settings.client_id, "connected to the MQTT broker");
                 let reason = serve(&session, connection, outgoing, &settings, &closed).await;
-                session.on_disconnected(format!("the connection to the MQTT broker was lost: {reason}"));
+                session.on_disconnected(format!(
+                    "the connection to the MQTT broker was lost: {reason}"
+                ));
                 if closed.is_cancelled() {
                     return;
                 }
@@ -728,20 +787,22 @@ async fn run(session: Arc<Session>, settings: Arc<Settings>, closed: Cancellatio
 async fn connect(settings: &Settings) -> Result<(Connection, ConnAck), MicroError> {
     let address = settings.url.address();
     let connecting = async {
-        let tcp = TcpStream::connect(&address)
-            .await
-            .map_err(|error| MicroError::transport(format!("cannot connect to the MQTT broker at {address}: {error}")))?;
+        let tcp = TcpStream::connect(&address).await.map_err(|error| {
+            MicroError::transport(format!(
+                "cannot connect to the MQTT broker at {address}: {error}"
+            ))
+        })?;
         let _ = tcp.set_nodelay(true);
         let io: Box<dyn Io> = match &settings.tls {
             Some(connector) => {
-                let name = ServerName::try_from(settings.url.host.clone())
-                    .map_err(|error| MicroError::transport(format!("bad TLS server name: {error}")))?;
-                Box::new(
-                    connector
-                        .connect(name, tcp)
-                        .await
-                        .map_err(|error| MicroError::transport(format!("the TLS handshake with {address} failed: {error}")))?,
-                )
+                let name = ServerName::try_from(settings.url.host.clone()).map_err(|error| {
+                    MicroError::transport(format!("bad TLS server name: {error}"))
+                })?;
+                Box::new(connector.connect(name, tcp).await.map_err(|error| {
+                    MicroError::transport(format!(
+                        "the TLS handshake with {address} failed: {error}"
+                    ))
+                })?)
             }
             None => Box::new(tcp),
         };
@@ -762,16 +823,22 @@ async fn connect(settings: &Settings) -> Result<(Connection, ConnAck), MicroErro
                 ..ConnectProperties::new()
             }),
         };
-        let login = settings
-            .username
-            .as_ref()
-            .map(|username| Login::new(username.clone(), settings.password.clone().unwrap_or_default()));
+        let login = settings.username.as_ref().map(|username| {
+            Login::new(
+                username.clone(),
+                settings.password.clone().unwrap_or_default(),
+            )
+        });
         connection
             .send(Packet::Connect(connect, None, login))
             .await
-            .map_err(|error| MicroError::transport(format!("cannot send CONNECT to {address}: {error}")))?;
+            .map_err(|error| {
+                MicroError::transport(format!("cannot send CONNECT to {address}: {error}"))
+            })?;
         match connection.next().await {
-            Some(Ok(Packet::ConnAck(ack))) if ack.code == ConnectReturnCode::Success => Ok((connection, ack)),
+            Some(Ok(Packet::ConnAck(ack))) if ack.code == ConnectReturnCode::Success => {
+                Ok((connection, ack))
+            }
             Some(Ok(Packet::ConnAck(ack))) => Err(MicroError::transport(format!(
                 "the MQTT broker at {address} refused the connection: {:?}",
                 ack.code
@@ -779,8 +846,12 @@ async fn connect(settings: &Settings) -> Result<(Connection, ConnAck), MicroErro
             Some(Ok(other)) => Err(MicroError::transport(format!(
                 "the MQTT broker at {address} answered CONNECT with {other:?}"
             ))),
-            Some(Err(error)) => Err(MicroError::transport(format!("reading CONNACK from {address} failed: {error}"))),
-            None => Err(MicroError::transport(format!("the MQTT broker at {address} closed the connection"))),
+            Some(Err(error)) => Err(MicroError::transport(format!(
+                "reading CONNACK from {address} failed: {error}"
+            ))),
+            None => Err(MicroError::transport(format!(
+                "the MQTT broker at {address} closed the connection"
+            ))),
         }
     };
     match tokio::time::timeout(settings.connect_timeout, connecting).await {
@@ -865,7 +936,11 @@ fn deliver(
     let entry = identifiers
         .iter()
         .find_map(|id| entries.iter().find(|entry| entry.index + 1 == *id))
-        .or_else(|| entries.iter().find(|entry| filter_matches(&entry.topic, &topic)));
+        .or_else(|| {
+            entries
+                .iter()
+                .find(|entry| filter_matches(&entry.topic, &topic))
+        });
     let Some(entry) = entry else {
         // Not ours any more: acknowledge so the broker stops resending it.
         session.ack(publish.pkid);
@@ -873,7 +948,11 @@ fn deliver(
     };
     let envelope = from_publish(prefix, &publish);
     let attempt = if publish.dup { 2 } else { 1 };
-    let pkid = if publish.qos == QoS::AtMostOnce { 0 } else { publish.pkid };
+    let pkid = if publish.qos == QoS::AtMostOnce {
+        0
+    } else {
+        publish.pkid
+    };
     Some(match (entry.kind, entry.broadcast) {
         (PatternKind::Event, true) => {
             session.ack(pkid);
@@ -931,7 +1010,9 @@ impl DeliveryActions for EventActions {
             let actions = EventActions { attempt, ..this };
             // A stopped listener drops it: the broker sends it again to
             // the resumed session or another instance.
-            let _ = deliveries.send(Delivery::new(envelope, index, attempt, actions)).await;
+            let _ = deliveries
+                .send(Delivery::new(envelope, index, attempt, actions))
+                .await;
         });
         Box::pin(async { Ok(()) })
     }
@@ -967,7 +1048,9 @@ impl DeliveryActions for RequestActions {
                     let publish = to_publish(topic, &reply, None, self.correlation.clone(), None);
                     match self.session.publish(publish, ACK_TIMEOUT).await {
                         Ok(_) => Ok(()),
-                        Err(Unacknowledged) => Err(MicroError::transport("the MQTT broker did not acknowledge the reply")),
+                        Err(Unacknowledged) => Err(MicroError::transport(
+                            "the MQTT broker did not acknowledge the reply",
+                        )),
                     }
                 }
                 None => Ok(()),
@@ -1051,7 +1134,12 @@ fn to_publish(
         message_expiry_interval: expiry,
         ..PublishProperties::default()
     };
-    Publish::new(topic, QoS::AtLeastOnce, envelope.payload().clone(), Some(properties))
+    Publish::new(
+        topic,
+        QoS::AtLeastOnce,
+        envelope.payload().clone(),
+        Some(properties),
+    )
 }
 
 /// The envelope of a publish: user properties are headers; the pattern is
@@ -1107,24 +1195,46 @@ mod tests {
         let envelope = Envelope::new("deal.won", "{}")
             .with_header(headers::MESSAGE_ID, "m1")
             .with_header(headers::CONTENT_TYPE, "application/msgpack");
-        let publish = to_publish("navree/deal/won", &envelope, Some("navree/replies/x".into()), Some(Bytes::from_static(b"c")), Some(5));
+        let publish = to_publish(
+            "navree/deal/won",
+            &envelope,
+            Some("navree/replies/x".into()),
+            Some(Bytes::from_static(b"c")),
+            Some(5),
+        );
         assert_eq!(publish.qos, QoS::AtLeastOnce);
         let properties = publish.properties.clone().unwrap();
-        assert_eq!(properties.content_type.as_deref(), Some("application/msgpack"));
-        assert_eq!(properties.response_topic.as_deref(), Some("navree/replies/x"));
+        assert_eq!(
+            properties.content_type.as_deref(),
+            Some("application/msgpack")
+        );
+        assert_eq!(
+            properties.response_topic.as_deref(),
+            Some("navree/replies/x")
+        );
         assert_eq!(properties.message_expiry_interval, Some(5));
         let back = from_publish("navree", &publish);
         assert_eq!(back.pattern(), "deal.won");
         assert_eq!(back.message_id(), Some("m1"));
         assert_eq!(back.content_type(), "application/msgpack");
-        let bare = from_publish("navree", &Publish::new("navree/deal/lost", QoS::AtLeastOnce, "x", None));
+        let bare = from_publish(
+            "navree",
+            &Publish::new("navree/deal/lost", QoS::AtLeastOnce, "x", None),
+        );
         assert_eq!(bare.pattern(), "deal.lost");
     }
 
     #[test]
     fn settings_are_checked() {
         let options = MqttOptions::default();
-        let transport = MqttTransport::new("mqtt://u:secret@127.0.0.1", &options, "deals", "deals-1", Duration::from_secs(1)).unwrap();
+        let transport = MqttTransport::new(
+            "mqtt://u:secret@127.0.0.1",
+            &options,
+            "deals",
+            "deals-1",
+            Duration::from_secs(1),
+        )
+        .unwrap();
         assert_eq!(transport.settings.url.address(), "127.0.0.1:1883");
         assert_eq!(transport.settings.client_id, "deals-1");
         assert_eq!(transport.settings.username.as_deref(), Some("u"));
@@ -1134,9 +1244,14 @@ mod tests {
             client_id: Some("a/b".into()),
             ..MqttOptions::default()
         };
-        let error = MqttTransport::new("mqtt://x", &bad, "s", "s-1", Duration::from_secs(1)).unwrap_err();
-        assert!(error.to_string().contains("micro.mqtt.client_id"), "{error}");
-        let error = MqttTransport::new("amqp://x", &options, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error =
+            MqttTransport::new("mqtt://x", &bad, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        assert!(
+            error.to_string().contains("micro.mqtt.client_id"),
+            "{error}"
+        );
+        let error = MqttTransport::new("amqp://x", &options, "s", "s-1", Duration::from_secs(1))
+            .unwrap_err();
         assert!(error.to_string().contains("mqtt://"), "{error}");
     }
 

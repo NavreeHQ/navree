@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use garde::Validate;
 use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules,
-    Subject, UPDATE, Update, field,
+    AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
+    UPDATE, Update, field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
@@ -90,7 +90,9 @@ impl MigrationTrait for CreateTables {
 
     async fn down(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
         for table in ["notes", "deals"] {
-            manager.drop_table(Table::drop().table(table).to_owned()).await?;
+            manager
+                .drop_table(Table::drop().table(table).to_owned())
+                .await?;
         }
         Ok(())
     }
@@ -165,12 +167,21 @@ pub struct NewNote {
 pub struct InternalOnly;
 
 impl Guard for InternalOnly {
-    fn check<'a>(&'a self, parts: &'a mut http::request::Parts) -> BoxFuture<'a, Result<(), AppError>> {
+    fn check<'a>(
+        &'a self,
+        parts: &'a mut http::request::Parts,
+    ) -> BoxFuture<'a, Result<(), AppError>> {
         let ok = parts
             .headers
             .get("x-service-key")
             .is_some_and(|value| value == "s3cret");
-        Box::pin(async move { if ok { Ok(()) } else { Err(AppError::forbidden()) } })
+        Box::pin(async move {
+            if ok {
+                Ok(())
+            } else {
+                Err(AppError::forbidden())
+            }
+        })
     }
 }
 
@@ -228,7 +239,11 @@ impl DealsHandlers {
     /// stored reply.
     #[message_pattern("notes.add", dedupe)]
     #[public]
-    async fn add_note(&self, uow: Uow, Valid(Payload(note)): Valid<Payload<NewNote>>) -> Result<Value> {
+    async fn add_note(
+        &self,
+        uow: Uow,
+        Valid(Payload(note)): Valid<Payload<NewNote>>,
+    ) -> Result<Value> {
         insert_note(&uow, &note.body).await?;
         Ok(json!({ "notes": count_notes(&uow).await? }))
     }
@@ -344,7 +359,12 @@ pub async fn notes(app: &TestApp) -> Vec<(String, Option<String>)> {
         .await
         .expect("notes")
         .iter()
-        .map(|row| (row.try_get("", "body").unwrap(), row.try_get("", "actor").unwrap()))
+        .map(|row| {
+            (
+                row.try_get("", "body").unwrap(),
+                row.try_get("", "actor").unwrap(),
+            )
+        })
         .collect()
 }
 
@@ -366,7 +386,12 @@ pub struct RecordingAudit(Arc<Mutex<Vec<AuditEntry>>>);
 
 impl RecordingAudit {
     pub fn actions(&self) -> Vec<String> {
-        self.0.lock().unwrap().iter().map(|e| e.action.clone()).collect()
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|e| e.action.clone())
+            .collect()
     }
 
     pub fn entries(&self) -> Vec<AuditEntry> {
@@ -400,7 +425,10 @@ pub async fn give_role(app: &TestApp, user: Uuid, role: &str, permissions: &[&st
     let service = app.get::<AccessService>().await;
     let uow = db.uow(None, None).await;
     if service.role(role).await.expect("role").is_none() {
-        service.create_role(&uow, role, None).await.expect("create role");
+        service
+            .create_role(&uow, role, None)
+            .await
+            .expect("create role");
     }
     for permission in permissions {
         service.grant(&uow, role, permission).await.expect("grant");

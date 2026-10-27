@@ -18,8 +18,8 @@ use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_telemetry::{TelemetryContext, TraceContext};
 use uuid::Uuid;
 
-use crate::envelope::headers;
 use crate::PatternKind;
+use crate::envelope::headers;
 
 /// What a handler knows about the message it handles: the pattern, the
 /// message id, the sending service, the deadline, the headers, the actor
@@ -119,7 +119,9 @@ impl<S: Send + Sync> FromRequestParts<S> for MessageContext {
             .extensions
             .get::<MessageContext>()
             .cloned()
-            .ok_or_else(|| AppError::internal("MessageContext is only available in message handlers"))
+            .ok_or_else(|| {
+                AppError::internal("MessageContext is only available in message handlers")
+            })
     }
 }
 
@@ -176,7 +178,10 @@ impl CallContext {
             .flatten()
             .or_else(|| {
                 header(headers::TRACEPARENT).and_then(|traceparent| {
-                    TraceContext::continue_from(&traceparent, header(headers::TRACESTATE).as_deref())
+                    TraceContext::continue_from(
+                        &traceparent,
+                        header(headers::TRACESTATE).as_deref(),
+                    )
                 })
             });
         CallContext {
@@ -212,9 +217,11 @@ impl Drop for InFlight {
 /// The HTTP layer that makes the current request's context available to
 /// `ServiceClient` (the `AuthContext` slot, after authentication).
 pub(crate) fn http_context_layer() -> GlobalLayer {
-    GlobalLayer::new(LayerSlot::AuthContext, MICRO_CONTEXT_LAYER, |_ctx, router| {
-        Ok(router.layer(from_fn(http_context)))
-    })
+    GlobalLayer::new(
+        LayerSlot::AuthContext,
+        MICRO_CONTEXT_LAYER,
+        |_ctx, router| Ok(router.layer(from_fn(http_context))),
+    )
 }
 
 /// The name of [`http_context_layer`]; the message pipeline skips it.
@@ -246,7 +253,10 @@ mod tests {
         let user = Uuid::now_v7();
         let mut request = http::Request::builder()
             .header("authorization", "Bearer t0k3n")
-            .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+            .header(
+                "traceparent",
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            )
             .header("x-workspace", "acme")
             .body(())
             .unwrap();
@@ -264,7 +274,10 @@ mod tests {
         assert_eq!(context.authorization.as_deref(), Some("Bearer t0k3n"));
         assert_eq!(context.request_id.as_deref(), Some("req-1"));
         let trace = context.trace.unwrap();
-        assert_eq!(trace.trace_id.to_string(), "4bf92f3577b34da6a3ce929d0e0e4736");
+        assert_eq!(
+            trace.trace_id.to_string(),
+            "4bf92f3577b34da6a3ce929d0e0e4736"
+        );
         assert_eq!(
             trace.parent_span_id.map(|span| span.to_string()).as_deref(),
             Some("00f067aa0ba902b7"),
@@ -277,12 +290,16 @@ mod tests {
     #[test]
     fn the_telemetry_context_trace_wins_over_the_header() {
         let request = http::Request::builder()
-            .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+            .header(
+                "traceparent",
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            )
             .body(())
             .unwrap();
         let (parts, ()) = request.into_parts();
         let span = TraceContext::root(true);
-        let context = TelemetryContext::new(navree_telemetry::Telemetry::disabled()).with_trace(span.clone());
+        let context =
+            TelemetryContext::new(navree_telemetry::Telemetry::disabled()).with_trace(span.clone());
         let call = context.sync_scope(|| CallContext::of_parts(&parts));
         assert_eq!(call.trace, Some(span));
     }

@@ -55,7 +55,11 @@ impl Harness for NatsHarness {
         }
     }
 
-    fn instance<'a>(&'a self, service: &'a str, _patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        service: &'a str,
+        _patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move { self.transport(service) })
     }
 
@@ -89,7 +93,10 @@ async fn two_apps_talk_over_core_nats() {
 
 #[tokio::test]
 async fn a_server_that_is_not_there_fails_the_call_as_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let unused = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
     let transport = NatsTransport::new(
         format!("nats://{unused}"),
         &core_nats(),
@@ -102,7 +109,10 @@ async fn a_server_that_is_not_there_fails_the_call_as_a_transport_error() {
         .publish(navree_micro::Envelope::new("deal.won", "{}"))
         .await
         .unwrap_err();
-    assert!(matches!(error, navree_micro::MicroError::Transport(_)), "{error:?}");
+    assert!(
+        matches!(error, navree_micro::MicroError::Transport(_)),
+        "{error:?}"
+    );
 }
 
 /// JetStream on a real server: `NAVREE_TEST_NATS_URL=nats://127.0.0.1:4222`.

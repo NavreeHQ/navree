@@ -80,13 +80,22 @@ fn matches(filter: &str, subject: &str) -> bool {
 impl State {
     /// Delivers a message to every plain subscriber and one member of each
     /// queue group; returns how many got it.
-    fn route(&self, subject: &str, reply: Option<&str>, headers: Option<&[u8]>, payload: &[u8]) -> usize {
+    fn route(
+        &self,
+        subject: &str,
+        reply: Option<&str>,
+        headers: Option<&[u8]>,
+        payload: &[u8],
+    ) -> usize {
         let mut subs = self.subs.lock().unwrap();
         let mut chosen = Vec::new();
         let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
         for i in (0..subs.len()).filter(|&i| matches(&subs[i].subject, subject)) {
             match &subs[i].queue {
-                Some(queue) => groups.entry(format!("{queue}|{}", subs[i].subject)).or_default().push(i),
+                Some(queue) => groups
+                    .entry(format!("{queue}|{}", subs[i].subject))
+                    .or_default()
+                    .push(i),
                 None => chosen.push(i),
             }
         }
@@ -99,7 +108,11 @@ impl State {
         let mut delivered = 0;
         for i in chosen {
             let sub = &mut subs[i];
-            if sub.out.send(frame(subject, &sub.sid, reply, headers, payload)).is_ok() {
+            if sub
+                .out
+                .send(frame(subject, &sub.sid, reply, headers, payload))
+                .is_ok()
+            {
                 delivered += 1;
             }
             if let Some(left) = &mut sub.left {
@@ -112,16 +125,26 @@ impl State {
 }
 
 /// A MSG or HMSG frame.
-fn frame(subject: &str, sid: &str, reply: Option<&str>, headers: Option<&[u8]>, payload: &[u8]) -> Bytes {
+fn frame(
+    subject: &str,
+    sid: &str,
+    reply: Option<&str>,
+    headers: Option<&[u8]>,
+    payload: &[u8],
+) -> Bytes {
     let mut out = BytesMut::new();
     let reply = reply.map(|r| format!(" {r}")).unwrap_or_default();
     match headers {
         Some(headers) => {
             let total = headers.len() + payload.len();
-            out.put_slice(format!("HMSG {subject} {sid}{reply} {} {total}\r\n", headers.len()).as_bytes());
+            out.put_slice(
+                format!("HMSG {subject} {sid}{reply} {} {total}\r\n", headers.len()).as_bytes(),
+            );
             out.put_slice(headers);
         }
-        None => out.put_slice(format!("MSG {subject} {sid}{reply} {}\r\n", payload.len()).as_bytes()),
+        None => {
+            out.put_slice(format!("MSG {subject} {sid}{reply} {}\r\n", payload.len()).as_bytes())
+        }
     }
     out.put_slice(payload);
     out.put_slice(b"\r\n");
@@ -200,11 +223,21 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Arc<State>) {
                 let with_headers = op.eq_ignore_ascii_case("HPUB");
                 let (subject, reply, header_len, total) = match (with_headers, args.as_slice()) {
                     (false, [subject, size]) => (*subject, None, 0, size.parse().unwrap_or(0)),
-                    (false, [subject, reply, size]) => (*subject, Some(*reply), 0, size.parse().unwrap_or(0)),
-                    (true, [subject, h, t]) => (*subject, None, h.parse().unwrap_or(0), t.parse().unwrap_or(0)),
-                    (true, [subject, reply, h, t]) => {
-                        (*subject, Some(*reply), h.parse().unwrap_or(0), t.parse().unwrap_or(0))
+                    (false, [subject, reply, size]) => {
+                        (*subject, Some(*reply), 0, size.parse().unwrap_or(0))
                     }
+                    (true, [subject, h, t]) => (
+                        *subject,
+                        None,
+                        h.parse().unwrap_or(0),
+                        t.parse().unwrap_or(0),
+                    ),
+                    (true, [subject, reply, h, t]) => (
+                        *subject,
+                        Some(*reply),
+                        h.parse().unwrap_or(0),
+                        t.parse().unwrap_or(0),
+                    ),
                     _ => break,
                 };
                 let mut body = vec![0u8; total + 2];

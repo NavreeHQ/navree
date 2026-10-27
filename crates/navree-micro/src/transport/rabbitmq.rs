@@ -105,7 +105,11 @@ impl RabbitmqTransport {
         connect_timeout: Duration,
     ) -> Result<Self, MicroError> {
         let url = url.into();
-        let scheme = url.split("://").next().unwrap_or_default().to_ascii_lowercase();
+        let scheme = url
+            .split("://")
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         if !matches!(scheme.as_str(), "amqp" | "amqps") || !url.contains("://") {
             return Err(MicroError::transport(format!(
                 "`{}` is not a RabbitMQ URL: expected amqp:// or amqps://",
@@ -119,7 +123,9 @@ impl RabbitmqTransport {
             )));
         }
         if options.exchange.is_empty() {
-            return Err(MicroError::transport("micro.rabbitmq.exchange may not be empty"));
+            return Err(MicroError::transport(
+                "micro.rabbitmq.exchange may not be empty",
+            ));
         }
         let cert_chain = match &options.tls.ca {
             Some(path) => Some(std::fs::read_to_string(path).map_err(|error| {
@@ -168,7 +174,8 @@ impl RabbitmqTransport {
     }
 
     async fn connect(&self) -> Result<Link, MicroError> {
-        let properties = ConnectionProperties::default().with_connection_name(self.instance.clone().into());
+        let properties =
+            ConnectionProperties::default().with_connection_name(self.instance.clone().into());
         let connection = DefaultConnectionBuilder::new()
             .map_err(amqp)?
             .with_uri_str(self.url.clone())
@@ -176,11 +183,19 @@ impl RabbitmqTransport {
             .with_tls_config(self.tls.clone())
             .connect()
             .await
-            .map_err(|error| MicroError::transport(format!("cannot connect to RabbitMQ: {error}")))?;
+            .map_err(|error| {
+                MicroError::transport(format!("cannot connect to RabbitMQ: {error}"))
+            })?;
         let publish = connection.create_channel().await.map_err(amqp)?;
-        publish.confirm_select(ConfirmSelectOptions::default()).await.map_err(amqp)?;
+        publish
+            .confirm_select(ConfirmSelectOptions::default())
+            .await
+            .map_err(amqp)?;
         let request = connection.create_channel().await.map_err(amqp)?;
-        request.confirm_select(ConfirmSelectOptions::default()).await.map_err(amqp)?;
+        request
+            .confirm_select(ConfirmSelectOptions::default())
+            .await
+            .map_err(amqp)?;
         let replies = request
             .basic_consume(
                 DIRECT_REPLY_TO.into(),
@@ -193,7 +208,11 @@ impl RabbitmqTransport {
             )
             .await
             .map_err(amqp)?;
-        tokio::spawn(read_replies(replies, self.replies.clone(), self.closed.clone()));
+        tokio::spawn(read_replies(
+            replies,
+            self.replies.clone(),
+            self.closed.clone(),
+        ));
         Ok(Link {
             connection,
             publish,
@@ -208,7 +227,11 @@ impl RabbitmqTransport {
 
     /// Declares the exchange, and the queues and bindings of
     /// `subscription` (not broadcast); returns what it did.
-    async fn declare(&self, channel: &Channel, subscription: &Subscription) -> Result<Vec<String>, MicroError> {
+    async fn declare(
+        &self,
+        channel: &Channel,
+        subscription: &Subscription,
+    ) -> Result<Vec<String>, MicroError> {
         let mut lines = Vec::new();
         let queue = self.queue(&subscription.pattern);
         let mut arguments = queue_arguments(&self.options.queue_type);
@@ -219,7 +242,10 @@ impl RabbitmqTransport {
             .queue_declare(queue.clone().into(), durable(), arguments)
             .await
             .map_err(|error| declare_error(&queue, &error))?;
-        lines.push(format!("declared queue {queue} ({})", self.options.queue_type));
+        lines.push(format!(
+            "declared queue {queue} ({})",
+            self.options.queue_type
+        ));
         let key = routing_key(&subscription.pattern);
         channel
             .queue_bind(
@@ -231,11 +257,17 @@ impl RabbitmqTransport {
             )
             .await
             .map_err(amqp)?;
-        lines.push(format!("bound queue {queue} to {} with {key}", self.options.exchange));
+        lines.push(format!(
+            "bound queue {queue} to {} with {key}",
+            self.options.exchange
+        ));
         if subscription.kind == PatternKind::Event {
             let retry = format!("{queue}.retry");
             let mut arguments = queue_arguments(&self.options.queue_type);
-            arguments.insert("x-dead-letter-exchange".into(), AMQPValue::LongString("".into()));
+            arguments.insert(
+                "x-dead-letter-exchange".into(),
+                AMQPValue::LongString("".into()),
+            );
             arguments.insert(
                 "x-dead-letter-routing-key".into(),
                 AMQPValue::LongString(queue.clone().into()),
@@ -257,7 +289,12 @@ impl RabbitmqTransport {
         };
         for name in [self.options.exchange.clone(), self.dead_exchange()] {
             channel
-                .exchange_declare(name.clone().into(), ExchangeKind::Topic, options, FieldTable::default())
+                .exchange_declare(
+                    name.clone().into(),
+                    ExchangeKind::Topic,
+                    options,
+                    FieldTable::default(),
+                )
                 .await
                 .map_err(|error| declare_error(&name, &error))?;
         }
@@ -328,11 +365,18 @@ impl RabbitmqTransport {
                 self.declare(&channel, subscription).await?;
                 let queue = self.queue(&subscription.pattern);
                 let consumer = channel
-                    .basic_consume(queue.clone().into(), tag.into(), BasicConsumeOptions::default(), FieldTable::default())
+                    .basic_consume(
+                        queue.clone().into(),
+                        tag.into(),
+                        BasicConsumeOptions::default(),
+                        FieldTable::default(),
+                    )
                     .await
                     .map_err(amqp)?;
                 consumers.push(IndexedConsumer::new(index, consumer));
-                retry_queues.push((subscription.kind == PatternKind::Event).then(|| format!("{queue}.retry")));
+                retry_queues.push(
+                    (subscription.kind == PatternKind::Event).then(|| format!("{queue}.retry")),
+                );
             }
         }
         Ok((channel, consumers, retry_queues))
@@ -453,7 +497,10 @@ impl MicroTransport for RabbitmqTransport {
         Box::pin(async move {
             let mut attempt = 0u32;
             loop {
-                let (channel, mut consumers, retry_queues) = match self.consume(&subscriptions).await {
+                let (channel, mut consumers, retry_queues) = match self
+                    .consume(&subscriptions)
+                    .await
+                {
                     Ok(consuming) => {
                         attempt = 0;
                         consuming
@@ -490,7 +537,16 @@ impl MicroTransport for RabbitmqTransport {
                     let Some(subscription) = subscriptions.get(index) else {
                         continue;
                     };
-                    let delivery = match self.delivery(subscription, index, retry_queues[index].clone(), message, &deliveries).await {
+                    let delivery = match self
+                        .delivery(
+                            subscription,
+                            index,
+                            retry_queues[index].clone(),
+                            message,
+                            &deliveries,
+                        )
+                        .await
+                    {
                         Ok(delivery) => delivery,
                         Err(error) => {
                             tracing::warn!(target: "navree::micro", %error, "a RabbitMQ delivery could not be handed over");
@@ -513,7 +569,10 @@ impl MicroTransport for RabbitmqTransport {
         })
     }
 
-    fn setup(&self, subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+    fn setup(
+        &self,
+        subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
         let durable: Vec<Subscription> = subscriptions
             .iter()
             .filter(|subscription| !subscription.is_broadcast())
@@ -533,7 +592,9 @@ impl MicroTransport for RabbitmqTransport {
 
     fn is_connected(&self) -> bool {
         match self.link.try_lock() {
-            Ok(link) => link.as_ref().is_none_or(|link| link.connection.status().connected()),
+            Ok(link) => link
+                .as_ref()
+                .is_none_or(|link| link.connection.status().connected()),
             Err(_) => true,
         }
     }
@@ -546,7 +607,14 @@ impl MicroTransport for RabbitmqTransport {
             envelope.set_header("navree-attempts", letter.attempts.to_string());
             envelope.set_header("navree-dead-service", letter.service.clone());
             let exchange = self.dead_exchange();
-            publish_confirmed(&link.publish, &exchange, &letter.pattern, &envelope, properties(&envelope)).await
+            publish_confirmed(
+                &link.publish,
+                &exchange,
+                &letter.pattern,
+                &envelope,
+                properties(&envelope),
+            )
+            .await
         })
     }
 
@@ -626,7 +694,11 @@ struct MessageActions {
 impl DeliveryActions for MessageActions {
     fn ack(self: Box<Self>) -> BoxFuture<'static, Result<(), MicroError>> {
         Box::pin(async move {
-            self.message.acker.ack(BasicAckOptions::default()).await.map_err(amqp)?;
+            self.message
+                .acker
+                .ack(BasicAckOptions::default())
+                .await
+                .map_err(amqp)?;
             Ok(())
         })
     }
@@ -635,15 +707,24 @@ impl DeliveryActions for MessageActions {
         Box::pin(async move {
             let Some(retry_queue) = &self.retry_queue else {
                 // A request is answered once.
-                self.message.acker.ack(BasicAckOptions::default()).await.map_err(amqp)?;
+                self.message
+                    .acker
+                    .ack(BasicAckOptions::default())
+                    .await
+                    .map_err(amqp)?;
                 return Ok(());
             };
             let mut envelope = self.envelope.clone();
             envelope.set_header(headers::ATTEMPT, (self.attempt + 1).to_string());
-            let properties = properties(&envelope).with_expiration(delay.as_millis().max(1).to_string().into());
+            let properties =
+                properties(&envelope).with_expiration(delay.as_millis().max(1).to_string().into());
             match publish_confirmed(&self.publish, "", retry_queue, &envelope, properties).await {
                 Ok(()) => {
-                    self.message.acker.ack(BasicAckOptions::default()).await.map_err(amqp)?;
+                    self.message
+                        .acker
+                        .ack(BasicAckOptions::default())
+                        .await
+                        .map_err(amqp)?;
                     Ok(())
                 }
                 Err(error) => {
@@ -673,14 +754,24 @@ impl DeliveryActions for MessageActions {
                         properties = properties.with_correlation_id(correlation);
                     }
                     self.publish
-                        .basic_publish("".into(), to, BasicPublishOptions::default(), reply.payload(), properties)
+                        .basic_publish(
+                            "".into(),
+                            to,
+                            BasicPublishOptions::default(),
+                            reply.payload(),
+                            properties,
+                        )
                         .await
                         .map(|_| ())
                         .map_err(amqp)
                 }
                 None => Ok(()),
             };
-            self.message.acker.ack(BasicAckOptions::default()).await.map_err(amqp)?;
+            self.message
+                .acker
+                .ack(BasicAckOptions::default())
+                .await
+                .map_err(amqp)?;
             outcome
         })
     }
@@ -740,7 +831,10 @@ fn durable() -> QueueDeclareOptions {
 /// `x-queue-type`.
 fn queue_arguments(queue_type: &str) -> FieldTable {
     let mut arguments = FieldTable::default();
-    arguments.insert("x-queue-type".into(), AMQPValue::LongString(queue_type.into()));
+    arguments.insert(
+        "x-queue-type".into(),
+        AMQPValue::LongString(queue_type.into()),
+    );
     arguments
 }
 
@@ -758,7 +852,10 @@ fn routing_key(pattern: &str) -> String {
 fn properties(envelope: &Envelope) -> BasicProperties {
     let mut table = FieldTable::default();
     for (name, value) in envelope.headers() {
-        table.insert(ShortString::from(name.clone()), AMQPValue::LongString(LongString::from(value.clone())));
+        table.insert(
+            ShortString::from(name.clone()),
+            AMQPValue::LongString(LongString::from(value.clone())),
+        );
     }
     let mut properties = BasicProperties::default()
         .with_headers(table)
@@ -844,13 +941,20 @@ mod tests {
             .with_header(headers::CONTENT_TYPE, "application/msgpack");
         let properties = properties(&envelope);
         assert_eq!(properties.delivery_mode(), &Some(2), "persistent");
-        assert_eq!(properties.message_id().as_ref().map(ShortString::as_str), Some("m1"));
+        assert_eq!(
+            properties.message_id().as_ref().map(ShortString::as_str),
+            Some("m1")
+        );
         assert_eq!(
             properties.content_type().as_ref().map(ShortString::as_str),
             Some("application/msgpack")
         );
         let table = properties.headers().clone().unwrap();
-        assert!(table.inner().contains_key(&ShortString::from("navree-pattern")));
+        assert!(
+            table
+                .inner()
+                .contains_key(&ShortString::from("navree-pattern"))
+        );
         assert_eq!(value_text(&AMQPValue::LongLongInt(3)), Some("3".into()));
     }
 
@@ -877,14 +981,20 @@ mod tests {
     #[test]
     fn bad_settings_are_refused() {
         let options = RabbitmqOptions::default();
-        let error = RabbitmqTransport::new("nats://x", &options, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error =
+            RabbitmqTransport::new("nats://x", &options, "s", "s-1", Duration::from_secs(1))
+                .unwrap_err();
         assert!(error.to_string().contains("amqp://"), "{error}");
         let bad = RabbitmqOptions {
             queue_type: "stream".into(),
             ..RabbitmqOptions::default()
         };
-        let error = RabbitmqTransport::new("amqp://x", &bad, "s", "s-1", Duration::from_secs(1)).unwrap_err();
-        assert!(error.to_string().contains("micro.rabbitmq.queue_type"), "{error}");
+        let error = RabbitmqTransport::new("amqp://x", &bad, "s", "s-1", Duration::from_secs(1))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("micro.rabbitmq.queue_type"),
+            "{error}"
+        );
         let missing_ca = RabbitmqOptions {
             tls: crate::TlsOptions {
                 ca: Some("missing-ca.pem".into()),
@@ -892,7 +1002,9 @@ mod tests {
             },
             ..RabbitmqOptions::default()
         };
-        let error = RabbitmqTransport::new("amqps://x", &missing_ca, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error =
+            RabbitmqTransport::new("amqps://x", &missing_ca, "s", "s-1", Duration::from_secs(1))
+                .unwrap_err();
         assert!(error.to_string().contains("missing-ca.pem"), "{error}");
     }
 }

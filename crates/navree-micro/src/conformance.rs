@@ -82,7 +82,10 @@ pub struct Listening {
 
 impl Listening {
     /// Starts `transport` listening to `subscriptions`.
-    pub async fn start(transport: Arc<dyn MicroTransport>, subscriptions: Vec<Subscription>) -> Listening {
+    pub async fn start(
+        transport: Arc<dyn MicroTransport>,
+        subscriptions: Vec<Subscription>,
+    ) -> Listening {
         let (sender, deliveries) = mpsc::channel(64);
         let task = tokio::spawn(async move { transport.listen(subscriptions, sender).await });
         // Give network transports a moment to subscribe.
@@ -92,7 +95,10 @@ impl Listening {
 
     /// The next delivery, within `wait`.
     pub async fn next(&mut self, wait: Duration) -> Option<Delivery> {
-        tokio::time::timeout(wait, self.deliveries.recv()).await.ok().flatten()
+        tokio::time::timeout(wait, self.deliveries.recv())
+            .await
+            .ok()
+            .flatten()
     }
 
     /// Stops listening.
@@ -116,11 +122,19 @@ fn subscription(pattern: &str, kind: PatternKind, group: Group) -> Subscription 
 }
 
 fn message(pattern: &str, service: &str) -> Subscription {
-    subscription(pattern, PatternKind::Message, Group::Service(service.to_owned()))
+    subscription(
+        pattern,
+        PatternKind::Message,
+        Group::Service(service.to_owned()),
+    )
 }
 
 fn event(pattern: &str, service: &str) -> Subscription {
-    subscription(pattern, PatternKind::Event, Group::Service(service.to_owned()))
+    subscription(
+        pattern,
+        PatternKind::Event,
+        Group::Service(service.to_owned()),
+    )
 }
 
 fn request(pattern: &str, payload: &'static str, wait: Duration) -> Envelope {
@@ -149,10 +163,16 @@ pub async fn request_reply(harness: &dyn Harness) {
         let delivery = listening.next(WAIT).await.expect("the request arrives");
         assert_eq!(delivery.subscription(), 0);
         assert_eq!(delivery.envelope().pattern(), "conf-echo.ping");
-        assert_eq!(delivery.envelope().header("x-custom"), Some("kept"), "headers travel");
-        let reply = delivery
-            .envelope()
-            .reply(201, "application/json", delivery.envelope().payload().clone());
+        assert_eq!(
+            delivery.envelope().header("x-custom"),
+            Some("kept"),
+            "headers travel"
+        );
+        let reply = delivery.envelope().reply(
+            201,
+            "application/json",
+            delivery.envelope().payload().clone(),
+        );
         delivery.reply(reply).await.expect("the reply is sent");
         listening
     });
@@ -160,7 +180,11 @@ pub async fn request_reply(harness: &dyn Harness) {
     let reply = client.request(sent.clone()).await.expect("a reply");
     assert_eq!(reply.status(), Some(201));
     assert_eq!(reply.payload().as_ref(), br#"{"n":1}"#);
-    assert_eq!(reply.message_id(), sent.message_id(), "the reply keeps the message id");
+    assert_eq!(
+        reply.message_id(),
+        sent.message_id(),
+        "the reply keeps the message id"
+    );
     responder.await.expect("responder").stop().await;
 }
 
@@ -206,7 +230,8 @@ pub async fn events_reach_every_service(harness: &dyn Harness) {
     let mut instances = Vec::new();
     for service in ["conf-fan-a", "conf-fan-b"] {
         let transport = harness.instance(service, &["conf-fan.happened"]).await;
-        instances.push(Listening::start(transport, vec![event("conf-fan.happened", service)]).await);
+        instances
+            .push(Listening::start(transport, vec![event("conf-fan.happened", service)]).await);
     }
     let client = harness.client().await;
     client
@@ -214,7 +239,10 @@ pub async fn events_reach_every_service(harness: &dyn Harness) {
         .await
         .expect("published");
     for listening in &mut instances {
-        let delivery = listening.next(WAIT).await.expect("every service gets the event");
+        let delivery = listening
+            .next(WAIT)
+            .await
+            .expect("every service gets the event");
         assert_eq!(delivery.envelope().payload().as_ref(), b"1");
         delivery.ack().await.expect("ack");
         assert!(listening.next(QUIET).await.is_none(), "once per service");
@@ -234,7 +262,8 @@ pub async fn consumer_groups_share_messages(harness: &dyn Harness) {
     let mut instances = Vec::new();
     for _ in 0..2 {
         let transport = harness.instance(service, &["conf-group.happened"]).await;
-        instances.push(Listening::start(transport, vec![event("conf-group.happened", service)]).await);
+        instances
+            .push(Listening::start(transport, vec![event("conf-group.happened", service)]).await);
     }
     let client = harness.client().await;
     for n in 0..10 {
@@ -300,18 +329,29 @@ pub async fn broadcast_reaches_every_instance(harness: &dyn Harness) {
 pub async fn retries_redeliver_events(harness: &dyn Harness) {
     let service = "conf-retry";
     let transport = harness.instance(service, &["conf-retry.happened"]).await;
-    let mut listening = Listening::start(transport, vec![event("conf-retry.happened", service)]).await;
+    let mut listening =
+        Listening::start(transport, vec![event("conf-retry.happened", service)]).await;
     let client = harness.client().await;
     let sent = published("conf-retry.happened", "r".into());
     client.publish(sent.clone()).await.expect("published");
     let first = listening.next(WAIT).await.expect("first attempt");
     assert_eq!(first.attempt(), 1);
-    first.retry_in(Duration::from_millis(20)).await.expect("retry");
+    first
+        .retry_in(Duration::from_millis(20))
+        .await
+        .expect("retry");
     let second = listening.next(WAIT).await.expect("second attempt");
     assert_eq!(second.attempt(), 2);
-    assert_eq!(second.envelope().message_id(), sent.message_id(), "same message id");
+    assert_eq!(
+        second.envelope().message_id(),
+        sent.message_id(),
+        "same message id"
+    );
     second.ack().await.expect("ack");
-    assert!(listening.next(QUIET).await.is_none(), "acknowledged events stay handled");
+    assert!(
+        listening.next(QUIET).await.is_none(),
+        "acknowledged events stay handled"
+    );
     listening.stop().await;
 }
 
@@ -319,16 +359,22 @@ pub async fn retries_redeliver_events(harness: &dyn Harness) {
 pub async fn per_key_order(harness: &dyn Harness) {
     let service = "conf-order";
     let transport = harness.instance(service, &["conf-order.updated"]).await;
-    let mut listening = Listening::start(transport, vec![event("conf-order.updated", service)]).await;
+    let mut listening =
+        Listening::start(transport, vec![event("conf-order.updated", service)]).await;
     let client = harness.client().await;
     for n in 0..20 {
-        let envelope = published("conf-order.updated", n.to_string()).with_header(headers::KEY, "deal-1");
+        let envelope =
+            published("conf-order.updated", n.to_string()).with_header(headers::KEY, "deal-1");
         client.publish(envelope).await.expect("published");
     }
     let mut seen = Vec::new();
     while let Some(delivery) = listening.next(Duration::from_secs(2)).await {
         assert_eq!(delivery.envelope().key(), Some("deal-1"), "the key travels");
-        seen.push(String::from_utf8_lossy(delivery.envelope().payload()).parse::<u32>().unwrap_or(999));
+        seen.push(
+            String::from_utf8_lossy(delivery.envelope().payload())
+                .parse::<u32>()
+                .unwrap_or(999),
+        );
         delivery.ack().await.expect("ack");
         if seen.len() == 20 {
             break;
@@ -346,7 +392,11 @@ pub async fn durable_events_wait(harness: &dyn Harness) {
     }
     let service = "conf-away";
     let transport = harness.instance(service, &["conf-away.happened"]).await;
-    let listening = Listening::start(transport.clone(), vec![event("conf-away.happened", service)]).await;
+    let listening = Listening::start(
+        transport.clone(),
+        vec![event("conf-away.happened", service)],
+    )
+    .await;
     listening.stop().await;
     let client = harness.client().await;
     client
@@ -371,7 +421,10 @@ pub async fn wildcards(harness: &dyn Harness) {
         .await;
     let mut listening = Listening::start(
         transport,
-        vec![event("conf-wild.*", service), event("conf-wild.deep.>", service)],
+        vec![
+            event("conf-wild.*", service),
+            event("conf-wild.deep.>", service),
+        ],
     )
     .await;
     let client = harness.client().await;

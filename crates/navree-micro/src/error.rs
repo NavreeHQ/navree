@@ -212,7 +212,10 @@ mod tests {
     use super::*;
 
     fn remote(status: u16, body: Value) -> MicroError {
-        MicroError::Remote(RemoteError::new(StatusCode::from_u16(status).unwrap(), body))
+        MicroError::Remote(RemoteError::new(
+            StatusCode::from_u16(status).unwrap(),
+            body,
+        ))
     }
 
     #[test]
@@ -220,7 +223,10 @@ mod tests {
         let not_found = json!({ "statusCode": 404, "message": "Not Found", "error": "Not Found" });
         let cases = [
             (remote(404, not_found.clone()), 404),
-            (remote(403, json!({ "statusCode": 403, "message": "Forbidden" })), 403),
+            (
+                remote(403, json!({ "statusCode": 403, "message": "Forbidden" })),
+                403,
+            ),
             (remote(500, json!({ "statusCode": 500 })), 502),
             (
                 MicroError::Timeout {
@@ -243,19 +249,16 @@ mod tests {
                 },
                 502,
             ),
-            (
-                MicroError::PayloadTooLarge {
-                    size: 2,
-                    limit: 1,
-                },
-                500,
-            ),
+            (MicroError::PayloadTooLarge { size: 2, limit: 1 }, 500),
             (MicroError::ShutDown, 503),
         ];
         for (error, status) in cases {
             assert_eq!(error.to_app_error().status.as_u16(), status, "{error}");
         }
-        assert_eq!(remote(404, not_found.clone()).to_app_error().body(), not_found);
+        assert_eq!(
+            remote(404, not_found.clone()).to_app_error().body(),
+            not_found
+        );
     }
 
     #[test]

@@ -89,12 +89,18 @@ impl Gates {
     /// Joins the chain of `key` on pattern `index`: returns what to wait
     /// for (the previous event with that key) and what to signal when done.
     /// Called in the order deliveries arrive.
-    fn chain(&self, index: usize, key: &str) -> (Option<oneshot::Receiver<()>>, oneshot::Sender<()>) {
+    fn chain(
+        &self,
+        index: usize,
+        key: &str,
+    ) -> (Option<oneshot::Receiver<()>>, oneshot::Sender<()>) {
         let (done, tail) = oneshot::channel();
         let mut keys = lock(&self.keys);
         // Forget chains whose last event is finished.
         if keys.len() > 1_024 {
-            keys.retain(|_, tail| matches!(tail.try_recv(), Err(oneshot::error::TryRecvError::Empty)));
+            keys.retain(|_, tail| {
+                matches!(tail.try_recv(), Err(oneshot::error::TryRecvError::Empty))
+            });
         }
         let previous = keys.insert((index, key.to_owned()), tail);
         (previous, done)
@@ -171,7 +177,9 @@ pub(crate) async fn run(
         // ordered handler's events wait for the previous one, whatever
         // their key.
         let chain = match router.patterns.get(delivery.subscription()) {
-            Some(registered) if registered.kind == PatternKind::Event && registered.meta.ordered => {
+            Some(registered)
+                if registered.kind == PatternKind::Event && registered.meta.ordered =>
+            {
                 Some(gates.chain(registered.index, ""))
             }
             Some(registered) if registered.kind == PatternKind::Event => delivery
@@ -206,8 +214,12 @@ pub(crate) async fn run(
     drop(deliveries);
     while in_flight.join_next().await.is_some() {}
     match listening.await {
-        Ok(Err(error)) => tracing::warn!(target: "navree::micro", %error, "the transport stopped with an error"),
-        Err(error) if error.is_panic() => tracing::error!(target: "navree::micro", "the transport panicked"),
+        Ok(Err(error)) => {
+            tracing::warn!(target: "navree::micro", %error, "the transport stopped with an error")
+        }
+        Err(error) if error.is_panic() => {
+            tracing::error!(target: "navree::micro", "the transport panicked")
+        }
         _ => {}
     }
     tracing::info!(target: "navree::micro", "message listener stopped");
@@ -235,8 +247,30 @@ async fn handle(
     };
     let (envelope, attempt, actions) = delivery.into_parts();
     match registered.kind {
-        PatternKind::Message => handle_message(runtime, ctx, router, &registered, envelope, attempt, actions).await,
-        PatternKind::Event => handle_event(runtime, ctx, router, &registered, envelope, attempt, actions).await,
+        PatternKind::Message => {
+            handle_message(
+                runtime,
+                ctx,
+                router,
+                &registered,
+                envelope,
+                attempt,
+                actions,
+            )
+            .await
+        }
+        PatternKind::Event => {
+            handle_event(
+                runtime,
+                ctx,
+                router,
+                &registered,
+                envelope,
+                attempt,
+                actions,
+            )
+            .await
+        }
     }
 }
 
@@ -258,7 +292,9 @@ async fn handle_message(
     let outcome = if envelope.payload().len() > runtime.options.max_message_bytes {
         too_large(runtime)
     } else {
-        router.dispatch(ctx, registered.index, &envelope, attempt).await
+        router
+            .dispatch(ctx, registered.index, &envelope, attempt)
+            .await
     };
     if envelope.is_expired() {
         let _ = actions.ack().await;
@@ -293,7 +329,9 @@ async fn handle_event(
     if registered.meta.broadcast {
         // At most once: no retries, no dead letters.
         if !oversized {
-            let outcome = router.dispatch(ctx, registered.index, &envelope, attempt).await;
+            let outcome = router
+                .dispatch(ctx, registered.index, &envelope, attempt)
+                .await;
             if !outcome.status.is_success() {
                 tracing::warn!(
                     target: "navree::micro",
@@ -317,7 +355,9 @@ async fn handle_event(
         let outcome = if oversized {
             too_large(runtime)
         } else {
-            router.dispatch(ctx, registered.index, &envelope, attempt).await
+            router
+                .dispatch(ctx, registered.index, &envelope, attempt)
+                .await
         };
         if outcome.status.is_success() {
             let _ = actions.ack().await;
@@ -390,7 +430,10 @@ pub(crate) fn dead_letter(
 }
 
 /// Puts a dead letter where `micro.events.dead_letter` says.
-pub(crate) async fn store_dead_letter(runtime: &MicroRuntime, letter: DeadLetter) -> Result<(), BoxError> {
+pub(crate) async fn store_dead_letter(
+    runtime: &MicroRuntime,
+    letter: DeadLetter,
+) -> Result<(), BoxError> {
     tracing::warn!(
         target: "navree::micro",
         pattern = %letter.pattern,
@@ -405,7 +448,11 @@ pub(crate) async fn store_dead_letter(runtime: &MicroRuntime, letter: DeadLetter
             Some(store) => store.dead_insert(&letter).await.map_err(Into::into),
             None => Err("micro.events.dead_letter = \"database\" needs DatabaseModule".into()),
         },
-        DeadLetterMode::Transport => runtime.transport.dead_letter(letter).await.map_err(Into::into),
+        DeadLetterMode::Transport => runtime
+            .transport
+            .dead_letter(letter)
+            .await
+            .map_err(Into::into),
         DeadLetterMode::Log => {
             tracing::error!(
                 target: "navree::micro",
@@ -449,7 +496,9 @@ pub(crate) async fn retry_dead_letter(
         .max(1);
     let mut attempt = 1;
     loop {
-        let outcome = router.dispatch(ctx, registered.index, &envelope, attempt).await;
+        let outcome = router
+            .dispatch(ctx, registered.index, &envelope, attempt)
+            .await;
         if outcome.status.is_success() {
             return Ok(true);
         }
@@ -458,7 +507,11 @@ pub(crate) async fn retry_dead_letter(
             .clone()
             .unwrap_or_else(|| outcome.status.to_string());
         if is_permanent(outcome.status) || attempt >= max_attempts {
-            store_dead_letter(runtime, dead_letter(runtime, &registered, &envelope, attempt, error)).await?;
+            store_dead_letter(
+                runtime,
+                dead_letter(runtime, &registered, &envelope, attempt, error),
+            )
+            .await?;
             return Ok(false);
         }
         let delay = runtime
@@ -492,12 +545,17 @@ pub(crate) async fn relay(runtime: Arc<MicroRuntime>, stop: CancellationToken) {
             let retention = i64::try_from(runtime.options.inbox_retention_hours)
                 .unwrap_or(i64::MAX / 3_600_000)
                 .saturating_mul(3_600_000);
-            match store.inbox_prune(now_millis().saturating_sub(retention)).await {
+            match store
+                .inbox_prune(now_millis().saturating_sub(retention))
+                .await
+            {
                 Ok(pruned) if pruned > 0 => {
                     tracing::debug!(target: "navree::micro", pruned, "pruned handled message ids");
                 }
                 Ok(_) => {}
-                Err(error) => tracing::warn!(target: "navree::micro", %error, "pruning the inbox failed"),
+                Err(error) => {
+                    tracing::warn!(target: "navree::micro", %error, "pruning the inbox failed")
+                }
             }
             last_prune = Some(tokio::time::Instant::now());
         }
@@ -511,7 +569,10 @@ pub(crate) async fn relay(runtime: Arc<MicroRuntime>, stop: CancellationToken) {
 /// One relay sweep: claims the due rows in a transaction (`FOR UPDATE SKIP
 /// LOCKED` on PostgreSQL), publishes and deletes them. A crash before the
 /// commit leaves them for the next sweep.
-pub(crate) async fn sweep_outbox(runtime: &MicroRuntime, store: &crate::store::Store) -> Result<usize, BoxError> {
+pub(crate) async fn sweep_outbox(
+    runtime: &MicroRuntime,
+    store: &crate::store::Store,
+) -> Result<usize, BoxError> {
     let before = now_millis().saturating_sub(OUTBOX_GRACE_MS);
     let transport = runtime.transport.clone();
     let store_in = store.clone();
@@ -554,10 +615,16 @@ mod tests {
     #[test]
     fn decode_validation_and_guard_failures_are_permanent() {
         for status in [400, 401, 403, 413, 415, 422] {
-            assert!(is_permanent(StatusCode::from_u16(status).unwrap()), "{status}");
+            assert!(
+                is_permanent(StatusCode::from_u16(status).unwrap()),
+                "{status}"
+            );
         }
         for status in [404, 409, 500, 503] {
-            assert!(!is_permanent(StatusCode::from_u16(status).unwrap()), "{status}");
+            assert!(
+                !is_permanent(StatusCode::from_u16(status).unwrap()),
+                "{status}"
+            );
         }
     }
 }

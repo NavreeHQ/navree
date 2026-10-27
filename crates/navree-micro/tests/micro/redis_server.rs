@@ -165,7 +165,13 @@ fn entry(id: Id, fields: &Fields) -> Reply {
 }
 
 fn now_ms() -> u64 {
-    u64::try_from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()).unwrap()
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap()
 }
 
 fn upper(arg: &[u8]) -> String {
@@ -177,7 +183,9 @@ fn text(arg: &[u8]) -> String {
 }
 
 /// Reads one command (an array of bulk strings).
-async fn read_command(reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>) -> Option<Vec<Vec<u8>>> {
+async fn read_command(
+    reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
+) -> Option<Vec<Vec<u8>>> {
     let mut line = String::new();
     if reader.read_line(&mut line).await.ok()? == 0 {
         return None;
@@ -237,7 +245,10 @@ async fn execute(state: &State, args: &[Vec<u8>]) -> Reply {
         "EXPIRE" => Reply::Int(1),
         "DEL" => {
             let mut data = state.data.lock().unwrap();
-            let removed = args[1..].iter().filter(|key| data.streams.remove(&text(key)).is_some()).count();
+            let removed = args[1..]
+                .iter()
+                .filter(|key| data.streams.remove(&text(key)).is_some())
+                .count();
             Reply::Int(i64::try_from(removed).unwrap())
         }
         _ => Reply::Simple("OK"),
@@ -270,7 +281,11 @@ fn xadd(state: &State, args: &[Vec<u8>]) -> Reply {
     let mut data = state.data.lock().unwrap();
     let stream = data.streams.entry(key).or_default();
     let ms = now_ms();
-    let id = if ms > stream.last.0 { (ms, 0) } else { (stream.last.0, stream.last.1 + 1) };
+    let id = if ms > stream.last.0 {
+        (ms, 0)
+    } else {
+        (stream.last.0, stream.last.1 + 1)
+    };
     stream.last = id;
     stream.entries.insert(id, fields);
     if let Some(max_len) = max_len {
@@ -300,7 +315,11 @@ fn xgroup(state: &State, args: &[Vec<u8>]) -> Reply {
     if stream.groups.contains_key(&group) {
         return Reply::Error("BUSYGROUP Consumer Group name already exists".into());
     }
-    let last_delivered = if start == "$" { stream.last } else { parse_id(&start).unwrap_or_default() };
+    let last_delivered = if start == "$" {
+        stream.last
+    } else {
+        parse_id(&start).unwrap_or_default()
+    };
     stream.groups.insert(
         group,
         Group {
@@ -351,7 +370,13 @@ async fn read(state: &State, command: &str, args: &[Vec<u8>]) -> Reply {
             }
         }
     }
-    let deadline = block.map(|ms| if ms == 0 { None } else { Some(Instant::now() + Duration::from_millis(ms)) });
+    let deadline = block.map(|ms| {
+        if ms == 0 {
+            None
+        } else {
+            Some(Instant::now() + Duration::from_millis(ms))
+        }
+    });
     loop {
         let notified = state.added.notified();
         tokio::pin!(notified);
@@ -375,7 +400,13 @@ async fn read(state: &State, command: &str, args: &[Vec<u8>]) -> Reply {
 }
 
 /// The entries a read takes now, per stream with any.
-fn take(state: &State, group: Option<&(String, String)>, keys: &[String], ids: &[String], count: usize) -> Result<Vec<Reply>, Reply> {
+fn take(
+    state: &State,
+    group: Option<&(String, String)>,
+    keys: &[String],
+    ids: &[String],
+    count: usize,
+) -> Result<Vec<Reply>, Reply> {
     let mut data = state.data.lock().unwrap();
     let mut found = Vec::new();
     for (key, id) in keys.iter().zip(ids) {
@@ -397,7 +428,10 @@ fn take(state: &State, group: Option<&(String, String)>, keys: &[String], ids: &
                     continue;
                 }
                 let start = state.last_delivered;
-                for (entry_id, fields) in entries.range((std::ops::Bound::Excluded(start), std::ops::Bound::Unbounded)).take(count) {
+                for (entry_id, fields) in entries
+                    .range((std::ops::Bound::Excluded(start), std::ops::Bound::Unbounded))
+                    .take(count)
+                {
                     state.last_delivered = *entry_id;
                     state.pending.insert(
                         *entry_id,
@@ -415,13 +449,20 @@ fn take(state: &State, group: Option<&(String, String)>, keys: &[String], ids: &
                     continue;
                 };
                 let after = parse_id(id).unwrap_or_default();
-                for (entry_id, fields) in stream.entries.range((std::ops::Bound::Excluded(after), std::ops::Bound::Unbounded)).take(count) {
+                for (entry_id, fields) in stream
+                    .entries
+                    .range((std::ops::Bound::Excluded(after), std::ops::Bound::Unbounded))
+                    .take(count)
+                {
                     items.push(entry(*entry_id, fields));
                 }
             }
         }
         if !items.is_empty() {
-            found.push(Reply::Array(vec![Reply::text(key.clone()), Reply::Array(items)]));
+            found.push(Reply::Array(vec![
+                Reply::text(key.clone()),
+                Reply::Array(items),
+            ]));
         }
     }
     Ok(found)
@@ -431,7 +472,11 @@ fn xack(state: &State, args: &[Vec<u8>]) -> Reply {
     let key = text(&args[0]);
     let group = text(&args[1]);
     let mut data = state.data.lock().unwrap();
-    let Some(group) = data.streams.get_mut(&key).and_then(|s| s.groups.get_mut(&group)) else {
+    let Some(group) = data
+        .streams
+        .get_mut(&key)
+        .and_then(|s| s.groups.get_mut(&group))
+    else {
         return Reply::Int(0);
     };
     let acked = args[2..]
@@ -495,7 +540,9 @@ fn xclaim(state: &State, args: &[Vec<u8>]) -> Reply {
         claimed.push(if justid {
             Reply::text(format_id(id))
         } else {
-            entries.get(&id).map_or(Reply::NilBulk, |fields| entry(id, fields))
+            entries
+                .get(&id)
+                .map_or(Reply::NilBulk, |fields| entry(id, fields))
         });
     }
     Reply::Array(claimed)
@@ -531,9 +578,17 @@ fn xautoclaim(state: &State, args: &[Vec<u8>]) -> Reply {
         pending.consumer.clone_from(&consumer);
         pending.delivered_at = Instant::now();
         pending.count += 1;
-        claimed.push(entries.get(id).map_or(Reply::NilBulk, |fields| entry(*id, fields)));
+        claimed.push(
+            entries
+                .get(id)
+                .map_or(Reply::NilBulk, |fields| entry(*id, fields)),
+        );
     }
-    Reply::Array(vec![Reply::text("0-0"), Reply::Array(claimed), Reply::Array(Vec::new())])
+    Reply::Array(vec![
+        Reply::text("0-0"),
+        Reply::Array(claimed),
+        Reply::Array(Vec::new()),
+    ])
 }
 
 fn xpending(state: &State, args: &[Vec<u8>]) -> Reply {
@@ -549,9 +604,15 @@ fn xpending(state: &State, args: &[Vec<u8>]) -> Reply {
         other => parse_id(other).unwrap_or(default),
     };
     let start = rest.first().map_or((0, 0), |arg| parse(arg, (0, 0)));
-    let end = rest.get(1).map_or((u64::MAX, u64::MAX), |arg| parse(arg, (u64::MAX, u64::MAX)));
+    let end = rest
+        .get(1)
+        .map_or((u64::MAX, u64::MAX), |arg| parse(arg, (u64::MAX, u64::MAX)));
     let data = state.data.lock().unwrap();
-    let Some(group) = data.streams.get(&key).and_then(|s| s.groups.get(&group_name)) else {
+    let Some(group) = data
+        .streams
+        .get(&key)
+        .and_then(|s| s.groups.get(&group_name))
+    else {
         return Reply::Array(Vec::new());
     };
     Reply::Array(
@@ -608,7 +669,15 @@ fn xrevrange(state: &State, args: &[Vec<u8>]) -> Reply {
     let Some(stream) = data.streams.get(&key) else {
         return Reply::Array(Vec::new());
     };
-    Reply::Array(stream.entries.iter().rev().take(count).map(|(id, fields)| entry(*id, fields)).collect())
+    Reply::Array(
+        stream
+            .entries
+            .iter()
+            .rev()
+            .take(count)
+            .map(|(id, fields)| entry(*id, fields))
+            .collect(),
+    )
 }
 
 fn xtrim(state: &State, args: &[Vec<u8>]) -> Reply {

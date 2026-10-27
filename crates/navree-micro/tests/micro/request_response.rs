@@ -151,7 +151,11 @@ async fn validation_runs_before_the_handler_and_the_unit_of_work_commits_on_ok()
     let event = &micro.emitted_envelopes("deal.renamed")[0];
     assert_eq!(event.key(), Some(deal.id.to_string().as_str()));
     assert_eq!(event.header("navree-actor"), Some(rep.to_string().as_str()));
-    assert_eq!(event.header("authorization"), None, "events never carry tokens");
+    assert_eq!(
+        event.header("authorization"),
+        None,
+        "events never carry tokens"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -161,7 +165,12 @@ async fn an_error_rolls_the_unit_of_work_back_and_drops_its_events() {
     let (app, _) = deals_app(&micro).await;
     micro
         .client()
-        .request("notes.write_then_fail", &NewNote { body: "lost".into() })
+        .request(
+            "notes.write_then_fail",
+            &NewNote {
+                body: "lost".into(),
+            },
+        )
         .await
         .assert_error(409, "not today");
     assert!(notes(&app).await.is_empty(), "rolled back");
@@ -233,7 +242,10 @@ async fn handlers_see_the_message_context() {
     let traceparent = body["traceparent"].as_str().expect("a traceparent");
     let mut fields = traceparent.split('-').skip(1);
     let (trace_id, span_id) = (fields.next().unwrap(), fields.next().unwrap());
-    assert_eq!(body["trace_id"], trace_id, "the handler continues the sender's trace");
+    assert_eq!(
+        body["trace_id"], trace_id,
+        "the handler continues the sender's trace"
+    );
     assert_eq!(body["parent_span_id"], span_id, "under the sender's span");
     assert_eq!(body["request_id_seen"], body["request_id"]);
     app.shutdown().await.unwrap();
@@ -247,14 +259,26 @@ async fn a_message_sent_from_a_handler_stays_in_the_trace() {
     let _: Value = micro
         .client()
         .send("deals.relay", &"companies.get")
-        .header("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+        .header(
+            "traceparent",
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+        )
         .await
         .unwrap();
     let relayed = &micro.sent_envelopes("companies.get")[0];
     let traceparent = relayed.header("traceparent").expect("a traceparent");
-    assert!(traceparent.starts_with("00-0af7651916cd43dd8448eb211c80319c-"), "{traceparent}");
-    assert!(!traceparent.contains("b7ad6b7169203331"), "a span of its own: {traceparent}");
-    assert!(traceparent.ends_with("-01"), "the sampling decision travels: {traceparent}");
+    assert!(
+        traceparent.starts_with("00-0af7651916cd43dd8448eb211c80319c-"),
+        "{traceparent}"
+    );
+    assert!(
+        !traceparent.contains("b7ad6b7169203331"),
+        "a span of its own: {traceparent}"
+    );
+    assert!(
+        traceparent.ends_with("-01"),
+        "the sampling decision travels: {traceparent}"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -295,7 +319,10 @@ async fn a_handler_past_its_time_limit_is_cut_off_and_rolled_back() {
         .send::<_, Value>("deals.slow", &())
         .timeout(Duration::from_millis(50))
         .await;
-    assert!(matches!(outcome, Err(MicroError::Timeout { .. })), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(MicroError::Timeout { .. })),
+        "{outcome:?}"
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -370,7 +397,11 @@ async fn stubs_answer_what_the_app_sends_elsewhere() {
         .assert_error(503, "Service Unavailable");
 
     micro.on("companies.get", Reply::json(&json!({ "name": "Acme" })));
-    let reply: Value = micro.client().send("deals.relay", &"companies.get").await.unwrap();
+    let reply: Value = micro
+        .client()
+        .send("deals.relay", &"companies.get")
+        .await
+        .unwrap();
     assert_eq!(reply, json!({ "name": "Acme" }));
 
     // A remote 4xx passes through with its status and message.
@@ -402,7 +433,11 @@ async fn stubs_answer_what_the_app_sends_elsewhere() {
         "companies.get",
         Reply::from_fn(|input: Value| -> Result<Value, AppError> { Ok(json!({ "got": input })) }),
     );
-    let reply: Value = micro.client().send("deals.relay", &"companies.get").await.unwrap();
+    let reply: Value = micro
+        .client()
+        .send("deals.relay", &"companies.get")
+        .await
+        .unwrap();
     assert_eq!(reply, json!({ "got": {} }));
 
     // Every attempt is recorded, the unanswered first one included.
@@ -424,7 +459,11 @@ async fn retries_resend_with_the_same_message_id() {
     let client = app.get::<ServiceClient>().await;
     micro.on(
         "companies.get",
-        Reply::sequence([Reply::timeout(), Reply::timeout(), Reply::json(&json!("third time"))]),
+        Reply::sequence([
+            Reply::timeout(),
+            Reply::timeout(),
+            Reply::json(&json!("third time")),
+        ]),
     );
     let reply: String = client
         .send("companies.get", &json!({ "id": 1 }))
@@ -435,12 +474,23 @@ async fn retries_resend_with_the_same_message_id() {
     assert_eq!(reply, "third time");
     let sent = micro.sent_envelopes("companies.get");
     assert_eq!(sent.len(), 3);
-    assert!(sent.windows(2).all(|pair| pair[0].message_id() == pair[1].message_id()));
+    assert!(
+        sent.windows(2)
+            .all(|pair| pair[0].message_id() == pair[1].message_id())
+    );
 
     // Without retries a timeout is the answer, and error replies are never retried.
-    micro.on("companies.get", Reply::sequence([Reply::error(AppError::conflict("no")), Reply::json(&1)]));
-    let outcome = client.send::<_, Value>("companies.get", &()).retries(3).await;
-    assert!(matches!(outcome, Err(MicroError::Remote(ref e)) if e.status() == StatusCode::CONFLICT));
+    micro.on(
+        "companies.get",
+        Reply::sequence([Reply::error(AppError::conflict("no")), Reply::json(&1)]),
+    );
+    let outcome = client
+        .send::<_, Value>("companies.get", &())
+        .retries(3)
+        .await;
+    assert!(
+        matches!(outcome, Err(MicroError::Remote(ref e)) if e.status() == StatusCode::CONFLICT)
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -457,13 +507,25 @@ async fn sending_checks_the_pattern_and_the_size_limit() {
     let client = app.get::<ServiceClient>().await;
     let outcome = client.send::<_, Value>("deals.get", &"x".repeat(64)).await;
     assert!(
-        matches!(outcome, Err(MicroError::PayloadTooLarge { size: 66, limit: 16 })),
+        matches!(
+            outcome,
+            Err(MicroError::PayloadTooLarge {
+                size: 66,
+                limit: 16
+            })
+        ),
         "{outcome:?}"
     );
     let outcome = client.send::<_, Value>("Deals.*", &()).await;
-    assert!(matches!(outcome, Err(MicroError::InvalidPattern { .. })), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(MicroError::InvalidPattern { .. })),
+        "{outcome:?}"
+    );
     let outcome = client.emit("deal.*", &()).await;
-    assert!(matches!(outcome, Err(MicroError::InvalidPattern { .. })), "{outcome:?}");
+    assert!(
+        matches!(outcome, Err(MicroError::InvalidPattern { .. })),
+        "{outcome:?}"
+    );
     micro.assert_nothing_sent();
     app.shutdown().await.unwrap();
 }

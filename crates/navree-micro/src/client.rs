@@ -21,9 +21,7 @@ use uuid::Uuid;
 use crate::context::CallContext;
 use crate::envelope::{LocalContext, headers, now_millis};
 use crate::store::Store;
-use crate::{
-    Codec, Envelope, MicroError, MicroTransport, RemoteError, check_pattern,
-};
+use crate::{Codec, Envelope, MicroError, MicroTransport, RemoteError, check_pattern};
 
 /// The first pause between retries of `send(..).retries(n)`; it doubles.
 const FIRST_RETRY_PAUSE: Duration = Duration::from_millis(100);
@@ -139,7 +137,11 @@ impl fmt::Debug for ServiceClient {
 }
 
 /// Encodes a payload, checking the pattern and the size limit.
-fn encode<P: Serialize + ?Sized>(core: &ClientCore, pattern: &str, payload: &P) -> Result<Bytes, MicroError> {
+fn encode<P: Serialize + ?Sized>(
+    core: &ClientCore,
+    pattern: &str,
+    payload: &P,
+) -> Result<Bytes, MicroError> {
     check_pattern(pattern, false).map_err(|reason| MicroError::InvalidPattern {
         pattern: pattern.to_owned(),
         reason,
@@ -162,7 +164,13 @@ fn encode<P: Serialize + ?Sized>(core: &ClientCore, pattern: &str, payload: &P) 
 
 /// The headers every message carries: id, service, content type, request
 /// id, trace context and workspace.
-fn base_envelope(core: &ClientCore, pattern: &str, payload: Bytes, message_id: &str, call: Option<&CallContext>) -> Envelope {
+fn base_envelope(
+    core: &ClientCore,
+    pattern: &str,
+    payload: Bytes,
+    message_id: &str,
+    call: Option<&CallContext>,
+) -> Envelope {
     let mut envelope = Envelope::new(pattern.to_owned(), payload);
     envelope.local.clone_from(&core.local);
     envelope.set_header(headers::MESSAGE_ID, message_id);
@@ -278,8 +286,13 @@ impl<R> SendBuilder<R> {
                     after: Duration::ZERO,
                 });
             }
-            let mut envelope =
-                base_envelope(core, &self.pattern, payload.clone(), &message_id, call.as_ref());
+            let mut envelope = base_envelope(
+                core,
+                &self.pattern,
+                payload.clone(),
+                &message_id,
+                call.as_ref(),
+            );
             envelope.set_deadline(deadline);
             if attempt > 0 {
                 envelope.set_header(headers::ATTEMPT, (attempt + 1).to_string());
@@ -350,7 +363,10 @@ where
 }
 
 /// The reply's value, or its error.
-pub(crate) fn decode_reply<R: DeserializeOwned>(pattern: &str, reply: &Envelope) -> Result<R, MicroError> {
+pub(crate) fn decode_reply<R: DeserializeOwned>(
+    pattern: &str,
+    reply: &Envelope,
+) -> Result<R, MicroError> {
     let status = reply
         .status()
         .and_then(|status| StatusCode::from_u16(status).ok())
@@ -359,10 +375,11 @@ pub(crate) fn decode_reply<R: DeserializeOwned>(pattern: &str, reply: &Envelope)
         let body = serde_json::from_slice::<Value>(reply.payload()).unwrap_or(Value::Null);
         return Err(MicroError::Remote(RemoteError::new(status, body)));
     }
-    let codec = Codec::from_content_type(reply.content_type()).ok_or_else(|| MicroError::Decode {
-        pattern: pattern.to_owned(),
-        source: format!("unknown content type `{}`", reply.content_type()).into(),
-    })?;
+    let codec =
+        Codec::from_content_type(reply.content_type()).ok_or_else(|| MicroError::Decode {
+            pattern: pattern.to_owned(),
+            source: format!("unknown content type `{}`", reply.content_type()).into(),
+        })?;
     // An empty body is `null` (a handler that returned `()`).
     let bytes: &[u8] = match (reply.payload().is_empty(), codec) {
         (false, _) => reply.payload(),
@@ -422,8 +439,13 @@ impl EmitBuilder {
         let message_id = self
             .message_id
             .unwrap_or_else(|| Uuid::now_v7().to_string());
-        let mut envelope =
-            base_envelope(&self.core, &self.pattern, payload, &message_id, call.as_ref());
+        let mut envelope = base_envelope(
+            &self.core,
+            &self.pattern,
+            payload,
+            &message_id,
+            call.as_ref(),
+        );
         let actor = call
             .as_ref()
             .and_then(|call| call.actor)
@@ -534,23 +556,30 @@ mod tests {
 
     #[test]
     fn replies_decode_by_content_type_and_status() {
-        let ok: Value = decode_reply("deals.get", &reply(200, "application/json", br#"{"id":1}"#)).unwrap();
+        let ok: Value =
+            decode_reply("deals.get", &reply(200, "application/json", br#"{"id":1}"#)).unwrap();
         assert_eq!(ok, json!({ "id": 1 }));
         let packed = Codec::Msgpack.encode(&json!({ "id": 2 })).unwrap();
-        let ok: Value = decode_reply("deals.get", &reply(200, "application/msgpack", &packed)).unwrap();
+        let ok: Value =
+            decode_reply("deals.get", &reply(200, "application/msgpack", &packed)).unwrap();
         assert_eq!(ok["id"], 2);
         let unit: () = decode_reply("deals.get", &reply(200, "application/json", b"")).unwrap();
         assert_eq!(unit, ());
         let missing = decode_reply::<Value>(
             "deals.get",
-            &reply(404, "application/json", br#"{"statusCode":404,"message":"Not Found","error":"Not Found"}"#),
+            &reply(
+                404,
+                "application/json",
+                br#"{"statusCode":404,"message":"Not Found","error":"Not Found"}"#,
+            ),
         )
         .unwrap_err();
         match missing {
             MicroError::Remote(error) => assert_eq!(error.status(), StatusCode::NOT_FOUND),
             other => panic!("{other}"),
         }
-        let wrong = decode_reply::<u64>("deals.get", &reply(200, "application/json", b"\"x\"")).unwrap_err();
+        let wrong = decode_reply::<u64>("deals.get", &reply(200, "application/json", b"\"x\""))
+            .unwrap_err();
         assert!(matches!(wrong, MicroError::Decode { .. }), "{wrong}");
     }
 }

@@ -10,10 +10,10 @@ use std::time::Duration;
 use bytes::Bytes;
 use http::header::{CONTENT_TYPE, HeaderValue};
 use http::{HeaderMap, StatusCode};
-use navree_telemetry::TracePolicy;
 use navree_contracts::Principal;
 use navree_http::AppError;
 use navree_kernel::BoxFuture;
+use navree_telemetry::TracePolicy;
 use navree_testing::TestResponse;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -161,7 +161,11 @@ impl MicroFake {
     #[track_caller]
     pub fn assert_nothing_sent(&self) {
         let sent = lock(&self.inner.sent);
-        assert!(sent.is_empty(), "expected no messages; sent{}", describe_all(&sent));
+        assert!(
+            sent.is_empty(),
+            "expected no messages; sent{}",
+            describe_all(&sent)
+        );
     }
 
     /// The envelopes of the events the app published under `pattern`
@@ -216,7 +220,11 @@ impl MicroFake {
     #[track_caller]
     pub fn assert_nothing_emitted(&self) {
         let emitted = lock(&self.inner.emitted);
-        assert!(emitted.is_empty(), "expected no events; emitted{}", describe_all(&emitted));
+        assert!(
+            emitted.is_empty(),
+            "expected no events; emitted{}",
+            describe_all(&emitted)
+        );
     }
 
     /// The events the app's handlers gave up on, whatever
@@ -309,9 +317,8 @@ struct Answer {
 impl Reply {
     /// A handler that returned `Ok(value)`.
     pub fn json<T: Serialize + ?Sized>(value: &T) -> Reply {
-        let body = serde_json::to_vec(value).unwrap_or_else(|error| {
-            panic!("Reply::json: the value does not serialize: {error}")
-        });
+        let body = serde_json::to_vec(value)
+            .unwrap_or_else(|error| panic!("Reply::json: the value does not serialize: {error}"));
         Reply(ReplyKind::Answer(Answer {
             status: 200,
             body: body.into(),
@@ -647,7 +654,12 @@ impl IntoFuture for FakeEmit {
             if let Some(id) = envelope.message_id() {
                 lock(&self.client.fake.inner.last_ids).insert(self.pattern.clone(), id.to_owned());
             }
-            self.client.fake.inner.broker.publish_and_wait(envelope).await
+            self.client
+                .fake
+                .inner
+                .broker
+                .publish_and_wait(envelope)
+                .await
         })
     }
 }
@@ -665,7 +677,11 @@ mod tests {
     #[test]
     fn sequences_answer_in_turn_then_repeat_the_last() {
         let mut stub = Stub {
-            reply: Reply::sequence([Reply::timeout(), Reply::json(&json!(1)), Reply::json(&json!(2))]),
+            reply: Reply::sequence([
+                Reply::timeout(),
+                Reply::json(&json!(1)),
+                Reply::json(&json!(2)),
+            ]),
             turn: 0,
         };
         let envelope = Envelope::new("a.b", "{}");
@@ -685,9 +701,13 @@ mod tests {
             }
         });
         let mut stub = Stub { reply, turn: 0 };
-        let ok = stub.answer(&Envelope::new("a.b", r#"{"ok":true}"#)).unwrap();
+        let ok = stub
+            .answer(&Envelope::new("a.b", r#"{"ok":true}"#))
+            .unwrap();
         assert_eq!(ok.status, 200);
-        let refused = stub.answer(&Envelope::new("a.b", r#"{"ok":false}"#)).unwrap();
+        let refused = stub
+            .answer(&Envelope::new("a.b", r#"{"ok":false}"#))
+            .unwrap();
         assert_eq!(refused.status, 409);
         let garbage = stub.answer(&Envelope::new("a.b", "not json")).unwrap();
         assert_eq!(garbage.status, 400);

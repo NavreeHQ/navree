@@ -154,7 +154,9 @@ fn register(m: &mut ModuleBuilder, options: Option<MicroOptions>, clients: &[Str
         .factory(
             Factory::<MicroRuntime>::new(|r: Resolver| async move {
                 let options = r.get::<MicroOptions>().await?;
-                Ok(Arc::new(MicroRuntime::new(r.app(), (*options).clone()).await?))
+                Ok(Arc::new(
+                    MicroRuntime::new(r.app(), (*options).clone()).await?,
+                ))
             })
             .deps(vec![ProviderKey::of::<MicroOptions>()]),
         )
@@ -210,33 +212,48 @@ fn register(m: &mut ModuleBuilder, options: Option<MicroOptions>, clients: &[Str
     }
 }
 
-type CommandFn = fn(AppContext, Vec<String>) -> navree_kernel::BoxFuture<'static, Result<(), BoxError>>;
+type CommandFn =
+    fn(AppContext, Vec<String>) -> navree_kernel::BoxFuture<'static, Result<(), BoxError>>;
 
 const COMMANDS: [(&str, &str, CommandFn); 8] = [
-    ("micro:listen", "Handle messages without serving HTTP, until stopped", |ctx, args| {
-        Box::pin(listen_command(ctx, args))
-    }),
-    ("micro:patterns", "List every message and event pattern ([--json])", |ctx, args| {
-        Box::pin(patterns_command(ctx, args))
-    }),
-    ("micro:send", "Send a request and print the reply (<pattern> <json>)", |ctx, args| {
-        Box::pin(send_command(ctx, args))
-    }),
-    ("micro:emit", "Publish an event (<pattern> <json>)", |ctx, args| {
-        Box::pin(emit_command(ctx, args))
-    }),
-    ("micro:setup", "Declare the streams, topics and queues the patterns need", |ctx, args| {
-        Box::pin(setup_command(ctx, args))
-    }),
+    (
+        "micro:listen",
+        "Handle messages without serving HTTP, until stopped",
+        |ctx, args| Box::pin(listen_command(ctx, args)),
+    ),
+    (
+        "micro:patterns",
+        "List every message and event pattern ([--json])",
+        |ctx, args| Box::pin(patterns_command(ctx, args)),
+    ),
+    (
+        "micro:send",
+        "Send a request and print the reply (<pattern> <json>)",
+        |ctx, args| Box::pin(send_command(ctx, args)),
+    ),
+    (
+        "micro:emit",
+        "Publish an event (<pattern> <json>)",
+        |ctx, args| Box::pin(emit_command(ctx, args)),
+    ),
+    (
+        "micro:setup",
+        "Declare the streams, topics and queues the patterns need",
+        |ctx, args| Box::pin(setup_command(ctx, args)),
+    ),
     ("micro:failed", "List dead-lettered events", |ctx, args| {
         Box::pin(failed_command(ctx, args))
     }),
-    ("micro:retry", "Retry dead-lettered events (<id|all>)", |ctx, args| {
-        Box::pin(retry_command(ctx, args))
-    }),
-    ("micro:flush", "Delete every dead-lettered event", |ctx, args| {
-        Box::pin(flush_command(ctx, args))
-    }),
+    (
+        "micro:retry",
+        "Retry dead-lettered events (<id|all>)",
+        |ctx, args| Box::pin(retry_command(ctx, args)),
+    ),
+    (
+        "micro:flush",
+        "Delete every dead-lettered event",
+        |ctx, args| Box::pin(flush_command(ctx, args)),
+    ),
 ];
 
 /// The dead letters of this service (`micro.events.dead_letter =
@@ -486,14 +503,14 @@ async fn failed_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxEr
 }
 
 async fn retry_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
-    let target = args
-        .first()
-        .ok_or("usage: micro:retry <id|all>")?
-        .clone();
+    let target = args.first().ok_or("usage: micro:retry <id|all>")?.clone();
     let dead_letters = ctx.get::<DeadLetters>().await?;
     if target == "all" {
         let (handled, failed) = dead_letters.retry_all().await?;
-        println!("Retried {}: {handled} handled, {failed} failed again.", handled + failed);
+        println!(
+            "Retried {}: {handled} handled, {failed} failed again.",
+            handled + failed
+        );
     } else if dead_letters.retry(&target).await? {
         println!("Handled {target}.");
     } else {

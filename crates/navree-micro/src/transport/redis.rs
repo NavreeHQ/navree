@@ -99,7 +99,9 @@ impl RedisTransport {
             ))
         })?;
         if options.max_len == 0 {
-            return Err(MicroError::transport("micro.redis.max_len must be at least 1"));
+            return Err(MicroError::transport(
+                "micro.redis.max_len must be at least 1",
+            ));
         }
         Ok(Self {
             client,
@@ -139,7 +141,9 @@ impl RedisTransport {
                 let connecting = ConnectionManager::new_with_config(self.client.clone(), config);
                 match tokio::time::timeout(self.connect_timeout, connecting).await {
                     Ok(Ok(manager)) => Ok(manager),
-                    Ok(Err(error)) => Err(MicroError::transport(format!("cannot connect to Redis: {error}"))),
+                    Ok(Err(error)) => Err(MicroError::transport(format!(
+                        "cannot connect to Redis: {error}"
+                    ))),
                     Err(_) => Err(MicroError::transport(format!(
                         "connecting to Redis took longer than {:?}",
                         self.connect_timeout
@@ -247,7 +251,8 @@ impl MicroTransport for RedisTransport {
     fn publish(&self, envelope: Envelope) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             let key = self.key(envelope.pattern());
-            self.run(&xadd(&key, self.options.max_len, &envelope)).await?;
+            self.run(&xadd(&key, self.options.max_len, &envelope))
+                .await?;
             Ok(())
         })
     }
@@ -269,11 +274,22 @@ impl MicroTransport for RedisTransport {
                 }
                 let key = self.key(&subscription.pattern);
                 if subscription.is_broadcast() {
-                    broadcast.push(Stream { index, key, claim_after: Duration::ZERO, kind: subscription.kind });
+                    broadcast.push(Stream {
+                        index,
+                        key,
+                        claim_after: Duration::ZERO,
+                        kind: subscription.kind,
+                    });
                 } else {
                     self.ensure_group(&key).await?;
-                    let claim_after = Duration::from_millis(self.options.claim_after_ms).max(subscription.ack_wait);
-                    grouped.push(Stream { index, key, claim_after, kind: subscription.kind });
+                    let claim_after = Duration::from_millis(self.options.claim_after_ms)
+                        .max(subscription.ack_wait);
+                    grouped.push(Stream {
+                        index,
+                        key,
+                        claim_after,
+                        kind: subscription.kind,
+                    });
                 }
             }
             let commands = self.commands().await?;
@@ -297,7 +313,13 @@ impl MicroTransport for RedisTransport {
                 tasks.spawn(claim(group.clone(), streams, deliveries.clone()));
             }
             if !broadcast.is_empty() {
-                tasks.spawn(read_broadcast(reader, group.clone(), broadcast, self.options.block_ms, deliveries.clone()));
+                tasks.spawn(read_broadcast(
+                    reader,
+                    group.clone(),
+                    broadcast,
+                    self.options.block_ms,
+                    deliveries.clone(),
+                ));
             }
             tokio::select! {
                 () = deliveries.closed() => {}
@@ -309,7 +331,10 @@ impl MicroTransport for RedisTransport {
         })
     }
 
-    fn setup(&self, subscriptions: &[Subscription]) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
+    fn setup(
+        &self,
+        subscriptions: &[Subscription],
+    ) -> BoxFuture<'_, Result<Vec<String>, MicroError>> {
         let keys: Vec<String> = subscriptions
             .iter()
             .filter(|subscription| !subscription.is_broadcast())
@@ -344,7 +369,8 @@ impl MicroTransport for RedisTransport {
             envelope.set_header("navree-attempts", letter.attempts.to_string());
             envelope.set_header("navree-dead-service", letter.service.clone());
             let key = format!("{}dead", self.options.prefix);
-            self.run(&xadd(&key, self.options.max_len, &envelope)).await?;
+            self.run(&xadd(&key, self.options.max_len, &envelope))
+                .await?;
             Ok(())
         })
     }
@@ -403,7 +429,10 @@ struct Reader {
 
 impl Reader {
     fn new(client: redis::Client, connect_timeout: Duration) -> Self {
-        Self { client, connect_timeout }
+        Self {
+            client,
+            connect_timeout,
+        }
     }
 
     /// A connection without a response timeout, for `BLOCK` reads.
@@ -413,12 +442,15 @@ impl Reader {
             .set_response_timeout(None);
         match tokio::time::timeout(
             self.connect_timeout,
-            self.client.get_multiplexed_async_connection_with_config(&config),
+            self.client
+                .get_multiplexed_async_connection_with_config(&config),
         )
         .await
         {
             Ok(Ok(connection)) => Ok(connection),
-            Ok(Err(error)) => Err(MicroError::transport(format!("cannot connect to Redis: {error}"))),
+            Ok(Err(error)) => Err(MicroError::transport(format!(
+                "cannot connect to Redis: {error}"
+            ))),
             Err(_) => Err(MicroError::transport(format!(
                 "connecting to Redis took longer than {:?}",
                 self.connect_timeout
@@ -428,7 +460,10 @@ impl Reader {
 
     /// A connection, retried with backoff (100 ms doubling to 30 s) until
     /// it is made or the listener stops.
-    async fn reconnect(&self, deliveries: &mpsc::Sender<Delivery>) -> Option<MultiplexedConnection> {
+    async fn reconnect(
+        &self,
+        deliveries: &mpsc::Sender<Delivery>,
+    ) -> Option<MultiplexedConnection> {
         let mut attempt = 0u32;
         loop {
             match self.connect().await {
@@ -570,7 +605,13 @@ async fn read_group(
                     // The stream was deleted: create the groups again.
                     let mut commands = group.commands.clone();
                     for stream in streams.iter() {
-                        let _ = ensure_group(&mut commands, &stream.key, &group.group, &group.connected).await;
+                        let _ = ensure_group(
+                            &mut commands,
+                            &stream.key,
+                            &group.group,
+                            &group.connected,
+                        )
+                        .await;
                     }
                     continue;
                 }
@@ -628,9 +669,15 @@ async fn claim(group: Group, streams: Arc<Vec<Stream>>, deliveries: mpsc::Sender
                 }
             };
             for entry in claimed {
-                let attempt = delivered(&mut commands, &stream.key, &group.group, &entry.id, &group.connected)
-                    .await
-                    .unwrap_or(2);
+                let attempt = delivered(
+                    &mut commands,
+                    &stream.key,
+                    &group.group,
+                    &entry.id,
+                    &group.connected,
+                )
+                .await
+                .unwrap_or(2);
                 let delivery = group.delivery(stream, entry, attempt);
                 if deliveries.send(delivery).await.is_err() {
                     return;
@@ -696,7 +743,8 @@ async fn read_broadcast(
                 for entry in entries {
                     last[position].clone_from(&entry.id);
                     let envelope = entry.envelope(&key);
-                    let delivery = LocalRetry::delivery(deliveries.clone(), envelope, streams[position].index);
+                    let delivery =
+                        LocalRetry::delivery(deliveries.clone(), envelope, streams[position].index);
                     if deliveries.send(delivery).await.is_err() {
                         return;
                     }
@@ -779,7 +827,12 @@ impl DeliveryActions for EntryActions {
             let mut commands = self.commands.clone();
             if delay < self.claim_after {
                 // Idle for `claim_after - delay` now: claimable in `delay`.
-                query(&mut commands, &self.set_idle(self.claim_after - delay), &self.connected).await?;
+                query(
+                    &mut commands,
+                    &self.set_idle(self.claim_after - delay),
+                    &self.connected,
+                )
+                .await?;
                 return Ok(());
             }
             // A backoff longer than the claim time: keep the entry ours
@@ -793,11 +846,25 @@ impl DeliveryActions for EntryActions {
                 loop {
                     let left = due.saturating_duration_since(tokio::time::Instant::now());
                     if left < this.claim_after {
-                        let _ = query(&mut commands, &this.set_idle(this.claim_after - left), &this.connected).await;
+                        let _ = query(
+                            &mut commands,
+                            &this.set_idle(this.claim_after - left),
+                            &this.connected,
+                        )
+                        .await;
                         return;
                     }
-                    let _ = query(&mut commands, &this.set_idle(Duration::ZERO), &this.connected).await;
-                    tokio::time::sleep((this.claim_after / 2).min(left - this.claim_after + Duration::from_millis(1))).await;
+                    let _ = query(
+                        &mut commands,
+                        &this.set_idle(Duration::ZERO),
+                        &this.connected,
+                    )
+                    .await;
+                    tokio::time::sleep(
+                        (this.claim_after / 2)
+                            .min(left - this.claim_after + Duration::from_millis(1)),
+                    )
+                    .await;
                 }
             });
             Ok(())
@@ -847,7 +914,11 @@ async fn ensure_group(
     connected: &AtomicBool,
 ) -> Result<bool, MicroError> {
     let mut cmd = redis::cmd("XGROUP");
-    cmd.arg("CREATE").arg(key).arg(group).arg("$").arg("MKSTREAM");
+    cmd.arg("CREATE")
+        .arg(key)
+        .arg(group)
+        .arg("$")
+        .arg("MKSTREAM");
     match cmd.query_async::<Value>(connection).await {
         Ok(_) => Ok(true),
         Err(error) if error.code() == Some("BUSYGROUP") => Ok(false),
@@ -879,7 +950,11 @@ async fn delivered(
 }
 
 /// Runs a command, keeping track of whether the connection works.
-async fn query(connection: &mut ConnectionManager, cmd: &Cmd, connected: &AtomicBool) -> Result<Value, MicroError> {
+async fn query(
+    connection: &mut ConnectionManager,
+    cmd: &Cmd,
+    connected: &AtomicBool,
+) -> Result<Value, MicroError> {
     match cmd.query_async::<Value>(connection).await {
         Ok(value) => {
             connected.store(true, Ordering::SeqCst);
@@ -892,7 +967,11 @@ async fn query(connection: &mut ConnectionManager, cmd: &Cmd, connected: &Atomic
 /// A Redis error as a transport error; marks the connection down when the
 /// error is about the connection.
 fn failed(connected: &AtomicBool, error: &RedisError) -> MicroError {
-    if error.is_io_error() || error.is_connection_dropped() || error.is_connection_refusal() || error.is_timeout() {
+    if error.is_io_error()
+        || error.is_connection_dropped()
+        || error.is_connection_refusal()
+        || error.is_timeout()
+    {
         connected.store(false, Ordering::SeqCst);
     }
     MicroError::transport(format!("the Redis command failed: {error}"))
@@ -900,7 +979,10 @@ fn failed(connected: &AtomicBool, error: &RedisError) -> MicroError {
 
 /// `ERR no such key` (`XINFO GROUPS` on a missing stream).
 fn is_no_such_key(error: &RedisError) -> bool {
-    error.to_string().to_ascii_lowercase().contains("no such key")
+    error
+        .to_string()
+        .to_ascii_lowercase()
+        .contains("no such key")
 }
 
 /// One stream entry: its id and its fields.
@@ -983,7 +1065,9 @@ fn entries(value: Value) -> Vec<Entry> {
                 }
                 Value::Map(map) => map
                     .into_iter()
-                    .filter_map(|(name, value)| Some((text(&name)?.to_ascii_lowercase(), bytes(value)?)))
+                    .filter_map(|(name, value)| {
+                        Some((text(&name)?.to_ascii_lowercase(), bytes(value)?))
+                    })
                     .collect(),
                 _ => return None,
             };
@@ -1047,7 +1131,18 @@ mod tests {
             .with_header("x-note", "a\nb");
         let packed = xadd("navree:deal.won", 500, &envelope).get_packed_command();
         let text = String::from_utf8_lossy(&packed);
-        for part in ["XADD", "navree:deal.won", "MAXLEN", "~", "500", "navree-message-id", "m1", "a b", "payload", r#"{"id":1}"#] {
+        for part in [
+            "XADD",
+            "navree:deal.won",
+            "MAXLEN",
+            "~",
+            "500",
+            "navree-message-id",
+            "m1",
+            "a b",
+            "payload",
+            r#"{"id":1}"#,
+        ] {
             assert!(text.contains(part), "{part} missing from {text}");
         }
     }
@@ -1082,7 +1177,10 @@ mod tests {
         assert_eq!(envelope.pattern(), "deal.won");
         assert_eq!(envelope.message_id(), Some("m1"));
         assert_eq!(envelope.payload().as_ref(), b"{}");
-        assert!(stream_entries(Value::Nil).is_empty(), "a read that timed out");
+        assert!(
+            stream_entries(Value::Nil).is_empty(),
+            "a read that timed out"
+        );
     }
 
     #[test]
@@ -1098,7 +1196,10 @@ mod tests {
     fn autoclaim_replies_give_their_entries() {
         let value = Value::Array(vec![
             bulk("0-0"),
-            Value::Array(vec![Value::Array(vec![bulk("5-0"), Value::Array(vec![bulk("payload"), bulk("x")])])]),
+            Value::Array(vec![Value::Array(vec![
+                bulk("5-0"),
+                Value::Array(vec![bulk("payload"), bulk("x")]),
+            ])]),
             Value::Array(vec![]),
         ]);
         let claimed = autoclaimed(value);
@@ -1116,18 +1217,29 @@ mod tests {
     #[test]
     fn bad_urls_and_settings_are_refused() {
         let options = RedisOptions::default();
-        let error = RedisTransport::new("http://x", &options, "s", "s-1", Duration::from_secs(1)).unwrap_err();
+        let error = RedisTransport::new("http://x", &options, "s", "s-1", Duration::from_secs(1))
+            .unwrap_err();
         assert!(error.to_string().contains("not a Redis URL"), "{error}");
         let error = RedisTransport::new(
             "redis://127.0.0.1:6379",
-            &RedisOptions { max_len: 0, ..RedisOptions::default() },
+            &RedisOptions {
+                max_len: 0,
+                ..RedisOptions::default()
+            },
             "s",
             "s-1",
             Duration::from_secs(1),
         )
         .unwrap_err();
         assert!(error.to_string().contains("micro.redis.max_len"), "{error}");
-        let transport = RedisTransport::new("redis://u:secret@127.0.0.1:6379/0", &options, "deals", "deals-1", Duration::from_secs(1)).unwrap();
+        let transport = RedisTransport::new(
+            "redis://u:secret@127.0.0.1:6379/0",
+            &options,
+            "deals",
+            "deals-1",
+            Duration::from_secs(1),
+        )
+        .unwrap();
         assert!(!format!("{transport:?}").contains("secret"));
         assert_eq!(transport.key("deal.won"), "navree:deal.won");
         assert_eq!(transport.reply_key(), "navree:replies.deals-1");

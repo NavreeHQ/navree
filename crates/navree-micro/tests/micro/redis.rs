@@ -58,7 +58,11 @@ impl Harness for RedisHarness {
         }
     }
 
-    fn instance<'a>(&'a self, service: &'a str, _patterns: &'a [&'a str]) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
+    fn instance<'a>(
+        &'a self,
+        service: &'a str,
+        _patterns: &'a [&'a str],
+    ) -> BoxFuture<'a, Arc<dyn MicroTransport>> {
         Box::pin(async move { self.transport(service) })
     }
 
@@ -106,7 +110,10 @@ async fn two_apps_talk_over_redis_streams() {
         ..MicroOptions::from(Transport::redis(server.url()))
     };
     deals_answer_the_api_over(options(), options()).await;
-    assert!(server.has_stream("crm:deals.get"), "requests go to the pattern's stream");
+    assert!(
+        server.has_stream("crm:deals.get"),
+        "requests go to the pattern's stream"
+    );
 }
 
 #[tokio::test]
@@ -116,19 +123,35 @@ async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
     let first = harness.transport("billing");
     let mut crashed = Listening::start(first, vec![event("invoice.paid", "billing")]).await;
     let client = harness.transport("shop");
-    client.publish(published("invoice.paid", "42")).await.unwrap();
-    let taken = crashed.next(Duration::from_secs(5)).await.expect("the first instance takes it");
+    client
+        .publish(published("invoice.paid", "42"))
+        .await
+        .unwrap();
+    let taken = crashed
+        .next(Duration::from_secs(5))
+        .await
+        .expect("the first instance takes it");
     assert_eq!(taken.attempt(), 1);
     // It dies without acknowledging.
     drop(taken);
     crashed.stop().await;
 
-    let mut survivor = Listening::start(harness.transport("billing"), vec![event("invoice.paid", "billing")]).await;
-    let claimed = survivor.next(Duration::from_secs(5)).await.expect("claimed after claim_after_ms");
+    let mut survivor = Listening::start(
+        harness.transport("billing"),
+        vec![event("invoice.paid", "billing")],
+    )
+    .await;
+    let claimed = survivor
+        .next(Duration::from_secs(5))
+        .await
+        .expect("claimed after claim_after_ms");
     assert_eq!(claimed.attempt(), 2, "the claim is the next attempt");
     assert_eq!(claimed.envelope().payload().as_ref(), b"42");
     claimed.ack().await.unwrap();
-    assert!(survivor.next(Duration::from_millis(600)).await.is_none(), "acknowledged");
+    assert!(
+        survivor.next(Duration::from_millis(600)).await.is_none(),
+        "acknowledged"
+    );
     survivor.stop().await;
 }
 
@@ -136,14 +159,32 @@ async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
 async fn a_retry_longer_than_the_claim_time_waits_its_backoff() {
     let server = MiniRedis::start().await;
     let harness = RedisHarness::new(server.url(), quick("navree:"));
-    let mut listening = Listening::start(harness.transport("mailer"), vec![event("mail.queued", "mailer")]).await;
-    harness.transport("app").publish(published("mail.queued", "m")).await.unwrap();
-    let first = listening.next(Duration::from_secs(5)).await.expect("first attempt");
+    let mut listening = Listening::start(
+        harness.transport("mailer"),
+        vec![event("mail.queued", "mailer")],
+    )
+    .await;
+    harness
+        .transport("app")
+        .publish(published("mail.queued", "m"))
+        .await
+        .unwrap();
+    let first = listening
+        .next(Duration::from_secs(5))
+        .await
+        .expect("first attempt");
     let started = std::time::Instant::now();
     first.retry_in(Duration::from_millis(900)).await.unwrap();
-    let second = listening.next(Duration::from_secs(5)).await.expect("second attempt");
+    let second = listening
+        .next(Duration::from_secs(5))
+        .await
+        .expect("second attempt");
     assert_eq!(second.attempt(), 2);
-    assert!(started.elapsed() >= Duration::from_millis(800), "came back after {:?}", started.elapsed());
+    assert!(
+        started.elapsed() >= Duration::from_millis(800),
+        "came back after {:?}",
+        started.elapsed()
+    );
     second.ack().await.unwrap();
     listening.stop().await;
 }
@@ -151,15 +192,31 @@ async fn a_retry_longer_than_the_claim_time_waits_its_backoff() {
 #[tokio::test]
 async fn wildcards_dead_letters_and_names() {
     let server = MiniRedis::start().await;
-    let transport = RedisTransport::new(server.url(), &quick("crm:"), "stats", "stats-1", Duration::from_secs(1)).unwrap();
+    let transport = RedisTransport::new(
+        server.url(),
+        &quick("crm:"),
+        "stats",
+        "stats-1",
+        Duration::from_secs(1),
+    )
+    .unwrap();
     assert!(!transport.supports_wildcards());
     let (sender, _receiver) = tokio::sync::mpsc::channel(1);
-    let error = transport.listen(vec![event("deal.*", "stats")], sender).await.unwrap_err();
+    let error = transport
+        .listen(vec![event("deal.*", "stats")], sender)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("full pattern names"), "{error}");
 
-    let lines = transport.setup(&[event("deal.won", "stats")]).await.unwrap();
+    let lines = transport
+        .setup(&[event("deal.won", "stats")])
+        .await
+        .unwrap();
     assert_eq!(lines, ["created consumer group stats on crm:deal.won"]);
-    let again = transport.setup(&[event("deal.won", "stats")]).await.unwrap();
+    let again = transport
+        .setup(&[event("deal.won", "stats")])
+        .await
+        .unwrap();
     assert_eq!(again, ["consumer group stats on crm:deal.won exists"]);
 
     let letter = navree_micro::DeadLetter {
@@ -181,7 +238,10 @@ async fn wildcards_dead_letters_and_names() {
 
 #[tokio::test]
 async fn a_server_that_is_not_there_is_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let unused = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
     let transport = RedisTransport::new(
         format!("redis://{unused}"),
         &RedisOptions::default(),
@@ -190,7 +250,10 @@ async fn a_server_that_is_not_there_is_a_transport_error() {
         Duration::from_millis(300),
     )
     .unwrap();
-    let error = transport.publish(published("deal.won", "{}")).await.unwrap_err();
+    let error = transport
+        .publish(published("deal.won", "{}"))
+        .await
+        .unwrap_err();
     assert!(matches!(error, MicroError::Transport(_)), "{error:?}");
 }
 
