@@ -10,6 +10,13 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## Inbound mail: received messages parsed with mail-parser, the provider
+## sources (SES through SNS and S3, Mailgun routes, Postmark inbound, raw
+## MIME), mailboxes routed by address, signed reply tokens and the raw
+## `.eml` stored on a navree-storage disk.
+inbound = ["dep:mail-parser", "dep:navree-storage", "dep:regex"]
+
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
@@ -22,6 +29,8 @@ hmac = { workspace = true }
 html2text = { workspace = true }
 http = { workspace = true }
 lettre = { workspace = true }
+# Feature `inbound`: MIME parsing of received mail.
+mail-parser = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
@@ -30,9 +39,13 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# Feature `inbound`: raw `.eml` files on a disk, SES messages read from S3.
+navree-storage = { workspace = true, optional = true }
 navree-telemetry = { workspace = true }
 navree-view = { workspace = true }
 percent-encoding = { workspace = true }
+# Feature `inbound`: mailbox address patterns.
+regex = { workspace = true, optional = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
@@ -48,6 +61,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+# The inbound tests run with the feature on.
+navree-mail = { workspace = true, features = ["inbound"] }
 hex = { workspace = true }
 navree-testing = { workspace = true }
 sha2 = { workspace = true }

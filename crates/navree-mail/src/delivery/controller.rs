@@ -379,36 +379,12 @@ impl MailController {
 
     /// Fetches an SNS `SubscribeURL` (only `https://sns.<region>.amazonaws.com`).
     async fn confirm_subscription(&self, envelope: &Value) {
-        let url = envelope["SubscribeURL"].as_str().unwrap_or_default();
-        let allowed = url::Url::parse(url).is_ok_and(|parsed| {
-            parsed.scheme() == "https"
-                && parsed.host_str().is_some_and(|host| {
-                    host.starts_with("sns.")
-                        && (host.ends_with(".amazonaws.com") || host.ends_with(".amazonaws.com.cn"))
-                })
-        });
-        if !allowed {
-            tracing::warn!(target: "navree::mail", "SNS subscription confirmation with an unexpected SubscribeURL ignored");
-            return;
-        }
-        if !self.options.webhooks.ses.confirm_subscriptions {
-            tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription waiting for confirmation: open its SubscribeURL");
-            return;
-        }
-        let Some(client) = &self.client else {
-            return;
-        };
-        match client.get(url).send().await {
-            Ok(response) if response.is_success() => {
-                tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription confirmed");
-            }
-            Ok(response) => {
-                tracing::warn!(target: "navree::mail", status = response.status().as_u16(), "SNS subscription confirmation failed");
-            }
-            Err(error) => {
-                tracing::warn!(target: "navree::mail", error = %error, "SNS subscription confirmation failed");
-            }
-        }
+        confirm_sns_subscription(
+            self.client.as_ref(),
+            envelope,
+            self.options.webhooks.ses.confirm_subscriptions,
+        )
+        .await;
     }
 
     /// Mailgun: HMAC-SHA256 of `timestamp + token` with the signing key,
@@ -418,20 +394,13 @@ impl MailController {
             return false;
         };
         let signature = &payload["signature"];
-        let timestamp = signature["timestamp"].as_str().unwrap_or_default();
-        let token = signature["token"].as_str().unwrap_or_default();
-        let given = signature["signature"].as_str().unwrap_or_default();
-        let Ok(seconds) = timestamp.parse::<i64>() else {
-            return false;
-        };
-        if (self.now().timestamp() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
-            return false;
-        }
-        let expected = hex::encode(navree_crypto::hmac_sha256(
-            key.expose().as_bytes(),
-            format!("{timestamp}{token}").as_bytes(),
-        ));
-        navree_crypto::constant_time_eq(expected.as_bytes(), given.as_bytes())
+        mailgun_signature_valid(
+            key.expose(),
+            signature["timestamp"].as_str().unwrap_or_default(),
+            signature["token"].as_str().unwrap_or_default(),
+            signature["signature"].as_str().unwrap_or_default(),
+            self.now(),
+        )
     }
 
     /// Postmark: the token as the basic-auth password or `?token=`.
@@ -439,21 +408,7 @@ impl MailController {
         let Some(token) = &self.options.webhooks.postmark.token else {
             return false;
         };
-        let token = token.expose().as_bytes();
-        if let Some(given) = query.get("token") {
-            return navree_crypto::constant_time_eq(given.as_bytes(), token);
-        }
-        headers
-            .get(header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Basic "))
-            .and_then(|encoded| STANDARD.decode(encoded.trim()).ok())
-            .and_then(|decoded| String::from_utf8(decoded).ok())
-            .and_then(|pair| {
-                pair.split_once(':')
-                    .map(|(_, password)| password.to_owned())
-            })
-            .is_some_and(|password| navree_crypto::constant_time_eq(password.as_bytes(), token))
+        basic_auth_or_token(headers, query, token.expose())
     }
 
     /// Resend (Svix): `v1,` HMAC-SHA256 of `id.timestamp.body` with the
@@ -786,6 +741,94 @@ impl MailError {
             _ => None,
         }
     }
+}
+
+/// Fetches an SNS subscription's `SubscribeURL` when `confirm` is on (only
+/// `https://sns.<region>.amazonaws.com` URLs); logs otherwise.
+pub(crate) async fn confirm_sns_subscription(
+    client: Option<&HttpClient>,
+    envelope: &Value,
+    confirm: bool,
+) {
+    let url = envelope["SubscribeURL"].as_str().unwrap_or_default();
+    let allowed = url::Url::parse(url).is_ok_and(|parsed| {
+        parsed.scheme() == "https"
+            && parsed.host_str().is_some_and(|host| {
+                host.starts_with("sns.")
+                    && (host.ends_with(".amazonaws.com") || host.ends_with(".amazonaws.com.cn"))
+            })
+    });
+    if !allowed {
+        tracing::warn!(target: "navree::mail", "SNS subscription confirmation with an unexpected SubscribeURL ignored");
+        return;
+    }
+    if !confirm {
+        tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription waiting for confirmation: open its SubscribeURL");
+        return;
+    }
+    let Some(client) = client else {
+        return;
+    };
+    match client.get(url).send().await {
+        Ok(response) if response.is_success() => {
+            tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription confirmed");
+        }
+        Ok(response) => {
+            tracing::warn!(target: "navree::mail", status = response.status().as_u16(), "SNS subscription confirmation failed");
+        }
+        Err(error) => {
+            tracing::warn!(target: "navree::mail", error = %error, "SNS subscription confirmation failed");
+        }
+    }
+}
+
+/// Mailgun's signature: HMAC-SHA256 of `timestamp + token` with the
+/// signing key, hex, with the timestamp within 15 minutes of `now`.
+pub(crate) fn mailgun_signature_valid(
+    key: &str,
+    timestamp: &str,
+    token: &str,
+    signature: &str,
+    now: DateTime<Utc>,
+) -> bool {
+    let Ok(seconds) = timestamp.parse::<i64>() else {
+        return false;
+    };
+    if (now.timestamp() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
+        return false;
+    }
+    let expected = hex::encode(navree_crypto::hmac_sha256(
+        key.as_bytes(),
+        format!("{timestamp}{token}").as_bytes(),
+    ));
+    navree_crypto::constant_time_eq(expected.as_bytes(), signature.as_bytes())
+}
+
+/// `token` as the `token` query parameter, or as the password of HTTP
+/// basic authentication.
+pub(crate) fn basic_auth_or_token(
+    headers: &HeaderMap,
+    query: &HashMap<String, String>,
+    token: &str,
+) -> bool {
+    let token = token.as_bytes();
+    if token.is_empty() {
+        return false;
+    }
+    if let Some(given) = query.get("token") {
+        return navree_crypto::constant_time_eq(given.as_bytes(), token);
+    }
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Basic "))
+        .and_then(|encoded| STANDARD.decode(encoded.trim()).ok())
+        .and_then(|decoded| String::from_utf8(decoded).ok())
+        .and_then(|pair| {
+            pair.split_once(':')
+                .map(|(_, password)| password.to_owned())
+        })
+        .is_some_and(|password| navree_crypto::constant_time_eq(password.as_bytes(), token))
 }
 
 /// The error mapper registered by `MailModule`.

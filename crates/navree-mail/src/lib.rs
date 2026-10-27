@@ -96,6 +96,8 @@ mod dkim;
 mod domains;
 mod error;
 mod fake;
+#[cfg(feature = "inbound")]
+pub mod inbound;
 mod job;
 mod mailable;
 mod mailer;
@@ -133,6 +135,11 @@ pub use domains::{
 };
 pub use error::MailError;
 pub use fake::MailFake;
+#[cfg(feature = "inbound")]
+pub use inbound::{
+    Inbound, InboundError, InboundMail, InboundOptions, Incoming, MailboxContext, MailboxHandler,
+    ModuleBuilderMailExt, Received, ReplyTokens,
+};
 pub use job::SendMailJob;
 pub use mailable::{Held, Mailable, TemplateMail};
 pub use mailer::{Mailer, ScopedMailer};

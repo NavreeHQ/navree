@@ -356,6 +356,10 @@ html2text = { version = "0.17.4", default-features = false }
 # DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
 # DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
 hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
+# Inbound mail (navree-mail, feature `inbound`): MIME parsing of received
+# messages, headers, parts and attachments, every charset through
+# encoding_rs (pure Rust; already in the tree).
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
 croner = "4.0.2"
 moka = { version = "0.12.16", features = ["future"] }
 dashmap = "6.2.1"
