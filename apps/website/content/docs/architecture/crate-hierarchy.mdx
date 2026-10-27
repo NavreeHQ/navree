@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm (packages built on other packages)
-L6  navree-social  navree-sso  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
+L6  navree-social  navree-sso  navree-webhooks  navree-sheets  navree-flags  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis  navree-mongo
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
@@ -70,6 +70,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
 | L6 | `navree-i18n` | [Localization](/docs/packages/localization/): Fluent files, `t!`, the request's locale, ICU4X formatting, translated validation messages, templates and notifications |
 | L6 | `navree-documents` | [Documents](/docs/packages/documents/): PDF from Typst or HTML templates, DOCX, merge and stamps, queued renders |
+| L6 | `navree-sheets` | [Imports and exports](/docs/packages/imports-and-exports/): CSV and Excel exports, streamed or queued with a signed link; imports with encoding detection, header mapping, row validation, a staging preview and error files |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
@@ -112,6 +113,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
 | `navree-documents` | kernel, contracts, config, http, view, storage, db and queue (with its `operations` feature) |
+| `navree-sheets` | kernel, contracts, config, macros, http, db, storage, validation, queue, workspace; i18n with its `i18n` feature |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree-i18n` | kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros |

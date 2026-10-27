@@ -72,6 +72,7 @@ conventions, and says which skill to load for each task.
 | [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
 | [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
 | [`navree-documents`](navree-documents/SKILL.md) | PDF from Typst or HTML templates, DOCX, merge and stamps, queued renders, `DocumentsFake` (feature `documents`) |
+| [`navree-sheets`](navree-sheets/SKILL.md) | CSV and Excel exports (downloads, queued files with signed links) and imports (encoding detection, header mapping, a staging preview, duplicate modes, error files) (feature `sheets`) |
 
 ## Installing
 

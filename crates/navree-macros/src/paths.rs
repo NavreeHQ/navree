@@ -79,9 +79,20 @@ pub(crate) const MCP: RuntimeCrate = RuntimeCrate {
     facade_module: "mcp",
 };
 
+/// navree-sheets: `Exportable`, `Column`, `Cell`, `IntoCell`, `ImportRow`
+/// and `ImportColumn` (`#[derive(Exportable)]`, `#[derive(Importable)]`).
+/// Its own tests name it `::navree_sheets` (`extern crate self`).
+pub(crate) const SHEETS: RuntimeCrate = RuntimeCrate {
+    package: "navree-sheets",
+    facade_module: "sheets",
+};
+
 /// The crates named by their own name even from inside themselves (their
 /// integration tests and doctests are separate crates).
-const NAMED_FROM_INSIDE: &[(&str, &str)] = &[("navree-mcp", "navree_mcp")];
+const NAMED_FROM_INSIDE: &[(&str, &str)] = &[
+    ("navree-mcp", "navree_mcp"),
+    ("navree-sheets", "navree_sheets"),
+];
 
 /// navree-ai: `ToolSpec`, `ToolAccess` and the dispatch helpers (`#[agent]`).
 pub(crate) const AI: RuntimeCrate = RuntimeCrate {

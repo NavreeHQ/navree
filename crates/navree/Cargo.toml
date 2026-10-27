@@ -41,6 +41,7 @@ full = [
     "schema",
     "session",
     "settings",
+    "sheets",
     "sso",
     "storage",
     "storage-s3",
@@ -226,6 +227,20 @@ sso = [
     "auth",
     "workspace",
 ]
+## L6
+## Sheets: CSV and Excel exports (streamed downloads, queued files with
+## signed links) and imports (encoding detection, header mapping, row
+## validation, a staging preview, batched apply, error files); pure Rust
+## (rust_xlsxwriter, calamine); in `full`.
+sheets = [
+    "dep:navree-sheets",
+    "http",
+    "db",
+    "storage",
+    "validation",
+    "queue",
+    "workspace",
+]
 ## L6 (opt-in, not in `full`)
 ## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
 ## Discord, X and OpenID Connect providers, linked to navree-auth users.
@@ -374,6 +389,8 @@ i18n = [
     "validation",
     "notify",
     "workspace",
+    # Export headers and import messages in the request's locale.
+    "navree-sheets?/i18n",
 ]
 ## L7 (in `full`)
 ## Lighthouse: application monitoring inside the app. Issues grouped by
@@ -510,6 +527,7 @@ navree-schedule = { workspace = true, optional = true }
 navree-schema = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
 navree-settings = { workspace = true, optional = true }
+navree-sheets = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
 navree-sso = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
