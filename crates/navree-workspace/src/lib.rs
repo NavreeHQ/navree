@@ -43,10 +43,12 @@
 //!   all or some of them; [`CurrentPartition`] (`X-Partition`) and
 //!   [`PartitionScope`] keep a request to the partitions it may touch, with
 //!   [`PartitionRepo`] and, on PostgreSQL, `navree.partition`.
-//! - **Time zones.** Each workspace has an optional `timezone` and
-//!   `country` ([`Workspaces::set_time_zone`]); the module registers
-//!   [`WorkspaceZones`], the workspace-level `dyn ZoneSource` that
-//!   navree-time's `CurrentZone` and per-workspace schedules read.
+//! - **Time zones.** Each workspace and organization has an optional
+//!   `timezone` and `country` ([`Workspaces::set_time_zone`],
+//!   [`Organizations::update`]); the module registers [`WorkspaceZones`]
+//!   and [`OrganizationZones`], the `dyn ZoneSource`s that navree-time's
+//!   `CurrentZone` and per-workspace schedules read. A workspace without
+//!   either follows its organization's.
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), plus
 //!   `/api/organizations...` ([`OrganizationController`]) and
@@ -166,4 +168,4 @@ pub use tenant::WorkspaceDatabases;
 pub use workspaces::{
     GrantedBy, MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify,
 };
-pub use zone::WorkspaceZones;
+pub use zone::{OrganizationZones, WorkspaceZones};
