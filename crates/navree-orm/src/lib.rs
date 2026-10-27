@@ -136,16 +136,18 @@ pub use value::{
     Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]` and `#[scopes]` (see their documentation in
-/// navree-orm-macros).
-pub use navree_orm_macros::{Model, scopes};
+/// `#[derive(Model)]`, `#[scopes]` and `#[relations]` (see their
+/// documentation in navree-orm-macros).
+pub use navree_orm_macros::{Model, relations, scopes};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
+    pub use crate::relations::derive_support as relations;
     pub use chrono::{DateTime, Utc};
+    pub use serde;
     pub use std::sync::Arc;
 }
 

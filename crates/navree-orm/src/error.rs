@@ -116,6 +116,55 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A relation path (`with("company.owner")`, `has("activities")`, ...)
+    /// names a relation the model does not declare.
+    #[error("{model} has no relation `{relation}`{}", known_relations(known))]
+    RelationNotFound {
+        /// The model the relation was looked up on.
+        model: Cow<'static, str>,
+        /// The relation name that was asked for.
+        relation: String,
+        /// The relations the model does declare.
+        known: Vec<String>,
+    },
+    /// A relation was about to be loaded for one record of a result of
+    /// several records while lazy loading is prevented (see
+    /// [`LazyLoading`](crate::relations::LazyLoading)).
+    #[error(
+        "lazy loading `{relation}` on {model} is prevented: eager load it on the query (`with(\"{relation}\")`) or on the collection (`load`)"
+    )]
+    LazyLoading {
+        /// The model the relation belongs to.
+        model: Cow<'static, str>,
+        /// The relation.
+        relation: String,
+    },
+    /// A model was used in a polymorphic relation without an entry in the
+    /// morph map while the map is required (see
+    /// [`MorphMap`](crate::relations::MorphMap)).
+    #[error(
+        "{model} has no entry in the morph map, which is required: register it with MorphMap::register::<{model}>()"
+    )]
+    MorphNotMapped {
+        /// The model.
+        model: Cow<'static, str>,
+    },
+    /// A polymorphic type column holds a name no model is registered
+    /// under.
+    #[error(
+        "no model is registered under the morph name `{name}`: register the model with MorphMap::register, or list it on the morph_to relation with `.types::<..>()`"
+    )]
+    UnknownMorph {
+        /// The stored type name.
+        name: String,
+    },
+}
+
+fn known_relations(known: &[String]) -> String {
+    match known {
+        [] => " (it declares no relations: add them in a #[relations] impl block)".to_owned(),
+        known => format!(" (it has: {})", known.join(", ")),
+    }
 }
 
 impl OrmError {

@@ -89,8 +89,9 @@ const KEY: &str = "key";
 
 impl<M: Model> Builder<M> {
     /// Runs the query on `target` and reads its records (running the
-    /// `Retrieved` hooks).
-    pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
+    /// `Retrieved` hooks), then loads its eager loads into them.
+    pub(crate) async fn fetch(mut self, target: &Target<'_>) -> Result<Collection<M>> {
+        let eager = self.take_eager();
         let ir = self.into_ir();
         let rows = target.fetch(&ir).await?;
         let mut records = Vec::with_capacity(rows.len());
@@ -106,6 +107,7 @@ impl<M: Model> Builder<M> {
                 }
             }
         }
+        crate::relations::eager::after_fetch(target, &mut records, &eager).await?;
         Ok(Collection::from(records))
     }
 

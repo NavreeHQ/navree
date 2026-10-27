@@ -18,6 +18,7 @@ use proc_macro::TokenStream;
 mod errors;
 mod model;
 mod paths;
+mod relations;
 mod scopes;
 
 /// Implements `Model` for a struct with named fields.
@@ -55,6 +56,44 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     model::derive(input)
         .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Declares a model's relations: each method of the impl block, `fn
+/// name(&self) -> RelationType`, is a relation, named after the method (so
+/// `deal.company()` and `with("company")` mean the same relation).
+///
+/// ```ignore
+/// #[relations]
+/// impl Deal {
+///     pub fn company(&self) -> BelongsTo<Deal, Company> {
+///         self.belongs_to(Deal::COMPANY_ID)
+///     }
+///
+///     pub fn activities(&self) -> HasMany<Deal, Activity> {
+///         self.has_many(Activity::DEAL_ID).latest()
+///     }
+/// }
+///
+/// let deals = Deal::query().with("company").with_count("activities").get(&db).await?;
+/// let company = deal.company().first(&db).await?;
+/// ```
+///
+/// The relation definitions (`belongs_to`, `has_many`, ...) are in scope in
+/// the methods. A model with relations implements `Default` (definitions
+/// are read from a default instance when a relation is used by name), and
+/// has one `#[relations]` block; relations added by other modules go
+/// through `RelationRegistry`.
+#[proc_macro_attribute]
+pub fn relations(args: TokenStream, item: TokenStream) -> TokenStream {
+    let item: proc_macro2::TokenStream = item.into();
+    relations::expand(args.into(), item.clone())
+        .unwrap_or_else(|error| {
+            // The impl block stays, so the errors are the only ones.
+            let mut out = error.into_compile_error();
+            out.extend(item);
+            out
+        })
         .into()
 }
 

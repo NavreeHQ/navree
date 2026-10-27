@@ -102,7 +102,7 @@ pub fn compile_exists(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
 /// Splits the trailing direction (and NULLs placement) off a raw order:
 /// `"field(stage, ?) DESC NULLS LAST"` is `field(stage, ?)`, descending,
 /// NULLs last. Without a direction the order is ascending, as in SQL.
-fn split_direction(sql: &str) -> (&str, sea_query::Order, Option<NullOrdering>) {
+pub(super) fn split_direction(sql: &str) -> (&str, sea_query::Order, Option<NullOrdering>) {
     let mut body = sql.trim_end();
     let mut nulls = None;
     for (suffix, placement) in [

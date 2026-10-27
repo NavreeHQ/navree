@@ -174,6 +174,24 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     if let Some(per_page) = &model.per_page {
         meta = quote!(#meta.per_page(#per_page));
     }
+    let morph_name = &model.morph_name;
+    let foreign_key = &model.foreign_key;
+    meta = quote!(#meta.morph_name(#morph_name).foreign_key(#foreign_key));
+    if !model.touches.is_empty() {
+        let touches = &model.touches;
+        meta = quote!(#meta.touches(&[#(#touches),*]));
+    }
+    if !model.with.is_empty() {
+        let with = &model.with;
+        meta = quote!(#meta.with(&[#(#with),*]));
+    }
+    if !model.with_count.is_empty() {
+        let with_count = &model.with_count;
+        meta = quote!(#meta.with_count(&[#(#with_count),*]));
+    }
+    if let Some((foreign_key, related_key)) = &model.pivot {
+        meta = quote!(#meta.pivot_keys(#foreign_key, #related_key));
+    }
 
     // from_row.
     let reads = model.columns.iter().zip(&codecs).map(|(column, codec)| {
@@ -374,6 +392,30 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
             }
 
             #global_scopes
+
+            fn relation(name: &str) -> ::core::option::Option<#krate::relations::DynRelation<Self>> {
+                // A `#[relations]` block's inherent function, else the
+                // fallback (no declared relations); then the relations other
+                // modules defined.
+                #[allow(unused_imports)]
+                use #private::relations::NoRelations as _;
+                match Self::__navree_relations(name) {
+                    ::core::option::Option::Some(relation) => ::core::option::Option::Some(relation),
+                    ::core::option::Option::None => #private::relations::defined::<Self>(name),
+                }
+            }
+
+            fn relation_names() -> ::std::vec::Vec<::std::borrow::Cow<'static, str>> {
+                #[allow(unused_imports)]
+                use #private::relations::NoRelations as _;
+                let mut names: ::std::vec::Vec<::std::borrow::Cow<'static, str>> =
+                    Self::__navree_relation_names()
+                        .iter()
+                        .map(|name| ::std::borrow::Cow::Borrowed(*name))
+                        .collect();
+                names.extend(#private::relations::defined_names::<Self>());
+                names
+            }
         }
 
         #[automatically_derived]

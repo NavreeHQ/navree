@@ -220,9 +220,23 @@ pub(crate) struct Hooks<M: Model> {
     hooks: Vec<Arc<dyn ModelHook<M>>>,
 }
 
+tokio::task_local! {
+    /// Set while lifecycle hooks are off (the `_quietly` writes).
+    static QUIET: ();
+}
+
+/// Runs `future` with every model's lifecycle hooks off (the `_quietly`
+/// writes of relations and `push_quietly`).
+pub(crate) async fn quietly<F: std::future::Future>(future: F) -> F::Output {
+    QUIET.scope((), future).await
+}
+
 impl<M: Model> Hooks<M> {
-    /// The hooks that apply in `ctx`.
+    /// The hooks that apply in `ctx` (none inside [`quietly`]).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
+        if QUIET.try_with(|_| ()).is_ok() {
+            return Ok(Hooks { hooks: Vec::new() });
+        }
         let mut hooks = M::hooks();
         if let Some(app) = ctx.app() {
             let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
