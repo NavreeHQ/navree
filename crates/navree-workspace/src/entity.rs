@@ -1,6 +1,7 @@
 //! The workspace module's tables as SeaORM entities.
 //!
-//! - `workspaces(id, name, slug UNIQUE, owner_id, created_at, updated_at)`
+//! - `workspaces(id, name, slug UNIQUE, owner_id, kind, created_at,
+//!   updated_at)`, `kind` being `live` or `demo`
 //! - `workspace_members(id, workspace_id → workspaces ON DELETE CASCADE,
 //!   user_id, role, created_at, updated_at)`, one row per (workspace, user)
 //! - `workspace_invitations(id, workspace_id → workspaces ON DELETE
@@ -15,12 +16,60 @@
 //! services, which keep the invariants, emit the events and record the
 //! changes; read them freely.
 
+use std::fmt;
+
 use navree_access::Subject;
+use serde::{Deserialize, Serialize};
+
+/// What a workspace holds: a team's own data, or a demo seeded from
+/// fixtures by the app's [`DemoSeeder`](crate::DemoSeeder)s.
+///
+/// Stored in `workspaces.kind` as `live` or `demo`; the API returns it as
+/// `kind`, so a front end can offer a Live/Demo switch.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceKind {
+    /// A team's own data (every workspace [`Workspaces::create`](crate::Workspaces::create) makes).
+    #[default]
+    Live,
+    /// A demo workspace ([`DemoWorkspaces::create`](crate::DemoWorkspaces::create)):
+    /// read-only or reset every night (`workspace.demo.mode`).
+    Demo,
+}
+
+impl WorkspaceKind {
+    /// `live` or `demo`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkspaceKind::Live => "live",
+            WorkspaceKind::Demo => "demo",
+        }
+    }
+
+    /// The kind stored as `value`: `demo`, else live.
+    pub fn parse(value: &str) -> WorkspaceKind {
+        if value == "demo" {
+            WorkspaceKind::Demo
+        } else {
+            WorkspaceKind::Live
+        }
+    }
+}
+
+impl fmt::Display for WorkspaceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// `workspaces`: the tenants.
 pub mod workspace {
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
+
+    use super::WorkspaceKind;
 
     /// A workspace.
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
@@ -36,10 +85,25 @@ pub mod workspace {
         pub slug: String,
         /// The owner: always a member with the `owner` role.
         pub owner_id: Uuid,
+        /// `live` (a team's own data) or `demo` (seeded from fixtures; see
+        /// [`DemoWorkspaces`](crate::DemoWorkspaces)).
+        pub kind: String,
         /// When the workspace was created.
         pub created_at: DateTimeUtc,
         /// When the workspace last changed.
         pub updated_at: DateTimeUtc,
+    }
+
+    impl Model {
+        /// The kind: [`WorkspaceKind::Live`] or [`WorkspaceKind::Demo`].
+        pub fn kind(&self) -> WorkspaceKind {
+            WorkspaceKind::parse(&self.kind)
+        }
+
+        /// Whether this is a demo workspace.
+        pub fn is_demo(&self) -> bool {
+            self.kind() == WorkspaceKind::Demo
+        }
     }
 
     /// A workspace has many members and invitations.

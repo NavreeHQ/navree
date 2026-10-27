@@ -4,6 +4,7 @@
 mod support;
 
 mod access;
+mod demo;
 mod invitations;
 mod isolation;
 mod resolution;

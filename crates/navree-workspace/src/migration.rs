@@ -1,5 +1,5 @@
 //! The workspace module's migrations (`MigrationSet` `workspace`, after
-//! `auth`).
+//! `auth`): the tables, then `workspaces.kind`.
 
 use navree_db::MigrationSet;
 use sea_orm::DbErr;
@@ -16,6 +16,63 @@ pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(WORKSPACE_MIGRATIONS)
         .after(["auth"])
         .migration(CreateWorkspaceTables)
+        .migration(AddWorkspaceKind)
+}
+
+/// Adds `workspaces.kind` (`live` or `demo`, default `live`) and its index.
+struct AddWorkspaceKind;
+
+impl MigrationName for AddWorkspaceKind {
+    fn name(&self) -> &str {
+        "m20261027_000001_add_workspace_kind"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for AddWorkspaceKind {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table("workspaces")
+                    .add_column(
+                        ColumnDef::new("kind")
+                            .string_len(16)
+                            .not_null()
+                            .default("live"),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspaces_kind_index")
+                    .table("workspaces")
+                    .col("kind")
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("workspaces_kind_index")
+                    .table("workspaces")
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table("workspaces")
+                    .drop_column("kind")
+                    .to_owned(),
+            )
+            .await
+    }
 }
 
 /// Creates `workspaces`, `workspace_members` and `workspace_invitations`.

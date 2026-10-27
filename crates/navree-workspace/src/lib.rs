@@ -30,6 +30,13 @@
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), unless
 //!   `workspace.routes` is false.
+//! - **Demo workspaces** ([`DemoWorkspaces`]). Workspaces of kind
+//!   [`WorkspaceKind::Demo`], filled from fixtures by each module's
+//!   [`DemoSeeder`] (`m.demo_seeder::<CrmDemo>()`). With
+//!   `workspace.demo.mode = "read_only"` writes to them are refused (403,
+//!   code `demo_read_only`); with `"reset"` they are cleared and seeded
+//!   again every night (`workspace:demo-reset`). Responses about a demo
+//!   carry `X-Navree-Demo: read_only|reset` ([`DEMO_HEADER`]).
 //!
 //! ```no_run
 //! use navree_access::{AccessModule, AccessOptions};
@@ -63,8 +70,10 @@ mod config;
 mod controller;
 mod core;
 mod current;
+mod demo;
 mod directory;
 mod error;
+mod fixtures;
 mod invitations;
 mod isolation;
 mod members;
@@ -75,18 +84,23 @@ mod role;
 mod tenant;
 mod workspaces;
 
-pub use config::{InvitationOptions, Isolation, ResolverKind, RoleOptions, WorkspaceConfig};
+pub use config::{
+    DemoMode, DemoOptions, InvitationOptions, Isolation, ResolverKind, RoleOptions,
+    WorkspaceConfig,
+};
 pub use controller::{
     AcceptInvitationInput, AcceptedInvitationResource, AddMemberInput, ChangeRoleInput,
     CreateWorkspaceInput, InvitationController, InvitationResource, InviteInput, MemberResource,
     RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController, WorkspaceResource,
 };
 pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
+pub use demo::{DEMO_HEADER, DemoReset, DemoSeed, DemoSeeder, DemoWorkspaces};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
 pub use entity::{
     INVITATION_SUBJECT, Invitation, MEMBER_SUBJECT, Member, WORKSPACE_SUBJECT, Workspace,
+    WorkspaceKind,
 };
-pub use error::WorkspaceError;
+pub use error::{DEMO_READ_ONLY, WorkspaceError};
 pub use invitations::{AcceptedInvitation, Invitations, SentInvitation, TOKEN_LEN};
 pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};

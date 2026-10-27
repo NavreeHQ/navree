@@ -137,3 +137,22 @@ pub struct InvitationAccepted {
 impl Event for InvitationAccepted {
     const NAME: &'static str = "workspace.invitation_accepted";
 }
+
+/// A demo workspace was seeded: when it was created
+/// ([`DemoWorkspaces::create`](crate::DemoWorkspaces::create), `reset:
+/// false`) or reset (`workspace:demo-reset`, `reset: true`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DemoWorkspaceSeeded {
+    /// The workspace.
+    pub workspace_id: Uuid,
+    /// Its slug.
+    pub slug: String,
+    /// The demo seeders that ran, in order.
+    pub seeders: Vec<String>,
+    /// Whether the workspace was cleared first.
+    pub reset: bool,
+}
+
+impl Event for DemoWorkspaceSeeded {
+    const NAME: &'static str = "workspace.demo_seeded";
+}
