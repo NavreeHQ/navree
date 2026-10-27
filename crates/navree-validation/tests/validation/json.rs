@@ -183,3 +183,77 @@ async fn non_json_content_type_is_415() {
             "Expected request with `Content-Type: application/json`",
         );
 }
+
+/// A valid body goes straight from its bytes into the DTO: no
+/// `serde_json::Value` is built for it.
+#[tokio::test]
+async fn bodies_are_deserialized_from_their_bytes() {
+    let app = app().await;
+    let response = app
+        .client()
+        .post("/v/probe")
+        .json(&json!({ "probe": { "any": [1, 2] }, "name": "x" }))
+        .send()
+        .await
+        .assert_status(200);
+    let deserializer = response.json_value()["ok"]["probe"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(deserializer.contains("SliceRead"), "{deserializer}");
+    assert!(!deserializer.contains("Value"), "{deserializer}");
+
+    // A garde failure still reports against the body as JSON.
+    let response = app
+        .client()
+        .post("/v/probe")
+        .json(&json!({ "probe": 1, "name": "" }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "name": ["name must be longer than or equal to 1 characters"] })
+    );
+}
+
+/// Bodies a straight read refuses are read as before: a repeated key keeps
+/// its last value, and a body that is not JSON at all is a `body` error
+/// even when a field before the mistake has the wrong type.
+#[tokio::test]
+async fn bodies_the_straight_read_refuses_are_judged_as_json_values() {
+    let app = app().await;
+    app.client()
+        .post("/v/users")
+        .header("content-type", "application/json")
+        .body(r#"{"name": "Al", "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"]}"#)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("ok.name", json!("Ada"));
+
+    let response = app
+        .client()
+        .post("/v/users")
+        .header("content-type", "application/json")
+        .body(r#"{"age": "old", "name": "#)
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "body": ["body must be a valid JSON string"] })
+    );
+
+    let response = app
+        .client()
+        .post("/v/users")
+        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": "old", "tags": [] }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "age": ["age must be an integer number"] })
+    );
+}

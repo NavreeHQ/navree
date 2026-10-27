@@ -95,7 +95,7 @@ where
             Err(invalid) => return Err(invalid.reject(ctx.as_ref()).await),
         };
         if let Err(failures) = check(&value) {
-            return Err(Invalid::new(failures, Some(input), "body")
+            return Err(Invalid::new(failures, input.into_value(), "body")
                 .reject(ctx.as_ref())
                 .await);
         }
@@ -435,9 +435,35 @@ pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Fail
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)
 }
 
+/// A JSON body as the garde failures see it: its bytes, parsed into a
+/// [`Value`] only when a failure needs it (the length messages pick their
+/// `array` variant from it).
+enum JsonInput {
+    Bytes(Bytes),
+    Value(Value),
+}
+
+impl JsonInput {
+    fn into_value(self) -> Option<Value> {
+        match self {
+            JsonInput::Bytes(bytes) => serde_json::from_slice(&bytes).ok(),
+            JsonInput::Value(value) => Some(value),
+        }
+    }
+}
+
 /// Reads and deserializes a JSON body. The outer error is an HTTP failure
 /// (415, 413); the inner one a validation failure.
-async fn json_body<T, S>(req: Request, state: &S) -> Result<Result<(T, Value), Invalid>, AppError>
+///
+/// A body is deserialized straight from its bytes. Only one that fails
+/// that way is parsed into a [`Value`] and deserialized from it, as every
+/// body once was: that reports every failure as before (malformed JSON on
+/// `body`, serde errors at their path) and accepts what the `Value` route
+/// accepts (a repeated key keeps its last value).
+async fn json_body<T, S>(
+    req: Request,
+    state: &S,
+) -> Result<Result<(T, JsonInput), Invalid>, AppError>
 where
     T: DeserializeOwned,
     S: Send + Sync,
@@ -449,6 +475,9 @@ where
     let bytes = Bytes::from_request(req, state)
         .await
         .map_err(|rejection| rejected(rejection.status(), rejection.body_text()))?;
+    if let Ok(value) = serde_json::from_slice::<T>(&bytes) {
+        return Ok(Ok((value, JsonInput::Bytes(bytes))));
+    }
     let input: Value = match serde_json::from_slice(&bytes) {
         Ok(input) => input,
         Err(_) => {
@@ -460,7 +489,7 @@ where
         }
     };
     match serde_path_to_error::deserialize::<_, T>(&input) {
-        Ok(value) => Ok(Ok((value, input))),
+        Ok(value) => Ok(Ok((value, JsonInput::Value(input)))),
         Err(error) => {
             let failure = failure::from_serde(error.path(), &error.inner().to_string());
             Ok(Err(Invalid::new(vec![failure], Some(input), "body")))
