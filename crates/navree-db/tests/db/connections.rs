@@ -302,6 +302,104 @@ async fn connections_announce_themselves_and_the_monitor_reports_them() {
     assert!(flag.to_string().contains("unknown argument `--both`"), "{flag}");
 }
 
+/// Owns the `users` table.
+struct Users;
+
+impl navree_kernel::Module for Users {
+    fn register(&self, m: &mut navree_kernel::ModuleBuilder) {
+        use navree_db::{MigrationSet, ModuleBuilderDbExt};
+
+        m.migrations(MigrationSet {
+            module: "users",
+            after: vec![],
+            migrations: vec![crate::fixtures::CreateTable::boxed(
+                "m0001_create_users",
+                "users",
+            )],
+        });
+    }
+}
+
+#[tokio::test]
+async fn migrations_and_session_work_use_the_direct_connection() {
+    use navree_db::Migrator;
+
+    // Behind a pooler, `url` and `direct_url` reach one database; two
+    // files show which one is used.
+    let pooled = TempDb::new();
+    let direct = TempDb::new();
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(DbOptions {
+            direct_url: Some(direct.url.clone()),
+            migrate_on_boot: true,
+            ..pooled.options()
+        }))
+        .module(Users)
+        .boot()
+        .await
+        .unwrap();
+    let db = app.ctx().get::<Db>().await.unwrap();
+    assert!(db.has_direct());
+    let session = db.direct().await.unwrap();
+    assert!(!std::ptr::eq(session.conn(), db.conn()));
+    assert!(
+        std::ptr::eq(db.direct().await.unwrap().conn(), session.conn()),
+        "opened once"
+    );
+    assert_eq!(session.name(), "default");
+    let direct_tables = crate::fixtures::tables(&session).await;
+    assert!(direct_tables.contains(&"users".to_owned()), "{direct_tables:?}");
+    assert!(
+        !crate::fixtures::tables(&db).await.contains(&"users".to_owned()),
+        "migrations bypass the pooled URL"
+    );
+    assert!(
+        Migrator::status(app.ctx())
+            .await
+            .unwrap()
+            .iter()
+            .all(|status| status.applied)
+    );
+    // The direct connection's statements reach the connection's listeners.
+    let heard = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = heard.clone();
+    db.on_query(move |_| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    });
+    read_count(&session).await;
+    assert!(heard.load(std::sync::atomic::Ordering::SeqCst) >= 1);
+    db.close().await.unwrap();
+    assert!(session.conn().ping().await.is_err(), "closed with the connection");
+
+    // Without `direct_url`, the direct connection is the connection.
+    let plain = Db::connect(&pooled.options()).await.unwrap();
+    assert!(!plain.has_direct());
+    assert!(std::ptr::eq(plain.direct().await.unwrap().conn(), plain.conn()));
+    // It must reach the same kind of database.
+    let mismatched = Db::connect(&DbOptions {
+        direct_url: Some("postgres://app@db/app".into()),
+        ..pooled.options()
+    })
+    .await
+    .unwrap_err();
+    assert!(
+        mismatched
+            .to_string()
+            .contains("direct_url must name the same kind of database as url"),
+        "{mismatched}"
+    );
+}
+
+async fn read_count(db: &Db) {
+    db.conn()
+        .query_one_raw(Statement::from_string(
+            DbBackend::Sqlite,
+            "SELECT COUNT(*) FROM users",
+        ))
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn pool_settings_statistics_and_closing() {
     let temp = TempDb::new();

@@ -141,7 +141,9 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                     .await?
                     .with_app(r.app().downgrade());
                 if options.migrate_on_boot {
-                    migrate::migrate_on_boot(&db, &r.app(), &options.url).await?;
+                    let direct = db.direct().await?;
+                    let url = options.direct_url.as_deref().unwrap_or(&options.url);
+                    migrate::migrate_on_boot(&direct, &r.app(), url).await?;
                 }
                 Ok(Arc::new(db))
             })
@@ -253,7 +255,7 @@ impl Lifecycle for PoolCloser {
 
     fn on_shutdown(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
-            self.0.conn().close_by_ref().await?;
+            self.0.close().await?;
             Ok(())
         })
     }
