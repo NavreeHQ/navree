@@ -243,7 +243,11 @@ impl Target<'_> {
 
     /// An aggregate over the rows of `query` (`NULL` when there are none,
     /// except for counts).
-    pub async fn aggregate(&self, query: &QueryIr, aggregate: &Aggregate) -> Result<Value, OrmError> {
+    pub async fn aggregate(
+        &self,
+        query: &QueryIr,
+        aggregate: &Aggregate,
+    ) -> Result<Value, OrmError> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::compile_aggregate(query, aggregate, sql.dialect)?;
@@ -409,7 +413,12 @@ impl Executor for Db {
                         app,
                     )));
                 }
-                Ok(Target::Sql(SqlTarget::new(SqlConn::Pool(self.conn()), dialect, None, app)))
+                Ok(Target::Sql(SqlTarget::new(
+                    SqlConn::Pool(self.conn()),
+                    dialect,
+                    None,
+                    app,
+                )))
             }
         }
     }

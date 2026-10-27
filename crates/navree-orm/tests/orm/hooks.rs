@@ -27,7 +27,11 @@ impl ModelHook<Company> for Guard {
         record: &'a mut Record<Company>,
     ) -> BoxFuture<'a, Result<Flow>> {
         Box::pin(async move {
-            self.0.0.lock().unwrap().push(format!("{event} {}", record.name));
+            self.0
+                .0
+                .lock()
+                .unwrap()
+                .push(format!("{event} {}", record.name));
             if event == ModelEvent::Saving {
                 if record.name == "Blocked" {
                     return Ok(Flow::Cancel);
@@ -50,7 +54,11 @@ impl ModelHook<Company> for Guard {
         record: &'a mut Record<Company>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            self.0.0.lock().unwrap().push(format!("{event} {}", record.name));
+            self.0
+                .0
+                .lock()
+                .unwrap()
+                .push(format!("{event} {}", record.name));
             if event == ModelEvent::Retrieved {
                 record.set_extra("seen", true);
             }
@@ -86,7 +94,11 @@ async fn hooks_see_and_steer_the_lifecycle() {
     )
     .await
     .unwrap();
-    assert_eq!(acme.country.as_deref(), Some("US"), "the saving hook changed the record");
+    assert_eq!(
+        acme.country.as_deref(),
+        Some("US"),
+        "the saving hook changed the record"
+    );
     assert_eq!(
         std::mem::take(&mut *seen.0.lock().unwrap()),
         ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
@@ -111,7 +123,10 @@ async fn hooks_see_and_steer_the_lifecycle() {
         ["saving Acme", "updating Acme", "updated Acme", "saved Acme"]
     );
 
-    assert!(!found.delete(&*db).await.unwrap(), "companies with employees stay");
+    assert!(
+        !found.delete(&*db).await.unwrap(),
+        "companies with employees stay"
+    );
     assert_eq!(count_rows(&db, "companies").await, 1);
     found.employees = 0;
     found.save(&*db).await.unwrap();

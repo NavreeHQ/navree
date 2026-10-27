@@ -24,7 +24,10 @@ async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
     assert_eq!((first.id, second.id), (1, 2));
     assert!(first.exists());
     assert!(first.was_recently_created());
-    assert_ne!(first.created_at, chrono::DateTime::<chrono::Utc>::UNIX_EPOCH);
+    assert_ne!(
+        first.created_at,
+        chrono::DateTime::<chrono::Utc>::UNIX_EPOCH
+    );
     assert_eq!(first.created_at, first.updated_at);
     assert!(first.is_clean(), "a saved record is clean");
     assert!(!first.was_changed(), "an insert records no changes");
@@ -38,19 +41,33 @@ async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
 #[tokio::test]
 async fn uuid_and_ulid_keys_are_generated_when_empty_and_kept_when_set() {
     let t = sqlite().await;
-    let deal = Deal::create(&t.db, Deal::new("Renewal", 1000)).await.unwrap();
+    let deal = Deal::create(&t.db, Deal::new("Renewal", 1000))
+        .await
+        .unwrap();
     assert_eq!(deal.id.get_version_num(), 7);
 
     let chosen = Uuid::now_v7();
-    let deal = Deal::create(&t.db, Deal { id: chosen, ..Deal::new("Upsell", 50) })
-        .await
-        .unwrap();
+    let deal = Deal::create(
+        &t.db,
+        Deal {
+            id: chosen,
+            ..Deal::new("Upsell", 50)
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(deal.id, chosen);
     assert!(Deal::find(&t.db, chosen).await.unwrap().is_some());
 
-    let event = Event::create(&t.db, Event { name: "signup".into(), ..Event::default() })
-        .await
-        .unwrap();
+    let event = Event::create(
+        &t.db,
+        Event {
+            name: "signup".into(),
+            ..Event::default()
+        },
+    )
+    .await
+    .unwrap();
     assert!(!event.id.is_nil());
     let found = Event::find(&t.db, event.id).await.unwrap().unwrap();
     assert_eq!(found.name, "signup");
@@ -60,18 +77,37 @@ async fn uuid_and_ulid_keys_are_generated_when_empty_and_kept_when_set() {
 #[tokio::test]
 async fn an_application_key_must_be_set() {
     let t = sqlite().await;
-    let error = Setting::create(&t.db, Setting { value: "dark".into(), ..Setting::default() })
-        .await
-        .unwrap_err();
+    let error = Setting::create(
+        &t.db,
+        Setting {
+            value: "dark".into(),
+            ..Setting::default()
+        },
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(error, OrmError::MissingKey { .. }), "{error:?}");
     assert_eq!(
         error.to_string(),
         "cannot insert a Setting without a key: set `key` first (its key type is manual, so no key is generated)"
     );
-    let setting = Setting::create(&t.db, Setting { key: "theme".into(), value: "dark".into(), ..Setting::default() })
-        .await
-        .unwrap();
-    assert_eq!(Setting::find_or_fail(&t.db, "theme".to_owned()).await.unwrap().value, "dark");
+    let setting = Setting::create(
+        &t.db,
+        Setting {
+            key: "theme".into(),
+            value: "dark".into(),
+            ..Setting::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        Setting::find_or_fail(&t.db, "theme".to_owned())
+            .await
+            .unwrap()
+            .value,
+        "dark"
+    );
     assert_eq!(setting.key, "theme");
 }
 
@@ -97,7 +133,10 @@ async fn save_updates_only_the_dirty_columns() {
     let before = stored.updated_at;
     let mut stored = stored;
     assert!(stored.save(&t.db).await.unwrap());
-    assert_eq!(Company::find_or_fail(&t.db, 1).await.unwrap().updated_at, before);
+    assert_eq!(
+        Company::find_or_fail(&t.db, 1).await.unwrap().updated_at,
+        before
+    );
 }
 
 #[tokio::test]
@@ -164,9 +203,15 @@ async fn refresh_and_fresh_reload_from_the_database() {
 #[tokio::test]
 async fn replicate_copies_the_columns_without_key_and_timestamps() {
     let t = sqlite().await;
-    let original = Deal::create(&t.db, Deal { stage: Stage::Qualified, ..Deal::new("Template", 900) })
-        .await
-        .unwrap();
+    let original = Deal::create(
+        &t.db,
+        Deal {
+            stage: Stage::Qualified,
+            ..Deal::new("Template", 900)
+        },
+    )
+    .await
+    .unwrap();
     let mut copy = original.replicate();
     assert!(!copy.exists());
     assert!(copy.id.is_nil());
@@ -193,9 +238,14 @@ async fn increment_and_decrement_change_the_row_and_the_record() {
     assert!(acme.was_changed_on([Company::EMPLOYEES]));
     assert!(acme.is_clean());
 
-    acme.decrement_with(&t.db, Company::EMPLOYEES, 2, [Company::NAME.set("Acme Ltd")])
-        .await
-        .unwrap();
+    acme.decrement_with(
+        &t.db,
+        Company::EMPLOYEES,
+        2,
+        [Company::NAME.set("Acme Ltd")],
+    )
+    .await
+    .unwrap();
     assert_eq!(acme.name, "Acme Ltd");
     let stored = Company::find_or_fail(&t.db, 1).await.unwrap();
     assert_eq!((stored.employees, stored.name.as_str()), (13, "Acme Ltd"));
@@ -204,12 +254,21 @@ async fn increment_and_decrement_change_the_row_and_the_record() {
         .increment(&t.db, Company::EMPLOYEES, 1)
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "cannot increment a Company that has not been saved");
+    assert_eq!(
+        error.to_string(),
+        "cannot increment a Company that has not been saved"
+    );
 
     let mut max = Company::find_or_fail(&t.db, 1).await.unwrap();
     max.employees = i32::MAX;
-    let error = max.increment(&t.db, Company::EMPLOYEES, 1).await.unwrap_err();
-    assert_eq!(error.to_string(), "invalid query: incrementing `employees` would overflow i32");
+    let error = max
+        .increment(&t.db, Company::EMPLOYEES, 1)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "invalid query: incrementing `employees` would overflow i32"
+    );
 }
 
 #[tokio::test]
@@ -237,7 +296,9 @@ async fn unique_violations_are_recognised() {
         color: "gold".into(),
         ..Default::default()
     };
-    crate::models::Tag::create(&t.db, tag.clone()).await.unwrap();
+    crate::models::Tag::create(&t.db, tag.clone())
+        .await
+        .unwrap();
     let error = crate::models::Tag::create(&t.db, tag).await.unwrap_err();
     assert!(error.is_unique_violation(), "{error:?}");
 }
@@ -247,12 +308,23 @@ async fn ulid_keys_order_by_creation() {
     let t = sqlite().await;
     let mut ids = Vec::new();
     for name in ["a", "b", "c"] {
-        let event = Event::create(&t.db, Event { name: name.into(), ..Event::default() })
-            .await
-            .unwrap();
+        let event = Event::create(
+            &t.db,
+            Event {
+                name: name.into(),
+                ..Event::default()
+            },
+        )
+        .await
+        .unwrap();
         ids.push(event.id);
         tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     }
-    let ordered: Vec<Ulid> = Event::query().order_by(Event::ID).get(&t.db).await.unwrap().model_keys();
+    let ordered: Vec<Ulid> = Event::query()
+        .order_by(Event::ID)
+        .get(&t.db)
+        .await
+        .unwrap()
+        .model_keys();
     assert_eq!(ordered, ids);
 }

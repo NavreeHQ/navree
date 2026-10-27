@@ -378,7 +378,9 @@ fn boolean(value: &Value) -> Result<bool, FieldError> {
         other => match integer(other) {
             Ok(0) => Ok(false),
             Ok(1) => Ok(true),
-            Ok(n) => Err(FieldError::Invalid(format!("{n} is not a boolean (0 or 1)"))),
+            Ok(n) => Err(FieldError::Invalid(format!(
+                "{n} is not a boolean (0 or 1)"
+            ))),
             Err(_) => Err(mismatch(other, "a boolean")),
         },
     }
@@ -415,9 +417,8 @@ fn uuid(value: Value) -> Result<Uuid, FieldError> {
     null_check(&value)?;
     match value {
         Value::Uuid(Some(u)) => Ok(u),
-        Value::String(Some(s)) => {
-            Uuid::parse_str(s.trim()).map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID")))
-        }
+        Value::String(Some(s)) => Uuid::parse_str(s.trim())
+            .map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID"))),
         Value::Bytes(Some(b)) if b.len() == 16 => Uuid::from_slice(&b)
             .map_err(|_| FieldError::Invalid(format!("{} bytes are not a UUID", b.len()))),
         Value::Bytes(Some(b)) => std::str::from_utf8(&b)
@@ -425,9 +426,12 @@ fn uuid(value: Value) -> Result<Uuid, FieldError> {
             .and_then(|text| Uuid::parse_str(text.trim()).ok())
             .ok_or_else(|| FieldError::Invalid(format!("{} bytes are not a UUID", b.len()))),
         Value::Json(Some(json)) => match json.as_str() {
-            Some(s) => Uuid::parse_str(s)
-                .map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID"))),
-            None => Err(FieldError::Invalid("JSON that is not a UUID string".to_owned())),
+            Some(s) => {
+                Uuid::parse_str(s).map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID")))
+            }
+            None => Err(FieldError::Invalid(
+                "JSON that is not a UUID string".to_owned(),
+            )),
         },
         other => Err(mismatch(&other, "a UUID")),
     }
@@ -689,7 +693,9 @@ integer_field!(u16, "u16", Value::SmallUnsigned(None));
 integer_field!(u32, "u32", Value::Unsigned(None));
 integer_field!(u64, "u64", Value::BigUnsigned(None));
 
-exact_field!(bool, "bool", Value::Bool(None), |value: Value| boolean(&value));
+exact_field!(bool, "bool", Value::Bool(None), |value: Value| boolean(
+    &value
+));
 
 impl Field for f32 {
     fn to_value(&self) -> Value {
@@ -1164,7 +1170,10 @@ mod tests {
             i64::from_value(Value::Decimal(Some(Decimal::new(4200, 2)))).unwrap(),
             42
         );
-        assert_eq!(i64::from_value(Value::String(Some(" 12 ".into()))).unwrap(), 12);
+        assert_eq!(
+            i64::from_value(Value::String(Some(" 12 ".into()))).unwrap(),
+            12
+        );
         assert!(matches!(
             i8::from_value(Value::BigInt(Some(300))),
             Err(FieldError::Invalid(message)) if message == "300 does not fit i8"
@@ -1248,7 +1257,10 @@ mod tests {
     #[test]
     fn uuids_and_json() {
         let id = Uuid::now_v7();
-        assert_eq!(Uuid::from_value(Value::String(Some(id.to_string()))).unwrap(), id);
+        assert_eq!(
+            Uuid::from_value(Value::String(Some(id.to_string()))).unwrap(),
+            id
+        );
         assert_eq!(
             Uuid::from_value(Value::Bytes(Some(id.as_bytes().to_vec()))).unwrap(),
             id

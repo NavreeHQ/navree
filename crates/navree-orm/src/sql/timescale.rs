@@ -45,7 +45,9 @@ impl Compiler {
                     )));
                 }
                 let seconds = micros / 1_000_000;
-                let s = |e: sea_query::Expr| self.custom("CAST(strftime('%s', {}) AS INTEGER)", vec![e]);
+                let s = |e: sea_query::Expr| {
+                    self.custom("CAST(strftime('%s', {}) AS INTEGER)", vec![e])
+                };
                 let (o1, o2, o3) = match origin {
                     None => {
                         let o = || sea_query::Expr::cust(ORIGIN_UNIX_SECONDS.to_string());
@@ -95,9 +97,9 @@ impl Compiler {
         time: &Expr,
     ) -> Result<sea_query::Expr, OrmError> {
         if self.dialect != Dialect::Postgres {
-            return Err(self.unsupported(format!(
-                "{function}(value, time) (a TimescaleDB aggregate)"
-            )));
+            return Err(
+                self.unsupported(format!("{function}(value, time) (a TimescaleDB aggregate)"))
+            );
         }
         let value = self.expr(value)?;
         let time = self.expr(time)?;
@@ -123,8 +125,13 @@ pub(crate) fn fixed_width_micros(width: &str) -> Option<i64> {
         }
         let amount: i64 = rest[..digits].parse().ok()?;
         rest = rest[digits..].trim_start();
-        let unit_end = rest.find(|c: char| c.is_ascii_digit()).unwrap_or(rest.len());
-        let unit = rest[..unit_end].trim().trim_end_matches(',').to_ascii_lowercase();
+        let unit_end = rest
+            .find(|c: char| c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        let unit = rest[..unit_end]
+            .trim()
+            .trim_end_matches(',')
+            .to_ascii_lowercase();
         rest = rest[unit_end..].trim_start();
         let micros: i64 = match unit.as_str() {
             "us" | "usec" | "usecs" | "microsecond" | "microseconds" => 1,

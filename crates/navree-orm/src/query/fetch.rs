@@ -7,7 +7,7 @@ use std::hash::Hash;
 use indexmap::IndexMap;
 
 use crate::collection::Collection;
-use crate::column::{AsExpr, Column};
+use crate::column::{Column, IntoExpr};
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, Target};
 use crate::hooks::{Hooks, ModelEvent};
@@ -50,7 +50,7 @@ impl Selectable for &str {
     type Output = Value;
 
     fn selected(&self) -> Expr {
-        self.as_expr()
+        self.into_expr()
     }
 
     fn read(&self, row: &Row, column: &str) -> Result<Value, FieldError> {
@@ -62,7 +62,7 @@ impl Selectable for String {
     type Output = Value;
 
     fn selected(&self) -> Expr {
-        self.as_str().as_expr()
+        self.as_str().into_expr()
     }
 
     fn read(&self, row: &Row, column: &str) -> Result<Value, FieldError> {
@@ -198,10 +198,9 @@ impl<M: Model> Builder<M> {
         };
         let rows = self.limit(1).select_rows(&target, vec![item]).await?;
         match rows.first() {
-            Some(row) => column
-                .read(row, VALUE)
-                .map(Some)
-                .map_err(|error| decode_error(M::meta().name(), VALUE, "the selected value".into(), &error)),
+            Some(row) => column.read(row, VALUE).map(Some).map_err(|error| {
+                decode_error(M::meta().name(), VALUE, "the selected value".into(), &error)
+            }),
             None => Ok(None),
         }
     }
@@ -304,22 +303,32 @@ impl<M: Model> Builder<M> {
     pub async fn count_column(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<u64> {
-        self.aggregate::<u64>(exec, AggregateFunction::Count, Some(column.as_expr()), false)
-            .await
-            .map(Option::unwrap_or_default)
+        self.aggregate::<u64>(
+            exec,
+            AggregateFunction::Count,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
+        .map(Option::unwrap_or_default)
     }
 
     /// The number of distinct non-NULL values of `column`.
     pub async fn count_distinct(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<u64> {
-        self.aggregate::<u64>(exec, AggregateFunction::Count, Some(column.as_expr()), true)
-            .await
-            .map(Option::unwrap_or_default)
+        self.aggregate::<u64>(
+            exec,
+            AggregateFunction::Count,
+            Some(column.into_expr()),
+            true,
+        )
+        .await
+        .map(Option::unwrap_or_default)
     }
 
     /// The sum of `column` over the matching records (zero when none match).
@@ -330,11 +339,16 @@ impl<M: Model> Builder<M> {
     pub async fn sum<T: Field + Default>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<T> {
-        self.aggregate::<T>(exec, AggregateFunction::Sum, Some(column.as_expr()), false)
-            .await
-            .map(Option::unwrap_or_default)
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Sum,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
+        .map(Option::unwrap_or_default)
     }
 
     /// The average of `column`; `None` when no record matches. Read it as
@@ -342,30 +356,45 @@ impl<M: Model> Builder<M> {
     pub async fn avg<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Avg, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Avg,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// The smallest value of `column`; `None` when no record matches.
     pub async fn min<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Min, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Min,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// The largest value of `column`; `None` when no record matches.
     pub async fn max<T: Field>(
         self,
         exec: &(impl Executor + ?Sized),
-        column: impl AsExpr,
+        column: impl IntoExpr,
     ) -> Result<Option<T>> {
-        self.aggregate::<T>(exec, AggregateFunction::Max, Some(column.as_expr()), false)
-            .await
+        self.aggregate::<T>(
+            exec,
+            AggregateFunction::Max,
+            Some(column.into_expr()),
+            false,
+        )
+        .await
     }
 
     /// An aggregate of the matching records read as `T`; `None` when the

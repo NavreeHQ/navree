@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use serde::{Serialize, Serializer};
 
 use crate::column::Column;
-use crate::error::{Result, OrmError};
+use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor};
 use crate::model::Model;
 use crate::query::Builder;
@@ -84,7 +84,11 @@ impl<M: Model> Collection<M> {
     /// The records for which `keep` holds.
     pub fn filter(self, mut keep: impl FnMut(&Record<M>) -> bool) -> Self {
         Collection {
-            records: self.records.into_iter().filter(|record| keep(record)).collect(),
+            records: self
+                .records
+                .into_iter()
+                .filter(|record| keep(record))
+                .collect(),
         }
     }
 
@@ -105,12 +109,18 @@ impl<M: Model> Collection<M> {
         self.records
             .iter()
             .map(|record| {
-                let value = record.model.value(&name)?.ok_or_else(|| {
-                    crate::model::derive_support::unknown_column::<M>(&name)
-                })?;
+                let value = record
+                    .model
+                    .value(&name)?
+                    .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(&name))?;
                 let row = Row::from_values(vec![(name.clone(), value)]);
                 column.decode(&row).map_err(|error| {
-                    crate::row::decode_error(M::meta().name(), &name, "the column's type".into(), &error)
+                    crate::row::decode_error(
+                        M::meta().name(),
+                        &name,
+                        "the column's type".into(),
+                        &error,
+                    )
                 })
             })
             .collect()
@@ -118,7 +128,10 @@ impl<M: Model> Collection<M> {
 
     /// The records by `key` (a later record with the same key replaces an
     /// earlier one, keeping its position).
-    pub fn key_by<K: Hash + Eq>(self, mut key: impl FnMut(&Record<M>) -> K) -> IndexMap<K, Record<M>> {
+    pub fn key_by<K: Hash + Eq>(
+        self,
+        mut key: impl FnMut(&Record<M>) -> K,
+    ) -> IndexMap<K, Record<M>> {
         let mut map = IndexMap::with_capacity(self.records.len());
         for record in self.records {
             map.insert(key(&record), record);

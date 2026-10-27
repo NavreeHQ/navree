@@ -13,14 +13,19 @@ async fn a_new_record_is_dirty_in_every_column() {
         ..Company::default()
     });
     assert!(record.is_dirty());
-    assert_eq!(record.get_dirty().unwrap().len(), Company::meta().all_columns().len());
+    assert_eq!(
+        record.get_dirty().unwrap().len(),
+        Company::meta().all_columns().len()
+    );
     assert!(record.get_original().is_none());
 }
 
 #[tokio::test]
 async fn changes_are_tracked_per_column_until_saved() {
     let t = sqlite().await;
-    Deal::create(&t.db, Deal::new("Renewal", 1000)).await.unwrap();
+    Deal::create(&t.db, Deal::new("Renewal", 1000))
+        .await
+        .unwrap();
     let mut deal = Deal::query().first_or_fail(&t.db).await.unwrap();
     assert!(deal.is_clean());
 
@@ -48,7 +53,11 @@ async fn changes_are_tracked_per_column_until_saved() {
     assert!(deal.was_changed());
     assert!(deal.was_changed_on(["stage", "title"]));
     assert!(!deal.was_changed_on([Deal::TITLE]));
-    let changed: Vec<&str> = deal.get_changes().iter().map(|(column, _)| *column).collect();
+    let changed: Vec<&str> = deal
+        .get_changes()
+        .iter()
+        .map(|(column, _)| *column)
+        .collect();
     assert_eq!(changed, ["amount_cents", "stage", "updated_at"]);
     assert_eq!(deal.get_previous()[1], ("stage", Value::from("lead")));
     assert_eq!(deal.get_original().unwrap().stage, Stage::ClosedWon);
@@ -57,7 +66,9 @@ async fn changes_are_tracked_per_column_until_saved() {
 #[tokio::test]
 async fn discarding_changes_restores_the_original() {
     let t = sqlite().await;
-    let mut deal = Deal::create(&t.db, Deal::new("Renewal", 1000)).await.unwrap();
+    let mut deal = Deal::create(&t.db, Deal::new("Renewal", 1000))
+        .await
+        .unwrap();
     deal.title = "Changed".into();
     deal.discard_changes();
     assert_eq!(deal.title, "Renewal");
@@ -92,7 +103,9 @@ async fn equivalent_values_are_not_changes() {
 #[tokio::test]
 async fn syncing_selected_columns() {
     let t = sqlite().await;
-    let mut deal = Deal::create(&t.db, Deal::new("Renewal", 1000)).await.unwrap();
+    let mut deal = Deal::create(&t.db, Deal::new("Renewal", 1000))
+        .await
+        .unwrap();
     deal.title = "A".into();
     deal.amount_cents = 1;
     deal.sync_original_on([Deal::TITLE]).unwrap();

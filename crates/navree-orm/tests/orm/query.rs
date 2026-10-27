@@ -31,10 +31,42 @@ async fn seeded() -> TestDb {
     }
     let day = |d: u32| Utc.with_ymd_and_hms(2026, 3, d, 14, 30, 0).unwrap();
     for (title, company, cents, stage, tags, closes, closed) in [
-        ("Alpha", Some(1), 5_000, Stage::Lead, vec!["vip", "q1"], Some(1), None),
-        ("Beta", Some(1), 25_000, Stage::Qualified, vec!["q1"], Some(15), None),
-        ("Gamma", Some(2), 90_000, Stage::ClosedWon, vec![], None, Some(day(20))),
-        ("Delta", Some(3), 50, Stage::ClosedLost, vec!["vip"], None, Some(day(21))),
+        (
+            "Alpha",
+            Some(1),
+            5_000,
+            Stage::Lead,
+            vec!["vip", "q1"],
+            Some(1),
+            None,
+        ),
+        (
+            "Beta",
+            Some(1),
+            25_000,
+            Stage::Qualified,
+            vec!["q1"],
+            Some(15),
+            None,
+        ),
+        (
+            "Gamma",
+            Some(2),
+            90_000,
+            Stage::ClosedWon,
+            vec![],
+            None,
+            Some(day(20)),
+        ),
+        (
+            "Delta",
+            Some(3),
+            50,
+            Stage::ClosedLost,
+            vec!["vip"],
+            None,
+            Some(day(21)),
+        ),
         ("Epsilon", None, 12_000, Stage::Lead, vec![], Some(31), None),
     ] {
         Deal::create(
@@ -46,7 +78,11 @@ async fn seeded() -> TestDb {
                 closes_on: closes.map(|d| NaiveDate::from_ymd_opt(2026, 3, d).unwrap()),
                 closed_at: closed,
                 meta: DealMeta {
-                    source: if cents > 20_000 { "ads".into() } else { "web".into() },
+                    source: if cents > 20_000 {
+                        "ads".into()
+                    } else {
+                        "web".into()
+                    },
                     score: u32::try_from(cents / 1000).unwrap(),
                 },
                 ..Deal::new(title, cents)
@@ -68,7 +104,11 @@ fn titles(deals: &Collection<Deal>) -> Vec<String> {
 async fn comparisons_and_boolean_groups() {
     let t = seeded().await;
     let db = &t.db;
-    let big = Deal::query().where_(Deal::AMOUNT_CENTS.gte(25_000)).get(db).await.unwrap();
+    let big = Deal::query()
+        .where_(Deal::AMOUNT_CENTS.gte(25_000))
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&big), ["Beta", "Gamma"]);
 
     let either = Deal::query()
@@ -82,7 +122,10 @@ async fn comparisons_and_boolean_groups() {
     // `a AND (b OR c)`.
     let grouped = Deal::query()
         .where_(Deal::AMOUNT_CENTS.gt(1_000))
-        .where_group(|g| g.where_(Deal::STAGE.eq(Stage::Lead)).or_where(Deal::STAGE.eq(Stage::ClosedWon)))
+        .where_group(|g| {
+            g.where_(Deal::STAGE.eq(Stage::Lead))
+                .or_where(Deal::STAGE.eq(Stage::ClosedWon))
+        })
         .get(db)
         .await
         .unwrap();
@@ -97,7 +140,12 @@ async fn comparisons_and_boolean_groups() {
     assert_eq!(titles(&not), ["Beta", "Gamma"]);
 
     let combined = Deal::query()
-        .where_(Deal::AMOUNT_CENTS.lt(10_000).and(Deal::STAGE.eq(Stage::Lead)).or(Deal::TITLE.eq("Gamma")))
+        .where_(
+            Deal::AMOUNT_CENTS
+                .lt(10_000)
+                .and(Deal::STAGE.eq(Stage::Lead))
+                .or(Deal::TITLE.eq("Gamma")),
+        )
         .get(db)
         .await
         .unwrap();
@@ -108,24 +156,79 @@ async fn comparisons_and_boolean_groups() {
 async fn lists_nulls_ranges_and_columns() {
     let t = seeded().await;
     let db = &t.db;
-    let listed = Deal::query().where_in(Deal::STAGE, [Stage::Lead, Stage::ClosedLost]).get(db).await.unwrap();
+    let listed = Deal::query()
+        .where_in(Deal::STAGE, [Stage::Lead, Stage::ClosedLost])
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&listed), ["Alpha", "Delta", "Epsilon"]);
-    assert!(Deal::query().where_in(Deal::STAGE, Vec::<Stage>::new()).get(db).await.unwrap().is_empty());
-    assert_eq!(Deal::query().where_not_in(Deal::STAGE, Vec::<Stage>::new()).count(db).await.unwrap(), 5);
+    assert!(
+        Deal::query()
+            .where_in(Deal::STAGE, Vec::<Stage>::new())
+            .get(db)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        Deal::query()
+            .where_not_in(Deal::STAGE, Vec::<Stage>::new())
+            .count(db)
+            .await
+            .unwrap(),
+        5
+    );
 
-    let unowned = Deal::query().where_null(Deal::COMPANY_ID).get(db).await.unwrap();
+    let unowned = Deal::query()
+        .where_null(Deal::COMPANY_ID)
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&unowned), ["Epsilon"]);
-    assert_eq!(Deal::query().where_not_null(Deal::CLOSED_AT).count(db).await.unwrap(), 2);
-    assert_eq!(Deal::query().where_(Deal::CLOSED_AT.eq(None)).count(db).await.unwrap(), 3);
+    assert_eq!(
+        Deal::query()
+            .where_not_null(Deal::CLOSED_AT)
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::CLOSED_AT.eq(None))
+            .count(db)
+            .await
+            .unwrap(),
+        3
+    );
 
-    let mid = Deal::query().where_between(Deal::AMOUNT_CENTS, 5_000, 25_000).get(db).await.unwrap();
+    let mid = Deal::query()
+        .where_between(Deal::AMOUNT_CENTS, 5_000, 25_000)
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&mid), ["Alpha", "Beta", "Epsilon"]);
-    assert_eq!(Deal::query().where_not_between(Deal::AMOUNT_CENTS, 5_000, 25_000).count(db).await.unwrap(), 2);
+    assert_eq!(
+        Deal::query()
+            .where_not_between(Deal::AMOUNT_CENTS, 5_000, 25_000)
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
 
-    let touched = Deal::query().where_column(Deal::UPDATED_AT, ">=", Deal::CREATED_AT).count(db).await.unwrap();
+    let touched = Deal::query()
+        .where_column(Deal::UPDATED_AT, ">=", Deal::CREATED_AT)
+        .count(db)
+        .await
+        .unwrap();
     assert_eq!(touched, 5);
 
-    let by_untyped = Deal::query().where_in("title", [Value::from("Beta"), Value::from("Nope")]).get(db).await.unwrap();
+    let by_untyped = Deal::query()
+        .where_in("title", [Value::from("Beta"), Value::from("Nope")])
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&by_untyped), ["Beta"]);
 }
 
@@ -134,16 +237,59 @@ async fn dates_and_times() {
     let t = seeded().await;
     let db = &t.db;
     let day = NaiveDate::from_ymd_opt(2026, 3, 20).unwrap();
-    let closed_that_day = Deal::query().where_date(Deal::CLOSED_AT, "=", day).get(db).await.unwrap();
+    let closed_that_day = Deal::query()
+        .where_date(Deal::CLOSED_AT, "=", day)
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&closed_that_day), ["Gamma"]);
-    assert_eq!(Deal::query().where_date(Deal::CLOSED_AT, ">", day).count(db).await.unwrap(), 1);
-    assert_eq!(Deal::query().where_month(Deal::CLOSES_ON, "=", 3).count(db).await.unwrap(), 3);
-    assert_eq!(Deal::query().where_day(Deal::CLOSES_ON, "<", 15).count(db).await.unwrap(), 1);
-    assert_eq!(Deal::query().where_year(Deal::CLOSED_AT, "=", 2026).count(db).await.unwrap(), 2);
-    let afternoon = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
-    assert_eq!(Deal::query().where_time(Deal::CLOSED_AT, "=", afternoon).count(db).await.unwrap(), 2);
     assert_eq!(
-        Deal::query().where_(Deal::CLOSES_ON.gt(NaiveDate::from_ymd_opt(2026, 3, 10).unwrap())).count(db).await.unwrap(),
+        Deal::query()
+            .where_date(Deal::CLOSED_AT, ">", day)
+            .count(db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Deal::query()
+            .where_month(Deal::CLOSES_ON, "=", 3)
+            .count(db)
+            .await
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        Deal::query()
+            .where_day(Deal::CLOSES_ON, "<", 15)
+            .count(db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Deal::query()
+            .where_year(Deal::CLOSED_AT, "=", 2026)
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
+    let afternoon = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
+    assert_eq!(
+        Deal::query()
+            .where_time(Deal::CLOSED_AT, "=", afternoon)
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::CLOSES_ON.gt(NaiveDate::from_ymd_opt(2026, 3, 10).unwrap()))
+            .count(db)
+            .await
+            .unwrap(),
         2
     );
 }
@@ -152,25 +298,97 @@ async fn dates_and_times() {
 async fn like_is_case_insensitive_unless_asked() {
     let t = seeded().await;
     let db = &t.db;
-    assert_eq!(titles(&Deal::query().where_like(Deal::TITLE, "%ALPHA%").get(db).await.unwrap()), ["Alpha"]);
-    assert_eq!(titles(&Deal::query().where_(Deal::TITLE.like("e%")).get(db).await.unwrap()), ["Epsilon"]);
-    assert_eq!(Deal::query().where_not_like(Deal::TITLE, "%a").count(db).await.unwrap(), 1);
-    assert!(Deal::query().where_like_case_sensitive(Deal::TITLE, "alpha").get(db).await.unwrap().is_empty());
-    assert_eq!(Deal::query().where_like_case_sensitive(Deal::TITLE, "Al_ha").count(db).await.unwrap(), 1);
-    assert_eq!(Company::query().where_(Company::COUNTRY.like("u%")).count(db).await.unwrap(), 2);
+    assert_eq!(
+        titles(
+            &Deal::query()
+                .where_like(Deal::TITLE, "%ALPHA%")
+                .get(db)
+                .await
+                .unwrap()
+        ),
+        ["Alpha"]
+    );
+    assert_eq!(
+        titles(
+            &Deal::query()
+                .where_(Deal::TITLE.like("e%"))
+                .get(db)
+                .await
+                .unwrap()
+        ),
+        ["Epsilon"]
+    );
+    assert_eq!(
+        Deal::query()
+            .where_not_like(Deal::TITLE, "%a")
+            .count(db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        Deal::query()
+            .where_like_case_sensitive(Deal::TITLE, "alpha")
+            .get(db)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        Deal::query()
+            .where_like_case_sensitive(Deal::TITLE, "Al_ha")
+            .count(db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Company::query()
+            .where_(Company::COUNTRY.like("u%"))
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
 }
 
 #[tokio::test]
 async fn json_columns_and_paths() {
     let t = seeded().await;
     let db = &t.db;
-    let vip = Deal::query().where_json_contains(Deal::TAGS, "vip").get(db).await.unwrap();
+    let vip = Deal::query()
+        .where_json_contains(Deal::TAGS, "vip")
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&vip), ["Alpha", "Delta"]);
-    assert_eq!(Deal::query().where_json_doesnt_contain(Deal::TAGS, "vip").count(db).await.unwrap(), 3);
-    assert_eq!(Deal::query().where_json_length(Deal::TAGS, ">", 1).count(db).await.unwrap(), 1);
-    let ads = Deal::query().where_(col("meta->source").eq("ads")).get(db).await.unwrap();
+    assert_eq!(
+        Deal::query()
+            .where_json_doesnt_contain(Deal::TAGS, "vip")
+            .count(db)
+            .await
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        Deal::query()
+            .where_json_length(Deal::TAGS, ">", 1)
+            .count(db)
+            .await
+            .unwrap(),
+        1
+    );
+    let ads = Deal::query()
+        .where_(col("meta->source").eq("ads"))
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&ads), ["Beta", "Gamma"]);
-    let scored = Deal::query().where_(Deal::META.json("score").gte(25)).get(db).await.unwrap();
+    let scored = Deal::query()
+        .where_(Deal::META.json("score").gte(25))
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&scored), ["Beta", "Gamma"]);
 }
 
@@ -178,8 +396,14 @@ async fn json_columns_and_paths() {
 async fn subqueries_exists_and_raw() {
     let t = seeded().await;
     let db = &t.db;
-    let active_ids = Company::query().select([Company::ID]).where_(Company::ACTIVE.eq(true));
-    let of_active = Deal::query().where_in_sub(Deal::COMPANY_ID, active_ids).get(db).await.unwrap();
+    let active_ids = Company::query()
+        .select([Company::ID])
+        .where_(Company::ACTIVE.eq(true));
+    let of_active = Deal::query()
+        .where_in_sub(Deal::COMPANY_ID, active_ids)
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&of_active), ["Alpha", "Beta", "Delta"]);
 
     let with_deals = Company::query()
@@ -196,13 +420,28 @@ async fn subqueries_exists_and_raw() {
     assert_eq!(without[0].name, "Umbrella");
 
     let above_average = Deal::query()
-        .where_sub(Deal::AMOUNT_CENTS, ">", Deal::query().select([Expr::avg(Deal::AMOUNT_CENTS)]))
+        .where_sub(
+            Deal::AMOUNT_CENTS,
+            ">",
+            Deal::query().select([Expr::avg(Deal::AMOUNT_CENTS)]),
+        )
         .get(db)
         .await
         .unwrap();
-    assert_eq!(titles(&above_average), ["Gamma"], "the average is 26,410 cents");
+    assert_eq!(
+        titles(&above_average),
+        ["Gamma"],
+        "the average is 26,410 cents"
+    );
 
-    let raw = Deal::query().where_raw("lower(title) = ? OR amount_cents = ?", [Value::from("beta"), Value::from(50_i64)]).get(db).await.unwrap();
+    let raw = Deal::query()
+        .where_raw(
+            "lower(title) = ? OR amount_cents = ?",
+            [Value::from("beta"), Value::from(50_i64)],
+        )
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(titles(&raw), ["Beta", "Delta"]);
 }
 
@@ -219,7 +458,11 @@ async fn conditional_clauses() {
         .when_some(none, |q, max| q.where_(Deal::AMOUNT_CENTS.lte(max)))
         .unless(true, |q| q.where_(Deal::TITLE.eq("never")));
     assert_eq!(titles(&query.get(db).await.unwrap()), ["Epsilon"]);
-    let either = Deal::query().when_else(false, |q| q.where_(Deal::TITLE.eq("Alpha")), |q| q.where_(Deal::TITLE.eq("Beta")));
+    let either = Deal::query().when_else(
+        false,
+        |q| q.where_(Deal::TITLE.eq("Alpha")),
+        |q| q.where_(Deal::TITLE.eq("Beta")),
+    );
     assert_eq!(titles(&either.get(db).await.unwrap()), ["Beta"]);
 }
 
@@ -237,24 +480,45 @@ async fn selects_and_extras() {
     let beta = &deals[0];
     assert_eq!(beta.title, "Beta", "the model's columns are still selected");
     assert_eq!(beta.extra::<i64>("doubled").unwrap(), Some(50_000));
-    assert_eq!(beta.extra::<String>("label").unwrap().as_deref(), Some("Beta"));
+    assert_eq!(
+        beta.extra::<String>("label").unwrap().as_deref(),
+        Some("Beta")
+    );
     assert_eq!(beta.extra::<i64>("absent").unwrap(), None);
     let json = serde_json::to_value(beta).unwrap();
     assert_eq!(json["doubled"], 50_000);
     assert_eq!(json["label"], "Beta");
 
     let with_company = Deal::query()
-        .select_sub(Company::query().select([Company::NAME]).where_column(Company::ID, "=", Deal::COMPANY_ID), "company_name")
+        .select_sub(
+            Company::query().select([Company::NAME]).where_column(
+                Company::ID,
+                "=",
+                Deal::COMPANY_ID,
+            ),
+            "company_name",
+        )
         .where_(Deal::TITLE.eq("Gamma"))
         .first(db)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(with_company.extra::<String>("company_name").unwrap().as_deref(), Some("Globex"));
+    assert_eq!(
+        with_company
+            .extra::<String>("company_name")
+            .unwrap()
+            .as_deref(),
+        Some("Globex")
+    );
 
     // Selecting fewer columns than the model has fails with a precise error.
     let error = Deal::query().select([Deal::ID]).get(db).await.unwrap_err();
-    assert!(error.to_string().starts_with("cannot read column `company_id` of Deal"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .starts_with("cannot read column `company_id` of Deal"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -267,10 +531,17 @@ async fn joins_groups_and_havings() {
         .get(db)
         .await
         .unwrap();
-    assert_eq!(titles(&from_us), ["Alpha", "Beta", "Delta"], "joined columns stay out of the model");
+    assert_eq!(
+        titles(&from_us),
+        ["Alpha", "Beta", "Delta"],
+        "joined columns stay out of the model"
+    );
 
     let rows = table("companies as c")
-        .left_join_on("deals as d", |j| j.on("d.company_id", "=", "c.id").where_(col("d.amount_cents").gt(1_000)))
+        .left_join_on("deals as d", |j| {
+            j.on("d.company_id", "=", "c.id")
+                .where_(col("d.amount_cents").gt(1_000))
+        })
         .select(["c.name"])
         .select_expr(Expr::count(col("d.id")), "deals")
         .group_by(["c.name"])
@@ -281,7 +552,12 @@ async fn joins_groups_and_havings() {
         .unwrap();
     let summary: Vec<(String, i64)> = rows
         .iter()
-        .map(|row| (row.get::<String>("name").unwrap(), row.get::<i64>("deals").unwrap()))
+        .map(|row| {
+            (
+                row.get::<String>("name").unwrap(),
+                row.get::<i64>("deals").unwrap(),
+            )
+        })
         .collect();
     assert_eq!(summary, [("Acme".to_owned(), 2), ("Globex".to_owned(), 1)]);
 
@@ -298,19 +574,53 @@ async fn joins_groups_and_havings() {
 async fn orders_limits_and_pages() {
     let t = seeded().await;
     let db = &t.db;
-    let by_amount = Deal::query().order_by_desc(Deal::AMOUNT_CENTS).limit(2).pluck(db, Deal::TITLE).await.unwrap();
+    let by_amount = Deal::query()
+        .order_by_desc(Deal::AMOUNT_CENTS)
+        .limit(2)
+        .pluck(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(by_amount, ["Gamma", "Beta"]);
-    let second_page = Deal::query().order_by(Deal::TITLE).for_page(2, 2).pluck(db, Deal::TITLE).await.unwrap();
+    let second_page = Deal::query()
+        .order_by(Deal::TITLE)
+        .for_page(2, 2)
+        .pluck(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(second_page, ["Delta", "Epsilon"]);
-    let skipped = Deal::query().order_by(Deal::TITLE).skip(4).pluck(db, Deal::TITLE).await.unwrap();
+    let skipped = Deal::query()
+        .order_by(Deal::TITLE)
+        .skip(4)
+        .pluck(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(skipped, ["Gamma"]);
-    let reordered = Deal::query().order_by(Deal::TITLE).reorder_by(Deal::AMOUNT_CENTS, navree_orm::ir::Direction::Asc).take(1).pluck(db, Deal::TITLE).await.unwrap();
+    let reordered = Deal::query()
+        .order_by(Deal::TITLE)
+        .reorder_by(Deal::AMOUNT_CENTS, navree_orm::ir::Direction::Asc)
+        .take(1)
+        .pluck(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(reordered, ["Delta"]);
     let latest = Deal::query().latest().first(db).await.unwrap().unwrap();
     assert_eq!(latest.title, "Epsilon");
-    assert_eq!(Deal::query().oldest().first(db).await.unwrap().unwrap().title, "Alpha");
+    assert_eq!(
+        Deal::query()
+            .oldest()
+            .first(db)
+            .await
+            .unwrap()
+            .unwrap()
+            .title,
+        "Alpha"
+    );
     assert_eq!(Deal::query().in_random_order().count(db).await.unwrap(), 5);
-    let raw = Deal::query().order_by_raw("amount_cents % ? DESC", [7_i64]).pluck(db, Deal::TITLE).await.unwrap();
+    let raw = Deal::query()
+        .order_by_raw("amount_cents % ? DESC", [7_i64])
+        .pluck(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(raw.len(), 5);
 }
 
@@ -321,7 +631,11 @@ async fn unions_combine_queries() {
     let names = table("companies")
         .select(["name"])
         .where_(col("country").eq("DE"))
-        .union(table("deals").select(["title"]).where_(col("amount_cents").lt(100)))
+        .union(
+            table("deals")
+                .select(["title"])
+                .where_(col("amount_cents").lt(100)),
+        )
         .pluck(db, col_as::<String>("name"))
         .await
         .unwrap();
@@ -335,45 +649,183 @@ async fn aggregates_values_and_plucks() {
     let t = seeded().await;
     let db = &t.db;
     assert_eq!(Deal::query().count(db).await.unwrap(), 5);
-    assert_eq!(Deal::query().sum::<i64>(db, Deal::AMOUNT_CENTS).await.unwrap(), 132_050);
-    assert_eq!(Deal::query().where_(Deal::TITLE.eq("none")).sum::<i64>(db, Deal::AMOUNT_CENTS).await.unwrap(), 0);
-    assert_eq!(Deal::query().min::<i64>(db, Deal::AMOUNT_CENTS).await.unwrap(), Some(50));
-    assert_eq!(Deal::query().max::<i64>(db, Deal::AMOUNT_CENTS).await.unwrap(), Some(90_000));
-    assert_eq!(Deal::query().avg::<f64>(db, Deal::AMOUNT_CENTS).await.unwrap(), Some(26_410.0));
-    assert_eq!(Deal::query().where_(Deal::TITLE.eq("none")).max::<i64>(db, Deal::AMOUNT_CENTS).await.unwrap(), None);
-    assert_eq!(Deal::query().count_column(db, Deal::CLOSED_AT).await.unwrap(), 2);
-    assert_eq!(Deal::query().count_distinct(db, Deal::COMPANY_ID).await.unwrap(), 3);
+    assert_eq!(
+        Deal::query()
+            .sum::<i64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        132_050
+    );
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::TITLE.eq("none"))
+            .sum::<i64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        Deal::query()
+            .min::<i64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        Some(50)
+    );
+    assert_eq!(
+        Deal::query()
+            .max::<i64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        Some(90_000)
+    );
+    assert_eq!(
+        Deal::query()
+            .avg::<f64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        Some(26_410.0)
+    );
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::TITLE.eq("none"))
+            .max::<i64>(db, Deal::AMOUNT_CENTS)
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        Deal::query()
+            .count_column(db, Deal::CLOSED_AT)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        Deal::query()
+            .count_distinct(db, Deal::COMPANY_ID)
+            .await
+            .unwrap(),
+        3
+    );
     // A grouped query counts its groups.
-    assert_eq!(Deal::query().group_by([Deal::STAGE]).count(db).await.unwrap(), 4);
+    assert_eq!(
+        Deal::query()
+            .group_by([Deal::STAGE])
+            .count(db)
+            .await
+            .unwrap(),
+        4
+    );
 
-    let title: Option<String> = Deal::query().where_(Deal::AMOUNT_CENTS.eq(50)).value(db, Deal::TITLE).await.unwrap();
+    let title: Option<String> = Deal::query()
+        .where_(Deal::AMOUNT_CENTS.eq(50))
+        .value(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert_eq!(title.as_deref(), Some("Delta"));
-    let missing: Option<String> = Deal::query().where_(Deal::AMOUNT_CENTS.eq(1)).value(db, Deal::TITLE).await.unwrap();
+    let missing: Option<String> = Deal::query()
+        .where_(Deal::AMOUNT_CENTS.eq(1))
+        .value(db, Deal::TITLE)
+        .await
+        .unwrap();
     assert!(missing.is_none());
-    let stage = Deal::query().where_(Deal::TITLE.eq("Gamma")).value(db, Deal::STAGE).await.unwrap();
-    assert_eq!(stage, Some(Stage::ClosedWon), "values decode through the field's cast");
-    let closed = Deal::query().order_by(Deal::TITLE).pluck(db, Deal::CLOSED_AT).await.unwrap();
-    assert_eq!(closed.iter().filter(|at| at.is_some()).count(), 2, "nullable columns pluck as options");
-    let keyed = Company::query().order_by(Company::NAME).pluck_keyed(db, Company::EMPLOYEES, Company::NAME).await.unwrap();
+    let stage = Deal::query()
+        .where_(Deal::TITLE.eq("Gamma"))
+        .value(db, Deal::STAGE)
+        .await
+        .unwrap();
+    assert_eq!(
+        stage,
+        Some(Stage::ClosedWon),
+        "values decode through the field's cast"
+    );
+    let closed = Deal::query()
+        .order_by(Deal::TITLE)
+        .pluck(db, Deal::CLOSED_AT)
+        .await
+        .unwrap();
+    assert_eq!(
+        closed.iter().filter(|at| at.is_some()).count(),
+        2,
+        "nullable columns pluck as options"
+    );
+    let keyed = Company::query()
+        .order_by(Company::NAME)
+        .pluck_keyed(db, Company::EMPLOYEES, Company::NAME)
+        .await
+        .unwrap();
     assert_eq!(keyed.get("Umbrella"), Some(&300));
     assert_eq!(keyed.keys().next().map(String::as_str), Some("Acme"));
-    let untyped = Company::query().where_key(1_i64).value(db, "name").await.unwrap();
+    let untyped = Company::query()
+        .where_key(1_i64)
+        .value(db, "name")
+        .await
+        .unwrap();
     assert_eq!(untyped, Some(Value::from("Acme")));
 
-    assert!(Deal::query().where_(Deal::STAGE.eq(Stage::ClosedWon)).exists(db).await.unwrap());
-    assert!(Deal::query().where_(Deal::TITLE.eq("Zeta")).doesnt_exist(db).await.unwrap());
+    assert!(
+        Deal::query()
+            .where_(Deal::STAGE.eq(Stage::ClosedWon))
+            .exists(db)
+            .await
+            .unwrap()
+    );
+    assert!(
+        Deal::query()
+            .where_(Deal::TITLE.eq("Zeta"))
+            .doesnt_exist(db)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
 async fn keys_select_and_exclude_records() {
     let t = seeded().await;
     let db = &t.db;
-    assert_eq!(Company::query().where_key(2_i64).first(db).await.unwrap().unwrap().name, "Globex");
-    assert_eq!(Company::query().where_key_not(2_i64).count(db).await.unwrap(), 3);
-    assert_eq!(Company::query().where_key_in([1_i64, 4]).count(db).await.unwrap(), 2);
-    assert_eq!(Company::query().where_key_not_in([1_i64, 4]).count(db).await.unwrap(), 2);
-    let unknown = Company::query().where_(Company::NAME.op("=>", "x")).get(db).await.unwrap_err();
-    assert!(unknown.to_string().contains("`=>` is not a known operator"), "{unknown}");
+    assert_eq!(
+        Company::query()
+            .where_key(2_i64)
+            .first(db)
+            .await
+            .unwrap()
+            .unwrap()
+            .name,
+        "Globex"
+    );
+    assert_eq!(
+        Company::query()
+            .where_key_not(2_i64)
+            .count(db)
+            .await
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        Company::query()
+            .where_key_in([1_i64, 4])
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        Company::query()
+            .where_key_not_in([1_i64, 4])
+            .count(db)
+            .await
+            .unwrap(),
+        2
+    );
+    let unknown = Company::query()
+        .where_(Company::NAME.op("=>", "x"))
+        .get(db)
+        .await
+        .unwrap_err();
+    assert!(
+        unknown.to_string().contains("`=>` is not a known operator"),
+        "{unknown}"
+    );
 }
 
 #[tokio::test]
@@ -402,7 +854,12 @@ async fn time_buckets_run_on_sqlite() {
         .unwrap();
     let buckets: Vec<(String, i64)> = rows
         .iter()
-        .map(|row| (row.get::<String>("bucket").unwrap(), row.get::<i64>("ticks").unwrap()))
+        .map(|row| {
+            (
+                row.get::<String>("bucket").unwrap(),
+                row.get::<i64>("ticks").unwrap(),
+            )
+        })
         .collect();
     assert_eq!(
         buckets,

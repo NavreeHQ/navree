@@ -90,7 +90,9 @@ impl<M: Model> Builder<M> {
             let (column, expr) = assignment.into_set().map_err(OrmError::invalid)?;
             if column.contains("->") {
                 return Err(OrmError::unsupported(
-                    format!("setting the JSON path `{column}` in a mass update (set the whole column)"),
+                    format!(
+                        "setting the JSON path `{column}` in a mass update (set the whole column)"
+                    ),
                     ctx.database(),
                 ));
             }
@@ -123,7 +125,13 @@ impl<M: Model> Builder<M> {
         let now = ctx.now().await;
         let sets = Self::sets(&ctx, now, assignments)?;
         let (table, wheres) = self.write_target()?;
-        target.update(&UpdateIr { table, sets, wheres }).await
+        target
+            .update(&UpdateIr {
+                table,
+                sets,
+                wheres,
+            })
+            .await
     }
 
     /// Deletes every matching record in one statement (a soft-deleting
@@ -141,7 +149,13 @@ impl<M: Model> Builder<M> {
                 })?;
                 let sets = Self::sets(&ctx, now, [Assignment::value(deleted_at, value)])?;
                 let (table, wheres) = self.write_target()?;
-                target.update(&UpdateIr { table, sets, wheres }).await
+                target
+                    .update(&UpdateIr {
+                        table,
+                        sets,
+                        wheres,
+                    })
+                    .await
             }
             None => self.delete_rows(exec).await,
         }
@@ -179,8 +193,14 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         T: Numeric,
     {
-        self.step(exec, column, amount, ArithmeticOp::Add, extra.into_iter().collect())
-            .await
+        self.step(
+            exec,
+            column,
+            amount,
+            ArithmeticOp::Add,
+            extra.into_iter().collect(),
+        )
+        .await
     }
 
     /// Subtracts `amount` from `column` on every matching record.
@@ -206,8 +226,14 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         T: Numeric,
     {
-        self.step(exec, column, amount, ArithmeticOp::Sub, extra.into_iter().collect())
-            .await
+        self.step(
+            exec,
+            column,
+            amount,
+            ArithmeticOp::Sub,
+            extra.into_iter().collect(),
+        )
+        .await
     }
 
     async fn step<E, T>(
@@ -233,7 +259,13 @@ impl<M: Model> Builder<M> {
         let now = ctx.now().await;
         let sets = Self::sets(&ctx, now, std::iter::once(step).chain(extra))?;
         let (table, wheres) = self.write_target()?;
-        target.update(&UpdateIr { table, sets, wheres }).await
+        target
+            .update(&UpdateIr {
+                table,
+                sets,
+                wheres,
+            })
+            .await
     }
 
     /// Sets the update timestamp of every matching record to now; returns
@@ -339,14 +371,20 @@ impl<M: Model> Builder<M> {
     /// The query narrowed to `attributes`.
     fn matching(self, attributes: &[Assignment]) -> Self {
         let table = M::meta().table();
-        attributes
-            .iter()
-            .fold(self, |query, attribute| query.where_(attribute.to_filter(Some(table))))
+        attributes.iter().fold(self, |query, attribute| {
+            query.where_(attribute.to_filter(Some(table)))
+        })
     }
 
     /// The first record on `target`.
     async fn first_on(self, target: &Target<'_>) -> Result<Option<Record<M>>> {
-        Ok(self.limit(1).fetch(target).await?.into_vec().into_iter().next())
+        Ok(self
+            .limit(1)
+            .fetch(target)
+            .await?
+            .into_vec()
+            .into_iter()
+            .next())
     }
 
     async fn create_or_first_on(

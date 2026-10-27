@@ -70,7 +70,8 @@ impl Row {
 
     /// Column `column` read as `T`.
     pub fn get<T: Field>(&self, column: &str) -> Result<T, OrmError> {
-        self.field(column).map_err(|error| decode_error("row", column, T::type_name(), &error))
+        self.field(column)
+            .map_err(|error| decode_error("row", column, T::type_name(), &error))
     }
 
     /// Column `column` decoded by its own type (a number column gives a

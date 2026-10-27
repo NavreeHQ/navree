@@ -26,7 +26,11 @@ async fn seeded() -> (TestDb, Collection<Company>) {
         .await
         .unwrap();
     }
-    let all = Company::query().order_by(Company::ID).get(&t.db).await.unwrap();
+    let all = Company::query()
+        .order_by(Company::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     (t, all)
 }
 
@@ -47,17 +51,28 @@ async fn keys_finding_and_containment() {
 async fn transforming_and_grouping() {
     let (_t, all) = seeded().await;
     assert_eq!(all.map(|c| c.name.clone()), ["Acme", "Globex", "Initech"]);
-    assert_eq!(all.pluck(Company::NAME).unwrap(), ["Acme", "Globex", "Initech"]);
+    assert_eq!(
+        all.pluck(Company::NAME).unwrap(),
+        ["Acme", "Globex", "Initech"]
+    );
     assert_eq!(
         all.pluck(Company::COUNTRY).unwrap(),
-        [Some("US".to_owned()), Some("DE".to_owned()), Some("US".to_owned())]
+        [
+            Some("US".to_owned()),
+            Some("DE".to_owned()),
+            Some("US".to_owned())
+        ]
     );
     let big = all.clone().filter(|c| c.employees > 15);
     assert_eq!(big.model_keys(), [2, 3]);
-    let (us, other) = all.clone().partition(|c| c.country.as_deref() == Some("US"));
+    let (us, other) = all
+        .clone()
+        .partition(|c| c.country.as_deref() == Some("US"));
     assert_eq!((us.len(), other.len()), (2, 1));
 
-    let by_country = all.clone().group_by(|c| c.country.clone().unwrap_or_default());
+    let by_country = all
+        .clone()
+        .group_by(|c| c.country.clone().unwrap_or_default());
     assert_eq!(by_country.keys().collect::<Vec<_>>(), ["US", "DE"]);
     assert_eq!(by_country["US"].model_keys(), [1, 3]);
     let by_name = all.clone().key_by(|c| c.name.clone());
@@ -83,7 +98,13 @@ async fn set_operations_by_key() {
 #[tokio::test]
 async fn queries_and_refreshes() {
     let (t, all) = seeded().await;
-    let updated = all.clone().only([1_i64, 2]).to_query().update(&t.db, [Company::EMPLOYEES.set(99)]).await.unwrap();
+    let updated = all
+        .clone()
+        .only([1_i64, 2])
+        .to_query()
+        .update(&t.db, [Company::EMPLOYEES.set(99)])
+        .await
+        .unwrap();
     assert_eq!(updated, 2);
     t.db.conn()
         .execute_unprepared("DELETE FROM companies WHERE id = 3")
@@ -98,7 +119,15 @@ async fn queries_and_refreshes() {
 #[tokio::test]
 async fn serializes_as_an_array_of_records() {
     let t = sqlite().await;
-    Deal::create(&t.db, Deal { stage: Stage::Qualified, ..Deal::new("A", 5) }).await.unwrap();
+    Deal::create(
+        &t.db,
+        Deal {
+            stage: Stage::Qualified,
+            ..Deal::new("A", 5)
+        },
+    )
+    .await
+    .unwrap();
     let deals = Deal::all(&t.db).await.unwrap();
     let json = serde_json::to_value(&deals).unwrap();
     assert_eq!(json.as_array().unwrap().len(), 1);

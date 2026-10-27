@@ -192,13 +192,12 @@ impl<M: Model> Hooks<M> {
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
         if let Some(app) = ctx.app() {
-            let registered = app
-                .get_all::<dyn ModelHook<M>>()
-                .await
-                .map_err(|error| crate::error::OrmError::Hook {
+            let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
+                crate::error::OrmError::Hook {
                     model: M::meta().name().into(),
                     message: format!("cannot resolve the app's model hooks: {error}"),
-                })?;
+                }
+            })?;
             hooks.extend(registered);
         }
         Ok(Hooks { hooks })
@@ -267,7 +266,14 @@ mod tests {
         .collect();
         assert_eq!(
             cancellable,
-            ["creating", "updating", "saving", "deleting", "force_deleting", "restoring"]
+            [
+                "creating",
+                "updating",
+                "saving",
+                "deleting",
+                "force_deleting",
+                "restoring"
+            ]
         );
         assert_eq!(ModelEvent::ForceDeleted.to_string(), "force_deleted");
     }

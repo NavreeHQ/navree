@@ -11,7 +11,7 @@ use navree_orm::ir::{
     UpdateIr, WhereClause,
 };
 use navree_orm::sql::{compile_delete, compile_insert, compile_update};
-use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
+use navree_orm::{Builder, Dialect, Expr, Model, Statement, Value, col, table};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -125,7 +125,11 @@ fn groups_and_negations() {
             .where_(Deal::AMOUNT_CENTS.gt(0))
             .where_group(|g| {
                 g.where_(Deal::STAGE.eq(Stage::Won))
-                    .or_where_group(|inner| inner.where_(Deal::STAGE.eq(Stage::Lost)).where_null(Deal::CLOSED_AT))
+                    .or_where_group(|inner| {
+                        inner
+                            .where_(Deal::STAGE.eq(Stage::Lost))
+                            .where_null(Deal::CLOSED_AT)
+                    })
             })
             .where_not(Deal::TITLE.eq("x").or(Deal::TITLE.eq("y")))
             .or_where_not(Deal::AMOUNT_CENTS.lt(5))
@@ -138,19 +142,44 @@ fn column_comparisons_subqueries_and_exists() {
     insta::assert_snapshot!(query(
         Company::query()
             .where_exists(Deal::query().where_column(Deal::COMPANY_ID, "=", Company::ID))
-            .where_not_exists(Deal::query().where_column(Deal::COMPANY_ID, "=", Company::ID).where_(Deal::STAGE.eq(Stage::Lost)))
-            .where_in_sub(Company::ID, Deal::query().select([Deal::COMPANY_ID]).where_(Deal::STAGE.eq(Stage::Won)))
-            .where_sub(Company::ID, ">", table("deals").select([Expr::max(col("company_id"))]))
+            .where_not_exists(
+                Deal::query()
+                    .where_column(Deal::COMPANY_ID, "=", Company::ID)
+                    .where_(Deal::STAGE.eq(Stage::Lost))
+            )
+            .where_in_sub(
+                Company::ID,
+                Deal::query()
+                    .select([Deal::COMPANY_ID])
+                    .where_(Deal::STAGE.eq(Stage::Won))
+            )
+            .where_sub(
+                Company::ID,
+                ">",
+                table("deals").select([Expr::max(col("company_id"))])
+            )
     ));
-    insta::assert_snapshot!(query(Deal::query().where_column(Deal::UPDATED_AT, ">", Deal::CREATED_AT)));
+    insta::assert_snapshot!(query(Deal::query().where_column(
+        Deal::UPDATED_AT,
+        ">",
+        Deal::CREATED_AT
+    )));
 }
 
 #[test]
 fn date_parts() {
     insta::assert_snapshot!(query(
         Deal::query()
-            .where_date(Deal::CLOSED_AT, "=", NaiveDate::from_ymd_opt(2026, 10, 27).unwrap())
-            .where_time(Deal::CLOSED_AT, ">=", NaiveTime::from_hms_opt(9, 0, 0).unwrap())
+            .where_date(
+                Deal::CLOSED_AT,
+                "=",
+                NaiveDate::from_ymd_opt(2026, 10, 27).unwrap()
+            )
+            .where_time(
+                Deal::CLOSED_AT,
+                ">=",
+                NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+            )
             .where_day(Deal::CLOSED_AT, "=", 7)
             .where_month(Deal::CLOSED_AT, "<", 10)
             .where_year(Deal::CLOSED_AT, ">", 2025)
@@ -178,16 +207,26 @@ fn json_columns() {
             .where_(col("meta->owner->name").eq("ada"))
             .where_(col("meta->items[0]").eq(3))
     ));
-    insta::assert_snapshot!(query(Deal::query().where_json_contains(Deal::TAGS, serde_json::json!({"k": 1}))));
+    insta::assert_snapshot!(query(
+        Deal::query().where_json_contains(Deal::TAGS, serde_json::json!({"k": 1}))
+    ));
 }
 
 #[test]
 fn full_text() {
-    insta::assert_snapshot!(query(Deal::query().where_full_text([Deal::TITLE], "renewal pricing")));
     insta::assert_snapshot!(query(
-        Deal::query().where_full_text_with([Deal::TITLE.expr(), Deal::STAGE.expr()], "\"net 30\" -draft", FullText::websearch().language("german"))
+        Deal::query().where_full_text([Deal::TITLE], "renewal pricing")
     ));
-    insta::assert_snapshot!(query(Deal::query().where_full_text_with([Deal::TITLE], "q", FullText::default().language("klingon"))));
+    insta::assert_snapshot!(query(Deal::query().where_full_text_with(
+        [Deal::TITLE.expr(), Deal::STAGE.expr()],
+        "\"net 30\" -draft",
+        FullText::websearch().language("german")
+    )));
+    insta::assert_snapshot!(query(Deal::query().where_full_text_with(
+        [Deal::TITLE],
+        "q",
+        FullText::default().language("klingon")
+    )));
 }
 
 #[test]
@@ -195,13 +234,18 @@ fn raw_fragments_and_operators() {
     insta::assert_snapshot!(query(
         Deal::query()
             .where_(Deal::AMOUNT_CENTS.gt(1))
-            .where_raw("lower(title) = ? OR amount_cents = ?", [Value::from("acme"), Value::from(5_i64)])
+            .where_raw(
+                "lower(title) = ? OR amount_cents = ?",
+                [Value::from("acme"), Value::from(5_i64)]
+            )
             .where_raw("meta ?? 'k' AND title <> '?'", Vec::<Value>::new())
             .where_(Deal::TITLE.null_safe_eq("x"))
             .where_(Deal::TITLE.op("regexp", "^A"))
             .where_(Deal::AMOUNT_CENTS.op("&", 4))
     ));
-    insta::assert_snapshot!(query(Deal::query().where_(Deal::TAGS.op("@>", vec!["a".to_owned()]))));
+    insta::assert_snapshot!(query(
+        Deal::query().where_(Deal::TAGS.op("@>", vec!["a".to_owned()]))
+    ));
     insta::assert_snapshot!(query(Deal::query().where_raw("a = ?", [1, 2])));
     insta::assert_snapshot!(query(Deal::query().where_(Deal::TITLE.op("=>", "x"))));
 }
@@ -212,11 +256,28 @@ fn selects_and_distinct() {
         Deal::query()
             .add_select([(Deal::TITLE, "label")])
             .select_raw("amount_cents * ? AS doubled", [2])
-            .select_sub(Company::query().select([Company::NAME]).where_column(Company::ID, "=", Deal::COMPANY_ID), "company")
-            .select_expr(Expr::coalesce([col("closed_at"), col("created_at")]), "settled_at")
+            .select_sub(
+                Company::query().select([Company::NAME]).where_column(
+                    Company::ID,
+                    "=",
+                    Deal::COMPANY_ID
+                ),
+                "company"
+            )
+            .select_expr(
+                Expr::coalesce([col("closed_at"), col("created_at")]),
+                "settled_at"
+            )
     ));
-    insta::assert_snapshot!(query(Company::query().select([Company::COUNTRY]).distinct()));
-    insta::assert_snapshot!(query(Deal::query().distinct_on([Deal::COMPANY_ID]).order_by(Deal::COMPANY_ID).latest()));
+    insta::assert_snapshot!(query(
+        Company::query().select([Company::COUNTRY]).distinct()
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .distinct_on([Deal::COMPANY_ID])
+            .order_by(Deal::COMPANY_ID)
+            .latest()
+    ));
     insta::assert_snapshot!(rows(table("deals as d").select(["d.title as name", "d.*"])));
 }
 
@@ -226,13 +287,18 @@ fn joins() {
         Deal::query()
             .join("companies", Deal::COMPANY_ID, "=", Company::ID)
             .left_join("users as owner", "owner.id", "=", "deals.owner_id")
-            .right_join_on("regions", |j| j.on("regions.id", "=", "companies.region_id").or_on("regions.code", "=", "companies.code"))
+            .right_join_on("regions", |j| j
+                .on("regions.id", "=", "companies.region_id")
+                .or_on("regions.code", "=", "companies.code"))
             .cross_join("currencies")
             .where_(Company::COUNTRY.eq("US"))
     ));
     insta::assert_snapshot!(query(
         Company::query().join_sub(
-            Deal::query().select([Deal::COMPANY_ID]).select_expr(Expr::max(Deal::AMOUNT_CENTS), "top").group_by([Deal::COMPANY_ID]),
+            Deal::query()
+                .select([Deal::COMPANY_ID])
+                .select_expr(Expr::max(Deal::AMOUNT_CENTS), "top")
+                .group_by([Deal::COMPANY_ID]),
             "best",
             "best.company_id",
             "=",
@@ -257,15 +323,26 @@ fn groups_havings_orders_and_pages() {
             .for_page(3, 25)
     ));
     insta::assert_snapshot!(query(Deal::query().latest().skip(10)));
-    insta::assert_snapshot!(query(Deal::query().oldest().in_random_order().reorder_by(Deal::TITLE, Direction::Desc).take(5)));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .oldest()
+            .in_random_order()
+            .reorder_by(Deal::TITLE, Direction::Desc)
+            .take(5)
+    ));
 }
 
 #[test]
 fn unions_and_locks() {
     insta::assert_snapshot!(rows(
-        table("companies").select(["name"]).union(table("deals").select(["title"])).union_all(table("users").select(["name"]))
+        table("companies")
+            .select(["name"])
+            .union(table("deals").select(["title"]))
+            .union_all(table("users").select(["name"]))
     ));
-    insta::assert_snapshot!(query(Deal::query().where_key(Uuid::nil()).lock_for_update()));
+    insta::assert_snapshot!(query(
+        Deal::query().where_key(Uuid::nil()).lock_for_update()
+    ));
     insta::assert_snapshot!(query(Company::query().shared_lock()));
 }
 
@@ -280,12 +357,17 @@ fn timescale_helpers() {
     ));
     insta::assert_snapshot!(rows(
         table("readings")
-            .select_expr(Expr::time_bucket_from("1 day", col("taken_at"), Expr::val(at())), "day")
+            .select_expr(
+                Expr::time_bucket_from("1 day", col("taken_at"), Expr::val(at())),
+                "day"
+            )
             .select_first("celsius", "taken_at", "opening")
             .select_last("celsius", "taken_at", "closing")
             .group_by(["day"])
     ));
-    insta::assert_snapshot!(rows(table("readings").select_time_bucket("1 month", "taken_at", "bucket")));
+    insta::assert_snapshot!(rows(
+        table("readings").select_time_bucket("1 month", "taken_at", "bucket")
+    ));
 }
 
 #[test]
@@ -298,16 +380,30 @@ fn aggregates_count_what_the_query_returns() {
         distinct: false,
     };
     let plain = Deal::query().where_(Deal::STAGE.eq(Stage::Won)).latest();
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(&plain.clone().into_ir(), &count, d)));
-    let grouped = table("deals").group_by(["stage"]).having(Expr::count_all().gt(1));
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(&grouped.clone().into_ir(), &count, d)));
+    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+        &plain.clone().into_ir(),
+        &count,
+        d
+    )));
+    let grouped = table("deals")
+        .group_by(["stage"])
+        .having(Expr::count_all().gt(1));
+    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+        &grouped.clone().into_ir(),
+        &count,
+        d
+    )));
     let distinct_sum = Aggregate {
         function: AggregateFunction::Sum,
         arg: Some(IrExpr::Column(ColumnRef::parse("amount_cents"))),
         distinct: true,
     };
     let limited = table("deals").order_by("title").limit(10);
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(&limited.clone().into_ir(), &distinct_sum, d)));
+    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+        &limited.clone().into_ir(),
+        &distinct_sum,
+        d
+    )));
     insta::assert_snapshot!(per_dialect(|d| compile_exists(&plain.clone().into_ir(), d)));
 }
 
@@ -317,8 +413,14 @@ fn writes() {
         table: Cow::Borrowed("companies"),
         columns: vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
         rows: vec![
-            vec![IrExpr::Value(Value::from("Acme")), IrExpr::Value(Value::String(None))],
-            vec![IrExpr::Value(Value::from("Globex")), IrExpr::Value(Value::from("DE"))],
+            vec![
+                IrExpr::Value(Value::from("Acme")),
+                IrExpr::Value(Value::String(None)),
+            ],
+            vec![
+                IrExpr::Value(Value::from("Globex")),
+                IrExpr::Value(Value::from("DE")),
+            ],
         ],
         returning: vec![Cow::Borrowed("id")],
     };
@@ -339,7 +441,7 @@ fn writes() {
                 Expr::col("amount_cents").add(Expr::val(5_i64)),
             ),
         ],
-        wheres: vec![WhereClause::and(Filter::from(Deal::ID.eq(Uuid::nil())).into_where())],
+        wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
     };
     insta::assert_snapshot!(per_dialect(|d| compile_update(&update, d)));
     let delete = DeleteIr {

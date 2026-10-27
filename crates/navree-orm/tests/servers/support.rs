@@ -137,5 +137,8 @@ fn urls_are_rewritten() {
         "mysql://root@localhost:3306/b?ssl-mode=disabled"
     );
     assert_eq!(with_query("postgres://h/db", "a=1"), "postgres://h/db?a=1");
-    assert_eq!(with_query("postgres://h/db?x=2", "a=1"), "postgres://h/db?x=2&a=1");
+    assert_eq!(
+        with_query("postgres://h/db?x=2", "a=1"),
+        "postgres://h/db?x=2&a=1"
+    );
 }

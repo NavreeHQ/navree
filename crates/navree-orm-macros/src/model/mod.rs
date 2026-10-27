@@ -107,7 +107,13 @@ fn inferred_key_type(ty: &Type) -> KeyType {
     let Type::Path(path) = ty else {
         return KeyType::Manual;
     };
-    match path.path.segments.last().map(|segment| segment.ident.to_string()).as_deref() {
+    match path
+        .path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+        .as_deref()
+    {
         Some("i16" | "i32" | "i64" | "u32" | "u64") => KeyType::Increments,
         Some("Uuid") => KeyType::UuidV7,
         Some("Ulid") => KeyType::Ulid,
@@ -162,7 +168,10 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         if let Some(existing) = columns.iter().find(|column| column.name == name) {
             errors.push(syn::Error::new(
                 field_ident.span(),
-                format!("column `{name}` is already the column of field `{}`", existing.ident),
+                format!(
+                    "column `{name}` is already the column of field `{}`",
+                    existing.ident
+                ),
             ));
         }
         columns.push(Column {
@@ -270,8 +279,16 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         key_type,
         columns,
         skipped,
-        created_at: attrs.timestamps.on.then(|| attrs.timestamps.created_at.clone()).flatten(),
-        updated_at: attrs.timestamps.on.then(|| attrs.timestamps.updated_at.clone()).flatten(),
+        created_at: attrs
+            .timestamps
+            .on
+            .then(|| attrs.timestamps.created_at.clone())
+            .flatten(),
+        updated_at: attrs
+            .timestamps
+            .on
+            .then(|| attrs.timestamps.updated_at.clone())
+            .flatten(),
         deleted_at,
         connection: attrs.connection,
         per_page: attrs.per_page,

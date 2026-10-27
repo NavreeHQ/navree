@@ -209,7 +209,10 @@ mod tests {
     #[test]
     fn known_vectors() {
         assert_eq!(Ulid::nil().to_string(), "00000000000000000000000000");
-        assert_eq!(Ulid::from_u128(u128::MAX).to_string(), "7ZZZZZZZZZZZZZZZZZZZZZZZZZ");
+        assert_eq!(
+            Ulid::from_u128(u128::MAX).to_string(),
+            "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"
+        );
         let id = Ulid::from_parts(1_469_918_176_385, 0);
         assert_eq!(&id.to_string()[..10], "01ARYZ6S41");
         assert_eq!(id.timestamp_ms(), 1_469_918_176_385);
@@ -220,7 +223,10 @@ mod tests {
         let id = Ulid::new();
         let text = id.to_string();
         assert_eq!(text.to_lowercase().parse::<Ulid>().unwrap(), id);
-        assert!("8ZZZZZZZZZZZZZZZZZZZZZZZZZ".parse::<Ulid>().is_err(), "overflows 128 bits");
+        assert!(
+            "8ZZZZZZZZZZZZZZZZZZZZZZZZZ".parse::<Ulid>().is_err(),
+            "overflows 128 bits"
+        );
         assert!("0123".parse::<Ulid>().is_err());
         assert!("0000000000000000000000000U".parse::<Ulid>().is_err());
         assert_eq!(
@@ -248,6 +254,9 @@ mod tests {
         assert_eq!(serde_json::from_str::<Ulid>(&json).unwrap(), id);
         assert_eq!(id.to_value(), Value::String(Some(id.to_string())));
         assert_eq!(Ulid::from_value(id.to_value()).unwrap(), id);
-        assert_eq!(Ulid::from_value(Value::Uuid(Some(id.to_uuid()))).unwrap(), id);
+        assert_eq!(
+            Ulid::from_value(Value::Uuid(Some(id.to_uuid()))).unwrap(),
+            id
+        );
     }
 }

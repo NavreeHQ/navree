@@ -22,7 +22,12 @@ async fn deleting_trashes_the_row() {
     assert_eq!(Deal::query().count(&t.db).await.unwrap(), 1);
     assert!(Deal::find(&t.db, gone.id).await.unwrap().is_none());
     assert_eq!(Deal::query().with_trashed().count(&t.db).await.unwrap(), 2);
-    let trashed = Deal::query().with_trashed().find(&t.db, gone.id).await.unwrap().unwrap();
+    let trashed = Deal::query()
+        .with_trashed()
+        .find(&t.db, gone.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(trashed.trashed());
 
     // Refresh and fresh see trashed rows (they ignore global scopes).
@@ -52,10 +57,21 @@ async fn mass_deletes_trash_every_match() {
     for (title, cents) in [("A", 1), ("B", 2), ("C", 300)] {
         Deal::create(&t.db, Deal::new(title, cents)).await.unwrap();
     }
-    let trashed = Deal::query().where_(Deal::AMOUNT_CENTS.lt(100)).delete(&t.db).await.unwrap();
+    let trashed = Deal::query()
+        .where_(Deal::AMOUNT_CENTS.lt(100))
+        .delete(&t.db)
+        .await
+        .unwrap();
     assert_eq!(trashed, 2);
     assert_eq!(Deal::query().count(&t.db).await.unwrap(), 1);
     assert_eq!(count_rows(&t.db, "deals").await, 3);
     // Trashed rows are not matched again.
-    assert_eq!(Deal::query().where_(Deal::AMOUNT_CENTS.lt(100)).delete(&t.db).await.unwrap(), 0);
+    assert_eq!(
+        Deal::query()
+            .where_(Deal::AMOUNT_CENTS.lt(100))
+            .delete(&t.db)
+            .await
+            .unwrap(),
+        0
+    );
 }

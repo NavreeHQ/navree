@@ -42,7 +42,10 @@ async fn the_module_db_knows_its_app_and_a_standalone_db_does_not() {
     assert!(standalone.app().is_none());
 
     let uow = db.uow(None, None).await;
-    assert!(uow.db().app().is_some(), "a unit of work reaches the app too");
+    assert!(
+        uow.db().app().is_some(),
+        "a unit of work reaches the app too"
+    );
     drop(owner);
     drop(app);
     assert!(db.app().is_none(), "no app once it is dropped");

@@ -8,7 +8,7 @@
 
 use std::borrow::Cow;
 
-use crate::column::{AsExpr, ColumnOf, Filter, IntoQuery};
+use crate::column::{ColumnOf, Filter, IntoExpr, IntoQuery};
 use crate::ir::{
     Boolean, ColumnRef, DatePart, Expr, FullText, InValues, Operator, TableRef, Where, WhereClause,
 };
@@ -167,7 +167,7 @@ macro_rules! filters {
         /// Adds `column IN (subquery)`.
         pub fn where_in_sub(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             query: impl $crate::IntoQuery,
         ) -> Self {
             self.where_($crate::query::filters::in_sub(column, query, false))
@@ -176,29 +176,29 @@ macro_rules! filters {
         /// Adds `column NOT IN (subquery)`.
         pub fn where_not_in_sub(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             query: impl $crate::IntoQuery,
         ) -> Self {
             self.where_($crate::query::filters::in_sub(column, query, true))
         }
 
         /// Adds `column IS NULL`.
-        pub fn where_null(self, column: impl $crate::AsExpr) -> Self {
+        pub fn where_null(self, column: impl $crate::IntoExpr) -> Self {
             self.where_($crate::query::filters::null(column, false))
         }
 
         /// Adds `OR column IS NULL`.
-        pub fn or_where_null(self, column: impl $crate::AsExpr) -> Self {
+        pub fn or_where_null(self, column: impl $crate::IntoExpr) -> Self {
             self.or_where($crate::query::filters::null(column, false))
         }
 
         /// Adds `column IS NOT NULL`.
-        pub fn where_not_null(self, column: impl $crate::AsExpr) -> Self {
+        pub fn where_not_null(self, column: impl $crate::IntoExpr) -> Self {
             self.where_($crate::query::filters::null(column, true))
         }
 
         /// Adds `OR column IS NOT NULL`.
-        pub fn or_where_not_null(self, column: impl $crate::AsExpr) -> Self {
+        pub fn or_where_not_null(self, column: impl $crate::IntoExpr) -> Self {
             self.or_where($crate::query::filters::null(column, true))
         }
 
@@ -209,7 +209,12 @@ macro_rules! filters {
             low: impl $crate::ValueFor<T>,
             high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), false);
+            let filter = $crate::query::filters::between(
+                &column,
+                $crate::ValueFor::into_value_for(low),
+                $crate::ValueFor::into_value_for(high),
+                false,
+            );
             self.where_(filter)
         }
 
@@ -220,7 +225,12 @@ macro_rules! filters {
             low: impl $crate::ValueFor<T>,
             high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), false);
+            let filter = $crate::query::filters::between(
+                &column,
+                $crate::ValueFor::into_value_for(low),
+                $crate::ValueFor::into_value_for(high),
+                false,
+            );
             self.or_where(filter)
         }
 
@@ -231,7 +241,12 @@ macro_rules! filters {
             low: impl $crate::ValueFor<T>,
             high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), true);
+            let filter = $crate::query::filters::between(
+                &column,
+                $crate::ValueFor::into_value_for(low),
+                $crate::ValueFor::into_value_for(high),
+                true,
+            );
             self.where_(filter)
         }
 
@@ -242,7 +257,12 @@ macro_rules! filters {
             low: impl $crate::ValueFor<T>,
             high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), true);
+            let filter = $crate::query::filters::between(
+                &column,
+                $crate::ValueFor::into_value_for(low),
+                $crate::ValueFor::into_value_for(high),
+                true,
+            );
             self.or_where(filter)
         }
 
@@ -250,9 +270,9 @@ macro_rules! filters {
         /// `.where_column(Deal::UPDATED_AT, ">", Deal::CREATED_AT)`.
         pub fn where_column(
             self,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
             self.where_($crate::query::filters::columns(first, op, second))
         }
@@ -260,9 +280,9 @@ macro_rules! filters {
         /// Adds `OR first op second` comparing two columns.
         pub fn or_where_column(
             self,
-            first: impl $crate::AsExpr,
+            first: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
-            second: impl $crate::AsExpr,
+            second: impl $crate::IntoExpr,
         ) -> Self {
             self.or_where($crate::query::filters::columns(first, op, second))
         }
@@ -271,12 +291,12 @@ macro_rules! filters {
         /// subquery returns.
         pub fn where_sub(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             query: impl $crate::IntoQuery,
         ) -> Self {
             self.where_($crate::Filter::from($crate::ir::Where::Compare {
-                left: $crate::AsExpr::as_expr(column),
+                left: $crate::IntoExpr::into_expr(column),
                 op: op.into(),
                 right: $crate::Expr::subquery(query),
             }))
@@ -286,7 +306,7 @@ macro_rules! filters {
         /// with `value` (a `NaiveDate`, or text).
         pub fn where_date(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -301,7 +321,7 @@ macro_rules! filters {
         /// Adds `OR` a comparison of the date part of `column`.
         pub fn or_where_date(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -316,7 +336,7 @@ macro_rules! filters {
         /// Adds a comparison of the time of day of `column` (`HH:MM:SS`).
         pub fn where_time(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -331,7 +351,7 @@ macro_rules! filters {
         /// Adds `OR` a comparison of the time of day of `column`.
         pub fn or_where_time(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -346,7 +366,7 @@ macro_rules! filters {
         /// Adds a comparison of the day of the month of `column`.
         pub fn where_day(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -361,7 +381,7 @@ macro_rules! filters {
         /// Adds `OR` a comparison of the day of the month of `column`.
         pub fn or_where_day(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -376,7 +396,7 @@ macro_rules! filters {
         /// Adds a comparison of the month (1 to 12) of `column`.
         pub fn where_month(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -391,7 +411,7 @@ macro_rules! filters {
         /// Adds `OR` a comparison of the month of `column`.
         pub fn or_where_month(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -406,7 +426,7 @@ macro_rules! filters {
         /// Adds a comparison of the year of `column`.
         pub fn where_year(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -421,7 +441,7 @@ macro_rules! filters {
         /// Adds `OR` a comparison of the year of `column`.
         pub fn or_where_year(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             value: impl Into<$crate::Value>,
         ) -> Self {
@@ -435,24 +455,32 @@ macro_rules! filters {
 
         /// Adds `column LIKE pattern`, ignoring case on every database
         /// (`%` and `_` are wildcards).
-        pub fn where_like(self, column: impl $crate::AsExpr, pattern: impl Into<String>) -> Self {
+        pub fn where_like(self, column: impl $crate::IntoExpr, pattern: impl Into<String>) -> Self {
             self.where_($crate::query::filters::like(column, pattern, false, false))
         }
 
         /// Adds `OR column LIKE pattern`, ignoring case.
-        pub fn or_where_like(self, column: impl $crate::AsExpr, pattern: impl Into<String>) -> Self {
+        pub fn or_where_like(
+            self,
+            column: impl $crate::IntoExpr,
+            pattern: impl Into<String>,
+        ) -> Self {
             self.or_where($crate::query::filters::like(column, pattern, false, false))
         }
 
         /// Adds `column NOT LIKE pattern`, ignoring case.
-        pub fn where_not_like(self, column: impl $crate::AsExpr, pattern: impl Into<String>) -> Self {
+        pub fn where_not_like(
+            self,
+            column: impl $crate::IntoExpr,
+            pattern: impl Into<String>,
+        ) -> Self {
             self.where_($crate::query::filters::like(column, pattern, false, true))
         }
 
         /// Adds `OR column NOT LIKE pattern`, ignoring case.
         pub fn or_where_not_like(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             pattern: impl Into<String>,
         ) -> Self {
             self.or_where($crate::query::filters::like(column, pattern, false, true))
@@ -461,7 +489,7 @@ macro_rules! filters {
         /// Adds `column LIKE pattern`, matching case on every database.
         pub fn where_like_case_sensitive(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             pattern: impl Into<String>,
         ) -> Self {
             self.where_($crate::query::filters::like(column, pattern, true, false))
@@ -472,7 +500,7 @@ macro_rules! filters {
         /// object's keys and values).
         pub fn where_json_contains(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             value: impl serde::Serialize,
         ) -> Self {
             self.where_($crate::query::filters::json_contains(column, value, false))
@@ -481,7 +509,7 @@ macro_rules! filters {
         /// Adds `OR` the JSON column contains `value`.
         pub fn or_where_json_contains(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             value: impl serde::Serialize,
         ) -> Self {
             self.or_where($crate::query::filters::json_contains(column, value, false))
@@ -490,7 +518,7 @@ macro_rules! filters {
         /// Adds: the JSON column (or path) does not contain `value`.
         pub fn where_json_doesnt_contain(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             value: impl serde::Serialize,
         ) -> Self {
             self.where_($crate::query::filters::json_contains(column, value, true))
@@ -500,7 +528,7 @@ macro_rules! filters {
         /// (or path).
         pub fn where_json_length(
             self,
-            column: impl $crate::AsExpr,
+            column: impl $crate::IntoExpr,
             op: impl Into<$crate::ir::Operator>,
             length: i64,
         ) -> Self {
@@ -537,10 +565,14 @@ macro_rules! filters {
         /// ```
         pub fn where_full_text(
             self,
-            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            columns: impl IntoIterator<Item = impl $crate::IntoExpr>,
             query: impl Into<String>,
         ) -> Self {
-            self.where_($crate::query::filters::full_text(columns, query, $crate::ir::FullText::default()))
+            self.where_($crate::query::filters::full_text(
+                columns,
+                query,
+                $crate::ir::FullText::default(),
+            ))
         }
 
         /// Adds a full-text match with options: the mode (`phrase`,
@@ -552,7 +584,7 @@ macro_rules! filters {
         /// ```
         pub fn where_full_text_with(
             self,
-            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            columns: impl IntoIterator<Item = impl $crate::IntoExpr>,
             query: impl Into<String>,
             options: $crate::ir::FullText,
         ) -> Self {
@@ -562,10 +594,14 @@ macro_rules! filters {
         /// Adds `OR` a full-text match.
         pub fn or_where_full_text(
             self,
-            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            columns: impl IntoIterator<Item = impl $crate::IntoExpr>,
             query: impl Into<String>,
         ) -> Self {
-            self.or_where($crate::query::filters::full_text(columns, query, $crate::ir::FullText::default()))
+            self.or_where($crate::query::filters::full_text(
+                columns,
+                query,
+                $crate::ir::FullText::default(),
+            ))
         }
 
         /// Adds raw SQL with `?` placeholders for `values` (`??` for a
@@ -603,7 +639,11 @@ macro_rules! filters {
             then: impl FnOnce(Self) -> Self,
             otherwise: impl FnOnce(Self) -> Self,
         ) -> Self {
-            if condition { then(self) } else { otherwise(self) }
+            if condition {
+                then(self)
+            } else {
+                otherwise(self)
+            }
         }
 
         /// Applies `then` with the value when `value` is `Some`.
@@ -681,17 +721,17 @@ pub(crate) fn in_list<T>(
     }
 }
 
-pub(crate) fn in_sub(column: impl AsExpr, query: impl IntoQuery, not: bool) -> Filter {
+pub(crate) fn in_sub(column: impl IntoExpr, query: impl IntoQuery, not: bool) -> Filter {
     Filter(Where::In {
-        expr: column.as_expr(),
+        expr: column.into_expr(),
         values: InValues::Subquery(Box::new(query.into_query())),
         not,
     })
 }
 
-pub(crate) fn null(column: impl AsExpr, not: bool) -> Filter {
+pub(crate) fn null(column: impl IntoExpr, not: bool) -> Filter {
     Filter(Where::Null {
-        expr: column.as_expr(),
+        expr: column.into_expr(),
         not,
     })
 }
@@ -711,46 +751,59 @@ pub(crate) fn between<T>(column: &impl ColumnOf<T>, low: T, high: T, not: bool) 
     }
 }
 
-pub(crate) fn columns(first: impl AsExpr, op: impl Into<Operator>, second: impl AsExpr) -> Filter {
+pub(crate) fn columns(
+    first: impl IntoExpr,
+    op: impl Into<Operator>,
+    second: impl IntoExpr,
+) -> Filter {
     Filter(Where::Compare {
-        left: first.as_expr(),
+        left: first.into_expr(),
         op: op.into(),
-        right: second.as_expr(),
+        right: second.into_expr(),
     })
 }
 
 pub(crate) fn date_part(
     part: DatePart,
-    column: impl AsExpr,
+    column: impl IntoExpr,
     op: impl Into<Operator>,
     value: impl Into<Value>,
 ) -> Filter {
     Filter(Where::DatePart {
         part,
-        expr: column.as_expr(),
+        expr: column.into_expr(),
         op: op.into(),
         value: Expr::Value(value.into()),
     })
 }
 
-pub(crate) fn like(column: impl AsExpr, pattern: impl Into<String>, case_sensitive: bool, not: bool) -> Filter {
-    Filter::like(column.as_expr(), pattern.into(), case_sensitive, not)
+pub(crate) fn like(
+    column: impl IntoExpr,
+    pattern: impl Into<String>,
+    case_sensitive: bool,
+    not: bool,
+) -> Filter {
+    Filter::like(column.into_expr(), pattern.into(), case_sensitive, not)
 }
 
 /// The column (with its JSON path) a JSON condition is about.
-fn json_column(column: impl AsExpr, what: &str) -> Result<ColumnRef, Filter> {
-    match column.as_expr() {
+fn json_column(column: impl IntoExpr, what: &str) -> Result<ColumnRef, String> {
+    match column.into_expr() {
         Expr::Column(column) => Ok(column),
-        other => Err(Filter(Where::Invalid(format!(
+        other => Err(format!(
             "{what} takes a column or a JSON path, not {other:?}"
-        )))),
+        )),
     }
 }
 
-pub(crate) fn json_contains(column: impl AsExpr, value: impl serde::Serialize, not: bool) -> Filter {
+pub(crate) fn json_contains(
+    column: impl IntoExpr,
+    value: impl serde::Serialize,
+    not: bool,
+) -> Filter {
     let column = match json_column(column, "a JSON containment check") {
         Ok(column) => column,
-        Err(invalid) => return invalid,
+        Err(message) => return Filter(Where::Invalid(message)),
     };
     match serde_json::to_value(value) {
         Ok(value) => Filter(Where::JsonContains { column, value, not }),
@@ -760,23 +813,23 @@ pub(crate) fn json_contains(column: impl AsExpr, value: impl serde::Serialize, n
     }
 }
 
-pub(crate) fn json_length(column: impl AsExpr, op: impl Into<Operator>, length: i64) -> Filter {
+pub(crate) fn json_length(column: impl IntoExpr, op: impl Into<Operator>, length: i64) -> Filter {
     match json_column(column, "a JSON length check") {
         Ok(column) => Filter(Where::JsonLength {
             column,
             op: op.into(),
             length,
         }),
-        Err(invalid) => invalid,
+        Err(message) => Filter(Where::Invalid(message)),
     }
 }
 
 pub(crate) fn full_text(
-    columns: impl IntoIterator<Item = impl AsExpr>,
+    columns: impl IntoIterator<Item = impl IntoExpr>,
     query: impl Into<String>,
     options: FullText,
 ) -> Filter {
-    let columns: Vec<Expr> = columns.into_iter().map(AsExpr::as_expr).collect();
+    let columns: Vec<Expr> = columns.into_iter().map(IntoExpr::into_expr).collect();
     if columns.is_empty() {
         return Filter(Where::Invalid(
             "a full-text condition needs at least one column".to_owned(),

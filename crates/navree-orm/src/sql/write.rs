@@ -30,7 +30,12 @@ pub fn compile_insert(insert: &InsertIr, dialect: Dialect) -> Result<Statement, 
     if insert.columns.is_empty() {
         statement.or_default_values();
     } else {
-        statement.columns(insert.columns.iter().map(|column| Alias::new(column.to_string())));
+        statement.columns(
+            insert
+                .columns
+                .iter()
+                .map(|column| Alias::new(column.to_string())),
+        );
         for row in &insert.rows {
             if row.len() != insert.columns.len() {
                 return Err(OrmError::invalid(format!(
@@ -50,15 +55,13 @@ pub fn compile_insert(insert: &InsertIr, dialect: Dialect) -> Result<Statement, 
         }
     }
     if !insert.returning.is_empty() && dialect.supports_returning() {
-        statement.returning(
-            ReturningClause::Columns(
-                insert
-                    .returning
-                    .iter()
-                    .map(|column| sea_query::ColumnRef::Column(Alias::new(column.to_string()).into()))
-                    .collect(),
-            ),
-        );
+        statement.returning(ReturningClause::Columns(
+            insert
+                .returning
+                .iter()
+                .map(|column| sea_query::ColumnRef::Column(Alias::new(column.to_string()).into()))
+                .collect(),
+        ));
     }
     Ok(build(&statement, dialect))
 }

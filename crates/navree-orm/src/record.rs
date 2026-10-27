@@ -411,7 +411,12 @@ impl<M: Model> Record<M> {
     /// ```ignore
     /// deal.increment(&db, Deal::VIEWS, 1).await?;
     /// ```
-    pub async fn increment<E, T>(&mut self, exec: &E, column: Column<M, T>, amount: T) -> Result<bool>
+    pub async fn increment<E, T>(
+        &mut self,
+        exec: &E,
+        column: Column<M, T>,
+        amount: T,
+    ) -> Result<bool>
     where
         E: Executor + ?Sized,
         T: Numeric,
@@ -439,7 +444,12 @@ impl<M: Model> Record<M> {
     }
 
     /// Subtracts `amount` from `column` in the database and in the record.
-    pub async fn decrement<E, T>(&mut self, exec: &E, column: Column<M, T>, amount: T) -> Result<bool>
+    pub async fn decrement<E, T>(
+        &mut self,
+        exec: &E,
+        column: Column<M, T>,
+        amount: T,
+    ) -> Result<bool>
     where
         E: Executor + ?Sized,
         T: Numeric,
@@ -513,7 +523,9 @@ impl<M: Model> Clone for Record<M> {
 impl<M: Model + fmt::Debug> fmt::Debug for Record<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("Record");
-        debug.field("model", &self.model).field("exists", &self.exists);
+        debug
+            .field("model", &self.model)
+            .field("exists", &self.exists);
         if !self.extras.is_empty() {
             debug.field("extras", &self.extras);
         }
@@ -535,8 +547,10 @@ impl<M: Model> Serialize for Record<M> {
             for (name, extra) in &self.extras {
                 object.insert(name.clone(), to_json(extra));
             }
-            if let serde_json::Value::Object(relations) =
-                self.relations.to_json().map_err(serde::ser::Error::custom)?
+            if let serde_json::Value::Object(relations) = self
+                .relations
+                .to_json()
+                .map_err(serde::ser::Error::custom)?
             {
                 object.extend(relations);
             }

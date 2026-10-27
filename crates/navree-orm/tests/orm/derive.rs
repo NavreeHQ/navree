@@ -5,7 +5,9 @@ use chrono::{TimeZone, Utc};
 use navree_orm::{KeyKind, Model, OrmError, Row, Ulid, Value};
 use uuid::Uuid;
 
-use crate::models::{Account, Article, Company, Deal, DealMeta, Event, Priority, Setting, Stage, Tag};
+use crate::models::{
+    Account, Article, Company, Deal, DealMeta, Event, Priority, Setting, Stage, Tag,
+};
 
 #[test]
 fn metadata_names_the_table_key_columns_and_timestamps() {
@@ -71,13 +73,22 @@ fn column_constants_carry_table_and_column() {
     assert_eq!(Account::NAME.name(), "display_name");
     assert_eq!(Account::ACCOUNT_ID.name(), "account_id");
     assert_eq!(Account::meta().key_column(), "account_id");
-    assert_eq!(Account::meta().column("display_name").unwrap().field(), "name");
+    assert_eq!(
+        Account::meta().column("display_name").unwrap().field(),
+        "name"
+    );
 }
 
 #[test]
 fn typed_columns_encode_values_as_their_fields_are_stored() {
-    assert_eq!(Deal::STAGE.encode(&Stage::ClosedWon).unwrap(), Value::from("closed_won"));
-    assert_eq!(Deal::PRIORITY.encode(&Priority::High).unwrap(), Value::BigInt(Some(3)));
+    assert_eq!(
+        Deal::STAGE.encode(&Stage::ClosedWon).unwrap(),
+        Value::from("closed_won")
+    );
+    assert_eq!(
+        Deal::PRIORITY.encode(&Priority::High).unwrap(),
+        Value::BigInt(Some(3))
+    );
     assert_eq!(
         Deal::META
             .encode(&DealMeta {
@@ -85,9 +96,14 @@ fn typed_columns_encode_values_as_their_fields_are_stored() {
                 score: 4
             })
             .unwrap(),
-        Value::Json(Some(Box::new(serde_json::json!({"source": "web", "score": 4}))))
+        Value::Json(Some(Box::new(
+            serde_json::json!({"source": "web", "score": 4})
+        )))
     );
-    assert_eq!(Deal::CLOSED_AT.encode(&None).unwrap(), Value::ChronoDateTimeUtc(None));
+    assert_eq!(
+        Deal::CLOSED_AT.encode(&None).unwrap(),
+        Value::ChronoDateTimeUtc(None)
+    );
 }
 
 fn deal_row(stage: &str) -> Row {
@@ -138,7 +154,10 @@ fn decoding_errors_name_the_model_the_column_and_the_cause() {
     let partial = Row::from_values(vec![("id".into(), Value::BigInt(Some(1)))]);
     let error = Company::from_row(&partial).unwrap_err().to_string();
     assert!(error.starts_with("cannot read column `name` of Company as String: the row has no such column (it has: id)"), "{error}");
-    assert!(error.ends_with("select it, or mark the field #[model(default)]"), "{error}");
+    assert!(
+        error.ends_with("select it, or mark the field #[model(default)]"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -148,7 +167,14 @@ fn defaulted_fields_read_their_default_when_the_row_lacks_them() {
         ("display_name".into(), Value::from("Ada")),
     ]);
     let account = Account::from_row(&row).unwrap();
-    assert_eq!(account, Account { account_id: 4, name: "Ada".into(), score: 0 });
+    assert_eq!(
+        account,
+        Account {
+            account_id: 4,
+            name: "Ada".into(),
+            score: 0
+        }
+    );
 }
 
 #[test]
@@ -157,7 +183,10 @@ fn values_and_set_value_round_trip() {
     let values = deal.values().unwrap();
     assert_eq!(values.len(), 15);
     assert_eq!(values[4], ("stage", Value::from("lead")));
-    assert_eq!(deal.value("priority").unwrap(), Some(Value::BigInt(Some(2))));
+    assert_eq!(
+        deal.value("priority").unwrap(),
+        Some(Value::BigInt(Some(2)))
+    );
     assert_eq!(deal.value("scratch").unwrap(), None, "not a column");
 
     deal.set_value("stage", Value::from("closed_lost")).unwrap();
@@ -165,7 +194,10 @@ fn values_and_set_value_round_trip() {
     assert_eq!(deal.stage, Stage::ClosedLost);
     assert_eq!(deal.amount_cents, 7);
     let error = deal.set_value("nope", Value::Int(Some(1))).unwrap_err();
-    assert_eq!(error.to_string(), "invalid query: Deal has no column `nope`");
+    assert_eq!(
+        error.to_string(),
+        "invalid query: Deal has no column `nope`"
+    );
 }
 
 #[test]
@@ -178,7 +210,10 @@ fn keys_and_timestamps_are_reachable_by_column() {
     let id = Ulid::new();
     event.set_key(id);
     assert_eq!(event.id, id);
-    assert!(event.touch_timestamp("occurred_at", Utc::now()).is_err(), "not a timestamp column");
+    assert!(
+        event.touch_timestamp("occurred_at", Utc::now()).is_err(),
+        "not a timestamp column"
+    );
 
     let mut deal = Deal::default();
     let now = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
