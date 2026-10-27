@@ -54,6 +54,14 @@ impl<M: Model> Builder<M> {
             alias: None,
         }];
         inner.lock = None;
+        // MySQL refuses a write whose subquery reads the written table,
+        // unless the derived table is materialized: a LIMIT does that,
+        // otherwise DISTINCT (the order is moot without a limit, and DISTINCT
+        // would need the ordered columns selected).
+        if inner.limit.is_none() && inner.offset.is_none() {
+            inner.orders.clear();
+            inner.distinct = Distinct::Yes;
+        }
         let mut keys = QueryIr::new(KEYS_ALIAS);
         keys.table = TableRef::subquery(inner, KEYS_ALIAS);
         keys.columns = vec![SelectItem {
