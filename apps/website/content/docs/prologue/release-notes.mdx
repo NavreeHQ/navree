@@ -39,7 +39,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 - **`navree-auth`**: 15-minute JWT access tokens and 30-day rotating refresh tokens with reuse detection, pluggable authentication strategies, `CurrentUser`, registration, password change and reset, email verification, TOTP two-factor authentication with recovery codes, and login throttling.
 - **`navree-access`**: roles, permissions and abilities, record checks for `#[can(.., from = "id")]` routes, SQL list filters with `Accessible`, the abilities endpoint that shares the rules with front ends (in the JSON form `@casl/ability` reads), management routes and the `access:role`, `access:grant` and `access:explain` commands.
-- **`navree-crypto`**: AES-256-GCM encryption with key rotation, Argon2id password hashing on a bounded blocking pool, token helpers and `key:generate`.
+- **`navree-crypto`**: AES-256-GCM encryption with key rotation, Argon2id password hashing on a bounded blocking pool, token helpers and `key:generate`. `navree_crypto::jose` signs and verifies JSON Web Signatures (HS256, EdDSA, ES256, RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys and key sets, and loads PKCS#8 keys such as Apple's `.p8` files.
 - **`navree-audit`**: an audit log of data changes, sign-ins, permission changes and access denials, with `audit:prune`.
 
 ### Workspaces

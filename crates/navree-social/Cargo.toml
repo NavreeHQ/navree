@@ -20,14 +20,14 @@ navree-auth = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# Sealed state, and `jose`: ID tokens verified against provider key sets,
+# Apple's ES256 client secret.
 navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
-# JWS signatures: RS256/ES256 ID tokens and Apple's ES256 client secret.
-ring = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
@@ -43,5 +43,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 navree-api = { workspace = true }
 navree-testing = { workspace = true }
+# The mock identity provider signs its tokens with `ring` directly, apart
+# from the code under test.
+ring = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 wiremock = { workspace = true }

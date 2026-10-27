@@ -13,7 +13,7 @@ compiled in).
 | `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` |
 | `navree::http` | navree-http | `http` | `HttpModule::from_config()` | `http` | controllers, `AppError`, `Json`, `Created`, `NoContent`, `CurrentPrincipal`, `ClientIp`, `Guard`, `RouteDef` |
 | `navree::log` | navree-log | `log` | `LoggerModule::from_config()` | `log` | tracing subscriber, JSON or pretty output |
-| `navree::crypto` | navree-crypto | `crypto` | `CryptoModule::from_config()` | `hashing` (+ `app.key`) | AES-256-GCM `Encrypter`, Argon2id hasher, `generate_key`, `random_token`, `sha256_hex` |
+| `navree::crypto` | navree-crypto | `crypto` | `CryptoModule::from_config()` | `hashing` (+ `app.key`) | AES-256-GCM `Encrypter`, Argon2id hasher, `generate_key`, `random_token`, `sha256_hex`; `jose`: `SigningKey`, `VerifyingKey`, `Jws`, `Jwk`, `JwkSet` |
 | `navree::events` | navree-events | `events` | `EventsModule::for_root()` | | `Event`, `Listener`, `EventBus` |
 | `navree::view` | navree-view | `view` | `ViewModule::from_config()` | `view` | MiniJinja templates, `Views` |
 | `navree::cache` | navree-cache | `cache` | `CacheModule::from_config()` | `cache` | `Cache`, `Locks` |
