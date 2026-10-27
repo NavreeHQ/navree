@@ -486,11 +486,17 @@ express.
 ## 7. Row decoding
 
 `Row` wraps a SeaORM `QueryResult` or `(column, value)` pairs. `M::from_row`
-reads each column with its field's decoder; a missing column is an error
-naming the model, the column and the selected columns (or the default for
-`#[model(default)]` fields). Columns that are not model columns become the
-record's extras, decoded by their own type (`row::sniff`). Aggregates and
-selected values decode leniently into the requested type.
+reads each column with its field's decoder. A missing column reads as the
+default of a `#[model(default)]` field; for any other field it is
+`OrmError::MissingAttribute` (naming the model, the column and the selected
+columns) in strict mode (`prevent_missing_attributes`, the default) or when
+the field's type has no `Default`, and the type's default otherwise (the
+derive passes each field's default through an autoref probe,
+`derive_support::DefaultOf`). `Builder::fetch` decodes with the strictness
+of the executor's app (`ExecContext::strictness`). Columns that are not
+model columns become the record's extras, decoded by their own type
+(`row::sniff`). Aggregates and selected values decode leniently into the
+requested type.
 
 ## 8. Errors
 
@@ -616,33 +622,32 @@ flows.
   in the key lists and parsers of `model/container.rs` / `model/field.rs`;
   `touches` generates `fn hooks()` entries.
 
-### orm-lifecycle
+### orm-lifecycle (shipped; section 12)
 
-- Owns `src/events.rs` (observers as `ModelHook<M>` adapters registered by
-  `OrmModule` as `dyn ModelHook<M>` multi-bindings; navree-events dispatch,
-  after commit inside a unit of work through `uow.after_commit`),
-  `src/soft_deletes.rs` (`restore`, `force_delete`, `only_trashed` on
-  `Record`/`Builder`, firing the `Restoring`/`Restored`/`ForceDeleting`/
-  `ForceDeleted` events that `ModelEvent` already has; the crate-internal
-  `Builder::delete_rows` (`query/write.rs`) removes rows for good, and
-  `without_global_scope::<SoftDeletes>()` reaches trashed ones),
-  `src/prune.rs` (`Prunable`, `MassPrunable`, the `model:prune` command),
-  `src/strict.rs` (strict modes: lazy loading, silently discarded
-  attributes, missing attributes) and `src/module.rs` (`OrmModule`, which
-  other tracks extend with their boot steps as separate lines).
-- Seams: `Hooks::resolve` (`hooks.rs`) is the single place hooks are
-  gathered (`M::hooks()`, then the app's); `without_events` adds one check
-  there (a task-local set by `without_events(fut)`). Core already fires
-  `Retrieved`, `Saving`, `Creating`, `Created`, `Updating`, `Updated`,
-  `Saved`, `Deleting`, `Deleted` and `Trashed`; `Replicating` belongs to an
-  executor-aware `replicate` variant the track adds.
-- Global scopes registered at runtime extend
-  `Builder::apply_global_scopes` (`query/mod.rs`), the single place scopes
-  apply; scopes have no executor there, so registration is process-wide
-  (filled by `OrmModule` at boot). `without_global_scopes_except` and
-  removal by name go with it.
-- Macro attributes: `observers(..)`, `prunable` in
-  `navree-orm-macros/src/model/lifecycle.rs`.
+- Owns `src/events/`, `src/quiet.rs`, `src/soft_deletes.rs`,
+  `src/lifecycle.rs`, `src/global_scopes.rs`, `src/strict.rs`,
+  `src/options.rs`, `src/module.rs`, `src/prune.rs`, `src/broadcast.rs`,
+  and `navree-orm-macros/src/model/lifecycle.rs`.
+- Seams it offers the other tracks:
+  - `ModelHook::kind()`: a hook implemented directly is a
+    `HookKind::Behaviour` (runs at once, also in quiet operations), so the
+    relations track's `touches` hooks keep writing inside the transaction.
+    Observers, closure listeners, `Dispatch` and broadcasts are listeners.
+  - `fn hooks()` is written by `lifecycle::hook_entries` +
+    `lifecycle::hooks_fn` (one `static` per model): a track that declares
+    hooks on the model (`touches`) adds its entries to that list.
+  - Strict modes: `ExecContext::strictness()` (per app) where there is an
+    executor, `strict::current()` where there is none;
+    `Strictness::check(Violation::..)` answers a violation (error, handler,
+    or tolerated). The attributes track's `fill` calls it with
+    `Violation::DiscardedAttributes` (`OrmError::MassAssignment`); the
+    relations track's lazy-loading check with `Violation::LazyLoading`
+    (`OrmError::LazyLoading`) and reads `auto_eager_loads()`.
+  - `OrmModule` registers boot steps in `module.rs::register`; tracks add
+    theirs as separate lines (the model registry, `RegisteredModel`, serves
+    `model:show` and the morph map too).
+  - `ModelEventFake` (in `events/`) is the testing stand-in for listeners;
+    `ModelMeta::pruning()` tells tooling whether a model is prunable.
 
 ### orm-attributes
 
@@ -707,3 +712,105 @@ flows.
   documents as JSON casts, `$lookup` or batched `$in` loads for relations,
   and time-series collections for the schema builder's engine helpers.
   Integration tests run against `NAVREE_TEST_MONGODB_URL`.
+
+## 12. The lifecycle
+
+### Events and when listeners hear them
+
+`ModelEvent` lists the fifteen built-in events (`ModelEvent::ALL`) and
+`Custom(name)`. Every flow announces its steps to `Hooks<M>` (`hooks.rs`),
+resolved once per operation: the model's own hooks (`M::hooks()`), then
+the app's `dyn ModelHook<M>` multi-bindings. Each hook has a `HookKind`:
+
+| Kind | `-ing` events | "-ed" write events in a unit of work | quiet operations |
+|---|---|---|---|
+| `Behaviour` (default) | at once | at once, in the transaction | still run |
+| `TransactionalListener` | at once | at once, in the transaction | silenced |
+| `Listener` | at once | after the commit, on a snapshot of the record | silenced |
+
+The write events are `created`, `updated`, `saved`, `deleted`, `trashed`,
+`force_deleted` and `restored` (`ModelEvent::runs_after_commit`). A
+listener's after-commit call is queued with `Uow::after_commit` together
+with a clone of the record as the event saw it (so `get_changes`,
+`was_changed` and `get_original` describe that write); a rollback drops it.
+Outside a unit of work every hook runs at once. Every hook runs with the
+operation's unit of work as the task's `Uow::current()`, so jobs and events
+it dispatches join that unit of work (written in its transaction, or queued
+after its commit). An error from an `-ing` hook stops the operation; an
+after-commit listener's error or panic is logged (target
+`navree_orm::events`), reported to the app's telemetry
+(`Telemetry::report_exception`) and never undoes the commit.
+
+The listener kinds an app writes:
+
+- `Observer<M>` (`events/observer.rs`): one async method per event (`-ing`
+  ones return `Flow`), `IN_TRANSACTION` for a transactional listener;
+  declared on the model (`#[model(observers(..))]`, also without an app) or
+  registered by a module (`m.observe::<M>(o)`, `m.observer::<M, O>()` built
+  by the container).
+- Closure listeners: `m.on_model::<M, _>(event, |record, ctx| ..)`.
+- `Dispatch<M, E>`: `#[model(dispatches(created = DealCreated))]` emits the
+  navree-events `Event` `E: From<&Record<M>>` (`-ing` events at once, a
+  failing listener refusing the write).
+- `BroadcastHook<M>`: `#[model(broadcasts)]` with `impl Broadcasts`
+  (`broadcast.rs`): the record's private channel, `deal.created`-style
+  names, `{"deal": <record>}` data, or a queue (`orm.broadcast` jobs through
+  `dyn Dispatcher`); `without_broadcasting(fut)`.
+- `Record::fire(exec, "archived")`: custom events, heard at once through
+  `Observer::custom` and closures of `ModelEvent::Custom(name)`; listeners
+  may cancel; built-in names are refused. `Record::replicate_on(exec)` runs
+  `replicating` on the copy.
+
+`without_events(fut)` (a task-local) keeps only behaviours; the quiet
+operations wrap it (`save_quietly`, `update_quietly`, `delete_quietly`,
+`touch_quietly`, `increment[_each]_quietly`, `decrement[_each]_quietly`,
+`create_quietly`, `restore_quietly`, `force_delete_quietly`,
+`replicate_quietly`). Change events for the audit trail are still recorded.
+With a `ModelEventFake` in the app, behaviours run and a recorder stands in
+for every listener. Mass writes read no records and fire no events.
+
+### Soft deletes
+
+`#[model(soft_deletes)]` makes the derive implement `SoftDeleting`, which
+unlocks `Record::restore`, `Builder::only_trashed`, `Builder::restore` and
+the restore-or-create family; `force_delete` (record and builder),
+`with_trashed`, `with_trashed_if` and `without_trashed` work on every model
+(force delete is a plain delete without soft deletes; the filters do
+nothing). A query's trashed choice lives in its `ScopeChoices` and applies
+last, grouped (section 5). `Builder::restore` restores only the trashed
+rows the query matches; `Builder::force_delete` includes trashed rows
+unless the query chose otherwise; neither fires events.
+`force_destroy(keys)` loads and force-deletes each record.
+`restore_or_create` / `create_or_restore` find with trashed rows included
+and restore a trashed match.
+
+### Strict modes and `OrmModule`
+
+`OrmModule` (global; `for_root(OrmOptions)`, `from_config()` or plain,
+reading `[orm]`) provides `OrmRuntime`: the options, the app's environment
+(`env` / `app.env`) and the resolved `Strictness`. At boot it installs the
+runtime global scopes and makes its strictness the process's (for code
+without an executor), and it registers `model:prune` and the job
+`orm.broadcast`. `strict` unset means strict unless the environment is
+`production`. `ConfiguredOrmModule::on_missing_attribute`,
+`on_discarded_attributes` and `on_lazy_loading` install handlers that
+replace the errors (`Ok(())` tolerates a violation). The strictness of an
+operation: `strict::scope`, else the executor's app
+(`ExecContext::strictness`), else the process's, else
+`Strictness::default()` (missing and discarded attributes are errors, lazy
+loading is allowed). `ModuleBuilderOrmExt::model::<M>()` and
+`global_scope*` import `OrmModule`.
+
+### Pruning
+
+`Prunable` (record by record: `prunable(query)`, the `pruning` hook, a
+force delete for soft-deleting models, chunks by key, a failing record
+logged and reported) and `MassPrunable` (`force_delete` of a limited query
+until nothing is left) each provide `prune_all(exec, chunk)`.
+`#[model(prunable)]` / `#[model(mass_prunable)]` put a `Pruning` (erased
+`run` and `count` on a `Db`) in the model's `ModelMeta`; `prune(app, run)`
+prunes the registered models that have one (`--model`, `--except`,
+`--chunk`: the model's `CHUNK_SIZE`, else the option, else
+`[orm] prune_chunk`; `--pretend` counts). `ModelsPruned` (a running total
+per chunk), `ModelPruningStarting` and `ModelPruningFinished` go through
+the app's `EventBus`.
