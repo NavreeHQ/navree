@@ -99,13 +99,15 @@ session = ["dep:navree-session", "http", "crypto", "db"]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
 ## rules on models).
 validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
+## The audit trail; its entries are ORM models (`orm`).
 audit = ["dep:navree-audit", "http", "db", "orm"]
 queue = ["dep:navree-queue", "http", "db", "realtime", "schedule"]
 schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
 ## `accessible` queries, `Authorized<Model, A>`).
 access = ["dep:navree-access", "http", "db", "navree-orm?/access"]
-notify = ["dep:navree-notify", "http", "db", "mail"]
+## Notifications; stored ones are ORM models (`orm`).
+notify = ["dep:navree-notify", "http", "db", "mail", "orm"]
 ## The UI kit of the server-rendered tools: the app shell, components as
 ## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
 ui = ["dep:navree-ui", "http", "view"]

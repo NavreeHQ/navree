@@ -113,7 +113,9 @@ const HIERARCHY: &[Rule] = &[
     // expressions on local clocks (navree-time).
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
-    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
+    // Stored notifications are navree-orm models, written by the database
+    // channel through the ORM (same layer; the ORM never depends on notify).
+    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail", "navree-orm"]),
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).
