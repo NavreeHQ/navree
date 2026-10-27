@@ -133,7 +133,9 @@ Routes (when `i18n.routes`): `GET /api/i18n/locales` (public, `{data:
   with `$attribute` and the rule's variables; `field-<path>` names a field
   (`field-first_name`, `field-address-city`). Order: the app's message for
   the locale, then (in the default locale's language) `validation.messages`,
-  then the shipped message (en, fr, de, es, it, nl, pt-BR), then
+  then the shipped message (en, fr, de, es, it, nl, pt-BR; every key of
+  `DEFAULT_MESSAGES`, including `phone`, `country`, `locale` and
+  `unicode_name`), then
   `validation.messages`, then the default locale's, then the English
   template. `navree i18n:publish validation [--force]` copies the shipped
   files into `locales/`.
@@ -205,3 +207,14 @@ then `Locale::scope(i18n.locale("fr"), async { .. })`.
 - The workspace source reads the workspace the request names only for its
   members and never enters the workspace; it costs a lookup per request
   that names one.
+- Two types are called `Locale`: `navree::i18n::Locale` (the prelude's;
+  the request's negotiated locale) and `navree::validation::Locale` (a
+  BCP 47 tag in input DTOs). Name the validation one by path in a DTO.
+  It converts: `Locale::scope(&input.locale, fut)` matches it with the
+  supported locales like a tag.
+- `Locale::scope(tag, fut)` matches the tag when it is called, not when
+  the future runs: inside `i18n.scope(..)` wrap it in `async { .. }` so the
+  tag is matched with that app's locales.
+- When a new rule key is added to navree-validation's `DEFAULT_MESSAGES`,
+  add `validation-<key>` to all seven `crates/navree-i18n/resources/*/
+  validation.ftl` files; `shipped::tests` fails until you do.

@@ -176,7 +176,7 @@ let subject = Locale::scope("de", async {
 // "Ada hat Lovelace renewal gewonnen."
 ```
 
-A tag is matched with the supported locales as a request's is, so `fr-CA` scopes to `fr`, and an unsupported one to `default_locale`. Outside a request, `Locale::current()` and tags given to `Locale::scope` use the app that booted last in the process (`I18n::scope` and `I18n::locale` name one explicitly).
+A tag is matched with the supported locales as a request's is, so `fr-CA` scopes to `fr`, and an unsupported one to `default_locale`. A [validated](/docs/basics/validation/) `navree::validation::Locale` from a request body works as a tag too: `Locale::scope(&input.locale, ...)`. Outside a request, `Locale::current()` and tags given to `Locale::scope` use the app that booted last in the process (`I18n::scope` and `I18n::locale` name one explicitly).
 
 A job of your own runs in `default_locale`. To run it in the locale of the request that dispatched it, carry the tag in the job:
 
@@ -307,7 +307,7 @@ field-email = adresse e-mail
 }
 ```
 
-navree-i18n ships the validation messages in English, French, German, Spanish, Italian, Dutch and Brazilian Portuguese, used for every locale of those languages. A message comes from, in order: your Fluent message for the locale or a parent of it; in the default locale's language, the `validation.messages` section; the shipped message for the locale's language; the `validation.messages` section; the default locale's message; the built-in English template. So `validation.messages` still overrides English when English is the default, and translated languages keep their translations. Copy the shipped messages into your `locales/` to edit them:
+navree-i18n ships the validation messages in English, French, German, Spanish, Italian, Dutch and Brazilian Portuguese, used for every locale of those languages. They cover every key of the table, the international ones too (`phone`, `country`, `locale`, `unicode_name`). A message comes from, in order: your Fluent message for the locale or a parent of it; in the default locale's language, the `validation.messages` section; the shipped message for the locale's language; the `validation.messages` section; the default locale's message; the built-in English template. So `validation.messages` still overrides English when English is the default, and translated languages keep their translations. Copy the shipped messages into your `locales/` to edit them:
 
 ```sh
 navree i18n:publish validation

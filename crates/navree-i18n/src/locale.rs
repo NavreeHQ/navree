@@ -259,7 +259,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Locale {
 }
 
 /// What [`Locale::scope`] accepts: a [`Locale`], or a tag (`&str`,
-/// `String`) matched with the supported locales of the current app.
+/// `String`, or a validated [`navree_validation::Locale`]) matched with the
+/// supported locales of the current app.
 pub trait IntoLocale {
     /// The locale.
     fn into_locale(self) -> Locale;
@@ -298,6 +299,20 @@ impl IntoLocale for String {
 }
 
 impl IntoLocale for &String {
+    fn into_locale(self) -> Locale {
+        self.as_str().into_locale()
+    }
+}
+
+/// A validated BCP 47 tag from input (a request body's `locale` field) is
+/// matched with the supported locales like a tag.
+impl IntoLocale for navree_validation::Locale {
+    fn into_locale(self) -> Locale {
+        self.as_str().into_locale()
+    }
+}
+
+impl IntoLocale for &navree_validation::Locale {
     fn into_locale(self) -> Locale {
         self.as_str().into_locale()
     }
