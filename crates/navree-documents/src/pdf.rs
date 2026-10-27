@@ -3,12 +3,15 @@
 
 use std::fmt;
 
+use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
+use http::header::{CONTENT_DISPOSITION, HeaderValue};
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
 
-use crate::DocumentsError;
+use crate::download::{Download, PDF_CONTENT_TYPE};
 use crate::stamp::{Pages, Position, Stamp};
+use crate::DocumentsError;
 use crate::text::decode_text_string;
 
 /// Decompressed content allowed per page while reading a PDF (64 MiB), so
@@ -403,6 +406,31 @@ impl Pdf {
 
     fn load(&self) -> Result<Document, DocumentsError> {
         Document::load_mem(&self.0).map_err(pdf_error)
+    }
+}
+
+impl Pdf {
+    /// The PDF as a response the browser saves as `filename`
+    /// (`Content-Disposition: attachment`).
+    pub fn download(self, filename: impl Into<String>) -> Download {
+        Download::new(self.0, PDF_CONTENT_TYPE, filename)
+    }
+
+    /// The PDF as a response the browser shows, saved as `filename` when
+    /// the reader saves it (`Content-Disposition: inline`).
+    pub fn inline(self, filename: impl Into<String>) -> Download {
+        Download::new(self.0, PDF_CONTENT_TYPE, filename).inline()
+    }
+}
+
+/// `application/pdf`, shown inline, `Cache-Control: private, no-store`.
+impl IntoResponse for Pdf {
+    fn into_response(self) -> Response {
+        let mut response = self.inline("document.pdf").into_response();
+        response
+            .headers_mut()
+            .insert(CONTENT_DISPOSITION, HeaderValue::from_static("inline"));
+        response
     }
 }
 
