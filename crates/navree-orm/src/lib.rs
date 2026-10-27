@@ -88,6 +88,7 @@
 
 extern crate self as navree_orm;
 
+pub mod binding;
 pub mod cast;
 mod collection;
 mod column;
