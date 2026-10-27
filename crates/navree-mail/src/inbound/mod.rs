@@ -95,6 +95,13 @@ struct Route {
     module: ModuleId,
 }
 
+/// A mailbox that matched: the route, the recipient and the captures.
+struct Match<'a> {
+    route: &'a Route,
+    address: String,
+    params: Vec<(String, String)>,
+}
+
 /// Receives mail: provided by `MailModule` (crate feature `inbound`).
 ///
 /// [`receive`](Inbound::receive) runs every message through the same
@@ -197,15 +204,19 @@ impl Inbound {
     /// matched.
     pub fn mailbox_for(&self, mail: &InboundMail) -> Option<(&str, String)> {
         self.find(mail)
-            .map(|(route, address, _)| (route.pattern.as_str(), address))
+            .map(|found| (found.route.pattern.as_str(), found.address))
     }
 
-    fn find(&self, mail: &InboundMail) -> Option<(&Route, String, Vec<(String, String)>)> {
+    fn find(&self, mail: &InboundMail) -> Option<Match<'_>> {
         let recipients = mail.recipients();
         for route in &self.routes {
             for address in &recipients {
                 if let Some(params) = route.pattern.matches(address) {
-                    return Some((route, address.clone(), params));
+                    return Some(Match {
+                        route,
+                        address: address.clone(),
+                        params,
+                    });
                 }
             }
         }
@@ -236,11 +247,16 @@ impl Inbound {
 
         let (status, mailbox, address, reason) = match self.find(&mail) {
             None => (InboundStatus::Unrouted, None, None, None),
-            Some((route, address, params)) => {
+            Some(Match {
+                route,
+                address,
+                params,
+            }) => {
                 let pattern = route.pattern.as_str().to_owned();
-                let app = self.app.upgrade().ok_or_else(|| {
-                    InboundError::Config("the app is shutting down".to_owned())
-                })?;
+                let app = self
+                    .app
+                    .upgrade()
+                    .ok_or_else(|| InboundError::Config("the app is shutting down".to_owned()))?;
                 let handler = match &route.handler {
                     HandlerSource::Value(handler) => handler.clone(),
                     HandlerSource::Provider(resolve) => resolve(app.clone(), route.module)
@@ -353,9 +369,12 @@ impl Inbound {
                         InboundError::Config("`mail.inbound.ses.disk` needs StorageModule".into())
                     })?
                     .disk(name)?;
-                if let Some(size) = disk.size(&key).await.ok().map(|size| {
-                    usize::try_from(size).unwrap_or(usize::MAX)
-                }) && size > self.options.max_size
+                if let Some(size) = disk
+                    .size(&key)
+                    .await
+                    .ok()
+                    .map(|size| usize::try_from(size).unwrap_or(usize::MAX))
+                    && size > self.options.max_size
                 {
                     return Err(InboundError::TooLarge {
                         size,
@@ -388,10 +407,9 @@ impl Inbound {
     /// [`InboundError::Storage`] when the file cannot be read, and
     /// [`InboundError::Unparseable`].
     pub async fn read(&self, stored: &StoredMail) -> Result<InboundMail, InboundError> {
-        let storage = self
-            .storage
-            .as_ref()
-            .ok_or_else(|| InboundError::Config("reading a stored message needs StorageModule".into()))?;
+        let storage = self.storage.as_ref().ok_or_else(|| {
+            InboundError::Config("reading a stored message needs StorageModule".into())
+        })?;
         let raw = storage.disk(&stored.disk)?.get(&stored.path).await?;
         let mut mail = InboundMail::parse(raw)?;
         mail.stored = Some(stored.clone());
@@ -403,10 +421,9 @@ impl Inbound {
         let Some(name) = &self.options.disk else {
             return Ok(None);
         };
-        let storage = self
-            .storage
-            .as_ref()
-            .ok_or_else(|| InboundError::Config("`mail.inbound.disk` needs StorageModule".into()))?;
+        let storage = self.storage.as_ref().ok_or_else(|| {
+            InboundError::Config("`mail.inbound.disk` needs StorageModule".into())
+        })?;
         let disk = storage.disk(name)?;
         let folder = self.options.path.trim().trim_matches('/');
         let file = format!(

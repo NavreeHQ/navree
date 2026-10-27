@@ -197,7 +197,9 @@ async fn graph_notifications_with_a_wrong_client_state_are_ignored() {
         .assert_status(202);
 
     assert!(seen.lock().unwrap().is_empty());
-    h.fake.api().assert_not_sent(|request| request.url().path().ends_with("$value"));
+    h.fake
+        .api()
+        .assert_not_sent(|request| request.url().path().ends_with("$value"));
 }
 
 #[tokio::test]
@@ -470,8 +472,7 @@ async fn expiring_watches_are_renewed_and_failures_flagged() {
         Method::PATCH,
         &format!("{GRAPH}/subscriptions/sub-1"),
         [
-            FakeResponse::new(200)
-                .json(&json!({ "expirationDateTime": "2026-11-01T00:00:00Z" })),
+            FakeResponse::new(200).json(&json!({ "expirationDateTime": "2026-11-01T00:00:00Z" })),
             FakeResponse::new(404).json(&json!({ "error": { "code": "ResourceNotFound" } })),
         ],
     );

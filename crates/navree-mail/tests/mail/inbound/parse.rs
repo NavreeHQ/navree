@@ -96,7 +96,10 @@ fn recipients_list_the_envelope_then_the_delivery_headers() {
 fn a_multipart_message_gives_text_html_inline_parts_and_files() {
     let mail = InboundMail::parse(fixture("report.eml")).unwrap();
 
-    assert_eq!(mail.text.as_deref().map(str::trim), Some("The report is attached."));
+    assert_eq!(
+        mail.text.as_deref().map(str::trim),
+        Some("The report is attached.")
+    );
     assert!(
         mail.html
             .as_deref()
@@ -128,7 +131,10 @@ fn a_multipart_message_gives_text_html_inline_parts_and_files() {
 fn a_forwarded_message_is_an_attachment_that_parses() {
     let mail = InboundMail::parse(fixture("forwarded.eml")).unwrap();
 
-    assert_eq!(mail.text.as_deref().map(str::trim), Some("This looks suspicious."));
+    assert_eq!(
+        mail.text.as_deref().map(str::trim),
+        Some("This looks suspicious.")
+    );
     let forwarded = &mail.attachments[0];
     assert!(forwarded.is_message());
     assert_eq!(forwarded.content_type, "message/rfc822");
@@ -185,10 +191,7 @@ fn auto_replies_are_recognized() {
         "Content-Type: multipart/report; report-type=delivery-status; boundary=x",
     ] {
         let raw = format!("From: a@b.test\nTo: c@d.test\n{header}\nSubject: s\n\nbody\n");
-        assert!(
-            InboundMail::parse(raw).unwrap().is_auto_reply(),
-            "{header}"
-        );
+        assert!(InboundMail::parse(raw).unwrap().is_auto_reply(), "{header}");
     }
     let human = "From: a@b.test\nTo: c@d.test\nAuto-Submitted: no\nSubject: s\n\nbody\n";
     assert!(!InboundMail::parse(human).unwrap().is_auto_reply());

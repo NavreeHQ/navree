@@ -354,10 +354,12 @@ impl Incoming {
 
         let named = |item: &Value| -> Option<String> {
             let email = item["Email"].as_str().filter(|email| !email.is_empty())?;
-            Some(match item["Name"].as_str().filter(|name| !name.is_empty()) {
-                Some(name) => format!("{name} <{email}>"),
-                None => email.to_owned(),
-            })
+            Some(
+                match item["Name"].as_str().filter(|name| !name.is_empty()) {
+                    Some(name) => format!("{name} <{email}>"),
+                    None => email.to_owned(),
+                },
+            )
         };
         let mut compose = Compose::new().source("postmark");
         for (name, value) in &headers {

@@ -133,7 +133,12 @@ impl Verdict {
     /// Reads a provider's status (`PASS`, `FAIL`, `GRAY`,
     /// `PROCESSING_FAILED`, `DISABLED`, `yes`/`no` for spam flags).
     pub fn parse(status: &str) -> Option<Self> {
-        match status.trim().to_ascii_lowercase().replace('-', "_").as_str() {
+        match status
+            .trim()
+            .to_ascii_lowercase()
+            .replace('-', "_")
+            .as_str()
+        {
             "pass" | "passed" => Some(Verdict::Pass),
             "fail" | "failed" | "hardfail" | "softfail" => Some(Verdict::Fail),
             "gray" | "grey" | "neutral" | "none" => Some(Verdict::Gray),
@@ -520,11 +525,13 @@ impl InboundMail {
         }
         if self.header("X-Autoreply").is_some()
             || self.header("X-Autorespond").is_some()
-            || self.header("X-Auto-Response-Suppress").is_some_and(|value| {
-                value
-                    .split(',')
-                    .any(|item| matches!(item.trim().to_ascii_lowercase().as_str(), "all" | "oof"))
-            })
+            || self
+                .header("X-Auto-Response-Suppress")
+                .is_some_and(|value| {
+                    value.split(',').any(|item| {
+                        matches!(item.trim().to_ascii_lowercase().as_str(), "all" | "oof")
+                    })
+                })
         {
             return true;
         }
@@ -592,9 +599,7 @@ fn is_original_marker(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     (lower.starts_with("-----") && lower.contains("original message"))
         || lower.starts_with("________________________________")
-        || (lower.starts_with("from:")
-            && lower.contains('@')
-            && !lower.starts_with("from: http"))
+        || (lower.starts_with("from:") && lower.contains('@') && !lower.starts_with("from: http"))
 }
 
 /// `On Mon, 26 Oct 2026 at 18:02, Ada <ada@example.com> wrote:`, also

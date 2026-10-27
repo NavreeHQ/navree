@@ -56,10 +56,11 @@ async fn raw_mime_needs_the_token() {
 
     for request in [
         mail.app.client().post("/api/mail/inbound/raw"),
-        mail.app.client().post("/api/mail/inbound/raw").bearer("wrong"),
         mail.app
             .client()
-            .post("/api/mail/inbound/raw?token=wrong"),
+            .post("/api/mail/inbound/raw")
+            .bearer("wrong"),
+        mail.app.client().post("/api/mail/inbound/raw?token=wrong"),
     ] {
         request
             .body(fixture("reply.eml"))
@@ -204,7 +205,10 @@ async fn ses_with_an_sns_action_delivers_the_message_in_the_notification() {
     assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
     assert_eq!(received.verdicts.dkim, Some(Verdict::Gray));
     assert_eq!(received.verdicts.dmarc, Some(Verdict::Fail));
-    assert_eq!(received.subject.as_deref(), Some("Re: [#42] Printer on fire"));
+    assert_eq!(
+        received.subject.as_deref(),
+        Some("Re: [#42] Printer on fire")
+    );
     assert_eq!(received.raw().as_ref(), fixture("reply.eml").as_slice());
 }
 
@@ -241,7 +245,10 @@ async fn ses_with_an_s3_action_reads_the_message_from_the_bucket_disk() {
         }),
         "the bucket keeps the raw message: it is not stored twice"
     );
-    assert_eq!(received.message_id.as_deref(), Some("CAF2reply-0001@mail.example.com"));
+    assert_eq!(
+        received.message_id.as_deref(),
+        Some("CAF2reply-0001@mail.example.com")
+    );
 }
 
 #[tokio::test]
@@ -306,8 +313,7 @@ async fn ses_notifications_of_other_kinds_are_refused() {
 async fn receive_ses_serves_routes_that_verify_sns_themselves() {
     let mail = inbound_app(MAILBOXES, |b| b).await;
     let envelope: Value = serde_json::from_slice(&fixture("ses-sns-action.json")).unwrap();
-    let notification: Value =
-        serde_json::from_str(envelope["Message"].as_str().unwrap()).unwrap();
+    let notification: Value = serde_json::from_str(envelope["Message"].as_str().unwrap()).unwrap();
 
     let received = mail
         .inbound()
@@ -417,10 +423,19 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     fields.extend([
         ("recipient".to_owned(), "support@acme.test".to_owned()),
         ("sender".to_owned(), "grace@example.com".to_owned()),
-        ("from".to_owned(), "Grace Hopper <grace@example.com>".to_owned()),
+        (
+            "from".to_owned(),
+            "Grace Hopper <grace@example.com>".to_owned(),
+        ),
         ("subject".to_owned(), "Quarterly report".to_owned()),
-        ("body-plain".to_owned(), "The report is attached.".to_owned()),
-        ("body-html".to_owned(), "<p>The report is attached.</p>".to_owned()),
+        (
+            "body-plain".to_owned(),
+            "The report is attached.".to_owned(),
+        ),
+        (
+            "body-html".to_owned(),
+            "<p>The report is attached.</p>".to_owned(),
+        ),
         ("X-Mailgun-Sflag".to_owned(), "Yes".to_owned()),
         (
             "message-headers".to_owned(),
@@ -452,8 +467,14 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     let received = &seen[0].2;
     assert_eq!(seen[0].0, "support@acme.test");
     assert_eq!(received.source, "mailgun");
-    assert_eq!(received.provider_id.as_deref(), Some("multi-0002@example.com"));
-    assert_eq!(received.message_id.as_deref(), Some("multi-0002@example.com"));
+    assert_eq!(
+        received.provider_id.as_deref(),
+        Some("multi-0002@example.com")
+    );
+    assert_eq!(
+        received.message_id.as_deref(),
+        Some("multi-0002@example.com")
+    );
     assert_eq!(
         received.from.as_ref().and_then(|a| a.name.as_deref()),
         Some("Grace Hopper")
@@ -463,7 +484,10 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
         received.header("Received"),
         Some("from mx.example.com by mxa.mailgun.org")
     );
-    assert_eq!(received.text.as_deref().map(str::trim), Some("The report is attached."));
+    assert_eq!(
+        received.text.as_deref().map(str::trim),
+        Some("The report is attached.")
+    );
     assert_eq!(
         received.html.as_deref().map(str::trim),
         Some("<p>The report is attached.</p>")
@@ -513,7 +537,10 @@ fn basic(password: &str) -> String {
 
 #[tokio::test]
 async fn postmark_with_the_raw_email_delivers_it_as_sent() {
-    let mail = inbound_app(MAILBOXES, |b| b.config("mail.inbound.postmark.token", "pm-secret")).await;
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.postmark.token", "pm-secret")
+    })
+    .await;
 
     mail.app
         .client()
@@ -536,7 +563,10 @@ async fn postmark_with_the_raw_email_delivers_it_as_sent() {
 
 #[tokio::test]
 async fn postmark_without_the_raw_email_is_rebuilt_from_its_fields() {
-    let mail = inbound_app(MAILBOXES, |b| b.config("mail.inbound.postmark.token", "pm-secret")).await;
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.postmark.token", "pm-secret")
+    })
+    .await;
 
     mail.app
         .client()
@@ -555,18 +585,27 @@ async fn postmark_without_the_raw_email_is_rebuilt_from_its_fields() {
     );
     assert_eq!(received.to[0].email, "reply+abc@in.acme.test");
     assert_eq!(received.cc[0].email, "grace@example.com");
-    assert_eq!(received.subject.as_deref(), Some("Re: [#42] Printer on fire"));
+    assert_eq!(
+        received.subject.as_deref(),
+        Some("Re: [#42] Printer on fire")
+    );
     assert_eq!(
         received.message_id.as_deref(),
         Some("CAF2reply-0001@mail.example.com")
     );
     assert_eq!(received.in_reply_to.as_deref(), Some("ticket-42@acme.test"));
-    assert_eq!(received.reply_text().as_deref(), Some("Thanks, the fire is out now."));
+    assert_eq!(
+        received.reply_text().as_deref(),
+        Some("Thanks, the fire is out now.")
+    );
     assert_eq!(
         received.html.as_deref().map(str::trim),
         Some("<p>Thanks, the fire is out now.</p>")
     );
-    assert_eq!(received.attachments[0].filename.as_deref(), Some("notes.txt"));
+    assert_eq!(
+        received.attachments[0].filename.as_deref(),
+        Some("notes.txt")
+    );
     assert_eq!(received.attachments[0].content.as_ref(), b"fire: out\n");
     assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
     assert_eq!(received.verdicts.spf, Some(Verdict::Pass));
@@ -578,7 +617,10 @@ async fn postmark_without_the_raw_email_is_rebuilt_from_its_fields() {
 
 #[tokio::test]
 async fn postmark_needs_the_password() {
-    let mail = inbound_app(MAILBOXES, |b| b.config("mail.inbound.postmark.token", "pm-secret")).await;
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.postmark.token", "pm-secret")
+    })
+    .await;
 
     mail.app
         .client()

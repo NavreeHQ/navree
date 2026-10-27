@@ -44,7 +44,10 @@ async fn mail_goes_to_the_mailbox_of_its_recipient() {
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].0, "billing@acme.test");
     assert_eq!(seen[0].2.id, received.id);
-    assert_eq!(seen[0].2.subject.as_deref(), Some("Re: [#42] Printer on fire"));
+    assert_eq!(
+        seen[0].2.subject.as_deref(),
+        Some("Re: [#42] Printer on fire")
+    );
 }
 
 #[tokio::test]
@@ -129,10 +132,21 @@ async fn the_event_describes_a_handled_message() {
     assert!(event.get("text").is_none(), "no bodies in the event");
 }
 
+/// The captured token and the ticket a reply mailbox verified.
+type Verified = Arc<Mutex<Vec<(Option<String>, Uuid)>>>;
+
+/// The boot error of `builder`'s app.
+async fn boot_error(builder: navree_testing::TestAppBuilder) -> String {
+    match builder.try_build().await {
+        Ok(_) => panic!("the boot should fail"),
+        Err(error) => error.to_string(),
+    }
+}
+
 #[tokio::test]
 async fn params_and_verified_reply_tokens_reach_the_handler() {
-    let seen: Arc<Mutex<Vec<(Option<String>, Uuid)>>> = Arc::default();
-    struct Replies(Arc<Mutex<Vec<(Option<String>, Uuid)>>>);
+    let seen: Verified = Arc::default();
+    struct Replies(Verified);
     impl Module for Replies {
         fn register(&self, m: &mut ModuleBuilder) {
             let seen = self.0.clone();
@@ -158,12 +172,7 @@ async fn params_and_verified_reply_tokens_reach_the_handler() {
         .address_for("reply+{token}@in.acme.test", ticket)
         .unwrap();
 
-    let received = mail
-        .inbound()
-        .await
-        .receive(reply(&address))
-        .await
-        .unwrap();
+    let received = mail.inbound().await.receive(reply(&address)).await.unwrap();
 
     assert_eq!(received.status, InboundStatus::Handled);
     let seen = seen.lock().unwrap().clone();
@@ -196,7 +205,10 @@ async fn a_forged_reply_token_rejects_the_message() {
         .unwrap();
 
     assert_eq!(received.status, InboundStatus::Rejected);
-    assert_eq!(received.reason.as_deref(), Some("the reply token is invalid"));
+    assert_eq!(
+        received.reason.as_deref(),
+        Some("the reply token is invalid")
+    );
     assert_eq!(events.try_recv().expect("event")["status"], "rejected");
 }
 
@@ -318,7 +330,10 @@ async fn injectable_mailboxes_get_their_dependencies() {
         .await
         .unwrap();
 
-    let log = mail.app.ctx().resolver_for(navree_kernel::ModuleId::of::<TicketsModule>());
+    let log = mail
+        .app
+        .ctx()
+        .resolver_for(navree_kernel::ModuleId::of::<TicketsModule>());
     let entries = log.get::<ReplyLog>().await.unwrap();
     assert_eq!(
         entries.0.lock().unwrap().clone(),
@@ -351,7 +366,10 @@ async fn raw_messages_are_stored_once_on_the_disk() {
     assert!(stored.path.ends_with(".eml"));
     assert_eq!(again.stored, first.stored, "a retry lands on the same file");
     let disk = mail.app.get::<Storage>().await.disk("mail").unwrap();
-    assert_eq!(disk.get(&stored.path).await.unwrap().as_ref(), raw.as_slice());
+    assert_eq!(
+        disk.get(&stored.path).await.unwrap().as_ref(),
+        raw.as_slice()
+    );
     assert_eq!(disk.list("inbound").await.unwrap().len(), 1);
     assert_eq!(mail.seen()[0].2.stored.as_ref(), Some(&stored));
 
@@ -374,7 +392,10 @@ async fn messages_over_the_limit_are_refused() {
 
     let error = mail.inbound().await.receive(big).await.unwrap_err();
 
-    assert!(matches!(error, InboundError::TooLarge { max: 512, .. }), "{error}");
+    assert!(
+        matches!(error, InboundError::TooLarge { max: 512, .. }),
+        "{error}"
+    );
     assert!(mail.seen().is_empty());
 }
 
@@ -404,54 +425,50 @@ async fn the_mail_fake_plays_the_provider() {
 
 #[tokio::test]
 async fn an_invalid_pattern_fails_the_boot() {
-    let error = TestApp::builder()
-        .config("mail.from", "app@example.com")
-        .module(crate::support::view_module())
-        .module(navree_mail::MailModule::from_config())
-        .module(super::Mailboxes {
-            patterns: vec!["reply+{token@in.acme.test"],
-            seen: Seen::default(),
-        })
-        .try_build()
-        .await
-        .err()
-        .expect("boot error");
+    let message = boot_error(
+        TestApp::builder()
+            .config("mail.from", "app@example.com")
+            .module(crate::support::view_module())
+            .module(navree_mail::MailModule::from_config())
+            .module(super::Mailboxes {
+                patterns: vec!["reply+{token@in.acme.test"],
+                seen: Seen::default(),
+            }),
+    )
+    .await;
 
-    let message = error.to_string();
     assert!(message.contains("reply+{token@in.acme.test"), "{message}");
 }
 
 #[tokio::test]
 async fn a_disk_without_storage_fails_the_boot() {
-    let error = TestApp::builder()
-        .config("mail.from", "app@example.com")
-        .config("mail.inbound.disk", "mail")
-        .module(crate::support::view_module())
-        .module(navree_mail::MailModule::from_config())
-        .try_build()
-        .await
-        .err()
-        .expect("boot error");
+    let error = boot_error(
+        TestApp::builder()
+            .config("mail.from", "app@example.com")
+            .config("mail.inbound.disk", "mail")
+            .module(crate::support::view_module())
+            .module(navree_mail::MailModule::from_config()),
+    )
+    .await;
 
-    assert!(error.to_string().contains("StorageModule"), "{error}");
+    assert!(error.contains("StorageModule"), "{error}");
 }
 
 #[tokio::test]
 async fn an_unknown_disk_fails_the_boot() {
-    let error = TestApp::builder()
-        .config("mail.from", "app@example.com")
-        .config("mail.inbound.disk", "missing")
-        .config("storage.disks.mail.driver", "memory")
-        .config("storage.default", "mail")
-        .module(navree_storage::StorageModule::from_config())
-        .module(crate::support::view_module())
-        .module(navree_mail::MailModule::from_config())
-        .try_build()
-        .await
-        .err()
-        .expect("boot error");
+    let error = boot_error(
+        TestApp::builder()
+            .config("mail.from", "app@example.com")
+            .config("mail.inbound.disk", "missing")
+            .config("storage.disks.mail.driver", "memory")
+            .config("storage.default", "mail")
+            .module(navree_storage::StorageModule::from_config())
+            .module(crate::support::view_module())
+            .module(navree_mail::MailModule::from_config()),
+    )
+    .await;
 
-    assert!(error.to_string().contains("`missing`"), "{error}");
+    assert!(error.contains("`missing`"), "{error}");
 }
 
 #[test]

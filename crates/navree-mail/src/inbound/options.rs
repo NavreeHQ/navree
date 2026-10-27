@@ -81,7 +81,11 @@ impl InboundOptions {
         if self.max_size == 0 {
             return Err("`inbound.max_size` must be greater than 0".to_owned());
         }
-        if self.disk.as_deref().is_some_and(|disk| disk.trim().is_empty()) {
+        if self
+            .disk
+            .as_deref()
+            .is_some_and(|disk| disk.trim().is_empty())
+        {
             return Err("`inbound.disk` must not be empty".to_owned());
         }
         let path = self.path.trim();
