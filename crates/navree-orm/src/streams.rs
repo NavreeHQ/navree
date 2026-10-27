@@ -276,11 +276,8 @@ impl<M: Model> Paged for Builder<M> {
         Builder::route(self)
     }
 
-    fn fetch_page<'t>(
-        self,
-        target: &'t Target<'_>,
-    ) -> impl Future<Output = Result<Vec<Record<M>>>> + Send + 't {
-        async move { Ok(self.fetch(target).await?.into_vec()) }
+    async fn fetch_page(self, target: &Target<'_>) -> Result<Vec<Record<M>>> {
+        Ok(self.fetch(target).await?.into_vec())
     }
 
     fn column_value(record: &Record<M>, column: &str) -> Result<Option<Value>> {
@@ -306,11 +303,8 @@ impl Paged for TableBuilder {
         TableBuilder::route(self)
     }
 
-    fn fetch_page<'t>(
-        self,
-        target: &'t Target<'_>,
-    ) -> impl Future<Output = Result<Vec<Row>>> + Send + 't {
-        async move { target.fetch(&self.into_ir()).await }
+    async fn fetch_page(self, target: &Target<'_>) -> Result<Vec<Row>> {
+        target.fetch(&self.into_ir()).await
     }
 
     fn column_value(row: &Row, column: &str) -> Result<Option<Value>> {

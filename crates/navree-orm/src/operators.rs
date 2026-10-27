@@ -29,12 +29,9 @@ use crate::value::Value;
 fn json_value(
     value: impl serde::Serialize,
     column: &ColumnRef,
-) -> Result<serde_json::Value, Filter> {
-    serde_json::to_value(value).map_err(|error| {
-        Filter(Where::Invalid(format!(
-            "the value for JSON column `{column}` cannot be encoded: {error}"
-        )))
-    })
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(value)
+        .map_err(|error| format!("the value for JSON column `{column}` cannot be encoded: {error}"))
 }
 
 impl<M, T> Column<M, T> {
@@ -107,7 +104,7 @@ impl<M, T> Column<M, T> {
                 value,
                 not: false,
             }),
-            Err(invalid) => invalid,
+            Err(problem) => Filter(Where::Invalid(problem)),
         }
     }
 
@@ -128,7 +125,7 @@ impl<M, T> Column<M, T> {
                 value,
                 not: false,
             }),
-            Err(invalid) => invalid,
+            Err(problem) => Filter(Where::Invalid(problem)),
         }
     }
 
@@ -142,7 +139,7 @@ impl<M, T> Column<M, T> {
                 value,
                 not: false,
             }),
-            Err(invalid) => invalid,
+            Err(problem) => Filter(Where::Invalid(problem)),
         }
     }
 

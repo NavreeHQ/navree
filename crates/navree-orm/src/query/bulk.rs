@@ -909,13 +909,16 @@ fn fill<M: Model>(models: impl IntoIterator<Item = M>, now: DateTime<Utc>) -> Re
     Ok(filled)
 }
 
+/// The columns of an insert and its rows.
+type InsertGroup = (Vec<Cow<'static, str>>, Vec<Vec<Expr>>);
+
 /// The inserts of `models`' stored values (casts applied): one group per
 /// column list, as a key the database assigns is left out when it is
 /// empty.
 fn model_inserts<M: Model>(models: &[M]) -> Result<Vec<InsertIr>> {
     let meta = M::meta();
-    let mut without_key: Option<(Vec<Cow<'static, str>>, Vec<Vec<Expr>>)> = None;
-    let mut with_key: Option<(Vec<Cow<'static, str>>, Vec<Vec<Expr>>)> = None;
+    let mut without_key: Option<InsertGroup> = None;
+    let mut with_key: Option<InsertGroup> = None;
     for model in models {
         let skip_key = meta.key_kind() == KeyKind::Increments && model.key().is_empty();
         let (columns, row): (Vec<Cow<'static, str>>, Vec<Expr>) = model

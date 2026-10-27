@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use navree_config::ConfigSection;
-use navree_kernel::{AppContext, WeakAppContext};
+use navree_kernel::{AppContext, BoxFuture, WeakAppContext};
 use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
 use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sea_orm::{
@@ -147,7 +147,12 @@ impl Db {
             .validate()
             .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
         let watchers = Arc::new(Watchers::new(Arc::from(name)));
-        Self::connect_watched(options, telemetry, watchers).await
+        // Boxed: the drivers' connect futures are deep, and every future
+        // that connects (workspace databases, migration commands) nests
+        // this one; a boxed future keeps their types shallow.
+        let connect: BoxFuture<'_, Result<Db, DbErr>> =
+            Box::pin(Self::connect_watched(options, telemetry, watchers));
+        connect.await
     }
 
     /// Opens the pools of `options` (writer, replicas), reporting to
@@ -200,16 +205,20 @@ impl Db {
         };
         let db = direct
             .db
-            .get_or_try_init(|| async {
-                let db = Self::connect_watched(
-                    &direct.options,
-                    direct.telemetry.clone(),
-                    self.inner.watchers.clone(),
-                )
-                .await?;
-                Ok::<_, DbErr>(match &self.inner.app {
-                    Some(app) => db.with_app(app.clone()),
-                    None => db,
+            .get_or_try_init(|| -> BoxFuture<'_, Result<Db, DbErr>> {
+                // Boxed: the driver's connect future is deep, and every
+                // caller's future (migration commands) would nest it.
+                Box::pin(async {
+                    let db = Self::connect_watched(
+                        &direct.options,
+                        direct.telemetry.clone(),
+                        self.inner.watchers.clone(),
+                    )
+                    .await?;
+                    Ok(match &self.inner.app {
+                        Some(app) => db.with_app(app.clone()),
+                        None => db,
+                    })
                 })
             })
             .await?;
@@ -542,7 +551,7 @@ impl Db {
             .query_one_raw(Statement::from_string(self.backend(), sql))
             .await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("`{sql}` returned no row")))?;
-        Ok(row.try_get_by_index::<String>(0)?)
+        row.try_get_by_index::<String>(0)
     }
 
     /// The database backend.
