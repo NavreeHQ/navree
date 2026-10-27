@@ -318,7 +318,12 @@ navree new acme --kit saas   # the full SaaS kit: BFF, sign-in, workspaces, bill
 
 `--ui next` writes `web/lib/bff.ts` with sign-in, sign-out, forwarding, a refresh on 401 and the origin check, and `navree dev` starts both servers. The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the CRM's complete BFF.
 
+The CRM's BFF is also a package: [`@navree/bff`](/docs/frontend/auth-and-bff/) has everything on this page, plus sessions for server rendering and test helpers, and [`@navree/next`](/docs/frontend/nextjs/) and [`@navree/nuxt`](/docs/frontend/nuxt/) mount it in a Next.js or Nuxt app in a few lines.
+
 <LinkCards>
+  <LinkCard href="/docs/frontend/introduction/" title="Front end">
+    The packages: the typed client, the BFF, Next.js, Nuxt and the theme.
+  </LinkCard>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
     Access tokens, rotating refresh tokens and reuse detection.
   </LinkCard>
