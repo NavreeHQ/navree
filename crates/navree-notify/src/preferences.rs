@@ -24,6 +24,9 @@ pub const WORKSPACE_OWNER_TYPE: &str = "workspace";
 /// The longest category name.
 pub const MAX_CATEGORY_LEN: usize = 100;
 
+/// The most categories one owner's preferences name.
+pub const MAX_CATEGORIES: usize = 200;
+
 /// What one owner (a person, or a workspace for its members) chooses to
 /// receive. Every field is optional: what an owner leaves out comes from
 /// the level below (a person's workspace, then the notification's own
@@ -146,6 +149,14 @@ impl Preferences {
         categories: &BTreeSet<String>,
     ) -> Result<(), BTreeMap<String, Vec<String>>> {
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        if self.categories.len() > MAX_CATEGORIES {
+            errors.insert(
+                "categories".to_owned(),
+                vec![format!(
+                    "at most {MAX_CATEGORIES} categories can have choices of their own"
+                )],
+            );
+        }
         let mut channel_errors = |prefix: &str, channels: &BTreeMap<Channel, bool>| {
             for channel in channels.keys() {
                 if !options.channels.contains(channel) {
@@ -780,5 +791,17 @@ mod tests {
         assert!(check_category("deals.won:v2").is_ok());
         assert!(check_category("").is_err());
         assert!(check_category(&"a".repeat(MAX_CATEGORY_LEN + 1)).is_err());
+    }
+
+    #[test]
+    fn the_number_of_categories_is_capped() {
+        let none = BTreeSet::new();
+        let many: serde_json::Map<String, Value> = (0..=MAX_CATEGORIES)
+            .map(|i| (format!("c{i}"), json!({"digest": "daily"})))
+            .collect();
+        let errors = Preferences::default()
+            .merged(&json!({"categories": many}), &options(), &none)
+            .unwrap_err();
+        assert!(errors.contains_key("categories"), "{errors:?}");
     }
 }

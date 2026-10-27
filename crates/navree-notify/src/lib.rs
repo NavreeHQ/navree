@@ -238,8 +238,9 @@ pub use options::{
 };
 pub use overrides::{MailOverride, NotificationOverrides, TemplateOverrides};
 pub use preferences::{
-    CategoryPreferences, MAX_CATEGORY_LEN, NotificationPreference, NotificationPreferences,
-    PreferenceOwner, Preferences, ResolvedPreferences, WORKSPACE_OWNER_TYPE, check_category,
+    CategoryPreferences, MAX_CATEGORIES, MAX_CATEGORY_LEN, NotificationPreference,
+    NotificationPreferences, PreferenceOwner, Preferences, ResolvedPreferences,
+    WORKSPACE_OWNER_TYPE, check_category,
 };
 pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
