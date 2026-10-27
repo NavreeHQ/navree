@@ -131,7 +131,7 @@ pub(crate) fn configure(connect: &mut sea_orm::ConnectOptions, options: &MySqlOp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{IsolationLevel, MySqlOptions};
+    use crate::IsolationLevel;
 
     #[test]
     fn quotes_identifiers_with_backticks() {
