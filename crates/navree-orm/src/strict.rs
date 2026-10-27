@@ -3,7 +3,7 @@
 //!
 //! | Mode | The mistake | Strict | Lenient |
 //! |---|---|---|---|
-//! | missing attributes | a partial select left out a model column | [`OrmError::MissingAttribute`] | the field's default |
+//! | missing attributes | a partial select left out a model column | [`OrmError::MissingAttribute`] | the default of the field's type (an error when it has none) |
 //! | discarding attributes | mass assignment names a column that is not fillable | [`OrmError::MassAssignment`] | the column is skipped |
 //! | lazy loading | a relation is loaded one record at a time for records read together | [`OrmError::LazyLoading`] | the relation loads |
 //!
