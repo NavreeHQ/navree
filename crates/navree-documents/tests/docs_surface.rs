@@ -14,10 +14,10 @@ use navree_documents::{
     CHROME_ENV, ChromeEngine, ChromeOptions, DOCUMENT_ORIGIN, DOCX_CONTENT_TYPE, DocumentStatus,
     Documents, DocumentsError, DocumentsFake, DocumentsModule, DocumentsOptions, Docx, DocxFile,
     Download, EngineKind, FAILED_SUFFIX, FONTS_STYLESHEET, FakeEngine, HTML_EXTENSION, Margins,
-    ModuleBuilderDocumentsExt, PDF_CONTENT_TYPE, Pages, Paper, Pdf, PdfEngine, Position,
-    PrintOptions, QueuedDocument, QueuedRender, RENDER_FAILED_MESSAGE, Render, RenderDocument,
-    NativeEngine, NativeOptions, PdfDocument, Stamp, StoredDocument, TemplateSource, Templates,
-    is_rtl,
+    ModuleBuilderDocumentsExt, NativeEngine, NativeOptions, PDF_CONTENT_TYPE, Pages, Paper, Pdf,
+    PdfDocument, PdfEngine, Position, PrintOptions, QueuedDocument, QueuedRender,
+    RENDER_FAILED_MESSAGE, Render, RenderDocument, Stamp, StoredDocument, TemplateSource,
+    Templates, is_rtl,
 };
 use navree_kernel::ModuleBuilder;
 use serde_json::json;
@@ -78,7 +78,10 @@ fn the_documented_api_exists() {
     let _ = DocumentsModule::for_root(DocumentsOptions::default());
     let _ = DocumentsModule::from_config();
 
-    let templates = Templates::new(vec![PathBuf::from("resources/documents")], [("a.html", "x")]);
+    let templates = Templates::new(
+        vec![PathBuf::from("resources/documents")],
+        [("a.html", "x")],
+    );
     let documents = Documents::new(templates.clone())
         .default_engine(EngineKind::Native)
         .with_engine(Arc::new(NativeEngine::new(templates.clone())));
@@ -127,7 +130,11 @@ fn the_documented_api_exists() {
         .paper(Paper::A4)
         .landscape()
         .margins(Margins::all(20.0))
-        .header(native::Paragraph::new().run(native::Run::title()).align(native::Align::End))
+        .header(
+            native::Paragraph::new()
+                .run(native::Run::title())
+                .align(native::Align::End),
+        )
         .footer_page_numbers()
         .heading(1, "Report")
         .paragraph(
@@ -149,7 +156,11 @@ fn the_documented_api_exists() {
         )
         .bullets(["x"])
         .numbered(["y"])
-        .list(native::List::new(native::ListKind::LowerRoman).start(3).item("z"))
+        .list(
+            native::List::new(native::ListKind::LowerRoman)
+                .start(3)
+                .item("z"),
+        )
         .table(
             native::Table::new()
                 .header(["a", "b"])

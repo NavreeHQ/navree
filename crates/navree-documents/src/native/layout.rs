@@ -97,7 +97,9 @@ impl Draw {
     /// in the tree.
     fn into_artifact(self, furniture: Furniture) -> Draw {
         match self {
-            Draw::Text { x, baseline, run, .. } => Draw::Text {
+            Draw::Text {
+                x, baseline, run, ..
+            } => Draw::Text {
                 x,
                 baseline,
                 run,
@@ -702,9 +704,10 @@ impl<'f> Layout<'f> {
                 item_pieces.extend(laid);
             }
             if item_pieces.is_empty() {
+                let style = self.resolve(&cx.style);
+                let (ascent, descent) = self.shaper.empty_line(&style);
                 item_pieces.push(Piece {
-                    height: self.shaper.empty_line(&self.resolve(&cx.style)).0
-                        + self.shaper.empty_line(&self.resolve(&cx.style)).1,
+                    height: ascent + descent,
                     ..Piece::default()
                 });
             }
@@ -716,17 +719,15 @@ impl<'f> Layout<'f> {
             }
             // The marker, on the first line's baseline.
             let marker = self.marker(list, cx.list_depth, index);
-            let marker_paragraph = Paragraph::new().text(marker);
-            let mut marker_cx = cx.clone();
-            marker_cx.width = indent * 4.0;
+            let marker_cx = Context {
+                width: indent * 4.0,
+                ..cx.clone()
+            };
             let marker_pieces = self.paragraph(
-                &marker_paragraph,
+                &Paragraph::new().text(marker),
                 &cx.style,
                 Align::Start,
-                &Context {
-                    furniture: cx.furniture,
-                    ..marker_cx
-                },
+                &marker_cx,
                 label,
             );
             let first_baseline = item_pieces[0]
@@ -781,7 +782,8 @@ impl<'f> Layout<'f> {
                     .shaper
                     .fonts()
                     .select(&style.families, false, false, wanted);
-                let covered = face.is_some_and(|face| self.shaper.fonts().face(face).covers(wanted));
+                let covered =
+                    face.is_some_and(|face| self.shaper.fonts().face(face).covers(wanted));
                 if covered { wanted } else { '•' }.to_string()
             }
             ListKind::Decimal => format!("{number}."),
@@ -1031,7 +1033,13 @@ impl<'f> Layout<'f> {
     }
 
     /// A cell's narrowest and widest content widths.
-    fn measure_cell(&mut self, cell: &Cell, row: &Row, header: bool, style: &TextStyle) -> (f32, f32) {
+    fn measure_cell(
+        &mut self,
+        cell: &Cell,
+        row: &Row,
+        header: bool,
+        style: &TextStyle,
+    ) -> (f32, f32) {
         let style = self.cell_style(cell, row, header, style);
         let (mut lo, mut hi) = (0.0f32, 0.0f32);
         for block in &cell.blocks {
@@ -1338,7 +1346,11 @@ fn split_row(row: &RowLaid, limit: f32, pad_v: f32) -> (RowLaid, Option<RowLaid>
         let mut used = 0.0;
         let mut take = 0;
         for (i, piece) in cell.pieces.iter().enumerate() {
-            let need = if i == 0 { piece.height } else { piece.gap + piece.height };
+            let need = if i == 0 {
+                piece.height
+            } else {
+                piece.gap + piece.height
+            };
             if used + need > room && take > 0 {
                 break;
             }
@@ -1397,7 +1409,11 @@ pub(crate) fn paginate(flow: Vec<Flow>, height: f32) -> Vec<Page> {
         match item {
             Flow::Block(laid) => {
                 for (i, piece) in laid.pieces.into_iter().enumerate() {
-                    let gap = if i == 0 { piece.gap.max(after) } else { piece.gap };
+                    let gap = if i == 0 {
+                        piece.gap.max(after)
+                    } else {
+                        piece.gap
+                    };
                     units.push(Unit::Piece { piece, gap });
                 }
                 after = laid.after;
@@ -1503,7 +1519,8 @@ pub(crate) fn paginate(flow: Vec<Flow>, height: f32) -> Vec<Page> {
                     headers_tagged[table] = true;
                     let count = laid.header.len();
                     for (i, header) in laid.header.iter().enumerate() {
-                        for mut draw in row_draws(laid, header, true, i + 1 == count, header.height) {
+                        for mut draw in row_draws(laid, header, true, i + 1 == count, header.height)
+                        {
                             if !tagged {
                                 draw = draw.into_artifact(Furniture::Pagination);
                             }
@@ -1641,7 +1658,9 @@ mod tests {
             .draws
             .iter()
             .filter_map(|draw| match draw {
-                Draw::Text { x, baseline, run, .. } => Some((*baseline, *x, run.text.clone())),
+                Draw::Text {
+                    x, baseline, run, ..
+                } => Some((*baseline, *x, run.text.clone())),
                 _ => None,
             })
             .collect();
@@ -1715,7 +1734,11 @@ mod tests {
                 .iter()
                 .position(|p| texts(p).iter().any(|t| t == "Findings"))
                 .unwrap();
-            assert!(texts(&laid.pages[page]).iter().any(|t| t == "The first finding."));
+            assert!(
+                texts(&laid.pages[page])
+                    .iter()
+                    .any(|t| t == "The first finding.")
+            );
             moved |= page > 0 && texts(&laid.pages[page])[0] == "Findings";
         }
         assert!(moved, "some count pushes the heading to the next page");
@@ -1758,7 +1781,11 @@ mod tests {
             })
             .collect();
         assert!(matches!(marks[0], Mark::Content(_)));
-        assert!(marks[1..].iter().all(|m| *m == Mark::Artifact(Furniture::Pagination)));
+        assert!(
+            marks[1..]
+                .iter()
+                .all(|m| *m == Mark::Artifact(Furniture::Pagination))
+        );
     }
 
     #[test]
@@ -1782,7 +1809,11 @@ mod tests {
         let mut document = PdfDocument::new()
             .title("Audit")
             .margins(Margins::all(20.0))
-            .header(Paragraph::new().run(super::super::model::Run::title()).align(Align::End))
+            .header(
+                Paragraph::new()
+                    .run(super::super::model::Run::title())
+                    .align(Align::End),
+            )
             .footer_page_numbers();
         for i in 0..100 {
             document = document.paragraph(format!("Paragraph {i}"));
@@ -1797,9 +1828,12 @@ mod tests {
                 .draws
                 .iter()
                 .filter_map(|draw| match draw {
-                    Draw::Text { baseline, run, mark, .. }
-                        if matches!(mark, Mark::Artifact(Furniture::Header | Furniture::Footer)) =>
-                    {
+                    Draw::Text {
+                        baseline,
+                        run,
+                        mark,
+                        ..
+                    } if matches!(mark, Mark::Artifact(Furniture::Header | Furniture::Footer)) => {
                         Some((*baseline, run.text.clone(), *mark))
                     }
                     _ => None,
@@ -1859,9 +1893,11 @@ mod tests {
 
     #[test]
     fn right_to_left_tables_start_on_the_right() {
-        let document = PdfDocument::new()
-            .locale("ar")
-            .table(Table::new().header(["الضابط", "الحالة"]).row(["المصادقة", "ناجح"]));
+        let document = PdfDocument::new().locale("ar").table(
+            Table::new()
+                .header(["الضابط", "الحالة"])
+                .row(["المصادقة", "ناجح"]),
+        );
         let laid = lay_out(&document, book(), "").unwrap();
         let x_of = |text: &str| {
             laid.pages[0]
@@ -1889,7 +1925,9 @@ mod tests {
             page.draws
                 .iter()
                 .find_map(|d| match d {
-                    Draw::Text { x, baseline, run, .. } if run.text == text => Some((*x, *baseline)),
+                    Draw::Text {
+                        x, baseline, run, ..
+                    } if run.text == text => Some((*x, *baseline)),
                     _ => None,
                 })
                 .unwrap_or_else(|| panic!("{text}: {:?}", texts(page)))

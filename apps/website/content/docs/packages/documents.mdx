@@ -1,6 +1,6 @@
 ---
 title: "Documents"
-description: "Render PDF from Typst templates compiled in process or HTML templates printed by headless Chrome, in any script, write Word files, merge and stamp PDFs, and queue renders to a storage disk."
+description: "Render PDF from HTML templates or documents built in code, laid out in process or printed by headless Chrome, in any script, write Word files, merge and stamp PDFs, and queue renders to a storage disk."
 ---
 
 ## Introduction
@@ -12,8 +12,9 @@ let pdf = documents.pdf("certificates/classic", &completion).await?;
 Ok(pdf.download("certificate.pdf"))
 ```
 
-- **Two PDF engines** behind one service. **Typst** compiles `.typ` templates inside your process, with no external program, and is the default. **Chrome** prints `.html` templates in headless Chrome over the DevTools protocol, for teams who already write their layouts in HTML and CSS. The template's file picks the engine.
-- **Any script.** Noto Sans, Noto Sans Arabic and Noto Sans Devanagari are compiled in, for both engines, so a certificate in Arabic or Hindi looks the same on your laptop, in CI and in a slim container. A render's locale sets the language and the text direction.
+- **Two PDF engines, one template.** Templates are `.html` files. The **native** engine lays them out inside your process, with no browser and no external program, and is the default. **Chrome** prints the same files in headless Chrome with full CSS, for layouts that need it. `documents.engine` or the render picks.
+- **Documents in code.** `PdfDocument` builds a PDF block by block: headings, formatted paragraphs, lists, tables whose header rows repeat on every page, images, and page-numbered headers and footers.
+- **Any script.** Noto Sans, Serif and Mono, Noto Sans Arabic, Hebrew and Devanagari are compiled in, so a certificate in Arabic or Hindi looks the same on your laptop, in CI and in a slim container. A render's locale sets the language and the text direction.
 - **Word files** with `Docx`: headings, formatted paragraphs, lists, tables, images and page numbers, right to left when the document's language is.
 - **PDF editing**: merge documents, write a stamp ("PAID", "DRAFT", a copy number) or draw another PDF over pages, a seal or a signature in any script.
 - **Responses, storage and the queue**: a `Pdf` is a response, `save` writes to a [storage](/docs/digging-deeper/storage/) disk, and `queue` renders on a [queue](/docs/digging-deeper/queues/) worker and tells you when the file is ready.
@@ -21,14 +22,14 @@ Ok(pdf.download("certificate.pdf"))
 
 ## Installation
 
-The `documents` feature of the `navree` facade is opt-in: it is not part of `full`, because the Typst compiler and the fonts add to your build. Turn it on by name:
+The `documents` feature of the `navree` facade is opt-in: it is not part of `full`, because the PDF engine and the fonts add to your build. Turn it on by name:
 
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] }
 ```
 
-It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `typst`, `chrome` and `docx`, all on, and `operations`, which the facade turns on along with its `queue` feature; depend on `navree-documents` directly with `default-features = false` to leave an engine out.
+It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `native`, `chrome` and `docx`, all on, and `operations`, which the facade turns on along with its `queue` feature; depend on `navree-documents` directly with `default-features = false` to leave an engine out.
 
 Add `DocumentsModule` to your app root:
 
@@ -42,7 +43,7 @@ Navree::app()
     // ...
 ```
 
-The module is global and provides `Arc<Documents>`. It needs nothing else to render. With `StorageModule` in the app, documents can be saved and queued to its disks; with `QueueModule`, queued renders run on a worker; with a `dyn Clock`, Typst's `datetime.today()` and the PDF's creation date follow it. Nothing starts at boot: the fonts load on the first Typst render and Chrome starts on the first HTML render, so the module costs nothing until you use it.
+The module is global and provides `Arc<Documents>`. It needs nothing else to render. With `StorageModule` in the app, documents can be saved and queued to its disks; with `QueueModule`, queued renders run on a worker; with a `dyn Clock`, the PDF's creation date and the dates footers print follow it. Nothing starts at boot: the fonts load on the first native render and Chrome starts on the first render that needs it, so the module costs nothing until you use it.
 
 ## Configuration
 
@@ -51,14 +52,17 @@ Every key is optional. The values below show each key's form; [the reference](#r
 ```toml title="config/app.toml"
 [documents]
 templates = ["resources/documents"]  # template directories, searched in order
-engine = "typst"                     # which engine wins when a name has both a .typ and an .html file
+engine = "native"                    # the engine renders use unless they name one: native or chrome
 disk = "documents"                   # storage disk for save and queue (default: the default disk)
 
-[documents.typst]
-bundled_fonts = true                 # Noto Sans, Noto Sans Arabic, Noto Sans Devanagari
+[documents.native]
+bundled_fonts = true                 # the bundled Noto families
 font_dirs = ["resources/fonts"]      # more fonts, searched recursively
-packages_dir = "resources/typst-packages"
 timeout_secs = 60                    # per render
+
+[documents.native.print]
+paper = "a4"                         # a4 | a3 | a5 | letter | legal
+margin = { top = 20, right = 20, bottom = 20, left = 20 }  # millimeters
 
 [documents.chrome]
 path = "/usr/bin/chromium"           # default: NAVREE_BROWSER_CHROME, then the usual install paths
@@ -70,15 +74,15 @@ allow_network = false                # let documents load from other origins
 args = []                            # more command-line flags
 
 [documents.chrome.print]
-paper = "a4"                         # a4 | a3 | a5 | letter | legal
+paper = "a4"
 landscape = false
-margin = { top = 10, right = 10, bottom = 10, left = 10 }  # millimeters
+margin = { top = 10, right = 10, bottom = 10, left = 10 }
 print_background = true
-prefer_css_page_size = true          # a CSS @page { size } rule wins over `paper`
+prefer_css_page_size = true          # a CSS @page rule wins over `paper` and `margin`
 scale = 1.0
 ```
 
-From the environment: `APP_DOCUMENTS__TEMPLATES=resources/documents,vendor/documents` (lists are comma-separated), `APP_DOCUMENTS__CHROME__PATH=/usr/bin/chromium`, `APP_DOCUMENTS__CHROME__POOL_SIZE=4`. `DocumentsModule::for_root(DocumentsOptions { .. })` takes the same options in code.
+From the environment: `APP_DOCUMENTS__TEMPLATES=resources/documents,vendor/documents` (lists are comma-separated), `APP_DOCUMENTS__ENGINE=chrome`, `APP_DOCUMENTS__CHROME__PATH=/usr/bin/chromium`. `DocumentsModule::for_root(DocumentsOptions { .. })` takes the same options in code.
 
 ## Rendering a PDF
 
@@ -124,21 +128,21 @@ let render = Render::template("certificates/course")
     .data(&completion)
     .locale("ar")                    // language and direction
     .title("شهادة إتمام")             // the PDF's title in its metadata
-    .engine(EngineKind::Chrome)      // instead of the one the template picks
-    .print(PrintOptions::letter());  // page settings, for Chrome
+    .engine(EngineKind::Chrome)      // instead of documents.engine
+    .print(PrintOptions::letter());  // page settings
 let pdf = documents.render(&render).await?;
 ```
 
-`Render::typst(markup)` and `Render::html(html)` render markup you pass in instead of a template file. A `Render` serializes, which is how a queued render travels.
+`Render::html(html)` renders HTML you pass in instead of a template file. A `Render` serializes, which is how a queued render travels.
 
 ### Which engine
 
-A render that names its engine uses it. Otherwise the template decides: `certificates/course.typ` goes to Typst and `invoices/show.html` to Chrome, and a name without an extension finds whichever file exists. When a name has both files, `documents.engine` decides (Typst by default). `documents.engine_for(&render)` tells you which one a render would use.
+A render that names its engine uses it; otherwise `documents.engine` decides, `native` by default (`chrome` in a build without the `native` feature). Both engines read the same files, so you can move one document to Chrome when it needs CSS the native engine doesn't read, and keep the rest in process. `documents.engine_for(&render)` tells you which engine a render would use.
 
-A name that matches no file is `DocumentsError::TemplateNotFound`, listing the files tried:
+A name that matches no file is `DocumentsError::TemplateNotFound`, naming the file tried:
 
 ```text wrap
-document template `reports/audit` not found (tried reports/audit.typ, reports/audit.html)
+document template `reports/audit` not found (tried reports/audit.html)
 ```
 
 ### Templates
@@ -149,91 +153,173 @@ Template files are read on every render, so an edited template shows up at once,
 
 <FileTree title="resources/documents">{`
 certificates/
-  course.typ          # Typst
+  course.html
 reports/
-  audit.typ
+  audit.html
 invoices/
-  show.html           # Chrome
+  show.html
 layouts/
   document.html       # {% extends %} target
 images/
   logo.png
-data.json             # sample data for previews
 `}</FileTree>
 
-## Typst templates
-
-[Typst](https://typst.app/docs/) is a markup language for documents with real typesetting: paragraphs, tables, page headers, counters and functions. The engine compiles it in process, on Tokio's blocking pool. The first render loads the fonts; later renders reuse the compiler's caches, so rendering the same template again is faster.
-
-The render's data is the file `/data.json`:
-
-```text title="resources/documents/certificates/course.typ"
-#let data = json("/data.json")
-#let dir = sys.inputs.at("dir", default: "ltr")
-#set page(paper: "a4", flipped: true, margin: 2cm)
-#set text(size: 14pt)
-
-#align(center)[
-  #text(size: 28pt, weight: "bold")[#if dir == "rtl" [شهادة إتمام] else [Certificate of completion]]
-
-  #v(1cm)
-  #data.name
-
-  #data.course
-
-  #data.completed_on
-]
-```
-
-- **Data**: `json("/data.json")` is the render's data. Put a sample `data.json` at the root of the template directory and the Typst CLI or your editor's Typst preview can render the template as you write it; at render time the render's data replaces it.
-- **Files**: `#import`, `#include`, `image(..)`, `read(..)` and `json(..)` resolve inside the template tree, `/`-paths from its root and other paths relative to the file. Nothing outside it can be read.
-- **Locale**: with `.locale("ar")`, text defaults to that language and its direction (right to left for Arabic, Hebrew, Persian and Urdu), and `sys.inputs` holds `locale` and `dir` (`"rtl"` or `"ltr"`).
-- **Fonts**: text falls back through Noto Sans, Noto Sans Arabic and Noto Sans Devanagari, so mixed-script text needs no font settings. Fonts under `documents.typst.font_dirs` (`.ttf`, `.otf`, `.ttc`, `.otc`) are added; `navree documents:fonts` lists the families templates can use.
-- **Packages**: `#import "@preview/name:1.0.0"` reads `<packages_dir>/preview/name/1.0.0/`. Nothing is downloaded at render time.
-- **Dates**: `datetime.today()` and the PDF's creation date come from the app's `dyn Clock`.
-- **Time limit**: a render that takes longer than `documents.typst.timeout_secs` (60) is `DocumentsError::Timeout`, a 503. The compilation finishes in the background and its result is dropped.
-
-A template error names the file, the line and the column, with the compiler's hints:
-
-```text wrap
-certificates/course.typ:3:13: unknown variable: nmae
-```
-
-## HTML templates with Chrome
-
-`.html` templates are [navree-view](/docs/digging-deeper/views/) templates, MiniJinja with Navree's settings: values are HTML-escaped, printing an undefined variable is an error, and the `money` and `date` filters work. The render's data are the template's variables, plus `locale` (`en` when the render has none) and `dir` (`rtl` or `ltr`) unless your data has keys of those names:
+They are [navree-view](/docs/digging-deeper/views/) templates, MiniJinja with Navree's settings: values are HTML-escaped, printing an undefined variable is an error, and the `money` and `date` filters work. The render's data are the template's variables, plus `locale` (`en` when the render has none) and `dir` (`rtl` or `ltr`) unless your data has keys of those names:
 
 ```html title="resources/documents/invoices/show.html"
 <!doctype html>
 <html lang="{{ locale }}" dir="{{ dir }}">
 <head>
   <meta charset="utf-8">
+  <title>Invoice {{ number }}</title>
   <link rel="stylesheet" href="/_navree/fonts.css">
-  <link rel="stylesheet" href="/styles/document.css">
-  <style>@page { size: A4; margin: 15mm; }</style>
+  <style>@page { size: A4; margin: 18mm; }</style>
 </head>
 <body>
-  <img src="/images/logo.png" alt="">
+  <img src="/images/logo.png" width="180" alt="Acme">
   <h1>Invoice {{ number }}</h1>
-  <p>Billed to {{ customer }}</p>
-  <p>Total {{ total_cents|money(currency) }}</p>
+  <p>Billed to <strong>{{ customer }}</strong></p>
+  <table>
+    <thead><tr><th>Item</th><th align="right">Amount</th></tr></thead>
+    <tbody>
+    {% for line in lines %}
+      <tr><td>{{ line.description }}</td><td align="right">{{ line.amount_cents|money(currency) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p style="text-align: right">Total <strong>{{ total_cents|money(currency) }}</strong></p>
+  <footer><p style="text-align: center">Page <span class="pageNumber"></span> of <span class="totalPages"></span></p></footer>
 </body>
 </html>
 ```
 
-`{% extends "layouts/document.html" %}` and `{% include %}` take full paths in the template tree. A template with a syntax error fails every HTML render until it is fixed, with an error naming its file and line.
+`{% extends "layouts/document.html" %}` and `{% include %}` take full paths in the template tree. A template with a syntax error fails every render until it is fixed, with an error naming its file and line:
+
+```text wrap
+invoices/show.html:13: undefined value
+```
+
+## The native engine
+
+The native engine turns the rendered HTML into pages inside your process: text is shaped with HarfRust (kerning, ligatures, Arabic joining, Devanagari conjuncts), ordered with the Unicode bidirectional algorithm, broken into lines at the places Unicode allows, and written to PDF with krilla. It runs on Tokio's blocking pool; the first render loads the fonts.
+
+It reads a subset of HTML, the elements documents are made of. What it doesn't know, it skips, so a template written for Chrome still renders, with the engine's own look where the stylesheet would have changed it.
+
+| Elements | What they print |
+|---|---|
+| `h1` to `h6` | Headings, 2 to 0.9 times the body size, bold; `h1` to `h3` make the PDF's outline |
+| `p`, `div`, `section`, `article`, `main`, `blockquote` and other containers | Paragraphs; text directly inside a container is a paragraph too |
+| `strong`, `b`, `em`, `i`, `u`, `s`, `del`, `small`, `code`, `span` | Bold, italic, underlined, struck-through, smaller and monospaced text |
+| `a href` | A link, blue and underlined, that the reader can click |
+| `br`, `pre` | A line break; preformatted text in Noto Sans Mono, spaces kept |
+| `ul`, `ol`, `li` | Bullet and numbered lists, nested; `start` and `type` (`1`, `a`, `A`, `i`, `I`) on `ol` |
+| `table`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td`, `col` | Tables (below) |
+| `img` | An image on its own line (below) |
+| `hr` | A horizontal rule |
+| `header`, `footer` (children of `body`) | Printed at the top and bottom of every page |
+| `title`, `meta name="author"`, `html lang dir` | The PDF's title, author and language, and the text direction |
+
+The `style` attribute of any element can set `font-weight`, `font-style`, `color`, `font-size` (`pt`, `px`, `mm`, `em`, `%` and the keywords), `font-family`, `text-align` (`left`, `right`, `center`, `justify`, `start`, `end`), `text-decoration`, `line-height` and `direction`; table cells and rows also take `background-color`, `width` and `vertical-align`, and images `width` and `height`. The `align`, `valign`, `width`, `bgcolor` and `dir` attributes work too. Styles on `html` and `body` set the document's base font, size and color. From a `<style>` element, only the `@page` rule is read: `size` (`A3`, `A4`, `A5`, `letter`, `legal` or two lengths, with `landscape` or `portrait`) and `margin`.
+
+Text is set in 11-point Noto Sans unless the document says otherwise; whitespace collapses as in a browser, and justified paragraphs stretch their spaces on every line but the last.
+
+### Tables
+
+- **Header rows** (the rows of `thead`, or a first row of `th` cells) are bold on a light gray band, and repeat at the top of every page the table continues on.
+- **Columns** share the width by their content, unless a `col` or a first-row cell gives a percentage (`width="30%"`). Tables take the full width of the page.
+- **Rows** never split across pages, except a row taller than a whole page, which breaks between the lines of its cells.
+- **Lines**: a line under every row by default; `border="1"` draws every cell's edges, and `border="0"` or `role="presentation"` none, for tables that only lay things out side by side. `cellpadding` sets the space inside cells, in pixels.
+- `colspan` joins cells across columns. In a right-to-left document the first column is on the right.
+
+### Images, page breaks, headers and footers
+
+- **Images** are PNG, JPEG, GIF or WebP files from the template tree (`src` relative to the document, or from the root with a leading `/`), or `data:` URIs. Nothing is fetched from another origin, and an image that isn't there is skipped. An image prints at 96 dots per inch unless `width` or `height` sizes it, never wider than its column or taller than a page; `alt` describes it to screen readers. An image inside a paragraph ends the paragraph and prints on a line of its own.
+- **Page breaks**: an element with the `page-break` class ends the page, and so do `break-after: page` and `break-before: page` (or `page-break-after: always`) in a `style` attribute. Add `.page-break { break-after: page; }` to the stylesheet and Chrome breaks at the same places.
+- **Headers and footers**: `header` and `footer` elements directly inside `body` print on every page, in 9-point gray text unless they set their own style, centered in the top and bottom margins; a taller one moves the page's content to make room. Spans with the classes `pageNumber`, `totalPages`, `title` and `date` print the page's number, the page count, the document's title and the date of the render, so `Page <span class="pageNumber"></span> of <span class="totalPages"></span>` prints "Page 2 of 5". The header and footer HTML of `PrintOptions` works the same way.
+
+Pages come from `PrintOptions`: the render's own (`Render::print`), else `documents.native.print`; an `@page` rule in the template wins while `prefer_css_page_size` is on. The defaults are A4 portrait with 10 mm margins.
+
+### Fonts
+
+The bundled families are Noto Sans, Noto Serif and Noto Sans Mono (Latin, Greek and Cyrillic, with bold and italic), Noto Sans Arabic, Noto Sans Hebrew and Noto Sans Devanagari. Every character falls back to a family that has it: the families the text asks for first, then the bundled ones in that order, so mixed-script text prints without naming a font. `font-family: serif` and `monospace` mean Noto Serif and Noto Sans Mono. Arabic, Hebrew and Devanagari have no italic faces and print upright.
+
+Fonts under `documents.native.font_dirs` (`.ttf`, `.otf`, `.ttc`, `.otc`) join them under their family names; `navree documents:fonts` lists the families. Only the glyphs a document uses are embedded, so a one-page certificate stays small.
+
+### What the PDF holds
+
+- **Text you can copy and search**, each font embedded as a subset with its Unicode mapping, so `pdf.text()` and screen readers read the words.
+- **Tags** for accessibility: headings, paragraphs, lists, tables with their header cells, figures with their alt text, and links. Headers, footers, repeated table headers, rules and borders are marked as page furniture.
+- **An outline** of the `h1` to `h3` headings, for the reader's sidebar.
+- **Metadata**: the title (`Render::title`, else `<title>`), the author, the language, and the creation date from the app's clock.
+
+### Limits
+
+The native engine reads no other CSS: no selectors or classes in stylesheets, no margins or padding outside table cells, no floats, flex or grid, no positioning, and no backgrounds or borders outside tables. Tables have no `rowspan`. Text is not hyphenated, and Thai, Lao, Khmer and Myanmar text breaks only at spaces. A document that needs any of that prints with Chrome: give its render `.engine(EngineKind::Chrome)`.
+
+A render that takes longer than `documents.native.timeout_secs` (60) is `DocumentsError::Timeout`, a 503. An image in the template tree that does not decode is a `DocumentsError::Template` naming the file.
+
+## Documents built in code
+
+When a document is mostly data, build it in code with `PdfDocument`. It has the blocks of the HTML subset, and `documents.render_document` lays it out with the configured fonts and the app's clock:
+
+```rust title="src/modules/reports/controller.rs"
+use navree::documents::native::{Align, Cell, Paragraph, Table};
+use navree::documents::{Documents, Download, PdfDocument};
+
+#[get("/summary.pdf")]
+#[authenticated]
+async fn summary(&self) -> Result<Download> {
+    let mut controls = Table::new().header(["Control", "Owner", "Status"]);
+    for (control, owner, status) in [
+        ("Multi-factor sign-in", "Security", "Passed"),
+        ("Backups restored", "Platform", "Open"),
+    ] {
+        controls = controls.row([Cell::new(control), Cell::new(owner), Cell::new(status).align(Align::End)]);
+    }
+    let document = PdfDocument::new()
+        .title("Quarterly audit report")
+        .locale("en")
+        .heading(1, "Quarterly audit report")
+        .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+        .bullets(["Every control was tested", "Two findings are open"])
+        .table(controls)
+        .paragraph(Paragraph::from("Signed off by the audit team.").align(Align::End))
+        .footer_page_numbers();
+    let pdf = self.documents.render_document(&document).await?;
+    Ok(pdf.download("audit-q3.pdf"))
+}
+```
+
+| Method | Adds |
+|---|---|
+| `heading(level, text)` | A heading, levels 1 to 6 |
+| `paragraph(p)` | A string, or a `Paragraph` of runs: `.text`, `.bold`, `.italic`, `.link(text, url)`, `.line_break()`, `.run(Run::new(..).size(9.0).color("C00000").underline())`, `.align(Align::Justify)` |
+| `bullets(items)`, `numbered(items)`, `list(List)` | Lists; `List::numbered().item_with(text, nested)` nests them |
+| `table(Table)` | `Table::new().header([..]).row([..])`, with `Cell::new(..).colspan(2).align(Align::End)`, `.widths([3.0, 1.0])`, `.borders(Borders::Grid)` |
+| `image(Image::new(bytes))` | A PNG, JPEG, GIF or WebP; `.width_mm(40.0)`, `.align(Align::Center)`, `.alt(..)` |
+| `rule()`, `space_mm(mm)`, `page_break()` | A horizontal rule, vertical space, a new page |
+| `header(block)`, `footer(block)`, `footer_page_numbers()` | Blocks on every page; `Paragraph::new().page_number()`, `.page_count()`, `Run::title()` and `Run::date()` fill in |
+| `paper(Paper::Letter)`, `landscape()`, `margins(Margins::all(20.0))`, `print(&options)` | The page; A4 with 20 mm margins by default |
+| `locale("ar")`, `direction(Direction::Rtl)`, `font("Noto Serif")`, `font_size(10.5)` | Language and direction, the base font and size |
+| `title(..)`, `author(..)` | The document's metadata |
+
+Outside an app, `document.build()` lays it out with the bundled fonts. A `NativeEngine` does the same with its own settings: `NativeEngine::new(templates)` with `.font_dirs(..)`, `.print(..)`, `.clock(..)` and `.timeout(..)` renders templates (`render`, `render_html`) and documents (`render_document`).
+
+## Printing with Chrome
+
+Chrome prints the same templates with everything CSS can do: stylesheets, web fonts, flex and grid layouts. Choose it per render with `.engine(EngineKind::Chrome)`, or for every render with `documents.engine = "chrome"`.
 
 ### Assets and the network
 
 The document loads from a private origin, `https://documents.navree.invalid/<path>`, and Chrome asks the engine for every request:
 
 - **Template-tree files**: `<img src="images/logo.png">` (relative to the document) and `<link href="/styles/document.css">` (from the root) are served from the template directories and embedded files. A missing file is a 404.
-- **The bundled fonts**: `<link rel="stylesheet" href="/_navree/fonts.css">` gives the page Noto Sans, Noto Sans Arabic and Noto Sans Devanagari through `@font-face` rules. Set `font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans Devanagari"` and Arabic and Devanagari print identically on every machine, whatever fonts the system has. The `_navree/` prefix is reserved.
+- **The bundled fonts**: `<link rel="stylesheet" href="/_navree/fonts.css">` gives the page the bundled Noto families through `@font-face` rules. Set `font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Devanagari"` and every script prints identically on every machine, whatever fonts the system has. The `_navree/` prefix is reserved.
 - **Everything else is blocked.** A request to any other origin fails, so a template can never make your server fetch an address its data names, an internal service included. Set `documents.chrome.allow_network = true` to let them through.
 
 ### Pages, headers and footers
 
-`PrintOptions` set the paper, orientation, margins, scale and backgrounds. A render's own settings (`Render::print`) win over `documents.chrome.print`, and a CSS `@page { size }` rule wins over the paper while `prefer_css_page_size` is on:
+`PrintOptions` set the paper, orientation, margins, scale and backgrounds. A render's own settings (`Render::print`) win over `documents.chrome.print`, and a CSS `@page` rule wins over the paper while `prefer_css_page_size` is on:
 
 ```rust
 use navree::documents::{Margins, PrintOptions, Render};
@@ -248,11 +334,11 @@ let pdf = documents
     .await?;
 ```
 
-Chrome fills elements of the header and footer templates with the classes `date`, `title`, `url`, `pageNumber` and `totalPages`. Style them inline: the page's styles don't reach them.
+Chrome fills elements of the header and footer templates with the classes `date`, `title`, `url`, `pageNumber` and `totalPages`. Style them inline: the page's styles don't reach them. The native engine reads the same options, so these pages look alike in both engines.
 
 ### The browser
 
-One browser serves every render. It starts on the first HTML render, from `documents.chrome.path`, else the `NAVREE_BROWSER_CHROME` environment variable, else the usual install locations of Chrome, Chromium and Edge. Each document prints in a fresh browser context, so no cookies, storage or cache carry over, and at most `pool_size` pages print at once; more renders wait their turn. If the browser crashes, the next render starts it again. The module closes it when the app stops.
+One browser serves every render. It starts on the first render that needs it, from `documents.chrome.path`, else the `NAVREE_BROWSER_CHROME` environment variable, else the usual install locations of Chrome, Chromium and Edge. Each document prints in a fresh browser context, so no cookies, storage or cache carry over, and at most `pool_size` pages print at once; more renders wait their turn. If the browser crashes, the next render starts it again. The module closes it when the app stops.
 
 In a container, install Chromium and set `documents.chrome.path`; when Chrome runs as root, also set `no_sandbox = true`. To keep Chrome out of your app's container, run it as a service of its own and point `documents.chrome.endpoint` at it, as a WebSocket URL or as `http://chrome:9222`, whose `/json/version` the engine reads.
 
@@ -260,7 +346,7 @@ No Chrome to be found is `DocumentsError::EngineUnavailable`, and a render that 
 
 ## Languages and right-to-left text
 
-A render's locale sets the language and the direction of the document in both engines:
+A render's locale sets the language and the direction of the document in both engines; a template's own `<html lang dir>` wins in the native engine:
 
 ```rust
 let pdf = documents
@@ -273,7 +359,7 @@ let pdf = documents
 assert!(pdf.text()?.contains("مريم العلي"));
 ```
 
-Right-to-left languages are Arabic, Aramaic, Hebrew, Persian, Urdu, Kurdish, Pashto, Sindhi, Uyghur, Yiddish, Dhivehi and Kashmiri (`is_rtl("ar-EG")` says so for any locale). Chrome also formats dates and numbers through `Intl` in the render's locale.
+Right-to-left languages are Arabic, Aramaic, Hebrew, Persian, Urdu, Kurdish, Pashto, Sindhi, Uyghur, Yiddish, Dhivehi and Kashmiri (`is_rtl("ar-EG")` says so for any locale). In a right-to-left document, paragraphs start on the right, list markers sit on the right and tables start on the right; a `dir="ltr"` element reads left to right inside it, and numbers and Latin words keep their order in Arabic or Hebrew text. Chrome also formats dates and numbers through `Intl` in the render's locale.
 
 ## Returning documents
 
@@ -301,14 +387,14 @@ let paid = both
     .stamp(&Stamp::text("Copy 1 of 2").at(Position::TopRight).pages(Pages::First))?;
 ```
 
-- **`Pdf::merge`** joins documents page by page; each page keeps its size and contents. Outlines and forms are dropped.
+- **`Pdf::merge`** joins documents page by page; each page keeps its size and contents. Outlines, forms and tags are dropped.
 - **`stamp`** writes text over the pages `Pages` selects (`All`, `First`, `Last`, `Only(vec![2, 3])`). `Stamp::text` is a gray, 25% opaque, 72-point diagonal watermark across the middle; `.at(..)` moves it to an edge or a corner as 12-point upright text. A stamp is set in Helvetica Bold, so its text must be Latin-1.
-- **`overlay`** draws the first page of another PDF over the selected pages, scaled to fit and centered. For a seal, a signature or a stamp in another script, render it with Typst and overlay it:
+- **`overlay`** draws the first page of another PDF over the selected pages, scaled to fit and centered. For a seal, a signature or a stamp in another script, render it and overlay it:
 
 ```rust
 let seal = documents
-    .render(&Render::typst(
-        "#set page(paper: \"a4\", margin: 0pt)\n#place(bottom + right, dx: -2cm, dy: -2cm, text(size: 16pt)[مدفوع — PAID])",
+    .render(&Render::html(
+        r#"<p style="text-align: right; font-size: 16pt; color: #b42318">مدفوع — PAID</p>"#,
     ))
     .await?;
 let stamped = invoice.overlay(&seal, Pages::All)?;
@@ -469,7 +555,7 @@ pub struct CertificatesModule;
 impl CertificatesModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.document_files([
-            ("certificates/course.typ", include_bytes!("documents/course.typ").as_slice()),
+            ("certificates/course.html", include_bytes!("documents/course.html").as_slice()),
             ("images/seal.png", include_bytes!("documents/seal.png").as_slice()),
         ]);
     }
@@ -482,20 +568,20 @@ Embedded files are templates and assets like any other: a file at the same path 
 
 | Command | What it does |
 |---|---|
-| `documents:render <template> [--data <file.json>] [--locale <tag>] [--engine typst\|chrome] [--out <file.pdf>]` | Renders a template to a file, with the app's configuration (default output: `<template name>.pdf`) |
-| `documents:fonts` | Lists the font families Typst templates can use |
+| `documents:render <template> [--data <file.json>] [--locale <tag>] [--engine native\|chrome] [--out <file.pdf>]` | Renders a template to a file, with the app's configuration (default output: `<template name>.pdf`) |
+| `documents:fonts` | Lists the font families the native engine prints with |
 
 ```sh
-navree documents:render certificates/course --data resources/documents/data.json --locale ar
+navree documents:render certificates/course --data sample.json --locale ar
 ```
 
 ```text
-Rendered certificates/course with typst to course.pdf (1 page, 64210 bytes)
+Rendered certificates/course with native to course.pdf (1 page, 24210 bytes)
 ```
 
 ## Testing
 
-Assert on the words a document shows. Templates render fast enough to test for real:
+Assert on the words a document shows. The native engine renders in milliseconds, fast enough to test for real:
 
 ```rust title="tests/certificates.rs"
 #[tokio::test]
@@ -519,7 +605,7 @@ async fn the_certificate_names_the_learner() {
 
 For right-to-left documents, compare `pdf.text()` with a golden file: it comes back in reading order, so the file reads like the certificate does.
 
-When the document itself isn't under test, install a `DocumentsFake`. It renders every template at once, without Typst or Chrome, and records each render:
+When the document itself isn't under test, install a `DocumentsFake`. It renders every template at once, without the native engine or Chrome, and records each render:
 
 ```rust
 use navree::documents::DocumentsFake;
@@ -537,21 +623,21 @@ app.client().get("/api/v1/certificates/Ada").send().await.assert_status(200);
 fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
 ```
 
-The fake's PDF shows the template's name and the data's top-level fields (`name: Ada`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` and `queue_operation` (queued renders are recorded, not rendered; `queue_operation` still starts its operation, which stays `pending`, and the recorded document's `operation_id` names it), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do.
+The fake's PDF shows the template's name and the data's top-level fields (`name: Ada`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` and `queue_operation` (queued renders are recorded, not rendered; `queue_operation` still starts its operation, which stays `pending`, and the recorded document's `operation_id` names it), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do. `render_document` on the fake's `Documents` lays the document out with the bundled fonts.
 
-Every engine implements `PdfEngine` and passes the same conformance suite: Typst, Chrome and the fake. Chrome's tests run against a stand-in DevTools endpoint, and against a real browser when `NAVREE_BROWSER_CHROME` names one.
+Every engine implements `PdfEngine` and passes the same conformance suite: the native engine, Chrome and the fake. Chrome's tests run against a stand-in DevTools endpoint, and against a real browser when `NAVREE_BROWSER_CHROME` names one.
 
 ## Reference
 
 | Key | Default | Meaning |
 |---|---|---|
 | `documents.templates` | `["resources/documents"]` | Template directories, searched in order |
-| `documents.engine` | `typst` | The engine for a name with both a `.typ` and an `.html` file |
+| `documents.engine` | `native` | The engine renders use unless they name one |
 | `documents.disk` | the default disk | Where `save` and `queue` write |
-| `documents.typst.bundled_fonts` | `true` | Load the bundled Noto fonts |
-| `documents.typst.font_dirs` | `[]` | More font directories |
-| `documents.typst.packages_dir` | none | Local Typst packages, as `<namespace>/<name>/<version>` |
-| `documents.typst.timeout_secs` | `60` | Limit per Typst render |
+| `documents.native.bundled_fonts` | `true` | Load the bundled Noto fonts |
+| `documents.native.font_dirs` | `[]` | More font directories |
+| `documents.native.timeout_secs` | `60` | Limit per native render |
+| `documents.native.print` | A4, 10 mm margins | Default `PrintOptions` of the native engine |
 | `documents.chrome.path` | `NAVREE_BROWSER_CHROME`, then the usual paths | The Chrome executable |
 | `documents.chrome.endpoint` | none | A running Chrome: `ws://..` or `http://host:9222` |
 | `documents.chrome.pool_size` | `2` | Pages printing at once |
@@ -559,26 +645,27 @@ Every engine implements `PdfEngine` and passes the same conformance suite: Typst
 | `documents.chrome.no_sandbox` | `false` | Run Chrome with `--no-sandbox` |
 | `documents.chrome.allow_network` | `false` | Let documents load from other origins |
 | `documents.chrome.args` | `[]` | More Chrome flags |
-| `documents.chrome.print` | A4, 10 mm margins | Default `PrintOptions` |
+| `documents.chrome.print` | A4, 10 mm margins | Default `PrintOptions` of Chrome |
 
 | `Documents` method | |
 |---|---|
 | `pdf(name, data)` | Renders a template with data |
 | `render(&render)` | Renders a `Render` |
+| `render_document(&document)` | Lays out a `PdfDocument` with the native engine |
 | `engine_for(&render)` | The engine a render would use |
 | `save(&render, path)` | Renders and writes to the documents disk; returns a `StoredDocument` (`url`, `temporary_url`) |
 | `queue(render, path)` | Queues the render; returns a `QueuedDocument` |
 | `queue_operation(&operations, &uow, operation, render, path)` | Starts an operation and queues the render as its work; returns the `OperationRecord` |
 | `status(&queued)` | `DocumentStatus::Pending`, `Ready { size }` or `Failed { error }` |
-| `font_families()` | The families Typst templates can use |
+| `font_families()` | The families the native engine prints with |
 
 | `DocumentsError` | Status | When |
 |---|---|---|
 | `TemplateNotFound { name, tried }` | 500 | No template has the name |
-| `Template { file, line, column, message }` | 500 | The template failed to compile or render |
+| `Template { file, line, column, message }` | 500 | The template failed to render, or an image in it does not decode |
 | `Data(..)` | 500 | The data does not serialize to JSON |
-| `EngineUnavailable { engine, reason }` | 503 | The engine is not compiled in, or Chrome can't start |
-| `Engine { engine, message }` | 500 | Chrome failed while printing |
+| `EngineUnavailable { engine, reason }` | 503 | The engine is not compiled in, Chrome can't start, or there are no fonts |
+| `Engine { engine, message }` | 500 | The engine failed while rendering |
 | `Timeout { engine, secs }` | 503 | The render took longer than its limit |
 | `Pdf(..)`, `Docx(..)` | 500 | Reading or editing a PDF, or writing a DOCX, failed |
 | `Storage(..)`, `Queue(..)` | 500 | The disk or the queue failed |

@@ -6,10 +6,11 @@
 
 #![cfg(feature = "documents")]
 
-use navree::documents::docx::{Align, Paragraph, Table};
+use navree::documents::docx::{Align, Paragraph, Table as DocxTable};
+use navree::documents::native::{self, Cell, Table};
 use navree::documents::{
-    DocumentStatus, Documents, DocumentsFake, Docx, Download, Pdf, Position, QueuedDocument,
-    Render, Stamp,
+    DocumentStatus, Documents, DocumentsFake, Docx, Download, Pdf, PdfDocument, Position,
+    QueuedDocument, Render, Stamp,
 };
 use navree::http::CurrentPrincipal;
 use navree::prelude::*;
@@ -92,6 +93,40 @@ impl ReportsController {
         Ok(Json(self.documents.status(&queued).await?))
     }
 
+    #[get("/summary.pdf")]
+    #[public]
+    async fn summary(&self) -> Result<Download> {
+        let mut controls = Table::new().header(["Control", "Owner", "Status"]);
+        for (control, owner, status) in [
+            ("Multi-factor sign-in", "Security", "Passed"),
+            ("Backups restored", "Platform", "Open"),
+        ] {
+            controls = controls.row([
+                Cell::new(control),
+                Cell::new(owner),
+                Cell::new(status).align(native::Align::End),
+            ]);
+        }
+        let document = PdfDocument::new()
+            .title("Quarterly audit report")
+            .locale("en")
+            .heading(1, "Quarterly audit report")
+            .paragraph(
+                native::Paragraph::new()
+                    .text("Prepared for ")
+                    .bold("Acme Ltd")
+                    .text("."),
+            )
+            .bullets(["Every control was tested", "Two findings are open"])
+            .table(controls)
+            .paragraph(
+                native::Paragraph::from("Signed off by the audit team.").align(native::Align::End),
+            )
+            .footer_page_numbers();
+        let pdf = self.documents.render_document(&document).await?;
+        Ok(pdf.download("audit-q3.pdf"))
+    }
+
     #[get("/audit.docx")]
     #[public]
     async fn word(&self) -> Result<Download> {
@@ -106,7 +141,7 @@ impl ReportsController {
             )
             .bullets(["Every control was tested", "Two findings are open"])
             .table(
-                Table::new()
+                DocxTable::new()
                     .header(["Control", "Status"])
                     .row(["Multi-factor sign-in", "Passed"])
                     .row(["Backups restored", "Open"]),
@@ -161,32 +196,25 @@ pub struct CertificatesModule;
 impl CertificatesModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.document_files([
-            ("certificates/course.typ", CERTIFICATE.as_bytes()),
-            ("reports/audit.typ", AUDIT_REPORT.as_bytes()),
+            ("certificates/course.html", CERTIFICATE.as_bytes()),
+            ("reports/audit.html", AUDIT_REPORT.as_bytes()),
         ]);
     }
 }
 
-const CERTIFICATE: &str = r#"#let data = json("/data.json")
-#let dir = sys.inputs.at("dir", default: "ltr")
-#set page(paper: "a4", flipped: true, margin: 2cm)
-#set text(size: 14pt)
-
-#align(center)[
-  #text(size: 28pt, weight: "bold")[#if dir == "rtl" [شهادة إتمام] else [Certificate of completion]]
-
-  #v(1cm)
-  #data.name
-
-  #data.course
-
-  #data.completed_on
-]
+const CERTIFICATE: &str = r#"<html lang="{{ locale }}" dir="{{ dir }}">
+<head><style>@page { size: A4 landscape; margin: 20mm }</style></head>
+<body style="font-size: 14pt; text-align: center">
+  <h1 style="font-size: 28pt">{% if dir == "rtl" %}شهادة إتمام{% else %}Certificate of completion{% endif %}</h1>
+  <p>{{ name }}</p>
+  <p>{{ course }}</p>
+  <p>{{ completed_on }}</p>
+</body>
+</html>
 "#;
 
-const AUDIT_REPORT: &str = r#"#let data = json("/data.json")
-= Audit report #data.quarter
-Every control was tested.
+const AUDIT_REPORT: &str = r#"<h1>Audit report {{ quarter }}</h1>
+<p>Every control was tested.</p>
 "#;
 
 fn storage() -> StorageOptions {
@@ -267,6 +295,21 @@ async fn certificates_download_and_reports_queue() {
             .unwrap()
             .contains("Multi-factor sign-in\tPassed")
     );
+
+    let response = app
+        .client()
+        .get("/api/v1/reports/summary.pdf")
+        .send()
+        .await
+        .assert_status(200);
+    let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
+    let text = pdf.text().unwrap();
+    assert!(text.contains("Prepared for Acme Ltd."), "{text}");
+    assert!(
+        text.contains("Multi-factor sign-in Security Passed"),
+        "{text}"
+    );
+    assert!(text.ends_with("Page 1 of 1"), "{text}");
 }
 
 #[tokio::test]

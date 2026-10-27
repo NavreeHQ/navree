@@ -325,8 +325,8 @@ export const ecosystem: EcosystemEntry[] = [
     category: "capabilities",
     tagline: "PDF and Word documents from your templates and data",
     summary:
-      "Render certificates, invoices and reports as PDF from Typst templates compiled in process or HTML templates printed by headless Chrome, in any script, and write DOCX. Merge, stamp and queue them.",
-    features: ["Typst and Chrome engines", "Bundled fonts for Arabic and Devanagari", "DOCX writer", "Merge, stamps and overlays", "Queued renders to storage"],
+      "Render certificates, invoices and reports as PDF from HTML templates or documents built in code, laid out in process or printed by headless Chrome, in any script, and write DOCX. Merge, stamp and queue them.",
+    features: ["Native and Chrome engines", "Bundled fonts for Arabic, Hebrew and Devanagari", "Tagged PDF with repeating table headers", "DOCX writer", "Merge, stamps and overlays", "Queued renders to storage"],
     crate: "navree-documents",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features documents",
     href: "/docs/packages/documents/",

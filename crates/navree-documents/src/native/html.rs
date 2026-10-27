@@ -292,7 +292,21 @@ impl Builder {
     /// Closes what the start of `name` implies is over.
     fn open_implied(&mut self, name: &str) {
         if CLOSES_P.contains(&name) {
-            self.close_within("p", &["div", "td", "th", "li", "body", "blockquote", "section", "article", "header", "footer"]);
+            self.close_within(
+                "p",
+                &[
+                    "div",
+                    "td",
+                    "th",
+                    "li",
+                    "body",
+                    "blockquote",
+                    "section",
+                    "article",
+                    "header",
+                    "footer",
+                ],
+            );
         }
         match name {
             "li" => self.close_within("li", &["ul", "ol"]),
@@ -341,7 +355,10 @@ impl Builder {
     /// An end tag: closes the innermost open element of that name (and
     /// whatever is open inside it); a stray end tag is ignored.
     fn close(&mut self, name: &str) {
-        if let Some(index) = (1..self.stack.len()).rev().find(|&i| self.stack[i].name == name) {
+        if let Some(index) = (1..self.stack.len())
+            .rev()
+            .find(|&i| self.stack[i].name == name)
+        {
             self.pop_to(index);
         }
     }
@@ -488,7 +505,8 @@ mod tests {
 
     #[test]
     fn omitted_end_tags_are_implied() {
-        let doc = parse("<ul><li>One<li>Two</ul><p>First<p>Second<table><tr><td>a<td>b<tr><td>c</table>");
+        let doc =
+            parse("<ul><li>One<li>Two</ul><p>First<p>Second<table><tr><td>a<td>b<tr><td>c</table>");
         let ul = doc.find("ul").unwrap();
         assert_eq!(ul.children.len(), 2);
         assert_eq!(element(&ul.children[1]).text(), "Two");
@@ -498,7 +516,11 @@ mod tests {
         assert_eq!(rows[0].children.len(), 2);
         assert_eq!(element(&rows[1].children[0]).text(), "c");
         // The two paragraphs are siblings, and the table is not inside one.
-        let paragraphs = doc.children.iter().filter(|n| matches!(n, Node::Element(e) if e.name == "p")).count();
+        let paragraphs = doc
+            .children
+            .iter()
+            .filter(|n| matches!(n, Node::Element(e) if e.name == "p"))
+            .count();
         assert_eq!(paragraphs, 2);
     }
 
@@ -522,6 +544,9 @@ mod tests {
         let p = doc.find("p").unwrap();
         assert_eq!(p.text(), "Open bold both");
         assert!(matches!(doc.children.last(), Some(Node::Text(t)) if t == "after"));
-        assert_eq!(parse("a < b and c").children, vec![Node::Text("a < b and c".into())]);
+        assert_eq!(
+            parse("a < b and c").children,
+            vec![Node::Text("a < b and c".into())]
+        );
     }
 }

@@ -344,7 +344,10 @@ mod tests {
         );
         assert_eq!(rule.paper, Some(Paper::A5));
         assert_eq!(rule.landscape, Some(true));
-        assert_eq!(rule.margins, [Some(15.0), Some(10.0), Some(15.0), Some(10.0)]);
+        assert_eq!(
+            rule.margins,
+            [Some(15.0), Some(10.0), Some(15.0), Some(10.0)]
+        );
         let custom = page_rules("@page{size:100mm 50mm;margin-top:1in}");
         assert_eq!(
             custom.paper,

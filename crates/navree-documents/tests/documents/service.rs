@@ -36,7 +36,10 @@ fn the_render_or_the_option_picks_the_engine() {
     // `documents.engine` (native, or chrome in a build without it).
     let default = DocumentsOptions::default().engine;
     assert_eq!(engine(Render::template("invoices/show")), default);
-    assert_eq!(engine(Render::template("certificates/classic.html")), default);
+    assert_eq!(
+        engine(Render::template("certificates/classic.html")),
+        default
+    );
     assert_eq!(engine(Render::html("x")), default);
     // The render decides.
     assert_eq!(

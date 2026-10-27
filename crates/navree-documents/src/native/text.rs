@@ -133,7 +133,6 @@ impl Para {
         }
         &self.spans[self.span_at(byte)].style
     }
-
 }
 
 /// One shaped glyph of a [`GlyphRun`].
@@ -496,7 +495,8 @@ impl<'f> Shaper<'f> {
         let text = para.text.as_str();
         let mut start = range.start;
         if !para.preformatted {
-            start += text[start..range.end].len() - text[start..range.end].trim_start_matches(' ').len();
+            start +=
+                text[start..range.end].len() - text[start..range.end].trim_start_matches(' ').len();
         }
         let end = trim_end(text, start, range.end).max(start);
         let lang = para.lang.clone().and_then(|lang| self.language(&lang));
@@ -524,7 +524,8 @@ impl<'f> Shaper<'f> {
                     let s = item.range.start.max(run.start);
                     let e = item.range.end.min(run.end);
                     let style = para.spans[item.span].style.clone();
-                    let whole = s == item.range.start && e == item.range.end && item.level.is_rtl() == rtl;
+                    let whole =
+                        s == item.range.start && e == item.range.end && item.level.is_rtl() == rtl;
                     let shaped = if whole {
                         item.glyphs.clone()
                     } else {
@@ -563,7 +564,12 @@ impl<'f> Shaper<'f> {
         if para.align == Align::Justify && !last && natural < width {
             let spaces: usize = runs
                 .iter()
-                .map(|run| run.glyphs.iter().filter(|g| is_space(&run.text[g.range.clone()])).count())
+                .map(|run| {
+                    run.glyphs
+                        .iter()
+                        .filter(|g| is_space(&run.text[g.range.clone()]))
+                        .count()
+                })
                 .sum();
             if spaces > 0 {
                 let extra = (width - natural) / spaces as f32;
@@ -757,7 +763,10 @@ fn opportunities(text: &str) -> Vec<(usize, bool)> {
 /// `end` moved back over trailing spaces and line breaks.
 fn trim_end(text: &str, start: usize, end: usize) -> usize {
     let slice = &text[start..end];
-    start + slice.trim_end_matches(|c: char| c.is_whitespace() || c == LINE_BREAK).len()
+    start
+        + slice
+            .trim_end_matches(|c: char| c.is_whitespace() || c == LINE_BREAK)
+            .len()
 }
 
 /// Whether `c` takes the face of the text around it: spaces, joiners,
@@ -819,7 +828,10 @@ mod tests {
         for pair in lines.windows(2) {
             let next_word = pair[1].visual_text();
             let next_word = next_word.split(' ').next().unwrap();
-            let widened = shaper.lines(&para(&format!("{} {next_word}", pair[0].visual_text())), 1000.0);
+            let widened = shaper.lines(
+                &para(&format!("{} {next_word}", pair[0].visual_text())),
+                1000.0,
+            );
             assert!(widened[0].width() > 200.0, "{next_word}");
         }
     }
@@ -844,7 +856,10 @@ mod tests {
         let mut shaper = shaper();
         let lines = shaper.lines(&para("First line\nSecond line\n\nAfter a blank"), 500.0);
         let texts: Vec<String> = lines.iter().map(Line::visual_text).collect();
-        assert_eq!(texts, vec!["First line", "Second line", "", "After a blank"]);
+        assert_eq!(
+            texts,
+            vec!["First line", "Second line", "", "After a blank"]
+        );
         assert!(lines[2].height() > 10.0, "an empty line keeps its height");
     }
 
@@ -910,12 +925,28 @@ mod tests {
         let mut mixed = para("Invoice for שלום עולם today");
         mixed.direction = Some(Direction::Ltr);
         let line = &shaper.lines(&mixed, 500.0)[0];
-        let shalom = line.runs.iter().position(|r| r.text.contains("שלום")).unwrap();
-        let olam = line.runs.iter().position(|r| r.text.contains("עולם")).unwrap();
+        let shalom = line
+            .runs
+            .iter()
+            .position(|r| r.text.contains("שלום"))
+            .unwrap();
+        let olam = line
+            .runs
+            .iter()
+            .position(|r| r.text.contains("עולם"))
+            .unwrap();
         // One right-to-left run holding both words, or "עולם" left of "שלום".
         assert!(olam <= shalom, "{line:?}");
-        let invoice = line.runs.iter().position(|r| r.text.contains("Invoice")).unwrap();
-        let today = line.runs.iter().position(|r| r.text.contains("today")).unwrap();
+        let invoice = line
+            .runs
+            .iter()
+            .position(|r| r.text.contains("Invoice"))
+            .unwrap();
+        let today = line
+            .runs
+            .iter()
+            .position(|r| r.text.contains("today"))
+            .unwrap();
         assert!(invoice < shalom && shalom < today || invoice < olam && olam < today);
     }
 
@@ -931,7 +962,10 @@ mod tests {
         assert_eq!(family("فاتورة"), "Noto Sans Arabic");
         assert_eq!(family("चालान"), "Noto Sans Devanagari");
         // The space between the two Arabic words is shaped with them.
-        assert!(line.runs.iter().any(|r| r.text.contains("فاتورة رقم")), "{line:?}");
+        assert!(
+            line.runs.iter().any(|r| r.text.contains("فاتورة رقم")),
+            "{line:?}"
+        );
     }
 
     #[test]
@@ -953,7 +987,11 @@ mod tests {
         assert!(av < a + v - 0.1, "kerned: {av} < {a} + {v}");
         let office = &shaper.lines(&para("office"), 1000.0)[0];
         assert!(office.runs[0].glyphs.len() < 6, "the ffi ligature");
-        let ligature = office.runs[0].glyphs.iter().find(|g| g.range.len() > 1).unwrap();
+        let ligature = office.runs[0]
+            .glyphs
+            .iter()
+            .find(|g| g.range.len() > 1)
+            .unwrap();
         assert_eq!(&office.runs[0].text[ligature.range.clone()], "ffi");
     }
 }

@@ -17,8 +17,8 @@ use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};
 use krilla::surface::Surface;
 use krilla::tagging::{
-    Artifact, ArtifactType, ContentTag, Identifier, ListNumbering, SpanTag, Tag, TagGroup,
-    TagKind, TagTree, TableHeaderScope,
+    Artifact, ArtifactType, ContentTag, Identifier, ListNumbering, SpanTag, TableHeaderScope, Tag,
+    TagGroup, TagKind, TagTree,
 };
 use krilla::text::{GlyphId, KrillaGlyph};
 use krilla::{Document, SerializeSettings};
@@ -97,7 +97,12 @@ pub(crate) fn write(laid: &LaidDocument, fonts: &FontBook, info: &Info) -> Resul
         .map_err(|error| format!("writing the PDF failed: {error:?}"))
 }
 
-fn draw_one(surface: &mut Surface<'_>, draw: &Draw, fonts: &FontBook, slots: &mut [Vec<Identifier>]) {
+fn draw_one(
+    surface: &mut Surface<'_>,
+    draw: &Draw,
+    fonts: &FontBook,
+    slots: &mut [Vec<Identifier>],
+) {
     match draw {
         Draw::Fill { x, y, w, h, color } => {
             let Some(rect) = Rect::from_xywh(*x, *y, w.max(0.0), h.max(0.0)) else {
@@ -168,7 +173,14 @@ fn draw_one(surface: &mut Surface<'_>, draw: &Draw, fonts: &FontBook, slots: &mu
             let id = begin(surface, *mark, true);
             surface.set_stroke(None);
             surface.set_fill(Some(fill(run.style.color)));
-            surface.draw_glyphs(Point::from_xy(*x, *baseline), &glyphs, font, &run.text, size, false);
+            surface.draw_glyphs(
+                Point::from_xy(*x, *baseline),
+                &glyphs,
+                font,
+                &run.text,
+                size,
+                false,
+            );
             surface.end_tagged();
             if let (Mark::Content(slot), Some(id)) = (mark, id) {
                 slots[*slot].push(id);
@@ -225,7 +237,9 @@ fn begin(surface: &mut Surface<'_>, mark: Mark, text: bool) -> Option<Identifier
 
 /// Draws layout furniture (fills, lines) as an artifact.
 fn artifact(surface: &mut Surface<'_>, draw: impl FnOnce(&mut Surface<'_>)) {
-    surface.start_tagged(ContentTag::Artifact(Artifact::with_kind(ArtifactType::Layout)));
+    surface.start_tagged(ContentTag::Artifact(Artifact::with_kind(
+        ArtifactType::Layout,
+    )));
     draw(surface);
     surface.end_tagged();
 }
@@ -258,7 +272,11 @@ fn group(tree: &StructTree, id: NodeId, slots: &mut [Vec<Identifier>]) -> Option
     let node = &tree.nodes[id];
     let kind: TagKind = match &node.kind {
         NodeKind::P => Tag::P.into(),
-        NodeKind::H(level) => Tag::Hn(NonZeroU16::new(u16::from(*level)).unwrap_or(NonZeroU16::MIN), None).into(),
+        NodeKind::H(level) => Tag::Hn(
+            NonZeroU16::new(u16::from(*level)).unwrap_or(NonZeroU16::MIN),
+            None,
+        )
+        .into(),
         NodeKind::L(ordered) => Tag::L(if *ordered {
             ListNumbering::Decimal
         } else {
