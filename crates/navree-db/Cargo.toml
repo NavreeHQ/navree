@@ -1,6 +1,6 @@
 [package]
 name = "navree-db"
-description = "Navree DatabaseModule: SeaORM integration, unit of work, module migrations, seeders, factories and pagination."
+description = "Navree DatabaseModule: SeaORM on SQLite, PostgreSQL and MySQL/MariaDB, unit of work, module migrations, seeders, factories and pagination."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
