@@ -147,7 +147,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
-| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation; organizations above workspaces and partitions inside them |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |

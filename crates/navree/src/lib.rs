@@ -33,7 +33,7 @@
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
-//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
+//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
