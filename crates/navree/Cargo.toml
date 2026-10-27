@@ -137,6 +137,7 @@ auth = [
     "mail",
     "access",
     "http-client",
+    "orm",
 ]
 ## Workspaces: multi-tenancy with members, roles, invitations and isolation.
 workspace = [

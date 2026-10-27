@@ -143,10 +143,11 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L5
     // Token exchange fetches trusted issuers' key sets with navree-http-client.
+    // The auth tables are navree-orm models.
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
-        "navree-access", "navree-http-client",
+        "navree-access", "navree-http-client", "navree-orm",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5).

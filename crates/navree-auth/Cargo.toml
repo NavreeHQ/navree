@@ -41,6 +41,9 @@ navree-kernel = { workspace = true }
 # navree-mail, qrcode2 and totp-rs: the account flows of plan Task 30
 # (password reset mail, TOTP two-factor).
 navree-mail = { workspace = true }
+# The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
+# sign-in tokens, pending resets and passkeys are written through the ORM.
+navree-orm = { workspace = true }
 navree-validation = { workspace = true }
 qrcode2 = { workspace = true }
 ring = { workspace = true }
