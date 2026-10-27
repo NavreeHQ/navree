@@ -1,0 +1,130 @@
+---
+title: "Connections and transactions"
+description: "Where ORM operations run: executors, the unit of work, transactions in commands and jobs, named connections, read replicas and reading from the writer, and watching the statements your code runs."
+---
+
+Every ORM method that touches the database takes an **executor** first, and the executor decides where the statement runs. In most code that is the request's unit of work, and you never think about it again; this page is for the rest: commands and jobs, several databases, read replicas.
+
+## Executors
+
+| Executor | Reads run on | Writes run on |
+|---|---|---|
+| `&Uow` | its transaction | its transaction, with a change event per record for the [audit log](/docs/security/audit-log/) |
+| `&Db` | the current unit of work's transaction when one is open on this pool; else the pool, or a read replica when you have them | the current unit of work when there is one on this pool; else the pool |
+| `&DatabaseConnection`, `&DatabaseTransaction` (SeaORM) | as given | as given, without change events |
+| `Arc<E>` of any of these | as `E` | as `E` |
+
+`&Db` joins the current unit of work, the request's while a handler runs, so a service holding an `Arc<Db>` writes inside the request's transaction without being given a `Uow`. That matters most on SQLite: a write through a second pool connection would wait for the request's write lock. Inside a unit of work, writes also mark it as having written, so with `sticky` read replicas its later reads go to the writer and see what it wrote.
+
+A unit of work begins its transaction on first use and commits once: when the response status is below 400, or when your command calls `commit`. [The unit of work](/docs/database/unit-of-work/) describes it in full; on PostgreSQL its transaction carries the actor, the request id and the workspace, which triggers and row-level security policies read, and ORM statements run inside it like any other.
+
+## Transactions in commands and jobs
+
+Outside a request there is no unit of work until you open one. `db.uow(actor, request_id)` opens one, `scope` makes it the current one while a future runs (so `&Db` joins it too), and you commit or roll back:
+
+```rust
+let uow = db.uow(Some(owner), None).await;
+let result: navree::orm::Result<()> = uow
+    .scope(async {
+        let mut deal = Deal::query().where_(Deal::STAGE.eq(Stage::Lead)).first_or_fail(&uow).await?;
+        deal.stage = Stage::Lost;
+        deal.save(&uow).await?;
+        Ok(())
+    })
+    .await;
+match result {
+    Ok(()) => uow.commit().await?,
+    Err(error) => {
+        uow.rollback().await?;
+        return Err(error.into());
+    }
+}
+```
+
+Committing runs the change observers (audit rows) in the transaction and the after-commit hooks once it is durable, so queued jobs and [model listeners](/docs/orm/events-and-observers/#inside-a-unit-of-work) hear about the writes. The actor you pass is who the audit log records. `db.transaction(|uow| async move { .. })` does the same for a closure whose errors are SeaORM's `DbErr`.
+
+Some ORM operations need atomicity of their own and take care of it: pivot writes (`attach`, `sync`) and multi-statement bulk inserts run in a transaction of their own on the pool, or a savepoint inside a unit of work; `create_or_first` inserts in a savepoint so a unique violation doesn't abort a PostgreSQL transaction.
+
+## Named connections
+
+An app can talk to several databases. Name each under `[database.connections]`, with any key of the `database` section:
+
+```toml title="config/app.toml"
+[database]
+url = "postgres://navree:navree@127.0.0.1:5432/crm"
+
+[database.connections.analytics]
+url = "postgres://navree:navree@127.0.0.1:5432/analytics"
+max_connections = 5
+
+[database.connections.archive]
+url = "mysql://crm:secret@archive.internal:3306/crm_archive"
+```
+
+A named connection opens on first use and closes with the app; its units of work report to the same change observers. A model that lives on one says so, and its queries and saves go there whatever executor you pass, as long as that executor is the default `Db`:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "page_views", connection = "analytics", timestamps)]
+pub struct PageView { /* .. */ }
+
+let views = PageView::query().count(&db).await?;              // on analytics
+let archived = Deal::on_connection("archive").count(&db).await?;
+let same = Deal::query().on_connection("archive").count(&db).await?;
+let scoped = using_connection("archive", Deal::query().count(&db)).await?;
+```
+
+`on_connection` sends one query elsewhere; `using_connection(name, future)` makes `name` stand in for the default connection while a future runs (its task only). A unit of work spans one connection: given a `Uow`, an operation on another connection fails with `OrmError::Connection` rather than running outside the transaction.
+
+To work with a named connection directly, `db.connection("analytics").await?` returns its `Db`; `DbConnections` (from the container) lists and opens them, and `ctx.get_named::<Db>("analytics")` injects one. `DbConnections::names()` lists every configured connection.
+
+## Read replicas
+
+```toml title="config/app.toml"
+[database]
+url = "postgres://navree:navree@primary.internal:5432/crm"
+read_urls = ["postgres://navree:navree@replica-1.internal:5432/crm"]
+sticky = true
+```
+
+Reads outside a transaction go to the replicas in turn, and writes and transactions to `url`. With `sticky` (the default), a unit of work that wrote reads from the writer afterwards, so a request sees its own writes while replicas catch up. When a read must see a write made elsewhere:
+
+```rust
+let current = Deal::on_write_connection().find(&db, id).await?;
+let same = Deal::query().use_write().find(&db, id).await?;
+let count = using_writer(Deal::query().count(&db)).await?;
+```
+
+A read that loses its connection outside a transaction is retried once on another pooled connection; writes and reads inside a transaction never are. From the environment, `APP_DATABASE__READ_URLS` takes a comma-separated list.
+
+`direct_url` names a direct connection to the same database past a transaction-mode pooler (PgBouncer, RDS Proxy): migrations run on it, and `db.direct()` hands it out for session work such as advisory locks.
+
+## Watching statements
+
+```rust
+use navree::db::QueryLog;
+
+let (deals, queries) = QueryLog::capture(Deal::query().with("company").get(&db)).await;
+for query in &queries {
+    println!("{} ({:?})", query.sql, query.duration);
+}
+
+db.on_query(|query| {
+    if query.duration > std::time::Duration::from_millis(200) {
+        tracing::warn!(sql = %query.sql, "slow statement");
+    }
+});
+```
+
+`QueryLog::capture(future)` returns what a future ran, each `LoggedQuery` with its SQL, values, duration and connection (`raw_sql()` writes the values in, for reading). `db.on_query` hears every statement of a connection, `db.before_executing` and `db.before_starting_transaction` run before the ORM's statements and transactions, and `db.when_querying_for_longer_than(threshold, ..)` runs once per unit of work whose statements add up past a threshold. Each unit of work counts its statements (`uow.query_stats()`), logs a summary when it finishes and warns about a statement repeated ten times or more: the shape of an N+1 query. [Logbook](/docs/tools/logbook/) shows all of it per request.
+
+Two commands help in development: `navree db [connection] [--read | --write]` opens the database's own client (`psql`, `mysql`, `mariadb`, `sqlite3` or `mongosh`) with the configured credentials, and `navree db:monitor` shows the connections each database has open.
+
+<LinkCards>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    One lazy transaction per request, after-commit hooks and row locks.
+  </LinkCard>
+  <LinkCard href="/docs/database/getting-started/" title="Database: getting started">
+    Pool settings, databases and errors.
+  </LinkCard>
+</LinkCards>
