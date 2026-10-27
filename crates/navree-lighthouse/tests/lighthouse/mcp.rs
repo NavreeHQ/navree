@@ -271,7 +271,14 @@ async fn issues_are_ignored_and_reopened() {
     .await
     .assert_ok()
     .assert_json_path("status", json!("ignored"));
-    assert!(store.issue_detail(id).await.unwrap().ignored_until.is_some());
+    assert!(
+        store
+            .issue_detail(id)
+            .await
+            .unwrap()
+            .ignored_until
+            .is_some()
+    );
 
     mcp.call_tool(
         "lighthouse_ignore_issue",
@@ -387,10 +394,7 @@ async fn the_figures_traces_and_alerts_are_read() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|query| query["statement"]
-                .as_str()
-                .unwrap_or("")
-                .contains("SELECT")),
+            .any(|query| query["statement"].as_str().unwrap_or("").contains("SELECT")),
         "{queries}"
     );
     for tool in ["lighthouse_list_jobs", "lighthouse_list_outgoing"] {
@@ -465,7 +469,10 @@ async fn an_issue_is_a_resource_and_fixing_it_is_a_prompt() {
     assert_eq!(arguments[0].required, Some(true));
 
     let rendered = mcp
-        .get_prompt("fix-lighthouse-issue", json!({ "issue_id": id.to_string() }))
+        .get_prompt(
+            "fix-lighthouse-issue",
+            json!({ "issue_id": id.to_string() }),
+        )
         .await
         .assert_ok();
     let messages = rendered.messages();
@@ -487,7 +494,10 @@ async fn an_issue_is_a_resource_and_fixing_it_is_a_prompt() {
 
 #[tokio::test]
 async fn nothing_is_offered_with_mcp_off_or_without_a_store() {
-    for (key, value) in [("lighthouse.mcp", json!(false)), ("lighthouse.store", json!("off"))] {
+    for (key, value) in [
+        ("lighthouse.mcp", json!(false)),
+        ("lighthouse.store", json!("off")),
+    ] {
         let app = builder()
             .config(key, value)
             .module(McpModule::from_config())

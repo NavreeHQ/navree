@@ -99,9 +99,9 @@ pub use dispatch::ChannelResult;
 pub use engine::Span;
 pub use fake::{LighthouseFake, Reported};
 pub use histogram::Histogram;
-pub use migration::LIGHTHOUSE_MIGRATIONS;
 #[cfg(feature = "mcp")]
 pub use mcp::LighthouseMcp;
+pub use migration::LIGHTHOUSE_MIGRATIONS;
 pub use model::{Issue, IssueKind, IssueStatus, Level};
 pub use module::{LighthouseModule, LighthouseSubject, RESOLVE, VIEW};
 pub use normalize::{normalize_message, normalize_sql, path_matches};

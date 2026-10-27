@@ -370,9 +370,7 @@ impl McpServer for LighthouseMcp {
                      users affected, first and last seen, and a 24-hour sparkline. Returns \
                      {data, meta} with the page, per_page, total and last_page.",
                 ),
-                |l, args: ListIssuesArgs| async move {
-                    Ok(store(&l)?.issues(&args.filter()).await?)
-                },
+                |l, args: ListIssuesArgs| async move { Ok(store(&l)?.issues(&args.filter()).await?) },
             ),
             tool(
                 l,
@@ -427,9 +425,7 @@ impl McpServer for LighthouseMcp {
                      a timeline of requests and errors, and the latest occurrences.",
                 ),
                 |l, args: PeriodArgs| async move {
-                    let mut overview = store(&l)?
-                        .overview(args.period.unwrap_or_default())
-                        .await?;
+                    let mut overview = store(&l)?.overview(args.period.unwrap_or_default()).await?;
                     overview.dropped = l.dropped();
                     Ok(overview)
                 },
