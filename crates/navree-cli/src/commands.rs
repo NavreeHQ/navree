@@ -14,6 +14,7 @@ use crate::forward::forward;
 use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
 use crate::new_app::{NavreeSource, NewApp, create_app};
+use crate::openapi_client;
 use crate::project::project_root;
 
 /// Runs `cli` with `cwd` as the working directory.
@@ -58,6 +59,35 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             &app_root(cwd)?,
             &mut std::io::stdout(),
         ),
+        Command::OpenapiClient(args) => {
+            let root = app_root(cwd)?;
+            let plan = openapi_client::plan(&args.out, args.input.as_deref());
+            std::fs::create_dir_all(root.join(&args.out))
+                .with_context(|| format!("cannot create {}", args.out.display()))?;
+            let env = dock::app_env(&root)?;
+            for step in &plan.steps {
+                println!("  run      {step}");
+                let status = step
+                    .clone()
+                    .with_env(env.clone())
+                    .run(&root)
+                    .with_context(|| format!("cannot run {} (is it installed and on PATH?)", step.program))?;
+                if !status.success() {
+                    return Ok(status
+                        .code()
+                        .and_then(|code| u8::try_from(code).ok())
+                        .map_or(ExitCode::FAILURE, ExitCode::from));
+                }
+            }
+            if args.input.is_none() {
+                println!("  wrote    {}", shown(&root, &root.join(&plan.document)));
+            }
+            println!("  wrote    {}", shown(&root, &root.join(&plan.schema)));
+            println!(
+                "  next     createNavreeClient<paths>() from @navree/client, with `import type {{ paths }} from \"./schema\"`"
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");

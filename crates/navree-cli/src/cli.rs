@@ -90,6 +90,9 @@ pub enum Command {
     /// Stop a service and remove it from dock.toml.
     #[command(name = "dock:remove")]
     DockRemove(DockRemoveArgs),
+    /// Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts).
+    #[command(name = "openapi:client")]
+    OpenapiClient(OpenapiClientArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -244,6 +247,17 @@ pub struct DockRemoveArgs {
     pub volumes: bool,
 }
 
+/// `navree openapi:client [--out web/src/lib/api] [--input openapi.json]`.
+#[derive(Debug, Args)]
+pub struct OpenapiClientArgs {
+    /// Where openapi.json and schema.d.ts go, relative to the app.
+    #[arg(long, default_value = crate::openapi_client::DEFAULT_OUT)]
+    pub out: PathBuf,
+    /// Generate from this OpenAPI document instead of exporting the app's.
+    #[arg(long, value_name = "FILE")]
+    pub input: Option<PathBuf>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,6 +266,26 @@ mod tests {
         Cli::try_parse_from(std::iter::once("navree").chain(args.iter().copied()))
             .unwrap_or_else(|e| panic!("{args:?}: {e}"))
             .command
+    }
+
+    #[test]
+    fn openapi_client_defaults_to_the_web_api_folder() {
+        let Command::OpenapiClient(args) = parse(&["openapi:client"]) else {
+            panic!("expected openapi:client");
+        };
+        assert_eq!(args.out, PathBuf::from("web/src/lib/api"));
+        assert_eq!(args.input, None);
+        let Command::OpenapiClient(args) = parse(&[
+            "openapi:client",
+            "--out",
+            "web/app/lib/api",
+            "--input",
+            "openapi.json",
+        ]) else {
+            panic!("expected openapi:client");
+        };
+        assert_eq!(args.out, PathBuf::from("web/app/lib/api"));
+        assert_eq!(args.input, Some(PathBuf::from("openapi.json")));
     }
 
     #[test]
