@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "format!(\"{exists:#}\")"
+---
+db.deals.find({"stage": "won", "deleted_at": null}, {"_id": 1}).limit(1)

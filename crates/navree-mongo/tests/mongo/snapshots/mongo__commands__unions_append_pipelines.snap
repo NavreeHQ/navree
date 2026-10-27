@@ -1,0 +1,14 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"companies\").select([\"name\"]).where_(col(\"country\").eq(\"NO\")).union_all(table(\"deals\").select([\"title\"]).where_(col(\"amount\").lt(10_000))).union(table(\"companies\").select([\"name\"]).where_(col(\"country\").eq(\"US\"))).order_by(\"name\").limit(5))"
+---
+db.companies.aggregate([
+  {"$match": {"country": "NO"}},
+  {"$project": {"name": 1, "_id": 0}},
+  {"$unionWith": {"coll": "deals", "pipeline": [{"$match": {"amount": {"$lt": 10000}}}, {"$project": {"title": 1, "_id": 0}}, {"$project": {"name": "$title", "_id": 0}}]}},
+  {"$unionWith": {"coll": "companies", "pipeline": [{"$match": {"country": "US"}}, {"$project": {"name": 1, "_id": 0}}]}},
+  {"$group": {"_id": "$$ROOT"}},
+  {"$replaceWith": "$_id"},
+  {"$sort": {"name": 1}},
+  {"$limit": 5}
+])

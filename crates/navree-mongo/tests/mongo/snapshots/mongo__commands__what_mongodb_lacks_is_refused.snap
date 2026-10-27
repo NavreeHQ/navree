@@ -1,0 +1,11 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "[refused(Deal::query().where_raw(\"amount > ?\", [5]).to_mongo()),\nrefused(Deal::query().lock_for_update().to_mongo()),\nrefused(table(\"deals\").right_join(\"companies\", \"companies._id\", \"=\",\n\"deals.company_id\").to_mongo()),\nrefused(Deal::query().order_by_raw(\"amount DESC\",\nVec::<navree_orm::Value>::new()).to_mongo()),\nrefused(table(\"deals\").select_expr(Expr::raw(\"now()\",\nVec::<navree_orm::Value>::new()), \"now\").to_mongo()),\nrefused(table(\"deals\").select([Expr::col(\"amount\").mul(Expr::val(2))]).to_mongo()),\nrefused(table(\"deals\").select([\"title\"]).union(table(\"companies\").select([\"name\",\n\"country\"])).to_mongo()),].join(\"\\n\")"
+---
+raw SQL conditions (`where_raw`; write the condition with typed columns, or as a filter document with `Filter::document(doc! { .. })`) is not supported on MongoDB
+row locks (`lock_for_update`, `shared_lock`; MongoDB has none: run the read and the write in a `MongoUow`, where two transactions writing the same document conflict and one is retried) is not supported on MongoDB
+RIGHT JOIN (MongoDB joins from the collection queried: swap the collections and LEFT JOIN) is not supported on MongoDB
+raw SQL orders (`order_by_raw`; order by columns or expressions) is not supported on MongoDB
+raw SQL expressions (write them with typed columns and functions) is not supported on MongoDB
+invalid query: a computed column needs a name on MongoDB, where a document's fields are named: give it an alias (`select_expr(expr, "name")`, or `(expr, "name")` in `select`)
+invalid query: each query of a UNION selects the same number of columns, not 1 and 2

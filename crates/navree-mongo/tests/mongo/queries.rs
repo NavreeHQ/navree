@@ -146,6 +146,20 @@ async fn conditions_become_filter_documents() {
         titles(mongo, q().where_(Deal::PRICE.gt(Decimal::new(119_999_99, 2)))).await,
         ["Enterprise plan", "Renewal"]
     );
+    // A deal without a date or tags has no month and no length: no
+    // comparison holds for it, as in SQL.
+    Deal::create(mongo, Deal { tags: Vec::new(), ..Deal::new("Undated", 1) }).await.unwrap();
+    t.db.collection("deals")
+        .update_one(doc! { "title": "Undated" }, doc! { "$unset": { "tags": "", "closes_on": "" } })
+        .await
+        .unwrap();
+    assert_eq!(titles(mongo, q().where_month(Deal::CLOSES_ON, "<", 6)).await, ["ACME support", "Renewal"]);
+    assert_eq!(titles(mongo, q().where_json_length("tags", Operator::Lt, 1)).await, ["Pilot"]);
+    assert_eq!(
+        titles(mongo, q().where_column("meta->score", "<", "amount")).await.len(),
+        5,
+        "the undated deal has no score, which is less than nothing"
+    );
     t.cleanup().await;
 }
 
@@ -360,6 +374,15 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .await
         .unwrap();
     assert_eq!(left, [Value::from("Initech")]);
+    // NULL keys join nothing, as in SQL (MongoDB would match Initech's
+    // null country with itself).
+    let unmatched = table("companies")
+        .left_join("companies as twins", "twins.country", "=", "companies.country")
+        .where_null("twins._id")
+        .pluck(mongo, "companies.name")
+        .await
+        .unwrap();
+    assert_eq!(unmatched, [Value::from("Initech")]);
     // Unions: the columns are named by the first query's, by position.
     let names: Vec<String> = table("companies")
         .select(["name"])

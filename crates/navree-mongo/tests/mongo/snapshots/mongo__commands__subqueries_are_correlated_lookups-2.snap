@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Deal::query().where_in_sub(Deal::COMPANY_ID,\nCompany::query().select([Company::ID]).where_(Company::COUNTRY.eq(\"NO\")),))"
+---
+db.deals.aggregate([
+  {"$lookup": {"from": "companies", "pipeline": [{"$match": {"country": "NO"}}, {"$project": {"_id": 1}}, {"$project": {"_v": "$_id", "_id": 0}}], "as": "__navree_in0"}},
+  {"$match": {"$expr": {"$in": ["$company_id", "$__navree_in0._v"]}, "deleted_at": null}},
+  {"$unset": ["__navree_in0"]},
+  {"$project": {"_id": 1, "title": 1, "company_id": 1, "amount": 1, "price": 1, "stage": 1, "meta": 1, "tags": 1, "closes_on": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1}}
+])

@@ -80,10 +80,13 @@ impl<'p> Scope<'p> {
         }
     }
 
-    /// The scope of a subquery of `table` inside this one.
+    /// The scope of a subquery (or a join's pipeline) of `table` inside
+    /// this one. As in SQL, an alias hides the table's name: in a self-join
+    /// (`companies AS twins`), `companies.country` is the enclosing
+    /// document's field and `twins.country` the joined one's.
     pub(crate) fn child<'a>(&'a self, table: &TableRef) -> Scope<'a> {
         Scope {
-            own: qualifiers(table),
+            own: vec![table.qualifier().to_owned()],
             joined: Vec::new(),
             parent: Some(self),
             lets: RefCell::new(Vec::new()),
@@ -156,6 +159,23 @@ impl<'p> Scope<'p> {
                 self.name(),
                 column.name
             ))),
+        }
+    }
+
+    /// The field `column` is in the documents this scope sees (the
+    /// collection's own or a joined one's), without binding anything:
+    /// `None` for a column of an enclosing query, or one that names no
+    /// field.
+    pub(crate) fn field_of(&self, column: &ColumnRef) -> Option<String> {
+        let path = field_path(column).ok()?;
+        match column.table.as_deref() {
+            None => Some(path),
+            Some(qualifier) if self.is_own(qualifier) => Some(path),
+            Some(qualifier) => self
+                .joined
+                .iter()
+                .find(|(name, _)| name == qualifier)
+                .map(|(_, field)| format!("{field}.{path}")),
         }
     }
 
@@ -292,6 +312,36 @@ mod tests {
         assert_eq!(
             innermost.lets(),
             [("navree1".to_owned(), Bson::String("$$navree0".into()))]
+        );
+    }
+
+    #[test]
+    fn fields_of_the_documents_a_scope_sees_resolve_without_binding() {
+        let mut outer = Scope::of(&TableRef::new("companies"));
+        outer.join("owner", "owner");
+        let inner = outer.child(&TableRef::new("deals"));
+        let field_of = |scope: &Scope<'_>, text: &'static str| scope.field_of(&ColumnRef::parse(text));
+        assert_eq!(field_of(&outer, "companies._id").as_deref(), Some("_id"));
+        assert_eq!(field_of(&outer, "owner.email").as_deref(), Some("owner.email"));
+        assert_eq!(field_of(&inner, "company_id").as_deref(), Some("company_id"));
+        assert_eq!(field_of(&inner, "companies._id"), None, "an enclosing query's column");
+        assert_eq!(field_of(&inner, "deals.$where"), None);
+        assert!(inner.lets().is_empty(), "nothing was bound");
+    }
+
+    #[test]
+    fn an_alias_hides_the_name_of_a_nested_table() {
+        let mut cx = Cx::default();
+        let outer = Scope::of(&TableRef::new("companies"));
+        let twins = outer.child(&TableRef::aliased("companies", "twins"));
+        assert_eq!(
+            twins.place(&mut cx, &ColumnRef::parse("twins.country")).unwrap(),
+            Place::Field("country".into())
+        );
+        assert_eq!(
+            twins.place(&mut cx, &ColumnRef::parse("companies.country")).unwrap(),
+            Place::Variable("navree0".into()),
+            "the enclosing query's companies"
         );
     }
 }

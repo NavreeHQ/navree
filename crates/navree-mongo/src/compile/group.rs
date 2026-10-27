@@ -14,10 +14,26 @@ use super::Pending;
 use super::expr::{self, Accumulator, literal};
 use super::filter;
 use super::like::like_regex;
-use super::read::{default_name, page};
+use super::read::{UNNAMED, default_name, page};
 use super::scope::{Cx, Place, Scope, output_name};
 use crate::convert::to_bson;
 use crate::error::{invalid, unsupported};
+
+/// `value LIKE pattern` over the groups, as `$regexMatch`.
+fn like(value: Bson, pattern: &Expr, insensitive: bool, negated: bool) -> Result<Bson, OrmError> {
+    let Expr::Value(navree_orm::Value::String(Some(pattern))) = pattern else {
+        return Err(invalid("a LIKE in HAVING takes a text pattern"));
+    };
+    let options = if insensitive { "is" } else { "s" };
+    let matched = Bson::Document(doc! {
+        "$regexMatch": { "input": { "$toString": value }, "regex": like_regex(pattern), "options": options }
+    });
+    Ok(if negated {
+        Bson::Document(doc! { "$not": [matched] })
+    } else {
+        matched
+    })
+}
 
 /// Whether `expr` holds an aggregate.
 pub(crate) fn has_aggregate(expr: &Expr) -> bool {
@@ -152,6 +168,26 @@ impl Post<'_> {
                 let right = self.value(cx, scope, pending, right)?;
                 Bson::Document(doc! { operator: [left, right] })
             }
+            Expr::TimeBucket { .. } => {
+                return Err(invalid(
+                    "a time bucket is selected but not grouped: group by its alias (`group_by([\"bucket\"])`)",
+                ));
+            }
+            Expr::Raw { .. } => {
+                return Err(unsupported(
+                    "raw SQL expressions (write them with typed columns and functions)",
+                ));
+            }
+            Expr::Subquery(_) => {
+                return Err(unsupported(
+                    "a subquery in a grouped select or HAVING (group in a derived table with `from_sub`, then select the subquery over it)",
+                ));
+            }
+            Expr::All { .. } => {
+                return Err(invalid(
+                    "`*` in a grouped query: select the group keys and aggregates",
+                ));
+            }
             other => {
                 return Err(unsupported(format!(
                     "{other:?} in a grouped query (select group keys, aggregates, and expressions of them)"
@@ -210,31 +246,41 @@ impl Post<'_> {
                 };
                 let l = self.value(cx, scope, pending, left)?;
                 match (comparison, op) {
+                    (Some(_), Operator::NullSafeEq) => {
+                        let r = self.value(cx, scope, pending, right)?;
+                        expr(filter::null_safe_equal(l, r))
+                    }
                     (Some(operator), _) => {
                         let r = self.value(cx, scope, pending, right)?;
-                        expr(Bson::Document(doc! { operator: [l, r] }))
+                        expr(filter::compared(operator, l, r))
                     }
                     (None, Operator::Like | Operator::NotLike | Operator::ILike | Operator::NotILike) => {
-                        let Expr::Value(navree_orm::Value::String(Some(pattern))) = right else {
-                            return Err(invalid("a LIKE in HAVING takes a text pattern"));
-                        };
-                        let options = if matches!(op, Operator::ILike | Operator::NotILike) { "is" } else { "s" };
-                        let matched = Bson::Document(doc! {
-                            "$regexMatch": { "input": { "$toString": l }, "regex": like_regex(pattern), "options": options }
-                        });
-                        expr(if matches!(op, Operator::NotLike | Operator::NotILike) {
-                            Bson::Document(doc! { "$not": [matched] })
-                        } else {
-                            matched
-                        })
+                        expr(like(
+                            l,
+                            right,
+                            matches!(op, Operator::ILike | Operator::NotILike),
+                            matches!(op, Operator::NotLike | Operator::NotILike),
+                        )?)
                     }
                     (None, Operator::Invalid(op)) => {
                         return Err(invalid(format!("`{op}` is not a known operator")));
                     }
                     (None, other) => {
-                        return Err(unsupported(format!("the operator {other:?} in HAVING")));
+                        return Err(unsupported(format!(
+                            "the operator `{}` in HAVING (compare with =, <>, <, <=, >, >= or LIKE)",
+                            filter::operator_text(other)
+                        )));
                     }
                 }
+            }
+            Where::Like {
+                expr: value,
+                pattern,
+                case_sensitive,
+                not,
+            } => {
+                let value = self.value(cx, scope, pending, value)?;
+                expr(like(value, pattern, !*case_sensitive, *not)?)
             }
             Where::Null { expr: value, not } => {
                 let value = self.value(cx, scope, pending, value)?;
@@ -270,7 +316,10 @@ impl Post<'_> {
                 let low = self.value(cx, scope, pending, low)?;
                 let high = self.value(cx, scope, pending, high)?;
                 let within = Bson::Document(doc! {
-                    "$and": [{ "$gte": [value.clone(), low] }, { "$lte": [value, high] }]
+                    "$and": [
+                        filter::compared("$gte", value.clone(), low),
+                        filter::compared("$lte", value, high),
+                    ]
                 });
                 expr(if *not {
                     Bson::Document(doc! { "$not": [within] })
@@ -281,11 +330,16 @@ impl Post<'_> {
             Where::Group(inner) => self.clauses(cx, scope, pending, inner)?,
             Where::Raw { .. } | Where::Sql(_) => {
                 return Err(unsupported(
-                    "raw SQL in HAVING (`having_raw`): compare aggregates and group keys",
+                    "raw SQL in HAVING (`having_raw`; compare aggregates and group keys)",
                 ));
             }
             Where::Invalid(message) => return Err(invalid(message.clone())),
-            other => return Err(unsupported(format!("the condition {other:?} in HAVING"))),
+            other => {
+                return Err(unsupported(format!(
+                    "{} in HAVING (HAVING compares group keys and aggregates; filter the documents with `where`)",
+                    filter::kind(other)
+                )));
+            }
         })
     }
 
@@ -340,7 +394,7 @@ impl Post<'_> {
                 }
                 Order::Raw { .. } => {
                     return Err(unsupported(
-                        "raw SQL orders (`order_by_raw`): order by columns or aggregates",
+                        "raw SQL orders (`order_by_raw`; order by columns or aggregates)",
                     ));
                 }
                 other => return Err(unsupported(format!("the order {other:?}"))),
@@ -407,12 +461,7 @@ pub(crate) fn stages(
         let name = match &item.alias {
             Some(alias) => output_name(alias)?.to_owned(),
             None => default_name(&item.expr)
-                .ok_or_else(|| {
-                    invalid(format!(
-                        "a computed column needs a name on MongoDB: select {:?} with an alias",
-                        item.expr
-                    ))
-                })?
+                .ok_or_else(|| invalid(UNNAMED))?
                 .into_owned(),
         };
         if outputs.iter().any(|(output, _)| *output == name) {

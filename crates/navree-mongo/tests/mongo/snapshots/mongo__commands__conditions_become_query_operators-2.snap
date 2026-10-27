@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_like(\"title\",\n\"50%_off\\\\%%\").where_not_like(\"title\",\n\"%test%\").where_like_case_sensitive(\"code\",\n\"AB_\").where_(col(\"title\").op(\"regexp\", \"^E\")))"
+---
+db.deals.find({"$and": [{"title": {"$regex": "^50.*.off%", "$options": "is"}}, {"title": {"$not": {"$regex": "test", "$options": "is"}}}, {"code": {"$regex": "^AB.\\z", "$options": "s"}}, {"title": {"$regex": "^E", "$options": "s"}}]})

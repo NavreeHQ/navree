@@ -30,6 +30,23 @@ use bson::{Bson, Document};
 /// assert_eq!(find.shape(), r#"db.deals.find({"stage": ?}).sort({"created_at": -1}).limit(?)"#);
 /// ```
 ///
+/// The alternate form (`{:#}`) puts each stage of a pipeline on a line of
+/// its own:
+///
+/// ```
+/// use bson::doc;
+/// use navree_mongo::{Aggregate, MongoCommand};
+///
+/// let pipeline = MongoCommand::Aggregate(Aggregate {
+///     collection: "deals".into(),
+///     pipeline: vec![doc! { "$match": { "stage": "won" } }, doc! { "$count": "won" }],
+/// });
+/// assert_eq!(
+///     format!("{pipeline:#}"),
+///     "db.deals.aggregate([\n  {\"$match\": {\"stage\": \"won\"}},\n  {\"$count\": \"won\"}\n])"
+/// );
+/// ```
+///
 /// [extended JSON]: https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -173,11 +190,13 @@ impl MongoCommand {
     /// leaves the process.
     pub fn shape(&self) -> String {
         let mut out = String::new();
-        self.render(&mut out, Mode::Shape);
+        self.render(&mut out, Mode::Shape, false);
         out
     }
 
-    fn render(&self, out: &mut String, mode: Mode) {
+    /// Writes the command; `pretty` puts each stage of a pipeline and each
+    /// inserted document on a line of its own.
+    fn render(&self, out: &mut String, mode: Mode, pretty: bool) {
         match self {
             MongoCommand::Find(find) => {
                 let _ = write!(out, "db.{}.find(", find.collection);
@@ -207,7 +226,7 @@ impl MongoCommand {
             }
             MongoCommand::Aggregate(aggregate) => {
                 let _ = write!(out, "db.{}.aggregate([", aggregate.collection);
-                stages(out, &aggregate.pipeline, mode);
+                stages(out, &aggregate.pipeline, mode, pretty);
                 out.push_str("])");
             }
             MongoCommand::Count(count) => {
@@ -218,14 +237,7 @@ impl MongoCommand {
             MongoCommand::Insert(insert) => {
                 let _ = write!(out, "db.{}.insertMany([", insert.collection);
                 match mode {
-                    Mode::Plain => {
-                        for (i, doc) in insert.documents.iter().enumerate() {
-                            if i > 0 {
-                                out.push_str(", ");
-                            }
-                            document(out, doc, mode);
-                        }
-                    }
+                    Mode::Plain => stages(out, &insert.documents, mode, pretty),
                     Mode::Shape => {
                         if let Some(first) = insert.documents.first() {
                             document(out, first, mode);
@@ -245,7 +257,7 @@ impl MongoCommand {
                     UpdateDocument::Operators(operators) => document(out, operators, mode),
                     UpdateDocument::Pipeline(pipeline) => {
                         out.push('[');
-                        stages(out, pipeline, mode);
+                        stages(out, pipeline, mode, pretty);
                         out.push(']');
                     }
                 }
@@ -260,10 +272,12 @@ impl MongoCommand {
     }
 }
 
+/// One line; the alternate form (`{:#}`) puts each stage of a pipeline and
+/// each inserted document on a line of its own.
 impl fmt::Display for MongoCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut out = String::new();
-        self.render(&mut out, Mode::Plain);
+        self.render(&mut out, Mode::Plain, f.alternate());
         f.write_str(&out)
     }
 }
@@ -277,12 +291,20 @@ enum Mode {
     Shape,
 }
 
-fn stages(out: &mut String, pipeline: &[Document], mode: Mode) {
+/// Documents in a list: separated by commas, or each on a line of its own,
+/// indented, when `pretty`.
+fn stages(out: &mut String, pipeline: &[Document], mode: Mode, pretty: bool) {
     for (i, stage) in pipeline.iter().enumerate() {
-        if i > 0 {
-            out.push_str(", ");
+        match (pretty, i) {
+            (true, 0) => out.push_str("\n  "),
+            (true, _) => out.push_str(",\n  "),
+            (false, 0) => {}
+            (false, _) => out.push_str(", "),
         }
         document(out, stage, mode);
+    }
+    if pretty && !pipeline.is_empty() {
+        out.push('\n');
     }
 }
 
@@ -441,5 +463,51 @@ mod tests {
             r#"db.deals.updateMany({"_id": ?}, {"$set": {"title": ?}, "$inc": {"n": ?}})"#
         );
         assert_eq!(update.collection(), "deals");
+    }
+
+    #[test]
+    fn the_alternate_form_puts_each_stage_on_its_own_line() {
+        let aggregate = MongoCommand::Aggregate(Aggregate {
+            collection: "events".into(),
+            pipeline: vec![
+                doc! { "$match": { "kind": "a" } },
+                doc! { "$count": "n" },
+            ],
+        });
+        assert_eq!(
+            format!("{aggregate:#}"),
+            "db.events.aggregate([\n  {\"$match\": {\"kind\": \"a\"}},\n  {\"$count\": \"n\"}\n])"
+        );
+        let insert = MongoCommand::Insert(Insert {
+            collection: "deals".into(),
+            documents: vec![doc! { "title": "A" }, doc! { "title": "B" }],
+        });
+        assert_eq!(
+            format!("{insert:#}"),
+            "db.deals.insertMany([\n  {\"title\": \"A\"},\n  {\"title\": \"B\"}\n])"
+        );
+        let update = MongoCommand::Update(Update {
+            collection: "deals".into(),
+            filter: doc! {},
+            update: UpdateDocument::Pipeline(vec![doc! { "$set": { "n": 1 } }]),
+        });
+        assert_eq!(
+            format!("{update:#}"),
+            "db.deals.updateMany({}, [\n  {\"$set\": {\"n\": 1}}\n])"
+        );
+        let empty = MongoCommand::Aggregate(Aggregate {
+            collection: "events".into(),
+            pipeline: Vec::new(),
+        });
+        assert_eq!(format!("{empty:#}"), "db.events.aggregate([])");
+        let find = MongoCommand::Find(Find {
+            collection: "deals".into(),
+            filter: doc! { "a": 1 },
+            sort: None,
+            projection: None,
+            skip: None,
+            limit: None,
+        });
+        assert_eq!(format!("{find:#}"), find.to_string(), "a find is one line");
     }
 }
