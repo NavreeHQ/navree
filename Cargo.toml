@@ -318,7 +318,10 @@ garde = { version = "0.23.0", features = ["derive", "email", "regex", "serde", "
 # International input (navree-validation): E.164 phone numbers (feature
 # `phone`), HTML sanitizing (feature `html`), general categories for names in
 # any script, BCP 47 locales (icu_locale_core is already in the tree via url).
-phonenumber = "0.3.10"
+# Phone numbers: a port of Google's libphonenumber with its metadata compiled
+# in; its default `protox` feature builds the metadata types without a system
+# `protoc`.
+rlibphonenumber = "2.2.14"
 ammonia = "4.2.4"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc"] }
@@ -360,8 +363,11 @@ tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compr
 # themselves above `max_memory_mb`): libc on Unix, windows-sys on Windows.
 memory-stats = "1.2.0"
 # GraphQL (navree-graphql): no default features (no handlebars, no
-# multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
-async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+# multipart temp files); the `chrono` and `uuid` scalars. No `dataloader`
+# feature: navree-graphql has its own per-operation dataloader (the feature
+# pulls in lru 0.16, whose `LruCache::pop` is not panic-safe,
+# RUSTSEC-2026-0253; async-graphql still requires lru 0.16).
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "2.7.0"
 # The official Rust MCP SDK (navree-mcp): the server, stdio and the
@@ -428,6 +434,19 @@ wiremock = "0.6.5"
 # The request-pipeline micro-benchmarks (`crates/navree/benches/pipeline.rs`):
 # no plots, no rayon; Tokio for the async routines.
 criterion = { version = "0.8.2", default-features = false, features = ["async_tokio", "cargo_bench_support"] }
+
+# Security fixes merged upstream but not yet released, pinned to the commit
+# that carries each one. Both keep their crate's released version number, so
+# the crates that depend on them are unchanged. Drop an entry (and run
+# `cargo update -p <crate>`) once a release includes the fix.
+[patch.crates-io]
+# docx-rs 0.4.22 requires zip 8, affected by RUSTSEC-2026-0367, -0368 and
+# -0369 (fixed in zip 9). This commit moves it to zip 9.0.4 (bokuweb/docx-rs#944).
+docx-rs = { git = "https://github.com/bokuweb/docx-rs", rev = "ad7fede6a7f3b61a097c28d0c39dd04626e44701" }
+# citationberg 0.7.0 (CSL styles, through Typst's hayagriva) requires
+# quick-xml 0.38, affected by RUSTSEC-2026-0194 and -0195 (fixed in 0.41).
+# This commit is 0.7.0 with only that bump (typst/citationberg#44).
+citationberg = { git = "https://github.com/typst/citationberg", rev = "06a591e2f237d25e1dfdedac3f3d1494c496c52d" }
 
 # Keep debug info small: less memory, faster links (many agents build at once).
 [profile.dev]

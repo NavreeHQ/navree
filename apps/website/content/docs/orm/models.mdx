@@ -1,0 +1,402 @@
+---
+title: "Models"
+description: "`#[derive(Model)]`: tables, keys, columns and timestamps; creating, reading, updating and deleting records; dirty tracking; and mass assignment from untyped input."
+---
+
+A model maps a table to a Rust struct. `#[derive(Model)]` reads the struct and writes everything the ORM needs: the table and key, a decoder for rows, the values to write, and one typed column constant per field. There is no reflection at runtime and no schema file: the struct is the source of truth.
+
+```rust title="src/modules/deals/models/deal.rs"
+use chrono::{DateTime, Utc};
+use navree::orm::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, soft_deletes, per_page = 25)]
+pub struct Deal {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+```
+
+A model must be `Clone`, `Send`, `Sync`, `Serialize` and `'static`. Derive `Default` as well: [relationships](/docs/orm/relationships/), [mass assignment](#mass-assignment) and the find-or-create methods build records from it, and `..Default::default()` keeps struct literals short.
+
+## Tables and columns
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `table = "deals"` | the struct's name in snake case, plural (`Deal` → `deals`, `Company` → `companies`, `Person` → `people`) | The table. |
+| `primary_key = "code"` | `id` | The key column. A model has one. |
+| `key_type = "uuid_v4"` | by the key's type ([below](#primary-keys)) | How the key gets a value. |
+| `timestamps` | off | Keep `created_at` and `updated_at` ([below](#timestamps)). |
+| `soft_deletes` | off | Set `deleted_at` instead of deleting, and hide trashed rows from queries. See [soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes). |
+| `connection = "analytics"` | the default connection | Run the model's queries on a [named connection](/docs/orm/connections-and-transactions/#named-connections). |
+| `per_page = 25` | 15 | The page size of [`paginate`](/docs/orm/pagination-and-streaming/) when the request names none. |
+
+Other attributes belong to other pages: `global_scopes(..)` to [scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes); `touches`, `morph_name`, `with` and `with_count` to [relationships](/docs/orm/relationships/) and [eager loading](/docs/orm/eager-loading/); `fillable`, `guarded` and `unguarded` to [mass assignment](#mass-assignment); `hidden`, `visible`, `appends` and `resource` to [serialization](/docs/orm/serialization/); `observers`, `dispatches` and `broadcasts` to [events](/docs/orm/events-and-observers/); `prunable` to [pruning](/docs/orm/scopes-and-soft-deletes/#pruning-models); `factory` to [factories](/docs/orm/factories/); `route_key` to [route model binding](/docs/orm/route-model-binding/); `workspace`, `subject` and `policy` to [workspaces and access](/docs/orm/workspaces-and-access/).
+
+Each field is a column of the same name. Field attributes change that:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "people", timestamps(created_at = "inserted_at", updated_at = false))]
+pub struct Person {
+    pub id: Uuid,
+    #[model(column = "full_name")]
+    pub name: String,            // stored in `full_name`
+    #[model(default)]
+    pub nickname: Option<String>, // a row without the column reads as `None`
+    #[model(skip)]
+    pub selected: bool,          // not a column: `Default` when read
+    pub inserted_at: DateTime<Utc>,
+}
+```
+
+`#[model(cast = ..)]` stores a field in another form, such as an enum by its name or a struct as JSON; [casts](/docs/orm/casts-and-accessors/) lists them. Without a cast, a field's type must be one the ORM reads and writes directly:
+
+| Rust type | Typical column |
+|---|---|
+| `bool` | `boolean` |
+| `i8` to `i64`, `u8` to `u64` | integers |
+| `f32`, `f64` | `float`, `double` |
+| `Decimal` (`navree::orm::Decimal`) | `decimal(p, s)` |
+| `String` | `string`, `text` |
+| `Vec<u8>` | `binary` |
+| `Uuid`, `Ulid` | `uuid`, `ulid` |
+| `NaiveDate`, `NaiveTime`, `NaiveDateTime` | `date`, `time`, `date_time` |
+| `DateTime<Utc>`, `DateTime<FixedOffset>` | `timestamp_tz` |
+| `serde_json::Value` | `json`, `jsonb` |
+| `url::Url` | `string` |
+| `Option<T>` of any of these | a nullable column; `NULL` is `None` |
+
+Reading is exact first and tolerant where databases differ: an integer column of any width reads into any integer type that holds it, a decimal sum reads as an integer, and SQLite's text dates and JSON read as dates and JSON.
+
+### Column constants
+
+The derive adds one constant per column, named after the field in capitals and typed like it:
+
+```rust
+let title: Column<Deal, String> = Deal::TITLE;
+let closed: Column<Deal, Option<DateTime<Utc>>> = Deal::CLOSED_AT;
+
+Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))      // through the cast: compares with 'won'
+    .where_(Deal::CLOSED_AT.is_not_null())
+    .where_(Deal::AMOUNT_CENTS.between(10_000, 50_000));
+```
+
+A condition takes a value of the column's type, so `Deal::AMOUNT_CENTS.eq("ten")` is a compile error. A nullable column takes plain values (`Deal::CLOSED_AT.eq(now)`) and `None`. Columns are qualified with their table in SQL, so joins never confuse them. The [query builder](/docs/orm/query-builder/) lists every operator.
+
+### Mistakes caught at compile time
+
+The derive refuses a model it can't map, with a message at the field and a fix: a missing key field, an `Option` key, a cast on the key, two fields with the same column, a timestamp column without its field, a soft-delete column that isn't an `Option`, or an unknown attribute (with the closest one suggested).
+
+## Primary keys
+
+The key's Rust type decides how it gets a value:
+
+| Key type | `key_type` | Value |
+|---|---|---|
+| `Uuid` | `uuid_v7` | A UUID v7, generated when the record is inserted with a nil key. UUID v7s start with a timestamp, so keys sort by creation time and keep inserts at the end of the index. |
+| `Uuid` | `uuid_v4` | A random UUID. |
+| `Ulid` (`navree::orm::Ulid`) | `ulid` | A ULID, generated on insert and stored as its 26-character text. |
+| `i16`, `i32`, `i64`, `u32`, `u64` | `int` | Assigned by the database (identity, `AUTO_INCREMENT`). A record whose key is `0` inserts without it and reads the new key back. |
+| `String`, anything else | `manual` | Set by your code. Inserting an empty one fails with `OrmError::MissingKey`. |
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "tags")]
+pub struct Tag {
+    pub id: i64, // the database assigns it
+    pub name: String,
+    pub color: String,
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "currencies", primary_key = "code")]
+pub struct Currency {
+    pub code: String, // yours to set: "USD"
+    pub name: String,
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "api_tokens", key_type = "uuid_v4")]
+pub struct ApiToken {
+    pub id: Uuid, // random, not time-ordered
+    pub name: String,
+}
+```
+
+Navree's own tables use UUID v7 keys. A generated key is known before the `INSERT`, doesn't reveal how many records there are, and lets [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) page by key.
+
+A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. On MySQL its column must be a 16-byte binary, not the schema builder's `uuid` column, which is `CHAR(36)` there; use the same binary on MariaDB ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)).
+
+## Timestamps
+
+With `timestamps`, the ORM sets `created_at` and `updated_at` on insert when they are empty, and `updated_at` on every update that changes something, unless you changed it yourself. Times come from the app's `dyn Clock`, so a test that [fixes the clock](/docs/testing/fakes/#the-clock) sees fixed timestamps, and are cut to microseconds so the stored and in-memory values agree on every database.
+
+The columns may have other names, or be left out: `timestamps(created_at = "inserted_at", updated_at = false)`. A timestamp field is a `DateTime<Utc>`, a `DateTime<FixedOffset>`, a `NaiveDateTime`, an `i64` (Unix seconds) or an `Option` of one of them.
+
+## Creating records
+
+`create` inserts a model and returns its record:
+
+```rust
+let deal = Deal::create(&uow, Deal {
+    company_id,
+    title: "Acme renewal".into(),
+    amount_cents: 120_000,
+    currency: "USD".into(),
+    ..Default::default()
+})
+.await?;
+println!("{} created at {}", deal.id, deal.created_at);
+```
+
+The record holds the key and timestamps the insert filled in. To insert in two steps, wrap the model in a `Record` and save it:
+
+```rust
+let mut deal = Record::new(Deal {
+    company_id,
+    title: "Globex expansion".into(),
+    ..Default::default()
+});
+deal.save(&uow).await?;
+assert!(deal.exists());
+assert!(deal.was_recently_created());
+```
+
+`save` inserts a new record and updates a stored one. Both run the [model events](/docs/orm/events-and-observers/), and through a unit of work they record a change event for the audit log. `save` returns `false` when a `saving` or `creating` observer canceled it.
+
+To insert many rows in one statement, without events, use the [bulk writes](/docs/orm/query-builder/#inserting-many-rows) of the query builder.
+
+## Reading records
+
+```rust
+let deal: Option<Record<Deal>> = Deal::find(&db, id).await?;
+let deal: Record<Deal> = Deal::find_or_fail(&db, id).await?; // a 404 from a handler
+let some: Collection<Deal> = Deal::find_many(&db, ids).await?;
+let all: Collection<Deal> = Deal::all(&db).await?;
+let first_won = Deal::where_(Deal::STAGE.eq(Stage::Won)).first(&db).await?;
+```
+
+`Deal::query()` starts a query of every record, `Deal::where_(..)` one with a condition; the [query builder](/docs/orm/query-builder/) does the rest. A query of a model with soft deletes leaves trashed records out.
+
+## Records
+
+A `Record<M>` is a model as the ORM knows it. It dereferences to the model, so you read and change fields directly, and it keeps:
+
+- whether it is stored (`exists()`) and whether its last save inserted it (`was_recently_created()`);
+- the values it was read or saved with, for [dirty tracking](#dirty-tracking);
+- the extra columns its query selected, such as aggregates (`extra::<T>("name")`, `extras()`);
+- its loaded [relationships](/docs/orm/eager-loading/#reading-loaded-relations).
+
+`record.model()` borrows the model and `into_inner()` takes it out. `a.is(&b)` tells whether two records are the same stored record (same key) and `is_not` the opposite. A record serializes as its model, followed by its extras and loaded relations ([serialization](/docs/orm/serialization/)).
+
+## Updating records
+
+Change the fields, then save:
+
+```rust
+let mut deal = Deal::find_or_fail(&uow, id).await?;
+deal.stage = Stage::Won;
+deal.closed_at = Some(Utc::now());
+deal.save(&uow).await?; // UPDATE deals SET stage = .., closed_at = .., updated_at = .. WHERE id = ..
+```
+
+Only the columns that changed are written, and a record with no change writes nothing (its `saving` and `saved` events still run). `update` changes a stored record in a closure and saves it in one call; it returns `false` and changes nothing for a record that isn't stored:
+
+```rust
+deal.update(&uow, |d| d.amount_cents += 5_000).await?;
+```
+
+To update many records in one statement, use the query builder's [mass updates](/docs/orm/query-builder/#updating-and-deleting-many-records).
+
+### Counters and timestamps
+
+`increment` and `decrement` change a numeric column in the database (`SET amount_cents = amount_cents + 500`, plus `updated_at`) and in the record, so concurrent increments don't overwrite each other:
+
+```rust
+deal.increment(&db, Deal::AMOUNT_CENTS, 500).await?;
+deal.decrement_with(&db, Deal::AMOUNT_CENTS, 100, [Deal::CURRENCY.set("EUR")]).await?;
+```
+
+`increment_each(&db, [(column, amount), ..])` and `decrement_each` change several columns of the same type in one statement. `touch` sets `updated_at` to now and saves the record (with any other change); `touch_column(&db, Deal::CLOSED_AT)` sets another date-time column.
+
+### Finding or creating
+
+These methods look a record up by the given values, then create or update it:
+
+| Method | Does |
+|---|---|
+| `first_or_create(exec, values, fill)` | The first record matching `values`, or a new one with `values` and what `fill` sets, inserted. |
+| `first_or_new(exec, values, fill)` | The same, but the new record is not saved. |
+| `create_or_first(exec, values, fill)` | Inserts first; when that breaks a unique constraint, returns the record that exists. |
+| `update_or_create(exec, values, fill)` | Updates the first match with `fill` and saves it, or creates a record with both. |
+
+```rust
+let vip = Tag::first_or_create(&uow, [Tag::NAME.set("vip")], |tag| {
+    tag.color = "gold".into();
+})
+.await?;
+
+Tag::update_or_create(&uow, [Tag::NAME.set("vip")], |tag| tag.color = "purple".into()).await?;
+```
+
+`Column::set(value)` builds the `values` list, typed like conditions. `first_or_create` and `update_or_create` are safe under concurrency: when another request inserts the same record between the lookup and the insert, the unique violation is caught and the record that won is returned. Inside a transaction, the insert runs in a savepoint, so the failed attempt doesn't abort the transaction on PostgreSQL. This needs a unique index on the `values` columns.
+
+The same methods exist on queries (`Tag::query().first_or_create(..)`) and on [relations](/docs/orm/relationships/#creating-related-records), which fill in the foreign key.
+
+### Reloading and copying
+
+```rust
+deal.refresh(&db).await?;                     // reread its columns
+let current = deal.fresh(&db).await?;         // a new record as stored now; None when gone
+let mut copy = deal.replicate();              // unsaved: no key, no timestamps
+copy.title = format!("{} (copy)", deal.title);
+copy.save(&db).await?;
+```
+
+`refresh` and `fresh` read by key without global scopes, so a soft-deleted record reloads too; `refresh` fails with `ModelNotFound` when the row is gone, and also reloads the relations the record has loaded. `refresh_for_update` rereads the row and locks it until the unit of work ends ([locking](/docs/orm/query-builder/#locking-rows)).
+
+## Deleting records
+
+```rust
+deal.delete(&uow).await?;                   // one record, with its events
+let deleted: u64 = Deal::destroy(&uow, ids).await?;
+```
+
+`delete` returns `false` for a record that isn't stored, or when a `deleting` observer canceled it. On a model with `soft_deletes` it sets `deleted_at` instead; `force_delete` removes the row. `destroy` loads the records with these keys and deletes them one by one, so each one's events run. Deleting by a query, in one statement, is a [mass delete](/docs/orm/query-builder/#updating-and-deleting-many-records).
+
+## Dirty tracking
+
+A record remembers its values as they were read or last saved, so it knows what you changed:
+
+```rust
+assert!(deal.is_clean());
+deal.title = "Acme renewal 2027".into();
+
+assert!(deal.is_dirty());
+assert!(deal.is_dirty_on([Deal::TITLE]));
+assert!(deal.is_clean_on([Deal::STAGE]));
+let dirty = deal.get_dirty()?;                 // [("title", "Acme renewal 2027")]
+let before = deal.get_original_value(Deal::TITLE)?;
+
+deal.discard_changes();                        // back to the original values
+```
+
+After a save, `was_changed()`, `was_changed_on([..])`, `get_changes()` (the new values) and `get_previous()` (the old ones) describe what that save wrote:
+
+```rust
+deal.stage = Stage::Won;
+deal.save(&uow).await?;
+assert!(deal.was_changed_on([Deal::STAGE]));
+for (column, value) in deal.get_previous() {
+    println!("{column} was {value:?}");
+}
+```
+
+Values are compared as they are stored: decimals by value, floats within a small tolerance, date-times by instant, JSON by structure, and cast fields as their cast compares them (an encrypted field by its plain text, since every encryption differs). A new record is dirty in every column. `get_original()` returns the whole model as it was, `sync_original()` accepts the current values as the original ones, and `sync_original_on([..])` some of them.
+
+## Mass assignment
+
+Mass assignment sets many columns from untyped input, such as a JSON body, in one call. Because input decides which columns change, a model lists the columns it allows:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, fillable(title, amount_cents, currency, "meta->source"))]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub owner_id: Option<Uuid>,
+    #[model(cast = "json")]
+    pub meta: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+- `fillable(..)` lists the columns `fill` may set. A JSON path such as `"meta->source"` allows one key inside a JSON column.
+- `guarded(..)` lists the columns it may not set instead; every other column is fillable.
+- A model that declares neither is *totally guarded*: `fill` fails with `OrmError::MassAssignment`, naming the model. `force_fill` still works.
+- `#[model(fillable)]` and `#[model(guarded)]` on a field add it to the list; `#[model(unguarded)]` turns guarding off for a model.
+
+`attrs!` builds the input in code. `fill` sets what the model allows and leaves the rest out:
+
+```rust
+let mut deal = Record::new(Deal::default());
+deal.fill(attrs! {
+    "title" => "Renewal",
+    "amount_cents" => 12_000,
+    "owner_id" => "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e",
+})?;
+assert_eq!(deal.owner_id, None); // not fillable: left out
+
+deal.force_fill(attrs! { "owner_id" => "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e" })?;
+deal.fill_only(attrs! { "title" => "Renewal 2027", "currency" => "EUR" }, &["title"])?;
+```
+
+Only real columns can be filled: an unknown key, or a path into a column that isn't JSON, never reaches the model. Values convert to each field's type the way untyped input does (numbers, numeric strings, RFC 3339 dates), through the field's [cast and mutator](/docs/orm/casts-and-accessors/), and `fill` checks every key before it changes anything.
+
+`Attributes` is the input type. It deserializes from a JSON object, keeping the order its keys were sent in, so a handler can read a body into it:
+
+```rust
+use navree::orm::attributes::Attributes;
+
+async fn store(uow: Uow, Json(body): Json<Attributes>) -> Result<Created<Record<Deal>>> {
+    let deal = Deal::create_from(&uow, body).await?;
+    Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+}
+
+async fn update(
+    uow: Uow,
+    Path(id): Path<Uuid>,
+    Json(body): Json<Attributes>,
+) -> Result<Json<Record<Deal>>> {
+    let mut deal = Deal::find_or_fail(&uow, id).await?;
+    deal.update_attributes(&uow, body).await?;
+    Ok(Json(deal))
+}
+```
+
+`create_from` creates a record from the model's `Default` filled with the input; `force_create` does the same unguarded; `update_attributes` fills a stored record and saves it. `Attributes::from_json(value)` and `Attributes::from_serialize(&dto)` build input from a JSON value or any serializable struct. A validated DTO is usually the better input: [validate](/docs/basics/validation/) it, then copy its fields or `fill` from `Attributes::from_serialize(&input)`.
+
+`set_attribute(Deal::CURRENCY, "EUR")` sets one column from untyped input, unguarded, and `set_json_path(Deal::META, "source", "referral")` one value inside a JSON column, creating the objects on the way.
+
+### When a key is left out
+
+By default `fill` leaves out the keys the model doesn't allow. With the strict mode `prevent_discarding_attributes`, on in development unless you turn it off ([configuration](/docs/orm/getting-started/#configuration)), it fails with `OrmError::MassAssignment` instead, before changing anything, so a form that sends a field the model guards shows up at once. A `DiscardPolicy` can decide for the process (`set_discard_policy`) or for one task (`with_discard_policy`), and `unguarded(future)` turns guarding off while a future runs:
+
+```rust
+use navree::orm::attributes::unguarded;
+
+let deal = unguarded(async {
+    Deal::create_from(&uow, attrs! { "title" => "Imported", "owner_id" => owner_id }).await
+})
+.await?;
+```
+
+`attrs!` values are anything `serde_json::json!` accepts, so a `Uuid` or a variable works as well as a literal.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/query-builder/" title="Query builder">
+    Conditions, joins, aggregates and bulk writes.
+  </LinkCard>
+  <LinkCard href="/docs/orm/casts-and-accessors/" title="Casts and accessors">
+    Enums, JSON, money, encrypted fields and computed values.
+  </LinkCard>
+  <LinkCard href="/docs/orm/events-and-observers/" title="Events and observers">
+    Code that runs when records are created, saved or deleted.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,7 @@
+# Known findings in this benchmark app that have no fix yet. Reviewed
+# 2026-10-27; each entry expires so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2027-01-31
+reason = "The advisory covers only the deprecated golang.org/x/crypto/openpgp packages, and every x/crypto release is listed (no fix). x/crypto is an indirect requirement (pgx's SCRAM authentication, quic-go under gin); neither the app nor those modules import openpgp. osv-scanner reports it because the scan runs without a Go toolchain, so its call analysis, which would mark it uncalled, is skipped."

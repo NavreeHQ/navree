@@ -1,0 +1,390 @@
+---
+title: "Relationships"
+description: "Belongs to, has one and has many, many to many with pivot tables, has one of many, through relations and polymorphic relations: defining them, querying them, filtering by them and writing through them."
+---
+
+Records relate to each other: a deal belongs to a company, a company has many deals, deals and tags are linked through a pivot table. A relation is a method of the model in a `#[relations]` block, returning a typed relation. You then use it three ways:
+
+- **as a query** of one record's related records: `deal.activities().where_(..).get(&db)`;
+- **by name in queries**, to [eager load](/docs/orm/eager-loading/) related records in batches (`with("company")`) or to filter by them (`where_has("activities", ..)`);
+- **to write**: create related records, point a deal at another company, attach tags.
+
+## Defining relationships
+
+```rust title="src/modules/deals/models/deal.rs"
+#[relations]
+impl Deal {
+    /// The company the deal is with.
+    pub fn company(&self) -> BelongsTo<Deal, Company> {
+        self.belongs_to(Deal::COMPANY_ID)
+    }
+
+    /// The deal's activities.
+    pub fn activities(&self) -> HasMany<Deal, Activity> {
+        self.has_many(Activity::DEAL_ID)
+    }
+
+    /// The deal's tags, through the `deal_tag` pivot table.
+    pub fn tags(&self) -> BelongsToMany<Deal, Tag> {
+        self.belongs_to_many("deal_tag").with_pivot(["added_by"]).with_timestamps()
+    }
+
+    /// The notes on the deal.
+    pub fn notes(&self) -> MorphMany<Deal, Note> {
+        self.morph_many("notable")
+    }
+}
+```
+
+`#[relations]` and the relation types come with `use navree::orm::prelude::*;`. Each method is a relation named after itself: `deal.company()` is the relation, and `"company"` names it in `with`, `where_has` and `load`. The definitions (`belongs_to`, `has_many`, ...) are in scope in the block; foreign keys are typed columns, so a key on the wrong model doesn't compile. A model has one `#[relations]` block, and a model with relations derives `Default`: relations used by name are read from a default instance.
+
+| Relation | Defined with | Holds when loaded |
+|---|---|---|
+| `BelongsTo<P, R>` | `self.belongs_to(P::FOREIGN_KEY)` | `Option<Record<R>>` |
+| `HasOne<P, R>` | `self.has_one(R::FOREIGN_KEY)` | `Option<Record<R>>` |
+| `HasMany<P, R>` | `self.has_many(R::FOREIGN_KEY)` | `Collection<R>` |
+| `BelongsToMany<P, R>` | `self.belongs_to_many("pivot_table")` | `Collection<R>`, each with its pivot row |
+| `HasOneThrough<P, R>`, `HasManyThrough<P, R>` | `self.has_one_through(..)`, `self.has_many_through(..)` | `Option<Record<R>>`, `Collection<R>` |
+| `MorphOne<P, R>`, `MorphMany<P, R>` | `self.morph_one("name")`, `self.morph_many("name")` | `Option<Record<R>>`, `Collection<R>` |
+| `MorphTo<P>` | `self.morph_to("name")` | `Option<AnyRecord>` |
+| many to many, polymorphic | `self.morph_to_many("name", "table")`, `self.morphed_by_many("name", "table")` | `Collection<R>` |
+
+A relation is also a query of the related model, so its definition can narrow it: `self.has_many(Activity::DEAL_ID).latest()` orders every use of the relation.
+
+## One to one and one to many
+
+`belongs_to` is defined on the model that holds the foreign key; `has_one` and `has_many` on the other side, naming the foreign key of the related model:
+
+```rust
+#[relations]
+impl User {
+    pub fn profile(&self) -> HasOne<User, Profile> {
+        self.has_one(Profile::USER_ID)
+    }
+
+    pub fn orders(&self) -> HasMany<User, Order> {
+        self.has_many(Order::USER_ID)
+    }
+}
+
+#[relations]
+impl Profile {
+    pub fn user(&self) -> BelongsTo<Profile, User> {
+        self.belongs_to(Profile::USER_ID)
+    }
+}
+```
+
+The foreign key points at the other model's key. When it points at another column, say so: `.owner_key(Company::DOMAIN)` on a `belongs_to`, `.local_key(User::EMAIL)` on a `has_one` or `has_many`. A record whose foreign key is `NULL` relates to nothing, without a query.
+
+`.inverse("deal")` on a `has_many` sets each loaded activity's `deal` relation to the parent it was loaded for, so code walking from an activity back to its deal needs no query.
+
+### Has one of many
+
+A `has_many` turns into a `has_one` that picks one record:
+
+```rust
+use navree::orm::ir::AggregateFunction;
+
+#[relations]
+impl User {
+    /// The user's most recent order.
+    pub fn latest_order(&self) -> HasOne<User, Order> {
+        self.has_many(Order::USER_ID).latest_of_many_by(Order::CREATED_AT)
+    }
+
+    /// The user's largest order.
+    pub fn largest_order(&self) -> HasOne<User, Order> {
+        self.has_many(Order::USER_ID)
+            .of_many([(Order::TOTAL_CENTS, AggregateFunction::Max)], |q| q)
+    }
+}
+```
+
+`latest_of_many()` and `oldest_of_many()` pick the record with the largest or smallest key (with UUID v7 or ULID keys, the newest and oldest); `latest_of_many_by(column)` and `oldest_of_many_by(column)` by another column; `of_many(columns, constraint)` by several aggregates, each breaking the ties of the one before, among the records `constraint` keeps. Eager loaded, they join a grouped subquery, so loading the latest order of a hundred users is one query.
+
+### Default models
+
+A to-one relation can hold a new, unsaved record instead of `None` when nothing is related, so templates and serializers need no `None` case:
+
+```rust
+pub fn user(&self) -> BelongsTo<Profile, User> {
+    self.belongs_to(Profile::USER_ID).with_default()
+}
+```
+
+`with_default()` uses the related model's `Default`, `with_default_value(model)` a copy of `model`, and `with_default_fn(|parent| ..)` builds one from the parent.
+
+## Many to many
+
+A many-to-many relation goes through a pivot table holding both keys. `deal.tags()` reads `deal_tag`, whose `deal_id` and `tag_id` columns link deals and tags:
+
+```rust
+pub fn tags(&self) -> BelongsToMany<Deal, Tag> {
+    self.belongs_to_many("deal_tag").with_pivot(["added_by"]).with_timestamps()
+}
+```
+
+The pivot's columns are `{model}_id` for both models, from their names in snake case. The conventional table is the two names in alphabetical order, joined by `_`. Other names go through `foreign_pivot_key("deal")`, `related_pivot_key("label")`, and `parent_key` / `related_key` when the pivot doesn't hold the models' keys.
+
+Loaded tags carry their pivot row. `with_pivot` adds pivot columns to it (the two keys are always there), and `with_timestamps` adds `created_at` and `updated_at`, which attaching then fills:
+
+```rust
+let tags = deal.tags().get(&db).await?;
+for tag in &tags {
+    let added_at: Option<DateTime<Utc>> = tag.pivot_value("created_at")?;
+    println!("{} added at {added_at:?}", tag.name);
+}
+```
+
+`tag.pivot()` returns the whole row as a `Pivot`. A record serializes its pivot under `pivot`; `.as_("membership")` renames it. Filter and order by pivot columns with `where_pivot("added_by", "=", me)`, `where_pivot_in`, `where_pivot_between`, `where_pivot_null` (each with `or_` and `not` forms), `order_by_pivot` and `order_by_pivot_desc`. `with_pivot_value("role", "owner")` both filters by a value and writes it into the pivot rows the relation attaches.
+
+### Pivot models
+
+When the pivot table has casts or hooks of its own, map it to a model and use it:
+
+```rust
+/// A row of `deal_tag`, as a model of its own.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deal_tag", timestamps, pivot(foreign_key = "deal_id", related_key = "tag_id"))]
+pub struct DealTag {
+    pub deal_id: Uuid,
+    pub tag_id: i64,
+    pub added_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub fn tags(&self) -> BelongsToMany<Deal, Tag, DealTag> {
+    self.belongs_to_many("deal_tag").using::<DealTag>()
+}
+```
+
+`#[model(pivot(..))]` names the two key columns; a pivot model without an `id` is identified by both. Loaded tags then carry a `Record<DealTag>` (`tag.pivot_as::<DealTag>()`), and attaching, updating and detaching save and delete `DealTag` records, so its casts, hooks and [events](/docs/orm/events-and-observers/) run.
+
+## Through relations
+
+A through relation reaches records across an intermediate model. A company's activities, through its deals:
+
+```rust
+#[relations]
+impl Company {
+    pub fn deals(&self) -> HasMany<Company, Deal> {
+        self.has_many(Deal::COMPANY_ID)
+    }
+
+    /// The activities on the company's deals.
+    pub fn activities(&self) -> HasManyThrough<Company, Activity> {
+        self.has_many_through(Deal::COMPANY_ID, Activity::DEAL_ID)
+    }
+}
+```
+
+The first key is the intermediate model's column holding this record's key (`deals.company_id`), the second the related model's column holding the intermediate model's key (`activities.deal_id`). `has_one_through` is the same for one record, and `local_key` / `second_local_key` name other columns than the keys. Two relations you already have compose into one: `self.through(Company::deals).has(Deal::activities)` defines the same relation from the two relation methods. Through relations read; write through the intermediate model. Records reached through soft-deleted intermediate records are left out unless the relation asks for them with `with_trashed_parents()`.
+
+## Polymorphic relations
+
+A polymorphic relation lets one table belong to several models. Notes can be on deals and on companies; the `notes` table has a `notable_type` column naming the model and a `notable_id` column holding its key (the schema builder's `morphs("notable")` creates both):
+
+```rust
+#[relations]
+impl Deal {
+    pub fn notes(&self) -> MorphMany<Deal, Note> {
+        self.morph_many("notable")
+    }
+}
+
+#[relations]
+impl Note {
+    /// What the note is on: a deal or a company.
+    pub fn notable(&self) -> MorphTo<Note> {
+        self.morph_to("notable").targets::<(Deal, Company)>()
+    }
+}
+```
+
+`deal.notes().create(..)` fills both columns: the type is the model's **morph name**, its name in snake case (`deal`), or `#[model(morph_name = "opportunity")]`. A `morph_to` loads an `AnyRecord`, which you downcast to the model it is:
+
+```rust
+let notes = Note::query().with("notable").get(&db).await?;
+for note in &notes {
+    if let Some(Some(target)) = note.relation::<Option<AnyRecord>>("notable") {
+        if let Some(deal) = target.downcast_ref::<Deal>() {
+            println!("a note on deal {}", deal.title);
+        }
+    }
+}
+```
+
+`morph_one` is the one-record form of `morph_many`. `morph_to_many` and `morphed_by_many` are the many-to-many forms, through a pivot with a type column (`taggables`: `tag_id`, `taggable_id`, `taggable_type`).
+
+### The morph map
+
+Rust can't find a type by its name at run time, so a `morph_to` loads only the models it knows: the ones it lists with `targets::<(..)>()` or `target::<M>()`, else the ones registered in the **morph map** at boot:
+
+```rust
+use navree::orm::relations::MorphMap;
+
+MorphMap::register::<Deal>();
+MorphMap::register::<Company>();
+MorphMap::require(true); // writing an unregistered model's type is an error
+```
+
+With `require`, a relation that would store the type of a model the map doesn't know fails with `OrmError::MorphNotMapped`, so every stored name can be read back. Morph names are data: renaming one needs a migration that rewrites the stored types (`UPDATE notes SET notable_type = 'opportunity' WHERE notable_type = 'deal'`). In tests, `MorphMap::new().with::<Deal>().scope(future)` replaces the map for one future.
+
+## Querying relations
+
+Every relation is a query of the related records of one record, with every method of the [query builder](/docs/orm/query-builder/):
+
+```rust
+let open = deal
+    .activities()
+    .where_(Activity::COMPLETED_AT.is_null())
+    .latest()
+    .get(&db)
+    .await?;
+let company: Option<Record<Company>> = deal.company().first(&db).await?;
+let count = deal.activities().count(&db).await?;
+let page = deal.activities().latest().paginate(&db, 1).await?;
+```
+
+The relation's own condition comes first, and yours are grouped after it, so an `or_where` never reaches another deal's activities. The related model's [global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes) apply: soft-deleted notes stay out.
+
+Calling a relation on each record of a list runs one query per record. To read the same relation for many records, [eager load](/docs/orm/eager-loading/) it.
+
+## Querying relationship existence
+
+To filter records by their related records, name the relation:
+
+```rust
+let with_activities = Deal::query().has("activities").get(&db).await?;
+let busy = Deal::query().has_count("activities", ">=", 3).get(&db).await?;
+let quiet = Deal::query().doesnt_have("activities").get(&db).await?;
+
+let overdue = Deal::query()
+    .where_has(Deal::activities, |q| {
+        q.where_(Activity::DUE_AT.lt(Utc::now()))
+            .where_(Activity::COMPLETED_AT.is_null())
+    })
+    .get(&db)
+    .await?;
+
+let acme_deals = Deal::query().where_relation("company", Company::NAME.eq("Acme")).get(&db).await?;
+let same = Deal::query().where_belongs_to(&acme).get(&db).await?;
+```
+
+Each becomes a correlated `EXISTS` (or a `COUNT` compared with a number) in one query. A path reaches nested relations: `Company::query().has("deals.activities")`. In `where_has`, a relation method (`Deal::activities`) fixes the closure's type; with a string path, annotate it: `|q: Builder<Company>| ..`. The related model's global scopes apply inside the subquery.
+
+| Method | Keeps records |
+|---|---|
+| `has(path)`, `has_count(path, op, n)` | with related records (at least one, or a number) |
+| `doesnt_have(path)` | without any |
+| `where_has(path, f)`, `where_doesnt_have(path, f)` | with (or without) related records matching `f` |
+| `where_relation(path, filter)`, `where_doesnt_have_relation(path, filter)` | the same, with one condition |
+| `with_where_has(path, f)`, `with_where_relation(..)` | with matching related records, and eager loads those |
+| `where_belongs_to(&record)` | whose `belongs_to` points at `record` (`where_belongs_to_named` picks the relation) |
+| `where_attached_to(&record)` | linked to `record` through a many-to-many relation |
+
+Most have an `or_` form (`or_has`, `or_where_has`, `or_where_relation`, `or_where_belongs_to`, ...). For polymorphic relations, `where_has_morph("notable", ["deal", "company"], |q, ty| ..)` filters by the target's columns per type, and `where_morphed_to("notable", &deal)` keeps the notes on one record.
+
+## Creating related records
+
+To-many relations create records with the foreign key filled in:
+
+```rust
+let call = deal
+    .activities()
+    .create(&uow, Activity {
+        kind: "call".into(),
+        subject: "Pricing call".into(),
+        ..Default::default()
+    })
+    .await?;
+assert_eq!(call.deal_id, deal.id);
+
+let mut task = Record::new(Activity { kind: "task".into(), subject: "Send the contract".into(), ..Default::default() });
+deal.activities().save(&uow, &mut task).await?;
+```
+
+| Method | Does |
+|---|---|
+| `make(model)`, `make_many(models)` | New, unsaved records with the foreign key set. |
+| `save(exec, &mut record)`, `save_many(exec, &mut records)` | Sets the foreign key and saves. |
+| `create(exec, model)`, `create_many(exec, models)` | Inserts with the foreign key set. |
+| `first_or_create`, `first_or_new`, `create_or_first`, `update_or_create` | As on [models](/docs/orm/models/#finding-or-creating), within the relation. |
+| `increment_or_create(exec, values, column, default, step)` | Adds `step` to the matching record's column, or creates the record with `default` there. |
+
+Each runs the model's events; the `_quietly` forms (`create_quietly`, `save_many_quietly`, ...) don't. Polymorphic relations fill the type column too.
+
+### Belongs to
+
+A `belongs_to` is written from the record that holds the key:
+
+```rust
+deal.associate(Deal::company, &acme)?;   // company_id = acme.id, and the loaded relation
+deal.save(&uow).await?;
+
+deal.dissociate(Deal::contact)?;          // contact_id = NULL
+deal.save(&uow).await?;
+```
+
+`associate` and `dissociate` work on `morph_to` relations too (setting the type as well). Neither saves: you do. `record.push(&uow)` saves a record and then every record of its loaded relations.
+
+### Attaching and syncing
+
+Many-to-many relations write the pivot table:
+
+```rust
+deal.tags().attach(&uow, [1_i64, 2]).await?;                         // keys
+deal.tags().attach(&uow, [&vip]).await?;                             // or records
+deal.tags().attach_with(&uow, [(3_i64, [col("added_by").set(me)])]).await?;
+deal.tags().detach(&uow, [2_i64]).await?;
+
+let changes = deal.tags().sync(&uow, [1_i64, 3, 5]).await?;          // exactly these
+println!("attached {:?}, detached {:?}", changes.attached, changes.detached);
+
+deal.tags().sync_without_detaching(&uow, [7_i64]).await?;
+deal.tags().toggle(&uow, [1_i64, 9]).await?;
+deal.tags().update_existing_pivot(&uow, 3_i64, [col("added_by").set(me)]).await?;
+```
+
+| Method | Does |
+|---|---|
+| `attach(exec, ids)`, `attach_with(exec, [(id, values)])` | Inserts pivot rows, with the relation's pivot values and timestamps. |
+| `detach(exec, ids)`, `detach_all(exec)` | Deletes the pivot rows; returns how many. |
+| `sync(exec, ids)`, `sync_with(exec, [(id, values)])` | Makes the related records exactly `ids`: attaches the missing, detaches the rest, updates changed pivot values. |
+| `sync_without_detaching(exec, ids)` | Attaches the missing ones only. |
+| `sync_with_pivot_values(exec, ids, values)` | `sync` with the same pivot values for every id. |
+| `toggle(exec, ids)` | Detaches the attached ones of `ids`, attaches the others. |
+| `update_existing_pivot(exec, id, values)` | Changes an attached record's pivot values. |
+| `save(exec, &mut record, values)`, `create(exec, model, values)` | Saves or creates the related record, then attaches it. |
+
+Ids are keys or records. `sync`, `sync_without_detaching` and `toggle` return a `SyncChanges` with the `attached`, `detached` and `updated` ids (`changes.attached_as::<i64>()` reads them typed). Pivot writes are atomic: in a transaction of their own on the pool, in the unit of work's otherwise.
+
+## Touching parents
+
+A record can keep its parents' `updated_at` current, so a company is "updated" when one of its deals changes:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, touches = ["company"])]
+pub struct Deal { /* .. */ }
+```
+
+Saving a changed deal or deleting one then touches its company, and the company's own `touches` in turn, each record once. Many-to-many writes touch the parent when the related model touches the relation named after the parent's table. `navree::orm::relations::without_touching(future)` turns touching off while a future runs, for imports.
+
+## Relations from other modules
+
+A module that can't edit a model's `#[relations]` block, such as a billing module adding a deal's invoices, defines the relation at boot with `RelationRegistry::define("invoices", ..)` and gives it a typed accessor through an extension trait. Defined relations work wherever a relation name does: `with`, `has`, `load`.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/eager-loading/" title="Eager loading">
+    Load relations for a whole result in one query per relation.
+  </LinkCard>
+  <LinkCard href="/docs/orm/serialization/" title="Serialization">
+    Loaded relations in a record's JSON.
+  </LinkCard>
+  <LinkCard href="/docs/database/indexes-and-foreign-keys/" title="Indexes and foreign keys">
+    The foreign keys and pivot tables in your migrations.
+  </LinkCard>
+</LinkCards>
