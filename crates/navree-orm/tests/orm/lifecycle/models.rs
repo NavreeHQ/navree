@@ -25,6 +25,28 @@ CREATE TABLE audit_rows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entry TEXT NOT NULL
 );
+CREATE TABLE gadgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    active BOOLEAN NOT NULL,
+    archived BOOLEAN NOT NULL,
+    level TEXT NOT NULL
+);
+CREATE TABLE probes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    reading INTEGER NOT NULL,
+    note TEXT NULL,
+    level TEXT NOT NULL
+);
+CREATE TABLE members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT NULL
+);
 "#;
 
 /// Creates the lifecycle tables.
@@ -113,6 +135,71 @@ impl Observer<Ticket> for TicketObserver {
             Flow::Continue
         })
     }
+}
+
+/// How serious a gadget is: no `Default`, so a missing `level` column has
+/// nothing to fall back to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Level {
+    Low,
+    High,
+}
+
+/// The model the runtime global-scope tests register scopes for (scopes
+/// registered at run time are process-wide, so no other test uses it).
+#[derive(Model, Clone, Debug, PartialEq, Serialize)]
+pub struct Gadget {
+    pub id: i64,
+    pub name: String,
+    pub active: bool,
+    pub archived: bool,
+    #[model(cast = "string_enum")]
+    pub level: Level,
+}
+
+impl Gadget {
+    pub fn new(name: &str, active: bool, archived: bool) -> Gadget {
+        Gadget {
+            id: 0,
+            name: name.into(),
+            active,
+            archived,
+            level: Level::Low,
+        }
+    }
+}
+
+/// Gadgets that are not archived: a scope registered by value.
+pub struct NotArchived;
+
+impl navree_orm::GlobalScope<Gadget> for NotArchived {
+    fn apply(&self, query: navree_orm::Builder<Gadget>) -> navree_orm::Builder<Gadget> {
+        query.where_(Gadget::ARCHIVED.eq(false))
+    }
+}
+
+/// A model for partial selects: `level` has no default.
+#[derive(Model, Clone, Debug, PartialEq, Serialize)]
+pub struct Probe {
+    pub id: i64,
+    pub name: String,
+    pub reading: i64,
+    pub note: Option<String>,
+    #[model(cast = "string_enum")]
+    pub level: Level,
+}
+
+/// A soft-deleting model with a unique column.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(timestamps, soft_deletes)]
+pub struct Member {
+    pub id: i64,
+    pub email: String,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// A row an in-transaction observer writes.

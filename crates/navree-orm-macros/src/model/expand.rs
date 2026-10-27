@@ -49,12 +49,19 @@ fn codec(model: &Model, column: &Column, krate: &TokenStream) -> Codec {
     let ty = &column.ty;
     let name = &column.name;
     let table = &model.table;
+    // The field's default when its type has one: what a column a partial
+    // select left out reads as in lenient mode.
+    let default = quote!({
+        #[allow(unused_imports)]
+        use #private::{ViaDefault as _, WithoutDefault as _};
+        (&#private::DefaultOf::<#ty>::new()).default_fn()
+    });
     match (&column.cast, &column.inner) {
         (None, _) => {
             let read = if column.default {
                 quote!(#private::read_or_default::<Self, #ty>(row, #name)?)
             } else {
-                quote!(#private::read::<Self, #ty>(row, #name)?)
+                quote!(#private::read::<Self, #ty>(row, #name, #default)?)
             };
             Codec {
                 read,
@@ -68,7 +75,7 @@ fn codec(model: &Model, column: &Column, krate: &TokenStream) -> Codec {
             let read = if column.default {
                 quote!(#private::read_cast_or_default::<Self, #cast, #ty>(row, #name)?)
             } else {
-                quote!(#private::read_cast::<Self, #cast, #ty>(row, #name)?)
+                quote!(#private::read_cast::<Self, #cast, #ty>(row, #name, #default)?)
             };
             Codec {
                 read,
@@ -87,7 +94,7 @@ fn codec(model: &Model, column: &Column, krate: &TokenStream) -> Codec {
             let read = if column.default {
                 quote!(#private::read_cast_option_or_default::<Self, #cast, #inner>(row, #name)?)
             } else {
-                quote!(#private::read_cast_option::<Self, #cast, #inner>(row, #name)?)
+                quote!(#private::read_cast_option::<Self, #cast, #inner>(row, #name, #default)?)
             };
             Codec {
                 read,
@@ -295,6 +302,8 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     // Lifecycle: the model's own hooks (observers, typed events, ...).
     let hook_entries = super::lifecycle::hook_entries(&model.lifecycle, krate);
     let hooks = super::lifecycle::hooks_fn(ident, &hook_entries, krate);
+    let capabilities =
+        super::lifecycle::capability_impls(ident, model.deleted_at.is_some(), krate);
 
     // Column constants.
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {
@@ -381,6 +390,8 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
 
             #hooks
         }
+
+        #capabilities
 
         #[automatically_derived]
         impl #ident {

@@ -12,8 +12,9 @@
 //! sync the original. A clean record still runs `saving` and `saved`.
 //!
 //! Delete: `deleting` → `DELETE` (soft-deleting models: `UPDATE` of the
-//! deleted-at and updated-at columns) → `deleted` change event → `deleted`
-//! (and `trashed` for a soft delete).
+//! deleted-at and updated-at columns, unless the record is being force
+//! deleted) → `deleted` change event → (`trashed` for a soft delete) →
+//! `deleted`.
 
 use std::borrow::Cow;
 
@@ -238,7 +239,9 @@ async fn update<M: Model>(
     Ok(true)
 }
 
-/// Deletes `record` (soft-deletes it when the model soft-deletes).
+/// Deletes `record`: soft-deletes it when the model soft-deletes (firing
+/// `deleting`, `trashed`, `deleted`), removes the row otherwise or while
+/// the record is being force deleted (`deleting`, `deleted`).
 pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> Result<bool> {
     if !record.exists {
         return Ok(false);
@@ -255,7 +258,7 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
         None => record.model.values()?,
     };
 
-    match meta.deleted_at() {
+    match meta.deleted_at().filter(|_| !record.force_deleting) {
         Some(deleted_at) => {
             let now = ctx.now().await;
             record.model.touch_timestamp(deleted_at, now)?;
@@ -286,8 +289,8 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
                 Some(json_object(&before)),
                 None,
             );
-            hooks.after(ModelEvent::Deleted, &ctx, record).await?;
             hooks.after(ModelEvent::Trashed, &ctx, record).await?;
+            hooks.after(ModelEvent::Deleted, &ctx, record).await?;
         }
         None => {
             let delete = DeleteIr {

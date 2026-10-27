@@ -116,6 +116,56 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A row lacks a model column (a partial select left it out) and the
+    /// strict mode `prevent_missing_attributes` is on, or the field has no
+    /// default to read instead.
+    #[error(
+        "cannot read column `{column}` of {model} as {expected}: the row has no such column (it has: {}); select it, or mark the field #[model(default)]",
+        selected.join(", ")
+    )]
+    MissingAttribute {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The missing column.
+        column: String,
+        /// The field's Rust type.
+        expected: Cow<'static, str>,
+        /// The columns the row has.
+        selected: Vec<String>,
+    },
+    /// Mass assignment would silently skip columns that are not fillable,
+    /// and the strict mode `prevent_discarding_attributes` is on.
+    #[error(
+        "cannot fill {} of {model}: not fillable (add {} to its fillable list, or use force_fill)",
+        quoted(columns),
+        if columns.len() == 1 { "it" } else { "them" }
+    )]
+    MassAssignment {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The columns that are not fillable.
+        columns: Vec<String>,
+    },
+    /// A relation was loaded lazily for a record that came with others (one
+    /// query per record), and the strict mode `prevent_lazy_loading` is on.
+    #[error(
+        "relation `{relation}` of {model} was loaded lazily, one record at a time: eager load it (with(\"{relation}\")) on the query that read the records"
+    )]
+    LazyLoading {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The relation.
+        relation: Cow<'static, str>,
+    },
+}
+
+/// `a`, `b` and `c` as `` `a`, `b`, `c` ``.
+fn quoted(columns: &[String]) -> String {
+    columns
+        .iter()
+        .map(|column| format!("`{column}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl OrmError {
@@ -188,6 +238,33 @@ mod tests {
             OrmError::not_found("Deal", Vec::new()).to_string(),
             "no Deal found"
         );
+    }
+
+    #[test]
+    fn strict_mode_errors_say_what_to_do() {
+        let missing = OrmError::MissingAttribute {
+            model: "Deal".into(),
+            column: "title".into(),
+            expected: "String".into(),
+            selected: vec!["id".into(), "stage".into()],
+        };
+        assert_eq!(
+            missing.to_string(),
+            "cannot read column `title` of Deal as String: the row has no such column (it has: id, stage); select it, or mark the field #[model(default)]"
+        );
+        let discarded = OrmError::MassAssignment {
+            model: "User".into(),
+            columns: vec!["role".into()],
+        };
+        assert_eq!(
+            discarded.to_string(),
+            "cannot fill `role` of User: not fillable (add it to its fillable list, or use force_fill)"
+        );
+        let lazy = OrmError::LazyLoading {
+            model: "Deal".into(),
+            relation: "company".into(),
+        };
+        assert!(lazy.to_string().starts_with("relation `company` of Deal was loaded lazily"));
     }
 
     #[test]

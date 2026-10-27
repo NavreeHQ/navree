@@ -88,22 +88,25 @@ const VALUE: &str = "value";
 const KEY: &str = "key";
 
 impl<M: Model> Builder<M> {
-    /// Runs the query on `target` and reads its records (running the
-    /// `Retrieved` hooks).
+    /// Runs the query on `target` and reads its records (with the strict
+    /// modes of the executor's app, running the `Retrieved` hooks).
     pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
         let ir = self.into_ir();
         let rows = target.fetch(&ir).await?;
-        let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
-            records.push(Record::<M>::from_row(row)?);
+        if rows.is_empty() {
+            return Ok(Collection::new());
         }
-        if !records.is_empty() {
-            let ctx = target.context();
-            let hooks = Hooks::<M>::resolve(&ctx).await?;
-            if !hooks.is_empty() {
-                for record in &mut records {
-                    hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
-                }
+        let ctx = target.context();
+        let strictness = ctx.strictness().await;
+        let mut records = crate::strict::sync_scope(strictness, || {
+            rows.iter()
+                .map(Record::<M>::from_row)
+                .collect::<Result<Vec<_>>>()
+        })?;
+        let hooks = Hooks::<M>::resolve(&ctx).await?;
+        if !hooks.is_empty() {
+            for record in &mut records {
+                hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
             }
         }
         Ok(Collection::from(records))

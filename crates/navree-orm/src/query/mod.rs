@@ -8,7 +8,6 @@
 
 use std::fmt;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 pub(crate) mod clauses;
 mod fetch;
@@ -27,7 +26,7 @@ use crate::column::{Filter, IntoQuery};
 use crate::error::Result;
 use crate::ir::{ColumnRef, Expr, InValues, QueryIr, SelectItem, Where, WhereClause};
 use crate::model::Model;
-use crate::scope::{GlobalScope, RemovedScopes, SoftDeletes, group_scope_wheres};
+use crate::scope::{GlobalScope, ScopeChoices, Trashed, group_scope_wheres};
 use crate::sql::{Dialect, Statement, compile_select};
 use crate::value::Field;
 
@@ -57,7 +56,7 @@ use self::filters::filters;
 /// soft-delete scope) apply when the query runs.
 pub struct Builder<M: Model> {
     pub(crate) ir: QueryIr,
-    pub(crate) removed: RemovedScopes,
+    pub(crate) scopes: ScopeChoices,
     pub(crate) scopes_applied: bool,
     _model: PhantomData<fn() -> M>,
 }
@@ -67,7 +66,7 @@ impl<M: Model> Builder<M> {
     pub fn new() -> Self {
         Builder {
             ir: QueryIr::new(M::meta().table()),
-            removed: RemovedScopes::default(),
+            scopes: ScopeChoices::default(),
             scopes_applied: false,
             _model: PhantomData,
         }
@@ -147,19 +146,22 @@ impl<M: Model> Builder<M> {
 
     /// Leaves out global scope `S` for this query.
     pub fn without_global_scope<S: GlobalScope<M>>(mut self) -> Self {
-        self.removed.ids.push(std::any::TypeId::of::<S>());
+        self.scopes.ids.push(std::any::TypeId::of::<S>());
         self
     }
 
-    /// Leaves out every global scope (the soft-delete scope included).
+    /// Leaves out every global scope (the soft-delete scope included;
+    /// `without_trashed()` and `only_trashed()` still apply).
     pub fn without_global_scopes(mut self) -> Self {
-        self.removed.all = true;
+        self.scopes.all = true;
         self
     }
 
-    /// Includes soft-deleted records (removes the soft-delete scope).
-    pub fn with_trashed(self) -> Self {
-        self.without_global_scope::<SoftDeletes>()
+    /// Includes soft-deleted records (removes the soft-delete scope). Does
+    /// nothing for a model without soft deletes.
+    pub fn with_trashed(mut self) -> Self {
+        self.scopes.trashed = Trashed::Included;
+        self
     }
 
     /// Newest first by the model's creation timestamp. Fails when the query
@@ -228,25 +230,33 @@ impl<M: Model> Builder<M> {
         compile_select(&self.clone().into_ir(), dialect)
     }
 
-    /// The builder with its global scopes applied (once).
+    /// The builder with its global scopes applied (once): the model's
+    /// scopes the query keeps, each grouped, then the query's own choice
+    /// of trashed rows (`without_trashed`, `only_trashed`).
     pub(crate) fn apply_global_scopes(mut self) -> Self {
         if self.scopes_applied {
             return self;
         }
         self.scopes_applied = true;
-        if self.removed.all {
-            return self;
-        }
-        let mut scopes: Vec<Arc<dyn GlobalScope<M>>> = M::global_scopes();
-        if M::meta().soft_deletes_enabled() {
-            scopes.push(Arc::new(SoftDeletes));
-        }
-        for scope in scopes {
-            if self.removed.contains(scope.scope_id()) {
+        for scope in crate::global_scopes::scopes_of::<M>() {
+            if self.scopes.removes(scope.as_ref()) {
                 continue;
             }
             let before = self.ir.wheres.len();
             self = scope.apply(self);
+            group_scope_wheres(&mut self.ir, before);
+        }
+        if let Some(deleted_at) = M::meta().deleted_at() {
+            let not = match self.scopes.trashed {
+                Trashed::Excluded => false,
+                Trashed::Only => true,
+                Trashed::Hidden | Trashed::Included => return self,
+            };
+            let before = self.ir.wheres.len();
+            self = self.where_(Filter(Where::Null {
+                expr: Expr::Column(ColumnRef::new(Some(M::meta().table()), deleted_at)),
+                not,
+            }));
             group_scope_wheres(&mut self.ir, before);
         }
         self
@@ -281,7 +291,7 @@ impl<M: Model> Clone for Builder<M> {
     fn clone(&self) -> Self {
         Builder {
             ir: self.ir.clone(),
-            removed: self.removed.clone(),
+            scopes: self.scopes.clone(),
             scopes_applied: self.scopes_applied,
             _model: PhantomData,
         }

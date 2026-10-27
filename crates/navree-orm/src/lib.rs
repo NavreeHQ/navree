@@ -96,11 +96,13 @@ mod error;
 pub mod events;
 mod exec;
 mod expr;
+mod global_scopes;
 pub mod hooks;
 pub mod ir;
 mod lifecycle;
 mod model;
 mod module;
+mod options;
 pub mod pagination;
 mod persist;
 pub mod prelude;
@@ -110,7 +112,9 @@ mod record;
 pub mod relations;
 mod row;
 mod scope;
+mod soft_deletes;
 pub mod sql;
+pub mod strict;
 mod ulid;
 mod value;
 
@@ -123,10 +127,15 @@ pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
 pub use events::{Observer, ObserverHook, without_events};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
+pub use global_scopes::ClosureScope;
 pub use ir::Expr;
 pub use lifecycle::ModelLifecycle;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
-pub use module::ModuleBuilderOrmExt;
+pub use module::{
+    ConfiguredOrmModule, ModuleBuilderOrmExt, OrmModule, OrmRuntime, RegisteredModel,
+    registered_models,
+};
+pub use options::{DEFAULT_PRUNE_CHUNK, OrmOptions};
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
@@ -137,6 +146,7 @@ pub use query::{
 pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
+pub use soft_deletes::SoftDeleting;
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{

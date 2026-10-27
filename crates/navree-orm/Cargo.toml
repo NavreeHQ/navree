@@ -25,6 +25,7 @@ chrono = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
+navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
