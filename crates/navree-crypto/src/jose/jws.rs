@@ -98,7 +98,9 @@ impl Header {
         // RFC 7515 §4.1.11: no extension is understood, so none may be
         // critical.
         if raw.crit.is_some() {
-            return Err(JoseError::Malformed("critical header extensions are not supported"));
+            return Err(JoseError::Malformed(
+                "critical header extensions are not supported",
+            ));
         }
         let alg = raw
             .alg

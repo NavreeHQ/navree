@@ -2,7 +2,9 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use navree_crypto::jose::{Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey};
+use navree_crypto::jose::{
+    Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -119,7 +121,9 @@ fn headers_serialize_in_a_fixed_order_with_extra_parameters() {
         serde_json::to_value(key.header()).unwrap(),
         json!({"alg": "ES256", "kid": "KEYID"})
     );
-    let token = key.sign_json(&key.header(), &json!({"iss": "TEAM"})).unwrap();
+    let token = key
+        .sign_json(&key.header(), &json!({"iss": "TEAM"}))
+        .unwrap();
     let encoded_header = token.split('.').next().unwrap();
     assert_eq!(
         URL_SAFE_NO_PAD.decode(encoded_header).unwrap(),
@@ -167,10 +171,7 @@ fn critical_extensions_are_refused() {
         &json!({"alg": "HS256", "b64": false, "crit": ["b64"]}),
         &json!({}),
     );
-    assert!(matches!(
-        Jws::parse(&token),
-        Err(JoseError::Malformed(_))
-    ));
+    assert!(matches!(Jws::parse(&token), Err(JoseError::Malformed(_))));
 }
 
 #[test]
@@ -231,7 +232,9 @@ fn a_key_verifies_only_its_own_algorithms() {
     assert!(!hs.verifying_key().accepts(Algorithm::HS512));
 
     // An RSA key accepts the RSA family unless its algorithm is pinned.
-    let rsa = SigningKey::from_pem(&fixture("rsa-2048.pem")).unwrap().verifying_key();
+    let rsa = SigningKey::from_pem(&fixture("rsa-2048.pem"))
+        .unwrap()
+        .verifying_key();
     assert!(rsa.accepts(Algorithm::RS256) && rsa.accepts(Algorithm::PS512));
     assert!(!rsa.accepts(Algorithm::ES256));
     let pinned = rsa.with_algorithm(Algorithm::PS256).unwrap();
@@ -245,7 +248,9 @@ fn an_hmac_token_never_verifies_with_public_key_material() {
     // published RSA key. An RSA key never verifies HMAC.
     let rsa = SigningKey::from_pem(&fixture("rsa-2048.pem")).unwrap();
     let public = rsa.public_jwk().unwrap();
-    let n = URL_SAFE_NO_PAD.decode(public.n.as_deref().unwrap()).unwrap();
+    let n = URL_SAFE_NO_PAD
+        .decode(public.n.as_deref().unwrap())
+        .unwrap();
     let forged = SigningKey::hmac(Algorithm::HS256, &n)
         .unwrap()
         .sign_jwt(&json!({"sub": "admin"}))
@@ -317,23 +322,50 @@ fn key_sets_skip_keys_for_other_uses_and_algorithms() {
     assert_eq!(public.alg.as_deref(), Some("ES256"));
 
     let variants = [
-        Jwk { use_: Some("enc".into()), ..public.clone() },
-        Jwk { alg: Some("ES384".into()), ..public.clone() },
-        Jwk { key_ops: Some(vec!["encrypt".into()]), ..public.clone() },
-        Jwk { kty: "RSA".into(), ..public.clone() },
+        Jwk {
+            use_: Some("enc".into()),
+            ..public.clone()
+        },
+        Jwk {
+            alg: Some("ES384".into()),
+            ..public.clone()
+        },
+        Jwk {
+            key_ops: Some(vec!["encrypt".into()]),
+            ..public.clone()
+        },
+        Jwk {
+            kty: "RSA".into(),
+            ..public.clone()
+        },
     ];
     for jwk in variants {
-        assert_eq!(jws.verify_with(&JwkSet::new([jwk.clone()])), Err(JoseError::NoKey), "{jwk:?}");
+        assert_eq!(
+            jws.verify_with(&JwkSet::new([jwk.clone()])),
+            Err(JoseError::NoKey),
+            "{jwk:?}"
+        );
     }
     let usable = [
-        Jwk { use_: None, alg: None, ..public.clone() },
-        Jwk { key_ops: Some(vec!["verify".into()]), ..public.clone() },
+        Jwk {
+            use_: None,
+            alg: None,
+            ..public.clone()
+        },
+        Jwk {
+            key_ops: Some(vec!["verify".into()]),
+            ..public.clone()
+        },
     ];
     for jwk in usable {
         assert!(jws.verify_with(&JwkSet::new([jwk])).is_ok());
     }
     // A key of the right type on the wrong curve.
-    let p384 = Jwk { crv: Some("P-384".into()), alg: None, ..public };
+    let p384 = Jwk {
+        crv: Some("P-384".into()),
+        alg: None,
+        ..public
+    };
     assert!(matches!(
         jws.verify_with(&JwkSet::new([p384])),
         Err(JoseError::InvalidKey(_))
@@ -360,7 +392,9 @@ fn key_sets_never_verify_symmetric_algorithms() {
 #[test]
 fn errors_never_contain_key_material() {
     let secret = "super-secret-value-that-must-not-leak-0123456789";
-    let key = SigningKey::hmac(Algorithm::HS256, secret).unwrap().with_kid("k");
+    let key = SigningKey::hmac(Algorithm::HS256, secret)
+        .unwrap()
+        .with_kid("k");
     let debug = format!("{key:?} {:?}", key.verifying_key());
     assert!(!debug.contains(secret), "{debug}");
     assert!(debug.contains("HS256"));
@@ -378,7 +412,10 @@ fn errors_never_contain_key_material() {
         ..Jwk::default()
     };
     let debug = format!("{private:?}");
-    assert!(!debug.contains("PRIVATE-D") && debug.contains("PUBLIC-X"), "{debug}");
+    assert!(
+        !debug.contains("PRIVATE-D") && debug.contains("PUBLIC-X"),
+        "{debug}"
+    );
 
     let long = "A".repeat(500);
     let message = JoseError::UnsupportedAlgorithm(long.clone()).to_string();

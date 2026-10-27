@@ -80,8 +80,8 @@ impl SigningKey {
 
     /// The Ed25519 key with this 32-byte seed (the private key of RFC 8032).
     pub fn ed25519_from_seed(seed: &[u8; 32]) -> Self {
-        let pair = Ed25519KeyPair::from_seed_unchecked(seed)
-            .expect("any 32 bytes are an Ed25519 seed");
+        let pair =
+            Ed25519KeyPair::from_seed_unchecked(seed).expect("any 32 bytes are an Ed25519 seed");
         Self::new(Private::Ed25519 { pair, seed: *seed }, Algorithm::EdDSA)
     }
 
@@ -262,9 +262,9 @@ impl SigningKey {
 
     fn sec1(der: &[u8]) -> Result<Self, JoseError> {
         let key = der::ec_private_key(der).ok_or(BAD_EC)?;
-        let curve = key
-            .curve
-            .ok_or(JoseError::InvalidKey("the EC private key does not name its curve"))?;
+        let curve = key.curve.ok_or(JoseError::InvalidKey(
+            "the EC private key does not name its curve",
+        ))?;
         let point = key.public.ok_or(JoseError::InvalidKey(
             "the EC private key does not include its public key",
         ))?;
@@ -603,9 +603,7 @@ impl VerifyingKey {
         let pem = der::decode_pem(pem)?;
         match pem.label.as_deref() {
             Some("PUBLIC KEY") | None => Self::from_spki_der(&pem.der),
-            Some("RSA PUBLIC KEY") => {
-                Self::from_public_key_info(der::rsa_public_key(&pem.der))
-            }
+            Some("RSA PUBLIC KEY") => Self::from_public_key_info(der::rsa_public_key(&pem.der)),
             Some(_) => Err(JoseError::InvalidKey(
                 "not a PEM public key: read a private key with SigningKey::from_pem",
             )),
@@ -677,7 +675,12 @@ impl VerifyingKey {
     /// [`JoseError::NoKey`] when the key does not verify `alg`,
     /// [`JoseError::BadSignature`] when the signature is wrong. ECDSA
     /// signatures are `R || S`, as in JWS.
-    pub fn verify(&self, alg: Algorithm, message: &[u8], signature: &[u8]) -> Result<(), JoseError> {
+    pub fn verify(
+        &self,
+        alg: Algorithm,
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), JoseError> {
         self.check(alg, message, signature, false)
     }
 
@@ -693,7 +696,13 @@ impl VerifyingKey {
         self.check(alg, message, signature, true)
     }
 
-    fn check(&self, alg: Algorithm, message: &[u8], sig: &[u8], der: bool) -> Result<(), JoseError> {
+    fn check(
+        &self,
+        alg: Algorithm,
+        message: &[u8],
+        sig: &[u8],
+        der: bool,
+    ) -> Result<(), JoseError> {
         if !self.accepts(alg) {
             return Err(JoseError::NoKey);
         }
@@ -717,13 +726,12 @@ impl VerifyingKey {
                 RsaPublicKeyComponents { n, e }.verify(params, message, sig)
             }
             Public::Ec { curve, point } => {
-                let algorithm: &'static signature::EcdsaVerificationAlgorithm =
-                    match (curve, der) {
-                        (Curve::P256, false) => &signature::ECDSA_P256_SHA256_FIXED,
-                        (Curve::P256, true) => &signature::ECDSA_P256_SHA256_ASN1,
-                        (Curve::P384, false) => &signature::ECDSA_P384_SHA384_FIXED,
-                        (Curve::P384, true) => &signature::ECDSA_P384_SHA384_ASN1,
-                    };
+                let algorithm: &'static signature::EcdsaVerificationAlgorithm = match (curve, der) {
+                    (Curve::P256, false) => &signature::ECDSA_P256_SHA256_FIXED,
+                    (Curve::P256, true) => &signature::ECDSA_P256_SHA256_ASN1,
+                    (Curve::P384, false) => &signature::ECDSA_P384_SHA384_FIXED,
+                    (Curve::P384, true) => &signature::ECDSA_P384_SHA384_ASN1,
+                };
                 UnparsedPublicKey::new(algorithm, point).verify(message, sig)
             }
             Public::Ed25519(key) => {
@@ -821,8 +829,8 @@ fn checked_secret(alg: Algorithm, secret: &[u8]) -> Result<Vec<u8>, JoseError> {
 
 fn hmac(alg: Algorithm, secret: &[u8], message: &[u8]) -> Vec<u8> {
     fn mac<M: hmac::Mac + hmac::KeyInit>(secret: &[u8], message: &[u8]) -> Vec<u8> {
-        let mut mac = <M as hmac::KeyInit>::new_from_slice(secret)
-            .expect("HMAC accepts keys of any length");
+        let mut mac =
+            <M as hmac::KeyInit>::new_from_slice(secret).expect("HMAC accepts keys of any length");
         mac.update(message);
         mac.finalize().into_bytes().to_vec()
     }
