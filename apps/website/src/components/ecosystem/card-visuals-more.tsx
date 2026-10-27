@@ -10,15 +10,21 @@ import { cn } from "@/lib/utils";
 
 function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div aria-hidden className={cn("rounded-lg border border-line bg-ink-0/60", className)}>
+    <div aria-hidden className={cn("rounded-md border border-line bg-ink-0/60", className)}>
       {children}
     </div>
   );
 }
 
-function Chip({ children, on = false }: { children: ReactNode; on?: boolean }) {
+/** A 4px chip. `selected` is ink (selection never turns green); `positive` is a success state in green. */
+function Chip({ children, tone = "plain" }: { children: ReactNode; tone?: "plain" | "selected" | "positive" }) {
   return (
-    <span className={cn("rounded-md border px-2 font-mono text-xs leading-5", on ? "border-accent/30 bg-accent/10 text-accent" : "border-line text-fg-2")}>
+    <span
+      className={cn(
+        "rounded-sm border px-2 font-mono text-xs leading-5",
+        tone === "positive" ? "border-accent/25 bg-accent/10 text-accent" : tone === "selected" ? "border-line-2 bg-ink-3 text-fg" : "border-line text-fg-2",
+      )}
+    >
       {children}
     </span>
   );
@@ -28,7 +34,7 @@ function Chips({ items, on }: { items: string[]; on?: number }) {
   return (
     <div aria-hidden className="flex flex-wrap gap-1.5">
       {items.map((item, i) => (
-        <Chip key={item} on={i === on}>
+        <Chip key={item} tone={i === on ? "selected" : "plain"}>
           {item}
         </Chip>
       ))}
@@ -48,13 +54,13 @@ export function SearchVisual() {
       <div className="px-3 py-1.5 text-xs leading-6">
         <div className="flex justify-between gap-3">
           <span className="truncate text-fg-1">
-            Ada <mark className="rounded-[3px] bg-accent/15 px-0.5 text-fg">Lovelace</mark>
+            Ada <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Lovelace</mark>
           </span>
           <span className="shrink-0 text-fg-3">Contact</span>
         </div>
         <div className="flex justify-between gap-3">
           <span className="truncate text-fg-1">
-            <mark className="rounded-[3px] bg-accent/15 px-0.5 text-fg">Lovelace</mark> renewal
+            <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Lovelace</mark> renewal
           </span>
           <span className="shrink-0 text-fg-3">Deal</span>
         </div>
@@ -71,7 +77,7 @@ export function BillingVisual() {
         <span className="text-fg-1">
           acme <span className="text-fg-3">on</span> Pro
         </span>
-        <Chip on>active</Chip>
+        <Chip tone="positive">active</Chip>
       </div>
       <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 font-mono text-xs leading-6">
         <span className="text-fg-3">seats</span>

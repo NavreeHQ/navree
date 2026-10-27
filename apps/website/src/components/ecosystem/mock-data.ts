@@ -359,6 +359,6 @@ export const navigatorSession: (
   { type: "call", tool: "list_commands", result: ["… migrate   Run every pending migration …"] },
   {
     type: "answer",
-    text: "The code you pulled reads deals.expected_close_date, but the migration that adds it hasn’t run on your database. Run `navree migrate` and reload the page.",
+    text: "The code you pulled reads `deals.expected_close_date`, but the migration that adds it hasn’t run on your database. Run `navree migrate` and reload the page.",
   },
 ];

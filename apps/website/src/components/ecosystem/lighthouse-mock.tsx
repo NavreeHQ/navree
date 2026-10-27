@@ -150,7 +150,7 @@ export function LighthouseMock({ className }: { className?: string }) {
 
             <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line @2xl:grid-cols-5">
               {lighthouseFigures.map((f, i) => (
-                <div key={f.label} className={cn("bg-ink-1 p-4", i === 4 && "col-span-2 @2xl:col-span-1")}>
+                <div key={f.label} className={cn("bg-ink-1 p-4", i === 4 && "hidden @2xl:block")}>
                   <div className="truncate text-[0.8125rem] text-fg-2">{f.label}</div>
                   <div className="mt-1.5 flex items-end justify-between gap-2">
                     <span className="text-2xl leading-tight font-semibold tracking-[-0.02em] whitespace-nowrap text-fg tabular-nums">{f.value}</span>
@@ -198,7 +198,12 @@ export function LighthouseMock({ className }: { className?: string }) {
               {lighthouseIssues.map((issue, i) => (
                 <div
                   key={issue.title}
-                  className={cn(i > 2 && "hidden @xl:grid", "grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-4 border-b border-line px-3 py-2.5 last:border-b-0 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_4rem]")}
+                  className={cn(
+                    "grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-4 border-b border-line px-3 py-2.5 last:border-b-0 @2xl:grid-cols-[minmax(0,1fr)_5.5rem_3.5rem_3rem_4rem]",
+                    // Narrow frames list the top three; the class comes last so it wins over `grid`.
+                    i > 2 && "hidden @xl:grid",
+                    i === 2 && "@max-xl:border-b-0",
+                  )}
                 >
                   <div className="min-w-0">
                     <KindLabel kind={issue.kind} />
@@ -229,7 +234,7 @@ export function LighthouseMock({ className }: { className?: string }) {
             {/* Absolutely placed on wide screens so the feed never sets the row's height. */}
             <LiveFeed
               rows={8}
-              className="h-[22rem] [mask-image:linear-gradient(to_bottom,black_80%,transparent)] @5xl:absolute @5xl:inset-x-4 @5xl:top-[3.75rem] @5xl:bottom-0 @5xl:h-auto"
+              className="h-[14.5rem] [mask-image:linear-gradient(to_bottom,black_75%,transparent)] @xl:h-[22rem] @5xl:absolute @5xl:inset-x-4 @5xl:top-[3.75rem] @5xl:bottom-0 @5xl:h-auto"
             />
           </div>
         </div>

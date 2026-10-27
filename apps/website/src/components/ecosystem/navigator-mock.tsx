@@ -83,15 +83,12 @@ export function AgentSession({ step, compact = false }: { step: number; compact?
                 </span>
               </div>
               {compact ? null : (
-                <div className={cn("mt-0.5 grid grid-cols-[1.25rem_minmax(0,1fr)] text-fg-2", fade(done))}>
-                  <span className="text-fg-3">⎿</span>
-                  <div className="min-w-0">
-                    {item.result.map((line) => (
-                      <div key={line} className="break-words">
-                        {line}
-                      </div>
-                    ))}
-                  </div>
+                <div className={cn("mt-0.5 ml-[0.1875rem] border-l border-line-2 pl-2.5 text-fg-2", fade(done))}>
+                  {item.result.map((line) => (
+                    <div key={line} className="[overflow-wrap:anywhere]">
+                      {line}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

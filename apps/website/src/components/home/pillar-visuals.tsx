@@ -239,8 +239,8 @@ export function SwitcherMock() {
                 <w.logo aria-hidden className="size-3.5" strokeWidth={2} />
               </span>
               <span className={cn("flex-1 text-sm", w.active ? "text-fg" : "text-fg-1")}>{w.name}</span>
-              <span className="font-mono text-xs text-fg-3">{w.role}</span>
-              <span className="w-7 text-right font-mono text-xs text-fg-3">⌘{i + 1}</span>
+              <span className="text-xs text-fg-3">{w.role}</span>
+              <span className="w-7 text-right text-xs tracking-widest text-fg-3">⌘{i + 1}</span>
             </li>
           ))}
         </ul>
