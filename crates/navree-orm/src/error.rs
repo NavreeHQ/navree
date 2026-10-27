@@ -173,6 +173,29 @@ impl OrmError {
         matches!(self, OrmError::Timeout { .. })
     }
 
+    /// Whether the connection to the database was lost under the
+    /// statement: the server went away or ended the session, the network
+    /// dropped it, or the pool was closed. The ORM reads again once, on
+    /// another pooled connection, when a read outside a transaction loses
+    /// its connection; inside a transaction the error stands (the
+    /// transaction went with its connection), and so it does for writes
+    /// (the write may have run before the connection dropped).
+    ///
+    /// ```
+    /// use navree_orm::OrmError;
+    /// use sea_orm::DbErr;
+    ///
+    /// let gone = OrmError::from(DbErr::Custom("2006 (HY000): MySQL server has gone away".into()));
+    /// assert!(gone.is_lost_connection());
+    /// assert!(!OrmError::from(DbErr::Custom("syntax error".into())).is_lost_connection());
+    /// ```
+    pub fn is_lost_connection(&self) -> bool {
+        match self {
+            OrmError::Db(error) => lost_connection(error),
+            _ => false,
+        }
+    }
+
     /// `self` as a [`Timeout`](OrmError::Timeout) of `timeout` when the
     /// database stopped the statement for its time: PostgreSQL's
     /// `statement_timeout` (SQLSTATE 57014), MySQL's `MAX_EXECUTION_TIME`
@@ -199,6 +222,41 @@ impl OrmError {
             driver: driver.into(),
         }
     }
+}
+
+/// Whether `error` says the connection under a statement was lost.
+pub(crate) fn lost_connection(error: &DbErr) -> bool {
+    if matches!(
+        error,
+        DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::ConnectionClosed)
+    ) {
+        return true;
+    }
+    let message = error.to_string().to_ascii_lowercase();
+    [
+        // MySQL 2006 and 2013.
+        "server has gone away",
+        "lost connection to",
+        // PostgreSQL 57P01 (pg_terminate_backend, shutdown) and a backend
+        // that died.
+        "terminating connection",
+        "server closed the connection unexpectedly",
+        "ssl connection has been closed unexpectedly",
+        "no connection to the server",
+        // The socket.
+        "error communicating with database",
+        "connection reset",
+        "reset by peer",
+        "broken pipe",
+        "connection refused",
+        "unexpected eof",
+        "communication link failure",
+        "decryption failed or bad record mac",
+        // The pool.
+        "attempted to acquire a connection on a closed pool",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
 }
 
 /// Whether a database error message says a statement ran out of time.
@@ -270,6 +328,43 @@ mod tests {
         assert!(mariadb.is_timeout());
         let other = OrmError::from(DbErr::Custom("syntax error".into())).timed_out(timeout);
         assert!(!other.is_timeout());
+    }
+
+    #[test]
+    fn lost_connections_are_recognised() {
+        for message in [
+            "2006 (HY000): MySQL server has gone away",
+            "2013 (HY000): Lost connection to MySQL server during query",
+            "error returned from database: terminating connection due to administrator command",
+            "error communicating with database: An existing connection was forcibly closed by the remote host. (os error 10054)",
+            "error communicating with database: Connection reset by peer (os error 104)",
+            "server closed the connection unexpectedly",
+            "Broken pipe (os error 32)",
+        ] {
+            let error = OrmError::from(DbErr::Custom(message.into()));
+            assert!(error.is_lost_connection(), "{message}");
+        }
+        assert!(
+            OrmError::from(DbErr::ConnectionAcquire(
+                sea_orm::ConnAcquireErr::ConnectionClosed
+            ))
+            .is_lost_connection()
+        );
+        for message in [
+            "UNIQUE constraint failed: tags.name",
+            "Connection pool timed out",
+        ] {
+            assert!(
+                !OrmError::from(DbErr::Custom(message.into())).is_lost_connection(),
+                "{message}"
+            );
+        }
+        assert!(
+            !OrmError::from(DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                .is_lost_connection(),
+            "an exhausted pool is not a lost connection"
+        );
+        assert!(!OrmError::invalid("x").is_lost_connection());
     }
 
     #[test]

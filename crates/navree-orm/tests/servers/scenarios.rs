@@ -1259,6 +1259,40 @@ pub async fn time_buckets(db: Db, server: Server) {
     }
 }
 
+/// PostgreSQL: a read outside a transaction that loses its connection runs
+/// again on another pooled one; inside a transaction the lost connection
+/// is the error.
+pub async fn lost_connections(db: Db) {
+    use navree_orm::{raw, scalar, select, unprepared};
+
+    unprepared(&db, "CREATE SEQUENCE lost_once").await.unwrap();
+    // The first run ends its own session; the second answers.
+    let ends_first = "SELECT CASE WHEN nextval('lost_once') = 1 THEN pg_terminate_backend(pg_backend_pid()) ELSE true END AS answered";
+    let rows = select(&db, raw(ends_first, Vec::<Value>::new()))
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    let next: Option<i64> = scalar(&db, raw("SELECT nextval('lost_once')", Vec::<Value>::new()))
+        .await
+        .unwrap();
+    assert_eq!(next, Some(3), "the read ran twice");
+
+    let uow = db.uow(None, None).await;
+    let error = select(
+        &uow,
+        raw(
+            "SELECT pg_terminate_backend(pg_backend_pid())",
+            Vec::<Value>::new(),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.is_lost_connection(), "{error:?}");
+    // The transaction went with its connection.
+    let _ = uow.rollback().await;
+    assert_eq!(Company::query().count(&db).await.unwrap(), 0);
+}
+
 /// Statement timeouts: a slow read is stopped with `OrmError::Timeout`,
 /// quick ones run, and a unit of work survives a stopped read (PostgreSQL
 /// runs it in a savepoint and restores the transaction's own timeout).

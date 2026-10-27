@@ -163,3 +163,8 @@ async fn postgres_timeouts() {
 async fn mysql_timeouts() {
     run(Server::MySql, |db| scenarios::timeouts(db, Server::MySql)).await;
 }
+
+#[tokio::test]
+async fn postgres_lost_connections() {
+    run(Server::Postgres, scenarios::lost_connections).await;
+}
