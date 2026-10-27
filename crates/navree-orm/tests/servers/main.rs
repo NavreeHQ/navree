@@ -43,6 +43,22 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_bulk_writes() {
+    run(Server::Postgres, |db| {
+        scenarios::bulk_writes(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_bulk_writes() {
+    run(Server::MySql, |db| {
+        scenarios::bulk_writes(db, Server::MySql)
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn postgres_streams() {
     run(Server::Postgres, scenarios::streams).await;
 }
