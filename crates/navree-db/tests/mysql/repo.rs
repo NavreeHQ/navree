@@ -102,6 +102,33 @@ async fn repo_update_and_delete_of_missing_records_fail() {
     uow.rollback().await.unwrap();
 }
 
+/// MySQL reports the rows an `UPDATE` matched, not only those it changed
+/// (SQLx asks for `CLIENT_FOUND_ROWS`), so an update writing the values a
+/// row already has succeeds instead of failing as "not updated", and
+/// records no change.
+#[tokio::test]
+async fn an_update_that_changes_nothing_succeeds() {
+    let Some(scratch) = Scratch::new("an_update_that_changes_nothing_succeeds").await else {
+        return;
+    };
+    let db = scratch.db().await;
+    create_notes(&db).await;
+    let seeded = db.uow(None, None).await;
+    let created = Notes::insert(&seeded, new_note("same")).await.unwrap();
+    seeded.commit().await.unwrap();
+
+    let uow = db.uow(None, None).await;
+    let mut unchanged = created.clone().into_active_model();
+    unchanged.title = Set(created.title.clone());
+    unchanged.body = Set(created.body.clone());
+    let updated = Notes::update(&uow, unchanged)
+        .await
+        .expect("the row matched, though nothing changed");
+    assert_eq!(updated, created);
+    assert!(uow.changes().is_empty(), "{:?}", uow.changes());
+    uow.commit().await.unwrap();
+}
+
 /// A row read with `find_for_update` stays locked until its unit of work
 /// ends: a second unit of work locking it waits, then reads the committed
 /// change.

@@ -15,6 +15,7 @@ mod support;
 
 mod connect;
 mod errors;
+mod health;
 mod migrations;
 mod paginate;
 mod repo;
