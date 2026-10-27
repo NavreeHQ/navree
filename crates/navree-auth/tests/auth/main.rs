@@ -10,6 +10,7 @@ mod login;
 mod logout;
 mod module;
 mod password_reset;
+mod policy;
 mod profile;
 mod refresh;
 mod register;

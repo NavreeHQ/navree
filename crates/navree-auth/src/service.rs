@@ -28,8 +28,8 @@ use crate::throttle::{Attempt, LoginThrottle};
 use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
-    AuthError, AuthOptions, JwtService, User, UserResource, UserResourceExtension, refresh_token,
-    user,
+    AuthError, AuthOptions, JwtService, PasswordSignInPolicy, User, UserResource,
+    UserResourceExtension, refresh_token, user,
 };
 
 /// The longest user agent stored with a refresh token.
@@ -140,6 +140,7 @@ pub struct AuthService {
     pub(crate) app: WeakAppContext,
     dummy_hash: OnceCell<String>,
     extensions: OnceCell<Vec<Arc<dyn UserResourceExtension>>>,
+    password_policies: OnceCell<Vec<Arc<dyn PasswordSignInPolicy>>>,
 }
 
 impl Injectable for AuthService {
@@ -191,6 +192,7 @@ impl Injectable for AuthService {
                 app: app.downgrade(),
                 dummy_hash: OnceCell::new(),
                 extensions: OnceCell::new(),
+                password_policies: OnceCell::new(),
             })
         })
     }
@@ -214,8 +216,11 @@ impl AuthService {
     /// checks the name, the email (unique, case-insensitively) and the
     /// password length (`auth.password_min_length`), then stores the
     /// Argon2id hash. [`AuthError::EmailTaken`] or [`AuthError::Invalid`]
-    /// otherwise. Writes an `auth.register` audit entry after the commit.
+    /// otherwise, and the refusal of a [`PasswordSignInPolicy`] for an
+    /// email that may not use a password. Writes an `auth.register` audit
+    /// entry after the commit.
     pub async fn register(&self, uow: &Uow, input: NewUser) -> Result<User, AuthError> {
+        self.check_password_sign_in(&input.email).await?;
         self.check_password(&input.password)?;
         let user = self
             .insert_user(uow, &input.name, &input.email, &input.password)
@@ -273,8 +278,9 @@ impl AuthService {
         }
     }
 
-    /// The login flow behind `POST /auth/login`: the per email and IP
-    /// throttle ([`AuthError::TooManyAttempts`] once
+    /// The login flow behind `POST /auth/login`: the
+    /// [`PasswordSignInPolicy`]s (a refusal is audited as
+    /// `auth.login_refused`), the per email and IP throttle ([`AuthError::TooManyAttempts`] once
     /// `auth.login_throttle_per_minute` failures are counted; a successful
     /// login resets it), [`validate_user`](AuthService::validate_user),
     /// then [`issue_tokens`](AuthService::issue_tokens), or, when the user
@@ -288,6 +294,14 @@ impl AuthService {
         password: &str,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
+        if let Err(refused) = self.check_password_sign_in(email).await {
+            self.audit(
+                entry(AuditKind::Security, "auth.login_refused", meta)
+                    .metadata(json!({ "email": normalize_email(email) })),
+            )
+            .await;
+            return Err(refused);
+        }
         let key = LoginThrottle::key(email, meta.ip.as_deref());
         // Counted before the (slow) password check, so parallel guesses
         // cannot all pass while the counter is still low.
@@ -515,6 +529,19 @@ impl AuthService {
                 .map_err(AuthError::Extension)?;
         }
         Ok(Value::Object(fields))
+    }
+
+    /// Whether `email` may use a password: `Ok(())`, or the first refusal
+    /// of a registered [`PasswordSignInPolicy`] (single sign-on enforced for
+    /// its domain, say). [`attempt_login`](AuthService::attempt_login) and
+    /// [`register`](AuthService::register) call it; call it from your own
+    /// password flows too.
+    pub async fn check_password_sign_in(&self, email: &str) -> Result<(), AuthError> {
+        let email = normalize_email(email);
+        for policy in self.password_policies().await? {
+            policy.check(&email).await?;
+        }
+        Ok(())
     }
 
     /// The [`JwtService`] signing the access tokens.
@@ -789,6 +816,22 @@ impl AuthService {
             .get_or_try_init(|| async { self.hasher.hash(&random_token(32)).await })
             .await?;
         Ok(hash)
+    }
+
+    async fn password_policies(&self) -> Result<&[Arc<dyn PasswordSignInPolicy>], AuthError> {
+        let policies = self
+            .password_policies
+            .get_or_try_init(|| async {
+                match self.app.upgrade() {
+                    Some(app) => app
+                        .get_all::<dyn PasswordSignInPolicy>()
+                        .await
+                        .map_err(AuthError::Kernel),
+                    None => Ok(Vec::new()),
+                }
+            })
+            .await?;
+        Ok(policies)
     }
 
     async fn extensions(&self) -> Result<&[Arc<dyn UserResourceExtension>], AuthError> {
