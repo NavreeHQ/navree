@@ -226,6 +226,16 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-validation", "navree-notify", "navree-workspace",
         "navree-i18n-macros",
     ]),
+    // Sheets: CSV and Excel exports (streamed `Download`s, queued exports
+    // written to a navree-storage disk and handed back through a
+    // navree-queue operation) and imports (uploads on a disk, staging
+    // tables in navree-db, rows checked with navree-validation, applied in
+    // queue batches); `#[derive(Exportable)]` and `#[derive(Importable)]`
+    // live in navree-macros and are re-exported next to their traits.
+    rule("navree-sheets", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-db", "navree-storage", "navree-validation", "navree-queue",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -355,6 +365,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-ai",
     "navree-billing",
     "navree-mcp",
+    "navree-sheets",
     "navree-lighthouse",
     "navree-logbook",
     "navree-micro",

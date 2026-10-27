@@ -1,0 +1,63 @@
+[package]
+name = "navree-sheets"
+description = "Navree SheetsModule: CSV and Excel exports (streamed downloads, queued files with signed links) and import pipelines (encoding detection, header mapping, row validation, a staging preview, batched apply, duplicate modes and error files)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
+## import tests run on their own fresh PostgreSQL database.
+postgres = ["navree-db/postgres", "navree-queue/postgres"]
+
+[dependencies]
+# The import routes (multipart uploads) and the `Download` response.
+axum = { workspace = true }
+bytes = { workspace = true }
+# XLSX, XLS and ODS reading.
+calamine = { workspace = true }
+# A guess at the encoding of a legacy CSV upload (Windows-1256, Shift_JIS, ...).
+chardetng = { workspace = true }
+chrono = { workspace = true }
+csv = { workspace = true }
+encoding_rs = { workspace = true }
+futures-util = { workspace = true }
+garde = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# `#[derive(Exportable)]` and `#[derive(Importable)]`, re-exported.
+navree-macros = { workspace = true }
+# Queued exports and imports run as operations, imports apply in batches.
+navree-queue = { workspace = true }
+# Uploads, export files and error files live on a disk.
+navree-storage = { workspace = true }
+# Row messages, digit folding.
+navree-validation = { workspace = true }
+percent-encoding = { workspace = true }
+# XLSX writing.
+rust_xlsxwriter = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
