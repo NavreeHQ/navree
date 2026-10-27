@@ -464,7 +464,7 @@ fn events_constants_and_types_have_their_documented_names() {
     let _ = IntegrationsFake::restore_tokens;
     let _ = GraphClient::tenant_id;
     let _ = GoogleClient::domain;
-    let _ = GoogleClient::as_user::<String>;
+    let _ = |google: &GoogleClient| google.as_user("admin@acme.test");
     let _ = SlackClient::team_id;
     let _ = IntegrationClient::connection;
     let _ = IntegrationClient::base_url;
