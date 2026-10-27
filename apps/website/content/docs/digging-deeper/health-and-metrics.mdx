@@ -182,7 +182,38 @@ http_request_duration_seconds_sum{method="GET",route="/api/v1/deals",status="401
 http_request_duration_seconds_count{method="GET",route="/api/v1/deals",status="401"} 1
 ```
 
-These are the HTTP metrics `ObserveModule` records. Queue throughput, wait and runtime are on [Fleet](/docs/tools/fleet/)'s dashboard, and [Lighthouse](/docs/tools/lighthouse/) covers the rest of monitoring.
+These are the HTTP metrics `ObserveModule` records. Queue throughput, wait and runtime are on [Fleet](/docs/tools/fleet/)'s dashboard and, with `FleetModule` in the app, in `GET /metrics` too; [Lighthouse](/docs/tools/lighthouse/) covers the rest of monitoring.
+
+### Metrics read when Prometheus scrapes
+
+Some numbers are not counted as things happen but read from somewhere else, such as the size of a backlog in your database. Implement `MetricsCollector`, set gauges with the [`metrics`](https://docs.rs/metrics) crate's macros (add it to your dependencies), and register the collector as a `dyn MetricsCollector` multi-binding: `GET /metrics` runs every collector, one after the other, before it renders, so its gauges are fresh on every scrape. Each collector gets 2 seconds (`COLLECT_TIMEOUT`); one that takes longer is left behind and the exposition shows its previous values.
+
+```rust title="src/modules/orders/metrics.rs"
+use navree::BoxFuture;
+use navree::observe::MetricsCollector;
+use navree::prelude::*;
+
+pub struct Backlog {
+    db: Arc<navree::db::Db>,
+}
+
+impl MetricsCollector for Backlog {
+    fn collect(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            if let Ok(count) = unshipped_orders(&self.db).await {
+                metrics::gauge!("orders_unshipped").set(count as f64);
+            }
+        })
+    }
+}
+
+// In the module's `wire`:
+// m.multi(Factory::<dyn MetricsCollector>::new(|r: Resolver| async move {
+//     Ok(Arc::new(Backlog { db: r.get().await? }) as Arc<dyn MetricsCollector>)
+// }));
+```
+
+Fleet registers one this way for its `fleet_*` gauges.
 
 ### Protecting the endpoint
 
