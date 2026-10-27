@@ -8,7 +8,7 @@ use axum::http::Method;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, BoxError, BoxFuture, SessionStore};
 use navree_crypto::CryptoModule;
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef, route_table};
-use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{Factory, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{MemoryStore, Session, SessionModule, SessionOptions};
 use navree_testing::TestApp;
 use serde_json::{Value, json};
@@ -171,6 +171,53 @@ async fn without_an_app_key_sessions_cannot_be_written() {
     assert!(
         store.is_empty(),
         "nothing is stored without a cookie to find it"
+    );
+}
+
+/// Provides the `redis` store the way navree-redis does: a `dyn
+/// SessionStore` provider named `redis` (memory-backed here).
+struct NamedStoreModule(Arc<MemoryStore>);
+
+impl Module for NamedStoreModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let store = self.0.clone();
+        m.factory(
+            Factory::<dyn SessionStore>::new(move |_| {
+                let store = store.clone();
+                async move { Ok(store as Arc<dyn SessionStore>) }
+            })
+            .named("redis"),
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_redis_store_is_the_provider_named_redis() {
+    let store = Arc::new(MemoryStore::new());
+    let app = support::base()
+        .config("session.store", "redis")
+        .module(NamedStoreModule(store.clone()))
+        .module(SessionModule::from_config())
+        .build()
+        .await;
+    let client = app.client();
+    let id = support::put(&client, "k", json!(1)).await;
+    let record = store.load(&id).await.unwrap().expect("saved in the named store");
+    assert_eq!(record.data["k"], json!(1));
+}
+
+#[tokio::test]
+async fn the_redis_store_without_its_provider_fails_the_boot() {
+    let error = support::base()
+        .config("session.store", "redis")
+        .module(SessionModule::from_config())
+        .try_build()
+        .await
+        .expect_err("no provider named redis");
+    let message = error.to_string();
+    assert!(
+        message.contains("session.store = \"redis\"") && message.contains("RedisModule"),
+        "{message}"
     );
 }
 

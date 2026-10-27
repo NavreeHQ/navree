@@ -14,6 +14,9 @@ pub enum SessionStoreKind {
     /// In the `sessions` table ([`DatabaseStore`](crate::DatabaseStore));
     /// needs `DatabaseModule` in the app.
     Database,
+    /// In Redis: the `dyn SessionStore` provider named `redis`, which
+    /// navree-redis's `RedisModule` registers; needs it in the app.
+    Redis,
 }
 
 /// The `SameSite` attribute of the session and `XSRF-TOKEN` cookies.
@@ -34,7 +37,7 @@ pub enum SameSite {
 ///
 /// ```toml
 /// [session]
-/// store = "database"          # memory (default) | database
+/// store = "database"          # memory (default) | database | redis
 /// cookie = "navree_session"
 /// lifetime_minutes = 120      # idle lifetime; every request within it extends it
 /// secure = true               # send the cookies over HTTPS only
@@ -261,7 +264,18 @@ mod tests {
 
     #[test]
     fn unknown_store_and_same_site_values_fail() {
-        assert!(from(ConfigSources::new().set("session.store", "redis")).is_err());
+        assert!(from(ConfigSources::new().set("session.store", "carrier-pigeon")).is_err());
+        assert!(from(ConfigSources::new().set("session.same_site", "sometimes")).is_err());
+    }
+
+    #[test]
+    fn the_redis_store_is_a_store_name() {
+        let options = from(ConfigSources::new().set("session.store", "redis")).unwrap();
+        assert_eq!(options.store, SessionStoreKind::Redis);
+    }
+
+    #[test]
+    fn unknown_same_site_values_fail() {
         assert!(from(ConfigSources::new().set("session.same_site", "sometimes")).is_err());
     }
 

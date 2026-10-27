@@ -13,8 +13,10 @@
 //!   [`QueueError::UnknownJob`].
 //! - Drivers ([`QueueDriver`]): `database` (tables `jobs` and `failed_jobs`,
 //!   created by the `queue` migration set; workers in several processes
-//!   share them) and `memory` (one process, for tests and development).
-//!   Both behave the same.
+//!   share them), `memory` (one process, for tests and development) and
+//!   `redis` (the [`QueueStore`] provider named `redis`, from navree-redis's
+//!   `RedisModule`). They behave the same; [`QueueStore`] states the
+//!   contract other drivers implement.
 //! - Workers ([`Queue::work`], command `queue:work`) reserve jobs atomically
 //!   (SQLite: `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING`;
 //!   PostgreSQL adds `FOR UPDATE SKIP LOCKED`), run each attempt within the
@@ -115,5 +117,6 @@ pub use migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 pub use module::QueueModule;
 pub use options::{QueueDriver, QueueOptions};
 pub use queue::Queue;
-pub use record::{FailedJob, RetryTarget};
+pub use record::{FailedJob, NewJob, ReservedJob, RetryTarget};
+pub use store::QueueStore;
 pub use worker::{STALE_RESERVATION_GRACE_SECS, WorkOptions, WorkStats};

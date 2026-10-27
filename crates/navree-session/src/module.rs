@@ -116,6 +116,13 @@ fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
                         })?;
                         Arc::new(DatabaseStore::new((*db).clone()).with_clock(clock))
                     }
+                    SessionStoreKind::Redis => {
+                        r.app().get_named::<dyn SessionStore>("redis").await.map_err(|error| {
+                            format!(
+                                "session.store = \"redis\" needs RedisModule (navree-redis) in the app: {error}"
+                            )
+                        })?
+                    }
                 };
                 Ok(store)
             })
