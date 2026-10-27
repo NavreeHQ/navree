@@ -106,6 +106,13 @@ impl ModelFactory for DealFactory {
     }
 }
 
+/// Deals are found under their company in nested routes.
+impl crate::binding::ChildOf<Company> for Deal {
+    fn children_of(company: &Record<Company>, query: Builder<Deal>) -> Builder<Deal> {
+        query.where_(Deal::COMPANY_ID.eq(company.id))
+    }
+}
+
 impl DealFactory {
     /// A won deal.
     pub fn won(deal: &mut Deal) {
