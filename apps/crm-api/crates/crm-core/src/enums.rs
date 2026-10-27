@@ -190,10 +190,12 @@ string_enum! {
     }
 }
 
+// Each value is the morph name of a model (`#[model(morph_name = ..)]`):
+// the one an activity's `subject_record` relation loads. The doc comment
+// below is the OpenAPI description, which the API contract keeps.
 string_enum! {
     /// The kind of record an activity is attached to
-    /// (`activities.subject_type`): the morph name of the model the
-    /// activity's `subject_record` relation loads.
+    /// (`activities.subject_type`).
     #[derive(Default)]
     SubjectType, "subject type" {
         /// A company.
