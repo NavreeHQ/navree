@@ -3970,6 +3970,7 @@ dependencies = [
  "navree-crypto",
  "navree-db",
  "navree-dock",
+ "navree-documents",
  "navree-events",
  "navree-flags",
  "navree-graphql",

@@ -237,9 +237,9 @@ struct Features {
 /// runtime never needs (`dock`), and ecosystem libraries and packages an app
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
-/// `features = ["billing"]`).
+/// `features = ["documents"]`, `features = ["billing"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "social", "oauth", "flags", "graphql", "grpc", "billing",
+    "dock", "social", "oauth", "flags", "graphql", "grpc", "documents", "billing",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -440,4 +440,15 @@ fn opt_in_libraries_are_reexported_whole() {
 fn flags_is_reexported_with_its_feature() {
     assert!(same::<navree::flags::FlagsModule, FlagsModule>());
     assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
+}
+
+/// `navree::documents` is navree-documents re-exported whole, and the
+/// `documents` feature puts its module in the prelude
+/// (`cargo test -p navree --features documents`).
+#[cfg(feature = "documents")]
+#[test]
+fn documents_is_reexported_with_its_feature() {
+    assert!(same::<navree::documents::DocumentsModule, DocumentsModule>());
+    let pdf = navree::documents::Pdf::from_lines(["Invoice 42"]);
+    assert_eq!(pdf.page_count().unwrap(), 1);
 }
