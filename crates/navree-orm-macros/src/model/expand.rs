@@ -320,6 +320,46 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         None => (quote!(), quote!()),
     };
 
+    // The navree-access subject (navree-orm's `access` feature).
+    let subject_impl = match &model.subject {
+        Some((subject, prefix)) => {
+            let support = quote!(#krate::access::derive_support);
+            let policy = model.policy.as_ref().map(|policy| {
+                quote! {
+                    fn policy() -> ::core::option::Option<fn(&#support::AbilityCtx, &mut #support::Rules)> {
+                        ::core::option::Option::Some(<#policy as #support::Policy>::define)
+                    }
+                }
+            });
+            quote! {
+                #[automatically_derived]
+                impl #support::Subject for #ident {
+                    const SUBJECT: &'static str = #subject;
+                    const PERMISSION_PREFIX: &'static str = #prefix;
+                }
+
+                #[automatically_derived]
+                impl #support::SubjectRecords for #ident {
+                    type Record = #krate::Record<Self>;
+
+                    fn load<'a>(
+                        uow: &'a #support::Uow,
+                        id: &'a str,
+                    ) -> #support::BoxFuture<'a, ::core::result::Result<::core::option::Option<#krate::Record<Self>>, #support::BoxError>> {
+                        #krate::access::load_record::<Self>(uow, id)
+                    }
+
+                    fn record_json(record: &#krate::Record<Self>) -> #support::Json {
+                        #krate::access::record_json(record)
+                    }
+
+                    #policy
+                }
+            }
+        }
+        None => quote!(),
+    };
+
     // Column constants.
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {
         let constant = format_ident!(
@@ -412,6 +452,8 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         }
 
         #factory_impl
+
+        #subject_impl
     }
 }
 

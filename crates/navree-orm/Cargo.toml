@@ -17,6 +17,11 @@ postgres = ["navree-db/postgres"]
 ## Run on MySQL / MariaDB (SeaORM's MySQL driver). SQL for every dialect is
 ## generated without any feature.
 mysql = ["sea-orm/sqlx-mysql"]
+## Access control on models: `#[model(subject, policy)]`, navree-access's
+## abilities as query filters (`accessible`) and record checks
+## (`AbilityExt`), `Authorized<Model, A>` routes. The facade turns it on
+## when both `orm` and `access` are on.
+access = ["dep:navree-access"]
 
 [dependencies]
 axum = { workspace = true }
@@ -24,6 +29,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
+navree-access = { workspace = true, optional = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
@@ -45,7 +51,10 @@ uuid = { workspace = true }
 futures = { workspace = true }
 insta = { workspace = true }
 navree-config = { workspace = true }
+# The crate's own tests use its `access` feature (models as subjects).
+navree-orm = { workspace = true, features = ["access"] }
 navree-testing = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }
 trybuild = { workspace = true }
 

@@ -71,6 +71,16 @@ CREATE TABLE tasks (
     project_id BLOB NOT NULL,
     title TEXT NOT NULL
 );
+CREATE TABLE tickets (
+    id BLOB PRIMARY KEY,
+    owner_id BLOB NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    closed_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 "#;
 
 /// A company: integer key, timestamps, soft deletes.
@@ -291,6 +301,55 @@ impl ModelFactory for TaskFactory {
         Task {
             title: ctx.fake().sentence(),
             ..Task::default()
+        }
+    }
+}
+
+/// A support ticket: a navree-access subject with a policy.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(timestamps, subject, policy = TicketPolicy, factory = TicketFactory)]
+pub struct Ticket {
+    pub id: Uuid,
+    pub owner_id: Option<Uuid>,
+    pub title: String,
+    pub status: String,
+    pub priority: i32,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Signed-in users read every ticket and update their own open ones.
+pub struct TicketPolicy;
+
+impl navree_access::Policy for TicketPolicy {
+    fn define(ctx: &navree_access::AbilityCtx, rules: &mut navree_access::Rules) {
+        let Some(user) = &ctx.user else {
+            return;
+        };
+        rules.can(navree_access::READ, "Ticket");
+        rules
+            .can(navree_access::UPDATE, "Ticket")
+            .when(navree_access::field("owner_id").eq(user.id));
+        rules
+            .cannot(navree_access::UPDATE, "Ticket")
+            .when(navree_access::field("status").eq("closed"));
+    }
+}
+
+/// Open tickets with fake titles.
+#[derive(Default)]
+pub struct TicketFactory;
+
+impl ModelFactory for TicketFactory {
+    type Model = Ticket;
+
+    fn definition(&self, ctx: &mut FactoryContext<'_, Ticket>) -> Ticket {
+        Ticket {
+            title: ctx.fake().sentence(),
+            status: "open".to_owned(),
+            priority: ctx.fake().number(1..=5),
+            ..Ticket::default()
         }
     }
 }

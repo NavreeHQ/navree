@@ -89,7 +89,9 @@ validation = ["dep:navree-validation", "http", "db"]
 audit = ["dep:navree-audit", "http", "db"]
 queue = ["dep:navree-queue", "http", "db", "realtime", "schedule"]
 schedule = ["dep:navree-schedule", "db"]
-access = ["dep:navree-access", "http", "db"]
+## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
+## `accessible` queries, `Authorized<Model, A>`).
+access = ["dep:navree-access", "http", "db", "navree-orm?/access"]
 notify = ["dep:navree-notify", "http", "db", "mail"]
 ## The UI kit of the server-rendered tools: the app shell, components as
 ## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).

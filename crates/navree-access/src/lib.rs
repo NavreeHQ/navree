@@ -16,10 +16,12 @@
 //!   [`AbilityFactory`] (each principal's compiled, cached abilities) and
 //!   the app's route authorizer ([`AccessAuthorizer`]) for `roles`,
 //!   `permissions` and `can` route declarations.
-//! - [`AccessModule::for_feature`] registers an entity as a subject, so
-//!   `can(Update, Post, from = "id")` routes load the record in the
-//!   request's unit of work and hand it to the handler as
-//!   [`Authorized<E, A>`](Authorized).
+//! - [`AccessModule::for_feature`] registers a subject whose records routes
+//!   load ([`SubjectRecords`]: a SeaORM entity, or an ORM model with
+//!   `#[model(subject = "...")]`), so `can(Update, Post, from = "id")`
+//!   routes load the record in the request's unit of work and hand it to
+//!   the handler as [`Authorized<S, A>`](Authorized); a [`Policy`]
+//!   attached to the subject joins every principal's rules.
 //! - [`Accessible<E, A>`](Accessible) filters list queries with the same
 //!   rules (one SQL `CASE` chain, last match wins), so a record check and a
 //!   list filter never disagree; [`Abilities`] gives the handler the rules.
@@ -40,6 +42,7 @@ mod migration;
 mod module;
 mod options;
 mod permission_check;
+mod records;
 mod service;
 mod store;
 mod subject;
@@ -56,5 +59,6 @@ pub use extract::{Abilities, Accessible, Authorized, CurrentAccess};
 pub use factory::{AbilityFactory, PrincipalAccess};
 pub use module::AccessModule;
 pub use options::{AbilitiesFn, AccessOptions, default_abilities};
+pub use records::{Policy, SubjectRecords};
 pub use service::{AccessService, Explanation, RoleInfo};
 pub use subject::{EntityColumns, record_json};

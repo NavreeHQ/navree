@@ -56,6 +56,10 @@ pub(crate) struct Model {
     pub(crate) route_key: Option<String>,
     /// The workspace column of a workspace-scoped model.
     pub(crate) workspace: Option<String>,
+    /// The navree-access subject: its name and permission prefix.
+    pub(crate) subject: Option<(String, String)>,
+    /// The policy attached to the subject.
+    pub(crate) policy: Option<syn::Path>,
 }
 
 impl Model {
@@ -304,6 +308,22 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         .table
         .as_ref()
         .map_or_else(|| naming::table_name(&ident.to_string()), LitStr::value);
+    // A policy makes the model a subject; the subject's name defaults to
+    // the model's and its permission prefix to the table.
+    let subject = if attrs.subject.is_some() || attrs.policy.is_some() || attrs.permission_prefix.is_some() {
+        let name = attrs
+            .subject
+            .clone()
+            .flatten()
+            .map_or_else(|| ident.to_string(), |name| name.value());
+        let prefix = attrs
+            .permission_prefix
+            .as_ref()
+            .map_or_else(|| table.clone(), LitStr::value);
+        Some((name, prefix))
+    } else {
+        None
+    };
     Ok(Model {
         ident,
         vis: input.vis.clone(),
@@ -329,5 +349,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         factory: attrs.factory,
         route_key: attrs.route_key.as_ref().map(LitStr::value),
         workspace: attrs.workspace.map(|(column, _)| column),
+        subject,
+        policy: attrs.policy,
     })
 }
