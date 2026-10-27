@@ -5,9 +5,10 @@
 //!   and PKCS#8 keys (Apple's `.p8` files among them), private JWKs and
 //!   HMAC secrets, generates Ed25519 and P-256 keys, and exports PKCS#8.
 //! - [`VerifyingKey`] verifies them: public keys from a JWK, a PEM
-//!   SubjectPublicKeyInfo or raw parts (RSA `n` and `e`, EC coordinates,
-//!   Ed25519 bytes), and HMAC secrets. A key verifies only its own
-//!   algorithms.
+//!   SubjectPublicKeyInfo, an X.509 certificate or raw parts (RSA `n` and
+//!   `e`, EC coordinates, Ed25519 bytes), and HMAC secrets. A key verifies
+//!   only its own algorithms (and, for senders that still use it, RSA with
+//!   SHA-1 through [`VerifyingKey::verify_legacy_sha1`]).
 //! - [`Jws`] parses a compact token; [`Jws::verify`] checks it with one
 //!   key and [`Jws::verify_with`] with a key set such as an identity
 //!   provider's JWKS.
