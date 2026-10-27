@@ -116,6 +116,8 @@ impl AppBuilder {
     /// - `check [--graph]` validates the graph without constructing anything
     ///   and prints a summary (or the module tree);
     /// - `help` / `list` prints the commands;
+    /// - `introspect [--json]` validates the graph without constructing
+    ///   anything and prints it as JSON ([`GraphReport::to_json`]);
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully;
     /// - no command runs `serve` if a module registers it, else `help`.
@@ -135,6 +137,10 @@ impl AppBuilder {
                         report.modules.len().saturating_sub(1)
                     );
                 }
+                Ok(())
+            }
+            Some("introspect") => {
+                println!("{}", self.validate()?.to_json());
                 Ok(())
             }
             Some("help" | "list" | "--help" | "-h") => {

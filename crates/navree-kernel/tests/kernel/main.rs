@@ -7,6 +7,7 @@ mod checks;
 mod commands;
 mod configuration;
 mod construction;
+mod introspect;
 mod lifecycle;
 mod providers;
 mod scopes;

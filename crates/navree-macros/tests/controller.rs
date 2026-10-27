@@ -681,8 +681,14 @@ async fn route_options_fill_meta() {
     assert_eq!(send_meta.timeout, Some(Duration::from_millis(500)));
     assert!(send_meta.transactional);
     assert_eq!(send_meta.audit_action.as_deref(), Some("invoice.sent"));
+    assert_eq!(
+        send_meta.handler.as_deref(),
+        Some("InvoiceController::send"),
+        "the controller method, for `routes --json` and Navigator"
+    );
 
     let index = table.iter().find(|m| m.method == "GET").expect("index");
+    assert_eq!(index.handler.as_deref(), Some("InvoiceController::index"));
     let throttle = index.throttle.expect("impl-level throttle");
     assert_eq!(
         (throttle.limit, throttle.per),
