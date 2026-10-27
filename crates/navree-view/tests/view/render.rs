@@ -7,6 +7,43 @@ use serde_json::json;
 use crate::support::{options, views_dir};
 
 #[test]
+fn render_source_renders_a_template_kept_as_text() {
+    let views = Views::from_templates([(
+        "layouts/mail.html",
+        "<main>{% block body %}{% endblock %}</main>",
+    )])
+    .expect("views");
+
+    // The name picks the escaping, like a file's extension.
+    let html = views
+        .render_source(
+            "override.html",
+            "{% extends \"layouts/mail.html\" %}{% block body %}Hi {{ name }}{% endblock %}",
+            json!({ "name": "<Ada>" }),
+        )
+        .expect("render");
+    assert_eq!(html, "<main>Hi &lt;Ada&gt;</main>");
+
+    let text = views
+        .render_source("subject.txt", "Hi {{ name }}", json!({ "name": "<Ada>" }))
+        .expect("render");
+    assert_eq!(text, "Hi <Ada>");
+
+    // The filters and the strict undefined rule of every template apply.
+    let error = views
+        .render_source("subject.txt", "{{ missing }}", json!({}))
+        .expect_err("undefined");
+    assert!(
+        matches!(&error, ViewError::Template { name, .. } if name == "subject.txt"),
+        "{error:?}"
+    );
+    let error = views
+        .render_source("broken.html", "{% if %}", json!({}))
+        .expect_err("syntax");
+    assert!(matches!(error, ViewError::Template { .. }), "{error:?}");
+}
+
+#[test]
 fn renders_file_template() {
     let dir = views_dir(&[("mail/welcome.html", "Hello {{ name }}!")]);
     let views = Views::new(&options(&[dir.path()])).expect("views");
