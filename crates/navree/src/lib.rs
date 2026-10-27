@@ -47,10 +47,11 @@
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
+//! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `dock`, `otel`). A feature also turns on the features of the
+//! `mcp`, `ai`, `i18n`, `dock`, `otel`). A feature also turns on the features of the
 //! crates its crate builds on (`auth` turns on `access`, `db`, `http`, ...).
 //! SQLite is built in; the `postgres` feature adds navree-db's PostgreSQL
 //! driver and the `mysql` feature its MySQL and MariaDB driver, and the
@@ -215,6 +216,10 @@ pub mod flags {
 }
 #[cfg(feature = "ai")]
 pub use navree_ai as ai;
+/// Localization (the `i18n` feature): navree-i18n re-exported whole,
+/// with `t!`, `args!` and `embed_locales!`.
+#[cfg(feature = "i18n")]
+pub use navree_i18n as i18n;
 
 /// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
 /// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
