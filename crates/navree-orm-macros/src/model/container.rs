@@ -57,6 +57,14 @@ pub(crate) struct Container {
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
+    /// `factory = DealFactory`: the model's factory.
+    pub(crate) factory: Option<syn::Path>,
+    /// `route_key = "slug"`: the column route model binding looks records
+    /// up by.
+    pub(crate) route_key: Option<LitStr>,
+    /// `workspace` or `workspace = "team_id"`: the column holding the
+    /// workspace of a workspace-scoped model.
+    pub(crate) workspace: Option<(String, Span)>,
 }
 
 /// The keys `#[model(...)]` takes on a struct.
@@ -69,6 +77,9 @@ const KEYS: &[&str] = &[
     "connection",
     "per_page",
     "global_scopes",
+    "factory",
+    "route_key",
+    "workspace",
 ];
 
 /// Parses the `#[model(...)]` attributes of the struct.
@@ -128,6 +139,32 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         syn::parenthesized!(content in meta.input);
         let scopes = Punctuated::<syn::Expr, Token![,]>::parse_terminated(&content)?;
         container.global_scopes.extend(scopes);
+    } else if path.is_ident("factory") {
+        let value = meta.value()?;
+        let factory = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the factory must be the path of a type implementing `ModelFactory`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.factory = Some(factory);
+    } else if path.is_ident("route_key") {
+        container.route_key = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("workspace") {
+        let span = path
+            .get_ident()
+            .map_or_else(Span::call_site, syn::Ident::span);
+        let column = if meta.input.peek(Token![=]) {
+            non_empty(meta.value()?.parse()?)?.value()
+        } else {
+            "workspace_id".to_owned()
+        };
+        container.workspace = Some((column, span));
     } else {
         let key = key_name(path);
         let hint = suggestion(&key, KEYS)

@@ -174,6 +174,12 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     if let Some(per_page) = &model.per_page {
         meta = quote!(#meta.per_page(#per_page));
     }
+    if let Some(route_key) = &model.route_key {
+        meta = quote!(#meta.route_key(#route_key));
+    }
+    if let Some(workspace) = &model.workspace {
+        meta = quote!(#meta.workspace(#workspace));
+    }
 
     // from_row.
     let reads = model.columns.iter().zip(&codecs).map(|(column, codec)| {
@@ -292,6 +298,28 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         }
     };
 
+    // The factory: `HasFactory` and an inherent `factory()`.
+    let (factory_impl, factory_fn) = match &model.factory {
+        Some(factory) => {
+            let doc = format!("A factory building `{ident}` records (see `navree_orm::factory`).");
+            (
+                quote! {
+                    #[automatically_derived]
+                    impl #krate::factory::HasFactory for #ident {
+                        type Factory = #factory;
+                    }
+                },
+                quote! {
+                    #[doc = #doc]
+                    #vis fn factory() -> #krate::factory::Factory<#factory> {
+                        #krate::factory::Factory::<#factory>::new()
+                    }
+                },
+            )
+        }
+        None => (quote!(), quote!()),
+    };
+
     // Column constants.
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {
         let constant = format_ident!(
@@ -379,7 +407,11 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         #[automatically_derived]
         impl #ident {
             #(#constants)*
+
+            #factory_fn
         }
+
+        #factory_impl
     }
 }
 

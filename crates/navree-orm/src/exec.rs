@@ -212,6 +212,26 @@ impl Target<'_> {
         }
     }
 
+    /// The same target, borrowed: the same connection or transaction, unit
+    /// of work and app. (A target is itself an [`Executor`] through this,
+    /// so code handed one, such as a factory's after-creating hook, keeps
+    /// writing in the same transaction.)
+    pub fn reborrow(&self) -> Target<'_> {
+        match self {
+            Target::Sql(sql) => Target::Sql(SqlTarget::new(
+                match &sql.conn {
+                    SqlConn::Pool(conn) => SqlConn::Pool(conn),
+                    SqlConn::Transaction(tx) => SqlConn::Transaction(tx.clone()),
+                    SqlConn::TransactionRef(tx) => SqlConn::TransactionRef(tx),
+                },
+                sql.dialect,
+                sql.uow.clone(),
+                sql.app.clone(),
+            )),
+            Target::Document(document) => Target::Document(document.clone()),
+        }
+    }
+
     /// The same target running on `tx` (a savepoint of its transaction).
     pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
         match self {
@@ -455,6 +475,13 @@ impl Executor for DatabaseTransaction {
             None,
             None,
         )))
+    }
+}
+
+/// Every operation runs where the target runs (see [`Target::reborrow`]).
+impl Executor for Target<'_> {
+    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
+        Ok(self.reborrow())
     }
 }
 

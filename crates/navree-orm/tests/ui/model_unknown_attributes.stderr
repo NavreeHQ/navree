@@ -1,4 +1,4 @@
-error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, primary_key, key_type, timestamps, soft_deletes, connection, per_page, global_scopes
+error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, primary_key, key_type, timestamps, soft_deletes, connection, per_page, global_scopes, factory, route_key, workspace
  --> tests/ui/model_unknown_attributes.rs:4:9
   |
 4 | #[model(tabel = "deals")]

@@ -221,10 +221,13 @@ pub(crate) struct Hooks<M: Model> {
 }
 
 impl<M: Model> Hooks<M> {
-    /// The hooks that apply in `ctx`.
+    /// The hooks that apply in `ctx`. The app's hooks are skipped inside a
+    /// quiet operation (see `crate::quiet`).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
-        if let Some(app) = ctx.app() {
+        if let Some(app) = ctx.app()
+            && !crate::quiet::is_active()
+        {
             let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
                 crate::error::OrmError::Hook {
                     model: M::meta().name().into(),

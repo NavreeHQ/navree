@@ -116,6 +116,15 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A model factory could not build or create its records: a state
+    /// failed, a relationship is misdeclared, a hook cancelled a save.
+    #[error("the {model} factory failed: {message}")]
+    Factory {
+        /// The model the factory builds.
+        model: Cow<'static, str>,
+        /// What went wrong.
+        message: String,
+    },
 }
 
 impl OrmError {
@@ -148,6 +157,13 @@ impl OrmError {
 
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
         OrmError::InvalidQuery(message.into())
+    }
+
+    pub(crate) fn factory(model: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+        OrmError::Factory {
+            model: model.into(),
+            message: message.into(),
+        }
     }
 
     pub(crate) fn unsupported(

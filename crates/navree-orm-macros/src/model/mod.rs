@@ -49,6 +49,13 @@ pub(crate) struct Model {
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
+    /// The model's factory (`factory = DealFactory`).
+    pub(crate) factory: Option<syn::Path>,
+    /// The column route model binding looks records up by, when it is not
+    /// the key.
+    pub(crate) route_key: Option<String>,
+    /// The workspace column of a workspace-scoped model.
+    pub(crate) workspace: Option<String>,
 }
 
 impl Model {
@@ -265,6 +272,32 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             ));
         }
     }
+    if let Some(route_key) = &attrs.route_key
+        && !columns.iter().any(|column| column.name == route_key.value())
+    {
+        errors.push(syn::Error::new(
+            route_key.span(),
+            format!(
+                "{ident} has no column `{}` to bind routes by: name one of its columns",
+                route_key.value()
+            ),
+        ));
+    }
+    if let Some((name, span)) = &attrs.workspace {
+        match columns.iter().find(|candidate| &candidate.name == name) {
+            None => errors.push(syn::Error::new(
+                *span,
+                format!(
+                    "#[model(workspace)] needs a field for the `{name}` column (a `Uuid`), or name the column with workspace = \"...\""
+                ),
+            )),
+            Some(column) if column.cast.is_some() => errors.push(syn::Error::new(
+                column.ident.span(),
+                "the workspace field cannot have a cast: use a `Uuid` field",
+            )),
+            Some(_) => {}
+        }
+    }
     errors.finish()?;
 
     let table = attrs
@@ -293,5 +326,8 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         connection: attrs.connection,
         per_page: attrs.per_page,
         global_scopes: attrs.global_scopes,
+        factory: attrs.factory,
+        route_key: attrs.route_key.as_ref().map(LitStr::value),
+        workspace: attrs.workspace.map(|(column, _)| column),
     })
 }

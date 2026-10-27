@@ -95,6 +95,7 @@ mod driver;
 mod error;
 mod exec;
 mod expr;
+pub mod factory;
 pub mod hooks;
 pub mod ir;
 mod model;
@@ -102,6 +103,7 @@ pub mod pagination;
 mod persist;
 pub mod prelude;
 mod query;
+mod quiet;
 mod record;
 pub mod relations;
 mod row;
@@ -154,3 +156,9 @@ pub mod __private {
 #[doc(hidden)]
 #[path = "doc_models.rs"]
 pub mod __doc_models;
+
+/// The models and factories the factory, testing, binding and workspace
+/// examples use. Not part of the API.
+#[doc(hidden)]
+#[path = "doc_factories.rs"]
+pub mod __doc_factories;
