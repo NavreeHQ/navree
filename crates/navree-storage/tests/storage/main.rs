@@ -1,10 +1,19 @@
-//! navree-storage integration tests: disks on the local filesystem and in
-//! memory, the signed download route and the upload helper.
+//! navree-storage integration tests: the disk conformance suite on every
+//! driver, the signed download and upload routes, presigned uploads, disk
+//! sync, configuration and the upload helper.
 
 mod support;
 
+mod cloud;
+mod conformance;
 mod disk;
+mod drivers;
 mod module;
+mod options;
+mod presign;
+#[cfg(feature = "s3")]
+mod s3_server;
 mod serve;
+mod sync;
 mod upload;
 mod urls;

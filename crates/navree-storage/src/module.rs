@@ -1,24 +1,29 @@
 //! [`StorageModule`].
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::multipart::MultipartError;
+use axum::http::StatusCode;
+use futures_util::future::join_all;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
-use navree_crypto::{AppKey, Encrypter, random_token};
+use navree_crypto::{AppKey, Encrypter};
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
 use crate::serve::StorageController;
-use crate::{Disk, Storage, StorageError, StorageOptions};
+use crate::{Disk, Storage, StorageError, StorageOptions, UploadRejection};
 
 /// The purpose string temporary URL keys are derived for.
 const SIGNING_PURPOSE: &str = "navree-storage/temporary-url/v1";
 
 /// The global storage module: provides and exports [`Storage`] (every
 /// configured disk) and [`Disk`] (the default disk), registers a `storage`
-/// readiness check (`dyn HealthCheck`) and mounts the temporary URL route
-/// `GET /storage/{disk}/{*path}` when the app has `HttpModule`.
+/// readiness check (`dyn HealthCheck`, probing every disk) and the
+/// `storage:sync` command, and mounts the routes of the app's own signed
+/// links for local and memory disks, `GET /storage/{disk}/{*path}` and
+/// `PUT /storage/{disk}/{*path}`, when the app has `HttpModule`.
 ///
 /// ```no_run
 /// use navree_kernel::Navree;
@@ -125,7 +130,8 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
     .exports::<Disk>()
     .controller::<StorageController>()
     .map_error::<StorageError>(storage_error)
-    .map_error::<MultipartError>(crate::upload::client_error);
+    .map_error::<MultipartError>(crate::upload::client_error)
+    .command(crate::sync::command());
 }
 
 /// The temporary URL signing key: derived from the app key (the
@@ -159,32 +165,35 @@ fn storage_error(error: &StorageError) -> Option<AppError> {
     match error {
         StorageError::NotFound { .. } => Some(AppError::not_found()),
         StorageError::InvalidPath { .. } => Some(AppError::bad_request("Invalid file path.")),
+        StorageError::Rejected { rejection, .. } => Some(match rejection {
+            UploadRejection::TooLarge { .. } => {
+                AppError::from_status(StatusCode::PAYLOAD_TOO_LARGE)
+                    .with_detail(sentence(rejection))
+            }
+            _ => AppError::bad_request(sentence(rejection)),
+        }),
         _ => None,
     }
 }
 
-/// Readiness: every disk can write, read back and delete a small file.
-struct StorageHealth {
-    storage: Arc<Storage>,
+/// A rejection as a response message: `The file must ...`.
+fn sentence(rejection: &UploadRejection) -> String {
+    let message = rejection.to_string();
+    let mut chars = message.chars();
+    match chars.next() {
+        Some(first) => format!("{}{}.", first.to_uppercase(), chars.as_str()),
+        None => message,
+    }
 }
 
-impl StorageHealth {
-    /// Writes, reads back and deletes a probe file; the error says what failed.
-    async fn probe(disk: &Disk) -> Result<(), String> {
-        let path = format!(".navree-health/{}", random_token(16));
-        disk.put(&path, "ok")
-            .await
-            .map_err(|error| error.to_string())?;
-        let read = disk.get(&path).await;
-        disk.delete(&path)
-            .await
-            .map_err(|error| error.to_string())?;
-        match read {
-            Ok(bytes) if bytes == "ok" => Ok(()),
-            Ok(_) => Err("the disk returned other contents than just written".to_owned()),
-            Err(error) => Err(error.to_string()),
-        }
-    }
+/// How long one disk's probe may take; below the readiness report's own
+/// limit, so a slow disk is named instead of failing the whole check.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+/// Readiness: every disk can write, read back and delete a small file. The
+/// disks are probed at the same time, each with its own time limit.
+struct StorageHealth {
+    storage: Arc<Storage>,
 }
 
 impl HealthCheck for StorageHealth {
@@ -194,15 +203,28 @@ impl HealthCheck for StorageHealth {
 
     fn check(&self) -> BoxFuture<'_, HealthStatus> {
         Box::pin(async move {
-            let mut down = Vec::new();
-            for name in self.storage.disk_names() {
-                let Ok(disk) = self.storage.disk(name) else {
-                    continue;
-                };
-                if let Err(reason) = Self::probe(&disk).await {
-                    down.push(format!("disk `{name}`: {reason}"));
-                }
-            }
+            let probes = self.storage.disk_names().filter_map(|name| {
+                let disk = self.storage.disk(name).ok()?;
+                Some(async move {
+                    let status = tokio::time::timeout(PROBE_TIMEOUT, disk.check_health())
+                        .await
+                        .unwrap_or_else(|_| {
+                            HealthStatus::Down(format!(
+                                "timed out after {} ms",
+                                PROBE_TIMEOUT.as_millis()
+                            ))
+                        });
+                    (disk.name().to_owned(), status)
+                })
+            });
+            let down: Vec<String> = join_all(probes)
+                .await
+                .into_iter()
+                .filter_map(|(name, status)| match status {
+                    HealthStatus::Up => None,
+                    HealthStatus::Down(reason) => Some(format!("disk `{name}`: {reason}")),
+                })
+                .collect();
             if down.is_empty() {
                 HealthStatus::Up
             } else {
