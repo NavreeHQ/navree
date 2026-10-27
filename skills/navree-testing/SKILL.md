@@ -175,6 +175,14 @@ app's `dyn Clock` (Navree's own modules do; `Utc::now()` doesn't). The
 `QueueFake` records jobs even from requests that roll back, and accepts
 unregistered jobs: keep one test on the real queue.
 
+## Isolation suites
+
+Multi-tenant modules get cross-workspace tests generated from their route
+table: `app.isolation_suite::<DealsModule>().factory(DealFactory::default()).run().await`
+(`navree::workspace::testing::IsolationSuiteExt`). From workspace A, B's
+records must be a 404, missing from lists and never created there. See
+skill `navree-module-conformity` for bindings, bodies and the report.
+
 ## Running
 
 ```sh
@@ -203,3 +211,4 @@ concurrency tests.
 - https://navree.com/docs/testing/http-tests/
 - https://navree.com/docs/testing/database-tests/
 - https://navree.com/docs/testing/fakes/
+- https://navree.com/docs/testing/isolation-tests/
