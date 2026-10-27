@@ -810,7 +810,7 @@ fn convert_error(collection: &str) -> MongoError {
 /// What went wrong in a write command's reply, which reports refused
 /// documents (`writeErrors`) and an unmet write concern
 /// (`writeConcernError`) beside `ok: 1`.
-fn write_problem(reply: &Document) -> Option<String> {
+pub(crate) fn write_problem(reply: &Document) -> Option<String> {
     let message = |error: &Document| {
         let text = error.get_str("errmsg").unwrap_or("refused");
         match error.get("code").and_then(Bson::as_i32) {

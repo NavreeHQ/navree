@@ -8,6 +8,7 @@ mod support;
 
 mod commands;
 mod crud;
+mod migrations;
 mod module;
 mod queries;
 mod schema;
