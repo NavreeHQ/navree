@@ -4,7 +4,7 @@ use navree_kernel::BoxError;
 use navree_mail::MailError;
 use sea_orm::DbErr;
 
-use crate::Channel;
+use crate::{Channel, ChannelError};
 
 /// An error raised while sending a notification or reading stored ones.
 ///
@@ -21,12 +21,27 @@ pub enum NotifyError {
     /// The broadcast channel failed.
     #[error("the broadcast channel failed: {0}")]
     Broadcast(#[source] BoxError),
+    /// A Slack, Teams, SMS, WhatsApp or web push driver did not send the
+    /// message.
+    #[error("the {channel} channel failed: {source}")]
+    Channel {
+        /// The channel.
+        channel: Channel,
+        /// What the driver reported.
+        #[source]
+        source: ChannelError,
+    },
+    /// A recipient address is not one the channel can use (a number that is
+    /// not E.164, an invalid push subscription).
+    #[error("invalid recipient: {0}")]
+    InvalidRecipient(String),
     /// Dispatching job `notify.send` failed.
     #[error("queueing the notification failed: {0}")]
     Queue(#[source] BoxError),
     /// A channel's service is missing from the app (`DatabaseModule` for
-    /// the database channel, `MailModule` for mail, a `dyn Broadcaster` such
-    /// as `RealtimeModule` for broadcast), or the app has shut down
+    /// the database channel and the channel tables, `MailModule` for mail,
+    /// a `dyn Broadcaster` such as `RealtimeModule` for broadcast, a driver
+    /// for SMS, WhatsApp and web push), or the app has shut down
     /// (`channel` is `None`).
     #[error("{} is not available: {reason}", describe(*.channel))]
     Unavailable {

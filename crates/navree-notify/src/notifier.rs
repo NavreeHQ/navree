@@ -15,10 +15,13 @@ use sea_orm::DbErr;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::channels::ChannelDrivers;
+use crate::deliveries::Outcome;
 use crate::recipient::within;
 use crate::{
-    Channel, Delivery, Notifiable, Notification, NotifyError, NotifyOptions, SendNotificationJob,
-    notifications,
+    Channel, ChannelError, Delivery, DeliveryLog, Notifiable, Notification, NotifyError,
+    NotifyOptions, OptOutSource, OptOuts, PushSubscriptions, SendNotificationJob, SentMessage,
+    SlackRoute, TeamsRoute, WebPushMessage, notifications,
 };
 
 /// The event the broadcast channel sends.
@@ -38,18 +41,46 @@ pub struct Notifier {
     warned_inline: AtomicBool,
     /// Where delivered channels are reported (`NotificationSent`).
     telemetry: Telemetry,
+    /// The drivers configured in `notify`.
+    drivers: ChannelDrivers,
+    /// The delivery log of the recorded channels.
+    log: Arc<DeliveryLog>,
+    /// The SMS and WhatsApp opt-outs.
+    opt_outs: Arc<OptOuts>,
+    /// The web push subscriptions.
+    push: Arc<PushSubscriptions>,
+}
+
+/// What [`Notifier::new`] needs besides the options.
+pub(crate) struct Parts {
+    pub(crate) app: WeakAppContext,
+    pub(crate) telemetry: Telemetry,
+    pub(crate) drivers: ChannelDrivers,
+    pub(crate) log: Arc<DeliveryLog>,
+    pub(crate) opt_outs: Arc<OptOuts>,
+    pub(crate) push: Arc<PushSubscriptions>,
 }
 
 impl Notifier {
-    /// A notifier for `app` with `options`, reporting each delivered
-    /// channel to `telemetry` as a `NotificationSent` event.
-    pub(crate) fn new(options: NotifyOptions, app: WeakAppContext, telemetry: Telemetry) -> Self {
+    /// A notifier for the app in `parts` with `options`, reporting each
+    /// delivered channel to the telemetry as a `NotificationSent` event.
+    pub(crate) fn new(options: NotifyOptions, parts: Parts) -> Self {
         Self {
             options,
-            app,
+            app: parts.app,
             warned_inline: AtomicBool::new(false),
-            telemetry,
+            telemetry: parts.telemetry,
+            drivers: parts.drivers,
+            log: parts.log,
+            opt_outs: parts.opt_outs,
+            push: parts.push,
         }
+    }
+
+    /// The application server key browsers subscribe with (base64url), when
+    /// `notify.web_push` has a key pair.
+    pub fn application_server_key(&self) -> Option<String> {
+        self.drivers.application_server_key()
     }
 
     /// The options.
@@ -207,23 +238,27 @@ impl Notifier {
         ctx: &AppContext,
         job: &SendNotificationJob,
     ) -> Result<(), NotifyError> {
-        self.deliver_channel(ctx, job).await?;
-        report(&self.telemetry, job);
+        if self.deliver_channel(ctx, job).await? {
+            report(&self.telemetry, job);
+        }
         Ok(())
     }
 
+    /// Delivers one channel; `false` when there was nothing to send (an
+    /// opted-out number, no push subscriptions).
     async fn deliver_channel(
         &self,
         ctx: &AppContext,
         job: &SendNotificationJob,
-    ) -> Result<(), NotifyError> {
+    ) -> Result<bool, NotifyError> {
         match &job.delivery {
             Delivery::Database { data } => {
                 let db = ctx
                     .try_get::<Db>()
                     .await
                     .ok_or_else(|| unavailable(Channel::Database, "add DatabaseModule"))?;
-                store(db.conn(), job, data).await
+                store(db.conn(), job, data).await?;
+                Ok(true)
             }
             Delivery::Mail { mail } => {
                 let mailer = ctx
@@ -238,7 +273,8 @@ impl Notifier {
                     mailer.send(mail),
                 )
                 .await;
-                Ok(sent?)
+                sent?;
+                Ok(true)
             }
             Delivery::Broadcast { channel, data } => {
                 let broadcaster = ctx.try_get::<dyn Broadcaster>().await.ok_or_else(|| {
@@ -254,8 +290,215 @@ impl Notifier {
                         broadcast_payload(job, data),
                     )
                     .await
-                    .map_err(NotifyError::Broadcast)
+                    .map_err(NotifyError::Broadcast)?;
+                Ok(true)
             }
+            Delivery::Slack { route, message } => {
+                let driver = self.drivers.slack(ctx).await;
+                let result = driver.send(route, message).await;
+                let recipient = slack_recipient(route);
+                self.finish(ctx, job, Channel::Slack, Some(&recipient), result)
+                    .await
+            }
+            Delivery::MicrosoftTeams { route, message } => {
+                let driver = self.drivers.teams(ctx).await;
+                let result = driver.send(route, message).await;
+                let recipient = teams_recipient(route);
+                self.finish(ctx, job, Channel::MicrosoftTeams, Some(&recipient), result)
+                    .await
+            }
+            Delivery::Sms { to, message } => {
+                let driver = self.drivers.sms(ctx).await.ok_or_else(|| {
+                    unavailable(
+                        Channel::Sms,
+                        "set notify.sms.driver (twilio, vonage, sns or log), or register a `dyn SmsDriver`",
+                    )
+                })?;
+                let Some(number) = self.number(ctx, job, Channel::Sms, to).await? else {
+                    return Ok(false);
+                };
+                let result = driver.send(&number, message).await;
+                self.finish(ctx, job, Channel::Sms, Some(&number), result)
+                    .await
+            }
+            Delivery::WhatsApp { to, message } => {
+                let driver = self.drivers.whatsapp(ctx).await.ok_or_else(|| {
+                    unavailable(
+                        Channel::WhatsApp,
+                        "set notify.whatsapp.driver (twilio, meta or log), or register a `dyn WhatsAppDriver`",
+                    )
+                })?;
+                let Some(number) = self.number(ctx, job, Channel::WhatsApp, to).await? else {
+                    return Ok(false);
+                };
+                let result = driver.send(&number, message).await;
+                self.finish(ctx, job, Channel::WhatsApp, Some(&number), result)
+                    .await
+            }
+            Delivery::WebPush { message } => self.push_all(ctx, job, message).await,
+        }
+    }
+
+    /// `to` in E.164, unless the number has opted out of `channel` (then
+    /// the delivery is recorded `opted_out` and `None` returned).
+    async fn number(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        channel: Channel,
+        to: &str,
+    ) -> Result<Option<String>, NotifyError> {
+        let number = match self.opt_outs.normalize(to) {
+            Ok(number) => number,
+            Err(error) => {
+                let outcome = Outcome::Failed {
+                    provider: None,
+                    error: error.to_string(),
+                };
+                self.record(ctx, job, channel, Some(to), outcome).await;
+                return Err(error);
+            }
+        };
+        if has_database(ctx).await && self.opt_outs.is_opted_out(channel, &number).await? {
+            self.record(ctx, job, channel, Some(&number), Outcome::OptedOut)
+                .await;
+            tracing::debug!(
+                target: "navree::notify",
+                notification = %job.id,
+                %channel,
+                "skipped an opted-out number"
+            );
+            return Ok(None);
+        }
+        Ok(Some(number))
+    }
+
+    /// Records a driver's answer; an opt-out at the provider opts the
+    /// number out and is not an error.
+    async fn finish(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        channel: Channel,
+        recipient: Option<&str>,
+        result: Result<SentMessage, ChannelError>,
+    ) -> Result<bool, NotifyError> {
+        match result {
+            Ok(sent) => {
+                self.record(ctx, job, channel, recipient, Outcome::Sent(&sent))
+                    .await;
+                Ok(true)
+            }
+            Err(ChannelError::OptedOut { .. }) => {
+                if let Some(number) = recipient
+                    && matches!(channel, Channel::Sms | Channel::WhatsApp)
+                    && has_database(ctx).await
+                    && let Err(error) = self
+                        .opt_outs
+                        .opt_out(channel, number, OptOutSource::Provider)
+                        .await
+                {
+                    tracing::warn!(target: "navree::notify", %channel, %error, "recording an opt-out failed");
+                }
+                self.record(ctx, job, channel, recipient, Outcome::OptedOut)
+                    .await;
+                Ok(false)
+            }
+            Err(error) => {
+                let outcome = Outcome::Failed {
+                    provider: provider_of(&error),
+                    error: error.to_string(),
+                };
+                self.record(ctx, job, channel, recipient, outcome).await;
+                Err(NotifyError::Channel {
+                    channel,
+                    source: error,
+                })
+            }
+        }
+    }
+
+    /// Pushes `message` to every subscription of the job's notifiable;
+    /// subscriptions the push service reports gone are deleted.
+    async fn push_all(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        message: &WebPushMessage,
+    ) -> Result<bool, NotifyError> {
+        let driver = self.drivers.web_push(ctx).await.ok_or_else(|| {
+            unavailable(
+                Channel::WebPush,
+                "set notify.web_push.public_key and private_key (see `notify:vapid`), or register a `dyn WebPushDriver`",
+            )
+        })?;
+        if !has_database(ctx).await {
+            return Err(unavailable(
+                Channel::WebPush,
+                "push subscriptions are stored in the database: add DatabaseModule",
+            ));
+        }
+        let subscriptions = self
+            .push
+            .of(&job.notifiable_type, &job.notifiable_id)
+            .await?;
+        let mut sent_any = false;
+        let mut errors = Vec::new();
+        for subscription in subscriptions {
+            let recipient = subscription.id.to_string();
+            let outcome = match driver.send(&subscription.target(), message).await {
+                Ok(sent) => {
+                    sent_any = true;
+                    if let Err(error) = self.push.touch(subscription.id, now(ctx).await).await {
+                        tracing::debug!(target: "navree::notify", %error, "updating a push subscription failed");
+                    }
+                    let outcome = Outcome::Sent(&sent);
+                    self.record(ctx, job, Channel::WebPush, Some(&recipient), outcome)
+                        .await;
+                    continue;
+                }
+                Err(ChannelError::Gone) => {
+                    if let Err(error) = self.push.forget(subscription.id).await {
+                        tracing::warn!(target: "navree::notify", %error, "deleting a gone push subscription failed");
+                    }
+                    Outcome::Failed {
+                        provider: None,
+                        error: ChannelError::Gone.to_string(),
+                    }
+                }
+                Err(error) => {
+                    let outcome = Outcome::Failed {
+                        provider: provider_of(&error),
+                        error: error.to_string(),
+                    };
+                    errors.push(NotifyError::Channel {
+                        channel: Channel::WebPush,
+                        source: error,
+                    });
+                    outcome
+                }
+            };
+            self.record(ctx, job, Channel::WebPush, Some(&recipient), outcome)
+                .await;
+        }
+        match NotifyError::collect(errors) {
+            Some(error) => Err(error),
+            None => Ok(sent_any),
+        }
+    }
+
+    /// Records an attempt in the delivery log, with `notify.deliveries`
+    /// and `DatabaseModule`.
+    async fn record(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        channel: Channel,
+        recipient: Option<&str>,
+        outcome: Outcome<'_>,
+    ) {
+        if self.options.deliveries && has_database(ctx).await {
+            self.log.record(job, channel, recipient, outcome).await;
         }
     }
 
@@ -353,6 +596,29 @@ fn render_channel<N: Notification>(
             let data = notification.to_broadcast(notifiable)?;
             Some(Delivery::Broadcast { channel, data })
         }
+        Channel::Slack => {
+            let message = notification.to_slack(notifiable)?;
+            let route = message.to.clone().or_else(|| notifiable.route_slack())?;
+            Some(Delivery::Slack { route, message })
+        }
+        Channel::MicrosoftTeams => {
+            let message = notification.to_teams(notifiable)?;
+            let route = message.to.clone().or_else(|| notifiable.route_teams())?;
+            Some(Delivery::MicrosoftTeams { route, message })
+        }
+        Channel::Sms => {
+            let message = notification.to_sms(notifiable)?;
+            let to = message.to.clone().or_else(|| notifiable.route_sms())?;
+            Some(Delivery::Sms { to, message })
+        }
+        Channel::WhatsApp => {
+            let message = notification.to_whatsapp(notifiable)?;
+            let to = message.to.clone().or_else(|| notifiable.route_whatsapp())?;
+            Some(Delivery::WhatsApp { to, message })
+        }
+        Channel::WebPush => Some(Delivery::WebPush {
+            message: notification.to_web_push(notifiable)?,
+        }),
     }
 }
 
@@ -462,6 +728,58 @@ fn dedup(channels: &mut Vec<Channel>) {
         seen.push(*channel);
         first
     });
+}
+
+/// Whether the app has a database (the channel tables).
+async fn has_database(ctx: &AppContext) -> bool {
+    ctx.try_get::<Db>().await.is_some()
+}
+
+/// What the log records as a Slack route's recipient: the channel, or the
+/// webhook's host (its URL is a secret).
+fn slack_recipient(route: &SlackRoute) -> String {
+    match route {
+        SlackRoute::Webhook { url } => webhook_recipient(url),
+        SlackRoute::Bot { channel, .. } => channel.clone(),
+    }
+}
+
+/// What the log records as a Teams route's recipient: the conversation,
+/// or the webhook's host.
+fn teams_recipient(route: &TeamsRoute) -> String {
+    match route {
+        TeamsRoute::Webhook { url } => webhook_recipient(url),
+        TeamsRoute::Bot {
+            conversation_id, ..
+        } => conversation_id.clone(),
+    }
+}
+
+/// `webhook:<host>`.
+fn webhook_recipient(url: &str) -> String {
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_default();
+    format!("webhook:{host}")
+}
+
+/// The driver an error came from, when it names one.
+fn provider_of(error: &ChannelError) -> Option<String> {
+    match error {
+        ChannelError::Refused { provider, .. }
+        | ChannelError::Unreachable { provider, .. }
+        | ChannelError::OptedOut { provider } => Some(provider.clone()),
+        _ => None,
+    }
+}
+
+/// [`now`] for a weak app (the system clock once it has shut down).
+pub(crate) async fn now_in(app: &WeakAppContext) -> DateTime<Utc> {
+    match app.upgrade() {
+        Some(ctx) => now(&ctx).await,
+        None => Utc::now().trunc_subsecs(6),
+    }
 }
 
 /// The app clock's time (`dyn Clock` when registered), in microseconds

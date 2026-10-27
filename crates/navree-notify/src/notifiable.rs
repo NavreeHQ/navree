@@ -1,8 +1,11 @@
 //! [`Notifiable`]: who receives notifications.
 
+use crate::{SlackRoute, TeamsRoute};
+
 /// Something that receives notifications, usually a
-/// user: it names the stored notifications' owner and routes the mail and
-/// broadcast channels.
+/// user: it names the stored notifications' owner and routes the mail,
+/// broadcast, Slack, Teams, SMS and WhatsApp channels. The web push channel
+/// sends to the notifiable's saved push subscriptions.
 ///
 /// ```
 /// use navree_notify::Notifiable;
@@ -45,6 +48,30 @@ pub trait Notifiable: Send + Sync {
     /// skips the broadcast channel. Default: `private-users.{id}`.
     fn broadcast_channel(&self) -> Option<String> {
         Some(format!("private-users.{}", self.notifiable_id()))
+    }
+
+    /// Where the Slack channel posts when the message names no route; `None`
+    /// (the default) skips it.
+    fn route_slack(&self) -> Option<SlackRoute> {
+        None
+    }
+
+    /// Where the Microsoft Teams channel posts when the message names no
+    /// route; `None` (the default) skips it.
+    fn route_teams(&self) -> Option<TeamsRoute> {
+        None
+    }
+
+    /// The phone number the SMS channel texts (any format: it is read as
+    /// E.164 in `notify.sms.default_region`); `None` (the default) skips it.
+    fn route_sms(&self) -> Option<String> {
+        None
+    }
+
+    /// The WhatsApp number the WhatsApp channel sends to; `None` (the
+    /// default) skips it.
+    fn route_whatsapp(&self) -> Option<String> {
+        None
     }
 }
 

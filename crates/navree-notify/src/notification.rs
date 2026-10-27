@@ -5,7 +5,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::{Channel, Notifiable};
+use crate::{
+    Channel, Notifiable, SlackMessage, SmsMessage, TeamsMessage, WebPushMessage, WhatsAppMessage,
+};
 
 /// A notification: it picks its channels per
 /// recipient with [`via`](Notification::via) and renders itself for each
@@ -84,5 +86,44 @@ pub trait Notification: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// [`to_database`](Notification::to_database).
     fn to_broadcast(&self, notifiable: &dyn Notifiable) -> Option<Value> {
         self.to_database(notifiable)
+    }
+
+    /// The message of the [`Channel::Slack`] channel. It goes to its own
+    /// [`to`](SlackMessage::to) route, else [`Notifiable::route_slack`].
+    /// Default: `None`.
+    fn to_slack(&self, notifiable: &dyn Notifiable) -> Option<SlackMessage> {
+        let _ = notifiable;
+        None
+    }
+
+    /// The message of the [`Channel::MicrosoftTeams`] channel. It goes to
+    /// its own [`to`](TeamsMessage::to) route, else
+    /// [`Notifiable::route_teams`]. Default: `None`.
+    fn to_teams(&self, notifiable: &dyn Notifiable) -> Option<TeamsMessage> {
+        let _ = notifiable;
+        None
+    }
+
+    /// The text of the [`Channel::Sms`] channel. It goes to its own
+    /// [`to`](SmsMessage::to) number, else [`Notifiable::route_sms`].
+    /// Default: `None`.
+    fn to_sms(&self, notifiable: &dyn Notifiable) -> Option<SmsMessage> {
+        let _ = notifiable;
+        None
+    }
+
+    /// The message of the [`Channel::WhatsApp`] channel. It goes to its own
+    /// [`to`](WhatsAppMessage::to) number, else
+    /// [`Notifiable::route_whatsapp`]. Default: `None`.
+    fn to_whatsapp(&self, notifiable: &dyn Notifiable) -> Option<WhatsAppMessage> {
+        let _ = notifiable;
+        None
+    }
+
+    /// The notification of the [`Channel::WebPush`] channel, pushed to each
+    /// of the notifiable's push subscriptions. Default: `None`.
+    fn to_web_push(&self, notifiable: &dyn Notifiable) -> Option<WebPushMessage> {
+        let _ = notifiable;
+        None
     }
 }
