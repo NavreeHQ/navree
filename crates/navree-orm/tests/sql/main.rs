@@ -893,3 +893,50 @@ fn operators_parse_from_their_spellings() {
     assert_eq!(Operator::from("not ilike"), Operator::NotILike);
     assert_eq!(Operator::from("is not distinct from"), Operator::NullSafeEq);
 }
+
+#[test]
+fn statement_timeouts() {
+    use std::time::Duration;
+
+    use navree_orm::ir::{Aggregate, AggregateFunction};
+    use navree_orm::sql::{compile_aggregate, compile_exists, compile_select};
+
+    let timed = Company::query()
+        .where_(Company::COUNTRY.eq("NZ"))
+        .timeout(Duration::from_micros(1_500_100));
+    let mut out = per_dialect(|d| timed.to_sql(d));
+    let ir = timed.clone().into_ir();
+    let count = Aggregate {
+        function: AggregateFunction::Count,
+        arg: None,
+        distinct: false,
+    };
+    writeln!(
+        out,
+        "count: {}",
+        compile_aggregate(&ir, &count, Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    let mut limited = ir.clone();
+    limited.limit = Some(5);
+    writeln!(
+        out,
+        "count of a limited query: {}",
+        compile_aggregate(&limited, &count, Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "exists: {}",
+        compile_exists(&ir, Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    let union = timed.clone().union(Company::query());
+    writeln!(
+        out,
+        "union: {}",
+        compile_select(&union.into_ir(), Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    insta::assert_snapshot!(out);
+}

@@ -323,6 +323,10 @@ pub(crate) fn reading_values(
     if query.limit.is_none() && query.offset.is_none() {
         query.orders.clear();
     }
+    // Where and how long the query runs stay with it.
+    outer.connection = query.connection.clone();
+    outer.use_writer = query.use_writer;
+    outer.timeout = query.timeout;
     outer.table = crate::ir::TableRef::subquery(query, qualifier);
     outer.columns = items;
     outer

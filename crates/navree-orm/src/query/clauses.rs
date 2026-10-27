@@ -938,6 +938,27 @@ macro_rules! clauses {
             $crate::query::clauses::HasQuery::query_mut(&mut self).use_writer = true;
             self
         }
+
+        /// Stops the query's reads once they run longer than `timeout`,
+        /// failing with [`OrmError::Timeout`](crate::OrmError::Timeout):
+        /// MySQL's `MAX_EXECUTION_TIME` hint on the `SELECT` (MariaDB
+        /// ignores it), PostgreSQL's `SET LOCAL statement_timeout` in a
+        /// transaction (or savepoint) of its own around the statement. Not
+        /// on SQLite (`Unsupported`), nor on PostgreSQL cursors. Rounded
+        /// up to whole milliseconds.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// use std::time::Duration;
+        ///
+        /// let report = Deal::query().select([Deal::STAGE]).timeout(Duration::from_secs(2));
+        /// assert!(report.to_sql(Dialect::MySql)?.sql.starts_with("SELECT /*+ MAX_EXECUTION_TIME(2000) */ `deals`.`stage`"));
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).timeout = Some(timeout);
+            self
+        }
     };
 }
 

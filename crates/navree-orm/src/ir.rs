@@ -1166,6 +1166,8 @@ pub struct QueryIr {
     /// Reads go to the writer even where read replicas exist
     /// (`use_write`).
     pub use_writer: bool,
+    /// The longest the database may run the query's reads (`timeout`).
+    pub timeout: Option<std::time::Duration>,
     /// Problems found while building the query; it fails with them when
     /// it runs.
     pub errors: Vec<String>,
@@ -1190,6 +1192,7 @@ impl QueryIr {
             group_limit: None,
             connection: None,
             use_writer: false,
+            timeout: None,
             errors: Vec::new(),
         }
     }

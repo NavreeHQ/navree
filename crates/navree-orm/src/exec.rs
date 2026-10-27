@@ -33,6 +33,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use futures::stream::{BoxStream, Stream, StreamExt};
@@ -416,7 +417,7 @@ impl Target<'_> {
             Target::Sql(sql) => {
                 let statement = sql::compile_select(query, sql.dialect)?;
                 Ok(sql
-                    .query_all(&statement)
+                    .query_all_timed(&statement, query.timeout)
                     .await?
                     .into_iter()
                     .map(Row::from_sql)
@@ -438,7 +439,22 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::compile_select(query, sql.dialect)?;
-                sql.stream(&statement).await
+                let Some(timeout) = query.timeout else {
+                    return sql.stream(&statement).await;
+                };
+                match sql.dialect {
+                    // The hint is in the statement.
+                    Dialect::MySql => Ok(sql
+                        .stream(&statement)
+                        .await
+                        .map_err(|error| error.timed_out(timeout))?
+                        .map(move |row| row.map_err(|error| error.timed_out(timeout)))
+                        .boxed()),
+                    dialect => Err(OrmError::unsupported(
+                        "a statement timeout on a cursor",
+                        dialect.name(),
+                    )),
+                }
             }
             Target::Document(document) => {
                 let rows = document.driver.stream(query).await?;
@@ -457,7 +473,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::compile_aggregate(query, aggregate, sql.dialect)?;
-                match sql.query_one(&statement).await? {
+                match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => Row::from_sql(row).value("aggregate"),
                     None => Ok(Value::BigInt(None)),
                 }
@@ -471,7 +487,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::compile_exists(query, sql.dialect)?;
-                match sql.query_one(&statement).await? {
+                match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => {
                         let value = Row::from_sql(row).value("exists")?;
                         bool::from_value(value).map_err(|error| {
@@ -660,6 +676,152 @@ impl<'a> SqlTarget<'a> {
         };
         Ok(rows)
     }
+
+    /// [`query_all`](Self::query_all), stopped by the database after
+    /// `timeout` when there is one (see `timeout` on the builders).
+    pub(crate) async fn query_all_timed(
+        &self,
+        statement: &Statement,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<QueryResult>, OrmError> {
+        match self.timed(TimedRead::All(statement), timeout).await? {
+            TimedRows::All(rows) => Ok(rows),
+            TimedRows::One(row) => Ok(row.into_iter().collect()),
+        }
+    }
+
+    /// [`query_one`](Self::query_one), stopped by the database after
+    /// `timeout` when there is one.
+    pub(crate) async fn query_one_timed(
+        &self,
+        statement: &Statement,
+        timeout: Option<Duration>,
+    ) -> Result<Option<QueryResult>, OrmError> {
+        match self.timed(TimedRead::One(statement), timeout).await? {
+            TimedRows::One(row) => Ok(row),
+            TimedRows::All(rows) => Ok(rows.into_iter().next()),
+        }
+    }
+
+    async fn read(&self, read: TimedRead<'_>) -> Result<TimedRows, OrmError> {
+        match read {
+            TimedRead::All(statement) => self.query_all(statement).await.map(TimedRows::All),
+            TimedRead::One(statement) => self.query_one(statement).await.map(TimedRows::One),
+        }
+    }
+
+    /// Runs `read`, stopped by the database after `timeout`: MySQL's hint
+    /// is in the statement; PostgreSQL's `statement_timeout` is set for a
+    /// transaction of its own around it; SQLite has no statement timeout.
+    async fn timed(
+        &self,
+        read: TimedRead<'_>,
+        timeout: Option<Duration>,
+    ) -> Result<TimedRows, OrmError> {
+        let Some(timeout) = timeout else {
+            return self.read(read).await;
+        };
+        match self.dialect {
+            Dialect::MySql => self.read(read).await.map_err(|error| error.timed_out(timeout)),
+            Dialect::Postgres => self.postgres_timed(read, timeout).await,
+            Dialect::Sqlite => Err(OrmError::unsupported("a statement timeout", "SQLite")),
+        }
+    }
+
+    /// `SET LOCAL statement_timeout` around `read`, in a transaction of its
+    /// own on the pool, or a savepoint inside a transaction (which restores
+    /// the previous timeout before it is released, and rolls back when the
+    /// statement fails, so the transaction stays usable).
+    async fn postgres_timed(
+        &self,
+        read: TimedRead<'_>,
+        timeout: Duration,
+    ) -> Result<TimedRows, OrmError> {
+        ensure_free(self.conn.transaction_id())?;
+        let in_transaction = self.in_transaction();
+        let tx = match &self.conn {
+            SqlConn::Pool(conn) => {
+                self.announce_transaction();
+                conn.begin().await?
+            }
+            SqlConn::Owned(conn) => {
+                self.announce_transaction();
+                conn.begin().await?
+            }
+            SqlConn::Transaction(tx) => tx.begin().await?,
+            SqlConn::TransactionRef(tx) => tx.begin().await?,
+        };
+        let nested = SqlTarget {
+            db: self.db.clone(),
+            ..SqlTarget::new(
+                SqlConn::TransactionRef(&tx),
+                self.dialect,
+                self.uow.clone(),
+                self.app.clone(),
+            )
+        };
+        let result = async {
+            let previous = if in_transaction {
+                let current = Statement {
+                    sql: "SELECT current_setting('statement_timeout') AS previous".to_owned(),
+                    values: Vec::new(),
+                    dialect: Dialect::Postgres,
+                };
+                match nested.query_one(&current).await? {
+                    Some(row) => Some(row.try_get::<String>("", "previous")?),
+                    None => None,
+                }
+            } else {
+                None
+            };
+            nested
+                .execute_unprepared(&format!(
+                    "SET LOCAL statement_timeout = {}",
+                    sql::timeout_millis(timeout)
+                ))
+                .await?;
+            let rows = nested
+                .read(read)
+                .await
+                .map_err(|error| error.timed_out(timeout))?;
+            if let Some(previous) = previous {
+                nested
+                    .execute(&Statement {
+                        sql: "SELECT set_config('statement_timeout', $1, true)".to_owned(),
+                        values: vec![Value::from(previous)],
+                        dialect: Dialect::Postgres,
+                    })
+                    .await?;
+            }
+            Ok::<_, OrmError>(rows)
+        }
+        .await;
+        drop(nested);
+        match result {
+            Ok(rows) => {
+                tx.commit().await?;
+                Ok(rows)
+            }
+            Err(error) => {
+                if let Err(rollback) = tx.rollback().await {
+                    tracing::warn!(target: "navree_orm", error = %rollback, "rolling back a timed-out statement failed");
+                }
+                Err(error)
+            }
+        }
+    }
+}
+
+/// A read that may run under a statement timeout.
+enum TimedRead<'s> {
+    All(&'s Statement),
+    One(&'s Statement),
+}
+
+/// What a [`TimedRead`] returns.
+enum TimedRows {
+    All(Vec<QueryResult>),
+    One(Option<QueryResult>),
 }
 
 impl SqlConn<'_> {

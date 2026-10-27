@@ -127,6 +127,16 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// The database stopped a statement that ran longer than the query's
+    /// `timeout`.
+    #[error("the statement ran longer than its timeout of {timeout:?} and was stopped")]
+    Timeout {
+        /// The query's timeout.
+        timeout: std::time::Duration,
+        /// The database's error.
+        #[source]
+        source: DbErr,
+    },
 }
 
 impl OrmError {
@@ -157,6 +167,25 @@ impl OrmError {
         )
     }
 
+    /// Whether the database stopped a statement for running longer than
+    /// its query's `timeout`.
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, OrmError::Timeout { .. })
+    }
+
+    /// `self` as a [`Timeout`](OrmError::Timeout) of `timeout` when the
+    /// database stopped the statement for its time: PostgreSQL's
+    /// `statement_timeout` (SQLSTATE 57014), MySQL's `MAX_EXECUTION_TIME`
+    /// (3024), MariaDB's `max_statement_time` (1969).
+    pub(crate) fn timed_out(self, timeout: std::time::Duration) -> Self {
+        match self {
+            OrmError::Db(source) if is_timeout_message(&source.to_string()) => {
+                OrmError::Timeout { timeout, source }
+            }
+            other => other,
+        }
+    }
+
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
         OrmError::InvalidQuery(message.into())
     }
@@ -170,6 +199,21 @@ impl OrmError {
             driver: driver.into(),
         }
     }
+}
+
+/// Whether a database error message says a statement ran out of time.
+fn is_timeout_message(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    [
+        // PostgreSQL, SQLSTATE 57014.
+        "canceling statement due to statement timeout",
+        // MySQL 3024.
+        "maximum statement execution time exceeded",
+        // MariaDB 1969.
+        "max_statement_time exceeded",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
 }
 
 fn not_found_message(model: &str, keys: &[String]) -> String {
@@ -199,6 +243,33 @@ mod tests {
             OrmError::not_found("Deal", Vec::new()).to_string(),
             "no Deal found"
         );
+    }
+
+    #[test]
+    fn timeouts_are_recognised_by_the_database_message() {
+        let timeout = std::time::Duration::from_millis(100);
+        let postgres = OrmError::from(DbErr::Custom(
+            "error returned from database: canceling statement due to statement timeout".into(),
+        ))
+        .timed_out(timeout);
+        assert!(postgres.is_timeout());
+        assert_eq!(
+            postgres.to_string(),
+            "the statement ran longer than its timeout of 100ms and was stopped"
+        );
+        assert!(postgres.source().unwrap().downcast_ref::<DbErr>().is_some());
+        let mysql = OrmError::from(DbErr::Custom(
+            "3024 (HY000): Query execution was interrupted, maximum statement execution time exceeded".into(),
+        ))
+        .timed_out(timeout);
+        assert!(mysql.is_timeout());
+        let mariadb = OrmError::from(DbErr::Custom(
+            "1969 (70100): Query execution was interrupted (max_statement_time exceeded)".into(),
+        ))
+        .timed_out(timeout);
+        assert!(mariadb.is_timeout());
+        let other = OrmError::from(DbErr::Custom("syntax error".into())).timed_out(timeout);
+        assert!(!other.is_timeout());
     }
 
     #[test]

@@ -51,7 +51,45 @@ pub fn compile_select(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
             statement.sql.replace_range(at..at + LEGACY.len(), " FOR SHARE");
         }
     }
+    timeout_hint(statement, query, dialect)
+}
+
+/// `statement` with MySQL's execution-time hint when `query` has a
+/// timeout (`SELECT /*+ MAX_EXECUTION_TIME(ms) */ ..`). PostgreSQL's
+/// timeout is set around the statement when it runs; SQLite has none.
+fn timeout_hint(
+    mut statement: Statement,
+    query: &QueryIr,
+    dialect: Dialect,
+) -> Result<Statement, OrmError> {
+    let Some(timeout) = query.timeout else {
+        return Ok(statement);
+    };
+    if dialect != Dialect::MySql {
+        return Ok(statement);
+    }
+    const SELECT: &str = "SELECT ";
+    if !statement.sql.starts_with(SELECT) {
+        return Err(OrmError::unsupported(
+            "a statement timeout on a query that does not start with SELECT",
+            "MySQL",
+        ));
+    }
+    let millis = timeout_millis(timeout);
+    statement
+        .sql
+        .insert_str(SELECT.len(), &format!("/*+ MAX_EXECUTION_TIME({millis}) */ "));
     Ok(statement)
+}
+
+/// `timeout` in whole milliseconds, rounded up (at least one).
+pub(crate) fn timeout_millis(timeout: std::time::Duration) -> u128 {
+    let millis = timeout.as_millis();
+    if timeout > std::time::Duration::from_millis(u64::try_from(millis).unwrap_or(u64::MAX)) {
+        millis + 1
+    } else {
+        millis.max(1)
+    }
 }
 
 /// The SQL of an aggregate over a query's rows, in a column named
@@ -116,7 +154,7 @@ pub fn compile_aggregate(
         select.expr_as(expr, Alias::new("aggregate"));
         select
     };
-    Ok(build(&select, dialect))
+    timeout_hint(build(&select, dialect), query, dialect)
 }
 
 /// `SELECT EXISTS(query) AS "exists"`.
@@ -129,7 +167,7 @@ pub fn compile_exists(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
     let inner = compiler.select(&inner)?;
     let mut select = sea_query::Query::select();
     select.expr_as(sea_query::Expr::exists(inner), Alias::new("exists"));
-    Ok(build(&select, dialect))
+    timeout_hint(build(&select, dialect), query, dialect)
 }
 
 /// Splits the trailing direction (and NULLs placement) off a raw order:
