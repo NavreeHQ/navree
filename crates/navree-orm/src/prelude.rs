@@ -5,11 +5,11 @@
 //! relation types, executors, errors, values and the pagination types.
 
 pub use crate::hooks::{Flow, ModelEvent, ModelHook};
-pub use crate::relations::{
-    AnyRecord, BelongsTo, BelongsToMany, HasMany, HasManyThrough, HasOne, HasOneThrough,
-    MorphMany, MorphOne, MorphTo, MorphToMany, MorphWith, Pivot, Relationships,
-};
 pub use crate::relations;
+pub use crate::relations::{
+    AnyRecord, BelongsTo, BelongsToMany, HasMany, HasManyThrough, HasOne, HasOneThrough, MorphMany,
+    MorphOne, MorphTo, MorphToMany, MorphWith, Pivot, Relationships,
+};
 pub use crate::{
     Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect, Executor,
     Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, OrmError, PageRequest, Record,

@@ -15,10 +15,12 @@ use crate::collection::Collection;
 use crate::column::{Assignment, Column, ColumnOf, Filter};
 use crate::error::Result;
 use crate::exec::{Access, Executor, Target};
-use crate::ir::{Boolean, ColumnRef, Direction, Expr, Operator, Order, QueryIr, SelectItem, Where, WhereClause};
+use crate::ir::{
+    Boolean, ColumnRef, Direction, Expr, Operator, Order, QueryIr, SelectItem, Where, WhereClause,
+};
 use crate::model::{Model, snake_case};
-use crate::query::{Builder, TableBuilder, table};
 use crate::query::filters::HasWheres;
+use crate::query::{Builder, TableBuilder, table};
 use crate::record::Record;
 use crate::relations::any::AnyRecord;
 use crate::relations::core::{
@@ -35,7 +37,7 @@ use crate::relations::pivot::{
     PivotKind, PivotSpec, RelatedId, SyncChanges, assigned, canonical_id,
 };
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
-use crate::relations::{Relation, RelatedTo, private};
+use crate::relations::{RelatedTo, Relation, private};
 use crate::value::{Numeric, Value, ValueFor, is_null};
 
 pub use crate::relations::pivot::Pivot;
@@ -289,7 +291,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Loads these pivot columns with the related records.
-    pub fn with_pivot<C: Into<Cow<'static, str>>>(mut self, columns: impl IntoIterator<Item = C>) -> Self {
+    pub fn with_pivot<C: Into<Cow<'static, str>>>(
+        mut self,
+        columns: impl IntoIterator<Item = C>,
+    ) -> Self {
         for column in columns {
             let column = column.into();
             if !self.pivot_columns.contains(&column) {
@@ -404,10 +409,16 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         self
     }
 
-    fn pivot_compare<T>(&self, column: impl ColumnOf<T>, op: impl Into<Operator>, value: impl ValueFor<T>) -> Where {
+    fn pivot_compare<T>(
+        &self,
+        column: impl ColumnOf<T>,
+        op: impl Into<Operator>,
+        value: impl ValueFor<T>,
+    ) -> Where {
         let column_ref = self.pivot_column_ref(column.column_ref());
         match column.encode_value(&value.into_value_for()) {
-            Ok(value) => Filter::compare(Expr::Column(column_ref), op.into(), Expr::Value(value)).into_where(),
+            Ok(value) => Filter::compare(Expr::Column(column_ref), op.into(), Expr::Value(value))
+                .into_where(),
             Err(error) => Where::Invalid(format!(
                 "cannot use a value for pivot column `{column_ref}`: {error}"
             )),
@@ -417,18 +428,33 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     /// Only related records whose pivot `column` compares to `value` with
     /// `op`: `where_pivot("role", "=", "owner")`, or a typed pivot model's
     /// column.
-    pub fn where_pivot<T>(self, column: impl ColumnOf<T>, op: impl Into<Operator>, value: impl ValueFor<T>) -> Self {
+    pub fn where_pivot<T>(
+        self,
+        column: impl ColumnOf<T>,
+        op: impl Into<Operator>,
+        value: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_compare(column, op, value);
         self.push_pivot_where(Boolean::And, false, filter)
     }
 
     /// `OR` related records whose pivot `column` compares to `value`.
-    pub fn or_where_pivot<T>(self, column: impl ColumnOf<T>, op: impl Into<Operator>, value: impl ValueFor<T>) -> Self {
+    pub fn or_where_pivot<T>(
+        self,
+        column: impl ColumnOf<T>,
+        op: impl Into<Operator>,
+        value: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_compare(column, op, value);
         self.push_pivot_where(Boolean::Or, false, filter)
     }
 
-    fn pivot_in<T>(&self, column: impl ColumnOf<T>, values: impl IntoIterator<Item = impl ValueFor<T>>, not: bool) -> Where {
+    fn pivot_in<T>(
+        &self,
+        column: impl ColumnOf<T>,
+        values: impl IntoIterator<Item = impl ValueFor<T>>,
+        not: bool,
+    ) -> Where {
         let qualified = PivotColumn {
             column,
             table: &self.table,
@@ -437,61 +463,104 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Only related records whose pivot `column` is one of `values`.
-    pub fn where_pivot_in<T>(self, column: impl ColumnOf<T>, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Self {
+    pub fn where_pivot_in<T>(
+        self,
+        column: impl ColumnOf<T>,
+        values: impl IntoIterator<Item = impl ValueFor<T>>,
+    ) -> Self {
         let filter = self.pivot_in(column, values, false);
         self.push_pivot_where(Boolean::And, false, filter)
     }
 
     /// `OR` related records whose pivot `column` is one of `values`.
-    pub fn or_where_pivot_in<T>(self, column: impl ColumnOf<T>, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Self {
+    pub fn or_where_pivot_in<T>(
+        self,
+        column: impl ColumnOf<T>,
+        values: impl IntoIterator<Item = impl ValueFor<T>>,
+    ) -> Self {
         let filter = self.pivot_in(column, values, false);
         self.push_pivot_where(Boolean::Or, false, filter)
     }
 
     /// Only related records whose pivot `column` is none of `values`.
-    pub fn where_pivot_not_in<T>(self, column: impl ColumnOf<T>, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Self {
+    pub fn where_pivot_not_in<T>(
+        self,
+        column: impl ColumnOf<T>,
+        values: impl IntoIterator<Item = impl ValueFor<T>>,
+    ) -> Self {
         let filter = self.pivot_in(column, values, true);
         self.push_pivot_where(Boolean::And, false, filter)
     }
 
     /// `OR` related records whose pivot `column` is none of `values`.
-    pub fn or_where_pivot_not_in<T>(self, column: impl ColumnOf<T>, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Self {
+    pub fn or_where_pivot_not_in<T>(
+        self,
+        column: impl ColumnOf<T>,
+        values: impl IntoIterator<Item = impl ValueFor<T>>,
+    ) -> Self {
         let filter = self.pivot_in(column, values, true);
         self.push_pivot_where(Boolean::Or, false, filter)
     }
 
-    fn pivot_between<T>(&self, column: impl ColumnOf<T>, low: impl ValueFor<T>, high: impl ValueFor<T>, not: bool) -> Where {
+    fn pivot_between<T>(
+        &self,
+        column: impl ColumnOf<T>,
+        low: impl ValueFor<T>,
+        high: impl ValueFor<T>,
+        not: bool,
+    ) -> Where {
         let qualified = PivotColumn {
             column,
             table: &self.table,
         };
-        crate::query::filters::between(&qualified, low.into_value_for(), high.into_value_for(), not).into_where()
+        crate::query::filters::between(&qualified, low.into_value_for(), high.into_value_for(), not)
+            .into_where()
     }
 
     /// Only related records whose pivot `column` is between `low` and
     /// `high`.
-    pub fn where_pivot_between<T>(self, column: impl ColumnOf<T>, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Self {
+    pub fn where_pivot_between<T>(
+        self,
+        column: impl ColumnOf<T>,
+        low: impl ValueFor<T>,
+        high: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_between(column, low, high, false);
         self.push_pivot_where(Boolean::And, false, filter)
     }
 
     /// `OR` related records whose pivot `column` is between `low` and
     /// `high`.
-    pub fn or_where_pivot_between<T>(self, column: impl ColumnOf<T>, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Self {
+    pub fn or_where_pivot_between<T>(
+        self,
+        column: impl ColumnOf<T>,
+        low: impl ValueFor<T>,
+        high: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_between(column, low, high, false);
         self.push_pivot_where(Boolean::Or, false, filter)
     }
 
     /// Only related records whose pivot `column` is not between `low` and
     /// `high`.
-    pub fn where_pivot_not_between<T>(self, column: impl ColumnOf<T>, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Self {
+    pub fn where_pivot_not_between<T>(
+        self,
+        column: impl ColumnOf<T>,
+        low: impl ValueFor<T>,
+        high: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_between(column, low, high, true);
         self.push_pivot_where(Boolean::And, false, filter)
     }
 
     /// `OR` related records whose pivot `column` is not between `low` and
     /// `high`.
-    pub fn or_where_pivot_not_between<T>(self, column: impl ColumnOf<T>, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Self {
+    pub fn or_where_pivot_not_between<T>(
+        self,
+        column: impl ColumnOf<T>,
+        low: impl ValueFor<T>,
+        high: impl ValueFor<T>,
+    ) -> Self {
         let filter = self.pivot_between(column, low, high, true);
         self.push_pivot_where(Boolean::Or, false, filter)
     }
@@ -529,7 +598,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Only related records whose pivot `column` holds `value`, and new
     /// pivot rows (attached, created) get it.
-    pub fn with_pivot_value(mut self, column: impl Into<Cow<'static, str>>, value: impl Into<Value>) -> Self {
+    pub fn with_pivot_value(
+        mut self,
+        column: impl Into<Cow<'static, str>>,
+        value: impl Into<Value>,
+    ) -> Self {
         let column = column.into();
         let value = value.into();
         if is_null(&value) {
@@ -677,7 +750,9 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         let related = qualified(R::meta().table(), &self.related_key);
         let pivot = qualified(&self.table, &self.related_pivot_key);
         let pivot_select = self.pivot_select();
-        query.join(&self.table, related, "=", pivot).add_select(pivot_select)
+        query
+            .join(&self.table, related, "=", pivot)
+            .add_select(pivot_select)
     }
 
     /// The pivot's morph condition.
@@ -698,16 +773,18 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         for record in records.iter_mut() {
             let mut values = Vec::new();
             let mut parent = None;
-            record.extras.retain(|(column, value)| match column.strip_prefix(PIVOT_PREFIX) {
-                Some(name) => {
-                    if *column == foreign {
-                        parent = key_of(value);
+            record
+                .extras
+                .retain(|(column, value)| match column.strip_prefix(PIVOT_PREFIX) {
+                    Some(name) => {
+                        if *column == foreign {
+                            parent = key_of(value);
+                        }
+                        values.push((name.to_owned(), value.clone()));
+                        false
                     }
-                    values.push((name.to_owned(), value.clone()));
-                    false
-                }
-                None => true,
-            });
+                    None => true,
+                });
             let row = X::row(&spec, values, true)?;
             record.relations.set_relation(self.accessor.clone(), row);
             parents.push(parent);
@@ -772,12 +849,16 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// The pivot rows of the parent and the related records `ids`.
-    pub fn pivot_query_for<I: RelatedId<R>>(&self, ids: impl IntoIterator<Item = I>) -> Result<TableBuilder> {
+    pub fn pivot_query_for<I: RelatedId<R>>(
+        &self,
+        ids: impl IntoIterator<Item = I>,
+    ) -> Result<TableBuilder> {
         let ids = self.related_ids(ids)?;
         let keys = distinct_keys(ids);
-        Ok(self
-            .pivot_query()?
-            .where_(Filter::from(in_keys(qualified(&self.table, &self.related_pivot_key), &keys))))
+        Ok(self.pivot_query()?.where_(Filter::from(in_keys(
+            qualified(&self.table, &self.related_pivot_key),
+            &keys,
+        ))))
     }
 
     /// A new, unsaved pivot row for the parent with `values` (and the
@@ -789,7 +870,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// A pivot row for the parent with `values`, marked stored (to update
     /// or delete a row whose keys are known).
-    pub fn new_existing_pivot(&self, values: impl IntoIterator<Item = Assignment>) -> Result<X::Row> {
+    pub fn new_existing_pivot(
+        &self,
+        values: impl IntoIterator<Item = Assignment>,
+    ) -> Result<X::Row> {
         let row = self.pivot_row_values(None, assigned(values)?)?;
         X::row(&self.spec(), row, true)
     }
@@ -816,7 +900,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
             } else {
                 crate::relations::morph_map::type_name_of::<P>()?
             };
-            row.push((morph.type_column.to_string(), Value::from(name.into_owned())));
+            row.push((
+                morph.type_column.to_string(),
+                Value::from(name.into_owned()),
+            ));
         }
         for (column, value) in &self.pivot_values {
             row.push((column.to_string(), value.clone()));
@@ -862,7 +949,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Inserts the pivot rows of `rows` (related id and values).
-    async fn attach_on(&self, target: &Target<'_>, rows: Vec<(Value, Vec<(String, Value)>)>) -> Result<()> {
+    async fn attach_on(
+        &self,
+        target: &Target<'_>,
+        rows: Vec<(Value, Vec<(String, Value)>)>,
+    ) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
         }
@@ -893,8 +984,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
             Some(ids) if ids.is_empty() => return Ok(0),
             Some(ids) => {
                 let keys = distinct_keys(ids);
-                self.pivot_query()?
-                    .where_(Filter::from(in_keys(qualified(&self.table, &self.related_pivot_key), &keys)))
+                self.pivot_query()?.where_(Filter::from(in_keys(
+                    qualified(&self.table, &self.related_pivot_key),
+                    &keys,
+                )))
             }
             None => self.pivot_query()?,
         };
@@ -902,17 +995,25 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Sets `values` (and the update timestamp) on the pivot row of `id`.
-    async fn update_existing_on(&self, target: &Target<'_>, id: Value, mut values: Vec<(String, Value)>) -> Result<u64> {
+    async fn update_existing_on(
+        &self,
+        target: &Target<'_>,
+        id: Value,
+        mut values: Vec<(String, Value)>,
+    ) -> Result<u64> {
         if let Some(updated_at) = &self.updated_at
-            && !values.iter().any(|(column, _)| column == updated_at.as_ref())
+            && !values
+                .iter()
+                .any(|(column, _)| column == updated_at.as_ref())
         {
             let now = Value::ChronoDateTimeUtc(Some(target.context().now().await));
             values.push((updated_at.to_string(), now));
         }
         let keys = distinct_keys([id]);
-        let rows = self
-            .pivot_query()?
-            .where_(Filter::from(in_keys(qualified(&self.table, &self.related_pivot_key), &keys)));
+        let rows = self.pivot_query()?.where_(Filter::from(in_keys(
+            qualified(&self.table, &self.related_pivot_key),
+            &keys,
+        )));
         X::update(target, &self.spec(), rows, values).await
     }
 
@@ -932,7 +1033,8 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Sets the update timestamp of every related record to now.
     async fn touch_on(&self, target: &Target<'_>) -> Result<u64> {
-        if R::meta().updated_at().is_none() || crate::relations::touch::is_ignoring_touch_of::<R>() {
+        if R::meta().updated_at().is_none() || crate::relations::touch::is_ignoring_touch_of::<R>()
+        {
             return Ok(0);
         }
         let ids = self.current_ids(target).await?;
@@ -942,7 +1044,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         let keys = distinct_keys(ids);
         let query = Builder::<R>::new()
             .without_global_scopes()
-            .where_(Filter::from(in_keys(qualified(R::meta().table(), &self.related_key), &keys)));
+            .where_(Filter::from(in_keys(
+                qualified(R::meta().table(), &self.related_key),
+                &keys,
+            )));
         crate::relations::touch::touch_related(Some(query), target).await
     }
 
@@ -975,7 +1080,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Attaches related records with pivot values of their own:
     /// `attach_with(&uow, [(tag_id, [col("role").set("owner")])])`.
-    pub async fn attach_with<E, I, V>(&self, exec: &E, rows: impl IntoIterator<Item = (I, V)>) -> Result<()>
+    pub async fn attach_with<E, I, V>(
+        &self,
+        exec: &E,
+        rows: impl IntoIterator<Item = (I, V)>,
+    ) -> Result<()>
     where
         E: Executor + ?Sized,
         I: RelatedId<R>,
@@ -1048,11 +1157,16 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         let mut attach = Vec::new();
         for ((id, values), key) in records.into_iter().zip(wanted) {
             if !current_keys.contains(&key) {
-                if !attach.iter().any(|(existing, _): &(Value, _)| key_of(existing) == key) {
+                if !attach
+                    .iter()
+                    .any(|(existing, _): &(Value, _)| key_of(existing) == key)
+                {
                     changes.attached.push(id.clone());
                     attach.push((id, values));
                 }
-            } else if !values.is_empty() && self.update_existing_on(target, id.clone(), values).await? > 0 {
+            } else if !values.is_empty()
+                && self.update_existing_on(target, id.clone(), values).await? > 0
+            {
                 changes.updated.push(id);
             }
         }
@@ -1065,13 +1179,20 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Makes the related records exactly `ids`: attaches the missing ones,
     /// detaches the others. Returns what changed.
-    pub async fn sync<E, I>(&self, exec: &E, ids: impl IntoIterator<Item = I>) -> Result<SyncChanges>
+    pub async fn sync<E, I>(
+        &self,
+        exec: &E,
+        ids: impl IntoIterator<Item = I>,
+    ) -> Result<SyncChanges>
     where
         E: Executor + ?Sized,
         I: RelatedId<R>,
     {
-        let records: Vec<(Value, Vec<(String, Value)>)> =
-            self.related_ids(ids)?.into_iter().map(|id| (id, Vec::new())).collect();
+        let records: Vec<(Value, Vec<(String, Value)>)> = self
+            .related_ids(ids)?
+            .into_iter()
+            .map(|id| (id, Vec::new()))
+            .collect();
         let target = exec.target(Access::Write).await?;
         atomically!(target, |t| self.sync_on(t, records, true))
     }
@@ -1079,7 +1200,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     /// Makes the related records exactly the ids of `rows`, with their
     /// pivot values: attached ones get them, already attached ones whose
     /// values differ are updated.
-    pub async fn sync_with<E, I, V>(&self, exec: &E, rows: impl IntoIterator<Item = (I, V)>) -> Result<SyncChanges>
+    pub async fn sync_with<E, I, V>(
+        &self,
+        exec: &E,
+        rows: impl IntoIterator<Item = (I, V)>,
+    ) -> Result<SyncChanges>
     where
         E: Executor + ?Sized,
         I: RelatedId<R>,
@@ -1095,13 +1220,20 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Attaches the missing ones of `ids`, detaching nothing.
-    pub async fn sync_without_detaching<E, I>(&self, exec: &E, ids: impl IntoIterator<Item = I>) -> Result<SyncChanges>
+    pub async fn sync_without_detaching<E, I>(
+        &self,
+        exec: &E,
+        ids: impl IntoIterator<Item = I>,
+    ) -> Result<SyncChanges>
     where
         E: Executor + ?Sized,
         I: RelatedId<R>,
     {
-        let records: Vec<(Value, Vec<(String, Value)>)> =
-            self.related_ids(ids)?.into_iter().map(|id| (id, Vec::new())).collect();
+        let records: Vec<(Value, Vec<(String, Value)>)> = self
+            .related_ids(ids)?
+            .into_iter()
+            .map(|id| (id, Vec::new()))
+            .collect();
         let target = exec.target(Access::Write).await?;
         atomically!(target, |t| self.sync_on(t, records, false))
     }
@@ -1129,7 +1261,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Detaches the attached ones of `ids` and attaches the others. Returns
     /// what changed (`updated` stays empty).
-    pub async fn toggle<E, I>(&self, exec: &E, ids: impl IntoIterator<Item = I>) -> Result<SyncChanges>
+    pub async fn toggle<E, I>(
+        &self,
+        exec: &E,
+        ids: impl IntoIterator<Item = I>,
+    ) -> Result<SyncChanges>
     where
         E: Executor + ?Sized,
         I: RelatedId<R>,
@@ -1149,7 +1285,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
             }
             let mut rows: Vec<(Value, Vec<(String, Value)>)> = Vec::new();
             for id in attach {
-                if !rows.iter().any(|(existing, _)| key_of(existing) == key_of(&id)) {
+                if !rows
+                    .iter()
+                    .any(|(existing, _)| key_of(existing) == key_of(&id))
+                {
                     rows.push((id, Vec::new()));
                 }
             }
@@ -1217,7 +1356,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// Saves each of `records` and attaches it.
-    pub async fn save_many<E: Executor + ?Sized>(&self, exec: &E, records: &mut [Record<R>]) -> Result<bool> {
+    pub async fn save_many<E: Executor + ?Sized>(
+        &self,
+        exec: &E,
+        records: &mut [Record<R>],
+    ) -> Result<bool> {
         let mut all = true;
         for record in records {
             all &= self.save(exec, record, []).await?;
@@ -1226,7 +1369,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// [`save_many`](Self::save_many) without lifecycle hooks.
-    pub async fn save_many_quietly<E: Executor + ?Sized>(&self, exec: &E, records: &mut [Record<R>]) -> Result<bool> {
+    pub async fn save_many_quietly<E: Executor + ?Sized>(
+        &self,
+        exec: &E,
+        records: &mut [Record<R>],
+    ) -> Result<bool> {
         crate::hooks::quietly(self.save_many(exec, records)).await
     }
 
@@ -1309,7 +1456,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// The related record with key `key`, or a new, unsaved `R` (not
     /// attached).
-    pub async fn find_or_new<E: Executor + ?Sized>(self, exec: &E, key: impl Into<R::Key>) -> Result<Record<R>>
+    pub async fn find_or_new<E: Executor + ?Sized>(
+        self,
+        exec: &E,
+        key: impl Into<R::Key>,
+    ) -> Result<Record<R>>
     where
         R: Default,
     {
@@ -1363,7 +1514,8 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
             self.attach_atomically(&target, id, pivot).await?;
             return Ok(existing);
         }
-        self.create_or_first_on(&target, &attributes, fill, pivot).await
+        self.create_or_first_on(&target, &attributes, fill, pivot)
+            .await
     }
 
     /// Inserts a record with `attributes` (and whatever `fill` sets) and
@@ -1382,7 +1534,8 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
         let pivot = assigned(pivot)?;
         let target = exec.target(Access::Write).await?;
-        self.create_or_first_on(&target, &attributes, fill, pivot).await
+        self.create_or_first_on(&target, &attributes, fill, pivot)
+            .await
     }
 
     /// Updates the related record matching `attributes` with `fill` (and
@@ -1399,7 +1552,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
         let pivot: Vec<Assignment> = pivot.into_iter().collect();
-        let mut record = self.clone().first_or_create(exec, attributes, &fill, pivot).await?;
+        let mut record = self
+            .clone()
+            .first_or_create(exec, attributes, &fill, pivot)
+            .await?;
         if !record.was_recently_created() && record.exists() {
             fill(&mut record.model);
             record.save(exec).await?;
@@ -1457,7 +1613,10 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     where
         R: Default,
     {
-        let mut record = self.with_trashed().first_or_create(exec, attributes, fill, pivot).await?;
+        let mut record = self
+            .with_trashed()
+            .first_or_create(exec, attributes, fill, pivot)
+            .await?;
         let target = exec.target(Access::Write).await?;
         restore_record(&target, &mut record).await?;
         Ok(record)
@@ -1475,15 +1634,25 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     where
         R: Default,
     {
-        let mut record = self.with_trashed().create_or_first(exec, attributes, fill, pivot).await?;
+        let mut record = self
+            .with_trashed()
+            .create_or_first(exec, attributes, fill, pivot)
+            .await?;
         let target = exec.target(Access::Write).await?;
         restore_record(&target, &mut record).await?;
         Ok(record)
     }
 
     /// The related record matching `attributes`, on `target`.
-    async fn related_matching(self, target: &Target<'_>, attributes: &[Assignment]) -> Result<Option<Record<R>>> {
-        let bound = self.scope(|query| matching(query, attributes)).limit(1).bound()?;
+    async fn related_matching(
+        self,
+        target: &Target<'_>,
+        attributes: &[Assignment],
+    ) -> Result<Option<Record<R>>> {
+        let bound = self
+            .scope(|query| matching(query, attributes))
+            .limit(1)
+            .bound()?;
         if bound.empty {
             return Ok(None);
         }
@@ -1493,7 +1662,11 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
     }
 
     /// A record of `R` matching `attributes`, attached or not.
-    async fn global_matching(&self, target: &Target<'_>, attributes: &[Assignment]) -> Result<Option<Record<R>>> {
+    async fn global_matching(
+        &self,
+        target: &Target<'_>,
+        attributes: &[Assignment],
+    ) -> Result<Option<Record<R>>> {
         let mut global = Builder::<R>::new();
         global.removed = self.core.query.removed.clone();
         Ok(matching(global, attributes)
@@ -1507,7 +1680,12 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
 
     /// Attaches `id` inside a savepoint, ignoring a unique violation (the
     /// row is there already).
-    async fn attach_atomically(&self, target: &Target<'_>, id: Value, pivot: Vec<(String, Value)>) -> Result<()> {
+    async fn attach_atomically(
+        &self,
+        target: &Target<'_>,
+        id: Value,
+        pivot: Vec<(String, Value)>,
+    ) -> Result<()> {
         let result = match target.begin_savepoint().await? {
             Some(savepoint) => {
                 let nested = target.on_transaction(&savepoint);
@@ -1666,7 +1844,8 @@ impl<P: Model, R: Model, X: PivotKind> ErasedRelation<P> for BelongsToMany<P, R,
             let mut groups: HashMap<RelationKey, Vec<Record<R>>> = HashMap::new();
             let relation = constrained(self.clone(), node)?;
             if !keys.is_empty() {
-                let query = prepare_query(relation.core.query.clone(), node, R::meta().table(), &[])?;
+                let query =
+                    prepare_query(relation.core.query.clone(), node, R::meta().table(), &[])?;
                 let query = relation.joined(query);
                 let mut conditions = vec![in_keys_on(
                     target,

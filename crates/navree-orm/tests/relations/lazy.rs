@@ -45,7 +45,12 @@ async fn lazy_loads_of_records_from_a_result_of_several_can_be_prevented() {
                 .unwrap();
             assert_eq!(company.as_ref().unwrap().name, "Acme");
             // An eager-loaded relation is no lazy load.
-            let mut loaded = Deal::query().with("company").get(&t.db).await.unwrap().into_vec();
+            let mut loaded = Deal::query()
+                .with("company")
+                .get(&t.db)
+                .await
+                .unwrap()
+                .into_vec();
             assert!(
                 loaded[1]
                     .relation_or_load::<Option<Record<Company>>, _>(&t.db, "company")
@@ -100,7 +105,12 @@ async fn automatic_eager_loading_loads_for_the_whole_result() {
         .automatic()
         .scope(async {
             assert!(LazyLoading::current().is_automatic());
-            let mut deals = Deal::query().order_by(Deal::ID).get(&t.db).await.unwrap().into_vec();
+            let mut deals = Deal::query()
+                .order_by(Deal::ID)
+                .get(&t.db)
+                .await
+                .unwrap()
+                .into_vec();
             t.log.clear();
             let company = deals[0]
                 .relation_or_load::<Option<Record<Company>>, _>(&t.db, "company")
@@ -177,7 +187,11 @@ async fn collections_and_records_opt_into_automatic_loading() {
 async fn push_saves_the_record_and_its_loaded_relations() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    crm.renewal.tags().attach(&t.db, [crm.vip.id]).await.unwrap();
+    crm.renewal
+        .tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap();
     let mut deal = Deal::query()
         .with("company")
         .with("activities")
@@ -204,7 +218,12 @@ async fn push_saves_the_record_and_its_loaded_relations() {
     // A new record in a loaded relation is inserted.
     deal.relation_mut::<Collection<Activity>>("activities")
         .unwrap()
-        .push(crm.renewal.activities().make(Activity::new("sms", 1)).unwrap());
+        .push(
+            crm.renewal
+                .activities()
+                .make(Activity::new("sms", 1))
+                .unwrap(),
+        );
     // Pivots are saved too.
     let tags = deal.relation_mut::<Collection<Tag>>("tags").unwrap();
     tags[0]
@@ -215,11 +234,17 @@ async fn push_saves_the_record_and_its_loaded_relations() {
 
     assert!(deal.push(&t.db).await.unwrap());
     assert_eq!(
-        Deal::find_or_fail(&t.db, crm.renewal.id).await.unwrap().title,
+        Deal::find_or_fail(&t.db, crm.renewal.id)
+            .await
+            .unwrap()
+            .title,
         "Renewal 2027"
     );
     assert_eq!(
-        Company::find_or_fail(&t.db, crm.acme.id).await.unwrap().name,
+        Company::find_or_fail(&t.db, crm.acme.id)
+            .await
+            .unwrap()
+            .name,
         "Acme Inc"
     );
     let minutes = crm
@@ -241,7 +266,10 @@ async fn push_saves_the_record_and_its_loaded_relations() {
     deal.title = "Renewal 2028".into();
     assert!(deal.push_quietly(&t.db).await.unwrap());
     assert_eq!(
-        Deal::find_or_fail(&t.db, crm.renewal.id).await.unwrap().title,
+        Deal::find_or_fail(&t.db, crm.renewal.id)
+            .await
+            .unwrap()
+            .title,
         "Renewal 2028"
     );
 }

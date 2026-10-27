@@ -22,7 +22,8 @@ pub(crate) struct ParsedPath {
 impl ParsedPath {
     /// Parses `text`.
     pub(crate) fn parse(text: &str) -> Result<ParsedPath> {
-        let invalid = |why: &str| OrmError::invalid(format!("`{text}` is not a relation path: {why}"));
+        let invalid =
+            |why: &str| OrmError::invalid(format!("`{text}` is not a relation path: {why}"));
         let mut rest = text.trim();
         let mut alias = None;
         let lower = rest.to_ascii_lowercase();
@@ -67,10 +68,7 @@ impl ParsedPath {
 }
 
 fn is_name(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_')
+    !text.is_empty() && text.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// A relation path from model `M`: a string (`"company"`,

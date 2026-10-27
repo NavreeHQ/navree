@@ -19,13 +19,39 @@ fn one(deal: &Record<Deal>, name: &str) -> Option<Record<Activity>> {
 async fn latest_oldest_and_by_aggregate() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    let latest = crm.renewal.latest_activity().first(&t.db).await.unwrap().unwrap();
+    let latest = crm
+        .renewal
+        .latest_activity()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!((latest.kind.as_str(), latest.minutes), ("call", 45));
-    let first = crm.renewal.first_activity().first(&t.db).await.unwrap().unwrap();
+    let first = crm
+        .renewal
+        .first_activity()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(first.minutes, 30);
-    let longest = crm.renewal.longest_call().first(&t.db).await.unwrap().unwrap();
+    let longest = crm
+        .renewal
+        .longest_call()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(longest.minutes, 45);
-    assert!(crm.upgrade.longest_call().first(&t.db).await.unwrap().is_none(), "no calls");
+    assert!(
+        crm.upgrade
+            .longest_call()
+            .first(&t.db)
+            .await
+            .unwrap()
+            .is_none(),
+        "no calls"
+    );
 
     // Eager loaded: one query for every deal.
     t.log.clear();
@@ -66,7 +92,9 @@ async fn latest_oldest_and_by_aggregate() {
 
     // Existence and counts see one record at most.
     let with_latest_call = Deal::query()
-        .where_has(Deal::latest_activity, |q| q.where_(Activity::KIND.eq("call")))
+        .where_has(Deal::latest_activity, |q| {
+            q.where_(Activity::KIND.eq("call"))
+        })
         .get(&t.db)
         .await
         .unwrap();
@@ -94,7 +122,13 @@ async fn ties_and_custom_aggregates() {
         .create(&t.db, Activity::new("call", 45))
         .await
         .unwrap();
-    let longest = crm.renewal.longest_call().first(&t.db).await.unwrap().unwrap();
+    let longest = crm
+        .renewal
+        .longest_call()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(longest.id, tie.id);
 
     // Several columns: the longest, then the smallest key among them.
@@ -129,7 +163,14 @@ async fn to_many_relations_as_to_one() {
     let any = crm.upgrade.activities().one();
     let activity = any.first(&t.db).await.unwrap().unwrap();
     assert_eq!(activity.kind, "meeting");
-    let contact = crm.acme.contacts().one().oldest_of_many().first(&t.db).await.unwrap();
+    let contact = crm
+        .acme
+        .contacts()
+        .one()
+        .oldest_of_many()
+        .first(&t.db)
+        .await
+        .unwrap();
     assert_eq!(contact.unwrap().name, "Alice");
     let biggest = crm.team.biggest_deal().first(&t.db).await.unwrap().unwrap();
     assert_eq!(biggest.title, "Platform");

@@ -817,7 +817,10 @@ macro_rules! relation_builder_traits {
         }
 
         impl<P: $crate::Model, R: $crate::Model> $crate::Scoped<R> for $relation<P, R> {
-            fn apply_scope(mut self, scope: impl FnOnce($crate::Builder<R>) -> $crate::Builder<R>) -> Self {
+            fn apply_scope(
+                mut self,
+                scope: impl FnOnce($crate::Builder<R>) -> $crate::Builder<R>,
+            ) -> Self {
                 self.core.query = self.core.query.scope(scope);
                 self
             }

@@ -96,7 +96,11 @@ impl<M: Model> Builder<M> {
     /// let companies = Company::query().with_accessible("deals", &mine).get(&db).await?;
     /// # Ok(()) }
     /// ```
-    pub fn with_accessible<A: AccessFilter + Clone>(self, path: impl RelationPath<M>, access: &A) -> Self {
+    pub fn with_accessible<A: AccessFilter + Clone>(
+        self,
+        path: impl RelationPath<M>,
+        access: &A,
+    ) -> Self {
         self.with_accessible_for(path, "read", access)
     }
 
@@ -122,7 +126,8 @@ impl<M: Model> Builder<M> {
             if depth == parsed.segments.len() && parsed.columns.is_some() {
                 node.columns.clone_from(&parsed.columns);
             }
-            node.constraints.push(Constraint::new_access(constraint.clone()));
+            node.constraints
+                .push(Constraint::new_access(constraint.clone()));
         }
         self
     }

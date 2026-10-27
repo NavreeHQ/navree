@@ -23,14 +23,20 @@ pub(crate) struct RelationAttrs {
 }
 
 /// Parses `meta` when it is one of [`KEYS`]; `Ok(false)` otherwise.
-pub(crate) fn parse_key(attrs: &mut RelationAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<bool> {
+pub(crate) fn parse_key(
+    attrs: &mut RelationAttrs,
+    meta: &ParseNestedMeta<'_>,
+) -> syn::Result<bool> {
     let path = &meta.path;
     if path.is_ident("touches") {
         attrs.touches.extend(names(meta, "touches", false)?);
     } else if path.is_ident("morph_name") {
         let name: LitStr = meta.value()?.parse()?;
         if name.value().trim().is_empty() {
-            return Err(syn::Error::new(name.span(), "the morph name cannot be empty"));
+            return Err(syn::Error::new(
+                name.span(),
+                "the morph name cannot be empty",
+            ));
         }
         attrs.morph_name = Some(name);
     } else if path.is_ident("with") {
@@ -59,7 +65,9 @@ pub(crate) fn parse_key(attrs: &mut RelationAttrs, meta: &ParseNestedMeta<'_>) -
             Ok(())
         })?;
         match (foreign_key, related_key) {
-            (Some(foreign_key), Some(related_key)) => attrs.pivot = Some((foreign_key, related_key)),
+            (Some(foreign_key), Some(related_key)) => {
+                attrs.pivot = Some((foreign_key, related_key))
+            }
             _ => {
                 return Err(meta.error(
                     "a pivot model names both pivot columns: pivot(foreign_key = \"deal_id\", related_key = \"tag_id\")",
@@ -85,7 +93,8 @@ fn names(meta: &ParseNestedMeta<'_>, key: &str, nested: bool) -> syn::Result<Vec
     for element in array.elems {
         match element {
             Expr::Lit(ExprLit {
-                lit: Lit::Str(name), ..
+                lit: Lit::Str(name),
+                ..
             }) => {
                 let text = name.value();
                 let is_step = |step: &str| {

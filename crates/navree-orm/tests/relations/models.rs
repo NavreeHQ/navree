@@ -324,7 +324,9 @@ impl Deal {
     /// The customer, or a placeholder naming the deal.
     pub fn company_or_placeholder(&self) -> BelongsTo<Deal, Company> {
         self.belongs_to(Deal::COMPANY_ID)
-            .with_default_fn(|deal: &Deal| Company::named(&format!("No company for {}", deal.title)))
+            .with_default_fn(|deal: &Deal| {
+                Company::named(&format!("No company for {}", deal.title))
+            })
     }
 
     /// The rep owning the deal.
@@ -339,7 +341,8 @@ impl Deal {
 
     /// The deal's calls.
     pub fn calls(&self) -> HasMany<Deal, Activity> {
-        self.has_many(Activity::DEAL_ID).where_(Activity::KIND.eq("call"))
+        self.has_many(Activity::DEAL_ID)
+            .where_(Activity::KIND.eq("call"))
     }
 
     /// The newest activity (largest key).
@@ -354,10 +357,10 @@ impl Deal {
 
     /// The longest call.
     pub fn longest_call(&self) -> HasOne<Deal, Activity> {
-        self.has_many(Activity::DEAL_ID).of_many(
-            [(Activity::MINUTES, AggregateFunction::Max)],
-            |q| q.where_(Activity::KIND.eq("call")),
-        )
+        self.has_many(Activity::DEAL_ID)
+            .of_many([(Activity::MINUTES, AggregateFunction::Max)], |q| {
+                q.where_(Activity::KIND.eq("call"))
+            })
     }
 
     /// The first activity, or a placeholder.
@@ -498,7 +501,10 @@ impl Tag {
 /// A row of `deal_tag` as a typed pivot model: no id of its own, so it is
 /// identified by both pivot columns.
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
-#[model(table = "deal_tag", pivot(foreign_key = "deal_id", related_key = "tag_id"))]
+#[model(
+    table = "deal_tag",
+    pivot(foreign_key = "deal_id", related_key = "tag_id")
+)]
 pub struct DealTag {
     pub deal_id: i64,
     pub tag_id: i64,

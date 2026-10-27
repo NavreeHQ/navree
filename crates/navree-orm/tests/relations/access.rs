@@ -59,10 +59,7 @@ async fn eager_loads_keep_what_the_viewer_may_read() {
         .map(|activity| activity.kind.as_str())
         .collect();
     assert_eq!(kinds, ["call", "call"], "emails are hidden");
-    assert_eq!(
-        *ada.asked.lock().unwrap(),
-        ["read Deal", "read Activity"]
-    );
+    assert_eq!(*ada.asked.lock().unwrap(), ["read Deal", "read Activity"]);
 
     // Another action, and a belongs-to.
     let deals = Deal::query()

@@ -90,7 +90,10 @@ impl Refine {
 pub(crate) fn merge_refined<R: Model>(mut query: Builder<R>, refined: Builder<R>) -> Builder<R> {
     let ir = refined.ir;
     if ir.wheres.iter().any(|clause| clause.boolean == Boolean::Or) {
-        query.ir.wheres.push(WhereClause::and(Where::Group(ir.wheres)));
+        query
+            .ir
+            .wheres
+            .push(WhereClause::and(Where::Group(ir.wheres)));
     } else {
         query.ir.wheres.extend(ir.wheres);
     }
@@ -275,7 +278,9 @@ pub(crate) fn has_filter<M: Model>(
         Where::Compare {
             left: Expr::Subquery(Box::new(query)),
             op,
-            right: Expr::Value(Value::BigInt(Some(i64::try_from(count).unwrap_or(i64::MAX)))),
+            right: Expr::Value(Value::BigInt(Some(
+                i64::try_from(count).unwrap_or(i64::MAX),
+            ))),
         }
     })
 }
@@ -534,7 +539,11 @@ impl<M: Model> Builder<M> {
 
     /// Only records with a related record through `path` matching
     /// `filter`, and those related records eager loaded.
-    pub fn with_where_relation(self, path: impl RelationPath<M>, filter: impl Into<Filter>) -> Self {
+    pub fn with_where_relation(
+        self,
+        path: impl RelationPath<M>,
+        filter: impl Into<Filter>,
+    ) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
         let eager = filter.clone();
@@ -734,8 +743,9 @@ fn relation_to<M: Model, R: Model>(
     method: &str,
 ) -> Result<String> {
     let fits = |name: &str| {
-        M::relation_meta(name)
-            .is_some_and(|meta| kinds.contains(&meta.kind) && meta.related == Some(R::meta().name()))
+        M::relation_meta(name).is_some_and(|meta| {
+            kinds.contains(&meta.kind) && meta.related == Some(R::meta().name())
+        })
     };
     if fits(preferred) {
         return Ok(preferred.to_owned());

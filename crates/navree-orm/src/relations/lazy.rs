@@ -18,6 +18,7 @@ use crate::exec::{Access, Executor, Target};
 use crate::ir::AggregateFunction;
 use crate::model::Model;
 use crate::record::Record;
+use crate::relations::Relation;
 use crate::relations::aggregates::{AggregateSpec, load_aggregate_on};
 use crate::relations::any::AnyRecord;
 use crate::relations::belongs_to::BelongsTo;
@@ -28,7 +29,6 @@ use crate::relations::path::{ConstrainPath, ParsedPath, RelationPath};
 use crate::relations::pivot::Pivot;
 use crate::relations::registry::{self, DynRelation};
 use crate::relations::store::{RelationValue, Relations};
-use crate::relations::Relation;
 use crate::value::{Field, Value};
 
 /// What a record knows about lazy loading: whether it came from a result
@@ -100,7 +100,10 @@ impl<M: Model> AutoloadGroup<M> {
                 autoload: true,
                 ..EagerNode::default()
             };
-            relation.inner.eager_load(target, &mut records, &node).await?;
+            relation
+                .inner
+                .eager_load(target, &mut records, &node)
+                .await?;
         }
         into.copy_from(&records[index].relations, name);
         Ok(())
@@ -344,7 +347,10 @@ pub(crate) fn load_missing_tree<'a, 'b, M: Model>(
                     children: EagerTree::default(),
                     ..node.clone()
                 };
-                relation.inner.eager_load(target, &mut snapshots, &shallow).await?;
+                relation
+                    .inner
+                    .eager_load(target, &mut snapshots, &shallow)
+                    .await?;
                 for (index, snapshot) in missing.into_iter().zip(&snapshots) {
                     records[index]
                         .relations
@@ -373,8 +379,10 @@ pub(crate) async fn load_nested_one<P: Model, R: Model>(
     let mut owners = Vec::new();
     let mut related = Vec::new();
     for (index, parent) in parents.iter_mut().enumerate() {
-        if matches!(parent.relations.get::<Option<Record<R>>>(name), Some(Some(_)))
-            && let Some(Some(record)) = parent.relations.take::<Option<Record<R>>>(name)
+        if matches!(
+            parent.relations.get::<Option<Record<R>>>(name),
+            Some(Some(_))
+        ) && let Some(Some(record)) = parent.relations.take::<Option<Record<R>>>(name)
         {
             owners.push(index);
             related.push(record);
@@ -410,7 +418,9 @@ pub(crate) async fn load_nested_many<P: Model, R: Model>(
     let mut records = related.into_iter();
     for (index, count) in owners {
         let collection: Collection<R> = records.by_ref().take(count).collect();
-        parents[index].relations.set_relation(name.to_owned(), collection);
+        parents[index]
+            .relations
+            .set_relation(name.to_owned(), collection);
     }
     result
 }
@@ -479,8 +489,14 @@ async fn load_morph_on<M: Model>(
             })
             .map(|(index, _)| index)
             .collect();
-        let of_type: Vec<AnyRecord> = indexes.iter().filter_map(|index| taken[*index].take()).collect();
-        match morph_target.load_into(target, of_type, loads, aggregate).await {
+        let of_type: Vec<AnyRecord> = indexes
+            .iter()
+            .filter_map(|index| taken[*index].take())
+            .collect();
+        match morph_target
+            .load_into(target, of_type, loads, aggregate)
+            .await
+        {
             Ok(loaded) => {
                 for (index, record) in indexes.into_iter().zip(loaded) {
                     taken[index] = Some(record);
@@ -577,7 +593,11 @@ impl<M: Model> Record<M> {
     /// the [`LazyLoading`] rules: with automatic loading, the load covers
     /// the record's whole result; when lazy loading is prevented and the
     /// record came from a result of several records, it is a violation.
-    pub async fn relation_or_load<T: 'static, E: Executor + ?Sized>(&mut self, exec: &E, name: &str) -> Result<&T> {
+    pub async fn relation_or_load<T: 'static, E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+    ) -> Result<&T> {
         if !self.relations.is_loaded(name) {
             let relation = registry::find::<M>(name)?;
             let target = exec.target(Access::Read).await?;
@@ -624,7 +644,11 @@ impl<M: Model> Record<M> {
 
     /// Eager loads relation `path` onto the record (again, if it is
     /// loaded).
-    pub async fn load<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>) -> Result<()> {
+    pub async fn load<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+    ) -> Result<()> {
         let tree = tree_of::<M>([path])?;
         let target = exec.target(Access::Read).await?;
         load_tree(&target, std::slice::from_mut(self), &tree).await
@@ -688,8 +712,12 @@ impl<M: Model> Record<M> {
         exec: &E,
         paths: impl IntoIterator<Item = impl RelationPath<M>>,
     ) -> Result<()> {
-        let paths = paths.into_iter().map(|path| path.relation_path().into_owned()).collect();
-        self.load_aggregate_paths(exec, paths, AggregateSpec::count()).await
+        let paths = paths
+            .into_iter()
+            .map(|path| path.relation_path().into_owned())
+            .collect();
+        self.load_aggregate_paths(exec, paths, AggregateSpec::count())
+            .await
     }
 
     /// Loads `{relation}_exists` of each relation of `paths`.
@@ -698,8 +726,12 @@ impl<M: Model> Record<M> {
         exec: &E,
         paths: impl IntoIterator<Item = impl RelationPath<M>>,
     ) -> Result<()> {
-        let paths = paths.into_iter().map(|path| path.relation_path().into_owned()).collect();
-        self.load_aggregate_paths(exec, paths, AggregateSpec::exists()).await
+        let paths = paths
+            .into_iter()
+            .map(|path| path.relation_path().into_owned())
+            .collect();
+        self.load_aggregate_paths(exec, paths, AggregateSpec::exists())
+            .await
     }
 
     /// Loads `function` of related `column` of relation `path`
@@ -717,28 +749,57 @@ impl<M: Model> Record<M> {
     }
 
     /// Loads `{relation}_sum_{column}`.
-    pub async fn load_sum<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Sum).await
+    pub async fn load_sum<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Sum)
+            .await
     }
 
     /// Loads `{relation}_avg_{column}`.
-    pub async fn load_avg<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Avg).await
+    pub async fn load_avg<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Avg)
+            .await
     }
 
     /// Loads `{relation}_min_{column}`.
-    pub async fn load_min<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Min).await
+    pub async fn load_min<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Min)
+            .await
     }
 
     /// Loads `{relation}_max_{column}`.
-    pub async fn load_max<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Max).await
+    pub async fn load_max<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Max)
+            .await
     }
 
     /// Loads `morph_to` relation `name` (if missing), then `with`'s
     /// per-model loads into the record it holds.
-    pub async fn load_morph<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
+    pub async fn load_morph<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         load_morph_on(&target, std::slice::from_mut(self), name, &with, None).await
     }
@@ -756,10 +817,22 @@ impl<M: Model> Record<M> {
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub async fn load_morph_count<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
+    pub async fn load_morph_count<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         let spec = AggregateSpec::count();
-        load_morph_on(&target, std::slice::from_mut(self), name, &with, Some(&spec)).await
+        load_morph_on(
+            &target,
+            std::slice::from_mut(self),
+            name,
+            &with,
+            Some(&spec),
+        )
+        .await
     }
 
     /// Loads `function` of `column` of the relations `with` lists for its
@@ -775,27 +848,62 @@ impl<M: Model> Record<M> {
     ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         let spec = AggregateSpec::function(function, column)?;
-        load_morph_on(&target, std::slice::from_mut(self), name, &with, Some(&spec)).await
+        load_morph_on(
+            &target,
+            std::slice::from_mut(self),
+            name,
+            &with,
+            Some(&spec),
+        )
+        .await
     }
 
     /// [`load_morph_aggregate`](Record::load_morph_aggregate) with `SUM`.
-    pub async fn load_morph_sum<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith, column: impl IntoExpr) -> Result<()> {
-        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Sum).await
+    pub async fn load_morph_sum<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Sum)
+            .await
     }
 
     /// [`load_morph_aggregate`](Record::load_morph_aggregate) with `AVG`.
-    pub async fn load_morph_avg<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith, column: impl IntoExpr) -> Result<()> {
-        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Avg).await
+    pub async fn load_morph_avg<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Avg)
+            .await
     }
 
     /// [`load_morph_aggregate`](Record::load_morph_aggregate) with `MIN`.
-    pub async fn load_morph_min<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith, column: impl IntoExpr) -> Result<()> {
-        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Min).await
+    pub async fn load_morph_min<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Min)
+            .await
     }
 
     /// [`load_morph_aggregate`](Record::load_morph_aggregate) with `MAX`.
-    pub async fn load_morph_max<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith, column: impl IntoExpr) -> Result<()> {
-        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Max).await
+    pub async fn load_morph_max<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_morph_aggregate(exec, name, with, column, AggregateFunction::Max)
+            .await
     }
 
     /// Saves the record, then every record of its loaded relations, and
@@ -905,7 +1013,9 @@ impl<M: Model, R: Model> Associate<M, Record<R>> for BelongsTo<M, R> {
 
 impl<M: Model, R: Model> Dissociate<M> for BelongsTo<M, R> {
     fn dissociate_from(&self, child: &mut Record<M>) -> Result<()> {
-        child.model.set_value(&self.foreign_key, Value::String(None))?;
+        child
+            .model
+            .set_value(&self.foreign_key, Value::String(None))?;
         child
             .relations
             .set_relation(self.core.name.to_string(), None::<Record<R>>);
@@ -933,8 +1043,12 @@ impl<M: Model, X: Model> Associate<M, Record<X>> for MorphTo<M> {
 
 impl<M: Model> Dissociate<M> for MorphTo<M> {
     fn dissociate_from(&self, child: &mut Record<M>) -> Result<()> {
-        child.model.set_value(&self.id_column, Value::String(None))?;
-        child.model.set_value(&self.type_column, Value::String(None))?;
+        child
+            .model
+            .set_value(&self.id_column, Value::String(None))?;
+        child
+            .model
+            .set_value(&self.type_column, Value::String(None))?;
         child
             .relations
             .set_relation(self.name.to_string(), None::<AnyRecord>);
@@ -943,14 +1057,22 @@ impl<M: Model> Dissociate<M> for MorphTo<M> {
 }
 
 impl<M: Model> Collection<M> {
-    async fn load_tree_into<E: Executor + ?Sized>(&mut self, exec: &E, tree: &EagerTree) -> Result<()> {
+    async fn load_tree_into<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        tree: &EagerTree,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         load_tree(&target, self, tree).await
     }
 
     /// Eager loads relation `path` onto every record (one query per
     /// relation and level).
-    pub async fn load<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>) -> Result<()> {
+    pub async fn load<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+    ) -> Result<()> {
         let tree = tree_of::<M>([path])?;
         self.load_tree_into(exec, &tree).await
     }
@@ -994,7 +1116,12 @@ impl<M: Model> Collection<M> {
         load_missing_tree(&target, self, &tree).await
     }
 
-    async fn load_aggregate_paths<E: Executor + ?Sized>(&mut self, exec: &E, paths: Vec<String>, spec: AggregateSpec) -> Result<()> {
+    async fn load_aggregate_paths<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        paths: Vec<String>,
+        spec: AggregateSpec,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         load_aggregate_on(&target, self, &paths, &spec).await
     }
@@ -1006,8 +1133,12 @@ impl<M: Model> Collection<M> {
         exec: &E,
         paths: impl IntoIterator<Item = impl RelationPath<M>>,
     ) -> Result<()> {
-        let paths = paths.into_iter().map(|path| path.relation_path().into_owned()).collect();
-        self.load_aggregate_paths(exec, paths, AggregateSpec::count()).await
+        let paths = paths
+            .into_iter()
+            .map(|path| path.relation_path().into_owned())
+            .collect();
+        self.load_aggregate_paths(exec, paths, AggregateSpec::count())
+            .await
     }
 
     /// Loads `{relation}_exists` of each relation of `paths`.
@@ -1016,8 +1147,12 @@ impl<M: Model> Collection<M> {
         exec: &E,
         paths: impl IntoIterator<Item = impl RelationPath<M>>,
     ) -> Result<()> {
-        let paths = paths.into_iter().map(|path| path.relation_path().into_owned()).collect();
-        self.load_aggregate_paths(exec, paths, AggregateSpec::exists()).await
+        let paths = paths
+            .into_iter()
+            .map(|path| path.relation_path().into_owned())
+            .collect();
+        self.load_aggregate_paths(exec, paths, AggregateSpec::exists())
+            .await
     }
 
     /// Loads `function` of related `column` of relation `path`.
@@ -1034,36 +1169,70 @@ impl<M: Model> Collection<M> {
     }
 
     /// Loads `{relation}_sum_{column}`.
-    pub async fn load_sum<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Sum).await
+    pub async fn load_sum<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Sum)
+            .await
     }
 
     /// Loads `{relation}_avg_{column}`.
-    pub async fn load_avg<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Avg).await
+    pub async fn load_avg<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Avg)
+            .await
     }
 
     /// Loads `{relation}_min_{column}`.
-    pub async fn load_min<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Min).await
+    pub async fn load_min<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Min)
+            .await
     }
 
     /// Loads `{relation}_max_{column}`.
-    pub async fn load_max<E: Executor + ?Sized>(&mut self, exec: &E, path: impl RelationPath<M>, column: impl IntoExpr) -> Result<()> {
-        self.load_aggregate(exec, path, column, AggregateFunction::Max).await
+    pub async fn load_max<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        path: impl RelationPath<M>,
+        column: impl IntoExpr,
+    ) -> Result<()> {
+        self.load_aggregate(exec, path, column, AggregateFunction::Max)
+            .await
     }
 
     /// Loads `morph_to` relation `name` where missing, then `with`'s
     /// per-model loads into the records it holds (one query per model and
     /// relation).
-    pub async fn load_morph<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
+    pub async fn load_morph<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         load_morph_on(&target, self, name, &with, None).await
     }
 
     /// Loads the counts of the relations `with` lists (with `on` or
     /// `count_on`) onto the records `morph_to` relation `name` holds.
-    pub async fn load_morph_count<E: Executor + ?Sized>(&mut self, exec: &E, name: &str, with: MorphWith) -> Result<()> {
+    pub async fn load_morph_count<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        name: &str,
+        with: MorphWith,
+    ) -> Result<()> {
         let target = exec.target(Access::Read).await?;
         let spec = AggregateSpec::count();
         load_morph_on(&target, self, name, &with, Some(&spec)).await
@@ -1133,7 +1302,10 @@ impl<M: Model> Record<M> {
 /// Loads again the relations `record` has loaded that are relations of
 /// its model (what `refresh` does after reloading the columns); pivots and
 /// values set by hand are left as they are.
-pub(crate) async fn reload_relations<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> Result<()> {
+pub(crate) async fn reload_relations<M: Model>(
+    target: &Target<'_>,
+    record: &mut Record<M>,
+) -> Result<()> {
     let names: Vec<String> = record
         .relations
         .names()

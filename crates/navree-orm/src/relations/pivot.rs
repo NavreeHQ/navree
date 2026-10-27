@@ -37,7 +37,8 @@ pub struct PivotSpec {
 impl PivotSpec {
     /// The conditions identifying the row with these key values.
     fn identity(&self, foreign: &Value, related: &Value) -> Vec<WhereClause> {
-        let column = |name: &str| Expr::Column(crate::ir::ColumnRef::new(None::<&str>, name.to_owned()));
+        let column =
+            |name: &str| Expr::Column(crate::ir::ColumnRef::new(None::<&str>, name.to_owned()));
         let mut clauses = vec![
             WhereClause::and(Where::Compare {
                 left: column(&self.foreign_key),
@@ -254,8 +255,15 @@ impl Pivot {
             let row: Vec<(String, Value)> = self.values.clone();
             let insert = crate::ir::InsertIr {
                 table: self.spec.table.clone(),
-                columns: row.iter().map(|(column, _)| Cow::Owned(column.clone())).collect(),
-                rows: vec![row.into_iter().map(|(_, value)| Expr::Value(value)).collect()],
+                columns: row
+                    .iter()
+                    .map(|(column, _)| Cow::Owned(column.clone()))
+                    .collect(),
+                rows: vec![
+                    row.into_iter()
+                        .map(|(_, value)| Expr::Value(value))
+                        .collect(),
+                ],
                 returning: Vec::new(),
             };
             target.insert(&insert).await?;
@@ -397,8 +405,14 @@ async fn insert_rows(
     let mut batches: Vec<(Vec<String>, Vec<Vec<Expr>>)> = Vec::new();
     for row in rows {
         let columns: Vec<String> = row.iter().map(|(column, _)| column.clone()).collect();
-        let values: Vec<Expr> = row.into_iter().map(|(_, value)| Expr::Value(value)).collect();
-        match batches.iter_mut().find(|(existing, _)| *existing == columns) {
+        let values: Vec<Expr> = row
+            .into_iter()
+            .map(|(_, value)| Expr::Value(value))
+            .collect();
+        match batches
+            .iter_mut()
+            .find(|(existing, _)| *existing == columns)
+        {
             Some((_, batch)) => batch.push(values),
             None => batches.push((columns, vec![values])),
         }
@@ -487,7 +501,11 @@ impl<M: Model + Default> PivotKind for M {
     type Row = Record<M>;
 
     fn columns() -> Vec<&'static str> {
-        M::meta().all_columns().iter().map(|column| column.name()).collect()
+        M::meta()
+            .all_columns()
+            .iter()
+            .map(|column| column.name())
+            .collect()
     }
 
     fn row(_spec: &PivotSpec, values: Vec<(String, Value)>, exists: bool) -> Result<Record<M>> {
@@ -644,7 +662,9 @@ pub(crate) fn canonical_id<R: Model>(related_key: &str, id: Value) -> Value {
 }
 
 /// Pivot values given as assignments, as `(column, value)` pairs.
-pub(crate) fn assigned(values: impl IntoIterator<Item = Assignment>) -> Result<Vec<(String, Value)>> {
+pub(crate) fn assigned(
+    values: impl IntoIterator<Item = Assignment>,
+) -> Result<Vec<(String, Value)>> {
     values
         .into_iter()
         .map(|assignment| match assignment.assigned_value() {

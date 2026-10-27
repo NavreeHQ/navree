@@ -7,7 +7,9 @@
 
 use std::borrow::Cow;
 
-use crate::ir::{ColumnRef, Expr, InValues, Order, QueryIr, SelectItem, TableRef, Where, WhereClause};
+use crate::ir::{
+    ColumnRef, Expr, InValues, Order, QueryIr, SelectItem, TableRef, Where, WhereClause,
+};
 
 /// Renames references to table `from` as `to` in `query` (not the tables
 /// it reads: the caller aliases the one it means).
@@ -193,9 +195,13 @@ mod tests {
     #[test]
     fn references_move_to_the_alias_except_where_shadowed() {
         let mut inner = QueryIr::new("companies");
-        inner.wheres.push(compare("deals.company_id", "companies.id"));
+        inner
+            .wheres
+            .push(compare("deals.company_id", "companies.id"));
         let mut shadowing = QueryIr::new("deals");
-        shadowing.wheres.push(compare("deals.id", "deals.parent_id"));
+        shadowing
+            .wheres
+            .push(compare("deals.id", "deals.parent_id"));
         let mut query = QueryIr::new("deals");
         query.table = TableRef::aliased("deals", "navree_1");
         query.wheres.push(compare("deals.title", "deals.notes"));
@@ -229,7 +235,10 @@ mod tests {
             panic!("a comparison");
         };
         assert_eq!(outer.table.as_deref(), Some("navree_1"), "correlated");
-        let Where::Exists { query: shadowed, .. } = &query.wheres[2].filter else {
+        let Where::Exists {
+            query: shadowed, ..
+        } = &query.wheres[2].filter
+        else {
             panic!("an exists");
         };
         let Where::Compare {

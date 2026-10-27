@@ -36,15 +36,29 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
         .await
         .unwrap();
 
-    let tags = crm.renewal.tags().order_by(Tag::ID).get(&t.db).await.unwrap();
+    let tags = crm
+        .renewal
+        .tags()
+        .order_by(Tag::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(tag_names(&tags), ["vip", "q1"]);
     let pivot = tags[0].pivot().expect("loaded under `pivot`");
-    assert_eq!(pivot.value::<String>("role").unwrap().as_deref(), Some("owner"));
+    assert_eq!(
+        pivot.value::<String>("role").unwrap().as_deref(),
+        Some("owner")
+    );
     assert_eq!(pivot.value::<i64>("deal_id").unwrap(), Some(crm.renewal.id));
     assert_eq!(pivot.value::<i64>("tag_id").unwrap(), Some(crm.vip.id));
     let added: Option<DateTime<Utc>> = pivot.value("created_at").unwrap();
     assert!(added.is_some(), "attaching set the pivot timestamps");
-    assert!(pivot.value::<DateTime<Utc>>("updated_at").unwrap().is_some());
+    assert!(
+        pivot
+            .value::<DateTime<Utc>>("updated_at")
+            .unwrap()
+            .is_some()
+    );
     assert!(pivot.has_timestamp_attributes());
     assert_eq!(
         tags[1].pivot_value::<Option<String>>("role").unwrap(),
@@ -72,7 +86,9 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     plain.attach(&t.db, [crm.hot.id]).await.unwrap();
     let hot = crm.upgrade.tags().get(&t.db).await.unwrap();
     assert_eq!(
-        hot[0].pivot_value::<Option<DateTime<Utc>>>("created_at").unwrap(),
+        hot[0]
+            .pivot_value::<Option<DateTime<Utc>>>("created_at")
+            .unwrap(),
         Some(None)
     );
     let only_updated = crm
@@ -82,7 +98,12 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     only_updated.attach(&t.db, [crm.hot.id]).await.unwrap();
     let hot = only_updated.get(&t.db).await.unwrap();
     let pivot = hot[0].pivot().unwrap();
-    assert!(pivot.value::<DateTime<Utc>>("updated_at").unwrap().is_some());
+    assert!(
+        pivot
+            .value::<DateTime<Utc>>("updated_at")
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(pivot.get("created_at"), None, "not loaded");
     assert!(!pivot.has_timestamp_attributes());
 }
@@ -128,7 +149,11 @@ async fn typed_pivot_models_with_an_id() {
         .attach_with(&t.db, [(crm.ada.id, [col("level").set("mentions")])])
         .await
         .unwrap();
-    crm.renewal.watchers().attach(&t.db, [&crm.bob]).await.unwrap();
+    crm.renewal
+        .watchers()
+        .attach(&t.db, [&crm.bob])
+        .await
+        .unwrap();
     assert_eq!(count_rows(&t.db, "deal_watchers").await, 2);
 
     let watchers = crm
@@ -138,13 +163,18 @@ async fn typed_pivot_models_with_an_id() {
         .get(&t.db)
         .await
         .unwrap();
-    let ada = watchers[0].pivot_as::<DealWatcher>().expect("a typed pivot");
+    let ada = watchers[0]
+        .pivot_as::<DealWatcher>()
+        .expect("a typed pivot");
     assert_eq!(ada.level, "mentions");
     assert!(ada.id > 0, "its own id");
     assert_eq!(ada.deal_id, crm.renewal.id);
     assert!(ada.exists());
     assert_eq!(
-        watchers[1].pivot_value::<String>("level").unwrap().as_deref(),
+        watchers[1]
+            .pivot_value::<String>("level")
+            .unwrap()
+            .as_deref(),
         Some(""),
         "the pivot model's own default was written"
     );
@@ -175,7 +205,11 @@ async fn typed_pivot_models_with_an_id() {
         .unwrap();
     assert_eq!(row.level, "none");
     assert_eq!(
-        crm.renewal.watchers().detach(&t.db, [crm.bob.id]).await.unwrap(),
+        crm.renewal
+            .watchers()
+            .detach(&t.db, [crm.bob.id])
+            .await
+            .unwrap(),
         1
     );
     assert_eq!(count_rows(&t.db, "deal_watchers").await, 1);
@@ -190,8 +224,18 @@ async fn typed_pivot_models_without_an_id() {
         .attach(&t.db, [crm.vip.id, crm.q1.id])
         .await
         .unwrap();
-    crm.upgrade.typed_tags().attach(&t.db, [crm.vip.id]).await.unwrap();
-    let tags = crm.renewal.typed_tags().order_by(Tag::ID).get(&t.db).await.unwrap();
+    crm.upgrade
+        .typed_tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap();
+    let tags = crm
+        .renewal
+        .typed_tags()
+        .order_by(Tag::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     let mut row = tags[0].pivot_as::<DealTag>().unwrap().clone();
     assert_eq!((row.deal_id, row.tag_id), (crm.renewal.id, crm.vip.id));
 
@@ -228,7 +272,10 @@ async fn conditions_values_and_order_on_pivot_columns() {
         .unwrap();
     let db = &t.db;
     let tags = || crm.renewal.tags().order_by(Tag::ID);
-    assert_eq!(names(db, tags().where_pivot("role", "=", "owner")).await, ["vip"]);
+    assert_eq!(
+        names(db, tags().where_pivot("role", "=", "owner")).await,
+        ["vip"]
+    );
     assert_eq!(
         names(
             db,
@@ -264,7 +311,11 @@ async fn conditions_values_and_order_on_pivot_columns() {
         ["vip", "hot"]
     );
     assert_eq!(
-        names(db, tags().where_pivot_between("tag_id", crm.vip.id, crm.q1.id)).await,
+        names(
+            db,
+            tags().where_pivot_between("tag_id", crm.vip.id, crm.q1.id)
+        )
+        .await,
         ["vip", "q1"]
     );
     assert_eq!(
@@ -285,7 +336,11 @@ async fn conditions_values_and_order_on_pivot_columns() {
     );
 
     // A pivot condition that also fills new rows.
-    crm.platform.owner_tags().attach(db, [crm.hot.id]).await.unwrap();
+    crm.platform
+        .owner_tags()
+        .attach(db, [crm.hot.id])
+        .await
+        .unwrap();
     let owners = crm.platform.owner_tags().get(db).await.unwrap();
     assert_eq!(tag_names(&owners), ["hot"]);
     assert_eq!(
@@ -327,7 +382,10 @@ fn pivot_metadata() {
     let inverse = Tag::default().labeled_deals();
     assert_eq!(inverse.related_pivot_key_name(), "taggable_id");
     assert_eq!(inverse.morph_name(), Some("deal"));
-    assert_eq!(navree_orm::relations::joining_table::<Tag, Deal>(), "deal_tag");
+    assert_eq!(
+        navree_orm::relations::joining_table::<Tag, Deal>(),
+        "deal_tag"
+    );
     let renamed = deal
         .belongs_to_many::<Tag>("labels_of_deals")
         .foreign_pivot_key("opportunity_id")
@@ -349,17 +407,20 @@ async fn querying_the_pivot_table_and_pivot_records() {
         .attach(&t.db, [crm.vip.id, crm.q1.id])
         .await
         .unwrap();
-    crm.upgrade.tags().attach(&t.db, [crm.vip.id]).await.unwrap();
+    crm.upgrade
+        .tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap();
 
     let rows = crm.renewal.tags().pivot_query().unwrap();
     assert_eq!(rows.clone().count(&t.db).await.unwrap(), 2);
     let sql = rows.to_sql(Dialect::Sqlite).unwrap().sql;
-    assert!(sql.contains(r#"FROM "deal_tag" WHERE "deal_tag"."deal_id" = ?"#), "{sql}");
-    let vip = crm
-        .renewal
-        .tags()
-        .pivot_query_for([crm.vip.id])
-        .unwrap();
+    assert!(
+        sql.contains(r#"FROM "deal_tag" WHERE "deal_tag"."deal_id" = ?"#),
+        "{sql}"
+    );
+    let vip = crm.renewal.tags().pivot_query_for([crm.vip.id]).unwrap();
     assert_eq!(vip.count(&t.db).await.unwrap(), 1);
 
     // A new pivot row, saved; then one marked stored, deleted by both keys.
@@ -374,7 +435,10 @@ async fn querying_the_pivot_table_and_pivot_records() {
     assert_eq!(row.table(), "deal_tag");
     assert!(row.save(&t.db).await.unwrap());
     assert!(row.exists());
-    assert!(row.has_timestamp_attributes(), "the relation's timestamps were set");
+    assert!(
+        row.has_timestamp_attributes(),
+        "the relation's timestamps were set"
+    );
     assert_eq!(crm.platform.tags().count(&t.db).await.unwrap(), 1);
     row.set("role", "changed");
     assert!(row.is_dirty());
@@ -421,7 +485,13 @@ async fn polymorphic_pivots_carry_the_morph_type() {
         .await
         .unwrap();
 
-    let labels = crm.renewal.labels().order_by(Tag::ID).get(&t.db).await.unwrap();
+    let labels = crm
+        .renewal
+        .labels()
+        .order_by(Tag::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(tag_names(&labels), ["vip", "hot"]);
     let pivot = labels[0].pivot().unwrap();
     assert_eq!(pivot.morph_type(), Some("taggable_type"));

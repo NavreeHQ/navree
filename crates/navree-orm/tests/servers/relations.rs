@@ -304,9 +304,15 @@ async fn create_tables(db: &Db, server: Server) {
 pub async fn relations(db: Db, server: Server) {
     create_tables(&db, server).await;
     let db = &db;
-    let team = Team::create(db, Team { name: "Enterprise".into(), ..Team::default() })
-        .await
-        .unwrap();
+    let team = Team::create(
+        db,
+        Team {
+            name: "Enterprise".into(),
+            ..Team::default()
+        },
+    )
+    .await
+    .unwrap();
     let ada = User::create(
         db,
         User {
@@ -327,9 +333,15 @@ pub async fn relations(db: Db, server: Server) {
     )
     .await
     .unwrap();
-    let acme = Company::create(db, Company { name: "Acme".into(), ..Company::default() })
-        .await
-        .unwrap();
+    let acme = Company::create(
+        db,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
     Company::create(
         db,
         Company {
@@ -422,7 +434,8 @@ pub async fn relations(db: Db, server: Server) {
     assert_eq!(titles(&busy), ["Renewal"]);
     let long_calls = Deal::query()
         .where_has(Deal::activities, |q| {
-            q.where_(Activity::KIND.eq("call")).where_(Activity::MINUTES.gt(40))
+            q.where_(Activity::KIND.eq("call"))
+                .where_(Activity::MINUTES.gt(40))
         })
         .get(db)
         .await
@@ -439,7 +452,10 @@ pub async fn relations(db: Db, server: Server) {
         .get(db)
         .await
         .unwrap();
-    assert_eq!(counted[0].extra::<i64>("activities_count").unwrap(), Some(3));
+    assert_eq!(
+        counted[0].extra::<i64>("activities_count").unwrap(),
+        Some(3)
+    );
     assert_eq!(
         counted[0].extra::<i64>("activities_sum_minutes").unwrap(),
         Some(80),
@@ -449,8 +465,14 @@ pub async fn relations(db: Db, server: Server) {
         counted[0].extra::<i64>("activities_max_minutes").unwrap(),
         Some(45)
     );
-    assert_eq!(counted[0].extra::<bool>("company_exists").unwrap(), Some(true));
-    assert_eq!(counted[2].extra::<bool>("company_exists").unwrap(), Some(false));
+    assert_eq!(
+        counted[0].extra::<bool>("company_exists").unwrap(),
+        Some(true)
+    );
+    assert_eq!(
+        counted[2].extra::<bool>("company_exists").unwrap(),
+        Some(false)
+    );
 
     // One of many, and through relations.
     let latest = renewal.latest_activity().first(db).await.unwrap().unwrap();
@@ -471,17 +493,34 @@ pub async fn relations(db: Db, server: Server) {
         "meeting"
     );
     assert_eq!(team.deals().count(db).await.unwrap(), 3);
-    let teams = Team::query().with("deals").with_count("deals").get(db).await.unwrap();
+    let teams = Team::query()
+        .with("deals")
+        .with_count("deals")
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(teams[0].loaded(Team::deals).unwrap().len(), 3);
     assert_eq!(teams[0].extra::<i64>("deals_count").unwrap(), Some(3));
 
     // Pivots: attach, sync, toggle, pivot columns, existence.
-    let vip = Tag::create(db, Tag { name: "vip".into(), ..Tag::default() })
-        .await
-        .unwrap();
-    let hot = Tag::create(db, Tag { name: "hot".into(), ..Tag::default() })
-        .await
-        .unwrap();
+    let vip = Tag::create(
+        db,
+        Tag {
+            name: "vip".into(),
+            ..Tag::default()
+        },
+    )
+    .await
+    .unwrap();
+    let hot = Tag::create(
+        db,
+        Tag {
+            name: "hot".into(),
+            ..Tag::default()
+        },
+    )
+    .await
+    .unwrap();
     renewal
         .tags()
         .attach_with(db, [(vip.id, [col("role").set("owner")])])
@@ -494,27 +533,54 @@ pub async fn relations(db: Db, server: Server) {
         tags[0].pivot_value::<String>("role").unwrap().as_deref(),
         Some("owner")
     );
-    assert!(tags[1].pivot_value::<DateTime<Utc>>("created_at").unwrap().is_some());
+    assert!(
+        tags[1]
+            .pivot_value::<DateTime<Utc>>("created_at")
+            .unwrap()
+            .is_some()
+    );
     let tagged = Deal::query().where_attached_to(&vip).get(db).await.unwrap();
     assert_eq!(titles(&tagged), ["Renewal"]);
     let toggled = renewal.tags().toggle(db, [vip.id]).await.unwrap();
     assert_eq!(toggled.detached_as::<i64>().unwrap(), [vip.id]);
-    let with_tags = Tag::query().with("deals").order_by(Tag::ID).get(db).await.unwrap();
+    let with_tags = Tag::query()
+        .with("deals")
+        .order_by(Tag::ID)
+        .get(db)
+        .await
+        .unwrap();
     assert!(with_tags[0].loaded(Tag::deals).unwrap().is_empty());
     assert_eq!(with_tags[1].loaded(Tag::deals).unwrap().len(), 1);
     // UUID parent keys travel bound, never inlined.
     upgrade.tags().attach(db, [hot.id]).await.unwrap();
     assert_eq!(hot.deals().count(db).await.unwrap(), 2);
-    let deals = Tag::query().with("deals").where_key(hot.id).get(db).await.unwrap();
+    let deals = Tag::query()
+        .with("deals")
+        .where_key(hot.id)
+        .get(db)
+        .await
+        .unwrap();
     assert_eq!(deals[0].loaded(Tag::deals).unwrap().len(), 2);
 
     // Polymorphic relations.
     acme.notes()
-        .create(db, Note { body: "lunch".into(), ..Note::default() })
+        .create(
+            db,
+            Note {
+                body: "lunch".into(),
+                ..Note::default()
+            },
+        )
         .await
         .unwrap();
     team.notes()
-        .create(db, Note { body: "offsite".into(), ..Note::default() })
+        .create(
+            db,
+            Note {
+                body: "offsite".into(),
+                ..Note::default()
+            },
+        )
         .await
         .unwrap();
     let notes = Note::query()
@@ -525,7 +591,10 @@ pub async fn relations(db: Db, server: Server) {
         .unwrap();
     let notable = |index: usize| notes[index].loaded(Note::notable).unwrap().clone().unwrap();
     assert_eq!(notable(0).downcast_ref::<Company>().unwrap().name, "Acme");
-    assert_eq!(notable(1).downcast_ref::<Team>().unwrap().name, "Enterprise");
+    assert_eq!(
+        notable(1).downcast_ref::<Team>().unwrap().name,
+        "Enterprise"
+    );
     let about_companies = Note::query()
         .where_has_morph("notable", MorphTypes::of::<Company>(), |q, _| {
             q.where_(col("name").eq("Acme"))

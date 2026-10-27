@@ -218,7 +218,10 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
     };
     if let Some((foreign_key, related_key)) = &attrs.relations.pivot {
         for column in [foreign_key, related_key] {
-            if !columns.iter().any(|candidate| candidate.name == column.value()) {
+            if !columns
+                .iter()
+                .any(|candidate| candidate.name == column.value())
+            {
                 errors.push(syn::Error::new(
                     column.span(),
                     format!(

@@ -229,7 +229,10 @@ pub(crate) async fn load_aggregate_on<M: Model>(
         .without_global_scopes()
         .where_key_in(keys)
         .select([SelectItem {
-            expr: Expr::Column(crate::relations::core::qualified(meta.table(), meta.key_column())),
+            expr: Expr::Column(crate::relations::core::qualified(
+                meta.table(),
+                meta.key_column(),
+            )),
             alias: Some(Cow::Borrowed("navree_key")),
         }]);
     for path in paths {

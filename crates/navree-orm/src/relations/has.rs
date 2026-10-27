@@ -14,7 +14,9 @@ use crate::collection::Collection;
 use crate::column::{Assignment, Column, Filter};
 use crate::error::Result;
 use crate::exec::{Access, Executor, Target};
-use crate::ir::{AggregateFunction, ColumnRef, Expr, Operator, Order, QueryIr, SelectItem, TableRef, Where};
+use crate::ir::{
+    AggregateFunction, ColumnRef, Expr, Operator, Order, QueryIr, SelectItem, TableRef, Where,
+};
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
@@ -31,7 +33,7 @@ use crate::relations::keys::{RelationKey, distinct_keys, in_keys_on, key_of};
 use crate::relations::morph::stored_type_of;
 use crate::relations::one_of_many::OneOfMany;
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
-use crate::relations::{Relation, RelatedTo, private};
+use crate::relations::{RelatedTo, Relation, private};
 use crate::value::{Numeric, Value, is_null};
 
 /// The column an eager load's per-parent row numbers are read from (and
@@ -70,7 +72,9 @@ pub(crate) fn limit_per_parent<R: Model>(query: Builder<R>, partition: Expr) -> 
         outer = outer.where_(Filter::from(Where::Compare {
             left: row.clone(),
             op: Operator::Gt,
-            right: Expr::Value(Value::BigInt(Some(i64::try_from(offset).unwrap_or(i64::MAX)))),
+            right: Expr::Value(Value::BigInt(Some(
+                i64::try_from(offset).unwrap_or(i64::MAX),
+            ))),
         }));
     }
     if let Some(limit) = limit {
@@ -217,7 +221,10 @@ impl HasKeys<'_> {
         query: Builder<R>,
         node: &EagerNode,
         one_of_many: Option<&OneOfMany<R>>,
-    ) -> Result<(Vec<Option<RelationKey>>, HashMap<RelationKey, Vec<Record<R>>>)> {
+    ) -> Result<(
+        Vec<Option<RelationKey>>,
+        HashMap<RelationKey, Vec<Record<R>>>,
+    )> {
         let values = column_values(parents, self.local_key, self.name)?;
         let parent_keys: Vec<Option<RelationKey>> = values.iter().map(key_of).collect();
         let keys = distinct_keys(values);
@@ -229,7 +236,13 @@ impl HasKeys<'_> {
         let query = prepare_query(query, node, table, &[self.foreign_key])?;
         let conditions = self.eager_conditions::<P, R>(target, &keys);
         let query = match one_of_many {
-            Some(one) => one.apply(query, self.name, &self.group_by::<R>(), conditions, &|query| query),
+            Some(one) => one.apply(
+                query,
+                self.name,
+                &self.group_by::<R>(),
+                conditions,
+                &|query| query,
+            ),
             None => constrain(query, conditions),
         };
         let query = limit_per_parent(query, Expr::Column(qualified(table, self.foreign_key)));
@@ -260,7 +273,10 @@ fn set_inverse<P: Model, R: Model>(inverse: &str, parent: &Record<P>, children: 
 
 /// The finisher of a bound relation with an inverse: the children get a
 /// snapshot of the parent.
-fn inverse_finisher<P: Model, R: Model>(inverse: &Option<Cow<'static, str>>, parent: &P) -> Option<Finisher<R>> {
+fn inverse_finisher<P: Model, R: Model>(
+    inverse: &Option<Cow<'static, str>>,
+    parent: &P,
+) -> Option<Finisher<R>> {
     let inverse = inverse.clone()?;
     let snapshot = Record::stored(parent.clone());
     Some(Box::new(move |records: &mut [Record<R>]| {
@@ -311,7 +327,11 @@ macro_rules! has_write_methods {
         /// Saves `record` as a related record: sets its foreign key (and
         /// type) to the parent's, then inserts or updates it. `false` when a
         /// hook cancelled the save.
-        pub async fn save<E: Executor + ?Sized>(&self, exec: &E, record: &mut Record<R>) -> Result<bool> {
+        pub async fn save<E: Executor + ?Sized>(
+            &self,
+            exec: &E,
+            record: &mut Record<R>,
+        ) -> Result<bool> {
             self.fill_foreign(record)?;
             record.save(exec).await
         }
@@ -446,7 +466,10 @@ macro_rules! has_write_methods {
             A: IntoIterator<Item = Assignment>,
             R: Default,
         {
-            let rows: Vec<Vec<Assignment>> = rows.into_iter().map(|row| row.into_iter().collect()).collect();
+            let rows: Vec<Vec<Assignment>> = rows
+                .into_iter()
+                .map(|row| row.into_iter().collect())
+                .collect();
             crate::hooks::quietly(self.force_create_many(exec, rows)).await
         }
 
@@ -476,7 +499,11 @@ macro_rules! has_write_methods {
             R: Default,
         {
             let attributes: Vec<Assignment> = attributes.into_iter().collect();
-            let found = self.clone().scope(|query| matching(query, &attributes)).first(exec).await?;
+            let found = self
+                .clone()
+                .scope(|query| matching(query, &attributes))
+                .first(exec)
+                .await?;
             match found {
                 Some(record) => Ok(record),
                 None => {
@@ -570,7 +597,10 @@ macro_rules! has_write_methods {
             let target = exec.target(Access::Write).await?;
             let mut record = match self.clone().first_matching(&target, &attributes).await? {
                 Some(found) => found,
-                None => self.create_or_first_on(&target, &with_default, |_| {}).await?,
+                None => {
+                    self.create_or_first_on(&target, &with_default, |_| {})
+                        .await?
+                }
             };
             if !record.was_recently_created() && record.exists() {
                 crate::persist::increment(&target, &mut record, &column, step, false, Vec::new())
@@ -593,9 +623,17 @@ macro_rules! has_write_methods {
             let attributes: Vec<Assignment> = attributes.into_iter().collect();
             let target = exec.target(Access::Write).await?;
             let relation = self.with_trashed();
-            let mut record = match relation.clone().first_matching(&target, &attributes).await? {
+            let mut record = match relation
+                .clone()
+                .first_matching(&target, &attributes)
+                .await?
+            {
                 Some(found) => found,
-                None => relation.create_or_first_on(&target, &attributes, fill).await?,
+                None => {
+                    relation
+                        .create_or_first_on(&target, &attributes, fill)
+                        .await?
+                }
             };
             restore_record(&target, &mut record).await?;
             Ok(record)
@@ -628,7 +666,10 @@ macro_rules! has_write_methods {
             target: &Target<'_>,
             attributes: &[Assignment],
         ) -> Result<Option<Record<R>>> {
-            let bound = self.scope(|query| matching(query, attributes)).limit(1).bound()?;
+            let bound = self
+                .scope(|query| matching(query, attributes))
+                .limit(1)
+                .bound()?;
             if bound.empty {
                 return Ok(None);
             }
@@ -813,25 +854,33 @@ impl<P: Model, R: Model> Clone for HasMany<P, R> {
 
 impl<P: Model, R: Model> fmt::Debug for HasOne<P, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(if self.morph.is_some() { "MorphOne" } else { "HasOne" })
-            .field("parent", &P::meta().name())
-            .field("related", &R::meta().name())
-            .field("name", &self.core.name)
-            .field("foreign_key", &self.foreign_key)
-            .field("local_key", &self.local_key)
-            .finish_non_exhaustive()
+        f.debug_struct(if self.morph.is_some() {
+            "MorphOne"
+        } else {
+            "HasOne"
+        })
+        .field("parent", &P::meta().name())
+        .field("related", &R::meta().name())
+        .field("name", &self.core.name)
+        .field("foreign_key", &self.foreign_key)
+        .field("local_key", &self.local_key)
+        .finish_non_exhaustive()
     }
 }
 
 impl<P: Model, R: Model> fmt::Debug for HasMany<P, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(if self.morph.is_some() { "MorphMany" } else { "HasMany" })
-            .field("parent", &P::meta().name())
-            .field("related", &R::meta().name())
-            .field("name", &self.core.name)
-            .field("foreign_key", &self.foreign_key)
-            .field("local_key", &self.local_key)
-            .finish_non_exhaustive()
+        f.debug_struct(if self.morph.is_some() {
+            "MorphMany"
+        } else {
+            "HasMany"
+        })
+        .field("parent", &P::meta().name())
+        .field("related", &R::meta().name())
+        .field("name", &self.core.name)
+        .field("foreign_key", &self.foreign_key)
+        .field("local_key", &self.local_key)
+        .finish_non_exhaustive()
     }
 }
 
@@ -1053,7 +1102,9 @@ impl<P: Model, R: Model> HasOne<P, R> {
         let name = self.core.name.clone();
         let finish = inverse_finisher(&self.inverse, &parent);
         let query = match &self.one_of_many {
-            Some(one) => one.apply(self.core.query, &name, &group_by, conditions, &|query| query),
+            Some(one) => one.apply(self.core.query, &name, &group_by, conditions, &|query| {
+                query
+            }),
             None => constrain(self.core.query, conditions),
         };
         Ok(Bound::new(query).finishing(finish))
@@ -1389,8 +1440,8 @@ mod tests {
     use std::fmt::Write as _;
 
     use super::*;
-    use crate::Dialect;
     use crate::__doc_models::Activity;
+    use crate::Dialect;
     use crate::relations::keys::in_keys;
 
     /// The statement of `query` for every dialect.
@@ -1408,7 +1459,10 @@ mod tests {
     fn per_parent_limits_number_each_parents_rows() {
         let keys = distinct_keys([Value::from("b"), Value::from("a")]);
         let query = Builder::<Activity>::new()
-            .where_(Filter::from(in_keys(qualified("activities", "deal_id"), &keys)))
+            .where_(Filter::from(in_keys(
+                qualified("activities", "deal_id"),
+                &keys,
+            )))
             .order_by_desc(Activity::DUE_AT)
             .offset(1)
             .limit(3);
@@ -1417,7 +1471,10 @@ mod tests {
 
         // Without a limit or offset the query is left as it is.
         let plain = Builder::<Activity>::new().order_by(Activity::DUE_AT);
-        let unchanged = limit_per_parent(plain.clone(), Expr::Column(qualified("activities", "deal_id")));
+        let unchanged = limit_per_parent(
+            plain.clone(),
+            Expr::Column(qualified("activities", "deal_id")),
+        );
         assert_eq!(
             unchanged.to_sql(Dialect::Sqlite).unwrap().sql,
             plain.to_sql(Dialect::Sqlite).unwrap().sql

@@ -2,8 +2,8 @@
 //! pagination, mass updates and touches, keys and names, and the
 //! find-or-create family with the foreign key filled in.
 
-use navree_orm::prelude::*;
 use navree_orm::OrmError;
+use navree_orm::prelude::*;
 
 use crate::fixtures::{seed, titles};
 use crate::models::{Activity, Company, Contact, Deal, Note, Tag, Team};
@@ -51,7 +51,14 @@ async fn relations_take_every_builder_method() {
         "{sql}"
     );
 
-    let latest = crm.renewal.activities().latest().limit(1).get(&t.db).await.unwrap();
+    let latest = crm
+        .renewal
+        .activities()
+        .latest()
+        .limit(1)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(latest.len(), 1);
     let nested = crm
         .acme
@@ -83,7 +90,10 @@ async fn retrieval_on_relations() {
     assert_eq!(all.len(), 3);
     let first = activities().first(&t.db).await.unwrap().unwrap();
     assert_eq!(first.minutes, 30);
-    assert_eq!(activities().first_or_fail(&t.db).await.unwrap().id, first.id);
+    assert_eq!(
+        activities().first_or_fail(&t.db).await.unwrap().id,
+        first.id
+    );
     let email = activities()
         .first_where(&t.db, Activity::KIND.eq("email"))
         .await
@@ -99,12 +109,26 @@ async fn retrieval_on_relations() {
 
     // Keys of other parents' records are not found through the relation.
     assert_eq!(
-        activities().find(&t.db, first.id).await.unwrap().unwrap().id,
+        activities()
+            .find(&t.db, first.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
         first.id
     );
-    assert!(activities().find(&t.db, meeting.id).await.unwrap().is_none());
+    assert!(
+        activities()
+            .find(&t.db, meeting.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(matches!(
-        activities().find_or_fail(&t.db, meeting.id).await.unwrap_err(),
+        activities()
+            .find_or_fail(&t.db, meeting.id)
+            .await
+            .unwrap_err(),
         OrmError::ModelNotFound { .. }
     ));
     let many = activities()
@@ -112,23 +136,41 @@ async fn retrieval_on_relations() {
         .await
         .unwrap();
     assert_eq!(many.len(), 2);
-    assert_eq!(activities().find_sole(&t.db, email.id).await.unwrap().id, email.id);
+    assert_eq!(
+        activities().find_sole(&t.db, email.id).await.unwrap().id,
+        email.id
+    );
     assert!(activities().exists(&t.db).await.unwrap());
     assert!(crm.platform.activities().doesnt_exist(&t.db).await.unwrap());
     assert_eq!(activities().count(&t.db).await.unwrap(), 3);
     assert_eq!(
-        activities().sum::<i64>(&t.db, Activity::MINUTES).await.unwrap(),
+        activities()
+            .sum::<i64>(&t.db, Activity::MINUTES)
+            .await
+            .unwrap(),
         80
     );
     assert_eq!(
-        activities().max::<i64>(&t.db, Activity::MINUTES).await.unwrap(),
+        activities()
+            .max::<i64>(&t.db, Activity::MINUTES)
+            .await
+            .unwrap(),
         Some(45)
     );
     assert_eq!(
-        activities().min::<i64>(&t.db, Activity::MINUTES).await.unwrap(),
+        activities()
+            .min::<i64>(&t.db, Activity::MINUTES)
+            .await
+            .unwrap(),
         Some(5)
     );
-    assert!(activities().avg::<f64>(&t.db, Activity::MINUTES).await.unwrap().is_some());
+    assert!(
+        activities()
+            .avg::<f64>(&t.db, Activity::MINUTES)
+            .await
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(
         activities().pluck(&t.db, Activity::KIND).await.unwrap(),
         ["call", "email", "call"]
@@ -142,7 +184,13 @@ async fn retrieval_on_relations() {
     let company = crm.renewal.company().first(&t.db).await.unwrap().unwrap();
     assert_eq!(company.name, "Acme");
     assert_eq!(
-        crm.renewal.company().results(&t.db).await.unwrap().unwrap().id,
+        crm.renewal
+            .company()
+            .results(&t.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
         crm.acme.id
     );
     crm.renewal
@@ -152,7 +200,14 @@ async fn retrieval_on_relations() {
         .unwrap();
     let vip = crm.renewal.tags().find(&t.db, crm.vip.id).await.unwrap();
     assert_eq!(vip.unwrap().name, "vip");
-    assert!(crm.renewal.tags().find(&t.db, crm.hot.id).await.unwrap().is_none());
+    assert!(
+        crm.renewal
+            .tags()
+            .find(&t.db, crm.hot.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(crm.renewal.tags().count(&t.db).await.unwrap(), 2);
     let sql = crm
         .renewal
@@ -229,7 +284,11 @@ async fn paginating_relations_keeps_pivot_columns() {
         .collect();
     assert_eq!(roles, [None, Some("watcher".to_owned())], "hot, q1");
     // The pivot columns are not left among the extras.
-    assert!(page.data[0].extras().is_empty(), "{:?}", page.data[0].extras());
+    assert!(
+        page.data[0].extras().is_empty(),
+        "{:?}",
+        page.data[0].extras()
+    );
 }
 
 #[tokio::test]
@@ -256,10 +315,34 @@ async fn whether_a_record_is_the_related_one() {
         .await
         .unwrap()
         .unwrap();
-    let first = crm.renewal.first_activity().first(&t.db).await.unwrap().unwrap();
-    assert!(crm.renewal.latest_activity().is(&t.db, &latest).await.unwrap());
-    assert!(crm.renewal.latest_activity().is_not(&t.db, &first).await.unwrap());
-    assert!(!crm.upgrade.latest_activity().is(&t.db, &latest).await.unwrap());
+    let first = crm
+        .renewal
+        .first_activity()
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        crm.renewal
+            .latest_activity()
+            .is(&t.db, &latest)
+            .await
+            .unwrap()
+    );
+    assert!(
+        crm.renewal
+            .latest_activity()
+            .is_not(&t.db, &first)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !crm.upgrade
+            .latest_activity()
+            .is(&t.db, &latest)
+            .await
+            .unwrap()
+    );
 }
 
 #[test]
@@ -280,7 +363,10 @@ fn relation_keys_and_names() {
 
     let activities = deal.activities();
     assert_eq!(activities.foreign_key_name(), "deal_id");
-    assert_eq!(activities.qualified_foreign_key_name(), "activities.deal_id");
+    assert_eq!(
+        activities.qualified_foreign_key_name(),
+        "activities.deal_id"
+    );
     assert_eq!(activities.local_key_name(), "id");
     assert_eq!(activities.parent_key(), Some(Value::BigInt(Some(7))));
     assert_eq!(activities.morph_type(), None);
@@ -332,10 +418,7 @@ async fn mass_updates_and_touches_of_related_records() {
             .unwrap(),
         3
     );
-    assert_eq!(
-        crm.upgrade.activities().delete(&t.db).await.unwrap(),
-        1
-    );
+    assert_eq!(crm.upgrade.activities().delete(&t.db).await.unwrap(), 1);
     assert_eq!(count_rows(&t.db, "activities").await, 3);
 
     // Touching sets the update timestamp of every related record.
@@ -344,10 +427,16 @@ async fn mass_updates_and_touches_of_related_records() {
         .attach(&t.db, [crm.vip.id])
         .await
         .unwrap();
-    let before = Tag::find_or_fail(&t.db, crm.vip.id).await.unwrap().updated_at;
+    let before = Tag::find_or_fail(&t.db, crm.vip.id)
+        .await
+        .unwrap()
+        .updated_at;
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     assert_eq!(crm.renewal.tags().touch(&t.db).await.unwrap(), 1);
-    let after = Tag::find_or_fail(&t.db, crm.vip.id).await.unwrap().updated_at;
+    let after = Tag::find_or_fail(&t.db, crm.vip.id)
+        .await
+        .unwrap()
+        .updated_at;
     assert!(after > before);
     let hot = Tag::find_or_fail(&t.db, crm.hot.id).await.unwrap();
     assert_eq!(hot.updated_at, crm.hot.updated_at, "not attached");
@@ -383,7 +472,11 @@ async fn all_related_keys() {
 async fn unsaved_related_records_carry_the_foreign_key() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    let made = crm.renewal.activities().make(Activity::new("call", 3)).unwrap();
+    let made = crm
+        .renewal
+        .activities()
+        .make(Activity::new("call", 3))
+        .unwrap();
     assert!(!made.exists());
     assert_eq!(made.deal_id, Some(crm.renewal.id));
     let many = crm
@@ -446,24 +539,42 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
         .unwrap();
     assert_eq!(updated.email, "dave@new.test");
     assert_eq!(
-        Contact::find_or_fail(&t.db, updated.id).await.unwrap().email,
+        Contact::find_or_fail(&t.db, updated.id)
+            .await
+            .unwrap()
+            .email,
         "dave@new.test"
     );
 
     let counted = crm
         .renewal
         .activities()
-        .increment_or_create(&t.db, [Activity::KIND.set("email")], Activity::MINUTES, 1, 10)
+        .increment_or_create(
+            &t.db,
+            [Activity::KIND.set("email")],
+            Activity::MINUTES,
+            1,
+            10,
+        )
         .await
         .unwrap();
     assert_eq!(counted.minutes, 15);
     let created = crm
         .platform
         .activities()
-        .increment_or_create(&t.db, [Activity::KIND.set("email")], Activity::MINUTES, 1, 10)
+        .increment_or_create(
+            &t.db,
+            [Activity::KIND.set("email")],
+            Activity::MINUTES,
+            1,
+            10,
+        )
         .await
         .unwrap();
-    assert_eq!((created.minutes, created.deal_id), (1, Some(crm.platform.id)));
+    assert_eq!(
+        (created.minutes, created.deal_id),
+        (1, Some(crm.platform.id))
+    );
 
     let blank = contacts().find_or_new(&t.db, 999_i64).await.unwrap();
     assert!(!blank.exists());
@@ -473,11 +584,22 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
     let tag = crm
         .renewal
         .tags()
-        .first_or_create(&t.db, [Tag::NAME.set("fresh")], |_| {}, [col("role").set("auto")])
+        .first_or_create(
+            &t.db,
+            [Tag::NAME.set("fresh")],
+            |_| {},
+            [col("role").set("auto")],
+        )
         .await
         .unwrap();
     assert!(tag.exists());
-    let attached = crm.renewal.tags().find(&t.db, tag.id).await.unwrap().unwrap();
+    let attached = crm
+        .renewal
+        .tags()
+        .find(&t.db, tag.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         attached.pivot_value::<String>("role").unwrap().as_deref(),
         Some("auto")

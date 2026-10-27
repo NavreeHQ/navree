@@ -22,7 +22,11 @@ pub trait KeyColumn<M> {
 
 impl<M, T> KeyColumn<M> for Column<M, T> {
     fn key_column(&self) -> Cow<'static, str> {
-        Cow::Owned(crate::ir::ColumnRef::parse(self.name().to_owned()).name.into_owned())
+        Cow::Owned(
+            crate::ir::ColumnRef::parse(self.name().to_owned())
+                .name
+                .into_owned(),
+        )
     }
 }
 
@@ -80,7 +84,10 @@ pub trait Relationships: Model {
     /// `R`'s key unless [`owner_key`](BelongsTo::owner_key) says
     /// otherwise): a deal's company.
     fn belongs_to<R: Model, T>(&self, foreign_key: Column<Self, T>) -> BelongsTo<Self, R> {
-        BelongsTo::new(Some(self.clone()), KeyColumn::<Self>::key_column(&foreign_key))
+        BelongsTo::new(
+            Some(self.clone()),
+            KeyColumn::<Self>::key_column(&foreign_key),
+        )
     }
 
     /// The record of `R` whose `foreign_key` column holds this record's
@@ -100,7 +107,10 @@ pub trait Relationships: Model {
     /// keys (see [`BelongsToMany`] for other names). The conventional
     /// table is both models' snake_case names in alphabetical order,
     /// joined by `_` (`deal_tag`).
-    fn belongs_to_many<R: Model>(&self, table: impl Into<Cow<'static, str>>) -> BelongsToMany<Self, R, Pivot> {
+    fn belongs_to_many<R: Model>(
+        &self,
+        table: impl Into<Cow<'static, str>>,
+    ) -> BelongsToMany<Self, R, Pivot> {
         BelongsToMany::new(Some(self.clone()), table.into())
     }
 
