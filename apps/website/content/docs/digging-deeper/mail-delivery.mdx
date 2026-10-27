@@ -280,7 +280,7 @@ secret = "whsec_..."       # the webhook's signing secret
 | `POST /api/mail/webhooks/postmark` | The token as the basic-auth password of the webhook URL, or a `token` query parameter. |
 | `POST /api/mail/webhooks/resend` | The `svix-signature` HMAC of the message id, timestamp and body, at most 15 minutes old. |
 
-Each answers 204 once the events are recorded, and 401 with code `invalid_signature` when verification fails. The routes need the pipeline (`mail.delivery.enabled`). Put their secrets in `.env`: `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY=...`.
+Each answers 204 once the events are recorded, and 401 with code `invalid_signature` when verification fails. The routes need the pipeline (`mail.delivery.enabled`). Put their secrets in `.env`: `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY=...`. The SES route trusts the secret token in its URL and the topic; it does not check the SNS message signature, so keep the subscription URL private and list your topic in `topic_arns`.
 
 Recording an event, with `Deliveries::record`:
 
