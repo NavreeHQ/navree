@@ -65,6 +65,13 @@ pub(crate) struct Container {
     /// `workspace` or `workspace = "team_id"`: the column holding the
     /// workspace of a workspace-scoped model.
     pub(crate) workspace: Option<(String, Span)>,
+    /// `subject` or `subject = "Deal"`: the model is a navree-access
+    /// subject (`None` inside: the model's name).
+    pub(crate) subject: Option<Option<LitStr>>,
+    /// `permission_prefix = "deals"`: the subject's permission prefix.
+    pub(crate) permission_prefix: Option<LitStr>,
+    /// `policy = DealPolicy`: the rules attached to the subject.
+    pub(crate) policy: Option<syn::Path>,
 }
 
 /// The keys `#[model(...)]` takes on a struct.
@@ -80,6 +87,9 @@ const KEYS: &[&str] = &[
     "factory",
     "route_key",
     "workspace",
+    "subject",
+    "permission_prefix",
+    "policy",
 ];
 
 /// Parses the `#[model(...)]` attributes of the struct.
@@ -165,6 +175,28 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
             "workspace_id".to_owned()
         };
         container.workspace = Some((column, span));
+    } else if path.is_ident("subject") {
+        container.subject = Some(if meta.input.peek(Token![=]) {
+            Some(non_empty(meta.value()?.parse()?)?)
+        } else {
+            None
+        });
+    } else if path.is_ident("permission_prefix") {
+        container.permission_prefix = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("policy") {
+        let value = meta.value()?;
+        let policy = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the policy must be the path of a type implementing `Policy`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.policy = Some(policy);
     } else {
         let key = key_name(path);
         let hint = suggestion(&key, KEYS)

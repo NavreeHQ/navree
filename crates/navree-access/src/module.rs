@@ -8,12 +8,12 @@ use navree_contracts::PermissionCheck;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{ModuleBuilderHttpExt, RouteAuthorizer};
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
-use sea_orm::EntityTrait;
 
 use crate::authorizer::AccessAuthorizer;
 use crate::commands::commands;
 use crate::controller::{AbilitiesController, AccessAdminController};
 use crate::engine::Subject;
+use crate::records::{Policy, PolicyRegistration, SubjectRecords};
 use crate::entity::role;
 use crate::error::{AccessError, map_access_error};
 use crate::factory::AbilityFactory;
@@ -68,21 +68,26 @@ impl AccessModule {
         ConfiguredAccessModule { options }
     }
 
-    /// Registers entity `E` as a subject: its permission prefix maps to its
-    /// subject type, and `can(.., E::SUBJECT, from = "id")` routes load its
-    /// records by primary key (UUID, integer or string).
-    pub fn for_feature<E>() -> impl Module
-    where
-        E: EntityTrait + Subject,
-        E::Model: Send + Sync + 'static,
-    {
-        AccessFeature::<E>(PhantomData)
+    /// Registers `S` as a subject: its permission prefix maps to its
+    /// subject type, `can(.., S::SUBJECT, from = "id")` routes load its
+    /// records ([`SubjectRecords::load`]: an entity by primary key, an ORM
+    /// model by route key, in the request's unit of work), and its policy,
+    /// if it has one ([`SubjectRecords::policy`]), joins every principal's
+    /// rules.
+    pub fn for_feature<S: SubjectRecords>() -> impl Module {
+        AccessFeature::<S>(PhantomData)
     }
 
     /// Registers a subject that is not an entity (only its permission
     /// prefix, e.g. `reports` → `Report`).
     pub fn for_subject<S: Subject + Send + Sync + 'static>() -> impl Module {
         AccessSubject::<S>(PhantomData)
+    }
+
+    /// Registers policy `P`: its rules join every principal's rules, before
+    /// the app's abilities function.
+    pub fn for_policy<P: Policy>() -> impl Module {
+        AccessPolicy::<P>(PhantomData)
     }
 }
 
@@ -173,16 +178,27 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
     }
 }
 
-/// `AccessModule::for_feature::<E>()`.
-struct AccessFeature<E>(PhantomData<fn() -> E>);
+/// `AccessModule::for_feature::<S>()`.
+struct AccessFeature<S>(PhantomData<fn() -> S>);
 
-impl<E> Module for AccessFeature<E>
-where
-    E: EntityTrait + Subject,
-    E::Model: Send + Sync + 'static,
-{
+impl<S: SubjectRecords> Module for AccessFeature<S> {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.contribute(SubjectRegistration::entity::<E>());
+        m.contribute(SubjectRegistration::records::<S>());
+        if let Some(define) = S::policy() {
+            m.contribute(PolicyRegistration {
+                name: std::any::type_name::<S>(),
+                define,
+            });
+        }
+    }
+}
+
+/// `AccessModule::for_policy::<P>()`.
+struct AccessPolicy<P>(PhantomData<fn() -> P>);
+
+impl<P: Policy> Module for AccessPolicy<P> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(PolicyRegistration::of::<P>());
     }
 }
 

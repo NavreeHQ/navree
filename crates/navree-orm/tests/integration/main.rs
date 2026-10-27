@@ -5,6 +5,7 @@
 mod models;
 mod support;
 
+mod access;
 mod assertions;
 mod binding;
 mod factories_create;

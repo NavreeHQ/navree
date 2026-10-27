@@ -88,6 +88,8 @@
 
 extern crate self as navree_orm;
 
+#[cfg(feature = "access")]
+pub mod access;
 pub mod binding;
 pub mod cast;
 mod collection;
@@ -165,3 +167,9 @@ pub mod __doc_models;
 #[doc(hidden)]
 #[path = "doc_factories.rs"]
 pub mod __doc_factories;
+
+/// The model the access-control examples use. Not part of the API.
+#[cfg(feature = "access")]
+#[doc(hidden)]
+#[path = "doc_access.rs"]
+pub mod __doc_access;

@@ -104,10 +104,11 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
-    // navree-crypto (ORM brief §2).
+    // navree-crypto (ORM brief §2). navree-access (same layer, optional
+    // feature `access`): models as subjects, abilities as query filters.
     rule("navree-orm", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
-        "navree-db", "navree-events", "navree-crypto", "navree-orm-macros",
+        "navree-db", "navree-events", "navree-crypto", "navree-orm-macros", "navree-access",
     ]),
     // L5
     rule("navree-auth", 5, &[
