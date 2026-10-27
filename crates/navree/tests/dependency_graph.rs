@@ -125,8 +125,18 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     // Stored notifications are navree-orm models, written by the database
-    // channel through the ORM (same layer; the ORM never depends on notify).
-    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail", "navree-orm"]),
+    // channel through the ORM (same layer; the ORM never depends on notify),
+    // like the delivery log, opt-outs and push subscriptions of the
+    // Slack, Teams, SMS, WhatsApp and web push channels. Their providers are
+    // called through navree-http-client, web push is encrypted and VAPID
+    // signed with navree-crypto, and numbers are read as E.164 with
+    // navree-validation's `Phone` (same layer; validation never depends on
+    // notify).
+    rule("navree-notify", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-db", "navree-mail", "navree-orm", "navree-crypto", "navree-http-client",
+        "navree-validation",
+    ]),
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).

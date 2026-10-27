@@ -121,32 +121,73 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod callbacks;
 mod channel;
+mod channels;
+mod commands;
 mod controller;
+mod deliveries;
+mod drivers;
 mod error;
+mod fake;
 mod job;
+mod messages;
 mod migration;
 mod module;
 mod notifiable;
 mod notification;
 pub mod notifications;
 mod notifier;
+mod opt_outs;
 mod options;
+mod push;
 mod recipient;
 mod schema;
+mod store;
 mod stored;
+mod tokens;
 
+pub use callbacks::{
+    ChannelCallback, InboundMessage, Keyword, OPT_IN_KEYWORDS, OPT_OUT_KEYWORDS, StatusUpdate,
+    keyword,
+};
 pub use channel::Channel;
+pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
+pub use drivers::log::{LogSms, LogWhatsApp};
+pub use drivers::meta::MetaWhatsApp;
+pub use drivers::slack::SlackApi;
+pub use drivers::sns::SnsSms;
+pub use drivers::teams::TeamsApi;
+pub use drivers::twilio::{TwilioSms, TwilioWhatsApp};
+pub use drivers::vonage::VonageSms;
+pub use drivers::web_push::VapidWebPush;
+pub use drivers::{
+    ChannelError, PushTarget, SentMessage, SlackDriver, SmsDriver, TeamsDriver, WebPushDriver,
+    WhatsAppDriver,
+};
 pub use error::NotifyError;
+pub use fake::{FAKE_PROVIDER, Sent, SlackFake, SmsFake, TeamsFake, WebPushFake, WhatsAppFake};
 pub use job::{Delivery, SendNotificationJob};
-pub use migration::NOTIFICATIONS_TABLE;
+pub use messages::{
+    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, Urgency, WebPushMessage,
+    WhatsAppMessage, WhatsAppTemplate,
+};
+pub use migration::{
+    DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PUSH_SUBSCRIPTIONS_TABLE,
+};
 pub use module::NotifyModule;
 pub use notifiable::Notifiable;
 pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};
-pub use options::NotifyOptions;
+pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
+pub use options::{
+    MetaOptions, NotifyOptions, SlackOptions, SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions,
+    TwilioOptions, VonageOptions, WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+};
+pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
 pub use stored::DatabaseNotification;
+pub use tokens::ConnectionTokens;
 
 /// The notifiable type of users: the `/api/notifications` endpoints serve
 /// the signed-in user's notifications stored under this type.
