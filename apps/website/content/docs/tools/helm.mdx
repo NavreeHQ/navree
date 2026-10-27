@@ -401,6 +401,10 @@ m.helm_page(
 
 The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline.
 
+### Settings
+
+<Badge feature="settings" /> When the app has `SettingsModule`, the panel edits every [settings type](/docs/packages/settings/) your modules register. **System → Settings** lists the types the signed-in user manages: those whose `permission` they hold app-wide, else those `settings.manage` covers. Each type opens at `/admin/settings/{key}` for a level: global, or an organization, workspace or user named by its id or slug. Every field shows where its value comes from; saving stores only the fields you changed, so the others keep inheriting, and a field set at the level has an **Inherit** button. Writes go through the `Settings` service in the request's unit of work, so they are validated, audited and announced like any other. The screens come with the `helm` and `settings` features together (both are in `full`; on the crate, `navree-helm`'s `settings` feature).
+
 ## Security
 
 - **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/) on, with the same login throttle as `POST /api/auth/login`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
