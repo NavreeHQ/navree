@@ -44,10 +44,12 @@ use crate::hooks::{ModelEvent, ModelHook};
 use crate::model::{Model, PrimaryKey};
 use crate::record::Record;
 
+mod dispatch;
 mod listener;
 mod observer;
 mod record;
 
+pub use dispatch::Dispatch;
 pub(crate) use listener::ClosureListener;
 pub use observer::{Observer, ObserverHook};
 
