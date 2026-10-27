@@ -14,14 +14,16 @@ use crate::print::PrintOptions;
 /// ```toml
 /// [documents]
 /// templates = ["resources/documents"]  # or APP_DOCUMENTS__TEMPLATES=a,b
-/// engine = "typst"          # which engine wins when a name has both a .typ and an .html file
+/// engine = "native"         # the engine renders use unless they name one: native or chrome
 /// disk = "documents"        # storage disk for queued renders (default: the default disk)
 ///
-/// [documents.typst]
-/// bundled_fonts = true      # Noto Sans, Noto Sans Arabic, Noto Sans Devanagari
+/// [documents.native]
+/// bundled_fonts = true      # Noto Sans, Serif and Mono; Noto Sans Arabic, Hebrew and Devanagari
 /// font_dirs = ["resources/fonts"]
-/// packages_dir = "resources/typst-packages"
 /// timeout_secs = 60
+///
+/// [documents.native.print]
+/// paper = "a4"
 ///
 /// [documents.chrome]
 /// path = "/usr/bin/chromium"   # default: NAVREE_BROWSER_CHROME, then the usual install paths
@@ -43,14 +45,14 @@ pub struct DocumentsOptions {
     /// list.
     #[serde(deserialize_with = "paths")]
     pub templates: Vec<PathBuf>,
-    /// The engine used when a template name has both a `.typ` and an
-    /// `.html` file (default `typst`).
+    /// The engine renders use unless they name one (default `native`;
+    /// `chrome` in a build without the `native` feature).
     pub engine: EngineKind,
     /// The storage disk queued renders are written to (default: the
     /// default disk).
     pub disk: Option<String>,
-    /// The Typst engine.
-    pub typst: TypstOptions,
+    /// The native engine.
+    pub native: NativeOptions,
     /// The Chrome engine.
     pub chrome: ChromeOptions,
 }
@@ -59,9 +61,13 @@ impl Default for DocumentsOptions {
     fn default() -> Self {
         Self {
             templates: vec![PathBuf::from("resources/documents")],
-            engine: EngineKind::Typst,
+            engine: if cfg!(feature = "native") {
+                EngineKind::Native
+            } else {
+                EngineKind::Chrome
+            },
             disk: None,
-            typst: TypstOptions::default(),
+            native: NativeOptions::default(),
             chrome: ChromeOptions::default(),
         }
     }
@@ -71,29 +77,30 @@ impl ConfigSection for DocumentsOptions {
     const KEY: &'static str = "documents";
 }
 
-/// The Typst engine's settings (`documents.typst`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The native engine's settings (`documents.native`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct TypstOptions {
+pub struct NativeOptions {
     /// Load the bundled Noto fonts (default true).
     pub bundled_fonts: bool,
     /// More font directories, searched recursively (default none).
     #[serde(deserialize_with = "paths")]
     pub font_dirs: Vec<PathBuf>,
-    /// Local Typst packages, as `<namespace>/<name>/<version>` (default
-    /// none: package imports fail).
-    pub packages_dir: Option<PathBuf>,
     /// Time limit for one render, in seconds (default 60).
     pub timeout_secs: u64,
+    /// The page settings renders use unless they bring their own (an
+    /// `@page` rule in the template wins while `prefer_css_page_size`
+    /// is on).
+    pub print: PrintOptions,
 }
 
-impl Default for TypstOptions {
+impl Default for NativeOptions {
     fn default() -> Self {
         Self {
             bundled_fonts: true,
             font_dirs: Vec::new(),
-            packages_dir: None,
             timeout_secs: 60,
+            print: PrintOptions::default(),
         }
     }
 }
@@ -184,10 +191,16 @@ mod tests {
             options.templates,
             vec![PathBuf::from("resources/documents")]
         );
-        assert_eq!(options.engine, EngineKind::Typst);
+        let engine = if cfg!(feature = "native") {
+            EngineKind::Native
+        } else {
+            EngineKind::Chrome
+        };
+        assert_eq!(options.engine, engine);
         assert_eq!(options.disk, None);
-        assert!(options.typst.bundled_fonts);
-        assert_eq!(options.typst.timeout_secs, 60);
+        assert!(options.native.bundled_fonts);
+        assert_eq!(options.native.timeout_secs, 60);
+        assert_eq!(options.native.print, PrintOptions::default());
         assert_eq!(options.chrome.pool_size, 2);
         assert_eq!(options.chrome.timeout_secs, 30);
         assert!(!options.chrome.no_sandbox);
@@ -199,7 +212,7 @@ mod tests {
         let options: DocumentsOptions = serde_json::from_value(json!({
             "templates": "a, b",
             "engine": "chrome",
-            "typst": {"font_dirs": ["fonts"]},
+            "native": {"font_dirs": ["fonts"], "print": {"landscape": true}},
             "chrome": {"args": "--lang=ar,--disable-gpu", "print": {"paper": "letter"}},
         }))
         .unwrap();
@@ -208,11 +221,13 @@ mod tests {
             vec![PathBuf::from("a"), PathBuf::from("b")]
         );
         assert_eq!(options.engine, EngineKind::Chrome);
-        assert_eq!(options.typst.font_dirs, vec![PathBuf::from("fonts")]);
-        assert!(options.typst.bundled_fonts);
+        assert_eq!(options.native.font_dirs, vec![PathBuf::from("fonts")]);
+        assert!(options.native.bundled_fonts);
+        assert!(options.native.print.landscape);
         assert_eq!(options.chrome.args, vec!["--lang=ar", "--disable-gpu"]);
         assert_eq!(options.chrome.print.paper, crate::Paper::Letter);
         assert_eq!(options.chrome.pool_size, 2);
         assert!(serde_json::from_value::<DocumentsOptions>(json!({"engine": "unknown"})).is_err());
+        assert!(serde_json::from_value::<DocumentsOptions>(json!({"engine": "typst"})).is_err());
     }
 }

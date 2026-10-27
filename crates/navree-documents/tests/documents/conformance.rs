@@ -1,4 +1,4 @@
-//! The `PdfEngine` conformance suite, run on every engine: Typst, Chrome
+//! The `PdfEngine` conformance suite, run on every engine: native, Chrome
 //! (against the mock endpoint) and the fake.
 
 use navree_documents::{
@@ -106,13 +106,13 @@ async fn conformance(case: Case<'_>) {
     );
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
-async fn the_typst_engine_conforms() {
-    let engine = navree_documents::TypstEngine::new(fixture_templates());
+async fn the_native_engine_conforms() {
+    let engine = navree_documents::NativeEngine::new(fixture_templates());
     conformance(Case {
         engine: &engine,
-        inline: Render::typst("Inline document"),
+        inline: Render::html("<p>Inline document</p>"),
         inline_text: "Inline document",
         prints_sentence: true,
     })
@@ -143,15 +143,11 @@ async fn the_chrome_engine_conforms() {
 #[tokio::test]
 async fn the_fake_engine_conforms() {
     let fake = DocumentsFake::with_templates(fixture_templates());
-    for kind in [EngineKind::Typst, EngineKind::Chrome] {
+    for kind in [EngineKind::Native, EngineKind::Chrome] {
         let engine = fake.engine(kind);
-        let inline = match kind {
-            EngineKind::Typst => Render::typst("Inline document"),
-            EngineKind::Chrome => Render::html("<p>Inline document</p>"),
-        };
         conformance(Case {
             engine: &engine,
-            inline,
+            inline: Render::html("<p>Inline document</p>"),
             inline_text: "inline",
             prints_sentence: false,
         })

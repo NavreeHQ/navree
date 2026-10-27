@@ -1,6 +1,5 @@
 //! [`Documents`]: the service apps render documents with.
 
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -12,10 +11,11 @@ use crate::engine::{EngineKind, PdfEngine};
 use crate::fake::FakeState;
 use crate::queue::{DocumentStatus, QueuedDocument, RenderDocument, StoredDocument};
 use crate::render::{Render, TemplateSource};
-use crate::templates::{HTML_EXTENSION, TYPST_EXTENSION, Templates};
+use crate::templates::{HTML_EXTENSION, Templates};
 use crate::{DocumentsError, DocumentsOptions, Pdf};
 
-/// Renders documents: PDF from Typst or HTML templates, stored or queued.
+/// Renders documents: PDF from HTML templates (native or Chrome), stored or
+/// queued.
 ///
 /// `DocumentsModule` provides and exports it (`Arc<Documents>`); outside
 /// an app, build one with [`Documents::new`]. It is cheap to clone.
@@ -27,8 +27,8 @@ use crate::{DocumentsError, DocumentsOptions, Pdf};
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), navree_documents::DocumentsError> {
 /// let documents = Documents::new(Templates::from_files([(
-///     "certificates/classic.typ",
-///     "#let data = json(\"/data.json\")\n= Certificate\n#data.name completed #data.course.",
+///     "certificates/classic.html",
+///     "<h1>Certificate</h1><p>{{ name }} completed {{ course }}.</p>",
 /// )]));
 /// let pdf = documents
 ///     .pdf("certificates/classic", json!({ "name": "Ada Lovelace", "course": "Engines" }))
@@ -38,10 +38,10 @@ use crate::{DocumentsError, DocumentsOptions, Pdf};
 /// # }
 /// ```
 ///
-/// **Which engine.** A render names its engine, or its template picks it:
-/// inline Typst and `name.typ` go to the Typst engine, inline HTML and
-/// `name.html` to Chrome. When a name has both files, `documents.engine`
-/// decides (Typst by default).
+/// **Which engine.** Both engines print the same `name.html` templates
+/// and inline HTML. A render names its engine
+/// ([`Render::engine`](crate::Render::engine)); otherwise
+/// `documents.engine` decides (`native` by default).
 #[derive(Clone)]
 pub struct Documents {
     inner: Arc<Inner>,
@@ -58,9 +58,10 @@ struct Inner {
     /// Set for the fake: renders and queued renders are recorded, and any
     /// template name is accepted when the fake has no templates.
     fake: Option<Arc<FakeState>>,
-    /// The configured Typst engine, for its font list.
-    #[cfg(feature = "typst")]
-    typst: Option<crate::TypstEngine>,
+    /// The configured native engine, for its fonts and
+    /// [`render_document`](Documents::render_document).
+    #[cfg(feature = "native")]
+    native: Option<crate::NativeEngine>,
 }
 
 impl std::fmt::Debug for Documents {
@@ -84,10 +85,10 @@ impl std::fmt::Debug for Documents {
 }
 
 impl Documents {
-    /// Documents over `templates` with the engines this build has: Typst
-    /// with the bundled fonts (feature `typst`) and Chrome with the default
-    /// settings (feature `chrome`; nothing starts until the first HTML
-    /// render). No storage and no queue: [`save`](Documents::save) needs
+    /// Documents over `templates` with the engines this build has: the
+    /// native engine with the bundled fonts (feature `native`) and Chrome
+    /// with the default settings (feature `chrome`; nothing starts until
+    /// the first render that needs it). No storage and no queue: [`save`](Documents::save) needs
     /// [`storage`](Documents::storage).
     pub fn new(templates: Templates) -> Self {
         Self::from_options(&DocumentsOptions::default(), templates)
@@ -100,7 +101,7 @@ impl Documents {
         Self::build(options, templates, None)
     }
 
-    /// [`from_options`](Documents::from_options), with the Typst engine on
+    /// [`from_options`](Documents::from_options), with the native engine on
     /// `clock` (the module passes the app's `dyn Clock`).
     pub(crate) fn build(
         options: &DocumentsOptions,
@@ -109,22 +110,17 @@ impl Documents {
     ) -> Self {
         #[allow(unused_mut)]
         let mut engines: Vec<Arc<dyn PdfEngine>> = Vec::new();
-        #[cfg(feature = "typst")]
-        let typst = {
-            let mut typst = crate::TypstEngine::new(templates.clone())
-                .bundled_fonts(options.typst.bundled_fonts)
-                .font_dirs(options.typst.font_dirs.clone())
-                .packages_dir(options.typst.packages_dir.clone())
-                .timeout(std::time::Duration::from_secs(
-                    options.typst.timeout_secs.max(1),
-                ));
+        #[cfg(feature = "native")]
+        let native = {
+            let mut native =
+                crate::NativeEngine::with_options(templates.clone(), options.native.clone());
             if let Some(clock) = clock {
-                typst = typst.clock(clock);
+                native = native.clock(clock);
             }
-            engines.push(Arc::new(typst.clone()));
-            Some(typst)
+            engines.push(Arc::new(native.clone()));
+            Some(native)
         };
-        #[cfg(not(feature = "typst"))]
+        #[cfg(not(feature = "native"))]
         let _ = clock;
         #[cfg(feature = "chrome")]
         engines.push(Arc::new(crate::ChromeEngine::new(
@@ -140,8 +136,8 @@ impl Documents {
                 disk: options.disk.clone(),
                 dispatcher: None,
                 fake: None,
-                #[cfg(feature = "typst")]
-                typst,
+                #[cfg(feature = "native")]
+                native,
             }),
         }
     }
@@ -156,20 +152,20 @@ impl Documents {
         Self {
             inner: Arc::new(Inner {
                 templates,
-                default_engine: EngineKind::Typst,
+                default_engine: EngineKind::Native,
                 engines: vec![engine],
                 storage: None,
                 disk: None,
                 dispatcher: None,
                 fake: Some(state),
-                #[cfg(feature = "typst")]
-                typst: None,
+                #[cfg(feature = "native")]
+                native: None,
             }),
         }
     }
 
     /// Uses `engine` for renders of its kind, replacing the built-in one
-    /// (a Typst engine with a fixed clock, a Chrome engine with other
+    /// (a native engine with a fixed clock, a Chrome engine with other
     /// settings, your own engine).
     pub fn with_engine(mut self, engine: Arc<dyn PdfEngine>) -> Self {
         let inner = Arc::make_mut(&mut self.inner);
@@ -178,7 +174,7 @@ impl Documents {
         self
     }
 
-    /// The engine for templates that exist as both `.typ` and `.html`.
+    /// The engine renders use unless they name one.
     pub fn default_engine(mut self, kind: EngineKind) -> Self {
         Arc::make_mut(&mut self.inner).default_engine = kind;
         self
@@ -216,43 +212,29 @@ impl Documents {
             .cloned()
     }
 
-    /// Which engine renders `render`: the one it names, else the one its
-    /// template picks. An unknown template name is
-    /// [`DocumentsError::TemplateNotFound`], listing the files tried.
+    /// Which engine renders `render`: the one it names, else
+    /// `documents.engine`. An unknown template name is
+    /// [`DocumentsError::TemplateNotFound`], naming the file tried.
     pub fn engine_for(&self, render: &Render) -> Result<EngineKind, DocumentsError> {
         if let Some(kind) = render.engine {
             return Ok(kind);
         }
-        let name = match &render.source {
-            TemplateSource::Typst(_) => return Ok(EngineKind::Typst),
-            TemplateSource::Html(_) => return Ok(EngineKind::Chrome),
-            TemplateSource::Template(name) => name,
+        let TemplateSource::Template(name) = &render.source else {
+            return Ok(self.inner.default_engine);
         };
-        match Path::new(name).extension().and_then(|e| e.to_str()) {
-            Some(TYPST_EXTENSION) => return Ok(EngineKind::Typst),
-            Some(HTML_EXTENSION) => return Ok(EngineKind::Chrome),
-            _ => {}
-        }
-        let (Some(typ), Some(html)) = (
-            Templates::template_path(name, TYPST_EXTENSION),
-            Templates::template_path(name, HTML_EXTENSION),
-        ) else {
+        let Some(path) = Templates::template_path(name, HTML_EXTENSION) else {
             return Err(DocumentsError::TemplateNotFound {
                 name: name.clone(),
                 tried: Vec::new(),
             });
         };
-        let templates = &self.inner.templates;
-        match (templates.exists(&typ), templates.exists(&html)) {
-            (true, true) => Ok(self.inner.default_engine),
-            (true, false) => Ok(EngineKind::Typst),
-            (false, true) => Ok(EngineKind::Chrome),
-            (false, false) if self.accepts_any_template() => Ok(self.inner.default_engine),
-            (false, false) => Err(DocumentsError::TemplateNotFound {
-                name: name.clone(),
-                tried: vec![typ, html],
-            }),
+        if self.inner.templates.exists(&path) || self.accepts_any_template() {
+            return Ok(self.inner.default_engine);
         }
+        Err(DocumentsError::TemplateNotFound {
+            name: name.clone(),
+            tried: vec![path],
+        })
     }
 
     /// Renders the template `name` with `data` (anything `Serialize`).
@@ -408,19 +390,42 @@ impl Documents {
         crate::queue::status(&disk, &queued.path).await
     }
 
-    /// The font families Typst templates can use, sorted (loads the fonts
-    /// on a blocking thread). Empty without the `typst` feature.
+    /// The font families the native engine prints with, sorted (loads the
+    /// fonts on a blocking thread). Empty without the `native` feature.
     pub async fn font_families(&self) -> Result<Vec<String>, DocumentsError> {
-        #[cfg(feature = "typst")]
-        if let Some(typst) = self.inner.typst.clone() {
-            return tokio::task::spawn_blocking(move || typst.font_families())
+        #[cfg(feature = "native")]
+        if let Some(native) = self.inner.native.clone() {
+            return tokio::task::spawn_blocking(move || native.font_families())
                 .await
                 .map_err(|error| DocumentsError::Engine {
-                    engine: "typst",
+                    engine: "native",
                     message: format!("loading the fonts stopped: {error}"),
                 });
         }
         Ok(Vec::new())
+    }
+
+    /// Lays out `document`, built in code, with the native engine's fonts
+    /// (`documents.native.font_dirs`) and the app's clock, on a blocking
+    /// thread. In the [`DocumentsFake`](crate::DocumentsFake)'s documents,
+    /// with the bundled fonts.
+    #[cfg(feature = "native")]
+    pub async fn render_document(
+        &self,
+        document: &crate::PdfDocument,
+    ) -> Result<Pdf, DocumentsError> {
+        match &self.inner.native {
+            Some(native) => native.render_document(document).await,
+            None => {
+                let document = document.clone();
+                tokio::task::spawn_blocking(move || document.build())
+                    .await
+                    .map_err(|error| DocumentsError::Engine {
+                        engine: "native",
+                        message: format!("the layout stopped: {error}"),
+                    })?
+            }
+        }
     }
 
     /// Releases what the engines hold (closes Chrome). Rendering again

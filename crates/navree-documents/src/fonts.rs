@@ -1,6 +1,6 @@
 //! The bundled Noto fonts (SIL Open Font License 1.1, see `fonts/OFL.txt`),
-//! shared by both engines: Typst loads them in process, Chrome reaches them
-//! through [`FONTS_STYLESHEET`].
+//! shared by both engines: the native engine loads them in process, Chrome
+//! reaches them through [`FONTS_STYLESHEET`].
 
 /// One bundled font file.
 #[derive(Clone, Copy, Debug)]
@@ -18,9 +18,10 @@ pub(crate) struct BundledFont {
     pub(crate) data: &'static [u8],
 }
 
-/// Noto Sans (Latin, Greek and Cyrillic) in regular, bold, italic and bold
-/// italic, Noto Sans Arabic and Noto Sans Devanagari in regular and bold.
-pub(crate) const BUNDLED: [BundledFont; 8] = [
+/// Noto Sans and Noto Serif (Latin, Greek and Cyrillic) in regular, bold,
+/// italic and bold italic, Noto Sans Mono, Noto Sans Arabic, Noto Sans
+/// Hebrew and Noto Sans Devanagari in regular and bold.
+pub(crate) const BUNDLED: [BundledFont; 16] = [
     font(
         "NotoSans-Regular.ttf",
         "Noto Sans",
@@ -50,6 +51,48 @@ pub(crate) const BUNDLED: [BundledFont; 8] = [
         include_bytes!("../fonts/NotoSans-BoldItalic.ttf"),
     ),
     font(
+        "NotoSerif-Regular.ttf",
+        "Noto Serif",
+        400,
+        false,
+        include_bytes!("../fonts/NotoSerif-Regular.ttf"),
+    ),
+    font(
+        "NotoSerif-Bold.ttf",
+        "Noto Serif",
+        700,
+        false,
+        include_bytes!("../fonts/NotoSerif-Bold.ttf"),
+    ),
+    font(
+        "NotoSerif-Italic.ttf",
+        "Noto Serif",
+        400,
+        true,
+        include_bytes!("../fonts/NotoSerif-Italic.ttf"),
+    ),
+    font(
+        "NotoSerif-BoldItalic.ttf",
+        "Noto Serif",
+        700,
+        true,
+        include_bytes!("../fonts/NotoSerif-BoldItalic.ttf"),
+    ),
+    font(
+        "NotoSansMono-Regular.ttf",
+        "Noto Sans Mono",
+        400,
+        false,
+        include_bytes!("../fonts/NotoSansMono-Regular.ttf"),
+    ),
+    font(
+        "NotoSansMono-Bold.ttf",
+        "Noto Sans Mono",
+        700,
+        false,
+        include_bytes!("../fonts/NotoSansMono-Bold.ttf"),
+    ),
+    font(
         "NotoSansArabic-Regular.ttf",
         "Noto Sans Arabic",
         400,
@@ -62,6 +105,20 @@ pub(crate) const BUNDLED: [BundledFont; 8] = [
         700,
         false,
         include_bytes!("../fonts/NotoSansArabic-Bold.ttf"),
+    ),
+    font(
+        "NotoSansHebrew-Regular.ttf",
+        "Noto Sans Hebrew",
+        400,
+        false,
+        include_bytes!("../fonts/NotoSansHebrew-Regular.ttf"),
+    ),
+    font(
+        "NotoSansHebrew-Bold.ttf",
+        "Noto Sans Hebrew",
+        700,
+        false,
+        include_bytes!("../fonts/NotoSansHebrew-Bold.ttf"),
     ),
     font(
         "NotoSansDevanagari-Regular.ttf",
@@ -95,15 +152,11 @@ const fn font(
     }
 }
 
-/// The families text falls back through by default, in order: Latin,
-/// Greek and Cyrillic first, then Arabic, then Devanagari.
-#[cfg(feature = "typst")]
-pub(crate) const DEFAULT_FAMILIES: [&str; 3] =
-    ["Noto Sans", "Noto Sans Arabic", "Noto Sans Devanagari"];
-
-/// The stylesheet that gives HTML templates the bundled fonts:
-/// `<link rel="stylesheet" href="/_navree/fonts.css">`, then
-/// `font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans Devanagari"`.
+/// The stylesheet that gives HTML templates printed by Chrome the bundled
+/// fonts: `<link rel="stylesheet" href="/_navree/fonts.css">`, then
+/// `font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew",
+/// "Noto Sans Devanagari"` (or `"Noto Serif"`, `"Noto Sans Mono"`). The
+/// native engine has the fonts without it.
 /// The `_navree/` prefix of the document origin is reserved for it.
 pub const FONTS_STYLESHEET: &str = "/_navree/fonts.css";
 
@@ -166,7 +219,8 @@ mod tests {
         assert!(css.starts_with(b"/* The bundled"));
         let (font, content_type) = reserved_file("fonts/NotoSansDevanagari-Regular.ttf").unwrap();
         assert_eq!(content_type, "font/ttf");
-        assert_eq!(font.len(), BUNDLED[6].data.len());
+        assert_eq!(font.len(), BUNDLED[14].data.len());
+        assert!(reserved_file("fonts/NotoSerif-BoldItalic.ttf").is_some());
         assert!(reserved_file("fonts/other.ttf").is_none());
         assert!(reserved_file("secret").is_none());
     }

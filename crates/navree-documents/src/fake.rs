@@ -10,11 +10,11 @@ use serde_json::Value;
 use crate::engine::{EngineKind, PdfEngine};
 use crate::queue::QueuedDocument;
 use crate::render::{Render, TemplateSource};
-use crate::templates::{HTML_EXTENSION, TYPST_EXTENSION, Templates};
+use crate::templates::{HTML_EXTENSION, Templates};
 use crate::{Documents, DocumentsError, Pdf};
 
-/// Documents for tests: every render succeeds at once, without Typst or
-/// Chrome, and is recorded.
+/// Documents for tests: every render succeeds at once, without the native
+/// engine or Chrome, and is recorded.
 ///
 /// The fake renders a plain PDF ([`Pdf::from_lines`]) whose first line is
 /// the template's name (`inline` for inline markup) and whose next lines
@@ -91,7 +91,7 @@ impl DocumentsFake {
         Self::default()
     }
 
-    /// A fake that renders only the templates in `templates` (as `.typ` or
+    /// A fake that renders only the templates in `templates` (as
     /// `.html`); other names are [`DocumentsError::TemplateNotFound`], as
     /// with the real engines.
     pub fn with_templates(templates: Templates) -> Self {
@@ -119,8 +119,7 @@ impl DocumentsFake {
     pub fn documents(&self) -> Documents {
         let templates = self.state.templates.clone().unwrap_or_default();
         let engine = FakeEngine {
-            kind: EngineKind::Typst,
-            every_kind: true,
+            kind: EngineKind::Native,
             state: self.state.clone(),
         };
         Documents::fake(templates, Arc::new(engine), self.state.clone())
@@ -131,7 +130,6 @@ impl DocumentsFake {
     pub fn engine(&self, kind: EngineKind) -> FakeEngine {
         FakeEngine {
             kind,
-            every_kind: false,
             state: self.state.clone(),
         }
     }
@@ -223,12 +221,9 @@ impl DocumentsFake {
 fn same_template(a: &str, b: &str) -> bool {
     let strip = |name: &str| -> String {
         let name = name.trim_start_matches('/');
-        for ext in [TYPST_EXTENSION, HTML_EXTENSION] {
-            if let Some(base) = name.strip_suffix(&format!(".{ext}")) {
-                return base.to_owned();
-            }
-        }
-        name.to_owned()
+        name.strip_suffix(&format!(".{HTML_EXTENSION}"))
+            .unwrap_or(name)
+            .to_owned()
     };
     strip(a) == strip(b)
 }
@@ -237,8 +232,6 @@ fn same_template(a: &str, b: &str) -> bool {
 #[derive(Clone, Debug)]
 pub struct FakeEngine {
     kind: EngineKind,
-    /// Serves every kind (the engine of `fake.documents()`).
-    every_kind: bool,
     state: Arc<FakeState>,
 }
 
@@ -286,29 +279,14 @@ impl FakeEngine {
         }
     }
 
-    /// With templates, `name` must exist: as `.typ` or `.html` when the fake
-    /// serves every engine (through `Documents`), else with this engine's
-    /// extension.
+    /// With templates, `name` must exist as `name.html`.
     fn check_exists(&self, name: &str) -> Result<(), DocumentsError> {
         let Some(templates) = &self.state.templates else {
             return Ok(());
         };
-        let extensions: &[&str] = match (self.every_kind, self.kind) {
-            (true, _) => &[TYPST_EXTENSION, HTML_EXTENSION],
-            (false, EngineKind::Typst) => &[TYPST_EXTENSION],
-            (false, EngineKind::Chrome) => &[HTML_EXTENSION],
-        };
-        let named = std::path::Path::new(name)
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .filter(|ext| extensions.contains(ext));
-        let tried: Vec<String> = match named {
-            Some(ext) => Templates::template_path(name, ext).into_iter().collect(),
-            None => extensions
-                .iter()
-                .filter_map(|ext| Templates::template_path(name, ext))
-                .collect(),
-        };
+        let tried: Vec<String> = Templates::template_path(name, HTML_EXTENSION)
+            .into_iter()
+            .collect();
         if tried.iter().any(|path| templates.exists(path)) {
             return Ok(());
         }

@@ -17,7 +17,8 @@ use crate::error::map_documents_error;
 use crate::templates::normalize;
 use crate::{Documents, DocumentsError, DocumentsOptions, RenderDocument, Templates};
 
-/// Documents: PDF from Typst or HTML templates, DOCX, merge and stamps.
+/// Documents: PDF from HTML templates (native or Chrome), DOCX, merge and
+/// stamps.
 ///
 /// Global; provides and exports [`Documents`] and [`DocumentsOptions`],
 /// and contributes:
@@ -33,8 +34,8 @@ use crate::{Documents, DocumentsError, DocumentsOptions, RenderDocument, Templat
 /// [`from_config`](DocumentsModule::from_config) and the plain module).
 /// With `StorageModule` in the app, documents can be saved and queued to
 /// its disks; with `QueueModule`, queued renders run on a worker; with a
-/// `dyn Clock`, Typst's `datetime.today()` and the PDF's creation date
-/// follow it. Nothing starts at boot: fonts load and Chrome starts on the
+/// `dyn Clock`, the native engine's dates (the PDF's creation date, a
+/// footer's `date`) follow it. Nothing starts at boot: fonts load and Chrome starts on the
 /// first render that needs them.
 ///
 /// ```no_run
@@ -170,14 +171,14 @@ fn register(m: &mut ModuleBuilder, options: Option<DocumentsOptions>) {
 /// Document registrations on a [`ModuleBuilder`].
 pub trait ModuleBuilderDocumentsExt {
     /// Embeds template files (templates, layouts, images, fonts' CSS) in
-    /// the app, as `(path, contents)` pairs: `certificates/classic.typ`,
+    /// the app, as `(path, contents)` pairs: `certificates/classic.html`,
     /// `images/seal.png`. A file at the same path in a template directory
     /// wins, so an app can override what a module ships. Paths that would
     /// leave the template tree are ignored.
     ///
     /// ```ignore
     /// m.document_files([
-    ///     ("certificates/course.typ", include_bytes!("../documents/certificates/course.typ").as_slice()),
+    ///     ("certificates/course.html", include_bytes!("../documents/certificates/course.html").as_slice()),
     ///     ("images/seal.png", include_bytes!("../documents/images/seal.png").as_slice()),
     /// ]);
     /// ```
