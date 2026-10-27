@@ -299,9 +299,14 @@ impl Automations {
 
     /// The automation `id`.
     pub async fn get(&self, id: Uuid) -> Result<Automation, WorkflowsError> {
+        self.load(None, id).await
+    }
+
+    /// The automation `id` as `uow` sees it (its own writes included).
+    async fn load(&self, uow: Option<&Uow>, id: Uuid) -> Result<Automation, WorkflowsError> {
         self.engine
             .automations
-            .get(id)
+            .get(uow, id)
             .await?
             .ok_or(WorkflowsError::UnknownAutomation(id))
     }
@@ -345,7 +350,7 @@ impl Automations {
         id: Uuid,
         changes: AutomationChanges,
     ) -> Result<Automation, WorkflowsError> {
-        let mut automation = self.get(id).await?;
+        let mut automation = self.load(Some(uow), id).await?;
         if let Some(name) = changes.name {
             automation.name = check_name(&name)?;
         }
@@ -380,7 +385,7 @@ impl Automations {
         id: Uuid,
         published_by: Option<Uuid>,
     ) -> Result<Automation, WorkflowsError> {
-        let mut automation = self.get(id).await?;
+        let mut automation = self.load(Some(uow), id).await?;
         let issues = automation
             .definition
             .issues(&self.engine.catalog)
@@ -398,7 +403,7 @@ impl Automations {
         let latest = self
             .engine
             .automations
-            .versions(id)
+            .versions(Some(uow), id)
             .await?
             .first()
             .map_or(0, |v| v.version);
@@ -424,7 +429,7 @@ impl Automations {
 
     /// Stops enrolling (enrollments under way go on); 409 unless active.
     pub async fn pause(&self, uow: &Uow, id: Uuid) -> Result<Automation, WorkflowsError> {
-        let mut automation = self.get(id).await?;
+        let mut automation = self.load(Some(uow), id).await?;
         if automation.status != AutomationStatus::Active {
             return Err(WorkflowsError::conflict(
                 codes::AUTOMATION_NOT_ACTIVE,
@@ -442,7 +447,7 @@ impl Automations {
 
     /// Enrolls again with the published version; 409 unless paused.
     pub async fn resume(&self, uow: &Uow, id: Uuid) -> Result<Automation, WorkflowsError> {
-        let mut automation = self.get(id).await?;
+        let mut automation = self.load(Some(uow), id).await?;
         if automation.status != AutomationStatus::Paused {
             return Err(WorkflowsError::conflict(
                 codes::AUTOMATION_NOT_PAUSED,
@@ -461,7 +466,7 @@ impl Automations {
     /// Deletes the automation with its versions and enrollments, and
     /// cancels the enrollments under way.
     pub async fn delete(&self, uow: &Uow, id: Uuid) -> Result<(), WorkflowsError> {
-        self.get(id).await?;
+        self.load(Some(uow), id).await?;
         let mut offset = 0;
         loop {
             let enrollments = self
@@ -495,7 +500,7 @@ impl Automations {
     /// Every published version, newest first.
     pub async fn versions(&self, id: Uuid) -> Result<Vec<AutomationVersion>, WorkflowsError> {
         self.get(id).await?;
-        self.engine.automations.versions(id).await
+        self.engine.automations.versions(None, id).await
     }
 
     /// One page of the automation's enrollments, newest first, with the

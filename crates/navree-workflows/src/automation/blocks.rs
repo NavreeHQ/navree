@@ -323,11 +323,20 @@ fn label(label: &'static str, kind: &'static str) -> String {
 }
 
 fn check<T: DeserializeOwned>(config: &Value) -> Result<(), String> {
-    T::deserialize(config).map(|_| ()).map_err(|error| error.to_string())
+    decode::<T>(config).map(|_| ())
 }
 
+/// Reads `value` as `T`; a missing configuration (`null`) that `T` does not
+/// accept is read as `{}`, so blocks whose settings are all optional need
+/// no `config`.
 fn decode<T: DeserializeOwned>(value: &Value) -> Result<T, String> {
-    T::deserialize(value).map_err(|error| error.to_string())
+    match T::deserialize(value) {
+        Ok(decoded) => Ok(decoded),
+        Err(error) if value.is_null() => {
+            T::deserialize(&Value::Object(serde_json::Map::new())).map_err(|_| error.to_string())
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 impl BlockRegistration {
