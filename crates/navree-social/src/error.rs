@@ -167,72 +167,87 @@ impl SocialError {
     /// The error response for this error, `None` for errors that stay a 500
     /// (their details are logged, never sent).
     pub fn to_app_error(&self) -> Option<AppError> {
-        match self {
-            SocialError::InvalidState => Some(AppError::bad_request("Invalid or expired state")),
-            SocialError::UnknownProvider(key) => {
-                Some(AppError::not_found().with_detail(format!("Unknown sign-in provider `{key}`")))
+        let error = match self {
+            SocialError::InvalidState | SocialError::WrongIntent => {
+                AppError::bad_request("Invalid or expired state").with_code("invalid_state")
             }
-            SocialError::Provider { provider, message } => Some(AppError::bad_request(format!(
+            SocialError::UnknownProvider(key) => AppError::not_found()
+                .with_code("unknown_provider")
+                .with_detail(format!("Unknown sign-in provider `{key}`")),
+            SocialError::Provider { provider, message } => AppError::bad_request(format!(
                 "{provider} refused the sign-in: {message}"
-            ))),
-            SocialError::InvalidIdToken { provider, .. } => Some(AppError::bad_request(format!(
-                "{provider} sent an invalid ID token"
-            ))),
-            SocialError::ProviderUnavailable { provider, .. } => Some(
+            ))
+            .with_code("provider_refused"),
+            SocialError::InvalidIdToken { provider, .. } => {
+                AppError::bad_request(format!("{provider} sent an invalid ID token"))
+                    .with_code("invalid_id_token")
+            }
+            SocialError::ProviderUnavailable { provider, .. } => {
                 AppError::from_status(http::StatusCode::BAD_GATEWAY)
-                    .with_detail(format!("{provider} is unavailable. Please try again.")),
-            ),
-            SocialError::Http(_) => Some(
-                AppError::from_status(http::StatusCode::BAD_GATEWAY)
-                    .with_detail("The sign-in provider is unavailable. Please try again."),
-            ),
-            SocialError::NotAllowed(message) => Some(AppError::forbidden().with_detail(message)),
-            SocialError::EmailTaken { provider } => Some(AppError::conflict(format!(
+                    .with_code("provider_unavailable")
+                    .with_detail(format!("{provider} is unavailable. Please try again."))
+            }
+            SocialError::Http(_) => AppError::from_status(http::StatusCode::BAD_GATEWAY)
+                .with_code("provider_unavailable")
+                .with_detail("The sign-in provider is unavailable. Please try again."),
+            SocialError::NotAllowed(message) => AppError::forbidden()
+                .with_code("sign_in_not_allowed")
+                .with_detail(message),
+            SocialError::EmailTaken { provider } => AppError::conflict(format!(
                 "An account with this email already exists. Sign in, then connect {provider} in your settings."
-            ))),
-            SocialError::RegistrationClosed => {
-                Some(AppError::forbidden().with_detail("Registration is closed"))
+            ))
+            .with_code("email_taken"),
+            SocialError::RegistrationClosed => AppError::forbidden()
+                .with_code("registration_closed")
+                .with_detail("Registration is closed"),
+            SocialError::MissingEmail { provider } => {
+                AppError::bad_request(format!("{provider} did not share an email address"))
+                    .with_code("missing_email")
             }
-            SocialError::MissingEmail { provider } => Some(AppError::bad_request(format!(
-                "{provider} did not share an email address"
-            ))),
-            SocialError::AlreadyLinked { provider } => Some(AppError::conflict(format!(
-                "This {provider} account is linked to another user"
-            ))),
-            SocialError::ProviderAlreadyConnected { provider } => Some(AppError::conflict(
-                format!("{provider} is already connected. Disconnect it first."),
-            )),
-            SocialError::NotLinked { provider } => {
-                Some(AppError::not_found().with_detail(format!("{provider} is not connected")))
+            SocialError::AlreadyLinked { provider } => {
+                AppError::conflict(format!("This {provider} account is linked to another user"))
+                    .with_code("account_already_linked")
             }
-            SocialError::LastSignInMethod { provider } => Some(AppError::conflict(format!(
+            SocialError::ProviderAlreadyConnected { provider } => AppError::conflict(format!(
+                "{provider} is already connected. Disconnect it first."
+            ))
+            .with_code("provider_already_connected"),
+            SocialError::NotLinked { provider } => AppError::not_found()
+                .with_code("provider_not_connected")
+                .with_detail(format!("{provider} is not connected")),
+            SocialError::LastSignInMethod { provider } => AppError::conflict(format!(
                 "Set a password or connect another provider before disconnecting {provider}"
-            ))),
-            SocialError::WrongIntent => Some(AppError::bad_request("Invalid or expired state")),
+            ))
+            .with_code("last_sign_in_method"),
             SocialError::InvalidReturnTo => {
-                Some(AppError::bad_request("return_to must be a relative path"))
+                AppError::bad_request("return_to must be a relative path")
+                    .with_code("invalid_return_to")
             }
-            SocialError::Reauthorize { provider } => Some(AppError::conflict(format!(
-                "Connect {provider} again to continue"
-            ))),
-            SocialError::NoToken { provider } => {
-                Some(AppError::not_found().with_detail(format!("No {provider} tokens are stored")))
+            SocialError::Reauthorize { provider } => {
+                AppError::conflict(format!("Connect {provider} again to continue"))
+                    .with_code("reauthorization_required")
             }
-            SocialError::TooManyAttempts { retry_after } => Some(
-                AppError::too_many_requests(*retry_after).with_detail(format!(
-                    "Too many sign-in attempts. Please try again in {} seconds.",
-                    retry_after.as_secs().max(1)
-                )),
-            ),
-            SocialError::Auth(error) => error.to_app_error(),
-            SocialError::Db(error) => navree_db::map_db_error(error),
+            SocialError::NoToken { provider } => AppError::not_found()
+                .with_code("no_provider_token")
+                .with_detail(format!("No {provider} tokens are stored")),
+            SocialError::TooManyAttempts { retry_after } => {
+                AppError::too_many_requests(*retry_after)
+                    .with_code("too_many_login_attempts")
+                    .with_detail(format!(
+                        "Too many sign-in attempts. Please try again in {} seconds.",
+                        retry_after.as_secs().max(1)
+                    ))
+            }
+            SocialError::Auth(error) => return error.to_app_error(),
+            SocialError::Db(error) => return navree_db::map_db_error(error),
             SocialError::NotBound
             | SocialError::Config(_)
             | SocialError::Crypto(_)
             | SocialError::Cache(_)
             | SocialError::Kernel(_)
-            | SocialError::Other(_) => None,
-        }
+            | SocialError::Other(_) => return None,
+        };
+        Some(error)
     }
 
     /// The error response for this error: [`to_app_error`](Self::to_app_error),
@@ -275,7 +290,7 @@ mod tests {
                 "statusCode": 400,
                 "message": "Invalid or expired state",
                 "error": "Bad Request",
-                "code": "bad_request",
+                "code": "invalid_state",
             })
         );
         assert_eq!(
@@ -367,6 +382,91 @@ mod tests {
         let error = SocialError::Config("client_secret=hunter2".to_owned()).into_app_error();
         assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!error.body().to_string().contains("hunter2"));
+    }
+
+    #[test]
+    fn every_refusal_has_its_own_code() {
+        let github = || "GitHub".to_owned();
+        let cases = [
+            (SocialError::InvalidState, "invalid_state"),
+            (SocialError::WrongIntent, "invalid_state"),
+            (
+                SocialError::UnknownProvider("gitlab".to_owned()),
+                "unknown_provider",
+            ),
+            (
+                SocialError::provider("GitHub", "access_denied"),
+                "provider_refused",
+            ),
+            (
+                SocialError::InvalidIdToken {
+                    provider: github(),
+                    reason: "bad issuer".to_owned(),
+                },
+                "invalid_id_token",
+            ),
+            (
+                SocialError::ProviderUnavailable {
+                    provider: github(),
+                    message: "status 503".to_owned(),
+                },
+                "provider_unavailable",
+            ),
+            (
+                SocialError::NotAllowed("Use your acme.test address".to_owned()),
+                "sign_in_not_allowed",
+            ),
+            (
+                SocialError::EmailTaken { provider: github() },
+                "email_taken",
+            ),
+            (SocialError::RegistrationClosed, "registration_closed"),
+            (
+                SocialError::MissingEmail { provider: github() },
+                "missing_email",
+            ),
+            (
+                SocialError::AlreadyLinked { provider: github() },
+                "account_already_linked",
+            ),
+            (
+                SocialError::ProviderAlreadyConnected { provider: github() },
+                "provider_already_connected",
+            ),
+            (
+                SocialError::NotLinked { provider: github() },
+                "provider_not_connected",
+            ),
+            (
+                SocialError::LastSignInMethod { provider: github() },
+                "last_sign_in_method",
+            ),
+            (SocialError::InvalidReturnTo, "invalid_return_to"),
+            (
+                SocialError::Reauthorize { provider: github() },
+                "reauthorization_required",
+            ),
+            (
+                SocialError::NoToken { provider: github() },
+                "no_provider_token",
+            ),
+            (
+                SocialError::TooManyAttempts {
+                    retry_after: Duration::from_secs(30),
+                },
+                "too_many_login_attempts",
+            ),
+            (
+                SocialError::Config("x".to_owned()),
+                navree_http::codes::INTERNAL_ERROR,
+            ),
+        ];
+        for (error, code) in cases {
+            let message = error.to_string();
+            let error = error.into_app_error();
+            assert_eq!(error.code, code, "{message}");
+            assert!(navree_http::codes::is_valid(&error.code), "{message}");
+        }
     }
 
     #[test]

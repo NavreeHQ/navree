@@ -123,7 +123,8 @@ async fn checkout_swap_cancel_resume_invoices_and_portal() {
         .assert_error(
             409,
             "Already subscribed; change the plan with swap instead.",
-        );
+        )
+        .assert_error_code(409, "already_subscribed");
 
     client
         .get("/api/billing")
@@ -296,7 +297,8 @@ async fn subscribed_answers_402_without_a_subscription() {
     premium()
         .send()
         .await
-        .assert_error(402, "This workspace needs an active subscription");
+        .assert_error(402, "This workspace needs an active subscription")
+        .assert_error_code(402, "subscription_required");
 
     world.billing().await.start_trial(&acme, 3).await.unwrap();
     premium()

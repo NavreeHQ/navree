@@ -189,7 +189,8 @@ async fn github_webhooks_are_verified_and_marked_once() {
         .assert_json_path("first", json!(false));
     send(GitHub::sign("wrong-secret", &body))
         .await
-        .assert_error(400, "Invalid webhook signature");
+        .assert_error(400, "Invalid webhook signature")
+        .assert_error_code(400, "invalid_webhook_signature");
     app.client()
         .post("/api/hooks/github")
         .body(body.clone())

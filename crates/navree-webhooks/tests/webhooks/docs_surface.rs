@@ -159,6 +159,10 @@ fn the_documented_names_exist() {
         navree_webhooks::INVALID_SIGNATURE,
         "Invalid webhook signature"
     );
+    assert_eq!(
+        navree_webhooks::INVALID_SIGNATURE_CODE,
+        "invalid_webhook_signature"
+    );
 }
 
 #[tokio::test]

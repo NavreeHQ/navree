@@ -109,8 +109,9 @@ impl UpgradeController {
    creates the endpoint and prints the secret), run a queue worker
    (`navree queue:work`) and the scheduler.
 
-5. Gate features: `Subscribed` (402 without a valid subscription or trial)
-   or `billing.subscribed(&ws, "pro").await?`.
+5. Gate features: `Subscribed` (402 `subscription_required` without a
+   valid subscription or trial) or `billing.subscribed(&ws, "pro").await?`.
+   The front end maps the error body's `code` to its upgrade prompt.
 
 ```rust
 #[post("/{id}/summary")]
@@ -254,7 +255,8 @@ fake.send_webhook("invoice.paid", json!({ /* Stripe-shaped data.object */ })).aw
 - Missing `#[guard(InWorkspace::guard())]` on a workspace billing route
   checks `billing.manage` globally (403 for workspace owners).
 - `success_url` is not proof of payment: wait for `SubscriptionCreated`.
-- A checkout for a billable with a valid subscription is a 409: `swap`.
+- A checkout for a billable with a valid subscription is a 409
+  `already_subscribed`: `swap`.
 - No `billing.return_url` and no `app.url`: checkouts without explicit
   URLs fail (`BillingError::Config`).
 - Paddle: the checkout opens the default payment link (set one in Paddle);
