@@ -8,9 +8,11 @@ use sea_orm::DbErr;
 use crate::engine::RuleError;
 
 /// An access-module error. Returned from handlers with `?`, it becomes an
-/// error response: unknown role → 404, existing role → 409, invalid names
-/// or unknown roles in a request body → 400, database errors as navree-db maps
-/// them, anything else 500.
+/// error response: unknown role → 404 `role_not_found`, existing role → 409
+/// `role_already_exists`, invalid names or unknown roles in a request body →
+/// 400 `validation_failed`, database errors as navree-db maps them, anything
+/// else 500. Denials are 403 `forbidden`, and a change to fields the user may
+/// not change is 403 `forbidden_fields`.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AccessError {
@@ -56,13 +58,16 @@ pub enum AccessError {
 /// `map_error`), `None` for errors that stay a 500.
 pub(crate) fn map_access_error(error: &AccessError) -> Option<AppError> {
     match error {
-        AccessError::RoleNotFound(name) => {
-            Some(AppError::not_found().with_detail(format!("The role `{name}` does not exist.")))
-        }
+        AccessError::RoleNotFound(name) => Some(
+            AppError::not_found()
+                .with_code("role_not_found")
+                .with_detail(format!("The role `{name}` does not exist.")),
+        ),
         AccessError::RecordNotFound { .. } => Some(AppError::not_found()),
-        AccessError::RoleExists(name) => Some(AppError::conflict(format!(
-            "The role `{name}` already exists."
-        ))),
+        AccessError::RoleExists(name) => Some(
+            AppError::conflict(format!("The role `{name}` already exists."))
+                .with_code("role_already_exists"),
+        ),
         AccessError::UnknownRoles(names) => Some(validation(
             "roles",
             names
@@ -138,6 +143,51 @@ fn check_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errors_map_to_statuses_and_codes() {
+        let cases = [
+            (
+                AccessError::RoleNotFound("auditor".into()),
+                404,
+                "role_not_found",
+            ),
+            (
+                AccessError::RoleExists("auditor".into()),
+                409,
+                "role_already_exists",
+            ),
+            (
+                AccessError::RecordNotFound {
+                    subject: "Post".into(),
+                    id: "7".into(),
+                },
+                404,
+                "not_found",
+            ),
+            (
+                AccessError::UnknownRoles(vec!["ghost".into()]),
+                400,
+                "validation_failed",
+            ),
+            (
+                AccessError::InvalidName {
+                    field: "name",
+                    name: "-x".into(),
+                    reason: "must start with a letter or digit",
+                },
+                400,
+                "validation_failed",
+            ),
+        ];
+        for (error, status, code) in cases {
+            let mapped = map_access_error(&error).expect("mapped");
+            assert_eq!(mapped.status.as_u16(), status, "{error}");
+            assert_eq!(mapped.body()["code"], code, "{error}");
+            assert!(navree_http::codes::is_valid(code), "{code}");
+        }
+        assert!(map_access_error(&AccessError::Config("two subjects".into())).is_none());
+    }
 
     #[test]
     fn role_names_are_checked() {

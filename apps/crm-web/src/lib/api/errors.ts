@@ -2,8 +2,10 @@ import type { ApiErrorBody } from "./types";
 
 /**
  * An error response from the API, in Navree's JSON error shape:
- * `{statusCode, message: string | string[], error, errors?: {field: [messages]}}`.
- * Validation failures are 400 with `message: string[]` and `errors`.
+ * `{statusCode, message: string | string[], error, code, errors?: {field: [messages]}}`.
+ * Validation failures are 400 with `message: string[]` and `errors`. `code` is the
+ * stable machine-readable code (`invalid_credentials`, `not_found`): branch on it, never
+ * on the English `message`.
  */
 export class ApiError extends Error {
   readonly status: number;
@@ -16,6 +18,11 @@ export class ApiError extends Error {
     this.status = body.statusCode;
     this.body = body;
     this.requestId = requestId;
+  }
+
+  /** The machine-readable error code; undefined when the API sends none (`http.errors.code = false`). */
+  get code(): string | undefined {
+    return this.body.code;
   }
 
   /** `message` as a list (the API sends a string, or a list for validation errors). */
@@ -79,6 +86,29 @@ function defaultReason(status: number): string {
   }
 }
 
+/**
+ * What to show for an error `code`: the app's catalogue of refusals, keyed by Navree's
+ * stable codes (translate the values to localize them). Codes not listed here fall back
+ * to the API's message and the status rules below.
+ */
+const CODE_MESSAGES: Record<string, string> = {
+  invalid_credentials: "That email and password don't match an account. Check them and try again.",
+  too_many_login_attempts: "Too many sign-in attempts. Wait a minute, then try again.",
+  invalid_two_factor_code: "That code isn't right. Check your authenticator app and try again.",
+  token_expired: "Your session has ended. Sign in again.",
+  invalid_refresh_token: "Your session has ended. Sign in again.",
+  csrf_token_mismatch: "Your session changed in another tab. Reload the page and try again.",
+  demo_read_only: "This is a demo workspace, so changes aren't saved.",
+  payload_too_large: "That file is too large.",
+  maintenance: "Navree is down for maintenance. Try again in a few minutes.",
+  request_timeout: "The server took too long to answer. Try again.",
+};
+
+/** The catalogue message for an error's code, if there is one. */
+export function codeMessage(error: ApiError): string | undefined {
+  return error.code ? CODE_MESSAGES[error.code] : undefined;
+}
+
 /** Generic built-in messages, which say nothing a person can act on. */
 const GENERIC_MESSAGES = new Set(["Forbidden resource", "Internal server error", "Unauthorized", "Forbidden"]);
 
@@ -91,6 +121,8 @@ function isGeneric(error: ApiError): boolean {
 /** Human-readable message for toasts. */
 export function errorMessage(error: unknown, fallback = "Something went wrong. Try again."): string {
   if (isApiError(error)) {
+    const known = codeMessage(error);
+    if (known) return known;
     const detail = isGeneric(error) ? undefined : error.messages[0];
     if (error.status === 400) {
       const first = Object.values(error.fieldErrors)[0]?.[0];

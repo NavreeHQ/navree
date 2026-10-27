@@ -83,7 +83,7 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
       onSuccess: onSignedIn,
       onError: (error) => {
         form.setValue("code", "");
-        if (isApiError(error) && error.status === 401 && error.messages[0] !== "Invalid two-factor code") {
+        if (isApiError(error) && error.status === 401 && error.code !== "invalid_two_factor_code") {
           // The challenge expired (or the BFF lost it): start over from the password.
           onBack();
           return;

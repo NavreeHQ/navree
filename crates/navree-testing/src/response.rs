@@ -232,22 +232,58 @@ impl TestResponse {
         this
     }
 
-    /// The former RFC 9457 assertion, kept for existing tests: asserts an
-    /// error response with `status` like
-    /// [`assert_error(status, None)`](Self::assert_error). Error bodies no
-    /// longer carry a machine-readable code, so `code` is ignored.
+    /// Asserts a JSON error response (see [`assert_error`](Self::assert_error))
+    /// whose machine-readable `code` is `code`.
+    ///
+    /// ```no_run
+    /// # fn demo(response: navree_testing::TestResponse) {
+    /// response
+    ///     .assert_error_code(401, "invalid_credentials")
+    ///     .assert_error(401, "Invalid credentials");
+    /// # }
+    /// ```
     ///
     /// # Panics
     ///
-    /// Like [`assert_error`](Self::assert_error).
+    /// When the response is not an error with `status`, or its body has no
+    /// `code` or another one (the message shows the body).
+    #[track_caller]
+    pub fn assert_error_code(self, status: u16, code: &str) -> Self {
+        let this = self.assert_error(status, None);
+        let body = this.json_value();
+        match body.get("code") {
+            Some(actual) if actual == code => this,
+            Some(actual) => panic!(
+                "expected code \"{code}\", got {}\n{}",
+                compact(actual),
+                this.describe()
+            ),
+            None => panic!(
+                "expected code \"{code}\", but the error body has no `code` (is http.errors.code off?)\n{}",
+                this.describe()
+            ),
+        }
+    }
+
+    /// The former RFC 9457 assertion, kept for existing tests: asserts an
+    /// error response with `status` like
+    /// [`assert_error(status, None)`](Self::assert_error) and, when `code`
+    /// is given, its `code` like
+    /// [`assert_error_code`](Self::assert_error_code).
+    ///
+    /// # Panics
+    ///
+    /// Like [`assert_error_code`](Self::assert_error_code).
     #[deprecated(
         since = "0.1.0",
-        note = "errors use the JSON error shape; use `assert_error(status, message)`"
+        note = "errors use the JSON error shape; use `assert_error(status, message)` or `assert_error_code(status, code)`"
     )]
     #[track_caller]
     pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
-        let _ignored = code.into();
-        self.assert_error(status, None)
+        match code.into() {
+            Some(code) => self.assert_error_code(status, code),
+            None => self.assert_error(status, None),
+        }
     }
 
     /// The status and the (possibly shortened) body, for failure messages.

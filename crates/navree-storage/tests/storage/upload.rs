@@ -159,6 +159,7 @@ async fn upload_rejects_wrong_mime_and_too_large() {
                 "statusCode": 400,
                 "message": ["avatar must be a file of type: image/png, image/jpeg"],
                 "error": "Bad Request",
+                "code": "validation_failed",
                 "errors": {"avatar": ["avatar must be a file of type: image/png, image/jpeg"]},
             })
         );
@@ -180,6 +181,7 @@ async fn upload_rejects_wrong_mime_and_too_large() {
                 "statusCode": 413,
                 "message": "avatar must not be larger than 16384 bytes",
                 "error": "Payload Too Large",
+                "code": "payload_too_large",
             })
         );
         let (status, _) = send(

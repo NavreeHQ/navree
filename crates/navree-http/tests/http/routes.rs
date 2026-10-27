@@ -256,6 +256,7 @@ async fn signed_url_guard_in_the_pipeline() {
         .assert_error(401);
     assert_eq!(body["message"], "Invalid signature.");
     assert_eq!(body["error"], "Unauthorized");
+    assert_eq!(body["code"], "invalid_signature");
     app.get("/verify-email/7?hash=abc").await.assert_error(401);
 
     clock.advance(std::time::Duration::from_secs(61 * 60));

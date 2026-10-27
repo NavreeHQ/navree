@@ -152,7 +152,7 @@ impl Guard for ValidSignature {
             } else {
                 Err(AppError::new(
                     http::StatusCode::UNAUTHORIZED,
-                    "invalid_signature",
+                    crate::codes::INVALID_SIGNATURE,
                     "Invalid signature.",
                 ))
             }

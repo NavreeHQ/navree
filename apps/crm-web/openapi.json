@@ -1851,6 +1851,13 @@
       "HttpError": {
         "description": "The JSON error shape every error response carries (`application/json`).",
         "properties": {
+          "code": {
+            "description": "The machine-readable error code (`not_found`, `validation_failed`, `invalid_credentials`), stable across releases, for front ends to map to a translation key. Left out when `http.errors.code` is false.",
+            "examples": [
+              "not_found"
+            ],
+            "type": "string"
+          },
           "error": {
             "description": "The reason phrase of the status (`Not Found`, `Bad Request`).",
             "type": "string"

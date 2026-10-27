@@ -129,6 +129,7 @@ async fn check_fields_rejects_fields_the_rule_does_not_cover() {
         .send()
         .await
         .assert_error(403, "You may not change these fields: author_id.")
+        .assert_error_code(403, "forbidden_fields")
         .assert_json_path("error", json!("Forbidden"));
 }
 
