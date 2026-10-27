@@ -452,11 +452,13 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
 
 - **Document databases.** The blueprint is public data
   ([`Blueprint::columns`], [`Blueprint::commands`],
-  [`Blueprint::hypertable_definition`], the [`Hypertable`] getters), so a
-  document driver (the ORM's MongoDB crate) can compile it into collection
-  commands: a time-series collection for a hypertable (time field,
-  granularity from the chunk interval, TTL from retention), a JSON-schema
-  validator from the columns, indexes from the index commands.
+  [`Blueprint::hypertable_definition`], the [`Hypertable`] getters, and
+  [`ContinuousAggregate::query`] as an [`AggregateSpec`]), so a document
+  driver (the ORM's MongoDB crate) can compile it into collection commands:
+  a time-series collection for a hypertable (time field, granularity from
+  the chunk interval, TTL from retention), a JSON-schema validator from the
+  columns, indexes from the index commands, a `$group` view for a described
+  aggregate.
 - **The query builder.** The ORM's `time_bucket`, `first` and `last` can
   reuse [`Interval`] and [`Target`].
 - **Framework tables.** Framework crates move their tables to schema

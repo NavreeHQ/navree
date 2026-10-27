@@ -218,8 +218,22 @@ impl<'c> Schema<'c> {
             })
     }
 
+    /// Reports what the database could not do as asked. Logged as a warning
+    /// on PostgreSQL, where TimescaleDB could have done it; elsewhere
+    /// (SQLite in development, MySQL) the fallback is expected, and logged
+    /// as information.
     fn notice(&self, message: String) {
-        tracing::warn!(target: "navree_schema", "{message}");
+        let postgres = self
+            .target
+            .lock()
+            .expect("target lock")
+            .as_ref()
+            .is_some_and(|target| target.dialect() == Dialect::Postgres);
+        if postgres {
+            tracing::warn!(target: "navree_schema", "{message}");
+        } else {
+            tracing::info!(target: "navree_schema", "{message}");
+        }
         if let Some(cx) = MigrationContext::current() {
             cx.notice(message.clone());
         }

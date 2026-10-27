@@ -50,7 +50,7 @@ Inside `create`, `t.if_not_exists()` adds `IF NOT EXISTS` and `t.temporary()` ma
 | `decimal(name, precision, scale)` | `DECIMAL(p, s)` | `DECIMAL(p, s)` | `NUMERIC` |
 | `float`, `double` | `FLOAT(53)`, `DOUBLE PRECISION` | `FLOAT(53)`, `DOUBLE` | `FLOAT`, `DOUBLE` |
 | `boolean` | `BOOLEAN` | `TINYINT(1)` | `TINYINT(1)` |
-| `date`, `time`, `time_tz` | `DATE`, `TIME`, `TIME WITH TIME ZONE` | `DATE`, `TIME(6)` | `DATE`, `TIME` |
+| `date`, `time`, `time_tz` | `DATE`, `TIME WITHOUT TIME ZONE`, `TIME WITH TIME ZONE` | `DATE`, `TIME(6)` | `DATE`, `TIME` |
 | `date_time`, `timestamp` | `TIMESTAMP WITHOUT TIME ZONE` | `DATETIME(6)`, `TIMESTAMP(6)` | `DATETIME` |
 | `date_time_tz`, `timestamp_tz` | `TIMESTAMP WITH TIME ZONE` | `DATETIME(6)`, `TIMESTAMP(6)` | `DATETIME` |
 | `year` | `INTEGER` | `YEAR` | `INTEGER` |
@@ -75,7 +75,7 @@ Column methods return a builder; chain modifiers on it:
 | Modifier | Does |
 |---|---|
 | `.nullable()` | Allows `NULL` (columns are `NOT NULL` otherwise). |
-| `.default(value)` | A default: `0`, `"lead"`, `true`, `None` for `NULL`, a `serde_json::Value`, or SQL with `raw("CURRENT_TIMESTAMP")`. |
+| `.default(value)` | A default: `0`, `"lead"`, `true`, `DefaultValue::Null`, a `serde_json::Value`, or SQL with `raw("CURRENT_TIMESTAMP")`. |
 | `.use_current()` | Defaults to the current date or time. |
 | `.use_current_on_update()` | Sets the current time on every update (MySQL). |
 | `.unsigned()` | Unsigned (MySQL). |

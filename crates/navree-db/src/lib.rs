@@ -7,8 +7,9 @@
 //!   [`Db`] and [`DbOptions`] (section `database`). SQLite connections use
 //!   WAL, `busy_timeout = 5000` and `foreign_keys = ON`; PostgreSQL is
 //!   behind the `postgres` feature. It registers the `database` health
-//!   check and the commands `migrate`, `migrate:rollback`,
-//!   `migrate:fresh [--seed]`, `migrate:status` and `db:seed`.
+//!   check and the commands `migrate`, `migrate:install`,
+//!   `migrate:rollback`, `migrate:reset`, `migrate:refresh`,
+//!   `migrate:fresh`, `migrate:status`, `schema:dump` and `db:seed`.
 //! - [`Uow`] is the unit of work: one per HTTP request (opened by the
 //!   module's [`LayerSlot::Uow`](navree_http::LayerSlot::Uow) layer, taken as
 //!   an extractor), job run or command ([`Db::uow`]). Its transaction opens
@@ -21,8 +22,11 @@
 //!   change events (old and new values) automatically.
 //! - [`MigrationSet`]s are contributed per module and run by the
 //!   [`Migrator`] in dependency order (`after`), recorded in
-//!   `navree_migrations`; each migration runs in a transaction unless it opts
-//!   out.
+//!   `navree_migrations` by batch; each migration runs in a transaction
+//!   unless it opts out. Migrations are written with the schema builder
+//!   ([`navree_schema`], re-exported) or with SeaORM; the migrator steps,
+//!   pretends, rolls back, resets, refreshes, and loads and writes schema
+//!   dumps.
 //! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
 //!   [`create_many`] build test records.
 //! - [`PageQuery`] / [`Page`] / [`paginate`] give offset

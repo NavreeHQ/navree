@@ -8,7 +8,9 @@
 //!   database's structure (`has_table`, `has_column`, `columns`,
 //!   `indexes`, `foreign_keys`, ...), and manages TimescaleDB hypertables,
 //!   policies and continuous aggregates. It runs on any SeaORM connection,
-//!   or [offline](Schema::offline), recording the SQL.
+//!   [offline](Schema::offline) (recording the SQL for a given database),
+//!   or [pretending](Schema::pretending) (reading the database, recording
+//!   what it would change).
 //! - [`Blueprint`] describes a table: every column type, the helpers
 //!   (`id`, `uuid_primary`, `timestamps`, `soft_deletes`, `morphs`, ...),
 //!   indexes and foreign keys (`foreign_id("company_id").constrained()`).
@@ -20,6 +22,9 @@
 //!   get regular tables (with time indexes) and plain views, and a notice.
 //! - SQLite's `ALTER TABLE` limits are handled by rebuilding the table,
 //!   keeping its data, indexes, triggers and constraints.
+//! - [`Schema::dump`] writes the database's schema as an SQL script read
+//!   from its catalogs (`schema:dump`), and [`Schema::load`] runs one,
+//!   cut into statements by [`split_statements`].
 //!
 //! ```
 //! # #[tokio::main(flavor = "current_thread")]
@@ -91,7 +96,7 @@ pub use options::{KeyStrategy, MorphKey, SchemaOptions, TimescaleMode};
 pub use schema::Schema;
 pub use script::split_statements;
 pub use target::{Dialect, Target, Version};
-pub use timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPolicy};
+pub use timescale::{AggregateSpec, Compression, ContinuousAggregate, Hypertable, RefreshPolicy};
 pub use value::{DefaultValue, Expression, raw};
 
 /// The names a migration file uses: `use navree_schema::prelude::*;`.
