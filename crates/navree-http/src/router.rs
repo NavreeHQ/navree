@@ -30,8 +30,7 @@ use crate::controller::ControllerRegistration;
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
 use crate::pipeline::{
-    self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride,
-    X_REQUEST_ID,
+    self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
 use crate::{
     AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
@@ -495,8 +494,17 @@ impl RouteRuntime {
             });
     }
 
-    fn security_entry(&self, parts: &Parts, action: &str, metadata: serde_json::Value) -> AuditEntry {
-        let requester = Requester::of(&parts.headers, &parts.extensions, ClientIp(client_ip(parts)));
+    fn security_entry(
+        &self,
+        parts: &Parts,
+        action: &str,
+        metadata: serde_json::Value,
+    ) -> AuditEntry {
+        let requester = Requester::of(
+            &parts.headers,
+            &parts.extensions,
+            ClientIp(client_ip(parts)),
+        );
         self.requester_entry(&requester, action, metadata)
     }
 
@@ -629,7 +637,11 @@ where
             // A 403 the handler returns itself (an ownership rule, a
             // channel it will not authorize) is a denial no authorizer saw.
             let requester = runtime.security.as_ref().map(|_| {
-                Requester::of(&parts.headers, &parts.extensions, ClientIp(client_ip(&parts)))
+                Requester::of(
+                    &parts.headers,
+                    &parts.extensions,
+                    ClientIp(client_ip(&parts)),
+                )
             });
             let run = async move {
                 match handler.oneshot(Request::from_parts(parts, body)).await {

@@ -165,9 +165,8 @@ impl Controller for NotesController {
                             let _ = resumed.send(Resumed {
                                 current_uow: Uow::current()
                                     .is_some_and(|current| current.same_as(&uow)),
-                                request_id: TelemetryContext::current().and_then(|context| {
-                                    context.request_id().map(str::to_owned)
-                                }),
+                                request_id: TelemetryContext::current()
+                                    .and_then(|context| context.request_id().map(str::to_owned)),
                             });
                         }
                         Ok::<_, AppError>(StatusCode::CREATED)
@@ -355,7 +354,11 @@ async fn uow_completes_even_if_client_disconnects() {
     }
     // The client is gone: the request future has been dropped, and the
     // rest of the request moved to a task on the app's tracker.
-    assert_eq!(s.app.ctx().tracker().len(), 1, "one task finishes the request");
+    assert_eq!(
+        s.app.ctx().tracker().len(),
+        1,
+        "one task finishes the request"
+    );
     gate.proceed.notify_one();
     let resumed = tokio::time::timeout(Duration::from_secs(10), resumed_rx)
         .await

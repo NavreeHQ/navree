@@ -274,9 +274,7 @@ impl Graph {
                     [only] => *only,
                     _ => {
                         let mut exported = providers.iter().copied().filter(|&p| {
-                            self.modules[self.providers[p].module]
-                                .exports
-                                .contains(key)
+                            self.modules[self.providers[p].module].exports.contains(key)
                         });
                         match (exported.next(), exported.next()) {
                             (Some(only), None) => only,
@@ -1082,11 +1080,8 @@ mod tests {
     #[test]
     fn the_locator_map_answers_as_a_scan_of_every_provider_does() {
         let graph = graph();
-        let mut keys: Vec<ProviderKey> = graph
-            .providers
-            .iter()
-            .map(|p| p.def.key.clone())
-            .collect();
+        let mut keys: Vec<ProviderKey> =
+            graph.providers.iter().map(|p| p.def.key.clone()).collect();
         keys.push(ProviderKey::of::<bool>());
         keys.push(ProviderKey::named::<u8>("nine"));
         for key in &keys {

@@ -69,7 +69,9 @@ fn new_counted(title: &str) -> counted::ActiveModel {
 
 /// Inserts, updates (twice: once without a change) and deletes a note.
 async fn write_through(uow: &Uow) -> Uuid {
-    let created = Counted::insert(uow, new_counted("a")).await.expect("insert");
+    let created = Counted::insert(uow, new_counted("a"))
+        .await
+        .expect("insert");
     let mut changed = created.clone().into_active_model();
     changed.body = Set("changed".into());
     let updated = Counted::update(uow, changed).await.expect("update");
@@ -90,7 +92,11 @@ async fn without_observers_events_are_prepared_when_read() {
 
     let before = serialized();
     let id = write_through(&uow).await.to_string();
-    assert_eq!(serialized(), before, "nothing listens, nothing is serialized");
+    assert_eq!(
+        serialized(),
+        before,
+        "nothing listens, nothing is serialized"
+    );
 
     let changes = uow.changes();
     assert!(serialized() > before, "read: the events are prepared");
@@ -119,7 +125,11 @@ async fn without_observers_events_are_prepared_when_read() {
         ],
         "an update that changed nothing records no event"
     );
-    assert!(changes.iter().all(|change| change.entity == "notes" && change.id == id));
+    assert!(
+        changes
+            .iter()
+            .all(|change| change.entity == "notes" && change.id == id)
+    );
     assert_eq!(uow.changes(), changes, "read again, the same events");
     uow.commit().await.expect("commits");
 }
@@ -177,7 +187,9 @@ async fn with_an_observer_events_are_prepared_as_records_are_written() {
     let uow = db.uow(None, None).await;
 
     let before = serialized();
-    Counted::insert(&uow, new_counted("b")).await.expect("insert");
+    Counted::insert(&uow, new_counted("b"))
+        .await
+        .expect("insert");
     assert_eq!(serialized(), before + 1, "serialized as it is written");
     uow.commit().await.expect("commits");
 
