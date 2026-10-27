@@ -50,7 +50,9 @@ pub(crate) fn convert(html: &str, images: &mut ImageSource<'_>) -> Converted {
     for element in [root, body].into_iter().flatten() {
         state = state.enter(element, true);
     }
-    document.style = state.block.clone();
+    // The styles of <html> and <body> are the document's base, under the
+    // engine's defaults for headings, headers and footers.
+    document.style = std::mem::take(&mut state.block);
     let mut walker = Walker {
         images,
         out: Vec::new(),

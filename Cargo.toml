@@ -447,10 +447,6 @@ criterion = { version = "0.8.2", default-features = false, features = ["async_to
 # docx-rs 0.4.22 requires zip 8, affected by RUSTSEC-2026-0367, -0368 and
 # -0369 (fixed in zip 9). This commit moves it to zip 9.0.4 (bokuweb/docx-rs#944).
 docx-rs = { git = "https://github.com/bokuweb/docx-rs", rev = "ad7fede6a7f3b61a097c28d0c39dd04626e44701" }
-# citationberg 0.7.0 (CSL styles, through Typst's hayagriva) requires
-# quick-xml 0.38, affected by RUSTSEC-2026-0194 and -0195 (fixed in 0.41).
-# This commit is 0.7.0 with only that bump (typst/citationberg#44).
-citationberg = { git = "https://github.com/typst/citationberg", rev = "06a591e2f237d25e1dfdedac3f3d1494c496c52d" }
 
 # Keep debug info small: less memory, faster links (many agents build at once).
 [profile.dev]

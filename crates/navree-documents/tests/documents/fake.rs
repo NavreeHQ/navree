@@ -28,7 +28,7 @@ async fn the_fake_renders_any_name_and_records_it() {
         vec!["certificates/classic", "inline"]
     );
     fake.assert_rendered("certificates/classic");
-    fake.assert_rendered("certificates/classic.typ");
+    fake.assert_rendered("certificates/classic.html");
     fake.assert_rendered_with("certificates/classic", |render| render.data["score"] == 98);
     fake.assert_rendered_with("inline", |render| render.locale.as_deref() == Some("ar"));
     fake.assert_not_rendered("reports/audit");
@@ -66,7 +66,7 @@ async fn assert_nothing_rendered_fails_after_a_render() {
 #[tokio::test]
 async fn a_fake_with_templates_knows_which_exist() {
     let fake = DocumentsFake::with_templates(Templates::from_files([
-        ("certificates/classic.typ", "x"),
+        ("certificates/classic.html", "x"),
         ("invoices/show.html", "x"),
     ]));
     let documents = fake.documents();
@@ -79,11 +79,11 @@ async fn a_fake_with_templates_knows_which_exist() {
         documents
             .engine_for(&Render::template("invoices/show"))
             .unwrap(),
-        EngineKind::Chrome
+        EngineKind::Native
     );
     match documents.pdf("reports/audit", json!({})).await {
         Err(DocumentsError::TemplateNotFound { tried, .. }) => {
-            assert_eq!(tried, vec!["reports/audit.typ", "reports/audit.html"]);
+            assert_eq!(tried, vec!["reports/audit.html"]);
         }
         other => panic!("{other:?}"),
     }

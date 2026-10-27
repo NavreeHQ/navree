@@ -12,12 +12,12 @@ pub(crate) fn commands() -> [CommandSpec; 2] {
         CommandSpec::new(
             "documents:render",
             "Render a document template to a PDF file: documents:render <template> \
-             [--data <file.json>] [--locale <tag>] [--engine typst|chrome] [--out <file.pdf>]",
+             [--data <file.json>] [--locale <tag>] [--engine native|chrome] [--out <file.pdf>]",
             |ctx, args| async move { print(render(ctx, args).await) },
         ),
         CommandSpec::new(
             "documents:fonts",
-            "List the font families Typst templates can use",
+            "List the font families the native engine prints with",
             |ctx, args| async move { print(fonts(ctx, args).await) },
         ),
     ]
@@ -41,7 +41,7 @@ pub(crate) struct RenderArgs {
 
 pub(crate) fn parse_render_args(args: &[String]) -> Result<RenderArgs, BoxError> {
     const USAGE: &str = "usage: documents:render <template> [--data <file.json>] \
-                         [--locale <tag>] [--engine typst|chrome] [--out <file.pdf>]";
+                         [--locale <tag>] [--engine native|chrome] [--out <file.pdf>]";
     let mut template = None;
     let mut data = None;
     let mut locale = None;
@@ -79,10 +79,7 @@ pub(crate) fn parse_render_args(args: &[String]) -> Result<RenderArgs, BoxError>
     let template = template.ok_or_else(|| format!("documents:render: name a template; {USAGE}"))?;
     let out = out.unwrap_or_else(|| {
         let base = template.rsplit('/').next().unwrap_or(&template);
-        let base = base
-            .strip_suffix(".typ")
-            .or_else(|| base.strip_suffix(".html"))
-            .unwrap_or(base);
+        let base = base.strip_suffix(".html").unwrap_or(base);
         PathBuf::from(format!("{base}.pdf"))
     });
     Ok(RenderArgs {
@@ -145,7 +142,7 @@ async fn fonts(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
     let families = documents.font_families().await?;
     if families.is_empty() {
         return Ok(
-            "No fonts: documents.typst.bundled_fonts is off and no font directory has fonts".into(),
+            "No fonts: documents.native.bundled_fonts is off and no font directory has fonts".into(),
         );
     }
     Ok(families.join("\n"))
@@ -183,7 +180,7 @@ mod tests {
                 out: "out/c.pdf".into(),
             }
         );
-        let parsed = parse_render_args(&args(&["reports/audit.typ"])).unwrap();
+        let parsed = parse_render_args(&args(&["reports/audit.html"])).unwrap();
         assert_eq!(parsed.out, PathBuf::from("audit.pdf"));
         assert!(parse_render_args(&args(&[])).is_err());
         assert!(parse_render_args(&args(&["a", "b"])).is_err());

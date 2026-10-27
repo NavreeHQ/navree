@@ -3,19 +3,20 @@
 //! configuration keys, commands, the job and the constants. A rename fails
 //! this file.
 
-#![cfg(all(feature = "typst", feature = "chrome", feature = "docx"))]
+#![cfg(all(feature = "native", feature = "chrome", feature = "docx"))]
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use navree_documents::docx::{Align, Image, Paragraph, Run, Table};
+use navree_documents::native;
 use navree_documents::{
     CHROME_ENV, ChromeEngine, ChromeOptions, DOCUMENT_ORIGIN, DOCX_CONTENT_TYPE, DocumentStatus,
     Documents, DocumentsError, DocumentsFake, DocumentsModule, DocumentsOptions, Docx, DocxFile,
     Download, EngineKind, FAILED_SUFFIX, FONTS_STYLESHEET, FakeEngine, HTML_EXTENSION, Margins,
     ModuleBuilderDocumentsExt, PDF_CONTENT_TYPE, Pages, Paper, Pdf, PdfEngine, Position,
     PrintOptions, QueuedDocument, QueuedRender, RENDER_FAILED_MESSAGE, Render, RenderDocument,
-    Stamp, StoredDocument, TYPST_EXTENSION, TemplateSource, Templates, TypstEngine, TypstOptions,
+    NativeEngine, NativeOptions, PdfDocument, Stamp, StoredDocument, TemplateSource, Templates,
     is_rtl,
 };
 use navree_kernel::ModuleBuilder;
@@ -34,6 +35,7 @@ async fn documents_methods(documents: &Documents, render: Render) -> Result<(), 
     let _: Option<uuid::Uuid> = queued.operation_id;
     let _: DocumentStatus = documents.status(&queued).await?;
     let _: Vec<String> = documents.font_families().await?;
+    let _: Pdf = documents.render_document(&PdfDocument::new()).await?;
     documents.shutdown().await;
     let _ = documents.disk()?;
     let _: &Templates = documents.templates();
@@ -66,7 +68,7 @@ async fn behind_an_operation(
 #[allow(dead_code)]
 fn embeds(m: &mut ModuleBuilder) {
     m.document_files([
-        ("certificates/course.typ", &b"x"[..]),
+        ("certificates/course.html", &b"x"[..]),
         ("images/seal.png", &b"x"[..]),
     ]);
 }
@@ -76,10 +78,10 @@ fn the_documented_api_exists() {
     let _ = DocumentsModule::for_root(DocumentsOptions::default());
     let _ = DocumentsModule::from_config();
 
-    let templates = Templates::new(vec![PathBuf::from("resources/documents")], [("a.typ", "x")]);
+    let templates = Templates::new(vec![PathBuf::from("resources/documents")], [("a.html", "x")]);
     let documents = Documents::new(templates.clone())
-        .default_engine(EngineKind::Typst)
-        .with_engine(Arc::new(TypstEngine::new(templates.clone())));
+        .default_engine(EngineKind::Native)
+        .with_engine(Arc::new(NativeEngine::new(templates.clone())));
     let _ = Documents::from_options(&DocumentsOptions::default(), templates.clone());
     let _ = documents;
 
@@ -91,14 +93,10 @@ fn the_documented_api_exists() {
         .print(PrintOptions::letter());
     assert_eq!(render.direction(), "rtl");
     assert_eq!(render.name(), "certificates/course");
-    assert!(matches!(
-        Render::typst("x").source,
-        TemplateSource::Typst(_)
-    ));
     assert!(matches!(Render::html("x").source, TemplateSource::Html(_)));
     assert!(matches!(render.source, TemplateSource::Template(_)));
     assert!(is_rtl("ar-EG"));
-    assert_eq!((TYPST_EXTENSION, HTML_EXTENSION), ("typ", "html"));
+    assert_eq!(HTML_EXTENSION, "html");
 
     let print = PrintOptions::a4()
         .landscape()
@@ -110,11 +108,82 @@ fn the_documented_api_exists() {
 
     let chrome = ChromeEngine::new(templates.clone(), ChromeOptions::default());
     let _ = chrome.executable();
-    let _ = TypstEngine::new(templates)
+    let native = NativeEngine::new(templates.clone())
         .bundled_fonts(true)
         .font_dirs(vec![])
-        .packages_dir(None)
+        .print(PrintOptions::a4())
+        .clock(Arc::new(navree_contracts::SystemClock))
         .timeout(std::time::Duration::from_secs(60));
+    let _ = NativeEngine::with_options(templates, NativeOptions::default());
+    let _: Vec<String> = native.font_families();
+    let _: &NativeOptions = native.options();
+
+    let built: Pdf = PdfDocument::new()
+        .title("Quarterly audit report")
+        .author("Acme")
+        .locale("en")
+        .font("Noto Serif")
+        .font_size(10.5)
+        .paper(Paper::A4)
+        .landscape()
+        .margins(Margins::all(20.0))
+        .header(native::Paragraph::new().run(native::Run::title()).align(native::Align::End))
+        .footer_page_numbers()
+        .heading(1, "Report")
+        .paragraph(
+            native::Paragraph::new()
+                .text("a")
+                .bold("b")
+                .italic("c")
+                .link("d", "https://example.com")
+                .run(
+                    native::Run::new("e")
+                        .size(9.0)
+                        .color("C00000")
+                        .underline()
+                        .strike()
+                        .font("Noto Sans Mono"),
+                )
+                .line_break()
+                .align(native::Align::Justify),
+        )
+        .bullets(["x"])
+        .numbered(["y"])
+        .list(native::List::new(native::ListKind::LowerRoman).start(3).item("z"))
+        .table(
+            native::Table::new()
+                .header(["a", "b"])
+                .row([
+                    native::Cell::new("1").colspan(1).align(native::Align::End),
+                    native::Cell::new("2")
+                        .valign(native::VAlign::Middle)
+                        .background(native::Color::rgb(0xF2, 0xF4, 0xF7)),
+                ])
+                .widths([1.0, 1.0])
+                .borders(native::Borders::Grid)
+                .padding_mm(1.5, 2.0),
+        )
+        .image(
+            native::Image::new(
+                std::fs::read(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/templates/images/acme-logo.png"
+                ))
+                .unwrap(),
+            )
+            .width_mm(40.0)
+            .alt("Acme"),
+        )
+        .rule()
+        .space_mm(5.0)
+        .page_break()
+        .paragraph(native::Paragraph::from("End").direction(native::Direction::Ltr))
+        .build()
+        .unwrap();
+    assert!(built.text().unwrap().contains("Report"));
+    let _ = [native::Borders::Rows, native::Borders::None];
+    let _ = [native::ListKind::Bullets, native::ListKind::Decimal];
+    let _ = [native::VAlign::Top, native::VAlign::Bottom];
 
     assert_eq!(CHROME_ENV, "NAVREE_BROWSER_CHROME");
     assert_eq!(DOCUMENT_ORIGIN, "https://documents.navree.invalid");
@@ -210,7 +279,7 @@ fn the_documented_api_exists() {
     let fake = DocumentsFake::new().fail("reports/audit", "broken");
     let _ = DocumentsFake::with_templates(Templates::default());
     let _: Documents = fake.documents();
-    let _: FakeEngine = fake.engine(EngineKind::Typst);
+    let _: FakeEngine = fake.engine(EngineKind::Native);
     let _: Vec<Render> = fake.rendered();
     let _: Vec<String> = fake.rendered_names();
     let _: Vec<QueuedRender> = fake.queued();
@@ -222,13 +291,13 @@ fn the_documented_api_exists() {
 fn every_documented_configuration_key_deserializes() {
     let options: DocumentsOptions = serde_json::from_value(json!({
         "templates": ["resources/documents"],
-        "engine": "typst",
+        "engine": "native",
         "disk": "documents",
-        "typst": {
+        "native": {
             "bundled_fonts": true,
             "font_dirs": ["resources/fonts"],
-            "packages_dir": "resources/typst-packages",
             "timeout_secs": 60,
+            "print": {"paper": "a4", "margin": {"top": 20, "right": 20, "bottom": 20, "left": 20}},
         },
         "chrome": {
             "path": "/usr/bin/chromium",
@@ -250,7 +319,7 @@ fn every_documented_configuration_key_deserializes() {
     }))
     .unwrap();
     assert_eq!(options.disk.as_deref(), Some("documents"));
-    let _: TypstOptions = options.typst;
+    let _: NativeOptions = options.native;
     assert_eq!(options.chrome.pool_size, 2);
 }
 
@@ -262,7 +331,7 @@ fn errors_and_statuses() {
             tried: vec![],
         },
         DocumentsError::Template {
-            file: "x.typ".into(),
+            file: "x.html".into(),
             line: Some(1),
             column: Some(1),
             message: "m".into(),

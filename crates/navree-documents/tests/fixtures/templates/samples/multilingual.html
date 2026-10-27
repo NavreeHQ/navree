@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/_navree/fonts.css">
+  <style>
+    @page { size: A4; margin: 20mm; }
+    body { font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Devanagari"; }
+  </style>
+</head>
+<body style="font-size: 11pt">
+  <header><p style="text-align: left; color: #6b7280">Acme Academy · {{ issued }}</p></header>
+
+  <h1 style="color: #14532d">شهادة إتمام</h1>
+  <p style="text-align: justify">تشهد <strong>أكاديمية أكمي</strong> بأن <strong>{{ arabic.name }}</strong> قد أتمت دورة <em>{{ arabic.course }}</em> بنجاح، وحصلت على درجة {{ arabic.score }} من 100. اشتملت الدورة على 12 وحدة باللغتين العربية والإنجليزية (English)، وتضمنت تدريباً عملياً على إدارة كلمات المرور والمصادقة متعددة العوامل.</p>
+
+  <hr>
+
+  <h2 dir="rtl">תעודת סיום</h2>
+  <p dir="rtl">אנו מאשרים כי <strong>{{ hebrew.name }}</strong> השלימה בהצלחה את הקורס <em>{{ hebrew.course }}</em> וקיבלה ציון {{ hebrew.score }}. הקורס כלל 12 יחידות לימוד ותרגול מעשי.</p>
+
+  <hr>
+
+  <h2 dir="ltr">प्रमाण पत्र</h2>
+  <p dir="ltr">यह प्रमाणित किया जाता है कि <strong>{{ hindi.name }}</strong> ने <em>{{ hindi.course }}</em> पाठ्यक्रम सफलतापूर्वक पूरा किया और 100 में से {{ hindi.score }} अंक प्राप्त किए।</p>
+
+  <h3>النتائج</h3>
+  <table>
+    <thead><tr><th>الاسم</th><th>اللغة</th><th align="end">الدرجة</th></tr></thead>
+    <tbody>
+      <tr><td>{{ arabic.name }}</td><td>العربية</td><td align="end">{{ arabic.score }}</td></tr>
+      <tr><td dir="rtl">{{ hebrew.name }}</td><td>עברית</td><td align="end">{{ hebrew.score }}</td></tr>
+      <tr><td dir="ltr">{{ hindi.name }}</td><td>हिन्दी</td><td align="end">{{ hindi.score }}</td></tr>
+    </tbody>
+  </table>
+
+  <footer><p style="text-align: center">صفحة <span class="pageNumber"></span> من <span class="totalPages"></span></p></footer>
+</body>
+</html>
