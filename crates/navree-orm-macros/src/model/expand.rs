@@ -147,6 +147,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         KeyType::UuidV7 => quote!(#krate::KeyKind::UuidV7),
         KeyType::UuidV4 => quote!(#krate::KeyKind::UuidV4),
         KeyType::Ulid => quote!(#krate::KeyKind::Ulid),
+        KeyType::ObjectId => quote!(#krate::KeyKind::ObjectId),
         KeyType::Manual => quote!(#krate::KeyKind::Manual),
     };
     let mut meta = quote! {
@@ -170,6 +171,9 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     }
     if let Some(connection) = &model.connection {
         meta = quote!(#meta.connection(#connection));
+    }
+    if let Some(driver) = &model.driver {
+        meta = quote!(#meta.driver(#driver));
     }
     if let Some(per_page) = &model.per_page {
         meta = quote!(#meta.per_page(#per_page));

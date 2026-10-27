@@ -235,3 +235,89 @@ fn global_scopes_come_from_the_attribute() {
     assert_eq!(Article::global_scopes().len(), 2);
     assert!(Deal::global_scopes().is_empty());
 }
+
+/// A stand-in for the MongoDB driver crate's `ObjectId`: the derive knows
+/// the key type by its name.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+struct ObjectId(u32);
+
+impl navree_orm::Field for ObjectId {
+    fn to_value(&self) -> Value {
+        Value::BigInt(Some(i64::from(self.0)))
+    }
+
+    fn null() -> Value {
+        Value::BigInt(None)
+    }
+
+    fn from_sql(
+        row: &navree_db::sea_orm::QueryResult,
+        column: &str,
+    ) -> Result<Self, navree_orm::FieldError> {
+        <u32 as navree_orm::Field>::from_sql(row, column).map(ObjectId)
+    }
+
+    fn from_value(value: Value) -> Result<Self, navree_orm::FieldError> {
+        <u32 as navree_orm::Field>::from_value(value).map(ObjectId)
+    }
+
+    fn type_name() -> std::borrow::Cow<'static, str> {
+        "ObjectId".into()
+    }
+}
+
+impl navree_orm::PrimaryKey for ObjectId {
+    fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
+    fn generate(kind: KeyKind) -> Option<Self> {
+        (kind == KeyKind::ObjectId).then_some(ObjectId(7))
+    }
+
+    fn empty() -> Self {
+        ObjectId(0)
+    }
+
+    fn to_key_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+/// A model on a document store: its key is the document's `_id`.
+#[derive(navree_orm::Model, Clone, Debug, Default, serde::Serialize)]
+#[model(collection = "audit_events", driver = "mongodb", timestamps)]
+struct AuditEvent {
+    id: ObjectId,
+    action: String,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+}
+
+/// On MongoDB a key named otherwise keeps its column when `primary_key`
+/// names it, and a field `id` with a column of its own keeps that column.
+#[derive(navree_orm::Model, Clone, Debug, Default, serde::Serialize)]
+#[model(driver = "mongodb", primary_key = "code", key_type = "manual")]
+struct Currency {
+    code: String,
+    #[model(column = "display")]
+    id: String,
+}
+
+#[test]
+fn document_models_declare_their_collection_driver_and_object_id_key() {
+    let meta = AuditEvent::meta();
+    assert_eq!(meta.table(), "audit_events");
+    assert_eq!(meta.driver_name(), Some("mongodb"));
+    assert_eq!(meta.key_column(), "_id", "the field `id` is stored as `_id`");
+    assert_eq!(meta.key_kind(), KeyKind::ObjectId);
+    assert_eq!(AuditEvent::ID.name(), "_id");
+    assert_eq!(meta.column("_id").unwrap().field(), "id");
+    let event = AuditEvent::default();
+    assert!(navree_orm::PrimaryKey::is_empty(&event.key()));
+
+    assert_eq!(Currency::meta().key_column(), "code");
+    assert_eq!(Currency::ID.name(), "display");
+    assert_eq!(Currency::meta().key_kind(), KeyKind::Manual);
+    assert_eq!(Deal::meta().driver_name(), None, "SQL models declare none");
+}

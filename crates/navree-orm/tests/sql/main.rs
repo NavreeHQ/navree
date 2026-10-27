@@ -250,6 +250,25 @@ fn raw_fragments_and_operators() {
     insta::assert_snapshot!(query(Deal::query().where_(Deal::TITLE.op("=>", "x"))));
 }
 
+/// A document store's own filter (`Where::Native`) never reaches SQL: every
+/// dialect refuses it, naming the store it belongs to.
+#[test]
+fn native_document_filters_are_refused() {
+    let native = navree_orm::ir::NativeFilter::new("mongodb", "{ status: 'open' }");
+    let builder = Company::query().where_(Filter::from(navree_orm::ir::Where::Native(native)));
+    for dialect in DIALECTS {
+        let error = builder.to_sql(dialect).unwrap_err();
+        assert!(
+            matches!(&error, navree_orm::OrmError::Unsupported { feature, .. } if feature == "a mongodb filter"),
+            "{dialect}: {error}"
+        );
+        assert_eq!(
+            error.to_string(),
+            format!("a mongodb filter is not supported on {}", dialect.name())
+        );
+    }
+}
+
 /// A raw fragment keeps its own grouping: bare when it is the whole
 /// condition, parenthesized beside other conditions and under `NOT`, so an
 /// `OR` inside it never regroups the caller's conditions.
