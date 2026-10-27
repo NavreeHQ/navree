@@ -8,6 +8,7 @@ use navree::config::ConfigSources;
 use navree::crypto::generate_key;
 use navree::db::Db;
 use navree::mail::{Mailer, Message};
+use navree::queue::Queue;
 use navree::testing::{TempDirGuard, TestApp, TestRequest, temp_sqlite_url};
 use navree::workspace::{Members, NewWorkspace, Workspace, WorkspaceRole, Workspaces};
 use serde_json::{Value, json};
@@ -28,6 +29,8 @@ pub fn sources() -> (ConfigSources, TempDirGuard) {
         .set("http.per_ip_rate_limit", Value::Null)
         .set("mail.transport", "array")
         .set("billing.provider", "fake")
+        // No `serve` process to relay broadcasts to.
+        .set("realtime.relay_url", "")
         .set("observe.metrics", false)
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1);
@@ -48,12 +51,17 @@ pub async fn user(app: &TestApp, name: &str, email: &str) -> User {
         .expect("the account is created")
 }
 
-/// Signs `email` in with the password: the access token.
+/// Signs `email` in with [`PASSWORD`]: the access token.
 pub async fn sign_in(app: &TestApp, email: &str) -> String {
+    sign_in_with(app, email, PASSWORD).await
+}
+
+/// Signs `email` in with `password`: the access token.
+pub async fn sign_in_with(app: &TestApp, email: &str, password: &str) -> String {
     let body = app
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": email, "password": PASSWORD }))
+        .json(&json!({ "email": email, "password": password }))
         .send()
         .await
         .assert_status(200)
@@ -102,8 +110,14 @@ pub fn in_workspace(request: TestRequest, token: &str, slug: &str) -> TestReques
     request.bearer(token).header("x-workspace", slug)
 }
 
-/// Every message the app sent so far.
+/// Every message the app sent so far. Mail goes through the queue, so the
+/// pending jobs run first.
 pub async fn sent_mail(app: &TestApp) -> Vec<Message> {
+    app.get::<Queue>()
+        .await
+        .run_pending()
+        .await
+        .expect("the queued jobs run");
     app.get::<Mailer>()
         .await
         .array_transport()

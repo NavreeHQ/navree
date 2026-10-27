@@ -3,8 +3,8 @@
 mod support;
 
 use serde_json::json;
-use support::{boot, in_workspace, sign_in, sources};
-use {{ crate_name }}::seed::{DEMO_MEMBER, DEMO_OWNER, DEMO_WORKSPACE};
+use support::{boot, in_workspace, sign_in_with, sources};
+use {{ crate_name }}::seed::{DEMO_MEMBER, DEMO_OWNER, DEMO_PASSWORD, DEMO_WORKSPACE};
 
 #[test]
 fn module_graph_is_valid() {
@@ -60,7 +60,7 @@ async fn the_demo_seeder_creates_the_demo_workspace() {
     // Seeding twice changes nothing.
     app.run_command("db:seed", &["demo"]).await.expect("db:seed");
 
-    let owner = sign_in(&app, DEMO_OWNER).await;
+    let owner = sign_in_with(&app, DEMO_OWNER, DEMO_PASSWORD).await;
     app.client()
         .get("/api/workspaces")
         .bearer(&owner)
@@ -81,7 +81,7 @@ async fn the_demo_seeder_creates_the_demo_workspace() {
         .send()
         .await
         .assert_status(200);
-    let member = sign_in(&app, DEMO_MEMBER).await;
+    let member = sign_in_with(&app, DEMO_MEMBER, DEMO_PASSWORD).await;
     app.client()
         .get("/admin/api/resources")
         .bearer(&member)
