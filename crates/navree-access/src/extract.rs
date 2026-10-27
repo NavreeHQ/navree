@@ -169,6 +169,23 @@ where
     E: EntityTrait + Subject,
     A: ActionMarker,
 {
+    /// Checks action `A` on `model` with `ability` outside a route (in an
+    /// agent's tool, a job or a service): the record, as conditions see it
+    /// ([`record_json`](crate::record_json)), or a 403 when `ability`
+    /// does not allow `A` on it.
+    pub fn check(model: E::Model, ability: Arc<Ability>) -> Result<Self, AppError> {
+        let record = crate::subject::record_json(&model);
+        if !ability.can(A::NAME, E::SUBJECT, Some(&record)) {
+            return Err(AppError::forbidden());
+        }
+        Ok(Self {
+            model: Arc::new(model),
+            record: Arc::new(record),
+            ability,
+            _action: PhantomData,
+        })
+    }
+
     /// The model.
     pub fn into_inner(self) -> E::Model {
         Arc::try_unwrap(self.model).unwrap_or_else(|shared| (*shared).clone())

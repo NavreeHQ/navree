@@ -119,6 +119,7 @@ navree list                                 # every command of the app
 | A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |
 | A gRPC API (tonic services, `.proto` files, gRPC-Web, Connect), calling another gRPC service | `navree-grpc` |
 | Tools, resources or prompts for Claude, ChatGPT, Cursor and other MCP clients (`#[mcp_server]`, `/mcp`, `mcp:serve`) | `navree-mcp` |
+| AI features: summaries, drafts, extraction, an assistant that calls your services, answers from your own data, embeddings and vector search | `navree-ai` |
 
 ## Common mistakes
 

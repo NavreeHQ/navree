@@ -74,6 +74,7 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "make/notification.rs",
     "make/policy.rs",
     "make/command.rs",
+    "make/agent.rs",
     "make/test.rs",
     "make/mcp.rs",
 ];
