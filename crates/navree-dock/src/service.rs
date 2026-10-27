@@ -666,16 +666,28 @@ mod tests {
         assert_eq!(postgres_major("pgvector/pgvector:0.8.0-pg16"), Some(16));
         assert_eq!(postgres_major("postgres:latest"), None);
         assert_eq!(postgres_major("postgres"), None);
-        assert_eq!(postgres_major("timescale/timescaledb:2.31.0-pg17"), Some(17));
-        assert_eq!(postgres_major("timescale/timescaledb:latest-pg18"), Some(18));
+        assert_eq!(
+            postgres_major("timescale/timescaledb:2.31.0-pg17"),
+            Some(17)
+        );
+        assert_eq!(
+            postgres_major("timescale/timescaledb:latest-pg18"),
+            Some(18)
+        );
         assert_eq!(postgres_major("timescale/timescaledb-ha:pg16"), Some(16));
     }
 
     #[test]
     fn image_repositories_and_timescaledb_images() {
         assert_eq!(image_repository("postgres:17"), "postgres");
-        assert_eq!(image_repository("localhost:5000/postgres:16"), "localhost:5000/postgres");
-        assert_eq!(image_repository("localhost:5000/postgres"), "localhost:5000/postgres");
+        assert_eq!(
+            image_repository("localhost:5000/postgres:16"),
+            "localhost:5000/postgres"
+        );
+        assert_eq!(
+            image_repository("localhost:5000/postgres"),
+            "localhost:5000/postgres"
+        );
         assert_eq!(image_repository("redis@sha256:abc"), "redis");
         assert!(has_timescaledb("timescale/timescaledb:2.31.0-pg17"));
         assert!(has_timescaledb("timescale/timescaledb-ha:pg17"));
@@ -683,7 +695,9 @@ mod tests {
         assert!(!has_timescaledb("postgres:17"));
         assert!(!has_timescaledb("postgis/postgis:17-3.5"));
         assert!(is_timescaledb_image("timescale/timescaledb:2.31.0-pg17"));
-        assert!(is_timescaledb_image("docker.io/timescale/timescaledb:latest-pg17"));
+        assert!(is_timescaledb_image(
+            "docker.io/timescale/timescaledb:latest-pg17"
+        ));
         assert!(!is_timescaledb_image("timescale/timescaledb-ha:pg17"));
     }
 

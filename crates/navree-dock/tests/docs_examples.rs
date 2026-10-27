@@ -287,8 +287,9 @@ fn the_getting_started_output() {
     let lines: Vec<&str> = printed.lines().collect();
     assert_eq!(lines[0], "Starting crm-api services with docker");
     assert!(
-        lines[1]
-            .starts_with("  postgres  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432  ready in "),
+        lines[1].starts_with(
+            "  postgres  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432  ready in "
+        ),
         "{printed}"
     );
     assert!(
