@@ -34,6 +34,7 @@ Navree::app()
     .module(HttpClientModule::from_config())  // metadata, discovery, key sets
     .module(DatabaseModule::from_config())
     .module(CacheModule::from_config())       // states, used assertions, codes
+    .module(AccessModule::for_root(AccessOptions::default())) // `sso.manage`, workspace roles
     .module(AuthModule::from_config())
     .module(WorkspaceModule::from_config())
     .module(SsoModule::from_config())         // section `sso`
