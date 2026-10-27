@@ -95,6 +95,10 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view"]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
+    // Time zones: zones, local days, send windows, holidays; the
+    // `CurrentZone` extractor reads the request (navree-http) and collects
+    // zone sources (navree-contracts) from workspaces and apps.
+    rule("navree-time", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
@@ -103,7 +107,9 @@ const HIERARCHY: &[Rule] = &[
     // the private channel `operations.{id}` (realtime) and schedule their
     // watchdog (schedule, same layer; schedule never depends on queue).
     rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule"]),
-    rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
+    // Schedule: `in_zone` and `per_workspace_local` evaluate cron
+    // expressions on local clocks (navree-time).
+    rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
     // The UI kit of the server-rendered tools: templates through navree-view,
@@ -138,6 +144,8 @@ const HIERARCHY: &[Rule] = &[
         // `navree_workspace::testing` (feature `testing`): isolation suites
         // on navree-testing's TestApp.
         "navree-testing",
+        // Workspace time zones and countries, and its `dyn ZoneSource`.
+        "navree-time",
     ]),
     // Redis: the shared connections and the Redis drivers of the cache,
     // the queue, sessions and the real-time backplane (ecosystem build
@@ -333,6 +341,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-mail",
     "navree-realtime",
     "navree-storage",
+    "navree-time",
     "navree-session",
     "navree-validation",
     "navree-queue",

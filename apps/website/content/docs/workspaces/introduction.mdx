@@ -47,7 +47,7 @@ The migration set `workspace` runs after `auth` and creates three tables, plus t
 
 | Table | Columns |
 |---|---|
-| `workspaces` | `id`, `name`, `slug` (unique), `owner_id`, `organization_id`, `created_at`, `updated_at` |
+| `workspaces` | `id`, `name`, `slug` (unique), `owner_id`, `organization_id`, `timezone`, `country`, `created_at`, `updated_at` |
 | `workspace_members` | `id`, `workspace_id` (cascades on delete), `user_id`, `role`, `partition_scope`, `created_at`, `updated_at`; one row per workspace and user |
 | `workspace_invitations` | `id`, `workspace_id` (cascades on delete), `email`, `role`, `token_hash` (unique), `invited_by`, `expires_at`, `accepted_at`, `accepted_by`, `created_at` |
 
@@ -195,7 +195,7 @@ Environment variables follow the usual mapping (`APP_WORKSPACE__HEADER=X-Team`).
 
 | Service | Methods |
 |---|---|
-| `Workspaces` | `create(&uow, owner, NewWorkspace)`, `rename`, `for_user(user)`, `find`, `find_by_slug`, `resolve(slug_or_id)`, `membership`, `transfer_ownership`, `delete`, `enter`, `migrate`, `all` |
+| `Workspaces` | `create(&uow, owner, NewWorkspace)`, `rename`, `set_time_zone(&uow, id, timezone, country)`, `for_user(user)`, `find`, `find_by_slug`, `resolve(slug_or_id)`, `membership`, `transfer_ownership`, `delete`, `enter`, `migrate`, `all` |
 | `Members` | `list(workspace)`, `find`, `add(&uow, workspace, user, role)`, `change_role`, `remove` |
 | `Invitations` | `invite(&uow, workspace, email, role, invited_by)`, `accept(&uow, token, user)`, `find_by_token`, `pending`, `revoke`, `prune_expired` |
 
@@ -217,9 +217,10 @@ Unless `workspace.routes` is `false`, the module mounts these routes under the A
 | Route | Who |
 |---|---|
 | `GET /api/workspaces` | The caller's workspaces, each with their role |
-| `POST /api/workspaces` `{name, slug?}` | Anyone; 201, the caller becomes the owner |
+| `POST /api/workspaces` `{name, slug?, timezone?, country?}` | Anyone; 201, the caller becomes the owner |
 | `GET /api/workspaces/{workspace}` | Members |
 | `PATCH /api/workspaces/{workspace}` `{name}` | `workspace.update` |
+| `PUT /api/workspaces/{workspace}/time-zone` `{timezone, country}` | `workspace.update` |
 | `DELETE /api/workspaces/{workspace}` | `workspace.delete` |
 | `POST /api/workspaces/{workspace}/transfer` `{user_id}` | `workspace.transfer` |
 | `POST /api/workspaces/{workspace}/leave` | Members; 409 for the owner |
@@ -240,10 +241,14 @@ A workspace comes back as:
   "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   "organization_id": null,
   "role": "owner",
+  "timezone": "Asia/Kolkata",
+  "country": "IN",
   "created_at": "2026-10-26T09:00:00Z",
   "updated_at": "2026-10-26T09:00:00Z"
 }
 ```
+
+`timezone` is an IANA zone, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`), and `country` an ISO 3166-1 alpha-2 code; both are optional, and `PUT .../time-zone` replaces both (`null` clears one). An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. They give the workspace's requests and per-workspace schedules their zone: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
 
 Lists are `{"data": [...]}`. The routes are in the OpenAPI document under the `Workspaces` tag. Set `workspace.routes = false` to write your own with the services.
 

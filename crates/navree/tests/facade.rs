@@ -52,6 +52,7 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::mail::MailModule, MailModule>());
     assert!(same::<navree::realtime::RealtimeModule, RealtimeModule>());
     assert!(same::<navree::storage::StorageModule, StorageModule>());
+    assert!(same::<navree::time::TimeModule, TimeModule>());
     // L4
     assert!(same::<navree::session::SessionModule, SessionModule>());
     assert!(same::<navree::validation::ValidationModule, ValidationModule>());
@@ -158,6 +159,13 @@ fn prelude_brings_the_everyday_types() {
         OrgRepo<DummyEntity>,
         navree::workspace::OrgRepo<DummyEntity>,
     >());
+    // Time zones.
+    assert!(same::<CurrentZone, navree::time::CurrentZone>());
+    assert!(same::<Zone, navree::time::Zone>());
+    assert!(same::<LocalDay, navree::time::LocalDay>());
+    assert!(same::<DayRange, navree::time::DayRange>());
+    assert!(same::<SendWindow, navree::time::SendWindow>());
+    assert!(same::<WithZone<u8>, navree::time::WithZone<u8>>());
     for (marker, name) in [
         (TypeId::of::<Read>(), Read::NAME),
         (TypeId::of::<Create>(), Create::NAME),

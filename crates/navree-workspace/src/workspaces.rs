@@ -1,18 +1,21 @@
 //! [`Workspaces`]: create, rename, list, transfer and delete workspaces.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
+use navree_contracts::ZoneOwner;
 use navree_db::{Repo, Uow};
+use navree_time::Zone;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
+    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Member, Workspace, member, organization_member, workspace};
+use crate::entity::{Member, Workspace, member, organization, organization_member, workspace};
 use crate::events::{MemberAdded, OwnershipTransferred, WorkspaceCreated, WorkspaceDeleted};
 use crate::grants::{org_grant, org_selector, reached};
 use crate::org_role::SCOPE_ALL;
@@ -145,6 +148,8 @@ impl Workspaces {
                 slug: Set(slug.clone()),
                 owner_id: Set(owner),
                 organization_id: Set(None),
+                timezone: Set(None),
+                country: Set(None),
                 created_at: Set(now),
                 updated_at: Set(now),
             },
@@ -201,6 +206,98 @@ impl Workspaces {
         row.name = Set(name);
         row.updated_at = Set(self.core.now());
         Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+    }
+
+    /// Sets the time zone and country of workspace `id` (`None` clears
+    /// one). The zone is any IANA name, stored under its current name
+    /// (`Asia/Calcutta` is stored as `Asia/Kolkata`); the country is an ISO
+    /// 3166-1 alpha-2 code, stored upper-case. An unknown zone is a 400 on
+    /// `timezone`, an unknown country a 400 on `country`.
+    ///
+    /// navree-time reads both: a request in this workspace (and every job
+    /// run for it) uses the zone, else the country's primary zone, else the
+    /// app's default zone.
+    pub async fn set_time_zone(
+        &self,
+        uow: &Uow,
+        id: Uuid,
+        timezone: Option<&str>,
+        country: Option<&str>,
+    ) -> Result<Workspace, WorkspaceError> {
+        let (timezone, country) = check_time_zone(timezone, country)?;
+        let current = self.core.workspace_in(&*uow.tx().await?, id).await?;
+        let mut row = current.into_active_model();
+        row.timezone = Set(timezone);
+        row.country = Set(country);
+        row.updated_at = Set(self.core.now());
+        Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+    }
+
+    /// Every workspace's id, time zone and country (for navree-time), with
+    /// [`zone_owner`](Self::zone_owner)'s inheritance.
+    pub(crate) async fn zone_owners(&self) -> Result<Vec<ZoneOwner>, WorkspaceError> {
+        self.zone_rows(None).await
+    }
+
+    /// Workspace `id`'s time zone and country (for navree-time). With
+    /// organizations on, a workspace with neither inherits its
+    /// organization's.
+    pub(crate) async fn zone_owner(&self, id: Uuid) -> Result<Option<ZoneOwner>, WorkspaceError> {
+        Ok(self.zone_rows(Some(id)).await?.pop())
+    }
+
+    async fn zone_rows(&self, id: Option<Uuid>) -> Result<Vec<ZoneOwner>, WorkspaceError> {
+        type Row = (Uuid, Option<String>, Option<String>, Option<Uuid>);
+        let conn = self.core.db.reader().await;
+        let mut query = workspace::Entity::find()
+            .select_only()
+            .column(workspace::Column::Id)
+            .column(workspace::Column::Timezone)
+            .column(workspace::Column::Country)
+            .column(workspace::Column::OrganizationId);
+        if let Some(id) = id {
+            query = query.filter(workspace::Column::Id.eq(id));
+        }
+        let rows: Vec<Row> = query.into_tuple().all(&conn).await?;
+        let unset = |value: &Option<String>| value.as_deref().is_none_or(|v| v.trim().is_empty());
+        let inheriting: HashSet<Uuid> = if self.core.config.organizations.enabled {
+            rows.iter()
+                .filter(|(_, zone, country, _)| unset(zone) && unset(country))
+                .filter_map(|(_, _, _, organization)| *organization)
+                .collect()
+        } else {
+            HashSet::new()
+        };
+        let organizations: HashMap<Uuid, (Option<String>, Option<String>)> =
+            if inheriting.is_empty() {
+                HashMap::new()
+            } else {
+                organization::Entity::find()
+                    .select_only()
+                    .column(organization::Column::Id)
+                    .column(organization::Column::Timezone)
+                    .column(organization::Column::Country)
+                    .filter(organization::Column::Id.is_in(inheriting))
+                    .into_tuple::<(Uuid, Option<String>, Option<String>)>()
+                    .all(&conn)
+                    .await?
+                    .into_iter()
+                    .map(|(id, zone, country)| (id, (zone, country)))
+                    .collect()
+            };
+        Ok(rows
+            .into_iter()
+            .map(|(id, zone, country, organization)| {
+                match organization.and_then(|org| organizations.get(&org)) {
+                    Some((org_zone, org_country)) if unset(&zone) && unset(&country) => ZoneOwner {
+                        id,
+                        zone: org_zone.clone(),
+                        country: org_country.clone(),
+                    },
+                    _ => ZoneOwner { id, zone, country },
+                }
+            })
+            .collect())
     }
 
     /// The workspaces `user` may enter, with their role in each, by name:
@@ -468,6 +565,44 @@ pub(crate) fn check_name(name: &str) -> Result<String, WorkspaceError> {
         ));
     }
     Ok(name.to_owned())
+}
+
+/// A checked time zone (its current IANA name) and country (upper-case);
+/// blank values count as unset.
+pub(crate) fn check_time_zone(
+    timezone: Option<&str>,
+    country: Option<&str>,
+) -> Result<(Option<String>, Option<String>), WorkspaceError> {
+    Ok((check_zone_name(timezone)?, check_country_code(country)?))
+}
+
+/// A checked time zone: its current IANA name (`asia/calcutta` gives
+/// `Asia/Kolkata`); blank counts as unset, anything else is a 400 on
+/// `timezone`. Workspaces and organizations store zones through it.
+pub(crate) fn check_zone_name(timezone: Option<&str>) -> Result<Option<String>, WorkspaceError> {
+    match timezone.map(str::trim).filter(|z| !z.is_empty()) {
+        Some(name) => Zone::canonical_name(name)
+            .map(|name| Some(name.to_owned()))
+            .ok_or_else(|| {
+                WorkspaceError::invalid("timezone", "timezone must be a valid IANA time zone name")
+            }),
+        None => Ok(None),
+    }
+}
+
+/// A checked country: an ISO 3166-1 alpha-2 code that has a time zone,
+/// upper-case; blank counts as unset, anything else is a 400 on `country`.
+pub(crate) fn check_country_code(country: Option<&str>) -> Result<Option<String>, WorkspaceError> {
+    match country.map(str::trim).filter(|c| !c.is_empty()) {
+        Some(code) if code.len() == 2 && Zone::for_country(code).is_some() => {
+            Ok(Some(code.to_ascii_uppercase()))
+        }
+        Some(_) => Err(WorkspaceError::invalid(
+            "country",
+            "country must be a valid ISO 3166-1 alpha-2 country code",
+        )),
+        None => Ok(None),
+    }
 }
 
 /// Checks a slug: lower-case ASCII letters and digits in groups separated

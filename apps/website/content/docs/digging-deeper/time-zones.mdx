@@ -1,0 +1,448 @@
+---
+title: "Time zones"
+description: "Zones for users, workspaces and organizations: the request's zone, local days and report windows, send windows, public holidays, local-time schedules and `AT TIME ZONE` with a checked zone."
+---
+
+## Introduction
+
+<Badge feature="time" /> Navree stores every timestamp in UTC. People don't live in UTC: a report for "yesterday" means yesterday in the workspace's zone, a reminder should arrive at 09:00 where the reader is, and a public holiday is a day on a country's calendar. `TimeModule` gives every request and every job the zone it belongs to, and turns local days and local times into the UTC instants your queries filter on.
+
+- `Zone` is a checked IANA time zone. It reads names in any case and replaces legacy aliases with their current names, so every PostgreSQL server accepts what you store.
+- `CurrentZone` is the request's zone: the signed-in user's, else the workspace's, else the organization's, else the app's default zone.
+- `LocalDay` and `DayRange` count calendar days in a zone, including the 23- and 25-hour days when clocks change.
+- `SendWindow` finds the next moment inside working hours on the recipient's clock, skipping weekends and public holidays.
+- `daily_at("09:00").per_workspace_local()` runs a scheduled task once per workspace, at nine on each workspace's clock.
+
+The IANA time zone database is compiled into the binary (release 2025b in this version), so nothing depends on the server's own tz data.
+
+## Registering the module
+
+Add `TimeModule` in your app root. It reads the `time` section:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(WorkspaceModule::from_config()) // workspace zones
+    .module(TimeModule::from_config())
+    // ...
+```
+
+```toml title="config/app.toml"
+[time]
+default_zone = "UTC"          # the zone when nobody has one
+routes = true                 # GET /api/time/zones
+
+[time.holidays]
+country = "GB"                # the app's public holidays
+days = ["2026-12-24"]         # extra closing days
+```
+
+| Key | Default | Environment variable |
+|---|---|---|
+| `time.default_zone` | `UTC` | `APP_TIME__DEFAULT_ZONE=Asia/Kolkata` |
+| `time.routes` | `true` | `APP_TIME__ROUTES=false` |
+| `time.holidays.country` | none | `APP_TIME__HOLIDAYS__COUNTRY=IN` |
+| `time.holidays.days` | none | `APP_TIME__HOLIDAYS__DAYS=2026-12-24,2026-12-31` |
+
+An unknown zone or country fails the boot and names the key:
+
+```text wrap
+time.default_zone: unknown time zone `Mars/Base`; use an IANA name such as `Europe/Paris`
+```
+
+`TimeModule::for_root(TimeOptions { .. })` takes the options in code instead. The module is global and exports `Zones` (the zone service) and `TimeOptions`.
+
+## Zones
+
+`Zone::parse` takes an IANA name, trims it, matches it in any case and normalizes it:
+
+```rust
+use navree::time::Zone;
+
+let zone = Zone::parse("Asia/Calcutta")?;
+assert_eq!(zone.name(), "Asia/Kolkata");
+assert_eq!(Zone::parse("us/eastern")?.name(), "America/New_York");
+assert_eq!(Zone::parse("Etc/UTC")?.name(), "UTC");
+assert!(Zone::parse("Mars/Olympus_Mons").is_err());
+```
+
+Browsers still report some legacy names (`Asia/Calcutta`, `Europe/Kiev`, `Asia/Saigon`), and PostgreSQL servers whose system tz data leaves out the backward-compatible links reject them with `time zone "Asia/Calcutta" not recognized`. A `Zone` always holds the current name. Names that are still country locations, such as `Europe/Oslo` or `Africa/Accra`, stay as they are. `Zone::canonical_name(name)` gives the normalized name without building a `Zone`.
+
+A `Zone` is `Copy`, serializes as its name and deserializes through `Zone::parse`, so a request field of type `Zone` accepts `"asia/calcutta"` and holds `Asia/Kolkata`. An unknown name is a 400 on that field.
+
+| Method | Returns |
+|---|---|
+| `Zone::UTC`, `Zone::default()` | UTC |
+| `Zone::all()` | every current zone, by name (legacy aliases left out) |
+| `Zone::for_country("IN")` | the country's primary zone, `Asia/Kolkata` |
+| `Zone::in_country("US")` | every zone of the country, primary first |
+| `zone.countries()` | the countries using it: `["IN"]` |
+| `zone.local(at)` | an instant on the zone's clock (`DateTime<Tz>`) |
+| `zone.offset_at(at)`, `zone.offset_label(at)` | the UTC offset in force: `+05:30` |
+| `zone.today(now)` | the local day `now` falls on |
+| `zone.to_utc(local)` | the instant a wall-clock time stands for |
+
+Clock changes make some wall-clock times special. `to_utc` reads a time that happens twice (when clocks go back) as the earlier one, and moves a time that is skipped (when clocks go forward) ahead by the length of the gap: in New York on 8 March 2026, 02:30 becomes 03:30 EDT.
+
+## The request's zone
+
+`CurrentZone` is an extractor. It resolves the zone of the request once and derefs to the `Zone`:
+
+```rust
+#[get("/zone")]
+#[authenticated]
+async fn zone(&self, zone: CurrentZone) -> Json<serde_json::Value> {
+    Json(json!({ "zone": zone.name(), "today": zone.today() }))
+}
+```
+
+The zone comes from the first level that has one:
+
+1. The signed-in user's zone, when a user-level source knows the user.
+2. The request's workspace: the one [workspace resolution](/docs/workspaces/resolution/) finds (the `X-Workspace` header, a path prefix, a subdomain or a token claim), when the user is a member.
+3. The organization: the one the request's workspace is attached to or, in a request without a workspace, the one it names (the `X-Organization` header, a path prefix, a subdomain or a token claim) when the user is a member. This level answers once [organizations](/docs/workspaces/organizations/) are on.
+4. `time.default_zone`.
+
+At each level a stored zone wins; without one, a stored country gives its primary zone (`AE` gives `Asia/Dubai`). A stored name that is not a zone is skipped with a warning at target `navree::time`, so a bad row never fails a request. `zone.level()` says which level answered (`None` for the default zone), `zone.owner()` whose zone it is, and `zone.from_country()` whether it came from a country. `zone.now()` and `zone.today()` read the app's `dyn Clock`.
+
+Without `TimeModule` in the app, the extractor answers 500.
+
+### Zone sources
+
+Each level is a `dyn ZoneSource` (from `navree::contracts`), registered as a multi-binding. `WorkspaceModule` registers the workspace and organization levels (`WorkspaceZones` and `OrganizationZones`). Register your users' zones yourself, for example from a `timezone` column of your `users` table:
+
+```rust title="src/users/zones.rs"
+use navree::contracts::{BoxFuture, ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
+use navree::db::Db;
+use navree::prelude::*;
+use sea_orm::ConnectionTrait;
+use sea_orm::sea_query::{self, Expr, ExprTrait};
+
+/// The zone of each user, from `users.timezone`.
+pub struct UserZones {
+    db: Arc<Db>,
+}
+
+impl UserZones {
+    async fn find(&self, id: Uuid) -> Result<Option<ZoneOwner>, BoxError> {
+        let query = sea_query::Query::select()
+            .column("timezone")
+            .from("users")
+            .and_where(Expr::col("id").eq(id))
+            .to_owned();
+        Ok(match self.db.conn().query_one(&query).await? {
+            Some(row) => {
+                let zone: Option<String> = row.try_get("", "timezone")?;
+                Some(ZoneOwner { id, zone, country: None })
+            }
+            None => None,
+        })
+    }
+}
+
+impl ZoneSource for UserZones {
+    fn level(&self) -> ZoneLevel {
+        ZoneLevel::User
+    }
+
+    fn zone_of_request<'a>(
+        &'a self,
+        request: &'a mut ZoneRequest<'_>,
+    ) -> BoxFuture<'a, Result<Option<ZoneOwner>, BoxError>> {
+        Box::pin(async move {
+            match request.user_id() {
+                Some(id) => self.find(id).await,
+                None => Ok(None),
+            }
+        })
+    }
+
+    fn zone_of(&self, owner: Uuid) -> BoxFuture<'_, Result<Option<ZoneOwner>, BoxError>> {
+        Box::pin(async move { self.find(owner).await })
+    }
+}
+```
+
+```rust title="src/users/mod.rs"
+m.multi(Factory::<dyn ZoneSource>::new(|r: Resolver| async move {
+    Ok(Arc::new(UserZones { db: r.get::<Db>().await? }) as Arc<dyn ZoneSource>)
+}));
+```
+
+A source returns what it stores, a `ZoneOwner { id, zone, country }`; `TimeModule` checks the values. `zone_of_request` sees the signed-in user and, in HTTP requests, the request head (`request.head::<http::request::Parts>()`). A source that holds no state can be registered with `m.zone_source(source)` (`ModuleBuilderTimeExt`). A source may also list every owner with `owners()`; the workspace source does, which is what [per-workspace schedules](#scheduling-in-local-time) run over.
+
+### Zones outside a request
+
+Jobs and commands resolve zones with the `Zones` service:
+
+```rust
+let zones = ctx.get::<Zones>().await?;
+let zone = zones.zone_of(ZoneLevel::Workspace, workspace_id).await?;
+let yesterday = DayRange::single(zone.today(zones.now()).pred());
+```
+
+`zone_of(level, owner)` gives the owner's zone, its country's zone or the default zone. `owners(level)` lists every owner at a level with its zone. At the workspace level, a workspace with neither a zone nor a country gets its organization's, so its jobs run on the clock its requests use. `default_zone()`, `holidays()` and `now()` give the app's settings and clock.
+
+## Local days and report windows
+
+A report for "October" means October in the workspace's zone. `DayRange` is a range of whole local days, both ends included, and turns into the UTC span to filter on:
+
+```rust
+#[derive(Serialize)]
+struct SignupReport {
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    signups: u64,
+}
+
+#[get("/signups")]
+#[authenticated]
+async fn signups(
+    &self,
+    zone: CurrentZone,
+    Valid(Query(range)): Valid<Query<DayRange>>,
+    uow: Uow,
+) -> Result<WithZone<SignupReport>> {
+    let (from, to) = range.utc_bounds(&zone);
+    let signups = signup::Entity::find()
+        .filter(signup::Column::CreatedAt.gte(from))
+        .filter(signup::Column::CreatedAt.lt(to))
+        .count(&*uow.tx().await?)
+        .await?;
+    Ok(WithZone::new(&zone, SignupReport { from, to, signups }))
+}
+```
+
+`GET /api/reports/signups?from=2026-10-01&to=2026-10-31` from a workspace in Kolkata answers:
+
+```json
+{
+  "from": "2026-09-30T18:30:00Z",
+  "to": "2026-10-31T18:30:00Z",
+  "signups": 42,
+  "timeZone": "Asia/Kolkata"
+}
+```
+
+- `LocalDay` is a date written `yyyy-MM-dd`. It parses only that form, so `2026-1-5` and `27/10/2026` are 400s on the field. `LocalDay::of(at, &zone)` is the day an instant falls on; `day.utc_bounds(&zone)` is its half-open span, 23 or 25 hours long when clocks change. `day.at(time, &zone)` is a time of that day.
+- `DayRange { from, to }` deserializes from a query string or a body and validates with garde: `to` before `from` is a 400 (`to must not be before from`). `DayRange::new(from, to)`, `single(day)`, `last_days(7, &zone, now)` and `month_of(day)` build one in code; `days()` iterates it and `day_count()` counts it.
+- Both are `garde::Validate` (with nothing to check), so a field of either type can use `#[garde(dive)]` or `#[garde(skip)]`.
+
+### Echoing the zone
+
+`WithZone::new(&zone, data)` adds `"timeZone"` to the response body, so the front end shows dates in the zone they were counted in. An object gets the key next to its own fields; anything else is wrapped: `{"data": [...], "timeZone": "Asia/Kolkata"}`.
+
+## Reports in SQL
+
+Grouping rows by local day belongs in the database. `zone.sql(backend)` builds the expressions, with the zone written into the SQL as a quoted literal. That is safe because a `Zone` only ever holds a checked name, and it lets the same expression appear in `SELECT` and `GROUP BY`:
+
+```rust
+use sea_orm::sea_query::{self, Alias, Expr, ExprTrait};
+
+let (from, to) = range.utc_bounds(&zone);
+let day = zone
+    .sql(db.backend())
+    .within(from, to)
+    .local_date(Expr::col(signup::Column::CreatedAt));
+let query = sea_query::Query::select()
+    .expr_as(day.clone(), Alias::new("day"))
+    .expr_as(Expr::cust("COUNT(*)"), Alias::new("signups"))
+    .from(signup::Entity)
+    .and_where(Expr::col(signup::Column::CreatedAt).gte(from))
+    .and_where(Expr::col(signup::Column::CreatedAt).lt(to))
+    .add_group_by([day])
+    .to_owned();
+```
+
+| Backend | `local_date(col)` |
+|---|---|
+| PostgreSQL | `CAST((col AT TIME ZONE 'Asia/Kolkata') AS DATE)` |
+| MySQL | `DATE(CONVERT_TZ(col, '+00:00', 'Asia/Kolkata'))` |
+| SQLite | `date(col, '+19800 seconds')` |
+
+`local_timestamp(col)` gives the local timestamp instead of the date. SQLite has no zones, so it adds the offset in force; `within(from, to)` tells it the window the query covers, and it switches offsets at each clock change inside the window with a `CASE` on `julianday(col)`. With `within`, MySQL uses the same fixed offsets and doesn't need its time zone tables; without it, MySQL's named zones need them loaded (`mysql_tzinfo_to_sql`) and SQLite uses the offset in force now. `set_local()` gives `SET LOCAL TIME ZONE 'Asia/Kolkata'` (PostgreSQL) or `SET time_zone = 'Asia/Kolkata'` (MySQL), to make the zone the transaction's own.
+
+## Send windows
+
+A digest or a campaign mail should arrive during working hours on the recipient's clock. `SendWindow` says when that is, and `next_slot` finds the next moment inside it:
+
+```rust
+let window = SendWindow::weekdays()
+    .between("09:00", "17:00")
+    .except(zones.holidays());
+let zone = zones.zone_of(ZoneLevel::Workspace, workspace_id).await?;
+let delay = window.delay(zones.now(), &zone);
+dispatcher.dispatch_later(SendDigest { workspace_id }, delay).await?;
+```
+
+Inside the window `next_slot` returns now and `delay` zero. After 17:00 on a Friday in Kolkata, the next slot is Monday at 09:00 IST.
+
+| Builder | Open on |
+|---|---|
+| `SendWindow::weekdays()` | Monday to Friday, all day |
+| `SendWindow::working_days_in("SA")` | the days that are not the country's weekend: Sunday to Thursday in Saudi Arabia, Monday to Saturday in India |
+| `SendWindow::on(&[Weekday::Sat])` | the given days |
+| `SendWindow::always()`, `every_day()` | every day |
+| `.between("09:00", "17:00")` | from the first time, until (not including) the second; `"24:00"` means midnight |
+| `.except(holidays)` | not on the days of a `Holidays` |
+
+`between` panics on a malformed time or an end that isn't after the start; `try_between` returns the error instead, for times that come from settings. Each day's opening and closing are computed on that day's clock, so the window follows clock changes. `contains(at, &zone)` checks an instant. `weekend_days("AE")` gives a country's weekend from the Unicode CLDR week data.
+
+## Holidays
+
+`Holidays::for_country("GB")` is a country's public holidays, computed from rules. `is_holiday(day)`, `holiday(day)` (with its name), `in_year(2026)` and `between(&range)` read them:
+
+```rust
+let gb = Holidays::for_country("GB");
+assert!(gb.is_holiday("2026-12-28".parse()?)); // Boxing Day (substitute day)
+let december = gb.between(&DayRange::month_of("2026-12-01".parse()?));
+```
+
+| Country | Holidays |
+|---|---|
+| `US` | federal holidays, moved to Friday or Monday when they fall on a weekend |
+| `GB` | England and Wales bank holidays, with substitute days |
+| `FR`, `DE` | national holidays, Easter-based ones included |
+| `CA` | federal statutory holidays |
+| `AU` | national holidays, with substitute days |
+| `IN` | Republic Day, Independence Day, Gandhi Jayanti |
+| `AE`, `SA` | the fixed national days |
+
+The rules cover national holidays only. Holidays that follow a lunar calendar (Diwali, Eid al-Fitr) and one-off holidays are not computed: add them as extra days, or serve your own calendar:
+
+```rust
+let closures = Holidays::for_country("IN").with_days(["2026-11-08".parse()?]);
+
+let calendar = FixedHolidays::new()
+    .add("NP", "2026-10-21".parse()?, "Dashain")
+    .add("NP", "2026-11-08".parse()?, "Tihar");
+let nepal = Holidays::with_calendar("NP", calendar);
+```
+
+`FixedHolidays` holds days you load (from a table, at boot). For anything else, implement `HolidayCalendar`, whose one method lists a country's holidays for a year. `time.holidays.country` and `time.holidays.days` set the app's own holidays, which `Zones::holidays()` returns; `Zones::holidays_for(country)` gives another country's.
+
+## Scheduling in local time
+
+<Badge feature="schedule" /> A [scheduled task](/docs/digging-deeper/scheduling/) reads its frequency in UTC unless you say otherwise:
+
+```rust
+m.schedule(|s| {
+    // 02:00 in London, all year.
+    s.command("reports:close-day", &[]).daily_at("02:00").in_zone("Europe/London");
+    // 08:00 on the app's default zone (time.default_zone).
+    s.command("crm:task-reminders", &[]).daily_at("08:00").in_default_zone();
+    // 09:00 in each workspace's own zone, one run per workspace.
+    s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_default() })
+        .daily_at("09:00")
+        .per_workspace_local();
+});
+```
+
+`per_workspace_local()` asks `Zones` for every workspace and its zone at each tick, and runs the task for each workspace whose clock matches. Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`. Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick on both clocks; `job_with` builds a job from it. The [scheduling page](/docs/digging-deeper/scheduling/#time-zones) has the details.
+
+## Workspaces and organizations
+
+<Badge feature="workspace" /> Every workspace has an optional `timezone` and `country`. Set them when creating a workspace or later:
+
+```http
+PUT /api/workspaces/acme/time-zone
+Content-Type: application/json
+
+{"timezone": "Asia/Calcutta", "country": "IN"}
+```
+
+The workspace comes back with `"timezone": "Asia/Kolkata"` and `"country": "IN"`. An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. In code, `workspaces.set_time_zone(&uow, id, Some("Asia/Kolkata"), Some("IN"))` does the same. A workspace with a country and no zone uses the country's primary zone. See [workspaces](/docs/workspaces/introduction/#the-routes) for the routes.
+
+[Organizations](/docs/workspaces/organizations/) have the same two columns. `POST /api/organizations` and `PATCH /api/organizations/{organization}` take `timezone` and `country`, checked and normalized the same way, and so do `organizations.create` and `organizations.update`:
+
+```rust
+organizations
+    .update(&uow, group.id, OrganizationChanges {
+        timezone: Some(Some("Asia/Calcutta".into())), // stored as Asia/Kolkata
+        ..OrganizationChanges::default()
+    })
+    .await?;
+```
+
+A workspace with neither a zone nor a country follows its organization. Its requests get the organization's zone, with `zone.level()` `Some(ZoneLevel::Organization)` and `zone.owner()` the organization's id, and so do its jobs and its runs of [per-workspace schedules](#scheduling-in-local-time). A workspace that sets either keeps its own.
+
+## The zone list
+
+Unless `time.routes` is `false`, `GET /api/time/zones` serves the zones for zone pickers, public and cached for an hour:
+
+```json
+{
+  "data": [
+    { "name": "Asia/Kolkata", "offset": "+05:30", "offset_minutes": 330, "countries": ["IN"] }
+  ]
+}
+```
+
+`?country=IN` lists a country's zones, primary first; `?search=york` filters names. An unknown country is a 400 on `country`. The offsets are the ones in force now.
+
+`time:zones [search] [--country CC]` prints the same list:
+
+```sh
+cargo run -- time:zones --country AU
+```
+
+## Validation
+
+A field of type `Zone` checks and normalizes itself. To keep the name as a string, use the garde rule:
+
+```rust
+#[derive(Deserialize, Validate)]
+pub struct UpdateProfile {
+    #[garde(custom(navree::time::rules::time_zone))]
+    pub timezone: Option<String>,
+}
+```
+
+It accepts any IANA name, legacy aliases included (`None` passes); normalize with `Zone::parse` before storing.
+
+## Testing
+
+`ZonesFake` is an in-memory zone source for one level. At the user level it answers for the signed-in user; at other levels for the owner whose id a header names. Clones share their owners, so a test can change zones after boot:
+
+```rust title="tests/zones.rs"
+use navree::contracts::{ZoneLevel, ZoneOwner};
+use navree::testing::{TestApp, principal};
+use navree::time::ZonesFake;
+
+#[tokio::test]
+async fn the_report_uses_the_users_zone() {
+    let user = Uuid::now_v7();
+    let users = ZonesFake::new(ZoneLevel::User)
+        .owner(ZoneOwner::new(user).zone("Asia/Kolkata"));
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(TimeModule::from_config())
+        .module(users.module())
+        .module(ReportsModule)
+        .build()
+        .await;
+    app.acting_as(principal(user))
+        .get("/api/zone")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("zone", json!("Asia/Kolkata"));
+}
+```
+
+Override `dyn Clock` with a `FixedClock` to pin `zone.today()`, `Zones::now()` and the scheduler. `ZonesFake::new(level).header("X-Workspace")` reads the workspace id from that header; register one fake per level.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Local-time and per-workspace schedules.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/resolution/" title="Workspace resolution">
+    How a request finds its workspace.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    `Valid<Query<DayRange>>` and field errors.
+  </LinkCard>
+</LinkCards>

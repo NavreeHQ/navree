@@ -10,8 +10,14 @@
 //!   queue's workers), an async function ([`Schedule::task`]) or a
 //!   registered CLI command ([`Schedule::command`]). [`TaskBuilder`] sets the
 //!   frequency (`cron`, `every_minute`, `hourly_at`, `daily_at("02:00")`, …,
-//!   all UTC), `without_overlapping` and the task name. Invalid
+//!   UTC by default), `without_overlapping` and the task name. Invalid
 //!   frequencies, duplicate task names and unknown commands fail the boot.
+//! - **Local clocks.** `in_zone("Asia/Kolkata")` and `in_default_zone()`
+//!   read the frequency on a zone's clock; `per_workspace_local()` runs the
+//!   task once per workspace when that workspace's clock reaches it
+//!   (navree-time's `Zones` lists the workspaces and their zones). Inside a
+//!   run, [`LocalRun::current`] gives the owner and zone, and
+//!   [`Schedule::job_with`] builds a job per owner.
 //! - [`ScheduleModule`] is global and exports the [`Scheduler`]. It needs
 //!   `DatabaseModule`: every run is recorded in [`schedule_runs`](RUNS_TABLE)
 //!   (`task, tick, started_at, finished_at, status, error`, primary key
@@ -62,12 +68,14 @@
 #![forbid(unsafe_code)]
 
 mod error;
+mod local;
 mod module;
 mod schedule;
 mod scheduler;
 mod store;
 
 pub use error::ScheduleError;
+pub use local::LocalRun;
 pub use module::ScheduleModule;
 pub use schedule::{ModuleBuilderScheduleExt, Schedule, TaskBuilder};
 pub use scheduler::{RUN_RETENTION, RunOutcome, RunStatus, Scheduler, SkipReason, TaskInfo};
