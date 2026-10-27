@@ -23,9 +23,9 @@ use navree_workspace::events::{
 use navree_workspace::{
     AccessRequests, Approval, ApprovedRequest, CurrentOrganization, CurrentPartition,
     CurrentWorkspace, GrantedBy, InOrganization, NewAccessRequest, NewOrganization, NewPartition,
-    OrgMemberInfo, OrgMembers, OrgMembership, OrgRepo, OrgRole, OrganizationChanges,
-    Organizations, PartitionRepo, PartitionScope, PartitionScoped, PartitionSelector, Partitions,
-    RlsPolicy, WorkspaceConfig, WorkspaceError, WorkspaceScoped, WorkspaceSelector, Workspaces,
+    OrgMemberInfo, OrgMembers, OrgMembership, OrgRepo, OrgRole, OrganizationChanges, Organizations,
+    PartitionRepo, PartitionScope, PartitionScoped, PartitionSelector, Partitions, RlsPolicy,
+    WorkspaceConfig, WorkspaceError, WorkspaceScoped, WorkspaceSelector, Workspaces,
 };
 use sea_orm::{ActiveValue::Set, EntityName, EntityTrait};
 use uuid::Uuid;
@@ -126,7 +126,13 @@ async fn org_members_methods(
         .add(uow, org, user, OrgRole::Admin, WorkspaceSelector::All)
         .await?;
     members
-        .add(uow, org, user, OrgRole::Member, WorkspaceSelector::only([uk]))
+        .add(
+            uow,
+            org,
+            user,
+            OrgRole::Member,
+            WorkspaceSelector::only([uk]),
+        )
         .await?;
     members
         .grant(uow, org, user, OrgRole::Viewer, WorkspaceSelector::All)
@@ -225,7 +231,12 @@ async fn workspace_grants(
 async fn current_organization(org: CurrentOrganization, uow: Uow) -> Result<(), AppError> {
     let _: Uuid = org.id();
     let _: &str = &org.slug;
-    let _ = (org.organization(), org.member(), org.role(), org.workspaces());
+    let _ = (
+        org.organization(),
+        org.member(),
+        org.role(),
+        org.workspaces(),
+    );
     let ids: &[Uuid] = org.workspace_ids();
     let _: bool = org.reaches(Uuid::now_v7());
     let _: &[String] = org.permissions();
@@ -284,7 +295,11 @@ async fn partition_requests(
 ) -> Result<(), AppError> {
     let workspace: Uuid = scope.workspace_id();
     let selector: &PartitionSelector = scope.selector();
-    let _ = (scope.allowed(), scope.current(), scope.includes(Uuid::now_v7()));
+    let _ = (
+        scope.allowed(),
+        scope.current(),
+        scope.includes(Uuid::now_v7()),
+    );
     let _ = scope.scope(Contact::find());
     let _: (Uuid, Uuid, &str) = (
         partition.id(),
@@ -323,7 +338,10 @@ fn the_documented_names_exist() {
         organization_member::Entity.table_name(),
         "organization_members"
     );
-    assert_eq!(organization_grant::Entity.table_name(), "organization_grants");
+    assert_eq!(
+        organization_grant::Entity.table_name(),
+        "organization_grants"
+    );
     assert_eq!(access_request::Entity.table_name(), "access_requests");
     assert_eq!(partition::Entity.table_name(), "workspace_partitions");
     assert_eq!(partition_grant::Entity.table_name(), "partition_grants");
@@ -364,34 +382,52 @@ fn the_documented_names_exist() {
     assert_eq!(ctx.organization_id, None);
     assert_eq!(ctx.team_id, None);
     // The default partition column.
-    assert_eq!(<Contact as PartitionScoped>::PARTITION_COLUMN, "partition_id");
+    assert_eq!(
+        <Contact as PartitionScoped>::PARTITION_COLUMN,
+        "partition_id"
+    );
 }
 
 #[test]
 fn the_documented_configuration_loads() {
     let sources = ConfigSources::new()
-        .set("workspace.roles.auditor.permissions", serde_json::json!(["workspace.read", "deals.read"]))
+        .set(
+            "workspace.roles.auditor.permissions",
+            serde_json::json!(["workspace.read", "deals.read"]),
+        )
         .set("workspace.organizations.enabled", true)
         .set(
             "workspace.organizations.resolvers",
             serde_json::json!(["header", "path", "subdomain", "claim"]),
         )
         .set("workspace.organizations.header", "X-Organization")
-        .set("workspace.organizations.base_domain", "partners.example.com")
+        .set(
+            "workspace.organizations.base_domain",
+            "partners.example.com",
+        )
         .set("workspace.organizations.path_prefix", "/o")
         .set("workspace.organizations.claim", "organization")
         .set(
             "workspace.organizations.roles.member.permissions",
             serde_json::json!(["reports.read"]),
         )
-        .set("workspace.organizations.roles.member.workspace_role", "viewer")
+        .set(
+            "workspace.organizations.roles.member.workspace_role",
+            "viewer",
+        )
         .set(
             "workspace.organizations.roles.partner.permissions",
             serde_json::json!(["organization.read", "reports.read"]),
         )
-        .set("workspace.organizations.roles.partner.workspace_role", "auditor")
+        .set(
+            "workspace.organizations.roles.partner.workspace_role",
+            "auditor",
+        )
         .set("workspace.partitions.enabled", true)
-        .set("workspace.partitions.resolvers", serde_json::json!(["header", "claim"]))
+        .set(
+            "workspace.partitions.resolvers",
+            serde_json::json!(["header", "claim"]),
+        )
         .set("workspace.partitions.header", "X-Partition")
         .set("workspace.partitions.path_prefix", "/p")
         .set("workspace.partitions.claim", "partition");
@@ -409,9 +445,10 @@ fn the_documented_configuration_loads() {
     .typed::<WorkspaceConfig>();
     assert!(missing.is_err());
     // Partitions have no subdomain resolver.
-    let subdomain = Config::load(
-        &ConfigSources::new().set("workspace.partitions.resolvers", serde_json::json!(["subdomain"])),
-    )
+    let subdomain = Config::load(&ConfigSources::new().set(
+        "workspace.partitions.resolvers",
+        serde_json::json!(["subdomain"]),
+    ))
     .unwrap()
     .typed::<WorkspaceConfig>();
     assert!(subdomain.is_err());
@@ -419,7 +456,8 @@ fn the_documented_configuration_loads() {
 
 #[test]
 fn the_documented_policies_are_the_sql_on_the_pages() {
-    let workspace = "\"workspace_id\" = NULLIF(current_setting('navree.workspace', true), '')::uuid";
+    let workspace =
+        "\"workspace_id\" = NULLIF(current_setting('navree.workspace', true), '')::uuid";
     let partition = "(NULLIF(current_setting('navree.partition', true), '') IS NULL OR \"partition_id\" = NULLIF(current_setting('navree.partition', true), '')::uuid)";
     // partitions.mdx
     let partitioned = RlsPolicy::new("contacts").partitioned().create_sql();
@@ -446,7 +484,9 @@ fn the_documented_policies_are_the_sql_on_the_pages() {
             .contains("\"domain_id\" = ")
     );
     assert_eq!(
-        RlsPolicy::new("contacts").organizations().organization_name(),
+        RlsPolicy::new("contacts")
+            .organizations()
+            .organization_name(),
         "contacts_organization_read"
     );
 }

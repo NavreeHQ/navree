@@ -610,7 +610,9 @@ mod tests {
             .create_sql();
         let domain = partition.replace("\"partition_id\"", "\"domain_id\"");
         assert!(both.contains(&format!("USING (({workspace}) AND {domain})")));
-        assert!(both.contains(&format!("FOR SELECT\n    USING (({organization}) AND {domain});")));
+        assert!(both.contains(&format!(
+            "FOR SELECT\n    USING (({organization}) AND {domain});"
+        )));
         assert_eq!(
             RlsPolicy::new("deals").partitioned().name(),
             "deals_workspace_isolation"
