@@ -99,6 +99,56 @@ async fn triggers_read_the_actor_and_request_id() {
     );
 }
 
+/// The trigger the database docs show: `updated_by`, a `BINARY(16)` UUID
+/// column like every Navree id on MySQL, stamped from `@navree_actor` with
+/// functions MySQL and MariaDB both have.
+#[tokio::test]
+async fn a_trigger_stamps_the_actor_into_a_binary_uuid_column() {
+    let Some(scratch) =
+        Scratch::new("a_trigger_stamps_the_actor_into_a_binary_uuid_column").await
+    else {
+        return;
+    };
+    let db = scratch.db_with(|options| options.max_connections = 1).await;
+    for sql in [
+        "CREATE TABLE deals (id INT PRIMARY KEY, stage VARCHAR(32) NOT NULL, \
+         updated_by BINARY(16) NULL)",
+        "CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW \
+         SET NEW.updated_by = UNHEX(REPLACE(@navree_actor, '-', ''))",
+        "INSERT INTO deals (id, stage) VALUES (1, 'lead')",
+    ] {
+        db.conn()
+            .execute_unprepared(sql)
+            .await
+            .unwrap_or_else(|error| panic!("{sql}: {error}"));
+    }
+    let updated_by = || async {
+        string(
+            db.conn(),
+            "SELECT IFNULL(LOWER(HEX(updated_by)), 'NULL') FROM deals",
+        )
+        .await
+    };
+
+    let actor = Uuid::now_v7();
+    let uow = db.uow(Some(actor), None).await;
+    uow.tx()
+        .await
+        .unwrap()
+        .execute_unprepared("UPDATE deals SET stage = 'won' WHERE id = 1")
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+    assert_eq!(updated_by().await, actor.simple().to_string());
+
+    // Outside a unit of work there is no actor.
+    db.conn()
+        .execute_unprepared("UPDATE deals SET stage = 'lost' WHERE id = 1")
+        .await
+        .unwrap();
+    assert_eq!(updated_by().await, "NULL");
+}
+
 #[tokio::test]
 async fn writes_are_visible_after_commit_and_gone_after_rollback() {
     let Some(scratch) =
