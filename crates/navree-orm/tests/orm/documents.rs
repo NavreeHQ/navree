@@ -12,12 +12,45 @@ use navree_orm::ir::{
     Aggregate, AggregateFunction, Boolean, DeleteIr, Direction, Expr, InValues, InsertIr, Operator,
     Order, QueryIr, UpdateIr, Where, WhereClause,
 };
+use navree_orm::relations::{BelongsTo, HasMany};
 use navree_orm::{
     Access, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model, OrmError, Row, Target,
-    Value, same_value, to_json,
+    Value, relations, same_value, to_json,
 };
+use serde::Serialize;
 
 use crate::models::Company;
+
+/// A customer kept in a document store, with support tickets.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "customers")]
+struct Customer {
+    id: i64,
+    name: String,
+}
+
+#[relations]
+impl Customer {
+    fn tickets(&self) -> HasMany<Customer, SupportTicket> {
+        self.has_many(SupportTicket::CUSTOMER_ID)
+    }
+}
+
+/// A support ticket of a customer.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "support_tickets")]
+struct SupportTicket {
+    id: i64,
+    customer_id: Option<i64>,
+    subject: String,
+}
+
+#[relations]
+impl SupportTicket {
+    fn customer(&self) -> BelongsTo<SupportTicket, Customer> {
+        self.belongs_to(SupportTicket::CUSTOMER_ID)
+    }
+}
 
 type Document = Vec<(String, Value)>;
 
@@ -406,4 +439,95 @@ async fn models_run_on_a_document_store() {
         .unwrap_err();
     assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
     assert!(Company::meta().name() == "Company");
+}
+
+#[tokio::test]
+async fn relations_eager_load_on_a_document_store() {
+    let store = MemoryStore(Arc::new(Memory::default()));
+    let mut acme = Customer::create(
+        &store,
+        Customer {
+            name: "Acme".into(),
+            ..Customer::default()
+        },
+    )
+    .await
+    .unwrap();
+    let globex = Customer::create(
+        &store,
+        Customer {
+            name: "Globex".into(),
+            ..Customer::default()
+        },
+    )
+    .await
+    .unwrap();
+    for (customer, subject) in [
+        (Some(acme.id), "Printer"),
+        (Some(acme.id), "Login"),
+        (Some(globex.id), "Billing"),
+        (None, "Spam"),
+    ] {
+        SupportTicket::create(
+            &store,
+            SupportTicket {
+                customer_id: customer,
+                subject: subject.into(),
+                ..SupportTicket::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    // Eager loads are batched `IN` queries the store answers.
+    let customers = Customer::query()
+        .with("tickets")
+        .order_by(Customer::ID)
+        .get(&store)
+        .await
+        .unwrap();
+    let counts: Vec<usize> = customers
+        .iter()
+        .map(|customer| customer.loaded(Customer::tickets).unwrap().len())
+        .collect();
+    assert_eq!(counts, [2, 1]);
+    let tickets = SupportTicket::query()
+        .with("customer")
+        .order_by(SupportTicket::ID)
+        .get(&store)
+        .await
+        .unwrap();
+    let owners: Vec<Option<String>> = tickets
+        .iter()
+        .map(|ticket| {
+            ticket
+                .loaded(SupportTicket::customer)
+                .unwrap()
+                .as_ref()
+                .map(|customer| customer.name.clone())
+        })
+        .collect();
+    assert_eq!(
+        owners,
+        [
+            Some("Acme".to_owned()),
+            Some("Acme".to_owned()),
+            Some("Globex".to_owned()),
+            None
+        ]
+    );
+
+    // Loading afterwards and querying through a relation too.
+    acme.load(&store, "tickets").await.unwrap();
+    assert_eq!(acme.loaded(Customer::tickets).unwrap().len(), 2);
+    assert_eq!(acme.tickets().count(&store).await.unwrap(), 2);
+    let login = acme
+        .tickets()
+        .where_(SupportTicket::SUBJECT.eq("Login"))
+        .first(&store)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(login.customer_id, Some(acme.id));
 }

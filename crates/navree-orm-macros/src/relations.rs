@@ -143,24 +143,25 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
     let arms = relations.iter().map(|(method, name)| {
         quote! {
             #name => ::core::option::Option::Some(#private::erased::<Self, _>(
-                Self::#method(&#private::template::<Self>()),
+                Self::#method(&template),
             )),
         }
     });
     let names = relations.iter().map(|(_, name)| name);
     let lookup = format_ident!("__navree_relations");
     let list = format_ident!("__navree_relation_names");
+    // Relation definitions are read from a default instance: a model
+    // without `Default` is reported once, on the impl block's type.
     let self_span = block.self_ty.span();
-    let assertion = quote_spanned! {self_span=>
-        const _: fn() = || {
-            fn models_with_relations_implement_default<M: #private::ModelWithRelations>() {}
-            models_with_relations_implement_default::<#model_path>();
-        };
-    };
+    let template = quote_spanned! {self_span=> #private::template::<Self>() };
     block.items.push(syn::parse_quote! {
         /// The relation named `name` (written by `#[relations]`).
         #[doc(hidden)]
         pub fn #lookup(name: &str) -> ::core::option::Option<#krate::relations::DynRelation<Self>> {
+            if !Self::#list().contains(&name) {
+                return ::core::option::Option::None;
+            }
+            let template: Self = #template;
             match name {
                 #(#arms)*
                 _ => ::core::option::Option::None,
@@ -174,8 +175,5 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
             &[#(#names),*]
         }
     });
-    Ok(quote! {
-        #block
-        #assertion
-    })
+    Ok(quote!(#block))
 }
