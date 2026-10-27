@@ -50,3 +50,19 @@ fn normalize(text: &str) -> String {
     out.push('\n');
     out
 }
+
+/// The Chrome executable from `NAVREE_BROWSER_CHROME`, or `None` after
+/// printing why the test is skipped (a failure when
+/// `NAVREE_TEST_REQUIRE_SERVICES=1`).
+pub fn chrome_or_skip(test: &str) -> Option<PathBuf> {
+    match std::env::var_os("NAVREE_BROWSER_CHROME") {
+        Some(path) if !path.is_empty() => Some(PathBuf::from(path)),
+        _ => {
+            if std::env::var_os("NAVREE_TEST_REQUIRE_SERVICES").is_some_and(|v| v == "1") {
+                panic!("{test}: set NAVREE_BROWSER_CHROME (NAVREE_TEST_REQUIRE_SERVICES=1)");
+            }
+            println!("SKIPPED {test}: set NAVREE_BROWSER_CHROME");
+            None
+        }
+    }
+}

@@ -1,8 +1,11 @@
 //! # navree-documents
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "chrome")]
+mod chrome;
 mod engine;
 mod error;
+mod options;
 mod pdf;
 mod print;
 mod render;
@@ -12,8 +15,11 @@ mod text;
 #[cfg(feature = "typst")]
 mod typst_engine;
 
+#[cfg(feature = "chrome")]
+pub use chrome::{CHROME_ENV, ChromeEngine, DOCUMENT_ORIGIN};
 pub use engine::{EngineKind, PdfEngine};
 pub use error::DocumentsError;
+pub use options::{ChromeOptions, DocumentsOptions, TypstOptions};
 pub use pdf::Pdf;
 pub use print::{Margins, Paper, PrintOptions};
 pub use render::{Render, TemplateSource, is_rtl};

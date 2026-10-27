@@ -28,6 +28,7 @@ use crate::print::PrintOptions;
 /// pool_size = 2             # pages rendering at once
 /// timeout_secs = 30
 /// no_sandbox = false        # true when Chrome runs as root in a container
+/// allow_network = false     # let documents load from other origins
 /// args = []                 # more command-line flags
 ///
 /// [documents.chrome.print]
@@ -113,6 +114,10 @@ pub struct ChromeOptions {
     /// Run Chrome with `--no-sandbox` (default false). Needed when Chrome
     /// runs as root, as in many containers.
     pub no_sandbox: bool,
+    /// Let documents load images, stylesheets and fonts from other origins
+    /// (default false: only the template tree is reachable, so a template
+    /// cannot make the server fetch an address its data names).
+    pub allow_network: bool,
     /// More command-line flags for Chrome.
     #[serde(deserialize_with = "strings")]
     pub args: Vec<String>,
@@ -128,6 +133,7 @@ impl Default for ChromeOptions {
             pool_size: 2,
             timeout_secs: 30,
             no_sandbox: false,
+            allow_network: false,
             args: Vec::new(),
             print: PrintOptions::default(),
         }
@@ -174,6 +180,7 @@ mod tests {
         assert_eq!(options.chrome.pool_size, 2);
         assert_eq!(options.chrome.timeout_secs, 30);
         assert!(!options.chrome.no_sandbox);
+        assert!(!options.chrome.allow_network);
     }
 
     #[test]

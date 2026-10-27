@@ -15,7 +15,7 @@ default = ["typst", "chrome", "docx"]
 ## The embedded Typst compiler with the bundled Noto fonts.
 typst = ["dep:typst", "dep:typst-pdf", "dep:typst-layout"]
 ## HTML to PDF in headless Chrome over the DevTools protocol.
-chrome = ["dep:tokio-tungstenite", "dep:futures-util"]
+chrome = ["dep:tokio-tungstenite", "dep:futures-util", "dep:tempfile", "dep:mime_guess"]
 ## The DOCX writer.
 docx = ["dep:docx-rs"]
 
@@ -28,6 +28,7 @@ docx-rs = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 http = { workspace = true }
 lopdf = { workspace = true }
+mime_guess = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-http = { workspace = true }
@@ -36,6 +37,7 @@ navree-storage = { workspace = true }
 navree-view = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true, optional = true }

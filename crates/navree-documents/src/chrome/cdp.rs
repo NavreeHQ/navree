@@ -1,5 +1,6 @@
 //! A small Chrome DevTools Protocol client: commands over one WebSocket
-//! to the browser, with flattened sessions for pages.
+//! to the browser, with flattened sessions for pages and their events
+//! routed to whoever subscribed to the session.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -17,14 +18,25 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 const MAX_MESSAGE: usize = 512 * 1024 * 1024;
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
+type Subscribers = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<Event>>>>;
+
+/// An event the browser sent for a page session.
+#[derive(Clone, Debug)]
+pub(crate) struct Event {
+    /// `Page.loadEventFired`, `Fetch.requestPaused`, ...
+    pub(crate) method: String,
+    /// The event's parameters.
+    pub(crate) params: Value,
+}
 
 /// One connection to a browser's DevTools endpoint.
 pub(crate) struct Cdp {
     outgoing: mpsc::UnboundedSender<Message>,
     pending: Pending,
+    subscribers: Subscribers,
     next_id: AtomicU64,
     alive: Arc<AtomicBool>,
-    tasks: [JoinHandle<()>; 2],
+    reader: JoinHandle<()>,
 }
 
 impl Cdp {
@@ -39,9 +51,10 @@ impl Cdp {
         let (mut sink, mut source) = stream.split();
         let (outgoing, mut queue) = mpsc::unbounded_channel::<Message>();
         let pending: Pending = Arc::default();
+        let subscribers: Subscribers = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
 
-        let writer = tokio::spawn(async move {
+        tokio::spawn(async move {
             while let Some(message) = queue.recv().await {
                 if sink.send(message).await.is_err() {
                     break;
@@ -51,6 +64,7 @@ impl Cdp {
         });
 
         let reader_pending = pending.clone();
+        let reader_subscribers = subscribers.clone();
         let reader_alive = alive.clone();
         let reader = tokio::spawn(async move {
             while let Some(message) = source.next().await {
@@ -65,29 +79,18 @@ impl Cdp {
                 let Ok(value) = serde_json::from_str::<Value>(text) else {
                     continue;
                 };
-                // Events have no id; only answers are routed.
-                let Some(id) = value.get("id").and_then(Value::as_u64) else {
-                    continue;
-                };
-                let waiter = reader_pending
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .remove(&id);
-                if let Some(waiter) = waiter {
-                    let answer = match value.get("error") {
-                        Some(error) => Err(error
-                            .get("message")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned)
-                            .unwrap_or_else(|| error.to_string())),
-                        None => Ok(value.get("result").cloned().unwrap_or(Value::Null)),
-                    };
-                    let _ = waiter.send(answer);
+                match value.get("id").and_then(Value::as_u64) {
+                    Some(id) => route_answer(&reader_pending, id, &value),
+                    None => route_event(&reader_subscribers, value),
                 }
             }
             reader_alive.store(false, Ordering::SeqCst);
-            // Fail everything still waiting.
+            // Fail everything still waiting, and end every subscription.
             reader_pending
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+            reader_subscribers
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clear();
@@ -96,15 +99,37 @@ impl Cdp {
         Ok(Cdp {
             outgoing,
             pending,
+            subscribers,
             next_id: AtomicU64::new(1),
             alive,
-            tasks: [writer, reader],
+            reader,
         })
     }
 
     /// Whether the connection is still open.
     pub(crate) fn is_alive(&self) -> bool {
         self.alive.load(Ordering::SeqCst)
+    }
+
+    /// The events of page `session` from now on, until
+    /// [`unsubscribe`](Cdp::unsubscribe) or the connection closes.
+    pub(crate) fn subscribe(&self, session: &str) -> mpsc::UnboundedReceiver<Event> {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        if self.is_alive() {
+            self.subscribers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(session.to_owned(), sender);
+        }
+        receiver
+    }
+
+    /// Stops routing the events of `session`.
+    pub(crate) fn unsubscribe(&self, session: &str) {
+        self.subscribers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(session);
     }
 
     /// Sends `method` with `params` (to the page `session`, or to the
@@ -144,12 +169,73 @@ impl Cdp {
             Err(_) => Err(format!("{method}: the DevTools connection closed")),
         }
     }
+
+    /// Sends `method` without waiting for the answer (for answers nobody
+    /// needs, such as continuing a paused request).
+    pub(crate) fn send(&self, method: &str, params: Value, session: Option<&str>) {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let mut message = json!({ "id": id, "method": method, "params": params });
+        if let Some(session) = session {
+            message["sessionId"] = Value::String(session.to_owned());
+        }
+        let _ = self.outgoing.send(Message::text(message.to_string()));
+    }
+}
+
+/// Hands an answer to the call waiting for it.
+fn route_answer(pending: &Pending, id: u64, value: &Value) {
+    let waiter = pending
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&id);
+    if let Some(waiter) = waiter {
+        let answer = match value.get("error") {
+            Some(error) => Err(error
+                .get("message")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| error.to_string())),
+            None => Ok(value.get("result").cloned().unwrap_or(Value::Null)),
+        };
+        let _ = waiter.send(answer);
+    }
+}
+
+/// Hands a session's event to its subscriber; browser-level events and
+/// events of sessions nobody subscribed to are dropped.
+fn route_event(subscribers: &Subscribers, mut value: Value) {
+    let Some(session) = value
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    else {
+        return;
+    };
+    let Some(method) = value
+        .get("method")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    else {
+        return;
+    };
+    let event = Event {
+        method,
+        params: value
+            .get_mut("params")
+            .map(Value::take)
+            .unwrap_or(Value::Null),
+    };
+    let subscribers = subscribers.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(subscriber) = subscribers.get(&session) {
+        let _ = subscriber.send(event);
+    }
 }
 
 impl Drop for Cdp {
+    /// Stops reading. The writer sends what is still queued (such as the
+    /// disposal of a browser context), then closes the connection, because
+    /// dropping `outgoing` ends its queue.
     fn drop(&mut self) {
-        for task in &self.tasks {
-            task.abort();
-        }
+        self.reader.abort();
     }
 }

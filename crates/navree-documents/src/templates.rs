@@ -116,11 +116,13 @@ impl Templates {
     }
 
     /// The directory for HTML templates that navree-view reads.
+    #[cfg(feature = "chrome")]
     pub(crate) fn view_dirs(&self) -> Vec<PathBuf> {
         self.dirs.clone()
     }
 
     /// Every embedded HTML template, as navree-view (name, source) pairs.
+    #[cfg(feature = "chrome")]
     pub(crate) fn embedded_html(&self) -> Vec<(String, String)> {
         self.embedded
             .iter()
