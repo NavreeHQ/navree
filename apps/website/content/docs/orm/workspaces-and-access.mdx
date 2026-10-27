@@ -1,0 +1,161 @@
+---
+title: "Workspaces and access"
+description: "Models scoped to the current workspace with `#[model(workspace)]`, models as access-control subjects with policies, list filters and record checks from the same rules, and `unique` and `exists` validation rules that query models."
+---
+
+Two questions come up for every record a request touches: does it belong to the request's workspace, and may this user act on it? The ORM answers both in the model, so every query and write follows the same rules without each handler remembering them.
+
+## Workspace scoping
+
+<Badge feature="workspace" /> In a multi-tenant app built with [workspaces](/docs/workspaces/introduction/), most records belong to one workspace. Mark the model `workspace`, with a `workspace_id` column:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "projects", workspace)]
+pub struct Project {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+}
+```
+
+`workspace = "team_id"` names another column. From then on, in a workspace request (one where `CurrentWorkspace` or the `InWorkspace` guard entered the workspace on the unit of work):
+
+```rust
+let mine = Project::query().get(&uow).await?;                   // WHERE workspace_id = <current>
+let new = Project::create(&uow, Project { name: "Launch".into(), ..Default::default() }).await?;
+assert_eq!(Some(new.workspace_id), uow.workspace());            // filled in
+```
+
+- **Reads** get `workspace_id = <current>` as a global scope: queries, finds, counts, pages, plucks, mass updates and deletes, existence and `IN` subqueries, eager loads and [route bindings](/docs/orm/route-model-binding/) (another workspace's record is a 404).
+- **Writes** go through a behaviour every workspace-scoped model has, which runs in quiet operations too: a new record gets the current workspace (creating one without a current workspace fails, and one set to another workspace is refused); a stored record's workspace never changes; saving, deleting or restoring another workspace's record answers `ModelNotFound`, a 404. Mass updates can't set the workspace column.
+
+The current workspace is the one a task runs with (`navree::orm::workspace::scope`), else the one the executor's unit of work entered (`uow.workspace()`; `Workspaces::enter` enters one for jobs and commands), else the current unit of work's. With none, a query of a workspace-scoped model **fails**: it never falls back to every workspace. System work names one or opts out explicitly:
+
+```rust
+let theirs = Project::query().for_workspace(other).get(&uow).await?;
+let every = Project::query().without_workspace_scope().count(&uow).await?;
+let in_job = navree::orm::workspace::scope(workspace_id, Project::query().count(&db)).await?;
+```
+
+The scoping is the same on every [isolation strategy](/docs/workspaces/isolation/). On PostgreSQL with row isolation, row-level security reads the `navree.workspace` setting of the request's transaction, which every ORM statement runs in, so the database enforces the same boundary underneath; with schema isolation the `search_path` does; and a `WorkspaceUow` (database isolation) is an executor like any other.
+
+## Access control
+
+<Badge feature="access" /> With [navree-access](/docs/security/authorization/), a model can be a **subject**: the thing rules are about. Mark it `subject` and give it a `policy`, the rules about it:
+
+```rust
+use navree::access::{AbilityCtx, Policy, Rules, READ, UPDATE, field};
+
+/// A support ticket: a subject owned by a user.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "tickets", timestamps, subject, policy = TicketPolicy)]
+pub struct Ticket {
+    pub id: Uuid,
+    pub owner_id: Option<Uuid>,
+    pub title: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Signed-in users read every ticket and update their own.
+pub struct TicketPolicy;
+
+impl Policy for TicketPolicy {
+    fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+        let Some(user) = &ctx.user else {
+            return;
+        };
+        rules.can(READ, "Ticket");
+        rules.can(UPDATE, "Ticket").when(field("owner_id").eq(user.id));
+    }
+}
+```
+
+The subject's name is the struct's (`subject = "SupportTicket"` renames it) and its permission prefix is the table (`permission_prefix = "support"`); `policy` implies `subject`. Register it once in its module, with the model:
+
+```rust
+impl TicketsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.model::<Ticket>().import(AccessModule::for_feature::<Ticket>());
+    }
+}
+```
+
+The policy's rules then join every user's rules (before the app's abilities function, which can still override them), and routes check them:
+
+```rust
+#[controller("/tickets", version = "1")]
+impl TicketsController {
+    /// The tickets the user may read: the rules become a SQL filter.
+    #[get("/")]
+    #[can(Read, Ticket)]
+    async fn index(&self, uow: Uow, scope: Accessible<Ticket, Read>, page: PageQuery) -> Result<Page<Record<Ticket>>> {
+        Ok(scope.query().latest().paginate(&uow, page).await?)
+    }
+
+    /// Loads the ticket and checks it before the handler runs.
+    #[patch("/{ticket}")]
+    #[can(Update, Ticket, from = "ticket")]
+    async fn update(&self, uow: Uow, ticket: Authorized<Ticket, Update>) -> Result<Json<Record<Ticket>>> {
+        let mut ticket = ticket.into_inner();
+        ticket.update(&uow, |t| t.status = "closed".into()).await?;
+        Ok(Json(ticket))
+    }
+}
+```
+
+`#[can(Update, Ticket, from = "ticket")]` loads the record by route key (with global scopes, so inside the current workspace, locked `FOR UPDATE` where the database supports it, in the unit of work), checks the ability, and hands it to the handler as `Authorized<Ticket, Update>`: a 404 when there's no such ticket, a 403 when the rules refuse. `Accessible<Ticket, Read>` turns the same rules into one SQL condition: `scope.query()` (the `AccessibleQuery` trait, `navree::orm::access`) starts a query of the readable tickets, and `scope.apply(query)` narrows one you have.
+
+Outside routes, check with the ability directly:
+
+```rust
+use navree::orm::access::{AbilityExt, AccessibleQuery};
+
+let visible = Ticket::query().accessible(&ability, Read).paginate(&db, 1).await?;
+ability.authorize(Update, &ticket)?;          // a 403 in Navree's error shape
+let can_update: bool = ability.allows(Update, &ticket);
+```
+
+A list filter and a record check are compiled from the same rules, last match wins, so a record is listed exactly when a check on it would pass; counts and pages of the query respect the filter. Rule conditions name model columns, and their values are bound with the column's type (UUIDs, dates, decimals, enums as stored). `navree make:model tickets Ticket --policy --controller` writes a model, a policy and a controller wired this way.
+
+## Validation rules
+
+<Badge feature="validation" /> Two rules query models while a request is validated: `unique` (no record has the value) and `exists` (a record has it). They are navree-validation `AsyncRule`s, checked by `ValidAsync` after the input's other rules pass:
+
+```rust
+use navree::orm::validation::{exists, unique};
+use navree::validation::{AsyncRule, AsyncRules};
+
+/// The body of `POST /deals` and `PATCH /deals/{deal}`.
+pub struct DealInput {
+    pub slug: String,
+    pub company_id: Option<Uuid>,
+}
+
+impl AsyncRules for DealInput {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        vec![
+            // An update keeps its own slug: the route's {deal} is skipped.
+            unique(Deal::SLUG, self.slug.clone()).ignore_path_param("deal").into(),
+            // None skips the rule; the error goes to company_id.
+            exists(Company::ID, self.company_id).field("company_id").into(),
+        ]
+    }
+}
+```
+
+The rules query through the model in the request's unit of work, so its global scopes hold: on a workspace-scoped model a value is unique, or exists, within the current workspace. `unique` counts soft-deleted records too, since a unique index still covers their rows (`without_trashed()` leaves them out); `exists` doesn't, since a deleted record is gone (`with_trashed()` counts it). `ignore(key)` skips one record, `ignore_path_param("deal")` the one the route names (by route key), `where_(..)` narrows the query, and `query(|q| ..)` changes it freely. A failure is a 400 with `errors.<field>` like every [validation error](/docs/basics/validation/).
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/isolation/" title="Isolation">
+    Row, schema and database isolation of workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions, abilities and conditions.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    Validated extractors and async rules.
+  </LinkCard>
+</LinkCards>
