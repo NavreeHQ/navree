@@ -4,14 +4,14 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crm_core::entities::{activity, company, contact, deal};
-use crm_core::{ActivityKind, Stage};
+use crm_core::Stage;
+use crm_core::models::{Activity, ActivityScopes, Company, Contact, Deal};
 use navree::config::Config;
 use navree::contracts::Clock;
 use navree::db::Db;
+use navree::orm::Model;
 use navree::prelude::*;
 use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
-use sea_orm::{EntityTrait, PaginatorTrait};
 use serde_json::{Value, json};
 
 /// Hermetic settings for one test app on the database at `url`.
@@ -187,16 +187,24 @@ async fn seeder_creates_demo_accounts() {
     }
 
     let db = app.get::<Db>().await;
-    let conn = db.conn();
+    let db = &*db;
     let counts = (
-        company::Entity::find().count(conn).await.unwrap(),
-        contact::Entity::find().count(conn).await.unwrap(),
-        deal::Entity::find().count(conn).await.unwrap(),
-        activity::Entity::find().count(conn).await.unwrap(),
+        Company::query().with_trashed().count(db).await.unwrap(),
+        Contact::query().with_trashed().count(db).await.unwrap(),
+        Deal::query().count(db).await.unwrap(),
+        Activity::query().count(db).await.unwrap(),
     );
     assert_eq!(counts, (20, 50, 30, 60));
+    assert!(
+        Company::query()
+            .only_trashed()
+            .doesnt_exist(db)
+            .await
+            .unwrap(),
+        "no demo company is deleted"
+    );
 
-    let deals = deal::Entity::find().all(conn).await.unwrap();
+    let deals = Deal::query().get(db).await.unwrap();
     let stages: BTreeSet<Stage> = deals.iter().map(|d| d.stage).collect();
     assert_eq!(stages.len(), Stage::ALL.len(), "every stage has deals");
     for stage in Stage::ALL {
@@ -224,14 +232,8 @@ async fn seeder_creates_demo_accounts() {
     // Tasks fall in every bucket of the task list.
     let now = app.get::<dyn Clock>().await.now();
     let today = now.date_naive();
-    let tasks: Vec<activity::Model> = activity::Entity::find()
-        .all(conn)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|a| a.kind == ActivityKind::Task && a.completed_at.is_none())
-        .collect();
-    let due = |a: &activity::Model| a.due_at.expect("tasks are due").date_naive();
+    let tasks = Activity::query().open_tasks().get(db).await.unwrap();
+    let due = |a: &Activity| a.due_at.expect("tasks are due").date_naive();
     assert!(tasks.iter().any(|t| due(t) < today), "an overdue task");
     assert!(tasks.iter().any(|t| due(t) == today), "a task due today");
     assert!(tasks.iter().any(|t| due(t) > today), "an upcoming task");
@@ -240,7 +242,7 @@ async fn seeder_creates_demo_accounts() {
     app.run_command("db:seed", &[])
         .await
         .expect("db:seed again");
-    assert_eq!(company::Entity::find().count(conn).await.unwrap(), 20);
+    assert_eq!(Company::query().with_trashed().count(db).await.unwrap(), 20);
     app.shutdown().await.expect("shutdown");
 }
 

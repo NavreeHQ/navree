@@ -87,6 +87,7 @@ Deal::query()
 | `like(pattern)`, `not_like(..)` | a `LIKE` that ignores case: `ILIKE` on PostgreSQL; `LIKE` on MySQL (case-insensitive under its default collations) and SQLite (for ASCII letters) |
 | `like_case_sensitive(pattern)` | a `LIKE` that matches case: `LIKE` on PostgreSQL, `LIKE BINARY` on MySQL, `GLOB` on SQLite |
 | `ilike(pattern)` | ignores case on every database (`LOWER(..) LIKE LOWER(..)` on MySQL) |
+| `contains_ignore_case(text)`, `eq_ignore_case(text)` | the text, taken literally, anywhere in the column or as all of it, ignoring case for every letter (`équipe` finds `Équipe`) and keeping accents, the same on every database: a `GLOB` of case variants on SQLite, `LOWER(..) LIKE` or a `~` regular expression on PostgreSQL, the lower-cased column on MySQL, a `$regex` with `i` on MongoDB |
 | `regex`, `regex_case_insensitive`, `not_regex` | `~` and `~*` on PostgreSQL, `REGEXP_LIKE` on MySQL, `REGEXP` on SQLite (which needs a `regexp` function registered on the connection) |
 | `similar_to(pattern)` | PostgreSQL's `SIMILAR TO` |
 | `null_safe_eq(value)`, `is_distinct_from(value)` | equality where `NULL` equals `NULL`, and its opposite |

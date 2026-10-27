@@ -2,6 +2,7 @@
 //! validation rules.
 
 use chrono::{DateTime, Utc};
+use crm_core::models::Activity;
 use crm_core::{ActivityKind, SubjectType};
 use garde::Validate;
 use serde::{Deserialize, Deserializer};
@@ -82,6 +83,55 @@ pub struct UpdateActivity {
     #[garde(skip)]
     #[schema(value_type = Option<Uuid>)]
     pub assignee_id: Option<Option<Uuid>>,
+}
+
+impl CreateActivity {
+    /// The new activity, owned by `owner_id`; a blank body is none.
+    pub fn into_activity(self, owner_id: Uuid) -> Activity {
+        Activity {
+            kind: self.kind,
+            subject: self.subject,
+            body: non_blank(self.body),
+            due_at: self.due_at,
+            subject_type: self.subject_type,
+            subject_id: self.subject_id,
+            owner_id,
+            assignee_id: self.assignee_id,
+            ..Activity::default()
+        }
+    }
+}
+
+impl UpdateActivity {
+    /// Changes the fields sent; a blank body clears it.
+    pub fn apply_to(self, activity: &mut Activity) {
+        if let Some(kind) = self.kind {
+            activity.kind = kind;
+        }
+        if let Some(subject) = self.subject {
+            activity.subject = subject;
+        }
+        if let Some(body) = self.body {
+            activity.body = non_blank(body);
+        }
+        if let Some(due_at) = self.due_at {
+            activity.due_at = due_at;
+        }
+        if let Some(subject_type) = self.subject_type {
+            activity.subject_type = subject_type;
+        }
+        if let Some(subject_id) = self.subject_id {
+            activity.subject_id = subject_id;
+        }
+        if let Some(assignee) = self.assignee_id {
+            activity.assignee_id = assignee;
+        }
+    }
+}
+
+/// `None` for a missing or blank text.
+fn non_blank(text: Option<String>) -> Option<String> {
+    text.filter(|text| !text.trim().is_empty())
 }
 
 /// A field that may be absent but not `null` (absent is `None`, thanks to

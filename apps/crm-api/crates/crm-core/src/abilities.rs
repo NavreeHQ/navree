@@ -109,7 +109,7 @@ mod tests {
     use crate::roles::{ADMIN, MANAGER, REP};
 
     /// The permission prefixes the CRM registers (`for_feature` on every
-    /// entity and on navree-auth's users).
+    /// model, navree-auth's users included).
     fn prefixes() -> Arc<BTreeMap<String, String>> {
         Arc::new(
             [

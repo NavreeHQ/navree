@@ -1,21 +1,15 @@
 //! crm-core against a real app: the platform modules plus `CrmCoreModule`,
-//! booted on a temporary SQLite database.
+//! booted on a temporary SQLite database. The models themselves are tested
+//! in `models.rs`.
 
-use chrono::{NaiveDate, TimeZone, Utc};
-use crm_core::embeds::{CompanyRef, ContactRef, OwnerRef};
-use crm_core::entities::{activity, company, contact, deal};
-use crm_core::enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
+use chrono::Utc;
 use crm_core::{CrmCoreModule, permissions, platform};
 use navree::access::{AbilityFactory, AccessService};
 use navree::audit::AuditLog;
-use navree::auth::{AuthService, User};
-use navree::db::{Db, Migrator};
+use navree::db::Migrator;
 use navree::prelude::*;
 use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
-use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, EntityTrait};
 use serde_json::Value;
-use uuid::Uuid;
 
 struct Core {
     app: TestApp,
@@ -42,15 +36,6 @@ async fn boot() -> Core {
     Core { app, _db: db }
 }
 
-async fn user(core: &Core, name: &str, email: &str) -> User {
-    core.app
-        .get::<AuthService>()
-        .await
-        .create_user(name, email, "password123")
-        .await
-        .expect("the user is created")
-}
-
 #[tokio::test]
 async fn crm_migrations_run_after_auth_and_access() {
     let core = boot().await;
@@ -69,120 +54,6 @@ async fn crm_migrations_run_after_auth_and_access() {
             .filter(|m| m.module == "crm")
             .all(|m| m.applied)
     );
-    core.app.shutdown().await.expect("shutdown");
-}
-
-#[tokio::test]
-async fn every_crm_table_round_trips_its_columns() {
-    let core = boot().await;
-    let owner = user(&core, "Priya Shah", "rep1@navree.test").await;
-    let db = core.app.get::<Db>().await;
-    let conn = db.conn();
-    let now = Utc.with_ymd_and_hms(2026, 10, 26, 9, 30, 0).unwrap();
-
-    let acme = company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set("Acme".into()),
-        domain: Set(Some("acme.test".into())),
-        industry: Set(Some("Software".into())),
-        size: Set(Some(CompanySize::Medium)),
-        phone: Set(None),
-        website: Set(Some("https://acme.test".into())),
-        city: Set(Some("Berlin".into())),
-        country: Set(Some("Germany".into())),
-        owner_id: Set(owner.id),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(conn)
-    .await
-    .expect("company");
-    let ada = contact::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        first_name: Set("Ada".into()),
-        last_name: Set("Lovelace".into()),
-        email: Set(Some("ada@acme.test".into())),
-        phone: Set(None),
-        title: Set(Some("CTO".into())),
-        status: Set(ContactStatus::Prospect),
-        company_id: Set(Some(acme.id)),
-        owner_id: Set(owner.id),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-    }
-    .insert(conn)
-    .await
-    .expect("contact");
-    let renewal = deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set("Renewal".into()),
-        amount_cents: Set(1_250_000),
-        currency: Set("USD".into()),
-        stage: Set(Stage::Negotiation),
-        position: Set(0),
-        expected_close_date: Set(NaiveDate::from_ymd_opt(2026, 12, 1)),
-        closed_at: Set(None),
-        lost_reason: Set(None),
-        company_id: Set(acme.id),
-        contact_id: Set(Some(ada.id)),
-        owner_id: Set(owner.id),
-        created_at: Set(now),
-        updated_at: Set(now),
-    }
-    .insert(conn)
-    .await
-    .expect("deal");
-    let call = activity::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        kind: Set(ActivityKind::Task),
-        subject: Set("Send the quote".into()),
-        body: Set(Some("Include the SLA".into())),
-        due_at: Set(Some(now)),
-        completed_at: Set(None),
-        subject_type: Set(SubjectType::Deal),
-        subject_id: Set(renewal.id),
-        owner_id: Set(owner.id),
-        assignee_id: Set(Some(owner.id)),
-        created_at: Set(now),
-        updated_at: Set(now),
-    }
-    .insert(conn)
-    .await
-    .expect("activity");
-
-    let found = company::Entity::find_by_id(acme.id)
-        .one(conn)
-        .await
-        .unwrap();
-    assert_eq!(found.as_ref(), Some(&acme));
-    let found = contact::Entity::find_by_id(ada.id)
-        .one(conn)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        (found.status, found.full_name()),
-        (ContactStatus::Prospect, "Ada Lovelace".to_owned())
-    );
-    let found = deal::Entity::find_by_id(renewal.id)
-        .one(conn)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!((found.stage, found.probability()), (Stage::Negotiation, 75));
-    assert_eq!(found, renewal);
-    let found = activity::Entity::find_by_id(call.id)
-        .one(conn)
-        .await
-        .unwrap();
-    assert_eq!(found, Some(call));
-
-    // Enum columns hold the contract strings, which ability conditions see.
-    let record = navree::access::record_json(&renewal);
-    assert_eq!(record["stage"], "negotiation");
-    assert_eq!(record["owner_id"], owner.id.to_string());
     core.app.shutdown().await.expect("shutdown");
 }
 
@@ -240,71 +111,6 @@ async fn roles_seeder_creates_the_roles_once() {
 }
 
 #[tokio::test]
-async fn embeds_load_names_by_id() {
-    let core = boot().await;
-    let priya = user(&core, "Priya Shah", "rep1@navree.test").await;
-    let tom = user(&core, "Tom Becker", "rep2@navree.test").await;
-    let db = core.app.get::<Db>().await;
-    let conn = db.conn();
-    let now = Utc::now();
-    let acme = company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set("Acme".into()),
-        owner_id: Set(priya.id),
-        created_at: Set(now),
-        updated_at: Set(now),
-        ..Default::default()
-    }
-    .insert(conn)
-    .await
-    .expect("company");
-    let ada = contact::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        first_name: Set("Ada".into()),
-        last_name: Set("Lovelace".into()),
-        status: Set(ContactStatus::Lead),
-        owner_id: Set(tom.id),
-        created_at: Set(now),
-        updated_at: Set(now),
-        ..Default::default()
-    }
-    .insert(conn)
-    .await
-    .expect("contact");
-
-    let unknown = Uuid::now_v7();
-    let owners = OwnerRef::load(conn, [priya.id, tom.id, priya.id, unknown])
-        .await
-        .expect("owners");
-    assert_eq!(owners.len(), 2);
-    assert_eq!(
-        owners[&tom.id],
-        OwnerRef {
-            id: tom.id,
-            name: "Tom Becker".into()
-        }
-    );
-    let companies = CompanyRef::load(conn, [acme.id]).await.expect("companies");
-    assert_eq!(
-        companies[&acme.id],
-        CompanyRef {
-            id: acme.id,
-            name: "Acme".into()
-        }
-    );
-    let contacts = ContactRef::load(conn, [ada.id]).await.expect("contacts");
-    assert_eq!(
-        contacts[&ada.id],
-        ContactRef {
-            id: ada.id,
-            full_name: "Ada Lovelace".into()
-        }
-    );
-    assert!(OwnerRef::load(conn, []).await.expect("none").is_empty());
-    core.app.shutdown().await.expect("shutdown");
-}
-
-#[tokio::test]
 async fn platform_and_core_pass_check() {
     let (url, _db) = temp_sqlite_url();
     platform(Navree::app(), sources(url))
@@ -346,4 +152,47 @@ async fn migrate_fresh_runs_on_a_migrated_database() {
         .expect("roles");
     assert_eq!(roles.len(), 3, "{roles:?}");
     app.shutdown().await.expect("shutdown");
+}
+
+/// `migrate:reset` takes the CRM's tables away (every migration reverted,
+/// newest first) and `migrate` puts them back: the schema-builder
+/// migrations run both ways.
+#[tokio::test]
+async fn crm_migrations_revert_and_run_again() {
+    let core = boot().await;
+    let crm_tables = |tables: Vec<String>| -> Vec<String> {
+        let mut found: Vec<String> = tables
+            .into_iter()
+            .filter(|table| {
+                ["companies", "contacts", "deals", "activities"].contains(&table.as_str())
+            })
+            .collect();
+        found.sort();
+        found
+    };
+    let db = core.app.get::<navree::db::Db>().await;
+    let listing = || async {
+        navree::schema::Schema::new(db.conn())
+            .table_listing()
+            .await
+            .expect("tables")
+    };
+    assert_eq!(
+        crm_tables(listing().await),
+        ["activities", "companies", "contacts", "deals"]
+    );
+    core.app
+        .run_command("migrate:reset", &[])
+        .await
+        .expect("reverted");
+    assert!(crm_tables(listing().await).is_empty());
+    core.app
+        .run_command("migrate", &[])
+        .await
+        .expect("migrated again");
+    assert_eq!(
+        crm_tables(listing().await),
+        ["activities", "companies", "contacts", "deals"]
+    );
+    core.app.shutdown().await.expect("shutdown");
 }

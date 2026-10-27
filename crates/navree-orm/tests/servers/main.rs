@@ -13,6 +13,7 @@ mod models;
 mod relations;
 mod scenarios;
 mod support;
+mod text;
 
 use support::{Server, run};
 
@@ -224,4 +225,17 @@ async fn mysql_timeouts() {
 #[tokio::test]
 async fn postgres_lost_connections() {
     run(Server::Postgres, scenarios::lost_connections).await;
+}
+
+#[tokio::test]
+async fn postgres_text_ignoring_case() {
+    run(Server::Postgres, |db| {
+        text::ignoring_case(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_text_ignoring_case() {
+    run(Server::MySql, |db| text::ignoring_case(db, Server::MySql)).await;
 }

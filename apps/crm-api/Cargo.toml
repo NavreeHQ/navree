@@ -15,6 +15,11 @@ path = "src/main.rs"
 [lints.rust]
 unsafe_code = "forbid"
 
+[features]
+## The PostgreSQL driver: `postgres://` database URLs (with TimescaleDB, the
+## activity timeline is a hypertable). Also runs tests/servers.rs there.
+postgres = ["navree/postgres"]
+
 [dependencies]
 chrono = { workspace = true }
 crm-activities = { path = "crates/crm-activities" }
@@ -23,7 +28,6 @@ crm-core = { path = "crates/crm-core" }
 crm-deals = { path = "crates/crm-deals" }
 crm-users = { path = "crates/crm-users" }
 navree = { workspace = true, features = ["mcp"] }
-sea-orm = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }

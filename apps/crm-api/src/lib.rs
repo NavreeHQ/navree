@@ -18,9 +18,10 @@
 //! # }
 //! ```
 //!
-//! The crates under `crates/`: `crm-core` (shared entities, enums,
-//! migrations, abilities, platform), `crm-testkit` (`TestCrm`),
-//! `crm-users`, `crm-companies`, `crm-deals`, `crm-activities`.
+//! The crates under `crates/`: `crm-core` (the shared models and their
+//! factories, enums, migrations, abilities, platform), `crm-testkit`
+//! (`TestCrm`), `crm-users`, `crm-companies`, `crm-deals`,
+//! `crm-activities`.
 #![forbid(unsafe_code)]
 
 mod app;
