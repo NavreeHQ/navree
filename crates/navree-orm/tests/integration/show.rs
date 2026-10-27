@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
 use navree_orm::hooks::{ModelEvent, ModelHook};
-use navree_orm::show::{describe_model, registered};
-use navree_orm::{ExecContext, ModuleBuilderOrmExt, Record, Result};
+use navree_orm::show::describe_model;
+use navree_orm::{ExecContext, ModuleBuilderOrmExt, Record, Result, registered_models};
 
 use crate::models::{Deal, Project, Ticket};
 use crate::support::app;
@@ -48,7 +48,7 @@ impl Module for ProjectsModule {
 #[tokio::test]
 async fn registered_models_are_described() {
     let (app, _db, _clock) = app(vec![Box::new(DealsModule), Box::new(ProjectsModule)]).await;
-    let names: Vec<&str> = registered(app.ctx()).iter().map(|meta| meta.name()).collect();
+    let names: Vec<&str> = registered_models(app.ctx()).iter().map(|model| model.name()).collect();
     assert_eq!(names, ["Deal", "Ticket", "Project"]);
 
     let deal = describe_model(app.ctx(), "deal").await.unwrap();
@@ -109,7 +109,7 @@ async fn the_command_lists_and_shows_models() {
 #[tokio::test]
 async fn without_registrations_the_command_says_how_to_register() {
     let (app, _db, _clock) = app(vec![Box::new(navree_orm::OrmModule)]).await;
-    assert!(registered(app.ctx()).is_empty());
+    assert!(registered_models(app.ctx()).is_empty());
     app.run_command("model:show", &[]).await.unwrap();
     let error = app.run_command("model:show", &["Deal"]).await.unwrap_err();
     assert!(

@@ -3,9 +3,11 @@
 //! timestamps, soft deletes, workspace, factory and the relationships it
 //! declares, access subject and policy, global scopes and hooks.
 //!
-//! Models are registered with [`ModuleBuilderOrmExt::model`] (`navree
-//! make:model` adds the line to the module's `wire`), which also imports
-//! [`OrmModule`], the module registering the command:
+//! Models are registered with
+//! [`ModuleBuilderOrmExt::model`](crate::ModuleBuilderOrmExt::model)
+//! (`navree make:model` adds the line to the module's `wire`), which also
+//! imports [`OrmModule`](crate::OrmModule), the module registering the
+//! command:
 //!
 //! ```text
 //! navree model:show              # the registered models
@@ -15,17 +17,7 @@
 //!
 //! ```
 //! # use navree_orm::__doc_factories::*;
-//! use navree_kernel::{Module, ModuleBuilder};
-//! use navree_orm::ModuleBuilderOrmExt;
 //! use navree_orm::show::ModelDescription;
-//!
-//! struct DealsModule;
-//!
-//! impl Module for DealsModule {
-//!     fn register(&self, m: &mut ModuleBuilder) {
-//!         m.model::<Deal>().model::<Company>();
-//!     }
-//! }
 //!
 //! let deal = ModelDescription::of::<Deal>(Vec::new());
 //! assert_eq!((deal.model, deal.table, deal.route_key), ("Deal", "deals", "slug"));
@@ -35,64 +27,22 @@
 
 use std::fmt::Write as _;
 
-use navree_kernel::{AppContext, BoxError, BoxFuture, CommandSpec, Module, ModuleBuilder};
+use navree_kernel::{AppContext, BoxError, CommandSpec};
 use serde::Serialize;
 
 use crate::factory::RelationshipInfo;
-use crate::hooks::ModelHook;
-use crate::model::{KeyKind, Model, ModelMeta};
+use crate::model::{KeyKind, Model};
+use crate::module::registered_models;
 use crate::scope::SoftDeletes;
 
-/// The ORM's module: the `model:show` command. [`ModuleBuilderOrmExt::model`]
-/// imports it, so apps rarely add it themselves.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct OrmModule;
-
-impl Module for OrmModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.command(CommandSpec::new(
-            "model:show",
-            "Show a model: table, key, columns and casts, relationships, scopes, hooks, policy (model:show [Model] [--json])",
-            |ctx, args| async move { run(&ctx, &args).await },
-        ));
-    }
-}
-
-/// Registers models with the app.
-pub trait ModuleBuilderOrmExt {
-    /// Registers model `M`: `model:show` describes it, with the hooks the
-    /// app registers for it. Imports [`OrmModule`].
-    fn model<M: Model>(&mut self) -> &mut Self;
-}
-
-impl ModuleBuilderOrmExt for ModuleBuilder {
-    fn model<M: Model>(&mut self) -> &mut Self {
-        self.import(OrmModule).contribute(ModelEntry::of::<M>())
-    }
-}
-
-/// A model registered with [`ModuleBuilderOrmExt::model`].
-struct ModelEntry {
-    meta: &'static ModelMeta,
-    describe: fn(AppContext) -> BoxFuture<'static, Result<ModelDescription, BoxError>>,
-}
-
-impl ModelEntry {
-    fn of<M: Model>() -> Self {
-        ModelEntry {
-            meta: M::meta(),
-            describe: describe::<M>,
-        }
-    }
-}
-
-/// `M`'s description, with the hooks `ctx` registers for it.
-fn describe<M: Model>(ctx: AppContext) -> BoxFuture<'static, Result<ModelDescription, BoxError>> {
-    Box::pin(async move {
-        let registered = ctx.get_all::<dyn ModelHook<M>>().await?;
-        let app_hooks = registered.iter().map(|hook| hook.name()).collect();
-        Ok(ModelDescription::of::<M>(app_hooks))
-    })
+/// The `model:show` command ([`OrmModule`](crate::OrmModule) registers
+/// it).
+pub(crate) fn command() -> CommandSpec {
+    CommandSpec::new(
+        "model:show",
+        "Show a model: table, key, columns and casts, relationships, scopes, hooks, policy (model:show [Model] [--json])",
+        |ctx, args| async move { run(&ctx, &args).await },
+    )
 }
 
 /// A model as `model:show` shows it (`--json` prints this).
@@ -307,21 +257,16 @@ fn table<const N: usize>(
     }
 }
 
-/// The models the app registers ([`ModuleBuilderOrmExt::model`]), in
-/// module order, each once.
-pub fn registered(ctx: &AppContext) -> Vec<&'static ModelMeta> {
-    entries(ctx).iter().map(|entry| entry.meta).collect()
-}
-
 /// The registered model named `name` (in any case) or stored in table
-/// `name`, described with the hooks the app registers for it.
+/// `name` ([`registered_models`](crate::registered_models)), described
+/// with the hooks the app registers for it.
 pub async fn describe_model(ctx: &AppContext, name: &str) -> Result<ModelDescription, BoxError> {
-    let entries = entries(ctx);
-    let entry = entries
+    let models = registered_models(ctx);
+    let model = models
         .iter()
-        .find(|entry| entry.meta.name().eq_ignore_ascii_case(name) || entry.meta.table() == name)
+        .find(|model| model.name().eq_ignore_ascii_case(name) || model.meta().table() == name)
         .ok_or_else(|| {
-            let known: Vec<&str> = entries.iter().map(|entry| entry.meta.name()).collect();
+            let known: Vec<&str> = models.iter().map(|model| model.name()).collect();
             if known.is_empty() {
                 format!("no model `{name}`. {}", no_models())
             } else {
@@ -331,21 +276,7 @@ pub async fn describe_model(ctx: &AppContext, name: &str) -> Result<ModelDescrip
                 )
             }
         })?;
-    (entry.describe)(ctx.clone()).await
-}
-
-/// The registrations, each model once.
-fn entries(ctx: &AppContext) -> Vec<std::sync::Arc<ModelEntry>> {
-    let mut entries: Vec<std::sync::Arc<ModelEntry>> = Vec::new();
-    for entry in ctx.contributions::<ModelEntry>() {
-        if !entries
-            .iter()
-            .any(|seen| std::ptr::eq(seen.meta, entry.value.meta))
-        {
-            entries.push(entry.value);
-        }
-    }
-    entries
+    model.describe(ctx).await
 }
 
 /// `model:show [Model] [--json]`.
@@ -365,7 +296,10 @@ async fn run(ctx: &AppContext, args: &[String]) -> Result<(), BoxError> {
         .collect();
     match names.as_slice() {
         [] => {
-            let models = registered(ctx);
+            let models: Vec<_> = registered_models(ctx)
+                .iter()
+                .map(|model| model.meta())
+                .collect();
             if json {
                 let list: Vec<serde_json::Value> = models
                     .iter()

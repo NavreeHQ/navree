@@ -49,6 +49,7 @@
 mod bulk;
 mod context;
 mod faker;
+pub(crate) mod quiet;
 mod relationships;
 mod sequence;
 mod sources;
@@ -753,12 +754,12 @@ impl<F: ModelFactory> Factory<F> {
     /// keys, timestamps, workspace) and the change events of the audit log
     /// still do.
     pub async fn create_quietly<E: Executor + ?Sized>(self, exec: &E) -> Result<Collection<F::Model>> {
-        crate::quiet::scope(self.create(exec)).await
+        self::quiet::scope(self.create(exec)).await
     }
 
     /// One record, created quietly.
     pub async fn create_one_quietly<E: Executor + ?Sized>(self, exec: &E) -> Result<Record<F::Model>> {
-        crate::quiet::scope(self.create_one(exec)).await
+        self::quiet::scope(self.create_one(exec)).await
     }
 
     /// `count` records, created quietly.
@@ -767,7 +768,7 @@ impl<F: ModelFactory> Factory<F> {
         exec: &E,
         count: usize,
     ) -> Result<Collection<F::Model>> {
-        crate::quiet::scope(self.create_many(exec, count)).await
+        self::quiet::scope(self.create_many(exec, count)).await
     }
 
     /// Inserts the records in one `INSERT` statement: no model events, no
