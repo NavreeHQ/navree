@@ -4601,6 +4601,7 @@ dependencies = [
  "chrono",
  "cookie",
  "form_urlencoded",
+ "garde",
  "hex",
  "hmac 0.13.0",
  "http",
@@ -4615,6 +4616,7 @@ dependencies = [
  "navree-http-client",
  "navree-kernel",
  "navree-mail",
+ "navree-mcp",
  "navree-queue",
  "navree-schedule",
  "navree-telemetry",
@@ -4629,6 +4631,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "utoipa",
  "uuid",
 ]
 
