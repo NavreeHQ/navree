@@ -15,8 +15,8 @@ use crate::forward::{ProcessRunner, forward};
 use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
-use crate::new_app::{NavreeSource, NewApp, create_app};
-use crate::project::project_root;
+use crate::new_app::{NavreeSource, NewApp, create_app, created_message};
+use crate::project::{project_root, run_root};
 use crate::resource::make_resource;
 
 /// Runs `cli` with `cwd` as the working directory.
@@ -26,11 +26,12 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let app = NewApp {
                 name: AppName::parse(&args.name)?,
                 ui: args.ui,
+                kit: args.kit,
                 navree: NavreeSource::resolve(args.navree_path.as_deref())?,
             };
             let root = create_app(cwd, &app, Timestamp::now())?;
             format_rust(&rust_files(&root));
-            print_new_app(&app, &root);
+            print!("{}", created_message(&app, &root));
             Ok(ExitCode::SUCCESS)
         }
         Command::MakeModule(args) => {
@@ -48,7 +49,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Dev(args) => {
-            let root = app_root(cwd)?;
+            let root = run_root_of(cwd)?;
             dev::run(
                 &root,
                 &DevOptions {
@@ -84,12 +85,12 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let report = run_gate(&root, &options, &mut ProcessRunner, &mut std::io::stdout())?;
             Ok(exit_code(report.passed()))
         }
-        Command::Dock(command) => dock::run(command, &app_root(cwd)?),
-        Command::DockAdd(args) => dock::add(&args.service, &app_root(cwd)?, &mut std::io::stdout()),
+        Command::Dock(command) => dock::run(command, &run_root_of(cwd)?),
+        Command::DockAdd(args) => dock::add(&args.service, &run_root_of(cwd)?, &mut std::io::stdout()),
         Command::DockRemove(args) => dock::remove(
             &args.service,
             args.volumes,
-            &app_root(cwd)?,
+            &run_root_of(cwd)?,
             &mut std::io::stdout(),
         ),
         Command::Harbor(command) => {
@@ -100,7 +101,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 anyhow::bail!("no command given");
             };
             // The app's dock.toml services, when it has one.
-            let env = match project_root(cwd) {
+            let env = match run_root(cwd) {
                 Some(root) => dock::app_env(&root)?,
                 None => Vec::new(),
             };
@@ -157,6 +158,17 @@ fn app_root(cwd: &Path) -> anyhow::Result<PathBuf> {
     })
 }
 
+/// Where `dev`, `dock` and forwarded commands run for `cwd`: the app, or a
+/// workspace whose `default-members` is the app ([`run_root`]).
+fn run_root_of(cwd: &Path) -> anyhow::Result<PathBuf> {
+    run_root(cwd).with_context(|| {
+        format!(
+            "{} is not inside a Rust package (no Cargo.toml with [package], or a [workspace] with default-members, here or above); run navree in your app",
+            cwd.display()
+        )
+    })
+}
+
 /// `path` relative to `root`, with `/` separators.
 fn shown(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).unwrap_or(path);
@@ -187,7 +199,7 @@ fn finish(root: &Path, report: &MakeReport) {
     }
 }
 
-/// Every `.rs` file under `root`'s `src/` and `tests/`.
+/// Every `.rs` file under `root`'s `src/`, `tests/` and `crates/`.
 fn rust_files(root: &Path) -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
@@ -205,6 +217,8 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     walk(&root.join("src"), &mut out);
     walk(&root.join("tests"), &mut out);
+    // The crates of a workspace app (the `micro` kit).
+    walk(&root.join("crates"), &mut out);
     out
 }
 
@@ -231,17 +245,3 @@ fn format_rust(files: &[PathBuf]) {
     }
 }
 
-fn print_new_app(app: &NewApp, root: &Path) {
-    println!("Created {} in {}", app.name.package(), root.display());
-    if let NavreeSource::Path(path) = &app.navree {
-        println!("It depends on navree at {}.", path.display());
-    }
-    println!();
-    println!("Next steps:");
-    println!("  cd {}", app.name.package());
-    println!("  navree key:generate     # then set APP_KEY in .env");
-    println!("  navree dev              # http://127.0.0.1:8080/api/docs");
-    if root.join("web").is_dir() {
-        println!("  cd web && npm install # the front end; `navree dev` starts it");
-    }
-}

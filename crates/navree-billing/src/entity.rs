@@ -57,6 +57,18 @@ pub mod customer {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
+/// The access subject of subscriptions (`Subscription`), for admin panels
+/// (Helm) and `#[can]` checks; permissions `subscriptions.<action>`.
+pub const SUBSCRIPTION_SUBJECT: &str = "Subscription";
+
+/// Subscriptions are the access subject [`SUBSCRIPTION_SUBJECT`] with the
+/// permission prefix `subscriptions`, so an app can list them in Helm or
+/// check `#[can(Read, Subscription)]`.
+impl navree_access::Subject for subscription::Entity {
+    const SUBJECT: &'static str = SUBSCRIPTION_SUBJECT;
+    const PERMISSION_PREFIX: &'static str = "subscriptions";
+}
+
 /// `subscriptions`: the local copy of the provider's subscriptions.
 pub mod subscription {
     use sea_orm::entity::prelude::*;
@@ -252,3 +264,20 @@ pub type BillingEventRecord = event::Model;
 pub type UsageRecord = usage::Model;
 /// A row of `subscription_items`.
 pub type SubscriptionItem = subscription_item::Model;
+
+#[cfg(test)]
+mod tests {
+    use navree_access::Subject;
+
+    use super::*;
+
+    #[test]
+    fn subscriptions_are_an_access_subject() {
+        assert_eq!(<subscription::Entity as Subject>::SUBJECT, "Subscription");
+        assert_eq!(SUBSCRIPTION_SUBJECT, "Subscription");
+        assert_eq!(
+            <subscription::Entity as Subject>::PERMISSION_PREFIX,
+            "subscriptions"
+        );
+    }
+}

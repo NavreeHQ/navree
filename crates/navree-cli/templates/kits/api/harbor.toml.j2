@@ -1,0 +1,41 @@
+# Servers and deploys with Harbor (https://navree.com/docs/tools/harbor/).
+#
+#   navree harbor:secrets set APP_KEY --generate
+#   navree harbor:provision        # prepares the servers below
+#   navree deploy                  # builds, uploads, migrates, health-checks, switches
+#
+# Replace the domain and the server's address with yours.
+app = "{{ package }}"
+domain = "{{ package }}.example.com"
+
+[build]
+features = ["postgres"]
+
+[deploy]
+health_check = "/health/ready"
+
+[processes]
+web = { command = "serve" }
+worker = { command = "queue:work" }
+scheduler = { command = "schedule:work" }
+
+[servers.app-1]
+host = "203.0.113.10"
+roles = ["web", "worker", "scheduler", "postgres"]
+{% if web %}
+
+# The Next.js app in web/ ships in the same release as the API, so a page and
+# the API it calls always come from the same build. Caddy serves `domain`
+# from it; the API stays on loopback behind its backend-for-frontend.
+[frontend]
+path = "web"
+build = "pnpm install --frozen-lockfile && pnpm build"
+command = "pnpm start"
+health_check = "/"
+{% endif %}
+
+[env]
+APP_APP__URL = "https://{{ package }}.example.com"
+APP_MAIL__FROM = "{{ title }} <hello@{{ package }}.example.com>"
+APP_BILLING__PROVIDER = "stripe"
+APP_LOG__LEVEL = "info"

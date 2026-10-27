@@ -1,0 +1,191 @@
+//! The `demo` seeder: `navree db:seed` (or `navree migrate:fresh --seed`)
+//! creates the workspace `demo` with an owner and a member, and a few
+//! projects. Both accounts use the password [`DEMO_PASSWORD`]; the owner is
+//! also a super admin, so the admin panel at `/admin` opens for them.
+//!
+//! Running it again changes nothing: what exists is found again.
+
+use navree::access::AccessService;
+use navree::auth::{AuthService, User};
+use navree::db::{Db, Seeder, Uow};
+use navree::workspace::{
+    Members, NewWorkspace, Workspace, WorkspaceRepo, WorkspaceRole, Workspaces,
+};
+use navree::{BoxFuture, prelude::*};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, IntoActiveModel, PaginatorTrait};
+use uuid::Uuid;
+
+use crate::abilities::SUPER_ADMIN;
+use crate::modules::projects::entity::{ActiveModel as ProjectModel, Project};
+
+/// The seeder's name: `navree db:seed demo`.
+pub const DEMO_SEEDER: &str = "demo";
+
+/// The password of the demo accounts.
+pub const DEMO_PASSWORD: &str = "password123";
+
+/// The demo workspace's slug: the web app opens it at `/w/demo/`.
+pub const DEMO_WORKSPACE: &str = "demo";
+
+/// The owner of the demo workspace, also a super admin.
+pub const DEMO_OWNER: &str = "owner@{{ package | replace("_", "-") }}.test";
+
+/// A member of the demo workspace.
+pub const DEMO_MEMBER: &str = "member@{{ package | replace("_", "-") }}.test";
+
+/// Registers the `demo` seeder.
+#[module(register = Self::wire)]
+pub struct SeedModule;
+
+impl SeedModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.seeder::<DemoSeeder>();
+    }
+}
+
+/// `navree db:seed demo`; see the [module docs](self).
+#[injectable]
+pub struct DemoSeeder;
+
+impl Seeder for DemoSeeder {
+    fn name(&self) -> &'static str {
+        DEMO_SEEDER
+    }
+
+    fn run<'a>(&'a self, ctx: &'a AppContext, _db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let workspace = seed_demo(ctx).await?;
+            tracing::info!(workspace = %workspace.slug, "seeded the demo workspace");
+            Ok(())
+        })
+    }
+}
+
+/// Creates (or finds) the demo accounts, workspace and projects.
+pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
+    let owner = ensure_account(ctx, "Olivia Owner", DEMO_OWNER, DEMO_PASSWORD)
+        .await?
+        .id;
+    let member = ensure_account(ctx, "Max Member", DEMO_MEMBER, DEMO_PASSWORD)
+        .await?
+        .id;
+    let db = ctx.get::<Db>().await?;
+
+    let access = ctx.get::<AccessService>().await?;
+    in_uow(&db, |uow| async move {
+        if access.role(SUPER_ADMIN).await?.is_none() {
+            access
+                .create_role(&uow, SUPER_ADMIN, Some("Super admins: every check passes"))
+                .await?;
+        }
+        access.assign_role(&uow, owner, SUPER_ADMIN).await?;
+        Ok(())
+    })
+    .await?;
+
+    let workspaces = ctx.get::<Workspaces>().await?;
+    let workspace = match workspaces.find_by_slug(DEMO_WORKSPACE).await? {
+        Some(workspace) => workspace,
+        None => {
+            let workspaces = workspaces.clone();
+            in_uow(&db, |uow| async move {
+                let input = NewWorkspace::named("Demo").slug(DEMO_WORKSPACE);
+                Ok(workspaces.create(&uow, owner, input).await?)
+            })
+            .await?
+        }
+    };
+
+    if workspaces.membership(workspace.id, member).await?.is_none() {
+        let members = ctx.get::<Members>().await?;
+        let id = workspace.id;
+        in_uow(&db, |uow| async move {
+            members
+                .add(&uow, id, member, WorkspaceRole::Member)
+                .await?;
+            Ok(())
+        })
+        .await?;
+    }
+
+    let id = workspace.id;
+    let author = owner;
+    in_uow(&db, |uow| async move {
+        // On PostgreSQL, row-level security admits this workspace's rows only.
+        workspaces.enter(&uow, id).await?;
+        let existing = WorkspaceRepo::<Project>::select(id)
+            .count(&*uow.tx().await?)
+            .await?;
+        if existing > 0 {
+            return Ok(());
+        }
+        let now = chrono::Utc::now();
+        for (name, description, status) in [
+            ("Website relaunch", "New pages, new pricing, one launch date.", "active"),
+            ("Mobile app", "Sign-in, projects and notifications on the phone.", "active"),
+            ("Onboarding emails", "Five emails over a customer's first two weeks.", "archived"),
+        ] {
+            WorkspaceRepo::<Project>::insert(
+                &uow,
+                id,
+                ProjectModel {
+                    id: Set(Uuid::now_v7()),
+                    name: Set(name.to_owned()),
+                    description: Set(Some(description.to_owned())),
+                    status: Set(status.to_owned()),
+                    created_by: Set(author),
+                    created_at: Set(now),
+                    updated_at: Set(now),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        }
+        Ok(())
+    })
+    .await?;
+    Ok(workspace)
+}
+
+/// The account for `email`, created with `password` if it does not exist,
+/// with its address marked verified.
+pub async fn ensure_account(
+    ctx: &AppContext,
+    name: &str,
+    email: &str,
+    password: &str,
+) -> Result<User, BoxError> {
+    let auth = ctx.get::<AuthService>().await?;
+    let user = match auth.find_by_email(email).await? {
+        Some(user) => user,
+        None => auth.create_user(name, email, password).await?,
+    };
+    if user.email_verified_at.is_some() {
+        return Ok(user);
+    }
+    let db = ctx.get::<Db>().await?;
+    let verified_at = user.created_at;
+    let mut active = user.into_active_model();
+    active.email_verified_at = Set(Some(verified_at));
+    Ok(active.update(db.conn()).await?)
+}
+
+/// Runs `f` in a new unit of work: commits when it succeeds, rolls back
+/// when it fails.
+async fn in_uow<T, F, Fut>(db: &Db, f: F) -> Result<T, BoxError>
+where
+    F: FnOnce(Uow) -> Fut,
+    Fut: Future<Output = Result<T, BoxError>>,
+{
+    let uow = db.uow(None, None).await;
+    match f(uow.clone()).await {
+        Ok(value) => {
+            uow.commit().await?;
+            Ok(value)
+        }
+        Err(error) => {
+            uow.rollback().await?;
+            Err(error)
+        }
+    }
+}
