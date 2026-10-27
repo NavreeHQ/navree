@@ -41,6 +41,7 @@
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
+//! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
@@ -207,6 +208,8 @@ pub mod flags {
 // L7
 #[cfg(feature = "billing")]
 pub use navree_billing as billing;
+#[cfg(feature = "fleet")]
+pub use navree_fleet as fleet;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

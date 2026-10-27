@@ -3069,6 +3069,7 @@ dependencies = [
  "navree-dock",
  "navree-events",
  "navree-flags",
+ "navree-fleet",
  "navree-graphql",
  "navree-grpc",
  "navree-http",
