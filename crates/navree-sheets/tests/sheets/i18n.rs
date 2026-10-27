@@ -26,7 +26,11 @@ async fn app() -> TestApp {
 async fn export_headers_follow_the_request_locale() {
     let app = app().await;
     let admin = app.acting_as(principal(ADMIN));
-    let english = admin.get("/api/exports/contacts").send().await.assert_status(200);
+    let english = admin
+        .get("/api/exports/contacts")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(csv_lines(english.bytes())[0], "Email,Name,Age,Vip");
     let french = admin
         .get("/api/exports/contacts")
@@ -70,7 +74,10 @@ async fn rows_are_checked_in_the_uploader_locale() {
     let admin = app.acting_as(principal(ADMIN));
     let (content_type, body) = support::multipart(
         &[("importer", "contacts")],
-        Some(("c.csv", b"Email,Name,Age\nnope,Bob,1\nbob@example.com,Bob,x\n")),
+        Some((
+            "c.csv",
+            b"Email,Name,Age\nnope,Bob,1\nbob@example.com,Bob,x\n",
+        )),
     );
     let uploaded = admin
         .post("/api/imports")
@@ -83,7 +90,10 @@ async fn rows_are_checked_in_the_uploader_locale() {
         .json_value();
     run_queue(&app).await;
     let rows = admin
-        .get(&format!("/api/imports/{}/rows?status=invalid", id_of(&uploaded)))
+        .get(&format!(
+            "/api/imports/{}/rows?status=invalid",
+            id_of(&uploaded)
+        ))
         .send()
         .await
         .json_value();

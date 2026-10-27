@@ -177,9 +177,9 @@ fn parse_export_field(field: &syn::Field) -> syn::Result<Option<ExportField>> {
                         Lit::Float(float) => float.base10_parse::<f64>().ok(),
                         _ => None,
                     };
-                    width = Some(parsed.filter(|w| *w > 0.0 && *w <= 255.0).ok_or_else(
-                        || syn::Error::new(value.span(), "the width is a number from 1 to 255"),
-                    )?);
+                    width = Some(parsed.filter(|w| *w > 0.0 && *w <= 255.0).ok_or_else(|| {
+                        syn::Error::new(value.span(), "the width is a number from 1 to 255")
+                    })?);
                 }
                 "with" => {
                     let value: LitStr = meta.value()?.parse()?;
@@ -407,7 +407,10 @@ fn parse_import_field(field: &syn::Field, serde: &SerdeStruct) -> syn::Result<Op
         .clone()
         .ok_or_else(|| syn::Error::new(field.span(), "expected a named field"))?;
     let serde_args = serde_field(field)?;
-    let key = serde_args.rename.clone().unwrap_or_else(|| field_name(&ident));
+    let key = serde_args
+        .rename
+        .clone()
+        .unwrap_or_else(|| field_name(&ident));
     let mut header: Option<LitStr> = None;
     let mut aliases: Vec<LitStr> = Vec::new();
     let mut required: Option<bool> = None;
@@ -456,8 +459,8 @@ fn parse_import_field(field: &syn::Field, serde: &SerdeStruct) -> syn::Result<Op
         return Ok(None);
     }
     let header = header.unwrap_or_else(|| LitStr::new(&sentence_case(&key), ident.span()));
-    let required = required
-        .unwrap_or_else(|| !(is_option(&field.ty) || serde_args.default || serde.default));
+    let required =
+        required.unwrap_or_else(|| !(is_option(&field.ty) || serde_args.default || serde.default));
     Ok(Some(ImportField {
         key,
         header,
@@ -470,10 +473,7 @@ fn parse_import_field(field: &syn::Field, serde: &SerdeStruct) -> syn::Result<Op
 mod tests {
     use super::*;
 
-    type Expansion = fn(
-        TokenStream,
-        fn() -> syn::Result<TokenStream>,
-    ) -> syn::Result<TokenStream>;
+    type Expansion = fn(TokenStream, fn() -> syn::Result<TokenStream>) -> syn::Result<TokenStream>;
 
     fn sheets() -> syn::Result<TokenStream> {
         Ok(quote!(::navree_sheets))
@@ -517,19 +517,42 @@ mod tests {
     fn exportable_rejects_unknown_arguments_and_tuple_structs() {
         let out = expand(
             try_expand_exportable,
-            quote!(struct Row { #[export(colour = "red")] a: String }),
+            quote!(
+                struct Row {
+                    #[export(colour = "red")]
+                    a: String,
+                }
+            ),
         );
-        assert!(out.contains("unknown #[export] field argument `colour`"), "{out}");
-        let out = expand(try_expand_exportable, quote!(struct Row(String);));
+        assert!(
+            out.contains("unknown #[export] field argument `colour`"),
+            "{out}"
+        );
+        let out = expand(
+            try_expand_exportable,
+            quote!(
+                struct Row(String);
+            ),
+        );
         assert!(out.contains("needs a struct with named fields"), "{out}");
         let out = expand(
             try_expand_exportable,
-            quote!(struct Row { #[export(skip, header = "X")] a: String }),
+            quote!(
+                struct Row {
+                    #[export(skip, header = "X")]
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("a skipped field takes no other"), "{out}");
         let out = expand(
             try_expand_exportable,
-            quote!(struct Row { #[export(width = 0)] a: String }),
+            quote!(
+                struct Row {
+                    #[export(width = 0)]
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("the width is a number from 1 to 255"), "{out}");
     }
@@ -562,10 +585,22 @@ mod tests {
             ),
             "{out}"
         );
-        assert!(out.contains("new (\"phone\" , \"Phone\") . required (false)"), "{out}");
-        assert!(out.contains("new (\"tags\" , \"Tags\") . required (false)"), "{out}");
-        assert!(out.contains("new (\"company\" , \"Company\") . required (true)"), "{out}");
-        assert!(out.contains("new (\"note\" , \"Note\") . required (false)"), "{out}");
+        assert!(
+            out.contains("new (\"phone\" , \"Phone\") . required (false)"),
+            "{out}"
+        );
+        assert!(
+            out.contains("new (\"tags\" , \"Tags\") . required (false)"),
+            "{out}"
+        );
+        assert!(
+            out.contains("new (\"company\" , \"Company\") . required (true)"),
+            "{out}"
+        );
+        assert!(
+            out.contains("new (\"note\" , \"Note\") . required (false)"),
+            "{out}"
+        );
         assert!(!out.contains("ignored"), "{out}");
     }
 
@@ -573,22 +608,43 @@ mod tests {
     fn importable_rejects_rename_all_and_bad_aliases() {
         let out = expand(
             try_expand_importable,
-            quote!(#[serde(rename_all = "camelCase")] struct Row { a: String }),
+            quote!(
+                #[serde(rename_all = "camelCase")]
+                struct Row {
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("rename fields one by one"), "{out}");
         let out = expand(
             try_expand_importable,
-            quote!(struct Row { #[import(aliases = "x")] a: String }),
+            quote!(
+                struct Row {
+                    #[import(aliases = "x")]
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("expected a list of strings"), "{out}");
         let out = expand(
             try_expand_importable,
-            quote!(struct Row { #[import(skip)] a: String }),
+            quote!(
+                struct Row {
+                    #[import(skip)]
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("at least one field"), "{out}");
         let out = expand(
             try_expand_importable,
-            quote!(struct Row { #[serde(rename = "a")] b: String, a: String }),
+            quote!(
+                struct Row {
+                    #[serde(rename = "a")]
+                    b: String,
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("two fields read the column `a`"), "{out}");
     }
@@ -597,7 +653,12 @@ mod tests {
     fn a_struct_wide_serde_default_makes_every_field_optional() {
         let out = expand(
             try_expand_importable,
-            quote!(#[serde(default, deny_unknown_fields)] struct Row { a: String }),
+            quote!(
+                #[serde(default, deny_unknown_fields)]
+                struct Row {
+                    a: String,
+                }
+            ),
         );
         assert!(out.contains("required (false)"), "{out}");
     }

@@ -68,10 +68,7 @@ impl HeaderCatalog {
         }
         // `ar-EG` falls back to `ar`.
         let language = locale.split('-').next().unwrap_or_default();
-        self.locales
-            .get(language)
-            .and_then(|t| t.get(key))
-            .cloned()
+        self.locales.get(language).and_then(|t| t.get(key)).cloned()
     }
 }
 
@@ -109,9 +106,8 @@ mod tests {
 
     #[test]
     fn headers_are_translated_or_kept() {
-        let catalog: Arc<dyn HeaderTranslator> = Arc::new(
-            HeaderCatalog::new("en").locale("ar_EG", [("contacts.name", "الاسم")]),
-        );
+        let catalog: Arc<dyn HeaderTranslator> =
+            Arc::new(HeaderCatalog::new("en").locale("ar_EG", [("contacts.name", "الاسم")]));
         let columns = [
             Column::new("name", "contacts.name"),
             Column::new("email", "Email"),

@@ -171,13 +171,28 @@ mod tests {
     fn bad_values_name_their_key() {
         let mut options = SheetsOptions::default();
         options.imports.chunk_size = 0;
-        assert!(options.validate().unwrap_err().contains("imports.chunk_size"));
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("imports.chunk_size")
+        );
         let mut options = SheetsOptions::default();
         options.exports.directory = "/".into();
-        assert!(options.validate().unwrap_err().contains("exports.directory"));
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("exports.directory")
+        );
         let mut options = SheetsOptions::default();
         options.csv.delimiter = '"';
-        assert!(options.validate().unwrap_err().contains("sheets.csv.delimiter"));
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("sheets.csv.delimiter")
+        );
     }
 
     #[test]

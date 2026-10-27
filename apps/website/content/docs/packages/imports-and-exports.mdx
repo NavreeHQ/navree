@@ -464,8 +464,9 @@ The import is staged again with it (`202`), and with `save` the next file with t
 ```json title="400 Bad Request"
 {
   "statusCode": 400,
-  "message": "Validation failed",
-  "error": "validation_failed",
+  "message": ["email is mapped to `Email`, which is not a column of the file", "email should not be empty"],
+  "error": "Bad Request",
+  "code": "validation_failed",
   "errors": {
     "email": ["email is mapped to `Email`, which is not a column of the file", "email should not be empty"]
   }
@@ -660,7 +661,7 @@ Over HTTP, post a `multipart/form-data` body with `importer` and `file` fields. 
 | `sheets.import.apply` | Saves one chunk of an import's rows |
 | `sheets.import.finish` | Counts the rows, writes the error file and completes the import |
 
-| Error | Status | `error` |
+| Error | Status | `code` |
 |---|---|---|
 | Unknown import, importer or export | 404 | `not_found` |
 | Not a spreadsheet, or an empty file | 400 | `unsupported_file` |

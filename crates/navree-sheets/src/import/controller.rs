@@ -94,7 +94,10 @@ pub struct ImportsController {
 
 impl Injectable for ImportsController {
     fn dependencies() -> Vec<ProviderKey> {
-        vec![ProviderKey::of::<Imports>(), ProviderKey::of::<SheetsOptions>()]
+        vec![
+            ProviderKey::of::<Imports>(),
+            ProviderKey::of::<SheetsOptions>(),
+        ]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
@@ -183,14 +186,20 @@ async fn read_form(mut form: Multipart, limit: u64) -> Result<UploadForm, AppErr
                     "mapping" if !text.is_empty() => {
                         let mapping: Mapping = serde_json::from_str(&text).map_err(|error| {
                             AppError::validation(
-                                [("mapping".to_owned(), vec![format!("mapping must be a JSON object of field to header: {error}")])]
-                                    .into(),
+                                [(
+                                    "mapping".to_owned(),
+                                    vec![format!(
+                                        "mapping must be a JSON object of field to header: {error}"
+                                    )],
+                                )]
+                                .into(),
                             )
                         })?;
                         out.options.mapping = Some(mapping);
                     }
                     "save_mapping" => {
-                        out.options.save_mapping = matches!(text.as_str(), "true" | "1" | "on" | "yes");
+                        out.options.save_mapping =
+                            matches!(text.as_str(), "true" | "1" | "on" | "yes");
                     }
                     _ => {}
                 }
@@ -238,15 +247,22 @@ impl Controller for ImportsController {
                 let form = read_form(form, limit).await?;
                 let importer = form.importer.filter(|i| !i.is_empty()).ok_or_else(|| {
                     AppError::validation(
-                        [("importer".to_owned(), vec!["importer should not be empty".to_owned()])]
-                            .into(),
+                        [(
+                            "importer".to_owned(),
+                            vec!["importer should not be empty".to_owned()],
+                        )]
+                        .into(),
                     )
                 })?;
                 let registration = imports.registration(&importer)?;
                 require(&app, &principal, registration.permission.as_deref(), scope).await?;
                 let file = form.file.ok_or_else(|| {
                     AppError::validation(
-                        [("file".to_owned(), vec!["file should not be empty".to_owned()])].into(),
+                        [(
+                            "file".to_owned(),
+                            vec!["file should not be empty".to_owned()],
+                        )]
+                        .into(),
                     )
                 })?;
                 let mut options = form.options.owner(principal.user_id);
@@ -257,7 +273,8 @@ impl Controller for ImportsController {
         };
 
         let (imports, app) = (self.imports.clone(), self.app.clone());
-        let importers = move |CurrentPrincipal(principal): CurrentPrincipal, Scope(scope): Scope| {
+        let importers = move |CurrentPrincipal(principal): CurrentPrincipal,
+                              Scope(scope): Scope| {
             let (imports, app) = (imports.clone(), app.clone());
             async move {
                 let app = upgrade(&app)?;
@@ -329,7 +346,9 @@ impl Controller for ImportsController {
             async move {
                 let app = upgrade(&app)?;
                 let record = visible(&imports, &app, &principal, scope, workspaces, &id).await?;
-                let record = imports.map(&uow, record.id, input.mapping, input.save).await?;
+                let record = imports
+                    .map(&uow, record.id, input.mapping, input.save)
+                    .await?;
                 Ok::<_, AppError>((StatusCode::ACCEPTED, Json(record)))
             }
         };
@@ -382,7 +401,13 @@ impl Controller for ImportsController {
         vec![
             route(RouteDef::on(Method::GET, "/", index))
                 .name("sheets.imports.index")
-                .api(api("Imports", "List your imports", &[401], None, Some(schema_fn::<ImportRecord>))),
+                .api(api(
+                    "Imports",
+                    "List your imports",
+                    &[401],
+                    None,
+                    Some(schema_fn::<ImportRecord>),
+                )),
             route(RouteDef::on(Method::POST, "/", store))
                 .name("sheets.imports.store")
                 .body_limit(body_limit)
@@ -413,7 +438,13 @@ impl Controller for ImportsController {
                 )),
             route(RouteDef::on(Method::GET, "/{id}", show))
                 .name("sheets.imports.show")
-                .api(api("Imports", "Show an import", &[401, 404], None, Some(schema_fn::<ImportRecord>))),
+                .api(api(
+                    "Imports",
+                    "Show an import",
+                    &[401, 404],
+                    None,
+                    Some(schema_fn::<ImportRecord>),
+                )),
             route(RouteDef::on(Method::GET, "/{id}/rows", rows))
                 .name("sheets.imports.rows")
                 .api(api(
@@ -443,10 +474,22 @@ impl Controller for ImportsController {
                 )),
             route(RouteDef::on(Method::GET, "/{id}/errors", errors))
                 .name("sheets.imports.errors")
-                .api(api("Imports", "Download the error file", &[401, 404], None, None)),
+                .api(api(
+                    "Imports",
+                    "Download the error file",
+                    &[401, 404],
+                    None,
+                    None,
+                )),
             route(RouteDef::on(Method::DELETE, "/{id}", destroy))
                 .name("sheets.imports.destroy")
-                .api(api("Imports", "Delete an import", &[204, 401, 404, 409], None, None)),
+                .api(api(
+                    "Imports",
+                    "Delete an import",
+                    &[204, 401, 404, 409],
+                    None,
+                    None,
+                )),
         ]
     }
 }

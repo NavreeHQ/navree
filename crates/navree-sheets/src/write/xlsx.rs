@@ -72,8 +72,9 @@ impl XlsxBuilder {
         headers: &[String],
         constant_memory: bool,
     ) -> Result<Self, SheetsError> {
-        let count = u16::try_from(columns.len().max(headers.len()))
-            .map_err(|_| SheetsError::Invalid("an XLSX sheet holds at most 16,384 columns".into()))?;
+        let count = u16::try_from(columns.len().max(headers.len())).map_err(|_| {
+            SheetsError::Invalid("an XLSX sheet holds at most 16,384 columns".into())
+        })?;
         if count > 16_384 {
             return Err(SheetsError::Invalid(
                 "an XLSX sheet holds at most 16,384 columns".into(),

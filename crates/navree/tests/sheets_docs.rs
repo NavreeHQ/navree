@@ -12,8 +12,7 @@ use navree::prelude::*;
 use navree::queue::Queue;
 use navree::sheets::{
     Download, DuplicateMode, Export, ExportContext, ExportPage, Exportable, Exports, Import,
-    ImportContext, ImportStatus, Importable, Imports, RowRejected, Upload,
-    UploadOptions,
+    ImportContext, ImportStatus, Importable, Imports, RowRejected, Upload, UploadOptions,
 };
 use navree::testing::TestApp;
 use sea_orm::sea_query::{ColumnDef, Expr, Table};
@@ -174,7 +173,11 @@ impl Import for ContactsImport {
         Some(row.email.trim().to_lowercase())
     }
 
-    async fn existing(&self, _ctx: &ImportContext, keys: &[String]) -> Result<HashSet<String>, BoxError> {
+    async fn existing(
+        &self,
+        _ctx: &ImportContext,
+        keys: &[String],
+    ) -> Result<HashSet<String>, BoxError> {
         let found = contact::Entity::find()
             .filter(contact::Column::Email.is_in(keys.to_vec()))
             .all(self.db.conn())
@@ -182,7 +185,12 @@ impl Import for ContactsImport {
         Ok(found.into_iter().map(|contact| contact.email).collect())
     }
 
-    async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
+    async fn insert(
+        &self,
+        _ctx: &ImportContext,
+        uow: &Uow,
+        row: ContactInput,
+    ) -> Result<(), BoxError> {
         if row.email.ends_with("@competitor.example") {
             return Err(RowRejected::new("Contacts at competitors are not imported").into());
         }
@@ -197,7 +205,12 @@ impl Import for ContactsImport {
         Ok(())
     }
 
-    async fn update(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
+    async fn update(
+        &self,
+        _ctx: &ImportContext,
+        uow: &Uow,
+        row: ContactInput,
+    ) -> Result<(), BoxError> {
         contact::Entity::update_many()
             .col_expr(contact::Column::Name, Expr::value(row.name))
             .col_expr(contact::Column::Company, Expr::value(row.company))
@@ -329,10 +342,16 @@ async fn a_contacts_file_is_imported_from_code() {
         .unwrap();
     uow.commit().await.unwrap();
     run_queue(&app).await;
-    assert_eq!(imports.find(import.id).await.unwrap().status, ImportStatus::Staged);
+    assert_eq!(
+        imports.find(import.id).await.unwrap().status,
+        ImportStatus::Staged
+    );
 
     let uow = db.uow(Some(ADMIN), None).await;
-    imports.apply(&uow, import.id, DuplicateMode::Update).await.unwrap();
+    imports
+        .apply(&uow, import.id, DuplicateMode::Update)
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
     run_queue(&app).await;
     let done = imports.find(import.id).await.unwrap();
@@ -354,7 +373,10 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
     );
     let uploaded = client
         .post("/api/imports")
-        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
         .body(body)
         .send()
         .await
@@ -381,14 +403,26 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
         .await
         .assert_json_path("status", json!("completed"));
 
-    let csv = client.get("/api/v1/contacts/export.csv").send().await.assert_status(200);
+    let csv = client
+        .get("/api/v1/contacts/export.csv")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(
         csv.text(),
         "\u{FEFF}Name,Email,Company,VIP\r\nAda,ada@example.com,,false\r\nGrace,grace@example.com,,false\r\n"
     );
-    let xlsx = client.get("/api/v1/contacts/export.xlsx").send().await.assert_status(200);
+    let xlsx = client
+        .get("/api/v1/contacts/export.xlsx")
+        .send()
+        .await
+        .assert_status(200);
     assert!(xlsx.bytes().starts_with(b"PK"));
-    let named = client.get("/api/exports/contacts").send().await.assert_status(200);
+    let named = client
+        .get("/api/exports/contacts")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(named.text(), csv.text());
 
     let queued = client
@@ -400,7 +434,10 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
         .json_value();
     run_queue(&app).await;
     let operation = client
-        .get(&format!("/api/operations/{}", queued["id"].as_str().unwrap()))
+        .get(&format!(
+            "/api/operations/{}",
+            queued["id"].as_str().unwrap()
+        ))
         .send()
         .await
         .json_value();

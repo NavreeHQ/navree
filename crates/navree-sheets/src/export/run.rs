@@ -43,7 +43,11 @@ pub(crate) struct Paging {
 
 impl Paging {
     /// The next page, with the max-rows check and the progress report.
-    async fn next_page(&self, offset: u64, max_rows: u64) -> Result<Vec<Vec<crate::Cell>>, BoxError> {
+    async fn next_page(
+        &self,
+        offset: u64,
+        max_rows: u64,
+    ) -> Result<Vec<Vec<crate::Cell>>, BoxError> {
         let page = ExportPage {
             offset,
             limit: self.limits.page_size,

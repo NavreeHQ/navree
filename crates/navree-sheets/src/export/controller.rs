@@ -57,7 +57,10 @@ pub struct ExportsController {
 
 impl Injectable for ExportsController {
     fn dependencies() -> Vec<ProviderKey> {
-        vec![ProviderKey::of::<Exports>(), ProviderKey::of::<SheetsOptions>()]
+        vec![
+            ProviderKey::of::<Exports>(),
+            ProviderKey::of::<SheetsOptions>(),
+        ]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
@@ -188,7 +191,10 @@ mod tests {
 
     #[test]
     fn the_format_defaults_to_csv() {
-        assert_eq!(format_of(&FormatQuery::default()).unwrap(), SheetFormat::Csv);
+        assert_eq!(
+            format_of(&FormatQuery::default()).unwrap(),
+            SheetFormat::Csv
+        );
         let xlsx = FormatQuery {
             format: Some("XLSX".into()),
         };
@@ -196,6 +202,11 @@ mod tests {
         let bad = FormatQuery {
             format: Some("pdf".into()),
         };
-        assert!(format_of(&bad).unwrap_err().to_string().contains("unknown format `pdf`"));
+        assert!(
+            format_of(&bad)
+                .unwrap_err()
+                .to_string()
+                .contains("unknown format `pdf`")
+        );
     }
 }

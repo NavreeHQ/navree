@@ -104,7 +104,10 @@ impl Download {
     /// `rows` as a CSV file named `filename` (`.csv` is added when it has
     /// no extension), with the default [`CsvOptions`]: a byte-order mark,
     /// commas, CRLF and formula escaping. Headers are written as declared.
-    pub fn csv<T: Exportable>(filename: impl Into<String>, rows: impl IntoIterator<Item = T>) -> Self {
+    pub fn csv<T: Exportable>(
+        filename: impl Into<String>,
+        rows: impl IntoIterator<Item = T>,
+    ) -> Self {
         csv_download(
             filename.into(),
             &CsvOptions::default(),
@@ -350,7 +353,10 @@ mod tests {
     #[test]
     fn filenames_get_their_extension() {
         assert_eq!(with_extension("contacts", SheetFormat::Csv), "contacts.csv");
-        assert_eq!(with_extension("contacts.csv", SheetFormat::Csv), "contacts.csv");
+        assert_eq!(
+            with_extension("contacts.csv", SheetFormat::Csv),
+            "contacts.csv"
+        );
         assert_eq!(with_extension("q1.report", SheetFormat::Xlsx), "q1.report");
         assert_eq!(with_extension("", SheetFormat::Xlsx), "export.xlsx");
         assert_eq!(with_extension(".hidden", SheetFormat::Csv), ".hidden.csv");

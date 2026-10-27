@@ -230,12 +230,12 @@ pub use navree_redis as redis;
 /// (`use navree::settings::{Settings, Scope};`).
 #[cfg(feature = "settings")]
 pub use navree_settings as settings;
-#[cfg(feature = "sso")]
-pub use navree_sso as sso;
 /// CSV and Excel exports and imports (the `sheets` feature): navree-sheets
 /// re-exported whole, with its `Exportable` and `Importable` derives.
 #[cfg(feature = "sheets")]
 pub use navree_sheets as sheets;
+#[cfg(feature = "sso")]
+pub use navree_sso as sso;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
 

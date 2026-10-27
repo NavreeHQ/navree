@@ -75,7 +75,10 @@ impl MigrationTrait for CreateImportTables {
             )
             .await?;
         for (name, columns) in [
-            ("imports_owner_created_index", &["owner_id", "created_at"][..]),
+            (
+                "imports_owner_created_index",
+                &["owner_id", "created_at"][..],
+            ),
             ("imports_updated_at_index", &["updated_at"][..]),
         ] {
             let mut index = Index::create();

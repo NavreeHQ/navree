@@ -104,11 +104,17 @@ async fn an_xlsx_download_has_typed_cells_and_the_sheet_name() {
         ]
     );
     // Text is never a formula in XLSX: it is written as it is.
-    assert_eq!(rows[1][0], Data::String("=HYPERLINK(\"http://evil\")".into()));
+    assert_eq!(
+        rows[1][0],
+        Data::String("=HYPERLINK(\"http://evil\")".into())
+    );
     assert_eq!(rows[1][1], Data::Float(1200.5));
     match &rows[1][2] {
         Data::DateTime(at) => {
-            assert_eq!(at.as_datetime().unwrap().date(), NaiveDate::from_ymd_opt(2026, 10, 1).unwrap());
+            assert_eq!(
+                at.as_datetime().unwrap().date(),
+                NaiveDate::from_ymd_opt(2026, 10, 1).unwrap()
+            );
         }
         other => panic!("a date cell, not {other:?}"),
     }
@@ -148,7 +154,9 @@ async fn a_failing_stream_cuts_the_download_short() {
         }),
         Err(std::io::Error::other("database went away")),
     ]);
-    let (_, body) = Download::csv_stream("cut", rows).into_response().into_parts();
+    let (_, body) = Download::csv_stream("cut", rows)
+        .into_response()
+        .into_parts();
     let error = axum::body::to_bytes(body, usize::MAX).await.unwrap_err();
     assert!(error.to_string().contains("database went away"), "{error}");
 }
@@ -160,7 +168,10 @@ impl Module for Headers {
     fn register(&self, m: &mut ModuleBuilder) {
         m.header_catalog(
             HeaderCatalog::new("en")
-                .locale("en", [("deals.title", "Title"), ("contacts.email", "Email")])
+                .locale(
+                    "en",
+                    [("deals.title", "Title"), ("contacts.email", "Email")],
+                )
                 .locale("ar", [("deals.title", "العنوان")]),
         );
     }
@@ -176,12 +187,18 @@ async fn exports_use_the_configured_csv_options_and_translated_headers() {
         .build()
         .await;
     let exports = app.get::<Exports>().await;
-    assert_eq!(exports.headers::<DealRow>(), ["Title", "Amount", "Closed on", "Won"]);
+    assert_eq!(
+        exports.headers::<DealRow>(),
+        ["Title", "Amount", "Closed on", "Won"]
+    );
     let (_, bytes) = body(exports.csv("deals", deals())).await;
     assert!(!bytes.starts_with(b"\xEF\xBB\xBF"));
     let lines = csv_lines(&bytes);
     assert_eq!(lines[0], "Title;Amount;Closed on;Won");
-    assert_eq!(lines[1], "\"=HYPERLINK(\"\"http://evil\"\")\";1200.5;2026-10-01;true");
+    assert_eq!(
+        lines[1],
+        "\"=HYPERLINK(\"\"http://evil\"\")\";1200.5;2026-10-01;true"
+    );
 
     let (parts, bytes) = body(exports.file(SheetFormat::Xlsx, "deals", deals()).unwrap()).await;
     assert_eq!(parts.headers["content-type"], XLSX_CONTENT_TYPE);

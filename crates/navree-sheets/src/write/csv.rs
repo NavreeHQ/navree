@@ -237,7 +237,10 @@ mod tests {
         };
         let out = csv(
             options,
-            &[vec![Cell::Text("a;b".into()), Cell::Text("say \"hi\"\nthere".into())]],
+            &[vec![
+                Cell::Text("a;b".into()),
+                Cell::Text("say \"hi\"\nthere".into()),
+            ]],
         );
         assert!(
             out.ends_with("A;B\r\n\"a;b\";\"say \"\"hi\"\"\nthere\"\r\n"),
