@@ -20,7 +20,8 @@
 //!   disconnects. The actor and request id reach SQL as `navree.actor` and
 //!   `navree.request_id` on PostgreSQL (`set_config`) and as
 //!   `@navree_actor` and `@navree_request_id` on MySQL (session variables,
-//!   cleared before the connection goes back to the pool).
+//!   cleared before the connection goes back to the pool), unless
+//!   `database.transaction_settings` is off.
 //!   [`ChangeObserver`]s see every recorded [`ChangeEvent`] inside the
 //!   transaction, right before commit; after-commit hooks run once it is
 //!   durable.
