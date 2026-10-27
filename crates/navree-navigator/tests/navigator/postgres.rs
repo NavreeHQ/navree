@@ -211,3 +211,79 @@ async fn postgres_schema_has_columns_indexes_and_foreign_keys() {
     );
     db.drop_db().await;
 }
+
+/// Lighthouse's tables as its migration creates them on PostgreSQL.
+const LIGHTHOUSE: &[&str] = &[
+    "CREATE TABLE lighthouse_issues (id uuid PRIMARY KEY, fingerprint varchar NOT NULL UNIQUE, kind varchar NOT NULL, \
+     level varchar NOT NULL, status varchar NOT NULL, title varchar NOT NULL, culprit varchar NOT NULL, \
+     message text NOT NULL, chain text NOT NULL, location varchar, error_type varchar, count bigint NOT NULL, \
+     first_seen timestamptz NOT NULL, last_seen timestamptz NOT NULL, first_release varchar, last_release varchar, \
+     environment varchar, resolved_at timestamptz, resolved_in_release varchar, ignored_until timestamptz, \
+     ignore_remaining bigint, regressed_at timestamptz, comment text, created_at timestamptz NOT NULL, \
+     updated_at timestamptz NOT NULL)",
+    "CREATE TABLE lighthouse_occurrences (id uuid PRIMARY KEY, issue_id uuid NOT NULL REFERENCES lighthouse_issues(id), \
+     at timestamptz NOT NULL, level varchar NOT NULL, message text NOT NULL, chain text NOT NULL, backtrace text, \
+     location varchar, request_id varchar, job_id varchar, trace_id varchar, user_id varchar, workspace_id varchar, \
+     release varchar, environment varchar, server varchar, process varchar, method varchar, route varchar, \
+     path varchar, status integer, sample_id uuid, context text NOT NULL)",
+    "CREATE TABLE lighthouse_aggregates (id uuid PRIMARY KEY, resolution integer NOT NULL, bucket timestamptz NOT NULL, \
+     kind varchar NOT NULL, key_hash varchar NOT NULL, key text NOT NULL, process varchar NOT NULL, count bigint NOT NULL, \
+     errors bigint NOT NULL, extra bigint NOT NULL, total_ms double precision NOT NULL, max_ms double precision NOT NULL, \
+     histogram text NOT NULL, detail text)",
+    "CREATE TABLE lighthouse_alerts (id uuid PRIMARY KEY, issue_id uuid, kind varchar NOT NULL, channel varchar NOT NULL, \
+     subject_key varchar NOT NULL, status varchar NOT NULL, attempts integer NOT NULL DEFAULT 0, error text, \
+     payload text NOT NULL, created_at timestamptz NOT NULL, delivered_at timestamptz)",
+    "INSERT INTO lighthouse_issues (id, fingerprint, kind, level, status, title, culprit, message, chain, count, \
+     first_seen, last_seen, created_at, updated_at) VALUES ('0192f3a4-b5c6-7d8e-9f00-112233445566', 'f1', 'exception', \
+     'error', 'open', 'Database connection failed', 'GET /api/v1/deals', 'Database connection failed', \
+     '[\"Database connection failed\"]', 3, now() - interval '2 days', now() - interval '1 hour', now(), now())",
+    "INSERT INTO lighthouse_occurrences (id, issue_id, at, level, message, chain, request_id, status, context) VALUES \
+     (gen_random_uuid(), '0192f3a4-b5c6-7d8e-9f00-112233445566', now() - interval '1 hour', 'error', 'x', '[]', 'req-1', \
+     500, '{\"user_agent\":\"curl\"}')",
+    "INSERT INTO lighthouse_aggregates (id, resolution, bucket, kind, key_hash, key, process, count, errors, extra, \
+     total_ms, max_ms, histogram) VALUES \
+     (gen_random_uuid(), 3600, date_trunc('hour', now()), 'request', 'a', 'GET /api/v1/deals', 'serve-1', 4, 1, 0, 40, 25, '10:2,14:2'), \
+     (gen_random_uuid(), 3600, date_trunc('hour', now()) - interval '2 hours', 'request', 'a', 'GET /api/v1/deals', 'serve-2', 4, 0, 0, 40, 25, '10:2,14:2'), \
+     (gen_random_uuid(), 3600, date_trunc('hour', now()), 'job', 'b', 'SendInvoice', 'worker', 3, 2, 1, 30, 12, '12:3')",
+];
+
+#[tokio::test]
+async fn postgres_lighthouse_tools_read_its_tables() {
+    let Some(db) = Scratch::new("postgres_lighthouse_tools_read_its_tables").await else {
+        return;
+    };
+    db.setup(LIGHTHOUSE).await;
+    let fixture = db.fixture();
+    crate::support::write(
+        &fixture.root().join("src/app.rs"),
+        ".module(LighthouseModule::from_config())",
+    );
+    let navigator = fixture.navigator();
+
+    let issues = call(&navigator, "lighthouse_list_issues", json!({})).await;
+    assert_eq!(
+        issues["issues"][0]["id"],
+        "0192f3a4-b5c6-7d8e-9f00-112233445566"
+    );
+    assert_eq!(issues["issues"][0]["count"], 3);
+
+    let issue = call(
+        &navigator,
+        "lighthouse_get_issue",
+        json!({"id": "0192f3a4-b5c6-7d8e-9f00-112233445566"}),
+    )
+    .await;
+    assert_eq!(issue["issue"]["chain"], json!(["Database connection failed"]));
+    assert_eq!(issue["occurrences"][0]["request_id"], "req-1");
+    assert_eq!(issue["occurrences"][0]["context"]["user_agent"], "curl");
+
+    let routes = call(&navigator, "lighthouse_slow_routes", json!({})).await;
+    assert_eq!(routes["routes"][0]["endpoint"], "GET /api/v1/deals");
+    assert_eq!(routes["routes"][0]["requests"], 8);
+    assert_eq!(routes["routes"][0]["avg_ms"], 10.0);
+
+    let jobs = call(&navigator, "lighthouse_failed_jobs", json!({})).await;
+    assert_eq!(jobs["jobs"][0]["failed_jobs"], 1);
+    drop(navigator);
+    db.drop_db().await;
+}

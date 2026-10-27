@@ -10,8 +10,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::app::{AppError, AppProbe, ProcessRunner, Runner};
-use crate::database::{self, DatabaseError, Driver, Target};
+use crate::database::{self, DatabaseError, Driver, QueryResult, Target};
 use crate::docs::{DocsLibrary, DocsSettings, HttpFetcher, SITE, navree_home};
+use crate::lighthouse;
 use crate::logs::{self, LogFile, LogFilter, NO_LOG_FILE};
 use crate::project::{NotAnApp, Project};
 
@@ -39,8 +40,8 @@ pub struct ToolDef {
     pub description: &'static str,
     /// The JSON Schema of its arguments.
     pub input_schema: Value,
-    /// Whether it may reach outside this machine (only `search_docs`, which
-    /// may download the docs once).
+    /// Whether it may reach outside this machine (`search_docs` and
+    /// `read_doc`, which may download the docs once).
     pub open_world: bool,
 }
 
@@ -80,7 +81,9 @@ fn object(properties: Value) -> Value {
     json!({ "type": "object", "properties": properties, "additionalProperties": false })
 }
 
-/// Every tool, in the order agents see them.
+/// The twelve tools every app gets, in the order agents see them. An app
+/// that includes Lighthouse also gets [`lighthouse::tool_defs`]; see
+/// [`Navigator::tools`].
 pub fn tools() -> Vec<ToolDef> {
     let none = || object(json!({}));
     let string = |description: &str| json!({ "type": "string", "description": description });
@@ -247,6 +250,7 @@ pub struct Navigator {
     probe: Option<Arc<AppProbe>>,
     docs_settings: DocsSettings,
     docs: tokio::sync::OnceCell<Arc<DocsLibrary>>,
+    lighthouse: bool,
 }
 
 impl std::fmt::Debug for Navigator {
@@ -254,6 +258,7 @@ impl std::fmt::Debug for Navigator {
         f.debug_struct("Navigator")
             .field("options", &self.options)
             .field("project", &self.project)
+            .field("lighthouse", &self.lighthouse)
             .finish_non_exhaustive()
     }
 }
@@ -338,6 +343,9 @@ impl Navigator {
         docs: DocsSettings,
     ) -> Navigator {
         let project = Project::find(&options.path).map_err(|e: NotAnApp| e.to_string());
+        let lighthouse = project
+            .as_ref()
+            .is_ok_and(|project| lighthouse::included(&project.root));
         let probe = project.as_ref().ok().map(|project| {
             Arc::new(AppProbe::new(
                 project.clone(),
@@ -352,7 +360,24 @@ impl Navigator {
             probe,
             docs_settings: docs,
             docs: tokio::sync::OnceCell::new(),
+            lighthouse,
         }
+    }
+
+    /// Whether the app includes Lighthouse (a file under `src/` adds
+    /// `LighthouseModule`), which adds Lighthouse's five read tools.
+    pub fn includes_lighthouse(&self) -> bool {
+        self.lighthouse
+    }
+
+    /// The tools this app gets: [`tools`], then Lighthouse's when the app
+    /// includes it.
+    pub fn tools(&self) -> Vec<ToolDef> {
+        let mut all = tools();
+        if self.lighthouse {
+            all.extend(lighthouse::tool_defs());
+        }
+        all
     }
 
     /// The app, or why there is none.
@@ -384,9 +409,10 @@ impl Navigator {
             "read_config" => self.read_config(parse(args)?),
             "search_docs" => self.search_docs(parse(args)?).await,
             "read_doc" => self.read_doc(parse(args)?).await,
+            name if lighthouse::is_lighthouse_tool(name) => self.lighthouse(name, args).await,
             other => Err(ToolError::new(format!(
                 "unknown tool `{other}`; the tools are {}",
-                tools()
+                self.tools()
                     .iter()
                     .map(|t| t.name)
                     .collect::<Vec<_>>()
@@ -427,6 +453,62 @@ impl Navigator {
             &project.root,
             self.options.allow_remote_database,
         )?)
+    }
+
+    /// Lighthouse's database: `lighthouse.database_url`, else `database.url`.
+    fn lighthouse_database(&self) -> Result<LighthouseDb, ToolError> {
+        let project = self.project()?;
+        let config = self.config()?;
+        let own = config
+            .get_string("lighthouse.database_url")
+            .filter(|url| !url.trim().is_empty());
+        let url = own
+            .clone()
+            .or_else(|| config.get_string("database.url"))
+            .unwrap_or_default();
+        let target = Target::new(&url, &project.root, self.options.allow_remote_database)
+            .map_err(|error| {
+                let message = error.to_string();
+                match (&error, own.is_some()) {
+                    (DatabaseError::Remote { .. }, true) => ToolError::new(message.replacen(
+                        "database.url",
+                        "lighthouse.database_url",
+                        1,
+                    )),
+                    _ => ToolError::new(message),
+                }
+            })?;
+        Ok(LighthouseDb { target })
+    }
+
+    async fn lighthouse(&self, name: &str, args: Value) -> Result<ToolOutput, ToolError> {
+        if !self.lighthouse {
+            return Err(ToolError::new(lighthouse::NOT_INCLUDED));
+        }
+        let now = chrono::Utc::now();
+        let answer = match name {
+            "lighthouse_list_issues" => {
+                let args = parse(args)?;
+                lighthouse::list_issues(&self.lighthouse_database()?, args).await?
+            }
+            "lighthouse_get_issue" => {
+                let args = parse(args)?;
+                lighthouse::get_issue(&self.lighthouse_database()?, args).await?
+            }
+            "lighthouse_slow_routes" => {
+                let args = parse(args)?;
+                lighthouse::slow_routes(&self.lighthouse_database()?, args, now).await?
+            }
+            "lighthouse_slow_queries" => {
+                let args = parse(args)?;
+                lighthouse::slow_queries(&self.lighthouse_database()?, args, now).await?
+            }
+            _ => {
+                let args = parse(args)?;
+                lighthouse::failed_jobs(&self.lighthouse_database()?, args, now).await?
+            }
+        };
+        Ok(ToolOutput::Json(answer))
     }
 
     async fn app_info(&self) -> Result<ToolOutput, ToolError> {
@@ -702,6 +784,23 @@ fn module_names(graph: &Value) -> Vec<String> {
         .filter(|m| m["root"] != true)
         .filter_map(|m| m["name"].as_str().map(str::to_owned))
         .collect()
+}
+
+/// Lighthouse's database, read like `query_database` reads the app's.
+struct LighthouseDb {
+    target: Target,
+}
+
+impl lighthouse::Reader for LighthouseDb {
+    fn driver(&self) -> Driver {
+        self.target.driver
+    }
+
+    async fn read(&self, sql: String) -> Result<QueryResult, ToolError> {
+        database::query_database(&self.target, &sql)
+            .await
+            .map_err(|error| lighthouse::explain(error.to_string(), &self.target.redacted_url()))
+    }
 }
 
 /// A fetcher that always fails (no HTTP client could be built).

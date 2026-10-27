@@ -12,7 +12,7 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::tools::{Navigator, NavigatorOptions, ToolDef, ToolOutput, tools};
+use crate::tools::{Navigator, NavigatorOptions, ToolDef, ToolOutput};
 
 /// What the server tells the agent when it connects.
 pub const INSTRUCTIONS: &str = "Navigator answers questions about this Navree app from the app itself. \
@@ -20,6 +20,9 @@ Call app_info first in a new project. Check list_routes before adding a route, m
 list_providers before wiring a provider, describe_schema before writing a migration or a query, and \
 last_error or read_logs when a request fails. search_docs and read_doc read the docs of the Navree \
 version in Cargo.lock. Every tool is read-only.";
+
+/// Added to [`INSTRUCTIONS`] when the app includes Lighthouse.
+pub const LIGHTHOUSE_INSTRUCTIONS: &str = " The app includes Lighthouse: lighthouse_list_issues and lighthouse_get_issue show what failed (exceptions with their request and backtrace), and lighthouse_slow_routes, lighthouse_slow_queries and lighthouse_failed_jobs show what is slow or failing.";
 
 /// The MCP handler around a [`Navigator`].
 #[derive(Clone, Debug)]
@@ -79,7 +82,11 @@ impl ServerHandler for NavigatorServer {
                     .with_title("Navigator")
                     .with_website_url("https://navree.com/docs/ai/navigator/"),
             )
-            .with_instructions(INSTRUCTIONS)
+            .with_instructions(if self.navigator.includes_lighthouse() {
+                format!("{INSTRUCTIONS}{LIGHTHOUSE_INSTRUCTIONS}")
+            } else {
+                INSTRUCTIONS.to_owned()
+            })
     }
 
     async fn list_tools(
@@ -88,7 +95,7 @@ impl ServerHandler for NavigatorServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         Ok(ListToolsResult::with_all_items(
-            tools().iter().map(tool).collect(),
+            self.navigator.tools().iter().map(tool).collect(),
         ))
     }
 
@@ -98,7 +105,7 @@ impl ServerHandler for NavigatorServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
         let name = request.name.to_string();
-        if !tools().iter().any(|t| t.name == name) {
+        if !self.navigator.tools().iter().any(|t| t.name == name) {
             return Err(ErrorData::invalid_params(
                 format!("Unknown tool: {name}"),
                 None,

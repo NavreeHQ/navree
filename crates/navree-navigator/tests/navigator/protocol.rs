@@ -81,6 +81,44 @@ async fn the_server_lists_twelve_read_only_tools() {
 }
 
 #[tokio::test]
+async fn an_app_with_lighthouse_gets_its_five_tools() {
+    let fixture = Fixture::new("[app]
+name = \"crm\"
+");
+    crate::support::write(
+        &fixture.root().join("src/app.rs"),
+        "Navree::app().module(LighthouseModule::from_config())",
+    );
+    let (client, server) = connect(&fixture).await;
+    let instructions = client
+        .peer_info()
+        .and_then(|info| info.instructions.clone())
+        .unwrap_or_default();
+    assert!(instructions.contains("lighthouse_list_issues"), "{instructions}");
+    let tools = client.list_all_tools().await.unwrap();
+    let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
+    assert_eq!(names.len(), 17);
+    assert_eq!(names[12..], navree_navigator::lighthouse::LIGHTHOUSE_TOOLS);
+    let issue = tools
+        .iter()
+        .find(|t| t.name == "lighthouse_get_issue")
+        .unwrap();
+    assert_eq!(issue.input_schema.get("required"), Some(&json!(["id"])));
+    assert_eq!(
+        issue.annotations.as_ref().unwrap().read_only_hint,
+        Some(true)
+    );
+
+    let answer = client
+        .call_tool(CallToolRequestParams::new("lighthouse_list_issues"))
+        .await
+        .unwrap();
+    assert_eq!(answer.is_error, Some(true), "no database configured");
+    client.cancel().await.unwrap();
+    server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn tools_answer_with_text_and_structured_content() {
     let fixture = Fixture::new("[app]\nname = \"crm\"\n[mail]\npassword = \"hunter2\"\n");
     let (client, server) = connect(&fixture).await;

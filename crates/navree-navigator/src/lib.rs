@@ -14,6 +14,7 @@
 //! | `read_logs`, `last_error` | Recent log lines; the last error with its request | `log.file` ([`logs`]) |
 //! | `read_config` | The merged configuration, secrets redacted | navree-config ([`Project::config`]) |
 //! | `search_docs`, `read_doc` | The docs of the app's Navree version | [`docs`] |
+//! | `lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs` | Lighthouse's issues and figures, when the app includes Lighthouse | Lighthouse's tables ([`lighthouse`]) |
 //!
 //! [`Navigator`] answers the tools; [`server`] puts them on MCP (rmcp);
 //! [`app::AppProbe`] builds and asks the app binary through a
@@ -31,6 +32,7 @@
 pub mod app;
 pub mod database;
 pub mod docs;
+pub mod lighthouse;
 pub mod logs;
 pub mod project;
 pub mod server;
