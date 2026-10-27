@@ -15,9 +15,9 @@ use crate::download::{DOCX_CONTENT_TYPE, Download};
 use crate::print::{Margins, Paper};
 use crate::render::is_rtl;
 
-/// Twips (1/20 of a point) per millimetre.
+/// Twips (1/20 of a point) per millimeter.
 const TWIPS_PER_MM: f64 = 1440.0 / 25.4;
-/// EMUs per millimetre (images are sized in EMUs).
+/// EMUs per millimeter (images are sized in EMUs).
 const EMU_PER_MM: f64 = 36_000.0;
 
 /// A Word document (DOCX), built block by block: headings, paragraphs
@@ -120,7 +120,7 @@ impl Docx {
         self
     }
 
-    /// The page margins in millimetres (default 25.4 on every side).
+    /// The page margins in millimeters (default 25.4 on every side).
     pub fn margins(mut self, margins: Margins) -> Self {
         self.margins = Some(margins);
         self
@@ -150,7 +150,7 @@ impl Docx {
         self
     }
 
-    /// "Page N of M", centred at the bottom of every page (Word fills the
+    /// "Page N of M", centered at the bottom of every page (Word fills the
     /// numbers in).
     pub fn footer_page_numbers(mut self) -> Self {
         self.footer = Some(FooterContent::PageNumbers);
@@ -443,7 +443,7 @@ fn direction(paragraph: docx_rs::Paragraph, rtl: bool) -> docx_rs::Paragraph {
 pub enum Align {
     /// The start of the line (left in left-to-right text).
     Start,
-    /// Centred.
+    /// Centered.
     Center,
     /// The end of the line (right in left-to-right text).
     End,
@@ -716,7 +716,7 @@ impl Image {
         }
     }
 
-    /// The printed width in millimetres; the height keeps the image's
+    /// The printed width in millimeters; the height keeps the image's
     /// proportions.
     pub fn width_mm(mut self, width: f64) -> Self {
         self.width_mm = Some(width);

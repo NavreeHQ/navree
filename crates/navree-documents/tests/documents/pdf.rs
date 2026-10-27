@@ -137,7 +137,7 @@ async fn an_overlay_of_another_size_is_scaled_to_fit() {
     let stamped = pdf.overlay(&small, Pages::Last).unwrap();
     let pages = stamped.page_texts().unwrap();
     assert_eq!(pages[0], "one");
-    // Scaled to the page width and centred: below the first line.
+    // Scaled to the page width and centered: below the first line.
     assert_eq!(pages[1], "two\nSEAL");
 }
 

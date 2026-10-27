@@ -36,13 +36,13 @@ impl Pages {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Position {
-    /// Centred on the page (with [`Stamp::text`]'s default rotation, a
+    /// Centered on the page (with [`Stamp::text`]'s default rotation, a
     /// diagonal watermark).
     #[default]
     Center,
-    /// Centred at the top.
+    /// Centered at the top.
     Top,
-    /// Centred at the bottom.
+    /// Centered at the bottom.
     Bottom,
     /// The top-left corner.
     TopLeft,
@@ -62,7 +62,7 @@ pub enum Position {
 /// ```
 /// use navree_documents::{Pages, Position, Stamp};
 ///
-/// // A grey diagonal watermark on every page (the defaults).
+/// // A gray diagonal watermark on every page (the defaults).
 /// let draft = Stamp::text("DRAFT");
 /// // A small red mark in the top-right corner of the first page.
 /// let copy = Stamp::text("Copy 2 of 3")
@@ -78,12 +78,12 @@ pub struct Stamp {
     pub text: String,
     /// Where it sits (default [`Position::Center`]).
     pub position: Position,
-    /// Font size in points (default 72 centred, 12 elsewhere).
+    /// Font size in points (default 72 centered, 12 elsewhere).
     pub size: f32,
-    /// Rotation in degrees, counter-clockwise (default 45 centred, 0
+    /// Rotation in degrees, counter-clockwise (default 45 centered, 0
     /// elsewhere).
     pub rotation: f32,
-    /// Fill color as red, green and blue from 0 to 1 (default grey).
+    /// Fill color as red, green and blue from 0 to 1 (default gray).
     pub color: (f32, f32, f32),
     /// Opacity from 0 to 1 (default 0.25).
     pub opacity: f32,
@@ -95,7 +95,7 @@ pub struct Stamp {
 }
 
 impl Stamp {
-    /// A grey, 25% opaque, 72-point diagonal stamp centred on every page.
+    /// A gray, 25% opaque, 72-point diagonal stamp centered on every page.
     pub fn text(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
@@ -215,8 +215,8 @@ mod tests {
             .at(Position::Bottom)
             .rotate(10.0);
         assert_eq!((stamp.size, stamp.rotation), (12.0, 10.0));
-        let centred = Stamp::text("DRAFT");
-        assert_eq!((centred.size, centred.rotation), (72.0, 45.0));
+        let centered = Stamp::text("DRAFT");
+        assert_eq!((centered.size, centered.rotation), (72.0, 45.0));
     }
 
     #[test]
