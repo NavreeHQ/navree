@@ -108,6 +108,15 @@ pub enum MediaError {
         /// What went wrong (the tool's last error lines).
         message: String,
     },
+    /// A local file could not be read ([`MediaSource::file`](crate::MediaSource::file))
+    /// or a temporary file written.
+    #[error("{path}: {message}")]
+    File {
+        /// The file.
+        path: String,
+        /// What went wrong.
+        message: String,
+    },
     /// The conversion job could not be queued.
     #[error("cannot queue the conversions: {message}")]
     Queue {
@@ -139,6 +148,7 @@ impl MediaError {
             MediaError::NotFound { .. } | MediaError::MissingConversion { .. } => 404,
             MediaError::NoPublicUrl { .. }
             | MediaError::Ffmpeg { .. }
+            | MediaError::File { .. }
             | MediaError::Queue { .. }
             | MediaError::Storage(_)
             | MediaError::Db(_) => 500,
@@ -162,6 +172,7 @@ impl MediaError {
             MediaError::MissingConversion { .. } => "conversion_not_found",
             MediaError::NoPublicUrl { .. }
             | MediaError::Ffmpeg { .. }
+            | MediaError::File { .. }
             | MediaError::Queue { .. }
             | MediaError::Storage(_)
             | MediaError::Db(_) => "internal_error",
