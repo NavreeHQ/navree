@@ -28,7 +28,7 @@ Connect your agent to it once, and it can ask your app:
 | `read_config` | The merged configuration, secrets redacted |
 | `search_docs`, `read_doc` | These docs, for the Navree version your app uses |
 
-When the app includes [Lighthouse](/docs/tools/lighthouse/#mcp-tools-for-agents), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database.
+When the app includes [Lighthouse](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database.
 
 Everything is read-only, and Navigator runs only on your machine, over stdio, for the project you start it in. It is for development; your production binary doesn't contain it.
 

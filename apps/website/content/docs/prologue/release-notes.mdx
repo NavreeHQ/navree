@@ -73,7 +73,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Tools
 
-- **[Lighthouse](/docs/tools/lighthouse/)** (`navree-lighthouse`): application monitoring inside your app, with a dashboard at `/_lighthouse`. Exceptions grouped by fingerprint, slow requests and queries, failed jobs, alerts to email, Slack and webhooks, OpenTelemetry export, and MCP tools so agents can read and resolve issues.
+- **[Lighthouse](/docs/tools/lighthouse/)** (`navree-lighthouse`): application monitoring inside your app, with a dashboard at `/_lighthouse`. Exceptions grouped by fingerprint, slow requests and queries, failed jobs, sampled traces, alerts to email, Slack and signed webhooks through the queue, and a JSON API so scripts and agents can read and resolve issues.
 - **[Logbook](/docs/tools/logbook/)** (`navree-logbook`): a local debugging timeline at `/_logbook` of every request, query, job, mail, event, cache call and log line, with filters and request replay. Development only.
 - **[Fleet](/docs/tools/fleet/)** (`navree-fleet`): a queue dashboard at `/_fleet` and a worker supervisor (`navree fleet`) with auto-balanced workers per queue, throughput, wait and runtime metrics, retries for failed jobs, pause and continue, and long-wait alerts.
 - **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your entities, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.

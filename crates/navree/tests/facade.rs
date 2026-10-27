@@ -61,6 +61,12 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    // L7
+    assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
+    assert!(same::<
+        navree::lighthouse::Lighthouse,
+        navree::lighthouse::Lighthouse,
+    >());
     // L7 (opt-in)
     #[cfg(feature = "billing")]
     assert!(same::<navree::billing::BillingModule, BillingModule>());

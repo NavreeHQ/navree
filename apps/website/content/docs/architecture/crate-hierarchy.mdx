@@ -14,7 +14,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ```text
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
-L7  navree-billing  navree-search (packages built on other packages)
+L7  navree-billing  navree-search  navree-lighthouse (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
@@ -62,6 +62,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
+| L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 
@@ -93,6 +94,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
+| `navree-lighthouse` | kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | `navree-dock` only (for `navree dock`): everything else it knows about the framework is in the code it generates |
 

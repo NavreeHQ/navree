@@ -3222,6 +3222,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-kernel",
+ "navree-lighthouse",
  "navree-log",
  "navree-macros",
  "navree-mail",
@@ -3789,6 +3790,47 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "navree-lighthouse"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "cookie",
+ "form_urlencoded",
+ "hex",
+ "hmac",
+ "http",
+ "metrics",
+ "navree-access",
+ "navree-auth",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-mail",
+ "navree-queue",
+ "navree-schedule",
+ "navree-telemetry",
+ "navree-testing",
+ "navree-view",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
