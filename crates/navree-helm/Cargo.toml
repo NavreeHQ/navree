@@ -10,6 +10,13 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## The Settings screens: every `#[derive(Settings)]` type the app registers
+## with navree-settings, edited per level (the facade turns it on with
+## `helm` and `settings`).
+settings = ["dep:navree-settings", "dep:navree-workspace"]
+
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
@@ -27,9 +34,11 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-settings = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-validation = { workspace = true }
 navree-view = { workspace = true }
+navree-workspace = { workspace = true, optional = true }
 pulldown-cmark = { workspace = true }
 regex = { workspace = true }
 sea-orm = { workspace = true }

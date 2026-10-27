@@ -1,0 +1,32 @@
+{% extends "helm/layout.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>Settings</h1>
+</div>
+<section class="card">
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Settings</th>
+        <th scope="col">Description</th>
+        <th scope="col">Levels</th>
+        <th scope="col">Fields</th>
+        <th scope="col"><span class="visually-hidden">Open</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in types %}
+      <tr>
+        <td data-label="Settings" class="primary"><a href="{{ t.url }}" class="row-link">{{ t.label }}</a> <span class="muted mono">{{ t.key }}</span></td>
+        <td data-label="Description">{% if t.description %}{{ t.description }}{% else %}<span class="muted" aria-label="empty">—</span>{% endif %}</td>
+        <td data-label="Levels">{% for l in t.levels %}<span class="badge tone-5">{{ l }}</span>{% if not loop.last %} {% endif %}{% endfor %}</td>
+        <td data-label="Fields">{{ t.fields }}</td>
+        <td class="open-col"><a href="{{ t.url }}" class="btn btn-ghost btn-sm" aria-label="Open {{ t.label }}">Open</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

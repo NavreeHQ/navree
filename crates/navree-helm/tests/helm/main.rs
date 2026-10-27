@@ -10,5 +10,7 @@ mod boot;
 mod files;
 mod metrics;
 mod pages;
+#[cfg(feature = "settings")]
+mod settings;
 mod signin;
 mod ui;

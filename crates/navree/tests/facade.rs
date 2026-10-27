@@ -67,6 +67,12 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    assert!(same::<navree::settings::SettingsModule, SettingsModule>());
+    assert!(same::<
+        navree::settings::Setting<FacadeSettings>,
+        Setting<FacadeSettings>,
+    >());
+    assert!(same::<navree::settings::Settings, navree::settings::Settings>());
     // L7
     assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
     assert!(same::<
@@ -198,6 +204,34 @@ type DummyEntity = navree::access::entity::role::Entity;
 struct Thing {
     id: i64,
     name: String,
+}
+
+/// Settings declared through the facade: the derive names
+/// `::navree::settings`.
+#[derive(
+    navree::settings::Settings,
+    Clone,
+    Debug,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+    garde::Validate,
+)]
+#[settings(key = "facade", scopes(global, user))]
+struct FacadeSettings {
+    #[garde(skip)]
+    compact: bool,
+}
+
+#[test]
+fn the_settings_derive_works_through_the_facade() {
+    use navree::settings::{ScopeKind, SettingsGroup};
+    assert_eq!(FacadeSettings::KEY, "facade");
+    assert_eq!(FacadeSettings::SCOPES, [ScopeKind::Global, ScopeKind::User]);
+    assert_eq!(
+        FacadeSettings::DESCRIPTION,
+        "Settings declared through the facade: the derive names `::navree::settings`."
+    );
 }
 
 #[test]

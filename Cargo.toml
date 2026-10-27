@@ -53,6 +53,7 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
+navree-settings = { path = "crates/navree-settings", version = "0.1.0" }
 navree-search = { path = "crates/navree-search", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }

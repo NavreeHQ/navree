@@ -202,6 +202,18 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace",
     ]),
+    // Settings: typed settings stored per scope (global, organization,
+    // workspace, user) with inheritance; patches validated with
+    // navree-validation's messages, changes audited (navree-audit) and
+    // emitted (navree-events), resolved values cached by tag (navree-cache),
+    // workspace and organization scopes from navree-workspace, the global
+    // write permission checked with navree-access; it re-exports
+    // `#[derive(Settings)]` from navree-macros.
+    rule("navree-settings", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-cache", "navree-events", "navree-db", "navree-validation", "navree-audit",
+        "navree-access", "navree-workspace",
+    ]),
     // GraphQL: `#[resolver]` fields with route-style access, per-request
     // units of work and dataloaders, subscriptions over WebSockets.
     rule("navree-graphql", 6, &[
@@ -293,11 +305,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-view", "navree-db", "navree-observe", "navree-queue",
         "navree-access",
     ]),
-    // Helm: the admin panel. navree-crypto seals its session cookie.
+    // Helm: the admin panel. navree-crypto seals its session cookie; with
+    // its `settings` feature, the Settings screens edit navree-settings'
+    // types (organizations and workspaces named by navree-workspace).
     rule("navree-helm", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
+        "navree-settings",
     ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -375,6 +390,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-settings",
     "navree-search",
     "navree-graphql",
     "navree-grpc",

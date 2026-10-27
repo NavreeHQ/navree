@@ -43,6 +43,7 @@
 //! | `mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: MongoDB connections and readiness; ORM models on collections, sessions and units of work; the schema builder, migrations and time-series collections on MongoDB |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
+//! | `settings` | navree-settings (plus `#[derive(Settings)]`) | `settings` | `SettingsModule`: typed settings per global, organization, workspace and user, inherited, with the source of every value |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
@@ -220,6 +221,11 @@ pub use navree_mongo as mongo;
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
+/// Typed settings with inheritance (the `settings` feature): navree-settings
+/// re-exported whole, `#[derive(Settings)]` included
+/// (`use navree::settings::{Settings, Scope};`).
+#[cfg(feature = "settings")]
+pub use navree_settings as settings;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
 
