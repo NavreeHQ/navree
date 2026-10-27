@@ -5,6 +5,8 @@
 mod chrome;
 mod commands;
 mod documents;
+#[cfg(feature = "docx")]
+pub mod docx;
 mod download;
 mod engine;
 mod error;
@@ -26,6 +28,8 @@ mod typst_engine;
 #[cfg(feature = "chrome")]
 pub use chrome::{CHROME_ENV, ChromeEngine, DOCUMENT_ORIGIN};
 pub use documents::Documents;
+#[cfg(feature = "docx")]
+pub use docx::{Docx, DocxFile};
 pub use download::{DOCX_CONTENT_TYPE, Download, PDF_CONTENT_TYPE};
 pub use engine::{EngineKind, PdfEngine};
 pub use error::DocumentsError;
