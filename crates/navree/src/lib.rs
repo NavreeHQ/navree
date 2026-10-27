@@ -46,6 +46,7 @@
 //! | `settings` | navree-settings (plus `#[derive(Settings)]`) | `settings` | `SettingsModule`: typed settings per global, organization, workspace and user, inherited, with the source of every value |
 //! | `sso` | navree-sso | `sso` | `SsoModule`: SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, just-in-time provisioning |
 //! | `sheets` | navree-sheets (plus `#[derive(Exportable)]`, `#[derive(Importable)]`) | `sheets` | `SheetsModule`: CSV and Excel exports and imports with staging, mapping and error files |
+//! | `integrations` | navree-integrations | `integrations` | `IntegrationsModule`: workspace and organization connections to Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs and API keys |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
@@ -226,6 +227,8 @@ pub use navree_mongo as mongo;
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
+#[cfg(feature = "integrations")]
+pub use navree_integrations as integrations;
 /// Typed settings with inheritance (the `settings` feature): navree-settings
 /// re-exported whole, `#[derive(Settings)]` included
 /// (`use navree::settings::{Settings, Scope};`).

@@ -319,6 +319,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "impl WebhookEvent for DealWon",
   },
   {
+    slug: "integrations",
+    name: "Integrations",
+    kind: "library",
+    category: "capabilities",
+    tagline: "Each customer's Microsoft 365, Google Workspace and Slack, connected",
+    summary:
+      "Let every workspace or organization connect its own Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs and API keys. Credentials are encrypted, tokens refresh once under a lock, each feature gets only the scopes it needs, and health checks warn you when a connection stops working.",
+    features: ["Admin consent and app-only tokens", "Service accounts with domain-wide delegation", "Least-privilege scope sets per feature", "Token refresh under a lock", "Scheduled health checks", "Typed clients and IntegrationsFake"],
+    crate: "navree-integrations",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features integrations",
+    href: "/docs/packages/integrations/",
+    status: "stable",
+    signature: "graph.get(\"/users\").send().await?",
+  },
+  {
     slug: "documents",
     name: "Documents",
     kind: "library",
