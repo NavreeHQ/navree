@@ -125,8 +125,25 @@ schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
 ## `accessible` queries, `Authorized<Model, A>`).
 access = ["dep:navree-access", "http", "db", "navree-orm?/access"]
-## Notifications; stored ones are ORM models (`orm`).
-notify = ["dep:navree-notify", "http", "db", "mail", "orm"]
+## Notifications over mail, the database, broadcasts, Slack, Microsoft
+## Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push (VAPID
+## through `crypto`, numbers in E.164 through `validation`); stored ones,
+## the delivery log, opt-outs and push subscriptions are ORM models (`orm`).
+## With `webhooks` on too, the providers' status callbacks and STOP replies
+## (`/api/webhooks/notify/*`); with `integrations`, bot routes send with a
+## connection's token.
+notify = [
+    "dep:navree-notify",
+    "http",
+    "db",
+    "mail",
+    "orm",
+    "crypto",
+    "http-client",
+    "validation",
+    "navree-webhooks?/notify",
+    "navree-integrations?/notify",
+]
 ## The UI kit of the server-rendered tools: the app shell, components as
 ## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
 ui = ["dep:navree-ui", "http", "view"]
