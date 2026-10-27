@@ -49,7 +49,7 @@ Navree::app()
 
 Only `ConfigModule`, `CryptoModule` and `DatabaseModule` are required. Without `CacheModule`, token locks and used states live in the process, which is enough for a single instance; with several instances, give the cache a shared store such as [Redis](/docs/digging-deeper/redis/) so two instances never refresh the same connection at once. Without `WorkspaceModule`, connections belong to the app itself.
 
-The module contributes the migration set `integrations`, which creates `integration_connections`: one row per owner, provider and scope set, with the encrypted credentials, the cached token and its expiry, the granted scopes, the tenant at the provider, and the health of the connection.
+The module contributes the migration set `integrations`, which creates `integration_connections`: one row per owner, provider and scope set, with the encrypted credentials, the cached token and its expiry, the granted scopes, the tenant at the provider, and the health of the connection. It runs on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite; its UUID columns are `BINARY(16)` on MySQL and MariaDB, where [models write UUIDs as 16 bytes](/docs/database/columns/#uuid-columns-on-mysql).
 
 ## Configuration
 
@@ -344,6 +344,32 @@ The routes, the extractor and the commands are built on the `Integrations` servi
 
 Connecting and disconnecting are data changes: in a handler they join the request's unit of work, are audited and emit their events after the commit. Token refreshes and health results commit on their own, so a request that fails afterwards keeps a rotated refresh token.
 
+### The connections table
+
+`IntegrationConnection` is the [model](/docs/orm/models/) of `integration_connections`, so reports and admin pages query connections like any other records:
+
+```rust title="src/modules/integrations/report.rs"
+use navree::db::Db;
+use navree::integrations::IntegrationConnection;
+use navree::orm::{Model as _, OrmError};
+
+/// Unhealthy connections, by provider, for the operations dashboard.
+pub async fn unhealthy_by_provider(db: &Db) -> Result<Vec<(String, u64)>, OrmError> {
+    let mut counts = Vec::new();
+    for provider in ["microsoft", "google", "slack"] {
+        let unhealthy = IntegrationConnection::query()
+            .where_(IntegrationConnection::PROVIDER.eq(provider))
+            .where_(IntegrationConnection::STATUS.eq("unhealthy"))
+            .count(db)
+            .await?;
+        counts.push((provider.to_owned(), unhealthy));
+    }
+    Ok(counts)
+}
+```
+
+Its `credentials` and `access_token` columns hold ciphertexts; they are hidden from serialized records and from `Debug`. Read the table freely, and change connections through `Integrations`, which encrypts the credentials, emits the events and writes the audit entries. `ConnectionInfo` is the view to return from your own routes.
+
 ## Health checks
 
 A connection stops working without telling you: an admin removes your app from their tenant, a key is rotated, a service account is deleted. `integrations:check` finds out before your users do. For each connection it asks the provider for a new token (OAuth, app-only and service-account connections) and gets the provider's health probe (`health_url`, or Slack's `auth.test`). Then:
@@ -402,7 +428,24 @@ Register it with `m.listen::<ConnectionUnhealthy, WarnAdmins>()`, and send a [no
 
 Each carries `connection_id`, `owner` (`{"type": "workspace", "id": "..."}`), `provider` and `scope_set`; `IntegrationConnected` adds `kind` and `connected_by`, and `ConnectionUnhealthy` adds `error` and `failures`. They are emitted after the change commits, when `EventsModule` is in the app.
 
-With the [audit log](/docs/security/audit-log/), connecting and disconnecting are recorded as `integration.connected` and `integration.disconnected` with the provider, scope set and owner, and as data changes of `integration_connections`. Credentials and tokens are never serialized, so they never reach the audit log; token refreshes and health checks aren't data changes.
+With the [audit log](/docs/security/audit-log/), connecting and disconnecting are recorded as `integration.connected` and `integration.disconnected`, by the admin who did it, with the connection as the subject (`IntegrationConnection` and its id) and the provider, scope set, kind and owner as metadata:
+
+```json
+{
+  "action": "integration.connected",
+  "actor_id": "019a1eff-9b8a-7d6c-8e5f-4a3b2c1d0e9f",
+  "subject_type": "IntegrationConnection",
+  "subject_id": "019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b",
+  "metadata": {
+    "provider": "microsoft",
+    "scope_set": "default",
+    "kind": "app_only",
+    "owner": { "type": "workspace", "id": "019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29" }
+  }
+}
+```
+
+The rows are written without row-level change events, so neither the credentials nor their ciphertexts reach the audit log. Token refreshes and health checks aren't recorded.
 
 ## Errors
 
