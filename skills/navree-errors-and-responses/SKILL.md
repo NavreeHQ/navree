@@ -1,6 +1,6 @@
 ---
 name: navree-errors-and-responses
-description: "Returns errors and responses the Navree way: `AppError` constructors, the `{statusCode, message, error, errors}` JSON shape, `?` and 500s, `map_error` for your own error types, database error mapping, status codes, headers, downloads, streaming and API resources with `__type`. Use when a handler must return a specific status or message, an error type needs an HTTP status, a response needs headers or a file, or an error response doesn't have the expected shape."
+description: "Returns errors and responses the Navree way: `AppError` constructors, the `{statusCode, message, error, code, errors}` JSON shape, machine-readable error codes (`with_code`, `navree::http::codes`, `http.errors.code`) that front ends translate, `?` and 500s, `map_error` for your own error types, database error mapping, status codes, headers, downloads, streaming and API resources with `__type`. Use when a handler must return a specific status, message or code, an error type needs an HTTP status, a front end must show a refusal in the user's language, a response needs headers or a file, or an error response doesn't have the expected shape."
 ---
 
 # Errors and responses
@@ -9,14 +9,16 @@ Every error a Navree app sends has one JSON body, whatever produced it (a
 handler, validation, the rate limiter, a panic):
 
 ```json
-{ "statusCode": 404, "message": "Deal not found", "error": "Not Found" }
+{ "statusCode": 404, "message": "Deal not found", "error": "Not Found", "code": "not_found" }
 ```
 
 `message` is the detail (a list of every message for validation errors),
-`error` is the reason phrase, and validation errors add
-`"errors": { "field": ["..."] }`. The request id is in the `X-Request-Id`
-header, never in the body. Internal details go to the log, never to the
-client. Navree never answers 422 or 419: input errors are 400, CSRF 403.
+`error` is the reason phrase, `code` is the stable machine-readable code a
+front end maps to a translation key, and validation errors add
+`"errors": { "field": ["..."] }` (with `"code": "validation_failed"`). The
+request id is in the `X-Request-Id` header, never in the body. Internal
+details go to the log, never to the client. Navree never answers 422 or
+419: input errors are 400, CSRF 403.
 
 ## Return an error from a handler
 
@@ -36,23 +38,50 @@ async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
 }
 ```
 
-| Constructor | Status | `message` |
-|---|---|---|
-| `AppError::bad_request("The export is empty.")` | 400 | the text |
-| `AppError::unauthenticated()` | 401 | `Unauthorized` |
-| `AppError::forbidden()` | 403 | `Forbidden` |
-| `AppError::not_found()` | 404 | `Not Found` |
-| `AppError::conflict("Already sent.")` | 409 | the text |
-| `AppError::validation(map)` | 400 | every field message, plus `errors` |
-| `AppError::too_many_requests(duration)` | 429 | `Too Many Requests`, `Retry-After` |
-| `AppError::service_unavailable("..")` | 503 | the text |
-| `AppError::internal(error)` | 500 | `Internal server error` (the error is logged) |
-| `AppError::from_status(StatusCode::PAYMENT_REQUIRED)` | any | the reason phrase |
-| `AppError::new(status, "code", "Title")` | any | the title |
+| Constructor | Status | `message` | `code` |
+|---|---|---|---|
+| `AppError::bad_request("The export is empty.")` | 400 | the text | `bad_request` |
+| `AppError::validation(map)` | 400 | every field message, plus `errors` | `validation_failed` |
+| `AppError::invalid_filter("..")` | 400 | the text | `invalid_filter` |
+| `AppError::unauthenticated()` | 401 | `Unauthorized` | `unauthenticated` |
+| `AppError::two_factor_required()` | 401 | `Two-factor authentication required` | `two_factor_required` |
+| `AppError::forbidden()` | 403 | `Forbidden` | `forbidden` |
+| `AppError::demo_read_only()` | 403 | `Demo workspaces are read-only.` | `demo_read_only` |
+| `AppError::not_found()` | 404 | `Not Found` | `not_found` |
+| `AppError::conflict("Already sent.")` | 409 | the text | `conflict` |
+| `AppError::limit_reached("Your plan includes 5 seats.")` | 409 | the text | `limit_reached` |
+| `AppError::too_many_requests(duration)` | 429 | `Too Many Requests`, `Retry-After` | `too_many_requests` |
+| `AppError::service_unavailable("..")` | 503 | the text | `service_unavailable` |
+| `AppError::internal(error)` | 500 | `Internal server error` (the error is logged) | `internal_error` |
+| `AppError::from_status(StatusCode::PAYMENT_REQUIRED)` | any | the reason phrase | `payment_required` |
+| `AppError::new(status, "code", "Title")` | any | the title | `code` |
 
-Builders: `.with_detail("..")` sets the message, `.with_header(name, value)`
-adds a header, `.with_source(error)` records the cause (logged for 5xx,
-never sent). `StatusCode` is `navree::axum::http::StatusCode`.
+Builders: `.with_detail("..")` sets the message, `.with_code("..")` sets
+the code, `.with_header(name, value)` adds a header, `.with_source(error)`
+records the cause (logged for 5xx, never sent). `StatusCode` is
+`navree::axum::http::StatusCode`.
+
+## Error codes
+
+Give every refusal a user can see its own code, naming what happened (not
+the status), in lower snake case:
+
+```rust
+return Err(AppError::conflict("The campaign is already running.")
+    .with_code("campaign_already_running"));
+```
+
+- The front end maps `code` to a translation key and branches on it; never
+  make client code compare English messages.
+- Framework codes are constants in `navree::http::codes` (`codes::ALL`
+  lists them; `codes::is_valid(code)` checks a code's form). They never
+  change once released.
+- Modules send their own: auth `invalid_credentials`, `token_expired`,
+  `invalid_two_factor_code`, `too_many_login_attempts`; workspace
+  `not_a_member`, `workspace_not_found`, `invitation_expired`; access
+  `role_not_found`, `forbidden_fields`. The errors page lists them all.
+- `http.errors.code = false` (`APP_HTTP__ERRORS__CODE=false`) leaves the
+  member out of every body; `AppError::code` keeps its value.
 
 ## `?` and 500s
 
@@ -92,9 +121,12 @@ fn billing_error(error: &BillingError) -> Option<AppError> {
     match error {
         BillingError::CardDeclined { reason } => Some(
             AppError::from_status(StatusCode::PAYMENT_REQUIRED)
+                .with_code("card_declined")
                 .with_detail(format!("The card was declined: {reason}.")),
         ),
-        BillingError::InvoicePaid => Some(AppError::conflict("The invoice is already paid.")),
+        BillingError::InvoicePaid => {
+            Some(AppError::conflict("The invoice is already paid.").with_code("invoice_paid"))
+        }
         BillingError::Gateway(_) => None, // stays a 500
     }
 }
@@ -118,16 +150,17 @@ call site: `.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailab
 
 | Source | Response |
 |---|---|
-| `DbErr::RecordNotFound`, `RecordNotUpdated` (e.g. `Repo::find_or_fail`) | 404 `Not Found` |
-| unique constraint violation | 409 `A record with the same unique value already exists.` |
-| foreign key violation | 409 `The change conflicts with a related record.` |
-| any other `DbErr` | 500 |
-| missing route / wrong method | 404 / 405 with `Allow` |
-| body over `http.body_limit_bytes` (2 MiB) | 413 |
-| wrong `Content-Type` for `Json` | 415 |
-| per-IP limit or `#[throttle]` exceeded | 429 with `Retry-After` |
-| request over `http.timeout_secs` (30) or `#[timeout]` | 503 |
-| panic in a handler | 500 (logged with the panic text) |
+| `DbErr::RecordNotFound`, `RecordNotUpdated` (e.g. `Repo::find_or_fail`) | 404 `Not Found`, `not_found` |
+| unique constraint violation | 409 `A record with the same unique value already exists.`, `conflict` |
+| foreign key violation | 409 `The change conflicts with a related record.`, `conflict` |
+| any other `DbErr` | 500, `internal_error` |
+| missing route / wrong method | 404 `not_found` / 405 `method_not_allowed` with `Allow` |
+| body over `http.body_limit_bytes` (2 MiB) | 413 `payload_too_large` |
+| wrong `Content-Type` for `Json` | 415 `unsupported_media_type` |
+| per-IP limit or `#[throttle]` exceeded | 429 `too_many_requests` with `Retry-After` |
+| request over `http.timeout_secs` (30) or `#[timeout]` | 503 `request_timeout` |
+| maintenance mode | 503 `maintenance` |
+| panic in a handler | 500 `internal_error` (logged with the panic text) |
 | `StorageError::NotFound` / `InvalidPath` | 404 / 400 |
 
 A response status of 400 or above rolls the request's unit of work back,
@@ -195,12 +228,16 @@ fields for resources built at run time.
 ```rust
 response.assert_error(404, "Note not found");    // status, shape, message, X-Request-Id
 response.assert_error(409, None);                 // any message
+response.assert_error_code(409, "campaign_already_running"); // and the code
 response.assert_validation_error("email");        // 400 with errors.email
 ```
 
 ## Common mistakes
 
 - `impl From<MyError> for AppError` (conflicts with the blanket impl): use `map_error`.
+- A refusal users see without its own code (two different 409s both
+  `conflict`): the front end can't tell them apart. Add `.with_code(..)`.
+- Front-end code comparing `message` strings: compare `code`.
 - Returning a JSON body with an error status built by hand: it's sent as
   is, not in the standard shape. Return `AppError`.
 - Putting the request id or internal details in `message`.
