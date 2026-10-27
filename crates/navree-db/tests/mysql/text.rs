@@ -74,7 +74,9 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
         ("øresund", 0),
         ("øresund énergie ", 0),
     ] {
-        let found = titles(eq_ignore_case(backend, title(), value)).await.unwrap();
+        let found = titles(eq_ignore_case(backend, title(), value))
+            .await
+            .unwrap();
         assert_eq!(found.len(), matches, "equals {value:?}");
     }
 }

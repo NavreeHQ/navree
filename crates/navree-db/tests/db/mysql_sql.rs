@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use navree_db::{
     ChangeOp, CursorQuery, DatabaseModule, Db, DbOptions, MigrationSet, Migrator,
-    ModuleBuilderDbExt, PageMeta, PageQuery, Repo, cursor_paginate, cursor_paginate_desc,
-    paginate,
+    ModuleBuilderDbExt, PageMeta, PageQuery, Repo, cursor_paginate, cursor_paginate_desc, paginate,
 };
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use sea_orm::{
@@ -189,7 +188,8 @@ async fn uow_clears_its_session_variables_when_the_transaction_is_still_held() {
     rolled_back.rollback().await.expect("rolls back");
     drop(held);
 
-    let begin = "SET @navree_actor = '0199a7a0-0000-7000-8000-000000000001', @navree_request_id = NULL";
+    let begin =
+        "SET @navree_actor = '0199a7a0-0000-7000-8000-000000000001', @navree_request_id = NULL";
     let clear = "SET @navree_actor = NULL, @navree_request_id = NULL";
     assert_eq!(
         sent(&db),
@@ -232,7 +232,10 @@ async fn uow_rolls_back_when_the_variables_cannot_be_cleared() {
     assert!(error.to_string().contains("connection lost"), "{error}");
     let log = sent(&db);
     assert_eq!(log.len(), 5, "{log:#?}");
-    assert_eq!(log[3], "SET @navree_actor = NULL, @navree_request_id = NULL");
+    assert_eq!(
+        log[3],
+        "SET @navree_actor = NULL, @navree_request_id = NULL"
+    );
     assert_eq!(log[4], "ROLLBACK");
     assert!(uow.is_finished().await);
 }
@@ -286,7 +289,10 @@ async fn repo_writes_through_the_unit_of_work_with_mysql_statements() {
         .await
         .expect("deletes");
     let ops: Vec<ChangeOp> = uow.changes().iter().map(|change| change.op).collect();
-    assert_eq!(ops, [ChangeOp::Created, ChangeOp::Updated, ChangeOp::Deleted]);
+    assert_eq!(
+        ops,
+        [ChangeOp::Created, ChangeOp::Updated, ChangeOp::Deleted]
+    );
     assert_eq!(
         uow.changes()[1].new,
         Some(serde_json::json!({"body": "changed"}))
@@ -386,9 +392,13 @@ async fn paginate_counts_then_reads_one_page() {
 #[tokio::test]
 async fn paginate_past_the_end_reads_only_the_count() {
     let db = scripted(0, vec![vec![count_row(3)]]);
-    let page = paginate(note::Entity::find(), db.conn(), PageQuery::new(u64::MAX, 100))
-        .await
-        .expect("pages");
+    let page = paginate(
+        note::Entity::find(),
+        db.conn(),
+        PageQuery::new(u64::MAX, 100),
+    )
+    .await
+    .expect("pages");
     assert!(page.data.is_empty());
     assert_eq!(page.meta.total, 3);
     assert_eq!(sent_raw(&db).len(), 1, "the count only");
@@ -398,7 +408,11 @@ async fn paginate_past_the_end_reads_only_the_count() {
 async fn cursor_pages_filter_and_order_on_the_key() {
     let notes: Vec<note::Model> = (0..5).map(|n| a_note(n, &format!("note-{n}"))).collect();
     let rows = |range: std::ops::Range<usize>| -> Vec<MockRow> {
-        notes[range].iter().cloned().map(IntoMockRow::into_mock_row).collect()
+        notes[range]
+            .iter()
+            .cloned()
+            .map(IntoMockRow::into_mock_row)
+            .collect()
     };
     let db = scripted(0, vec![rows(0..3), rows(2..5), rows(0..2)]);
     let first = cursor_paginate(
@@ -569,16 +583,16 @@ async fn a_migration_can_ask_for_a_transaction_on_mysql() {
     let app = app_on(db.clone(), Some(true)).await;
     Migrator::up(app.ctx()).await.expect("migrates");
     let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
-    assert_eq!(sql[2..], ["BEGIN", sql[3].as_str(), INSERT_APPLIED, "COMMIT"]);
+    assert_eq!(
+        sql[2..],
+        ["BEGIN", sql[3].as_str(), INSERT_APPLIED, "COMMIT"]
+    );
     assert!(sql[3].starts_with("CREATE TABLE `users`"), "{}", sql[3]);
 }
 
 #[tokio::test]
 async fn rollback_reverts_the_last_batch_on_mysql() {
-    let db = scripted(
-        3,
-        vec![vec![applied_row("users", "m0001_create_users", 1)]],
-    );
+    let db = scripted(3, vec![vec![applied_row("users", "m0001_create_users", 1)]]);
     let app = app_on(db.clone(), None).await;
     let reverted = Migrator::rollback(app.ctx()).await.expect("rolls back");
     assert_eq!(reverted, ["users/m0001_create_users"]);
@@ -668,7 +682,11 @@ async fn fresh_on_an_empty_mysql_database_only_migrates() {
     let app = app_on(db.clone(), None).await;
     Migrator::fresh(app.ctx()).await.expect("fresh");
     let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
-    assert!(sql[0].starts_with("SELECT CAST(table_name AS CHAR)"), "{}", sql[0]);
+    assert!(
+        sql[0].starts_with("SELECT CAST(table_name AS CHAR)"),
+        "{}",
+        sql[0]
+    );
     assert_eq!(sql[1], CREATE_MIGRATIONS_TABLE);
     assert!(!sql.iter().any(|sql| sql.contains("FOREIGN_KEY_CHECKS")));
 }

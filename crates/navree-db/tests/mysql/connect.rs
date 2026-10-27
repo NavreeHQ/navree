@@ -61,7 +61,10 @@ async fn sessions_are_utc_utf8mb4_and_strict() {
         return;
     };
     let db = scratch.db().await;
-    assert_eq!(string(db.conn(), "SELECT @@SESSION.time_zone").await, "+00:00");
+    assert_eq!(
+        string(db.conn(), "SELECT @@SESSION.time_zone").await,
+        "+00:00"
+    );
     assert_eq!(
         string(db.conn(), "SELECT @@SESSION.character_set_client").await,
         "utf8mb4"
@@ -184,7 +187,11 @@ async fn the_isolation_level_applies_to_every_connection() {
         let after = count(&*tx, "seen").await;
         drop(tx);
         uow.commit().await.unwrap();
-        assert_eq!(after == before + 1, sees_the_new_row, "{before} then {after}");
+        assert_eq!(
+            after == before + 1,
+            sees_the_new_row,
+            "{before} then {after}"
+        );
     }
 }
 
@@ -290,8 +297,7 @@ async fn show(conn: &impl ConnectionTrait, statement: &str) -> Option<String> {
 /// The default `ssl-mode` (PREFERRED) uses TLS when the server offers it.
 #[tokio::test]
 async fn connections_use_tls_when_the_server_offers_it() {
-    let Some(scratch) = Scratch::new("connections_use_tls_when_the_server_offers_it").await
-    else {
+    let Some(scratch) = Scratch::new("connections_use_tls_when_the_server_offers_it").await else {
         return;
     };
     let db = scratch.db().await;

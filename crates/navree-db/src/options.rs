@@ -350,7 +350,10 @@ impl fmt::Debug for DbOptions {
 /// `sqlite`, ...), if it has one.
 pub(crate) fn scheme(url: &str) -> Option<Cow<'_, str>> {
     let (scheme, _) = url.split_once(':')?;
-    let valid = scheme.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+    let valid = scheme
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic())
         && scheme
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
@@ -512,11 +515,15 @@ mod tests {
         assert_eq!(from_env.modes, listed.modes);
         // Empty: clear the SQL mode.
         assert_eq!(
-            mysql_section(serde_json::json!({"modes": ""})).unwrap().modes,
+            mysql_section(serde_json::json!({"modes": ""}))
+                .unwrap()
+                .modes,
             Some(vec![])
         );
         assert_eq!(
-            mysql_section(serde_json::json!({"modes": null})).unwrap().modes,
+            mysql_section(serde_json::json!({"modes": null}))
+                .unwrap()
+                .modes,
             None
         );
         assert!(mysql_section(serde_json::json!({})).unwrap().strict);
@@ -567,7 +574,10 @@ mod tests {
             error,
             "unknown isolation level `snapshot`; expected read_uncommitted, read_committed, repeatable_read or serializable"
         );
-        assert_eq!(IsolationLevel::RepeatableRead.to_string(), "REPEATABLE READ");
+        assert_eq!(
+            IsolationLevel::RepeatableRead.to_string(),
+            "REPEATABLE READ"
+        );
         assert_eq!(IsolationLevel::ReadUncommitted.as_sql(), "READ UNCOMMITTED");
     }
 
@@ -581,10 +591,7 @@ mod tests {
         let error = mysql_section(serde_json::json!({"isolation_level": "chaos"}))
             .unwrap_err()
             .to_string();
-        assert!(
-            error.contains("unknown isolation level `chaos`"),
-            "{error}"
-        );
+        assert!(error.contains("unknown isolation level `chaos`"), "{error}");
     }
 
     #[test]

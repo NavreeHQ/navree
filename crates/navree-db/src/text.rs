@@ -198,7 +198,11 @@ mod tests {
                 .to_string(MysqlQueryBuilder)
         };
         let col = || Expr::col(Alias::new("name"));
-        let contains = sql(contains_ignore_case(DbBackend::MySql, col(), "Équipe 50%_*"));
+        let contains = sql(contains_ignore_case(
+            DbBackend::MySql,
+            col(),
+            "Équipe 50%_*",
+        ));
         assert!(
             contains.contains(
                 "INSTR(CAST(LOWER(`name`) AS BINARY), CAST('équipe 50%_*' AS BINARY)) > 0"

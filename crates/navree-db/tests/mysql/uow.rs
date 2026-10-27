@@ -104,8 +104,7 @@ async fn triggers_read_the_actor_and_request_id() {
 /// functions MySQL and MariaDB both have.
 #[tokio::test]
 async fn a_trigger_stamps_the_actor_into_a_binary_uuid_column() {
-    let Some(scratch) =
-        Scratch::new("a_trigger_stamps_the_actor_into_a_binary_uuid_column").await
+    let Some(scratch) = Scratch::new("a_trigger_stamps_the_actor_into_a_binary_uuid_column").await
     else {
         return;
     };
@@ -200,7 +199,11 @@ async fn after_a_deadlock_the_victims_statements_commit_on_their_own() {
     drop(survivor_tx);
     survivor.commit().await.unwrap();
     assert_eq!(
-        strings(db.conn(), "SELECT CAST(id AS CHAR) FROM counters ORDER BY id").await,
+        strings(
+            db.conn(),
+            "SELECT CAST(id AS CHAR) FROM counters ORDER BY id"
+        )
+        .await,
         ["1", "2", "3"],
         "the victim's insert survived its rollback"
     );
@@ -221,7 +224,11 @@ async fn writes_are_visible_after_commit_and_gone_after_rollback() {
         .insert(&*uow.tx().await.unwrap())
         .await
         .unwrap();
-    assert_eq!(count(db.conn(), "notes").await, 0, "not visible before commit");
+    assert_eq!(
+        count(db.conn(), "notes").await,
+        0,
+        "not visible before commit"
+    );
     uow.commit().await.unwrap();
     assert_eq!(count(db.conn(), "notes").await, 1);
 
@@ -350,7 +357,11 @@ async fn observers_write_in_the_transaction_and_their_errors_roll_it_back() {
     uow.commit().await.expect("commits");
     assert_eq!(count(db.conn(), "notes").await, 2);
     assert_eq!(
-        strings(db.conn(), "SELECT CONCAT(op, '|', actor) FROM audit ORDER BY id").await,
+        strings(
+            db.conn(),
+            "SELECT CONCAT(op, '|', actor) FROM audit ORDER BY id"
+        )
+        .await,
         [format!("created|{actor}"), format!("created|{actor}")]
     );
 
@@ -364,8 +375,16 @@ async fn observers_write_in_the_transaction_and_their_errors_roll_it_back() {
     Notes::insert(&uow, new_note("c")).await.unwrap();
     let error = uow.commit().await.unwrap_err();
     assert!(error.to_string().contains("observer refused"), "{error}");
-    assert_eq!(count(db.conn(), "notes").await, 2, "the change is rolled back");
-    assert_eq!(count(db.conn(), "audit").await, 2, "and its audit row with it");
+    assert_eq!(
+        count(db.conn(), "notes").await,
+        2,
+        "the change is rolled back"
+    );
+    assert_eq!(
+        count(db.conn(), "audit").await,
+        2,
+        "and its audit row with it"
+    );
     assert_eq!(string(db.conn(), VARIABLES).await, "NULL|NULL");
     app.shutdown().await.unwrap();
 }

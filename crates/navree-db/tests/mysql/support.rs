@@ -42,11 +42,9 @@ impl Scratch {
         let conn = Database::connect(admin.as_str())
             .await
             .unwrap_or_else(|error| panic!("{test}: cannot connect to {URL_VARIABLE}: {error}"));
-        conn.execute_unprepared(&format!(
-            "CREATE DATABASE `{name}` CHARACTER SET utf8mb4"
-        ))
-        .await
-        .expect("creates the scratch database");
+        conn.execute_unprepared(&format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4"))
+            .await
+            .expect("creates the scratch database");
         conn.close().await.expect("closes the admin connection");
         let url = with_database(&admin, &name);
         Some(Scratch { admin, name, url })
@@ -110,7 +108,10 @@ impl Drop for Scratch {
         .join();
         match dropped {
             Ok(Ok(())) => {}
-            Ok(Err(error)) => eprintln!("the scratch database {} was not dropped: {error}", self.name),
+            Ok(Err(error)) => eprintln!(
+                "the scratch database {} was not dropped: {error}",
+                self.name
+            ),
             Err(_) => eprintln!("dropping the scratch database {} panicked", self.name),
         }
     }
@@ -258,7 +259,11 @@ fn adds_query_parameters_to_a_url() {
         "mysql://root@db/app?ssl-mode=DISABLED"
     );
     assert_eq!(
-        with_param("mysql://root@db/app?charset=utf8mb4", "ssl-mode", "DISABLED"),
+        with_param(
+            "mysql://root@db/app?charset=utf8mb4",
+            "ssl-mode",
+            "DISABLED"
+        ),
         "mysql://root@db/app?charset=utf8mb4&ssl-mode=DISABLED"
     );
 }
