@@ -80,11 +80,13 @@ async fn the_route_checks_size_type_and_expiry() {
             body["message"],
             "The upload must be exactly 100 bytes long."
         );
+        assert_eq!(body["code"], "upload_size_mismatch");
         let body = upload(&app, &signed, png(99)).await.error(400);
         assert_eq!(
             body["message"],
             "The upload must be exactly 100 bytes long."
         );
+        assert_eq!(body["code"], "upload_size_mismatch");
         assert!(!disk.exists("a.png").await.unwrap(), "{name}");
 
         // The declared size, the declared type.
@@ -105,6 +107,7 @@ async fn the_route_checks_size_type_and_expiry() {
         body["message"],
         "The file must not be larger than 1000 bytes."
     );
+    assert_eq!(body["code"], "payload_too_large");
     let chunks: Vec<Result<Vec<u8>, std::io::Error>> = vec![Ok(png(600)), Ok(vec![0; 600])];
     let streamed = Request::put(&signed.url)
         .header("content-type", "image/png")
@@ -295,6 +298,19 @@ impl Controller for UploadsController {
                 }
             })
             .public(),
+            RouteDef::on(Method::POST, "/presign-untyped", {
+                let disk = self.disk.clone();
+                move || {
+                    let disk = disk.clone();
+                    async move {
+                        let upload = disk
+                            .presigned_put("x.png", Duration::minutes(1), &rules())
+                            .await?;
+                        Ok::<_, AppError>(Json(upload))
+                    }
+                }
+            })
+            .public(),
             RouteDef::on(
                 Method::POST,
                 "/accept/{*path}",
@@ -339,13 +355,22 @@ async fn rejections_map_to_400_and_413_in_handlers() {
         body["message"],
         "The file must not be larger than 1000 bytes."
     );
+    assert_eq!(body["code"], "payload_too_large");
     let body = app.send(post("/presign/0")).await.error(400);
     assert_eq!(body["message"], "The file should not be empty.");
+    assert_eq!(body["code"], "empty_file");
     let body = app.send(post("/presign-type/png")).await.error(400);
     assert_eq!(
         body["message"],
         "The declared content type is not a valid `type/subtype`."
     );
+    assert_eq!(body["code"], "invalid_content_type");
+    let body = app.send(post("/presign-untyped")).await.error(400);
+    assert_eq!(
+        body["message"],
+        "Declare the file's content type (allowed: image/png)."
+    );
+    assert_eq!(body["code"], "missing_content_type");
 
     let disk = app.app.ctx().get::<Disk>().await.unwrap();
     disk.put("up/fake.png", "<svg/>").await.unwrap();
@@ -354,7 +379,9 @@ async fn rejections_map_to_400_and_413_in_handlers() {
         body["message"],
         "The file must be of type: image/png (it is text/plain)."
     );
-    app.send(post("/accept/up/missing.png")).await.error(404);
+    assert_eq!(body["code"], "file_type_not_allowed");
+    let body = app.send(post("/accept/up/missing.png")).await.error(404);
+    assert_eq!(body["code"], "not_found");
     disk.put("up/real.png", png(500)).await.unwrap();
     let ok = app.send(post("/accept/up/real.png")).await;
     assert_eq!(ok.status, 200, "{}", ok.text());
