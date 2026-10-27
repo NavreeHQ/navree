@@ -6,3 +6,10 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@tanstack/query-core@5.105.0'
   - '@tanstack/vue-query@5.105.0'
+  # node-forge 1.4.2 is the fix for GHSA-86w9-cpqp-85rv (see overrides).
+  - 'node-forge@1.4.2'
+
+overrides:
+  # listhen (nuxt dev's HTTPS certificates) asks for node-forge ^1.4.0;
+  # 1.4.0 accepts forged RSA PKCS#1 v1.5 signatures (GHSA-86w9-cpqp-85rv).
+  node-forge: 1.4.2
