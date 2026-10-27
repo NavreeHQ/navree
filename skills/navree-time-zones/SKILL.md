@@ -1,6 +1,6 @@
 ---
 name: navree-time-zones
-description: "Counts dates, reports and messages on the clock of the person or workspace they are for, with `TimeModule` (navree-time): checked IANA `Zone`s with PostgreSQL-safe names, the request's zone (`CurrentZone`: user, workspace, organization, default), `LocalDay` and `DayRange` turned into UTC bounds, `WithZone` responses, `SendWindow` working hours with weekends and `Holidays`, `AT TIME ZONE` SQL with a checked zone, schedules with `in_zone` and `per_workspace_local`, workspace `timezone`/`country`, `ZonesFake` in tests. Use when a report counts days, a reminder must arrive in working hours, a cron task should run at local time or per workspace, a user or workspace picks a time zone, or a zone name breaks PostgreSQL."
+description: "Counts dates, reports and messages on the clock of the person or workspace they are for, with `TimeModule` (navree-time): checked IANA `Zone`s with PostgreSQL-safe names, the request's zone (`CurrentZone`: user, workspace, organization, default), `LocalDay` and `DayRange` turned into UTC bounds, `WithZone` responses, `SendWindow` working hours with weekends and `Holidays`, `AT TIME ZONE` SQL with a checked zone, schedules with `in_zone` and `per_workspace_local`, workspace and organization `timezone`/`country`, `ZonesFake` in tests. Use when a report counts days, a reminder must arrive in working hours, a cron task should run at local time or per workspace, a user or workspace picks a time zone, or a zone name breaks PostgreSQL."
 ---
 
 # Time zones
@@ -15,8 +15,10 @@ local days and times to the UTC instants queries filter on.
 2. Set `time.default_zone` (`APP_TIME__DEFAULT_ZONE`), and
    `time.holidays.country` if the app observes a country's holidays.
 3. Give zones a source: `WorkspaceModule` already registers the workspace
-   level (`workspaces.timezone`, `workspaces.country`); register users'
-   zones with a `dyn ZoneSource` of your own.
+   and organization levels (`timezone` and `country` on `workspaces` and
+   `organizations`; the organization level answers once
+   `workspace.organizations.enabled`); register users' zones with a
+   `dyn ZoneSource` of your own.
 4. Take `CurrentZone` in handlers that count days; return `WithZone`.
 5. Test with `ZonesFake` and a `FixedClock`.
 
@@ -73,13 +75,15 @@ async fn signups(
 ```
 
 - Resolution: user source, then the request's workspace (same resolvers as
-  `CurrentWorkspace`; members only), then organization, then
+  `CurrentWorkspace`; members only), then organization (the workspace's,
+  or the one an organization request names, members only), then
   `time.default_zone`. Per level: stored zone, else the country's primary
   zone. A stored name that isn't a zone is skipped with a warning.
 - `zone.level()`, `zone.owner()`, `zone.from_country()`, `zone.today()`,
   `zone.now()` (app clock). Without `TimeModule` the extractor answers 500.
 - Jobs: `ctx.get::<Zones>().await?` then `zone_of(ZoneLevel::Workspace, id)`,
-  `owners(level)`, `holidays()`, `now()`.
+  `owners(level)`, `holidays()`, `now()`. A workspace with neither zone nor
+  country gets its organization's there (and in `per_workspace_local`).
 
 ## Users' zones (a source)
 
@@ -157,12 +161,17 @@ Runs are claimed as `<task>@<workspace id>` (task names at most 154
 bytes). `LocalRun::current()` inside the run gives `owner`, `zone`,
 `tick`, `local`.
 
-## Workspaces
+## Workspaces and organizations
 
 `POST /api/workspaces {name, timezone?, country?}` and
 `PUT /api/workspaces/{workspace}/time-zone {timezone, country}`
 (`workspace.update`); `workspaces.set_time_zone(&uow, id, Some("Asia/Kolkata"), Some("IN"))`.
-Unknown values are 400s on `timezone` / `country`.
+Organizations: `POST /api/organizations` and `PATCH /api/organizations/{organization}`
+take `timezone` / `country`; in code `organizations.update(&uow, id,
+OrganizationChanges { timezone: Some(Some(..)), .. })`. Both store the
+current zone name (`Asia/Calcutta` becomes `Asia/Kolkata`) and the
+upper-case country; unknown values are 400s on `timezone` / `country`.
+A workspace without either follows its organization's zone.
 
 ## Testing
 

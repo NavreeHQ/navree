@@ -102,7 +102,7 @@ The zone comes from the first level that has one:
 
 1. The signed-in user's zone, when a user-level source knows the user.
 2. The request's workspace: the one [workspace resolution](/docs/workspaces/resolution/) finds (the `X-Workspace` header, a path prefix, a subdomain or a token claim), when the user is a member.
-3. The workspace's organization, when an organization-level source is registered.
+3. The organization: the one the request's workspace is attached to or, in a request without a workspace, the one it names (the `X-Organization` header, a path prefix, a subdomain or a token claim) when the user is a member. This level answers once [organizations](/docs/workspaces/organizations/) are on.
 4. `time.default_zone`.
 
 At each level a stored zone wins; without one, a stored country gives its primary zone (`AE` gives `Asia/Dubai`). A stored name that is not a zone is skipped with a warning at target `navree::time`, so a bad row never fails a request. `zone.level()` says which level answered (`None` for the default zone), `zone.owner()` whose zone it is, and `zone.from_country()` whether it came from a country. `zone.now()` and `zone.today()` read the app's `dyn Clock`.
@@ -111,7 +111,7 @@ Without `TimeModule` in the app, the extractor answers 500.
 
 ### Zone sources
 
-Each level is a `dyn ZoneSource` (from `navree::contracts`), registered as a multi-binding. `WorkspaceModule` registers the workspace level. Register your users' zones yourself, for example from a `timezone` column of your `users` table:
+Each level is a `dyn ZoneSource` (from `navree::contracts`), registered as a multi-binding. `WorkspaceModule` registers the workspace and organization levels (`WorkspaceZones` and `OrganizationZones`). Register your users' zones yourself, for example from a `timezone` column of your `users` table:
 
 ```rust title="src/users/zones.rs"
 use navree::contracts::{BoxFuture, ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
@@ -183,7 +183,7 @@ let zone = zones.zone_of(ZoneLevel::Workspace, workspace_id).await?;
 let yesterday = DayRange::single(zone.today(zones.now()).pred());
 ```
 
-`zone_of(level, owner)` gives the owner's zone, its country's zone or the default zone. `owners(level)` lists every owner at a level with its zone. `default_zone()`, `holidays()` and `now()` give the app's settings and clock.
+`zone_of(level, owner)` gives the owner's zone, its country's zone or the default zone. `owners(level)` lists every owner at a level with its zone. At the workspace level, a workspace with neither a zone nor a country gets its organization's, so its jobs run on the clock its requests use. `default_zone()`, `holidays()` and `now()` give the app's settings and clock.
 
 ## Local days and report windows
 
@@ -342,7 +342,7 @@ m.schedule(|s| {
 
 `per_workspace_local()` asks `Zones` for every workspace and its zone at each tick, and runs the task for each workspace whose clock matches. Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`. Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick on both clocks; `job_with` builds a job from it. The [scheduling page](/docs/digging-deeper/scheduling/#time-zones) has the details.
 
-## Workspaces
+## Workspaces and organizations
 
 <Badge feature="workspace" /> Every workspace has an optional `timezone` and `country`. Set them when creating a workspace or later:
 
@@ -354,6 +354,19 @@ Content-Type: application/json
 ```
 
 The workspace comes back with `"timezone": "Asia/Kolkata"` and `"country": "IN"`. An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. In code, `workspaces.set_time_zone(&uow, id, Some("Asia/Kolkata"), Some("IN"))` does the same. A workspace with a country and no zone uses the country's primary zone. See [workspaces](/docs/workspaces/introduction/#the-routes) for the routes.
+
+[Organizations](/docs/workspaces/organizations/) have the same two columns. `POST /api/organizations` and `PATCH /api/organizations/{organization}` take `timezone` and `country`, checked and normalized the same way, and so do `organizations.create` and `organizations.update`:
+
+```rust
+organizations
+    .update(&uow, group.id, OrganizationChanges {
+        timezone: Some(Some("Asia/Calcutta".into())), // stored as Asia/Kolkata
+        ..OrganizationChanges::default()
+    })
+    .await?;
+```
+
+A workspace with neither a zone nor a country follows its organization. Its requests get the organization's zone, with `zone.level()` `Some(ZoneLevel::Organization)` and `zone.owner()` the organization's id, and so do its jobs and its runs of [per-workspace schedules](#scheduling-in-local-time). A workspace that sets either keeps its own.
 
 ## The zone list
 

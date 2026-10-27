@@ -255,6 +255,10 @@ access_requests.approve(&uow, acme.id, request_id, Some(admin), Approval::defaul
   with `OrgRepo::<E>::select(org.workspace_ids())` (read-only; writes go through
   `WorkspaceRepo` in one workspace). 400 `The request names no organization.`,
   404 `Organization not found.`, 403 `You are not a member of this organization.`
+- An organization's `timezone` / `country` (checked like a workspace's,
+  stored as the current zone name) is the zone of its workspaces that have
+  neither, in requests, jobs and `per_workspace_local` schedules
+  (`OrganizationZones`, see navree-time-zones).
 - PostgreSQL: `RlsPolicy::new("deals").organizations()` adds a SELECT-only
   policy on `navree.organization` (set by `CurrentOrganization`, or
   `organizations.enter(&uow, id)` in jobs).
