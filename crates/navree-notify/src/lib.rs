@@ -139,6 +139,9 @@
 //! ```
 #![forbid(unsafe_code)]
 
+// `#[notification]` names this crate `::navree_notify`, also from inside.
+extern crate self as navree_notify;
+
 mod callbacks;
 mod catalog;
 mod channel;
@@ -206,6 +209,11 @@ pub use migration::{
     PUSH_SUBSCRIPTIONS_TABLE,
 };
 pub use module::NotifyModule;
+/// `#[notification(category = "..", digest = "daily", urgent)]` on an
+/// `impl Notification for ..` block: sets [`Notification::CATEGORY`],
+/// [`Notification::DIGEST`] and [`Notification::URGENT`] (see
+/// `navree_macros::notification`).
+pub use navree_macros::notification;
 pub use notifiable::Notifiable;
 pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};

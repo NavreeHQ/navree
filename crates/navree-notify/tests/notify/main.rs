@@ -3,6 +3,7 @@
 
 mod support;
 
+mod attribute;
 mod channels;
 mod conformance;
 mod drivers;

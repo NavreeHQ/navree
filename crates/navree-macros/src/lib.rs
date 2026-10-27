@@ -2,7 +2,8 @@
 //!
 //! Attribute macros for Navree applications: `#[module]`, `#[injectable]`,
 //! `#[controller]` and the route attributes, `#[flag]` (feature flags),
-//! `#[resolver]` (GraphQL root fields, for navree-graphql),
+//! `#[notification]` (a notification's category, digest and urgency, for
+//! navree-notify), `#[resolver]` (GraphQL root fields, for navree-graphql),
 //! `#[grpc_service]` (gRPC services, for navree-grpc), the
 //! `Searchable` derive of navree-search, the `Settings` derive of
 //! navree-settings, the `Exportable` and `Importable` derives of
@@ -36,6 +37,7 @@ mod flag;
 mod grpc;
 mod injectable;
 mod mcp;
+mod notification;
 mod micro;
 mod module;
 mod path;
@@ -389,6 +391,37 @@ pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn flag(args: TokenStream, item: TokenStream) -> TokenStream {
     flag::expand(args.into(), item.into()).into()
+}
+
+/// Sets the category, digest and urgency of a
+/// `navree_notify::Notification` implementation (re-exported as
+/// `navree::notify::notification`): it goes on the `impl Notification for
+/// ..` block and adds the constants its arguments name.
+///
+/// ```text
+/// #[notification(category = "deals", digest = "daily")]
+/// impl Notification for DealWon {
+///     const TYPE: &'static str = "deal_won";
+///     fn via(&self, _n: &dyn Notifiable) -> Vec<Channel> { vec![Channel::Database, Channel::Mail] }
+/// }
+/// // const CATEGORY: &'static str = "deals";
+/// // const DIGEST: navree::notify::Digest = navree::notify::Digest::Daily;
+/// ```
+///
+/// | Argument | Constant | Meaning |
+/// |---|---|---|
+/// | `type = ".."` | `TYPE` | the stored type name, when the impl does not set it |
+/// | `category = ".."` | `CATEGORY` | the category preferences switch channels for (default: the type) |
+/// | `digest = "daily"` | `DIGEST` | `off`, `hourly`, `daily` or `weekly`: its mail is batched into one digest mail |
+/// | `urgent` | `URGENT` | delivered at once, whatever the quiet hours and digest |
+///
+/// Anything but an `impl Notification for ..` block, an unknown or
+/// duplicate key, an unknown digest, an invalid category, a constant also
+/// set in the impl, or `urgent` with a digest is a compile error. The
+/// expansion names `::navree::notify` (or `::navree_notify`).
+#[proc_macro_attribute]
+pub fn notification(args: TokenStream, item: TokenStream) -> TokenStream {
+    notification::expand(args.into(), item.into()).into()
 }
 
 /// Implements `navree_graphql::GraphqlResolver` for an inherent impl block
