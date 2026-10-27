@@ -1,11 +1,15 @@
-//! navree-notify integration tests. Every test uses a fresh temporary SQLite file.
+//! navree-notify integration tests. Every test uses a fresh temporary SQLite
+//! file; the HTTP drivers run against a local mock server.
 
 mod support;
 
 mod channels;
+mod external;
 mod http;
 mod module;
+mod opt_outs;
 mod orm;
+mod push;
 mod queue;
 mod recipient;
 mod rendering;
