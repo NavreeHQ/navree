@@ -178,8 +178,8 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new` (with the starter kits: `--kit saas`, `api` or `micro`), `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install` |
 
-The CRM API is split the same way: `crm-core` (entities, migrations,
-abilities, platform modules), `crm-companies` (companies and contacts),
+The CRM API is split the same way: `crm-core` (models, factories,
+migrations, abilities, platform modules), `crm-companies` (companies and contacts),
 `crm-deals`, `crm-activities` (activities and the dashboard), `crm-users`,
 `crm-testkit` (a booted CRM for feature tests) and the `crm-api` binary.
 
