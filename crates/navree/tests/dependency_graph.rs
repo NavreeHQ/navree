@@ -97,10 +97,13 @@ const HIERARCHY: &[Rule] = &[
     // same-layer edge, like navree-queue -> navree-schedule), their routes
     // on navree-http, events through navree-events, credentials sealed and
     // DKIM signed with navree-crypto; navree-testing backs its tests.
+    // Inbound mail (feature `inbound`) keeps raw messages on navree-storage
+    // disks and reads SES's S3 objects from them (a same-layer edge;
+    // storage never depends on mail).
     rule("navree-mail", 3, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view",
         "navree-http", "navree-crypto", "navree-events", "navree-http-client", "navree-db",
-        "navree-testing",
+        "navree-testing", "navree-storage",
     ]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),

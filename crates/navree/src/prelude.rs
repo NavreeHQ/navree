@@ -62,6 +62,8 @@ pub use navree_db::{
 };
 #[cfg(feature = "mail")]
 pub use navree_mail::MailModule;
+#[cfg(feature = "mail-inbound")]
+pub use navree_mail::{InboundMail, MailboxContext, ModuleBuilderMailExt as _};
 #[cfg(feature = "observe")]
 pub use navree_observe::ObserveModule;
 #[cfg(feature = "realtime")]
