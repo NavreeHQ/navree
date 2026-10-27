@@ -348,12 +348,17 @@ async fn the_figures_traces_and_alerts_are_read() {
     assert!(overview["requests"].as_i64().unwrap() >= 3, "{overview}");
     assert!(overview["exceptions"].as_i64().unwrap() >= 2, "{overview}");
 
-    let routes = mcp
+    let listed = mcp
         .call_tool("lighthouse_list_routes", json!({}))
         .await
-        .assert_ok()
-        .json_value();
-    let routes = routes["result"].as_array().expect("a list of routes").clone();
+        .assert_ok();
+    // A list is the text and, as structured content, `{"result": [..]}`.
+    assert!(listed.structured().unwrap()["result"].is_array());
+    let routes = listed
+        .json_value()
+        .as_array()
+        .expect("a list of routes")
+        .clone();
     assert!(
         routes
             .iter()
@@ -369,7 +374,7 @@ async fn the_figures_traces_and_alerts_are_read() {
         .await
         .assert_ok()
         .json_value();
-    assert_eq!(route["stats"]["requests"], 2, "{route}");
+    assert_eq!(route["stats"]["count"], 2, "{route}");
     assert!(!route["slowest"].as_array().unwrap().is_empty());
 
     let queries = mcp
@@ -378,7 +383,7 @@ async fn the_figures_traces_and_alerts_are_read() {
         .assert_ok()
         .json_value();
     assert!(
-        queries["result"]
+        queries
             .as_array()
             .unwrap()
             .iter()
@@ -394,7 +399,7 @@ async fn the_figures_traces_and_alerts_are_read() {
             .await
             .assert_ok()
             .json_value();
-        assert!(value["result"].is_array(), "{tool}: {value}");
+        assert!(value.is_array(), "{tool}: {value}");
     }
 
     let trace = mcp
@@ -421,7 +426,7 @@ async fn the_figures_traces_and_alerts_are_read() {
         .await
         .assert_ok()
         .json_value();
-    assert!(alerts["result"].is_array(), "{alerts}");
+    assert!(alerts.is_array(), "{alerts}");
     app.shutdown().await.unwrap();
 }
 
