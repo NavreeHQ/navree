@@ -139,6 +139,8 @@ struct UowInner {
     db: Db,
     actor: Option<Uuid>,
     request_id: Option<String>,
+    /// The workspace the work is done in, once one was entered.
+    workspace: Mutex<Option<Uuid>>,
     tx: tokio::sync::Mutex<TxState>,
     changes: Mutex<Vec<ChangeEvent>>,
     after_commit: Mutex<Vec<AfterCommit>>,
@@ -181,6 +183,7 @@ impl Uow {
                 db,
                 actor,
                 request_id,
+                workspace: Mutex::new(None),
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 changes: Mutex::new(Vec::new()),
                 after_commit: Mutex::new(Vec::new()),
@@ -223,6 +226,38 @@ impl Uow {
     /// The request id, if any.
     pub fn request_id(&self) -> Option<&str> {
         self.inner.request_id.as_deref()
+    }
+
+    /// The workspace the work is done in: set when a workspace is entered
+    /// (navree-workspace does it for every workspace request and for
+    /// `Workspaces::enter`), `None` before. Workspace-scoped ORM models read
+    /// it to scope their queries and fill new records.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), sea_orm::DbErr> {
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let url = format!("sqlite://{}?mode=rwc", dir.path().join("w.db").display());
+    /// use navree_db::{Db, DbOptions};
+    ///
+    /// let db = Db::connect(&DbOptions { url, ..DbOptions::default() }).await?;
+    /// let uow = db.uow(None, None).await;
+    /// assert_eq!(uow.workspace(), None);
+    /// let acme = uuid::Uuid::now_v7();
+    /// uow.set_workspace(Some(acme));
+    /// assert_eq!(uow.workspace(), Some(acme));
+    /// # Ok(()) }
+    /// ```
+    pub fn workspace(&self) -> Option<Uuid> {
+        *lock(&self.inner.workspace)
+    }
+
+    /// Records the workspace the work is done in (`None` leaves it). This
+    /// only remembers the id: the database-side settings of a workspace
+    /// (PostgreSQL's `navree.workspace`, the `search_path`) are applied by
+    /// whoever enters it.
+    pub fn set_workspace(&self, workspace: Option<Uuid>) {
+        *lock(&self.inner.workspace) = workspace;
     }
 
     /// The database.
@@ -404,6 +439,7 @@ impl fmt::Debug for Uow {
         f.debug_struct("Uow")
             .field("actor", &self.inner.actor)
             .field("request_id", &self.inner.request_id)
+            .field("workspace", &self.workspace())
             .field("changes", &lock(&self.inner.changes).len())
             .finish_non_exhaustive()
     }

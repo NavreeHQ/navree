@@ -91,7 +91,7 @@ impl<M: Model> Builder<M> {
     /// Runs the query on `target` and reads its records (running the
     /// `Retrieved` hooks).
     pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
-        let ir = self.into_ir();
+        let ir = crate::workspace::with_target(target, || self.into_ir());
         let rows = target.fetch(&ir).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -112,7 +112,7 @@ impl<M: Model> Builder<M> {
     /// The rows of the query with `items` as its select list (global scopes
     /// applied).
     async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
-        let mut builder = self.apply_global_scopes();
+        let mut builder = crate::workspace::with_target(target, || self.apply_global_scopes());
         builder.ir.columns = items;
         target.fetch(&builder.ir).await
     }
@@ -286,7 +286,8 @@ impl<M: Model> Builder<M> {
     /// Whether the query matches any record.
     pub async fn exists<E: Executor + ?Sized>(self, exec: &E) -> Result<bool> {
         let target = exec.target(Access::Read).await?;
-        target.exists(&self.into_ir()).await
+        let ir = crate::workspace::with_target(&target, || self.into_ir());
+        target.exists(&ir).await
     }
 
     /// Whether the query matches no record.
@@ -437,7 +438,7 @@ impl<M: Model> Builder<M> {
         };
         // Without the default columns: a grouped count selects only the
         // groups (PostgreSQL refuses ungrouped columns).
-        let ir = self.apply_global_scopes().ir;
+        let ir = crate::workspace::with_target(target, || self.apply_global_scopes()).ir;
         let value = target.aggregate(&ir, &aggregate).await?;
         <Option<T>>::from_value(value).map_err(|error| {
             decode_error(

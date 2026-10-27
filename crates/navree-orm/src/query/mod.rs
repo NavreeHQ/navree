@@ -241,6 +241,9 @@ impl<M: Model> Builder<M> {
         if M::meta().soft_deletes_enabled() {
             scopes.push(Arc::new(SoftDeletes));
         }
+        if M::meta().is_workspace_scoped() {
+            scopes.push(Arc::new(crate::workspace::WorkspaceScope));
+        }
         for scope in scopes {
             if self.removed.contains(scope.scope_id()) {
                 continue;

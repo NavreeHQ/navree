@@ -373,11 +373,13 @@ impl IsolationDriver {
         format!("{}{}", self.schema_prefix, workspace.simple())
     }
 
-    /// Sets the transaction-local settings of `workspace` on `uow` (a unit
-    /// of work on the app's database) when it runs on PostgreSQL:
-    /// `navree.workspace` always, and `search_path` under schema isolation.
-    /// Begins the transaction. Nothing on other databases.
+    /// Enters `workspace` on `uow` (a unit of work on the app's database):
+    /// records it on every database (`Uow::workspace`, which scopes
+    /// workspace-scoped ORM models), and on PostgreSQL sets the
+    /// transaction-local `navree.workspace` (row-level security) and, under
+    /// schema isolation, the `search_path`, beginning the transaction.
     pub(crate) async fn apply(&self, uow: &Uow, workspace: Uuid) -> Result<(), WorkspaceError> {
+        uow.set_workspace(Some(workspace));
         if uow.db().backend() != DbBackend::Postgres {
             return Ok(());
         }

@@ -57,6 +57,20 @@ CREATE TABLE notes (
     body TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE projects (
+    id BLOB PRIMARY KEY,
+    workspace_id BLOB NOT NULL,
+    name TEXT NOT NULL,
+    budget INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id BLOB NOT NULL,
+    project_id BLOB NOT NULL,
+    title TEXT NOT NULL
+);
 "#;
 
 /// A company: integer key, timestamps, soft deletes.
@@ -226,6 +240,59 @@ pub struct Note {
     pub id: Ulid,
     pub body: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// A project: scoped to workspaces.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(timestamps, workspace, factory = ProjectFactory)]
+pub struct Project {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+    pub budget: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Projects with fake names.
+#[derive(Default)]
+pub struct ProjectFactory;
+
+impl ModelFactory for ProjectFactory {
+    type Model = Project;
+
+    fn definition(&self, ctx: &mut FactoryContext<'_, Project>) -> Project {
+        Project {
+            name: ctx.fake().catch_phrase(),
+            budget: ctx.fake().number(100..=10_000),
+            ..Project::default()
+        }
+    }
+}
+
+/// A task of a project: scoped to workspaces too.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(workspace, factory = TaskFactory)]
+pub struct Task {
+    pub id: i64,
+    pub workspace_id: Uuid,
+    pub project_id: Uuid,
+    pub title: String,
+}
+
+/// Tasks with fake titles.
+#[derive(Default)]
+pub struct TaskFactory;
+
+impl ModelFactory for TaskFactory {
+    type Model = Task;
+
+    fn definition(&self, ctx: &mut FactoryContext<'_, Task>) -> Task {
+        Task {
+            title: ctx.fake().sentence(),
+            ..Task::default()
+        }
+    }
 }
 
 /// Notes with a paragraph each.

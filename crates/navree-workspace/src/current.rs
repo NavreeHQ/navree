@@ -562,7 +562,11 @@ async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, Ap
                 .await
                 .map_err(AppError::internal)?;
             let db = databases.db(workspace).await.map_err(app_error)?;
-            Ok::<_, AppError>(db.uow(actor, request_id).await)
+            let uow = db.uow(actor, request_id).await;
+            // The workspace's own database: workspace-scoped models see it
+            // as the current workspace.
+            uow.set_workspace(Some(workspace));
+            Ok::<_, AppError>(uow)
         })
         .await?;
     Ok(uow.clone())

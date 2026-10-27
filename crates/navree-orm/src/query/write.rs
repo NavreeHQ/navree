@@ -33,8 +33,8 @@ impl<M: Model> Builder<M> {
     /// The rows a mass write touches: the query's conditions, or, for a
     /// query with joins, groups, a limit or an offset, the keys of the rows
     /// it selects.
-    pub(crate) fn write_target(self) -> Result<(TableRef, Vec<WhereClause>)> {
-        let ir = self.apply_global_scopes().ir;
+    pub(crate) fn write_target(self, target: &Target<'_>) -> Result<(TableRef, Vec<WhereClause>)> {
+        let ir = crate::workspace::with_target(target, || self.apply_global_scopes()).ir;
         ir.check()?;
         let meta = M::meta();
         let table = TableRef::new(meta.table());
@@ -98,6 +98,7 @@ impl<M: Model> Builder<M> {
             }
             sets.push((column, expr));
         }
+        crate::workspace::check_assignments::<M>(&sets)?;
         let meta = M::meta();
         if let Some(updated_at) = meta.updated_at()
             && !sets.iter().any(|(column, _)| column == updated_at)
@@ -132,7 +133,7 @@ impl<M: Model> Builder<M> {
         let ctx = target.context();
         let now = ctx.now().await;
         let sets = Self::sets(&ctx, now, assignments)?;
-        let (table, wheres) = self.write_target()?;
+        let (table, wheres) = self.write_target(&target)?;
         target
             .update(&UpdateIr {
                 table,
@@ -156,7 +157,7 @@ impl<M: Model> Builder<M> {
                     crate::model::derive_support::not_a_timestamp::<M>(deleted_at)
                 })?;
                 let sets = Self::sets(&ctx, now, [Assignment::value(deleted_at, value)])?;
-                let (table, wheres) = self.write_target()?;
+                let (table, wheres) = self.write_target(&target)?;
                 target
                     .update(&UpdateIr {
                         table,
@@ -173,7 +174,7 @@ impl<M: Model> Builder<M> {
     /// soft-deleting model (no hooks, no change events).
     pub(crate) async fn delete_rows<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
         let target = exec.target(Access::Write).await?;
-        let (table, wheres) = self.write_target()?;
+        let (table, wheres) = self.write_target(&target)?;
         target.delete(&DeleteIr { table, wheres }).await
     }
 
@@ -266,7 +267,7 @@ impl<M: Model> Builder<M> {
         let ctx = target.context();
         let now = ctx.now().await;
         let sets = Self::sets(&ctx, now, std::iter::once(step).chain(extra))?;
-        let (table, wheres) = self.write_target()?;
+        let (table, wheres) = self.write_target(&target)?;
         target
             .update(&UpdateIr {
                 table,

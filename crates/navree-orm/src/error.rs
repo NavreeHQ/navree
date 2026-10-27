@@ -116,6 +116,17 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A workspace-scoped model was used outside the rules of workspaces:
+    /// no current workspace, a record created in or moved to another
+    /// workspace. (A record of another workspace is
+    /// [`ModelNotFound`](OrmError::ModelNotFound).)
+    #[error("{message}")]
+    Workspace {
+        /// The model.
+        model: Cow<'static, str>,
+        /// What went wrong, and how to fix it.
+        message: String,
+    },
     /// A model factory could not build or create its records: a state
     /// failed, a relationship is misdeclared, a hook cancelled a save.
     #[error("the {model} factory failed: {message}")]
