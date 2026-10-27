@@ -699,7 +699,12 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         .await
         .unwrap();
     assert!(schema.has_column("readings", "value").await.unwrap());
-    assert!(schema.has_index("readings", ["taken_at"], None).await.unwrap());
+    assert!(
+        schema
+            .has_index("readings", ["taken_at"], None)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
