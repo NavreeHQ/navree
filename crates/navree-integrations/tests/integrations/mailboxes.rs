@@ -21,11 +21,11 @@ use serde_json::{Value, json};
 use crate::support::{Harness, harness, service_account};
 
 const TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
-const GRAPH: &str = "https://graph.microsoft.com/v1.0";
-const GMAIL: &str = "https://gmail.googleapis.com/gmail/v1";
+pub(crate) const GRAPH: &str = "https://graph.microsoft.com/v1.0";
+pub(crate) const GMAIL: &str = "https://gmail.googleapis.com/gmail/v1";
 const NOTIFICATION_URL: &str = "https://app.acme.test/api/mail/inbound/graph";
 
-type Seen = Arc<Mutex<Vec<InboundMail>>>;
+pub(crate) type Seen = Arc<Mutex<Vec<InboundMail>>>;
 
 /// A catch-all mailbox that records what it receives.
 struct Catcher(Seen);
@@ -43,7 +43,7 @@ impl Module for Catcher {
     }
 }
 
-fn with_mail(seen: &Seen) -> impl FnOnce(TestAppBuilder) -> TestAppBuilder {
+pub(crate) fn with_mail(seen: &Seen) -> impl FnOnce(TestAppBuilder) -> TestAppBuilder {
     let seen = seen.clone();
     move |b| {
         b.config(
@@ -65,7 +65,7 @@ fn with_mail(seen: &Seen) -> impl FnOnce(TestAppBuilder) -> TestAppBuilder {
     }
 }
 
-fn message(subject: &str) -> Vec<u8> {
+pub(crate) fn message(subject: &str) -> Vec<u8> {
     Incoming::compose()
         .from("Ada Lovelace <ada@example.com>")
         .to("support@acme.test")
@@ -75,13 +75,13 @@ fn message(subject: &str) -> Vec<u8> {
         .to_vec()
 }
 
-async fn watches(h: &Harness) -> Arc<MailboxWatches> {
+pub(crate) async fn watches(h: &Harness) -> Arc<MailboxWatches> {
     h.app.get::<MailboxWatches>().await
 }
 
 /// A Microsoft 365 connection and a watched `support@acme.test`
 /// (subscription `sub-1`).
-async fn graph_watch(h: &Harness) -> navree_integrations::MailboxWatch {
+pub(crate) async fn graph_watch(h: &Harness) -> navree_integrations::MailboxWatch {
     h.fake.api().on(
         Method::POST,
         &format!("{GRAPH}/subscriptions"),
@@ -268,7 +268,7 @@ async fn graph_lifecycle_notifications_renew_and_flag_watches() {
 
 /// A Google service-account connection (domain-wide delegation) and a
 /// watched `ada@acme.test` with cursor `1000`.
-async fn gmail_watch(h: &Harness) -> navree_integrations::MailboxWatch {
+pub(crate) async fn gmail_watch(h: &Harness) -> navree_integrations::MailboxWatch {
     h.fake.api().on(
         Method::POST,
         &format!("{GMAIL}/users/ada@acme.test/watch"),
@@ -293,7 +293,7 @@ async fn gmail_watch(h: &Harness) -> navree_integrations::MailboxWatch {
         .unwrap()
 }
 
-fn push(mailbox: &str, history: &str) -> Value {
+pub(crate) fn push(mailbox: &str, history: &str) -> Value {
     let data = json!({ "emailAddress": mailbox, "historyId": history }).to_string();
     json!({
         "message": {

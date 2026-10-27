@@ -3,7 +3,8 @@
 //! `IntegrationConnection` model run on each: the upsert of a reconnect,
 //! the owner chain's `OR` groups, token and health updates, the `IS NULL
 //! OR <` lookup of due checks, deletes, and timestamps that come back as
-//! they were written.
+//! they were written. With the `mail` feature, the same for the
+//! `MailboxWatch` model.
 //!
 //! Opt-in: build with `--features postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL`, or `--features mysql` and
@@ -227,6 +228,116 @@ async fn flow(scratch: &Scratch) {
     assert!(integrations.find(hubspot).await.is_err());
     assert_eq!(integrations.forget(organization).await.unwrap(), 1);
     assert_eq!(IntegrationConnection::query().count(&*db).await.unwrap(), 0);
+}
+
+/// Feature `mail`: the mailbox watches' migration and statements on
+/// `scratch`: insert, the lookup by Graph subscription id (a nullable
+/// column), cursor and expiry updates, the lookup by provider and mailbox,
+/// and deletes.
+async fn mailbox_flow(scratch: &Scratch) {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use http::Method;
+    use navree_http_client::FakeResponse;
+    use navree_integrations::MailboxWatch;
+    use serde_json::json;
+
+    use crate::mailboxes::{
+        GMAIL, GRAPH, Seen, gmail_watch, graph_watch, message, push, watches, with_mail,
+    };
+
+    let seen = Seen::default();
+    let h = harness(|b| {
+        with_mail(&seen)(b)
+            .config("database.url", scratch.url.as_str())
+            .config("database.migrate_on_boot", true)
+    })
+    .await;
+    let db = h.app.get::<Db>().await;
+    let watches = watches(&h).await;
+
+    // Microsoft 365: a subscription, a notification, a renewal.
+    let graph = graph_watch(&h).await;
+    h.fake.api().on(
+        Method::GET,
+        &format!("{GRAPH}/users/support@acme.test/messages/AAMk1/$value"),
+        FakeResponse::new(200).body(message("On a real server")),
+    );
+    let received = watches
+        .graph_notifications(&json!({ "value": [{
+            "subscriptionId": "sub-1",
+            "clientState": watches.client_state(graph.id).unwrap(),
+            "changeType": "created",
+            "resourceData": { "id": "AAMk1" },
+        }]}))
+        .await
+        .unwrap();
+    assert_eq!(received.len(), 1);
+    let stored = watches.find(graph.id).await.unwrap();
+    assert_eq!(stored.created_at, start());
+    assert_eq!(stored.last_received_at, Some(start()));
+    assert_eq!(stored.subscription_id.as_deref(), Some("sub-1"));
+
+    // Gmail: the cursor moves.
+    let gmail = gmail_watch(&h).await;
+    h.fake.api().on(
+        Method::GET,
+        &format!("{GMAIL}/users/ada@acme.test/history*"),
+        FakeResponse::new(200).json(&json!({
+            "history": [{ "messagesAdded": [{ "message": { "id": "m1" } }] }],
+            "historyId": "1005",
+        })),
+    );
+    h.fake.api().on(
+        Method::GET,
+        &format!("{GMAIL}/users/ada@acme.test/messages/m1*"),
+        FakeResponse::new(200)
+            .json(&json!({ "id": "m1", "raw": URL_SAFE_NO_PAD.encode(message("Gmail")) })),
+    );
+    assert_eq!(
+        watches
+            .gmail_push(&push("ada@acme.test", "1005"))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        watches.find(gmail.id).await.unwrap().cursor.as_deref(),
+        Some("1005")
+    );
+    assert_eq!(seen.lock().unwrap().len(), 2);
+
+    // One row per watched mailbox; unwatching deletes them.
+    assert_eq!(MailboxWatch::query().count(&*db).await.unwrap(), 2);
+    h.fake.api().on(
+        Method::DELETE,
+        &format!("{GRAPH}/subscriptions/sub-1"),
+        FakeResponse::new(204),
+    );
+    watches.unwatch(graph.id).await.unwrap();
+    watches.unwatch(gmail.id).await.unwrap();
+    assert_eq!(MailboxWatch::query().count(&*db).await.unwrap(), 0);
+}
+
+#[cfg(feature = "postgres")]
+#[tokio::test]
+async fn mailbox_watches_work_on_postgres() {
+    let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres", false).await else {
+        return;
+    };
+    mailbox_flow(&scratch).await;
+    scratch.drop().await;
+}
+
+#[cfg(feature = "mysql")]
+#[tokio::test]
+async fn mailbox_watches_work_on_mysql() {
+    let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql", true).await else {
+        return;
+    };
+    mailbox_flow(&scratch).await;
+    scratch.drop().await;
 }
 
 #[cfg(feature = "postgres")]
