@@ -1,11 +1,17 @@
 //! The database driver: tables `jobs` and `failed_jobs`.
+//!
+//! Jobs are reserved, released and completed with hand-written statements
+//! (a reservation is one atomic `UPDATE … RETURNING` that skips locked
+//! rows); failed jobs are [`FailedJob`] models, written and read through
+//! navree-orm.
 
 use navree_db::{Db, Uow};
+use navree_orm::{Model as _, Record};
 use sea_orm::{
     ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement, Value,
 };
 
-use crate::migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
+use crate::migration::JOBS_TABLE;
 use crate::record::{
     FailedJob, Membership, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus,
     ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
@@ -111,8 +117,7 @@ impl DatabaseStore {
         now: i64,
     ) -> Result<bool, QueueError> {
         let backend = self.db.backend();
-        let options = serde_json::to_string(&job.options).map_err(QueueError::Payload)?;
-        let payload = job.payload.to_string();
+        let failed = FailedJob::of(job, error, now);
         let moved = self
             .db
             .transaction(|uow| async move {
@@ -126,25 +131,7 @@ impl DatabaseStore {
                     .await?
                     .rows_affected();
                 if deleted == 1 {
-                    tx.execute_raw(statement(
-                        backend,
-                        &format!(
-                            "INSERT INTO {FAILED_JOBS_TABLE} \
-                             (id, queue, job_type, payload, options, error, attempts, failed_at) \
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                        ),
-                        vec![
-                            job.id.as_str().into(),
-                            job.queue.as_str().into(),
-                            job.job_type.as_str().into(),
-                            payload.into(),
-                            options.into(),
-                            error.into(),
-                            i64::from(job.attempts).into(),
-                            now.into(),
-                        ],
-                    ))
-                    .await?;
+                    FailedJob::insert(&*tx, [failed]).await?;
                 }
                 Ok(deleted == 1)
             })
@@ -152,52 +139,38 @@ impl DatabaseStore {
         Ok(moved)
     }
 
+    /// Every failed job, newest first.
     pub(crate) async fn failed(&self) -> Result<Vec<FailedJob>, QueueError> {
-        let rows = self
-            .db
-            .conn()
-            .query_all_raw(self.stmt(
-                &format!(
-                    "SELECT id, queue, job_type, payload, options, error, attempts, failed_at \
-                     FROM {FAILED_JOBS_TABLE} ORDER BY failed_at DESC, id DESC"
-                ),
-                Vec::new(),
-            ))
-            .await?;
-        rows.iter().map(failed_job).collect()
+        Ok(FailedJob::query()
+            .order_by_desc(FailedJob::FAILED_AT)
+            .order_by_desc(FailedJob::ID)
+            .get(self.db.conn())
+            .await?
+            .into_models())
     }
 
-    /// Moves the targeted failed jobs back to `jobs` (one transaction);
-    /// returns how many.
+    /// Moves the targeted failed jobs back to `jobs`, oldest first (one
+    /// transaction); returns how many.
     pub(crate) async fn retry(&self, target: &RetryTarget, now: i64) -> Result<u64, QueueError> {
         let backend = self.db.backend();
-        let mut select = format!(
-            "SELECT id, queue, job_type, payload, options, error, attempts, failed_at \
-             FROM {FAILED_JOBS_TABLE}"
-        );
-        let mut values = Vec::new();
+        let mut targeted = FailedJob::query()
+            .order_by(FailedJob::FAILED_AT)
+            .order_by(FailedJob::ID);
         if let RetryTarget::Id(id) = target {
-            select.push_str(" WHERE id = ?");
-            values.push(id.as_str().into());
+            targeted = targeted.where_key(id.clone());
         }
-        select.push_str(" ORDER BY failed_at, id");
 
         let uow = self.db.uow(None, None).await;
         let result = async {
             let tx = uow.tx().await?;
-            let rows = tx
-                .query_all_raw(statement(backend, &select, values))
-                .await?;
-            let failed = rows.iter().map(failed_job).collect::<Result<Vec<_>, _>>()?;
+            let failed = targeted.get(&*tx).await?.into_models();
             for job in &failed {
                 tx.execute_raw(insert_job(backend, &job.requeued(now))?)
                     .await?;
-                tx.execute_raw(statement(
-                    backend,
-                    &format!("DELETE FROM {FAILED_JOBS_TABLE} WHERE id = ?"),
-                    vec![job.id.as_str().into()],
-                ))
-                .await?;
+                FailedJob::query()
+                    .where_key(job.id.clone())
+                    .delete(&*tx)
+                    .await?;
             }
             Ok::<_, QueueError>(failed.len() as u64)
         }
@@ -216,13 +189,9 @@ impl DatabaseStore {
         }
     }
 
+    /// Deletes every failed job; returns how many.
     pub(crate) async fn flush_failed(&self) -> Result<u64, QueueError> {
-        let result = self
-            .db
-            .conn()
-            .execute_raw(self.stmt(&format!("DELETE FROM {FAILED_JOBS_TABLE}"), Vec::new()))
-            .await?;
-        Ok(result.rows_affected())
+        Ok(FailedJob::query().delete(self.db.conn()).await?)
     }
 
     pub(crate) async fn pending_count(&self, queue: &str) -> Result<u64, QueueError> {
@@ -327,32 +296,20 @@ impl DatabaseStore {
         row.map(|row| pending_job(&row, now)).transpose()
     }
 
+    /// Failed job `id`, if there is one.
     pub(crate) async fn failed_job(&self, id: &str) -> Result<Option<FailedJob>, QueueError> {
-        let row = self
-            .db
-            .conn()
-            .query_one_raw(self.stmt(
-                &format!(
-                    "SELECT id, queue, job_type, payload, options, error, attempts, failed_at \
-                     FROM {FAILED_JOBS_TABLE} WHERE id = ?"
-                ),
-                vec![id.into()],
-            ))
-            .await?;
-        row.map(|row| failed_job(&row)).transpose()
+        Ok(FailedJob::find(self.db.conn(), id.to_owned())
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Deletes failed job `id`; false when there is none.
     pub(crate) async fn forget(&self, id: &str) -> Result<bool, QueueError> {
-        let result = self
-            .db
-            .conn()
-            .execute_raw(self.stmt(
-                &format!("DELETE FROM {FAILED_JOBS_TABLE} WHERE id = ?"),
-                vec![id.into()],
-            ))
+        let deleted = FailedJob::query()
+            .where_key(id.to_owned())
+            .delete(self.db.conn())
             .await?;
-        Ok(result.rows_affected() == 1)
+        Ok(deleted == 1)
     }
 }
 
@@ -561,19 +518,6 @@ fn reserved_job(row: &QueryResult) -> Result<ReservedJob, QueueError> {
             callback: row.try_get("", "batch_callback")?,
             operation_id: row.try_get("", "operation_id")?,
         },
-    })
-}
-
-pub(super) fn failed_job(row: &QueryResult) -> Result<FailedJob, QueueError> {
-    Ok(FailedJob {
-        id: row.try_get("", "id")?,
-        queue: row.try_get("", "queue")?,
-        job_type: row.try_get("", "job_type")?,
-        payload: json(&row.try_get::<String>("", "payload")?)?,
-        options: json(&row.try_get::<String>("", "options")?)?,
-        error: row.try_get("", "error")?,
-        attempts: count(row, "attempts")?,
-        failed_at: from_millis(row.try_get("", "failed_at")?),
     })
 }
 

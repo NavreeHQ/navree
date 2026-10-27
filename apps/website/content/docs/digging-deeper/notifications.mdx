@@ -382,7 +382,21 @@ let found = notifier.mark_as_read(&*tx, &me, id).await?;  // false: not one of m
 let marked = notifier.mark_all_as_read(&*tx, &me).await?; // how many were unread
 ```
 
-For any other query, the `notifications` table is a SeaORM entity: `navree::notify::notifications::Entity`.
+For any other query, a stored notification is a model of Navree's ORM (`navree::orm`), `navree::notify::notifications::Model`; its `type` column is the field `notification_type`:
+
+```rust
+use navree::notify::notifications::Model as Stored;
+use navree::orm::Model as _;
+
+let unread = Stored::query()
+    .where_(Stored::NOTIFIABLE_ID.eq(me.id.to_string()))
+    .where_null(Stored::READ_AT)
+    .latest_by(Stored::CREATED_AT)
+    .get(&db)
+    .await?;
+```
+
+The same table is also a SeaORM entity, `navree::notify::notifications::Entity`, for code built on SeaORM.
 
 ## Errors
 

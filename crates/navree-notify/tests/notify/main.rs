@@ -5,6 +5,7 @@ mod support;
 mod channels;
 mod http;
 mod module;
+mod orm;
 mod queue;
 mod recipient;
 mod rendering;

@@ -20,17 +20,18 @@
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, hmac_sha256, sha256_hex};
-use sea_orm::sea_query::Expr;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_orm::{Model as _, Record};
+use sea_orm::Set;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::account::{after, send_after_commit};
+use crate::login_token::Model as LoginToken;
 use crate::service::{entry, normalize_email};
 use crate::throttle::LoginThrottle;
 use crate::token::RefreshSecret;
 use crate::two_factor::two_factor_enabled;
-use crate::{AuthError, AuthService, ClientMeta, LoginOutcome, User, login_token, mail, user};
+use crate::{AuthError, AuthService, ClientMeta, LoginOutcome, User, mail, user};
 
 /// `login_tokens.kind` of magic links.
 pub(crate) const MAGIC_LINK: &str = "magic_link";
@@ -91,8 +92,7 @@ impl AuthService {
         }
         let now = self.clock.now();
         let found = match RefreshSecret::parse(token) {
-            Some(presented) => login_token::Entity::find_by_id(presented.id())
-                .one(&self.db.reader().await)
+            Some(presented) => LoginToken::find(&self.db, presented.id())
                 .await?
                 .filter(|row| {
                     row.kind == MAGIC_LINK
@@ -184,16 +184,15 @@ impl AuthService {
         let code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
         let user = self.find_by_email(email).await?;
         let pending = match &user {
-            Some(user) => {
-                login_token::Entity::find()
-                    .filter(login_token::Column::UserId.eq(user.id))
-                    .filter(login_token::Column::Kind.eq(OTP))
-                    .filter(login_token::Column::UsedAt.is_null())
-                    .filter(login_token::Column::ExpiresAt.gt(now))
-                    .order_by_desc(login_token::Column::CreatedAt)
-                    .one(&self.db.reader().await)
-                    .await?
-            }
+            Some(user) => LoginToken::query()
+                .where_(LoginToken::USER_ID.eq(user.id))
+                .where_(LoginToken::KIND.eq(OTP))
+                .where_null(LoginToken::USED_AT)
+                .where_(LoginToken::EXPIRES_AT.gt(now))
+                .order_by_desc(LoginToken::CREATED_AT)
+                .first(&self.db)
+                .await?
+                .map(Record::into_inner),
             None => None,
         };
         let valid = match &pending {
@@ -238,14 +237,14 @@ impl AuthService {
             tracing::debug!(target: "navree::auth", kind, "passwordless sign-in requested for an unknown email");
             return Ok(None);
         };
-        let last = login_token::Entity::find()
-            .filter(login_token::Column::UserId.eq(user.id))
-            .filter(login_token::Column::Kind.eq(kind))
-            .order_by_desc(login_token::Column::CreatedAt)
-            .one(&self.db.reader().await)
+        let last = LoginToken::query()
+            .where_(LoginToken::USER_ID.eq(user.id))
+            .where_(LoginToken::KIND.eq(kind))
+            .order_by_desc(LoginToken::CREATED_AT)
+            .value(&self.db, LoginToken::CREATED_AT)
             .await?;
         if let Some(last) = last
-            && self.clock.now() < after(last.created_at, throttle_secs)
+            && self.clock.now() < after(last, throttle_secs)
         {
             tracing::debug!(target: "navree::auth", user_id = %user.id, kind, "passwordless mail throttled");
             return Ok(None);
@@ -278,26 +277,26 @@ impl AuthService {
             );
         }
         let now = self.clock.now();
-        let row = login_token::ActiveModel {
-            id: Set(id),
-            user_id: Set(user.id),
-            kind: Set(kind.to_owned()),
-            token_hash: Set(token_hash),
-            attempts: Set(0),
-            expires_at: Set(after(now, ttl_secs)),
-            used_at: Set(None),
-            created_at: Set(now),
+        let row = LoginToken {
+            id,
+            user_id: user.id,
+            kind: kind.to_owned(),
+            token_hash,
+            attempts: 0,
+            expires_at: after(now, ttl_secs),
+            used_at: None,
+            created_at: now,
         };
         let user_id = user.id;
         self.write(Some(user_id), |uow| async move {
             {
                 let tx = uow.tx().await?;
-                login_token::Entity::delete_many()
-                    .filter(login_token::Column::UserId.eq(user_id))
-                    .filter(login_token::Column::Kind.eq(kind))
-                    .exec(&*tx)
+                LoginToken::query()
+                    .where_(LoginToken::USER_ID.eq(user_id))
+                    .where_(LoginToken::KIND.eq(kind))
+                    .delete(&*tx)
                     .await?;
-                row.insert(&*tx).await?;
+                LoginToken::insert(&*tx, [row]).await?;
             }
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
@@ -313,13 +312,12 @@ impl AuthService {
     async fn claim_login_token(&self, id: Uuid, now: DateTime<Utc>) -> Result<bool, AuthError> {
         self.write(None, |uow| async move {
             let tx = uow.tx().await?;
-            let result = login_token::Entity::update_many()
-                .col_expr(login_token::Column::UsedAt, Expr::value(now))
-                .filter(login_token::Column::Id.eq(id))
-                .filter(login_token::Column::UsedAt.is_null())
-                .exec(&*tx)
+            let claimed = LoginToken::query()
+                .where_key(id)
+                .where_null(LoginToken::USED_AT)
+                .update(&*tx, [LoginToken::USED_AT.set(now)])
                 .await?;
-            Ok(result.rows_affected == 1)
+            Ok(claimed == 1)
         })
         .await
     }
@@ -328,7 +326,7 @@ impl AuthService {
     /// transaction (the failed request rolls its own back).
     async fn count_wrong_code(
         &self,
-        row: &login_token::Model,
+        row: &LoginToken,
         now: DateTime<Utc>,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
@@ -340,13 +338,11 @@ impl AuthService {
             meta.request_id.clone(),
             |uow| async move {
                 let tx = uow.tx().await?;
-                let mut update = login_token::Entity::update_many()
-                    .col_expr(login_token::Column::Attempts, Expr::value(attempts))
-                    .filter(login_token::Column::Id.eq(id));
+                let mut sets = vec![LoginToken::ATTEMPTS.set(attempts)];
                 if burned {
-                    update = update.col_expr(login_token::Column::UsedAt, Expr::value(now));
+                    sets.push(LoginToken::USED_AT.set(now));
                 }
-                update.exec(&*tx).await?;
+                LoginToken::query().where_key(id).update(&*tx, sets).await?;
                 Ok(())
             },
         )

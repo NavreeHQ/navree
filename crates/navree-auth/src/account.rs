@@ -10,16 +10,15 @@ use navree_crypto::{CryptoError, constant_time_eq, random_token, sha256_hex};
 use navree_db::{Repo, Uow};
 use navree_http::{HttpOptions, UrlSigner};
 use navree_mail::{Mailable, Mailer};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set, Unchanged};
+use navree_orm::Model as _;
+use sea_orm::{DbErr, Set, Unchanged};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
+use crate::password_reset_token::Model as PasswordResetToken;
 use crate::service::{entry, invalid, normalize_email, record, revoke_user};
 use crate::throttle::LoginThrottle;
-use crate::{
-    AuthError, AuthService, ClientMeta, TokenPair, USER_SUBJECT, User, mail, password_reset_token,
-    user,
-};
+use crate::{AuthError, AuthService, ClientMeta, TokenPair, USER_SUBJECT, User, mail, user};
 
 /// Random characters in a password reset token (about 380 bits).
 const RESET_TOKEN_LEN: usize = 64;
@@ -43,9 +42,7 @@ impl AuthService {
         };
         let now = self.clock.now();
         let options = &self.options.password_reset;
-        let pending = password_reset_token::Entity::find_by_id(user.email.clone())
-            .one(&self.db.reader().await)
-            .await?;
+        let pending = PasswordResetToken::find(&self.db, user.email.clone()).await?;
         if let Some(pending) = pending
             && now < after(pending.created_at, options.throttle_secs)
         {
@@ -64,19 +61,20 @@ impl AuthService {
                 "no Mailer in the app (MailModule): the password reset token was not sent"
             );
         }
-        let row = password_reset_token::ActiveModel {
-            email: Set(user.email.clone()),
-            token_hash: Set(sha256_hex(token.as_bytes())),
-            created_at: Set(now),
+        let row = PasswordResetToken {
+            email: user.email.clone(),
+            token_hash: sha256_hex(token.as_bytes()),
+            created_at: now,
         };
         let audit = entry(AuditKind::Auth, "auth.password_reset_requested", meta).actor(user.id);
         self.write(Some(user.id), |uow| async move {
             {
                 let tx = uow.tx().await?;
-                password_reset_token::Entity::delete_by_id(user.email.clone())
-                    .exec(&*tx)
+                PasswordResetToken::query()
+                    .where_key(user.email.clone())
+                    .delete(&*tx)
                     .await?;
-                row.insert(&*tx).await?;
+                PasswordResetToken::insert(&*tx, [row]).await?;
             }
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
@@ -104,8 +102,7 @@ impl AuthService {
         let email = normalize_email(email);
         let presented = sha256_hex(token.as_bytes());
         let now = self.clock.now();
-        let pending = password_reset_token::Entity::find_by_id(email.clone())
-            .one(&self.db.reader().await)
+        let pending = PasswordResetToken::find(&self.db, email.clone())
             .await?
             .ok_or(AuthError::InvalidResetToken)?;
         if !constant_time_eq(pending.token_hash.as_bytes(), presented.as_bytes())
@@ -123,12 +120,12 @@ impl AuthService {
             {
                 // Claim the token: a concurrent reset with it finds nothing.
                 let tx = uow.tx().await?;
-                let claimed = password_reset_token::Entity::delete_many()
-                    .filter(password_reset_token::Column::Email.eq(email.as_str()))
-                    .filter(password_reset_token::Column::TokenHash.eq(presented.as_str()))
-                    .exec(&*tx)
+                let claimed = PasswordResetToken::query()
+                    .where_key(email.clone())
+                    .where_(PasswordResetToken::TOKEN_HASH.eq(presented.as_str()))
+                    .delete(&*tx)
                     .await?;
-                if claimed.rows_affected != 1 {
+                if claimed != 1 {
                     return Err(AuthError::InvalidResetToken);
                 }
                 revoke_user(&*tx, user.id, now).await?;
@@ -295,8 +292,9 @@ impl AuthService {
             {
                 let tx = uow.tx().await?;
                 revoke_user(&*tx, user.id, now).await?;
-                password_reset_token::Entity::delete_by_id(user.email.clone())
-                    .exec(&*tx)
+                PasswordResetToken::query()
+                    .where_key(user.email.clone())
+                    .delete(&*tx)
                     .await?;
             }
             let user = update_user(
@@ -407,12 +405,11 @@ impl AuthService {
             if let Some(email) = &new_email {
                 let taken = {
                     let tx = uow.tx().await?;
-                    user::Entity::find()
-                        .filter(user::Column::Email.eq(email.as_str()))
-                        .filter(user::Column::Id.ne(user.id))
-                        .one(&*tx)
+                    User::query()
+                        .where_(User::EMAIL.eq(email.as_str()))
+                        .where_key_not(user.id)
+                        .exists(&*tx)
                         .await?
-                        .is_some()
                 };
                 if taken {
                     return Err(AuthError::EmailTaken);
@@ -420,8 +417,9 @@ impl AuthService {
                 // A reset token mailed to the old address must not reset
                 // whoever takes that address next.
                 let tx = uow.tx().await?;
-                password_reset_token::Entity::delete_by_id(user.email.clone())
-                    .exec(&*tx)
+                PasswordResetToken::query()
+                    .where_key(user.email.clone())
+                    .delete(&*tx)
                     .await?;
             }
             let user = update_user(&uow, row).await?;

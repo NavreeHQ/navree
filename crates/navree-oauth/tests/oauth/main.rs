@@ -13,6 +13,7 @@ mod grants;
 mod introspect;
 mod oidc;
 mod openapi;
+mod orm;
 mod pats;
 mod registration;
 mod tokens;

@@ -19,6 +19,9 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
+# Stored notifications are models (`notifications::Model`), written by the
+# database channel through the ORM.
+navree-orm = { workspace = true }
 navree-telemetry = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
