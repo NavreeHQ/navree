@@ -76,7 +76,7 @@ pub use navree_audit::AuditModule;
 #[cfg(feature = "notify")]
 pub use navree_notify::NotifyModule;
 #[cfg(feature = "queue")]
-pub use navree_queue::QueueModule;
+pub use navree_queue::{Batch, Operation, Operations, QueueModule};
 #[cfg(feature = "schedule")]
 pub use navree_schedule::{ModuleBuilderScheduleExt as _, ScheduleModule};
 #[cfg(feature = "session")]

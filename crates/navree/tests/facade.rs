@@ -109,6 +109,10 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<Abilities, navree::access::Abilities>());
     assert!(same::<Rules, navree::access::Rules>());
     assert!(same::<AbilityCtx, navree::access::AbilityCtx>());
+    // Long work: batches and operations.
+    assert!(same::<Batch, navree::queue::Batch>());
+    assert!(same::<Operation, navree::queue::Operation>());
+    assert!(same::<Operations, navree::queue::Operations>());
     // Workspaces.
     assert!(same::<CurrentWorkspace, navree::workspace::CurrentWorkspace>());
     assert!(same::<InWorkspace, navree::workspace::InWorkspace>());
