@@ -6,9 +6,9 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "build": "pnpm --filter @navree/client --filter @navree/bff --filter @navree/theme build && pnpm --filter @navree/next --filter @navree/nuxt build",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "test": "pnpm build && pnpm -r test",
+    "typecheck": "pnpm build && pnpm -r typecheck",
+    "check": "pnpm build && pnpm -r typecheck && pnpm -r test"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
