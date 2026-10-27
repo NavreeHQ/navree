@@ -11,7 +11,8 @@
 //! - **The request's zone.** [`CurrentZone`] resolves the signed-in
 //!   user's zone, else the workspace's, else the organization's, else
 //!   `time.default_zone`, through the `dyn ZoneSource` multi-bindings of
-//!   navree-contracts (navree-workspace registers one). [`Zones`] does the
+//!   navree-contracts (navree-workspace registers the workspace and
+//!   organization levels). [`Zones`] does the
 //!   same for jobs: [`Zones::zone_of`] and [`Zones::owners`].
 //! - **Local days.** [`LocalDay`] (`yyyy-MM-dd`) and [`DayRange`] (from and
 //!   to, both included) turn into the UTC instants they span in a zone,
