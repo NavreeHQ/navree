@@ -4,6 +4,8 @@
 mod support;
 
 mod channels;
+mod conformance;
+mod drivers;
 mod external;
 mod http;
 mod module;
