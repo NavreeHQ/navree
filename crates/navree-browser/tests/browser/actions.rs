@@ -131,6 +131,7 @@ async fn press_waits_for_a_button_to_be_enabled_and_uncovered() {
 async fn a_button_that_stays_covered_or_disabled_fails_with_the_reason() {
     let (browser, site) = browser_or_skip!("a_button_that_stays_covered_or_disabled_fails_with_the_reason");
     let page = browser.visit(site.url("/playground")).await.unwrap();
+    page.wait_until_missing("#overlay").await.unwrap(); // gone after 400 ms
     let quick = page.with_timeout(Duration::from_millis(150));
     let error = quick.press("Blocked").await.unwrap_err();
     assert!(
