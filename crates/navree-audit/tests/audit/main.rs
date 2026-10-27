@@ -8,3 +8,4 @@ mod module;
 mod prune;
 mod sink;
 mod skip;
+mod time_series;
