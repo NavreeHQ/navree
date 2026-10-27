@@ -374,6 +374,27 @@ impl<M: Model> Record<M> {
         persist::refresh(&target, self).await
     }
 
+    /// Reloads the record's columns and locks its row for update until the
+    /// unit of work ends (`SELECT … FOR UPDATE`; SQLite's write transaction
+    /// holds the whole database already). Call it in a unit of work before
+    /// changing the record, so no other transaction changes the row in
+    /// between; through `&Db` it joins the task's unit of work.
+    /// [`OrmError::ModelNotFound`] when the row is gone,
+    /// [`OrmError::NotPersisted`] for a record that was never stored.
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow, mut deal: Record<Deal>) -> Result<()> {
+    /// deal.refresh_for_update(&uow).await?;
+    /// deal.amount_cents += 500; // based on the latest stored amount
+    /// deal.save(&uow).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn refresh_for_update<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<()> {
+        let target = exec.target(Access::Write).await?;
+        persist::refresh_for_update(&target, self).await
+    }
+
     /// The record as it is now in the database (ignoring global scopes);
     /// `None` when it is gone or was never stored.
     pub async fn fresh<E: Executor + ?Sized>(&self, exec: &E) -> Result<Option<Record<M>>> {

@@ -43,6 +43,16 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_locks() {
+    run(Server::Postgres, scenarios::locks).await;
+}
+
+#[tokio::test]
+async fn mysql_locks() {
+    run(Server::MySql, scenarios::locks).await;
+}
+
+#[tokio::test]
 async fn postgres_bulk_writes() {
     run(Server::Postgres, |db| {
         scenarios::bulk_writes(db, Server::Postgres)

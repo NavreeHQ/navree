@@ -641,17 +641,68 @@ macro_rules! clauses {
 
         /// Locks the selected rows for update until the transaction ends
         /// (`FOR UPDATE`; SQLite serialises write transactions instead).
-        pub fn lock_for_update(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
-                Some($crate::ir::Lock::Update);
-            self
+        /// Run it in a unit of work: a locking read through `&Db` joins
+        /// the task's unit of work (beginning its transaction), since a
+        /// lock outside a transaction ends with the statement.
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(uow: Uow, id: Uuid) -> Result<()> {
+        /// let mut deal = Deal::query().where_key(id).lock_for_update().first_or_fail(&uow).await?;
+        /// deal.views += 1;
+        /// deal.save(&uow).await?; // nobody changed the row in between
+        /// # Ok(()) }
+        /// ```
+        pub fn lock_for_update(self) -> Self {
+            self.lock($crate::ir::LockMode::Update)
         }
 
         /// Locks the selected rows against changes until the transaction
         /// ends (`FOR SHARE`, `LOCK IN SHARE MODE` on MySQL).
-        pub fn shared_lock(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
-                Some($crate::ir::Lock::Share);
+        pub fn shared_lock(self) -> Self {
+            self.lock($crate::ir::LockMode::Share)
+        }
+
+        /// Locks the selected rows in `mode` until the transaction ends
+        /// (see [`Lock`](crate::ir::Lock) for each database's clause).
+        pub fn lock(mut self, mode: $crate::ir::LockMode) -> Self {
+            let query = $crate::query::clauses::HasQuery::query_mut(&mut self);
+            let wait = query.lock.map(|lock| lock.wait).unwrap_or_default();
+            query.lock = Some($crate::ir::Lock { mode, wait });
+            self
+        }
+
+        /// Leaves out the rows another transaction has locked instead of
+        /// waiting for them (`SKIP LOCKED`; PostgreSQL and MySQL 8). Locks
+        /// for update when no lock is set yet.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// // Each worker claims ten events nobody else is working on.
+        /// let claim = Event::query().oldest().limit(10).lock_for_update().skip_locked();
+        /// assert_eq!(
+        ///     claim.to_sql(Dialect::Postgres)?.sql,
+        ///     r#"SELECT "events"."id", "events"."name", "events"."created_at", "events"."updated_at" FROM "events" ORDER BY "events"."created_at" ASC LIMIT $1 FOR UPDATE SKIP LOCKED"#
+        /// );
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn skip_locked(self) -> Self {
+            self.lock_wait($crate::ir::LockWait::SkipLocked)
+        }
+
+        /// Fails at once with the database's lock error when another
+        /// transaction holds one of the rows (`NOWAIT`; PostgreSQL and
+        /// MySQL 8). Locks for update when no lock is set yet.
+        pub fn no_wait(self) -> Self {
+            self.lock_wait($crate::ir::LockWait::NoWait)
+        }
+
+        fn lock_wait(mut self, wait: $crate::ir::LockWait) -> Self {
+            let query = $crate::query::clauses::HasQuery::query_mut(&mut self);
+            let mode = query
+                .lock
+                .map_or($crate::ir::LockMode::Update, |lock| lock.mode);
+            query.lock = Some($crate::ir::Lock { mode, wait });
             self
         }
     };

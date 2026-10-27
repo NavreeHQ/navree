@@ -486,6 +486,19 @@ fn writes() {
 }
 
 #[test]
+fn lock_modes_and_waits() {
+    use navree_orm::LockMode;
+    let locked = |q: Builder<Company>| query(q.where_key(1_i64));
+    insta::assert_snapshot!(locked(Company::query().lock(LockMode::NoKeyUpdate).skip_locked()));
+    insta::assert_snapshot!(locked(Company::query().shared_lock().no_wait()));
+    insta::assert_snapshot!(locked(Company::query().lock(LockMode::KeyShare)));
+    // `skip_locked` alone locks for update; a later mode keeps the wait.
+    insta::assert_snapshot!(locked(
+        Company::query().skip_locked().lock(LockMode::Share)
+    ));
+}
+
+#[test]
 fn inserts_that_skip_or_update_conflicts() {
     let base = || {
         InsertIr::new(
