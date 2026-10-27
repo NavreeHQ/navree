@@ -282,10 +282,8 @@ impl WorkspaceDatabases {
                 "workspace.database_url is not set: database isolation needs a URL template".into(),
             )
         })?;
-        let options = DbOptions {
-            url,
-            ..self.options.clone()
-        };
+        // The main database's settings, without its read replicas.
+        let options = self.options.for_database(url);
         let db = Arc::new(Db::connect(&options).await?);
         let ran = match self.app.upgrade() {
             Some(app) => migrate_db(&db, &workspace_sets(&app)).await?,

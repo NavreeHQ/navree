@@ -3,31 +3,43 @@
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use navree_config::ConfigSection;
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
-use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
-use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbBackend, DbErr};
+use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sea_orm::{
+    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, Statement,
+};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-use crate::options::{driver_url, scheme, url_password};
-use crate::{ChangeObserver, DbOptions, Reader, Uow};
+use crate::options::{driver_url, redact_url, scheme, url_password};
+use crate::{ChangeObserver, DbOptions, Reader, SqliteOptions, Uow};
 
-/// How long SQLite waits for a lock before failing with `SQLITE_BUSY`.
-const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
-
-/// The database: a cheap, cloneable handle to the connection pool.
+/// The database: a cheap, cloneable handle to the connection pool (and to
+/// the pools of its read replicas).
 ///
 /// Provided (and exported) by `DatabaseModule`; inject `Arc<Db>` or take a
 /// [`Uow`](crate::Uow) per request. SQLite connections use WAL,
-/// `busy_timeout = 5000` and `foreign_keys = ON`. MySQL and MariaDB
-/// connections (`mysql://` or `mariadb://`, the `mysql` feature) run in
-/// the UTC time zone with `utf8mb4`, over TLS when the server offers it,
-/// in strict SQL mode unless `database.mysql` says otherwise, and at its
-/// `isolation_level` when set (see [`MySqlOptions`](crate::MySqlOptions)).
+/// `busy_timeout = 5000` and `foreign_keys = ON` unless `database.sqlite`
+/// says otherwise (see [`SqliteOptions`](crate::SqliteOptions)). MySQL and
+/// MariaDB connections (`mysql://` or `mariadb://`, the `mysql` feature)
+/// run in the UTC time zone with `utf8mb4`, over TLS when the server offers
+/// it, in strict SQL mode unless `database.mysql` says otherwise, and at
+/// its `isolation_level` when set (see
+/// [`MySqlOptions`](crate::MySqlOptions)). PostgreSQL connections take the
+/// session settings of `database.postgres`
+/// ([`PostgresOptions`](crate::PostgresOptions)).
+///
+/// **Read replicas.** With `read_urls`, reads outside a transaction
+/// ([`reader`](Db::reader)) go to the replicas in turn; writes and
+/// transactions use the writer. A task reads from the writer inside
+/// [`Db::using_writer`], and (with `sticky`, the default) once its unit of
+/// work has written, so a request sees its own writes while replicas catch
+/// up.
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<DbInner>,
@@ -37,9 +49,37 @@ struct DbInner {
     /// Shared by every handle on the same pool ([`Db::with_app`] included),
     /// so [`Db::reader`] can tell whether a unit of work uses this pool.
     conn: Arc<DatabaseConnection>,
+    /// The pools of the read replicas.
+    replicas: Arc<Vec<DatabaseConnection>>,
+    /// The replica the next read goes to.
+    next_replica: Arc<AtomicUsize>,
+    /// Reads follow a unit of work's writes to the writer.
+    sticky: bool,
+    /// The connection's name: `default`, or a named connection's.
+    name: Arc<str>,
     /// The app whose `dyn ChangeObserver` multi-bindings see every commit.
     app: Option<WeakAppContext>,
     observers: OnceCell<Vec<Arc<dyn ChangeObserver>>>,
+}
+
+tokio::task_local! {
+    /// Set while [`Db::using_writer`] runs a future.
+    static USING_WRITER: bool;
+}
+
+/// The name of the main connection.
+pub(crate) const DEFAULT_CONNECTION: &str = "default";
+
+/// The connections of a pool: how many are open, how many idle, and the
+/// most the pool opens ([`Db::pool_stats`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PoolStats {
+    /// Connections open (idle or in use).
+    pub size: u32,
+    /// Open connections nobody uses.
+    pub idle: usize,
+    /// The most connections the pool opens (`max_connections`).
+    pub max: u32,
 }
 
 impl Db {
@@ -78,67 +118,222 @@ impl Db {
         options: &DbOptions,
         telemetry: Telemetry,
     ) -> Result<Db, DbErr> {
+        Self::connect_named(DEFAULT_CONNECTION, options, telemetry).await
+    }
+
+    /// Opens the pool of connection `name` (a named connection of
+    /// [`DbConnections`](crate::DbConnections)), and the pools of its read
+    /// replicas.
+    pub async fn connect_named(
+        name: &str,
+        options: &DbOptions,
+        telemetry: Telemetry,
+    ) -> Result<Db, DbErr> {
         options
             .validate()
             .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
-        let mut connect = ConnectOptions::new(driver_url(&options.url).into_owned());
-        connect
-            .max_connections(options.max_connections)
-            .min_connections(options.min_connections)
-            .connect_timeout(Duration::from_secs(options.connect_timeout_secs))
-            .acquire_timeout(Duration::from_secs(options.connect_timeout_secs.max(1) * 4))
-            .sqlx_logging(false);
-        if is_sqlite_url(&options.url) {
-            create_sqlite_parent_dir(&options.url).await?;
-            connect.map_sqlx_sqlite_opts(|o| {
-                o.journal_mode(SqliteJournalMode::Wal)
-                    .busy_timeout(SQLITE_BUSY_TIMEOUT)
-                    .foreign_keys(true)
-            });
+        let conn = open_pool(&options.url, options, telemetry.clone()).await?;
+        let mut replicas = Vec::with_capacity(options.read_urls.len());
+        for url in &options.read_urls {
+            replicas.push(open_pool(url, options, telemetry.clone()).await?);
         }
-        #[cfg(feature = "mysql")]
-        if crate::options::is_mysql_url(&options.url) {
-            crate::mysql::configure(&mut connect, &options.mysql);
-        }
-        let mut conn = Database::connect(connect)
-            .await
-            .map_err(|error| connect_error(options, &error))?;
-        install_query_log(
-            &mut conn,
-            options.log_queries,
-            options.slow_query_ms,
-            QueryTelemetry {
-                telemetry,
-                connection: options.redacted_url(),
-            },
-        );
-        Ok(Self::from_connection(conn))
+        Ok(Self::build(
+            Arc::new(conn),
+            Arc::new(replicas),
+            options.sticky,
+            Arc::from(name),
+            None,
+        ))
     }
 
-    /// Wraps an existing SeaORM connection (no change observers).
+    /// Wraps an existing SeaORM connection (no replicas, no change
+    /// observers).
     pub fn from_connection(conn: DatabaseConnection) -> Db {
-        Self::build(Arc::new(conn), None)
+        Self::build(
+            Arc::new(conn),
+            Arc::new(Vec::new()),
+            true,
+            Arc::from(DEFAULT_CONNECTION),
+            None,
+        )
     }
 
     /// The same pool, reporting commits to the `dyn ChangeObserver`
     /// multi-bindings of `app`.
     pub(crate) fn with_app(&self, app: WeakAppContext) -> Db {
-        Self::build(self.inner.conn.clone(), Some(app))
+        Self::build(
+            self.inner.conn.clone(),
+            self.inner.replicas.clone(),
+            self.inner.sticky,
+            self.inner.name.clone(),
+            Some(app),
+        )
     }
 
-    fn build(conn: Arc<DatabaseConnection>, app: Option<WeakAppContext>) -> Db {
+    fn build(
+        conn: Arc<DatabaseConnection>,
+        replicas: Arc<Vec<DatabaseConnection>>,
+        sticky: bool,
+        name: Arc<str>,
+        app: Option<WeakAppContext>,
+    ) -> Db {
         Self {
             inner: Arc::new(DbInner {
                 conn,
+                replicas,
+                next_replica: Arc::new(AtomicUsize::new(0)),
+                sticky,
+                name,
                 app,
                 observers: OnceCell::new(),
             }),
         }
     }
 
-    /// The SeaORM connection (pool).
+    /// The SeaORM connection (pool) of the writer.
     pub fn conn(&self) -> &DatabaseConnection {
         &self.inner.conn
+    }
+
+    /// The connection's name: `default`, or the name of a named connection
+    /// (`[database.connections.<name>]`).
+    pub fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    /// How many read replicas the connection has.
+    pub fn replicas(&self) -> usize {
+        self.inner.replicas.len()
+    }
+
+    /// The pool a read outside a transaction uses: the next read replica
+    /// in turn, or the writer when there is none or the task reads from the
+    /// writer ([`Db::using_writer`]).
+    pub fn read_conn(&self) -> &DatabaseConnection {
+        let replicas = &self.inner.replicas;
+        if replicas.is_empty() || Self::reads_from_writer() {
+            return &self.inner.conn;
+        }
+        let at = self.inner.next_replica.fetch_add(1, Ordering::Relaxed) % replicas.len();
+        &replicas[at]
+    }
+
+    /// Runs `future` with every read of the task going to the writer, even
+    /// where replicas exist: for reads that must see a write that just
+    /// happened outside the task's unit of work.
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) {
+    /// use navree_db::Db;
+    ///
+    /// let fresh = Db::using_writer(async { db.reader().await.in_transaction() }).await;
+    /// # let _ = fresh;
+    /// # }
+    /// ```
+    pub async fn using_writer<F: Future>(future: F) -> F::Output {
+        USING_WRITER.scope(true, future).await
+    }
+
+    /// Whether the running task reads from the writer
+    /// ([`Db::using_writer`]).
+    pub fn reads_from_writer() -> bool {
+        USING_WRITER.try_with(|writer| *writer).unwrap_or(false)
+    }
+
+    /// Closes the pools (the writer's and the replicas'). Statements fail
+    /// from then on; a pool replaces a connection it lost by itself, so
+    /// there is no reconnecting by hand.
+    pub async fn close(&self) -> Result<(), DbErr> {
+        self.inner.conn.close_by_ref().await?;
+        for replica in self.inner.replicas.iter() {
+            replica.close_by_ref().await?;
+        }
+        Ok(())
+    }
+
+    /// The writer pool's connections: open, idle and the most it opens.
+    pub fn pool_stats(&self) -> PoolStats {
+        pool_stats(&self.inner.conn)
+    }
+
+    /// The number of connections the database server has open (from every
+    /// client): `pg_stat_activity` on PostgreSQL, `Threads_connected` on
+    /// MySQL; `None` on SQLite, which has no server. For `db:monitor`.
+    pub async fn open_connections(&self) -> Result<Option<u64>, DbErr> {
+        let sql = match self.backend() {
+            DbBackend::Postgres => "SELECT COUNT(*) FROM pg_stat_activity",
+            DbBackend::MySql => {
+                "SELECT CAST(VARIABLE_VALUE AS UNSIGNED) FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'"
+            }
+            _ => return Ok(None),
+        };
+        let row = self.conn().query_one_raw(Statement::from_string(self.backend(), sql)).await?;
+        let count = match row {
+            Some(row) => row
+                .try_get_by_index::<i64>(0)
+                .map(|count| count.max(0).cast_unsigned())
+                .or_else(|_| row.try_get_by_index::<u64>(0))?,
+            None => 0,
+        };
+        Ok(Some(count))
+    }
+
+    /// The server's version: `17.2` (PostgreSQL), `8.4.3` or
+    /// `11.4.2-MariaDB` (MySQL, MariaDB), `3.47.0` (SQLite).
+    pub async fn server_version(&self) -> Result<String, DbErr> {
+        let sql = match self.backend() {
+            DbBackend::Postgres => "SELECT current_setting('server_version')",
+            DbBackend::MySql => "SELECT VERSION()",
+            _ => "SELECT sqlite_version()",
+        };
+        self.text(sql).await
+    }
+
+    /// The name of the database the connection uses (`main` on SQLite).
+    pub async fn database_name(&self) -> Result<String, DbErr> {
+        let sql = match self.backend() {
+            DbBackend::Postgres => "SELECT current_database()",
+            DbBackend::MySql => "SELECT DATABASE()",
+            _ => return Ok("main".to_owned()),
+        };
+        self.text(sql).await
+    }
+
+    /// Whether the server is MariaDB (which speaks MySQL's protocol).
+    pub async fn is_mariadb(&self) -> Result<bool, DbErr> {
+        if self.backend() != DbBackend::MySql {
+            return Ok(false);
+        }
+        Ok(self.server_version().await?.to_ascii_lowercase().contains("mariadb"))
+    }
+
+    /// Whether the database has the TimescaleDB extension installed.
+    pub async fn has_timescaledb(&self) -> Result<bool, DbErr> {
+        if self.backend() != DbBackend::Postgres {
+            return Ok(false);
+        }
+        let row = self
+            .conn()
+            .query_one_raw(Statement::from_string(
+                DbBackend::Postgres,
+                "SELECT COUNT(*) FROM pg_extension WHERE extname = 'timescaledb'",
+            ))
+            .await?;
+        Ok(row
+            .map(|row| row.try_get_by_index::<i64>(0))
+            .transpose()?
+            .unwrap_or(0)
+            > 0)
+    }
+
+    /// The text in the first column of the first row of `sql`.
+    async fn text(&self, sql: &str) -> Result<String, DbErr> {
+        let row = self
+            .conn()
+            .query_one_raw(Statement::from_string(self.backend(), sql))
+            .await?
+            .ok_or_else(|| DbErr::RecordNotFound(format!("`{sql}` returned no row")))?;
+        Ok(row.try_get_by_index::<String>(0)?)
     }
 
     /// The database backend.
@@ -168,14 +363,22 @@ impl Db {
     /// is locked"). Reading through the transaction also sees its own
     /// uncommitted writes. Drop the reader before the unit of work commits
     /// (use it as a temporary: `.one(&db.reader().await)`).
+    ///
+    /// With read replicas, a read outside a transaction goes to a replica
+    /// ([`read_conn`](Db::read_conn)), unless the task reads from the
+    /// writer ([`Db::using_writer`]) or, with `sticky`, its unit of work
+    /// has written ([`Uow::has_modified_records`]).
     pub async fn reader(&self) -> Reader<'_> {
-        if let Some(uow) = Uow::current()
-            && Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn)
+        let current = Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn));
+        if let Some(uow) = &current
             && let Some(tx) = uow.open_tx().await
         {
             return Reader::Transaction(tx);
         }
-        Reader::Pool(&self.inner.conn)
+        if self.inner.sticky && current.as_ref().is_some_and(Uow::has_modified_records) {
+            return Reader::Pool(&self.inner.conn);
+        }
+        Reader::Pool(self.read_conn())
     }
 
     /// A new, lazy unit of work for `actor` (jobs, commands, tests; HTTP
@@ -248,8 +451,144 @@ impl Db {
 impl fmt::Debug for Db {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Db")
+            .field("name", &self.name())
             .field("backend", &self.backend())
+            .field("replicas", &self.replicas())
             .finish_non_exhaustive()
+    }
+}
+
+/// Opens one pool at `url` with the pool, session and logging settings of
+/// `options` (the writer's and each replica's).
+async fn open_pool(
+    url: &str,
+    options: &DbOptions,
+    telemetry: Telemetry,
+) -> Result<DatabaseConnection, DbErr> {
+    let mut connect = ConnectOptions::new(driver_url(url).into_owned());
+    connect
+        .max_connections(options.max_connections)
+        .min_connections(options.min_connections)
+        .connect_timeout(Duration::from_secs(options.connect_timeout_secs))
+        .acquire_timeout(Duration::from_secs(options.connect_timeout_secs.max(1) * 4))
+        .sqlx_logging(false);
+    if let Some(idle) = options.idle_timeout_secs {
+        connect.idle_timeout(Duration::from_secs(idle));
+    }
+    if let Some(lifetime) = options.max_lifetime_secs {
+        connect.max_lifetime(Duration::from_secs(lifetime));
+    }
+    if is_sqlite_url(url) {
+        create_sqlite_parent_dir(url).await?;
+        configure_sqlite(&mut connect, &options.sqlite);
+    }
+    #[cfg(feature = "mysql")]
+    if crate::options::is_mysql_url(url) {
+        crate::mysql::configure(&mut connect, &options.mysql);
+    }
+    #[cfg(feature = "postgres")]
+    if matches!(scheme(url).as_deref(), Some("postgres" | "postgresql")) {
+        configure_postgres(&mut connect, &options.postgres)?;
+    }
+    let reported = DbOptions {
+        url: url.to_owned(),
+        ..DbOptions::default()
+    };
+    let mut conn = Database::connect(connect)
+        .await
+        .map_err(|error| connect_error(&reported, &error))?;
+    install_query_log(
+        &mut conn,
+        options.log_queries,
+        options.slow_query_ms,
+        QueryTelemetry {
+            telemetry,
+            connection: redact_url(url),
+        },
+    );
+    Ok(conn)
+}
+
+/// The SQLite settings of every connection: journal mode, lock wait,
+/// foreign keys, `synchronous` and further pragmas.
+fn configure_sqlite(connect: &mut ConnectOptions, sqlite: &SqliteOptions) {
+    let sqlite = sqlite.clone();
+    connect.map_sqlx_sqlite_opts(move |o| {
+        let journal = sqlite
+            .journal_mode
+            .parse::<SqliteJournalMode>()
+            .unwrap_or(SqliteJournalMode::Wal);
+        let mut o = o
+            .journal_mode(journal)
+            .busy_timeout(Duration::from_millis(sqlite.busy_timeout_ms))
+            .foreign_keys(sqlite.foreign_keys);
+        if let Some(synchronous) = sqlite
+            .synchronous
+            .as_deref()
+            .and_then(|mode| mode.parse::<SqliteSynchronous>().ok())
+        {
+            o = o.synchronous(synchronous);
+        }
+        for (name, value) in &sqlite.pragmas {
+            o = o.pragma(name.clone(), value.clone());
+        }
+        o
+    });
+}
+
+/// The PostgreSQL session settings of every connection, and TLS.
+#[cfg(feature = "postgres")]
+fn configure_postgres(
+    connect: &mut ConnectOptions,
+    postgres: &crate::PostgresOptions,
+) -> Result<(), DbErr> {
+    use sea_orm::sqlx::postgres::PgSslMode;
+
+    let ssl = postgres
+        .ssl_mode
+        .as_deref()
+        .map(|mode| {
+            mode.parse::<PgSslMode>()
+                .map_err(|error| DbErr::Custom(format!("postgres.ssl_mode: {error}")))
+        })
+        .transpose()?;
+    let settings = postgres.settings();
+    let application = postgres.application_name.clone();
+    connect.map_sqlx_postgres_opts(move |o| {
+        let mut o = o.options(settings.iter().map(|(name, value)| (*name, value.as_str())));
+        if let Some(application) = &application {
+            o = o.application_name(application);
+        }
+        if let Some(ssl) = ssl {
+            o = o.ssl_mode(ssl);
+        }
+        o
+    });
+    Ok(())
+}
+
+/// The connections of `conn`'s pool.
+fn pool_stats(conn: &DatabaseConnection) -> PoolStats {
+    if conn.is_mock_connection() {
+        return PoolStats::default();
+    }
+    macro_rules! of {
+        ($pool:expr) => {{
+            let pool = $pool;
+            PoolStats {
+                size: pool.size(),
+                idle: pool.num_idle(),
+                max: pool.options().get_max_connections(),
+            }
+        }};
+    }
+    match conn.get_database_backend() {
+        DbBackend::Sqlite => of!(conn.get_sqlite_connection_pool()),
+        #[cfg(feature = "postgres")]
+        DbBackend::Postgres => of!(conn.get_postgres_connection_pool()),
+        #[cfg(feature = "mysql")]
+        DbBackend::MySql => of!(conn.get_mysql_connection_pool()),
+        _ => PoolStats::default(),
     }
 }
 
