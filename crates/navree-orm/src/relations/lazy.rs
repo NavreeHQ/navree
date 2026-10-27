@@ -666,7 +666,7 @@ impl<M: Model> Record<M> {
     }
 
     /// Eager loads relation `path`, constrained by `constraint` (see
-    /// [`Builder::with_constrained`]).
+    /// [`Builder::with_constrained`](crate::Builder::with_constrained)).
     pub async fn load_constrained<Q: 'static, E: Executor + ?Sized>(
         &mut self,
         exec: &E,
