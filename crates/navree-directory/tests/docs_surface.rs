@@ -17,11 +17,11 @@ use navree_directory::{
     Directory, DirectoryConnection, DirectoryController, DirectoryError, DirectoryFake,
     DirectoryGroup, DirectoryModule, DirectoryOptions, DirectoryOwner, DirectoryScopes,
     DirectorySink, DirectorySource, DirectorySyncFinished, DirectoryUser, DirectoryUserCreated,
-    DirectoryUserDeactivated, DirectoryUserUpdated, FakePull, GOOGLE, GroupChange, LDAP, Level,
-    MANAGE_PERMISSION, MICROSOFT, MemberChange, ModuleBuilderDirectoryExt, NewConnection, OKTA,
-    Owner, PullRequest, Pulled, RunStatus, RunSummary, RunTrigger, SCIM, SCIM_TOKEN_PREFIX,
-    ScimController, ScimOptions, SinkContext, SyncChange, SyncDirectory, SyncOptions, SyncRun,
-    SyncSettings, SyncedGroup, SyncedUser, UserChange, models,
+    DirectoryUserDeactivated, DirectoryUserUpdated, FakePull, GOOGLE, GroupChange, LDAP,
+    LdapPolicy, Level, MANAGE_PERMISSION, MICROSOFT, MemberChange, ModuleBuilderDirectoryExt,
+    NewConnection, OKTA, Owner, PullRequest, Pulled, RunStatus, RunSummary, RunTrigger, SCIM,
+    SCIM_TOKEN_PREFIX, ScimController, ScimOptions, SinkContext, SyncChange, SyncDirectory,
+    SyncOptions, SyncRun, SyncSettings, SyncedGroup, SyncedUser, UserChange, models,
 };
 use navree_events::Event;
 use navree_integrations::ScopeSet;
@@ -37,9 +37,16 @@ fn the_configuration_keys_have_their_documented_defaults() {
         level,
         scim,
         sync,
+        ldap,
     } = DirectoryOptions::default();
     assert!(routes);
     assert_eq!(level, Level::Workspace);
+    let LdapPolicy {
+        block_private,
+        allow_hosts,
+    } = ldap;
+    assert!(block_private);
+    assert!(allow_hosts.is_empty());
     let ScimOptions {
         enabled,
         path,
@@ -88,17 +95,28 @@ fn the_configuration_keys_have_their_documented_defaults() {
                         "max_recorded_changes": 5000,
                         "keep_runs_days": 90,
                         "stale_after_mins": 120
-                    }
+                    },
+                    "ldap": { "block_private": true }
                 }),
             )
             .env_vars(
                 "APP_",
-                [("APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT", "10")],
+                [
+                    ("APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT", "10"),
+                    (
+                        "APP_DIRECTORY__LDAP__ALLOW_HOSTS",
+                        "dc1.corp.internal,10.0.0.5",
+                    ),
+                ],
             ),
     )
     .unwrap();
     let options: DirectoryOptions = config.typed().unwrap();
     assert_eq!(options.sync.max_deactivation_percent, 10);
+    assert_eq!(
+        options.ldap.allow_hosts,
+        vec!["dc1.corp.internal", "10.0.0.5"]
+    );
     assert_eq!(
         options.scim.base_url.as_deref(),
         Some("https://app.acme.test/scim/v2")
@@ -365,19 +383,41 @@ fn the_service_values_have_their_documented_fields() {
     ] {
         assert_eq!(action.as_str(), name);
     }
-    let _: fn(&SyncedUser) -> (Uuid, &DirectoryUser, &Option<String>, &Option<DateTime<Utc>>) =
-        |u| (u.id, &u.user, &u.local_id, &u.deactivated_at);
-    let _: fn(&SyncedGroup) -> (Uuid, &DirectoryGroup) = |g| (g.id, &g.group);
-    let _: fn(&UserChange) -> (ChangeAction, Uuid, &Option<DirectoryUser>, &Vec<String>, bool) =
-        |c| (c.action, c.directory_user_id, &c.previous, &c.changed, c.deleted);
-    let _: fn(&GroupChange) -> (Uuid, &Vec<String>, &Vec<String>, &Option<String>) =
-        |c| (c.directory_group_id, &c.added, &c.removed, &c.local_id);
-    let _: fn(&PullRequest) -> (&DirectoryConnection, &Option<String>, &Option<Secret<String>>) =
-        |r| (&r.connection, &r.cursor, &r.secret);
-    let _: fn(&FakePull) -> (Uuid, &String, &Option<String>) =
-        |p| (p.connection_id, &p.source, &p.cursor);
-    let _: fn(&SinkContext) -> (&DirectoryConnection, Owner, Option<Uuid>) =
-        |c| (c.connection(), c.owner(), c.run_id());
+    fn synced_user(u: &SyncedUser) {
+        let _: (Uuid, &DirectoryUser, &Option<String>) = (u.id, &u.user, &u.local_id);
+        let _: Option<DateTime<Utc>> = u.deactivated_at;
+    }
+    fn synced_group(g: &SyncedGroup) {
+        let _: (Uuid, &DirectoryGroup, &Option<String>) = (g.id, &g.group, &g.local_id);
+    }
+    fn user_change(c: &UserChange) {
+        let _: (ChangeAction, Uuid, bool) = (c.action, c.directory_user_id, c.deleted);
+        let _: (&Option<DirectoryUser>, &Vec<String>) = (&c.previous, &c.changed);
+    }
+    fn group_change(c: &GroupChange) {
+        let _: (Uuid, &Option<String>) = (c.directory_group_id, &c.local_id);
+        let _: (&Vec<String>, &Vec<String>) = (&c.added, &c.removed);
+    }
+    fn pull_request(r: &PullRequest) {
+        let _: &DirectoryConnection = &r.connection;
+        let _: (&Option<String>, &Option<Secret<String>>) = (&r.cursor, &r.secret);
+    }
+    fn fake_pull(p: &FakePull) {
+        let _: (Uuid, &String, &Option<String>) = (p.connection_id, &p.source, &p.cursor);
+    }
+    fn sink_context(c: &SinkContext) {
+        let _: (&DirectoryConnection, Owner, Option<Uuid>) =
+            (c.connection(), c.owner(), c.run_id());
+    }
+    let _ = (
+        synced_user as fn(&SyncedUser),
+        synced_group as fn(&SyncedGroup),
+        user_change as fn(&UserChange),
+        group_change as fn(&GroupChange),
+        pull_request as fn(&PullRequest),
+        fake_pull as fn(&FakePull),
+        sink_context as fn(&SinkContext),
+    );
     let update = ConnectionUpdate {
         name: Some("n".into()),
         settings: Some(json!({})),
@@ -508,12 +548,23 @@ fn the_traits_and_extensions_have_their_documented_names() {
 /// The service's documented methods, as signatures (exercised in
 /// `tests/directory`).
 #[allow(dead_code)]
-async fn service_methods(directory: &Directory, owner: Owner, id: Uuid) -> Result<(), DirectoryError> {
+async fn service_methods(
+    directory: &Directory,
+    owner: Owner,
+    id: Uuid,
+) -> Result<(), DirectoryError> {
     let _: Level = directory.level()?;
     let _: Vec<String> = directory.sources()?;
     let _: String = directory.scim_url()?;
     let _: CreatedConnection = directory
-        .create_connection(owner, NewConnection::new("n", SCIM).settings(json!({})).secret("s").interval(0).created_by(id))
+        .create_connection(
+            owner,
+            NewConnection::new("n", SCIM)
+                .settings(json!({}))
+                .secret("s")
+                .interval(0)
+                .created_by(id),
+        )
         .await?;
     let _: DirectoryConnection = directory
         .update_connection(id, ConnectionUpdate::default())

@@ -35,6 +35,8 @@ pub struct DirectoryOptions {
     pub scim: ScimOptions,
     /// Sync runs.
     pub sync: SyncSettings,
+    /// Which hosts LDAP connections may reach.
+    pub ldap: LdapPolicy,
 }
 
 impl Default for DirectoryOptions {
@@ -44,8 +46,55 @@ impl Default for DirectoryOptions {
             level: Level::Workspace,
             scim: ScimOptions::default(),
             sync: SyncSettings::default(),
+            ldap: LdapPolicy::default(),
         }
     }
+}
+
+/// Which hosts LDAP connections may reach (`directory.ldap`). An LDAP URL
+/// is typed by a customer's admin, so by default it may not point at the
+/// app's own network: loopback, private, link-local and shared addresses
+/// are refused after the host name is resolved.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct LdapPolicy {
+    /// Refuse hosts that resolve to loopback, private, link-local or
+    /// shared addresses (default true).
+    pub block_private: bool,
+    /// Hosts (names or addresses) allowed anyway: a directory on your own
+    /// network (`["dc1.corp.internal"]`; a list, or a comma-separated
+    /// string from the environment).
+    #[serde(deserialize_with = "list_or_csv")]
+    pub allow_hosts: Vec<String>,
+}
+
+impl Default for LdapPolicy {
+    fn default() -> Self {
+        Self {
+            block_private: true,
+            allow_hosts: Vec::new(),
+        }
+    }
+}
+
+/// A list, or one comma-separated string (what an environment variable
+/// holds).
+fn list_or_csv<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum ListOrCsv {
+        List(Vec<String>),
+        Csv(String),
+    }
+    Ok(match ListOrCsv::deserialize(deserializer)? {
+        ListOrCsv::List(items) => items,
+        ListOrCsv::Csv(text) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    })
 }
 
 /// The SCIM server (`directory.scim`).
@@ -185,6 +234,8 @@ mod tests {
         assert_eq!(options.sync.max_recorded_changes, 5000);
         assert_eq!(options.sync.keep_runs_days, 90);
         assert_eq!(options.sync.stale_after_mins, 120);
+        assert!(options.ldap.block_private);
+        assert!(options.ldap.allow_hosts.is_empty());
         assert!(options.check().is_ok());
     }
 
@@ -200,6 +251,15 @@ mod tests {
         assert_eq!(options.scim.path, "/identity/scim");
         assert_eq!(options.sync.max_deactivation_percent, 5);
         assert_eq!(options.sync.chunk_size, 100);
+        let options: DirectoryOptions = serde_json::from_value(json!({
+            "ldap": { "allow_hosts": "dc1.corp.internal, 10.0.0.5" }
+        }))
+        .unwrap();
+        assert_eq!(
+            options.ldap.allow_hosts,
+            vec!["dc1.corp.internal", "10.0.0.5"]
+        );
+        assert!(options.ldap.block_private);
     }
 
     #[test]

@@ -178,6 +178,14 @@ The `ldap` source binds, then searches users and groups with paged results (500 
 
 Group members come from the groups' `member`, `uniqueMember` and `memberUid`, and from the users' `memberOf`, which also covers Active Directory groups too large for one `member` list. Nested groups are not expanded: a group's members are its users. TLS runs on rustls with ring. The bind password is never written to logs or runs: a refused bind is recorded as `the bind as CN=... failed: result code 49`.
 
+A customer's admin types the LDAP URL, so by default it may not point at your app's own network: before connecting, the host is resolved, and loopback, private (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), link-local and shared (`100.64/10`) addresses fail the run with `dc1.corp.internal resolves to a private address (10.0.0.5); allow it in directory.ldap.allow_hosts`. To sync a directory on your own network, list its host:
+
+```toml title="config/app.toml"
+[directory.ldap]
+allow_hosts = ["dc1.corp.internal"]   # or APP_DIRECTORY__LDAP__ALLOW_HOSTS=dc1.corp.internal
+# block_private = false               # a single-tenant deployment inside the customer's network
+```
+
 ### A source of your own
 
 An HR system, a CSV drop, a partner API: implement `DirectorySource` and register it under a name. `check_settings` refuses bad settings when a connection is saved; `pull` returns a `Pulled`.
@@ -313,7 +321,7 @@ impl Module for RecipientsModule {
 
 `UserChange` also carries `directory_user_id` (Navree's id for the person, stable within the connection: key your records on it), `previous` (the user before the change) and `changed` (the fields that changed, sorted by name). `SinkContext` gives the connection, its `owner()` (the workspace or organization your records go in), the change's `uow()`, the app and the `run_id`.
 
-Each sink call runs inside the change's unit of work. Write through `ctx.uow()`, and the directory row, your rows and the event commit or roll back together. A sync applies its changes in chunks of `directory.sync.chunk_size`, one transaction per chunk. When a chunk fails, its changes are tried one by one; a change your sink refuses is rolled back and recorded as failed, and the others apply. SCIM changes run in the request's unit of work, and a sink error answers 500, which the identity provider retries.
+Each sink call runs inside the change's unit of work. Write through `ctx.uow()`, and the directory row, your rows and the event commit or roll back together. A sync applies its changes in chunks of `directory.sync.chunk_size`, one transaction per chunk. When a chunk fails, its changes are tried one by one; a change your sink refuses is rolled back and recorded as failed, and the others apply. So a sink may be called again for the same change: keep it to writes through `ctx.uow()`, and send mail or call other services from a listener of the [events](#events), which fire only after the commit. SCIM changes run in the request's unit of work, and a sink error answers 500, which the identity provider retries.
 
 ## Sync runs
 
@@ -628,6 +636,8 @@ To test SCIM, create a `scim` connection and send requests with its token throug
 | `directory.sync.max_recorded_changes` | `5000` | Changes recorded per run |
 | `directory.sync.keep_runs_days` | `90` | `directory:prune` deletes older runs |
 | `directory.sync.stale_after_mins` | `120` | A queued or running run older than this is taken for a crashed worker's |
+| `directory.ldap.block_private` | `true` | LDAP hosts that resolve to loopback, private, link-local or shared addresses are refused |
+| `directory.ldap.allow_hosts` | `[]` | LDAP hosts allowed anyway (a list, or a comma-separated string) |
 
 | Type | What it is |
 |---|---|

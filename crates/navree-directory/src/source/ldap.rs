@@ -18,6 +18,7 @@
 //! are not expanded.
 
 use std::collections::{BTreeSet, HashMap};
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,6 +32,7 @@ use uuid::Uuid;
 
 use super::{DirectorySource, PullRequest};
 use crate::error::DirectoryError;
+use crate::options::{DirectoryOptions, LdapPolicy};
 use crate::pulled::Pulled;
 use crate::user::{ContactValue, DirectoryGroup, DirectoryUser};
 
@@ -239,8 +241,86 @@ impl DirectorySource for LdapSource {
                 .secret
                 .as_ref()
                 .map(|secret| secret.expose().clone());
+            let policy = match request.app.try_get::<DirectoryOptions>().await {
+                Some(options) => options.ldap.clone(),
+                None => LdapPolicy::default(),
+            };
+            check_host(&settings.url, &policy).await?;
             pull(&settings, password.as_deref()).await
         })
+    }
+}
+
+/// Refuses an LDAP URL whose host resolves to an address the policy blocks
+/// (loopback, private, link-local, shared), unless the host is allowed.
+pub(crate) async fn check_host(url: &str, policy: &LdapPolicy) -> Result<(), DirectoryError> {
+    if !policy.block_private {
+        return Ok(());
+    }
+    let parsed = url::Url::parse(url).map_err(|_| {
+        DirectoryError::InvalidSettings(format!("settings.url `{url}` is not a URL"))
+    })?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| {
+            DirectoryError::InvalidSettings(format!("settings.url `{url}` has no host"))
+        })?
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
+    if policy
+        .allow_hosts
+        .iter()
+        .any(|allowed| allowed.eq_ignore_ascii_case(&host))
+    {
+        return Ok(());
+    }
+    let port = parsed
+        .port()
+        .unwrap_or(if parsed.scheme().eq_ignore_ascii_case("ldaps") {
+            636
+        } else {
+            389
+        });
+    let addresses: Vec<IpAddr> = match host.parse::<IpAddr>() {
+        Ok(ip) => vec![ip],
+        Err(_) => tokio::net::lookup_host((host.as_str(), port))
+            .await
+            .map_err(|error| failed(format!("could not resolve {host}: {error}")))?
+            .map(|address| address.ip())
+            .collect(),
+    };
+    if let Some(blocked) = addresses.into_iter().find(|ip| is_blocked(*ip)) {
+        return Err(failed(format!(
+            "{host} resolves to a private address ({blocked}); allow it in directory.ldap.allow_hosts"
+        )));
+    }
+    Ok(())
+}
+
+/// Loopback, private, link-local, shared (CGNAT) and unspecified
+/// addresses.
+pub(crate) fn is_blocked(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || (a == 100 && (64..=127).contains(&b))
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked(IpAddr::V4(v4));
+            }
+            let first = v6.segments()[0];
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80
+        }
     }
 }
 
@@ -868,6 +948,52 @@ mod tests {
                 "CN=Charles Babbage,OU=People,DC=acme,DC=test".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn private_addresses_are_blocked() {
+        for blocked in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.1.10",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:10.0.0.1",
+        ] {
+            assert!(is_blocked(blocked.parse().unwrap()), "{blocked}");
+        }
+        for open in ["20.42.73.10", "8.8.8.8", "172.32.0.1", "2001:4860::8888"] {
+            assert!(!is_blocked(open.parse().unwrap()), "{open}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_host_policy_refuses_private_hosts_unless_allowed() {
+        let policy = LdapPolicy::default();
+        let error = check_host("ldaps://127.0.0.1:636", &policy)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "LDAP could not be read: 127.0.0.1 resolves to a private address (127.0.0.1); allow it in directory.ldap.allow_hosts"
+        );
+        assert!(check_host("ldap://[::1]", &policy).await.is_err());
+        assert!(check_host("ldap://20.42.73.10", &policy).await.is_ok());
+        let allowed = LdapPolicy {
+            allow_hosts: vec!["127.0.0.1".into()],
+            ..LdapPolicy::default()
+        };
+        assert!(check_host("ldap://127.0.0.1:3890", &allowed).await.is_ok());
+        let open = LdapPolicy {
+            block_private: false,
+            ..LdapPolicy::default()
+        };
+        assert!(check_host("ldap://10.0.0.5", &open).await.is_ok());
     }
 
     #[test]

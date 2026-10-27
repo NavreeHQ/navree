@@ -68,7 +68,10 @@ impl DirectorySink for RecipientSink {
 
    Key your records on `change.directory_user_id` (stable per connection),
    not on the email. `change.action`: `Create`, `Update`, `Reactivate`
-   (upsert) or `Deactivate`. A user can arrive inactive.
+   (upsert) or `Deactivate`. A user can arrive inactive. A failed chunk is
+   retried change by change, so the sink may see a change twice: only
+   write through `ctx.uow()`; mail and remote calls go in listeners of the
+   events (after commit).
 3. Create connections (routes, or in code):
    `directory.create_connection(Owner::Workspace(id), NewConnection::new("Acme Entra ID", "scim"))`
    returns `CreatedConnection { connection, scim_token, scim_url }` (token
@@ -104,6 +107,10 @@ impl DirectorySink for RecipientSink {
   `pwdAccountLockedTime`/`nsAccountLock`. Members from `member`,
   `uniqueMember`, `memberUid` and users' `memberOf`. No nested groups.
   TLS on rustls/ring; `ca_certificate` for an internal CA.
+  Host policy: hosts resolving to loopback/private/link-local/shared
+  addresses fail the run unless listed in `directory.ldap.allow_hosts`
+  (`APP_DIRECTORY__LDAP__ALLOW_HOSTS=a,b`) or `directory.ldap.block_private = false`.
+  Tests with a local LDAP server need `allow_hosts = ["127.0.0.1"]`.
 - Your own: `impl DirectorySource` (`check_settings`, `pull` ->
   `Pulled::snapshot(users, groups)` or `Pulled::delta(..)` with
   `removed_user`, `removed_group`, `member_added`, `member_removed`,
