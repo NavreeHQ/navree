@@ -315,7 +315,10 @@ async fn a_rejection_handled_in_code_keeps_its_code() {
     );
     assert!(!documents.exists("incoming/a/fake.png").await.unwrap());
 
-    documents.put("incoming/a/real.png", png(500)).await.unwrap();
+    documents
+        .put("incoming/a/real.png", png(500))
+        .await
+        .unwrap();
     let file = accept_document(&documents, "incoming/a/real.png")
         .await
         .unwrap();
