@@ -1187,6 +1187,32 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Self::query().where_(filter)
     }
 
+    /// The connection the model lives on (`#[model(connection = "..")]`);
+    /// `None` runs it on the executor's. Given the default `Db`, the
+    /// model's queries and records go to this connection.
+    fn connection_name() -> Option<&'static str> {
+        Self::meta().connection_name()
+    }
+
+    /// A query of the model on connection `name`, whatever the model's
+    /// (see [`Builder::on_connection`]).
+    fn on_connection(name: impl Into<std::borrow::Cow<'static, str>>) -> Builder<Self> {
+        Builder::new().on_connection(name)
+    }
+
+    /// A query of the model reading from the writer, even where read
+    /// replicas exist (see [`Builder::use_write`]).
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, id: Uuid) -> Result<()> {
+    /// let current = Deal::on_write_connection().find(&db, id).await?;
+    /// # Ok(()) }
+    /// ```
+    fn on_write_connection() -> Builder<Self> {
+        Builder::new().use_write()
+    }
+
     /// Every record.
     fn all<E: Executor + ?Sized>(
         exec: &E,
@@ -1268,6 +1294,59 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     {
         let attributes = attributes.into();
         Self::query().force_create(exec, attributes)
+    }
+
+    /// Inserts `models` as they are, in one statement without hooks or
+    /// change events (see [`Builder::insert`]); returns how many rows were
+    /// inserted.
+    fn insert<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().insert(exec, models)
+    }
+
+    /// Inserts `models` as they are, skipping the ones that conflict with a
+    /// unique index (see [`Builder::insert_or_ignore`]).
+    fn insert_or_ignore<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().insert_or_ignore(exec, models)
+    }
+
+    /// Inserts `models` with generated keys and timestamps, in one
+    /// statement without hooks (see [`Builder::fill_and_insert`]).
+    fn fill_and_insert<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().fill_and_insert(exec, models)
+    }
+
+    /// Inserts `models`, updating the stored rows they conflict with on
+    /// `unique_by` (see [`Builder::upsert`]).
+    fn upsert<E, U>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+        unique_by: impl IntoIterator<Item = impl crate::column::ColumnName>,
+        update: impl IntoIterator<Item = U>,
+    ) -> impl Future<Output = Result<u64>> + Send
+    where
+        E: Executor + ?Sized,
+        U: Into<crate::query::ConflictUpdate>,
+    {
+        let models: Vec<Self> = models.into_iter().collect();
+        let unique_by: Vec<String> = unique_by
+            .into_iter()
+            .map(|column| column.column_name().into_owned())
+            .collect();
+        let update: Vec<crate::query::ConflictUpdate> =
+            update.into_iter().map(Into::into).collect();
+        Self::query().upsert(exec, models, unique_by, update)
     }
 
     /// Deletes the records with these keys one by one (so each one's

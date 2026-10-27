@@ -133,14 +133,17 @@ impl<M: Model> Builder<M> {
     /// The rows of the query with `items` as its select list (global scopes
     /// applied).
     async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
-        let mut builder = self.apply_global_scopes();
-        builder.ir.columns = items;
-        target.fetch(&builder.ir).await
+        let builder = self.apply_global_scopes();
+        let defaults = crate::query::model_columns::<M>(builder.ir.table.qualifier());
+        let query = crate::query::reading_values(builder.ir, items, defaults);
+        target.fetch(&query).await
     }
 
     /// The query's records.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Collection<M>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         self.fetch(&target).await
     }
 
@@ -215,7 +218,9 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let item = SelectItem {
             expr: column.selected(),
             alias: Some(Cow::Borrowed(VALUE)),
@@ -242,7 +247,9 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let item = SelectItem {
             expr: column.selected(),
             alias: Some(Cow::Borrowed(VALUE)),
@@ -279,7 +286,9 @@ impl<M: Model> Builder<M> {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let items = vec![
             SelectItem {
                 expr: column.selected(),
@@ -306,7 +315,7 @@ impl<M: Model> Builder<M> {
 
     /// Whether the query matches any record.
     pub async fn exists<E: Executor + ?Sized>(self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         target.exists(&self.into_ir()).await
     }
 
@@ -318,7 +327,7 @@ impl<M: Model> Builder<M> {
     /// The number of matching records (of matching groups for a grouped
     /// query).
     pub async fn count<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         self.count_on(&target).await
     }
 
@@ -439,7 +448,7 @@ impl<M: Model> Builder<M> {
         argument: Option<Expr>,
         distinct: bool,
     ) -> Result<Option<T>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         self.aggregate_on(&target, function, argument, distinct)
             .await
     }

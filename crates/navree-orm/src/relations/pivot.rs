@@ -265,6 +265,8 @@ impl Pivot {
                         .collect(),
                 ],
                 returning: Vec::new(),
+                select: None,
+                on_conflict: None,
             };
             target.insert(&insert).await?;
             self.exists = true;
@@ -423,6 +425,8 @@ async fn insert_rows(
             columns: columns.into_iter().map(Cow::Owned).collect(),
             rows,
             returning: Vec::new(),
+            select: None,
+            on_conflict: None,
         };
         target.insert(&insert).await?;
     }

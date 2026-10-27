@@ -61,9 +61,9 @@ treats navree-orm-macros as a companion proc-macro crate of navree-orm
 (`COMPANION_MACROS` in `crates/navree/tests/facade.rs`).
 
 Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, and
-SeaORM's pgvector values for `cast = "vector"`), `mysql` (SeaORM's MySQL
-driver; once navree-db has its own `mysql` feature, this one forwards to
-it). SQL for every dialect is generated without any feature.
+SeaORM's pgvector values for `cast = "vector"`), `mysql` (navree-db's
+MySQL and MariaDB driver). SQL for every dialect is generated without any
+feature.
 
 ### Paths in generated code
 
@@ -123,21 +123,25 @@ src/
                     eager and lazy loading, existence, aggregates, pivots, morphs, touches
   driver.rs         DocumentDriver, InsertOutcome
   doc_models.rs     `__doc_models` (hidden): the models the doc examples use, so every example compiles
-  exec.rs           Executor, Access, Target, SqlTarget, DocumentTarget, ExecContext
-  ir.rs             QueryIr, Where, Expr, Order, Join, TableRef, FullText, InsertIr, UpdateIr, DeleteIr, ...
+  exec.rs           Executor, Access, Route, Target, SqlTarget, DocumentTarget, ExecContext; using_connection, using_writer; timed reads
+  ir.rs             QueryIr, Where, Expr, Order, Join, TableRef, FullText, Lock, GroupLimit, InsertIr (OnConflict), UpdateIr, DeleteIr, ...
+  operators.rs      Column pattern, JSON and null-safe helpers (ilike, regex, similar_to, contains, has_key, ...), Filter::op_raw, Expr::binary, vector distances
+  raw.rs            Raw, raw(): statements written by hand (select, select_one, scalar, statement, affecting_statement, unprepared)
+  streams.rs        RowStream; chunk/each/lazy/cursor on both builders (offset pages or keysets); cursor(exec, raw(..))
   query/
-    mod.rs          Builder<M> (state, keys, scopes, into_ir, to_sql)
+    mod.rs          Builder<M> (state, keys, scopes, route, into_ir, to_sql)
     filters.rs      the where family (`filters!`), WhereGroup, HasWheres
-    clauses.rs      select/join/group/having/order/limit/union/lock (`clauses!`), HasQuery, IntoSelect
+    clauses.rs      select/join/group/having/order/limit/union/lock/timeout/connection (`clauses!`), HasQuery, IntoSelect
     join.rs         JoinClause
     fetch.rs        retrieval, values, plucks, existence, aggregates; Selectable
     write.rs        mass update/delete/increment/touch; first_or_new/create, create_or_first, update_or_create
+    bulk.rs         inserts of many rows or models, insert-or-ignore, upserts, insert-using, update-or-insert, update-from, truncate; ConflictUpdate
     table.rs        TableBuilder, table(): rows of any table, inserts/updates/deletes of rows
   sql/
-    mod.rs          Dialect, Statement, Compiler, expressions, JSON paths, raw placeholders
-    select.rs       SELECT, aggregates over queries, EXISTS
+    mod.rs          Dialect, Statement, Compiler, expressions, JSON paths, raw placeholders, vector distances
+    select.rs       SELECT (derived tables, table functions, lateral joins, limits per group, union orders), aggregates, EXISTS, timeout hints
     filter.rs       WHERE/HAVING/ON trees; dialect rules for dates, LIKE, JSON, full text, operators
-    write.rs        INSERT (RETURNING), UPDATE, DELETE
+    write.rs        INSERT (RETURNING, ON CONFLICT / IGNORE / ON DUPLICATE KEY), UPDATE (JSON paths, row ids, FROM), DELETE, TRUNCATE
     timescale.rs    time_bucket, first, last (native on PostgreSQL; fixed-width buckets emulated elsewhere)
 ```
 
@@ -398,7 +402,32 @@ return `Self`; terminal methods take the executor first.
   `order_by_dir`, `order_by_raw` (a trailing `ASC`/`DESC`/`NULLS ...` is
   honoured), `order`, `latest_by`, `oldest_by`, `in_random_order`,
   `reorder`, `reorder_by`, `limit`/`take`, `offset`/`skip`, `for_page`,
-  `union`, `union_all`, `lock_for_update`, `shared_lock`.
+  `union`, `union_all` (orders and limits on a union apply to the whole;
+  counts, `exists`, values and pages read a union as a derived table),
+  `right_join_sub`, `cross_join_sub`, `join_lateral`, `left_join_lateral`
+  (PostgreSQL and MySQL 8.0.14+), `group_limit(n, column)` (top N per
+  group through `ROW_NUMBER()`), row locks (`lock_for_update`,
+  `shared_lock`, `lock(LockMode)` with `NoKeyUpdate`/`KeyShare`,
+  `skip_locked`, `no_wait`; a locking read through `&Db` joins the task's
+  unit of work), `timeout(Duration)`, `on_connection(name)`, `use_write()`,
+  and the vector helpers (`where_vector_similar_to`,
+  `where_vector_distance_less_than`, `select_vector_distance`,
+  `order_by_vector_distance`; pgvector, MariaDB vectors).
+- Sources: `from_as(alias)` and `TableBuilder::from_sub(query, alias)`,
+  `Builder::from_sub(query)` (a model read from a derived table named
+  like its table), `from_function(Expr::func("generate_series", ..), "n")`
+  and `from_raw("generate_series(?, ?) AS n", values)` (a table function
+  written by hand).
+- JSON and pattern conditions: `where_json_overlaps` /
+  `where_json_doesnt_overlap`, `where_json_contains_key` /
+  `where_json_doesnt_contain_key` (with `or_` forms), the column helpers
+  `contains`, `contained_by`, `overlaps`, `has_key`, `ilike`, `regex`,
+  `regex_case_insensitive`, `not_regex`, `similar_to`, `is_distinct_from`,
+  and `Filter::op_raw(column, op, value)` checked against each dialect's
+  operator allow-list. Full text takes `FullText::english()` (a validated
+  language), `.websearch()`/`.phrase()`/`.raw()` modes and `tsvector`
+  columns (`FullText::vectors()`); SQLite answers `Unsupported` (query an
+  FTS5 table with `where_raw`).
 - `Builder<M>` adds `where_key`, `where_key_not`, `where_key_in`,
   `where_key_not_in`, `scope`, `without_global_scope::<S>`,
   `without_global_scopes`, `with_trashed`, `latest`/`oldest` (by the
@@ -422,8 +451,29 @@ return `Self`; terminal methods take the executor first.
   navree_keys)`: the inner query keeps its order with a limit or offset,
   and is `DISTINCT` without orders otherwise (MySQL refuses a merged
   subquery on the written table; the derived table is materialized).
-  Setting a JSON path in a mass update is `Unsupported` in core (streams
-  track).
+  An assignment to a JSON path (`col("meta->status").set("won")`) updates
+  the value inside the column: `jsonb_set` on PostgreSQL, `JSON_SET` on
+  MySQL, `json_set` on SQLite, several paths of one column folded into
+  one expression.
+- Bulk writes (`query/bulk.rs`) run without hooks or change events:
+  `insert` of many rows (one statement, split under the dialect's bind
+  limit and run as one transaction or savepoint), `insert_get_id`,
+  `insert_or_ignore` (`ON CONFLICT DO NOTHING`, `INSERT IGNORE`, `INSERT OR
+  IGNORE`), `insert_or_ignore_returning`, `insert_using` /
+  `insert_or_ignore_using` (`INSERT .. SELECT`), `upsert(rows, unique_by,
+  update)` (`ON CONFLICT .. DO UPDATE SET c = excluded.c`, MySQL `ON
+  DUPLICATE KEY UPDATE c = VALUES(c)`; `ConflictUpdate` names columns,
+  expressions or `All`), `update_or_insert`, `update_from` (`UPDATE ..
+  FROM` / MySQL's joined update), `truncate` (`RESTART IDENTITY`, opt-in
+  `CASCADE`; SQLite deletes and resets its sequence). Model builders add
+  `fill_and_insert`, `fill_and_insert_or_ignore`, `fill_and_insert_get_id`
+  and `fill_for_insert` (generated keys, timestamps and casts applied);
+  `Model::insert`, `insert_or_ignore`, `fill_and_insert` and `upsert` are
+  the static shortcuts; `Record::save_or_ignore(_on)` inserts one record
+  through its lifecycle unless it conflicts.
+- Table writes with joins, orders or a limit narrow the rows by row id:
+  `ctid IN (SELECT ..)` on PostgreSQL, `rowid IN (SELECT ..)` on SQLite;
+  MySQL (no row id) refuses them on tables and uses keys on models.
 - `create_or_first` inserts inside a savepoint when the target is a
   transaction (PostgreSQL aborts a transaction on a failed statement), and
   returns the existing record on a unique violation; `first_or_create` and
@@ -461,7 +511,10 @@ meaning of the caller's conditions.
 
 `QueryIr { table: TableRef, distinct, columns: Vec<SelectItem>, joins,
 wheres: Vec<WhereClause>, groups, havings, orders, limit, offset, lock,
-unions, errors }`. `TableRef` is a table, an aliased table, or a subquery.
+unions, group_limit, connection, use_writer, timeout, errors }`.
+`TableRef` is a table, an aliased table, a subquery or a table function.
+`connection`, `use_writer` and `timeout` say where and how long the query
+runs (`Route`, timed reads; section 6), not what it selects.
 `Where` covers `Compare`, `Null`, `In` (list or subquery), `Between`,
 `Like`, `DatePart`, `Exists`, `Group`, `JsonContains`, `JsonLength`,
 `FullText`, `Raw`, `Sql` (a sea-query condition) and `Invalid` (a problem
@@ -480,19 +533,45 @@ Terminal methods take `&E where E: Executor + ?Sized`:
 
 | Executor | Reads | Writes |
 |---|---|---|
-| `Db` | the task's current unit of work when its transaction is open on this pool (`Db::reader`), else the pool | the task's current unfinished unit of work on this pool (events recorded there), else the pool |
+| `Db` | the task's current unit of work when its transaction is open on this pool (`Db::reader`), else a read replica (the writer without replicas, after the unit of work wrote, or with `use_write`/`using_writer`) | the task's current unfinished unit of work on this pool (events recorded there), else the pool |
 | `Uow` | its transaction | its transaction, events recorded |
 | `DatabaseConnection`, `DatabaseTransaction` | as given | as given, no events |
 | `Arc<E>` | as `E` | as `E` |
 | a document store's executor | `Target::Document` | `Target::Document` |
 
 `Executor::target(Access)` resolves a `Target`: `Target::Sql(SqlTarget)`
-(dialect, connection or transaction, unit of work, app) or
-`Target::Document(DocumentTarget)` (driver, app). `Target` runs IR:
-`fetch`, `aggregate`, `exists`, `insert`, `update`, `delete`, and nests a
-savepoint (`begin_savepoint`, `on_transaction`). `ExecContext` (from
+(dialect, connection or transaction, unit of work, app, the connection's
+hooks) or `Target::Document(DocumentTarget)` (driver, app). Terminal
+methods call `Executor::target_routed(Access, Route)`: a `Route` carries
+the connection the query names (`on_connection`), the model's connection
+(`#[model(connection = "..")]`, `M::connection_name()`) and whether reads
+go to the writer. Given the default `Db`, an operation runs on the
+connection its query names, else its model's, else (inside
+`using_connection(name, fut)`) the scoped one, reached through the app's
+`DbConnections`; a named connection's `Db` runs what it is given unless
+the query names another; a `Uow` refuses an operation on another
+connection (`OrmError::Connection`: a unit of work spans one
+connection); SeaORM connections, transactions and document stores run
+what they are given. A write through `Db` or `Uow` marks the task's unit
+of work as having written (`Uow::has_modified_records`), so with replicas
+and `sticky` its later reads stay on the writer. `Target` runs IR:
+`fetch`, `stream`, `aggregate`, `exists`, `insert`, `update`, `delete`,
+and nests a savepoint (`begin_savepoint`, `on_transaction`) or a
+transaction of its own (`begin_atomic`). `ExecContext` (from
 `Target::context()`) gives hooks and later tracks the app, the unit of
 work, the dialect and `now()`.
+
+`SqlTarget` announces each statement and each transaction it begins to the
+connection's hooks (`Db::before_executing`,
+`Db::before_starting_transaction`), reads again once on another pooled
+connection when a read outside a transaction loses its connection
+(`OrmError::is_lost_connection`; never inside a transaction, never for
+writes), and runs reads under a query's `timeout`: MySQL's
+`MAX_EXECUTION_TIME` hint, PostgreSQL's `SET LOCAL statement_timeout` in a
+transaction of its own on the pool or a savepoint inside a transaction
+(restoring the transaction's own timeout; a stopped read leaves the
+transaction usable), `Unsupported` on SQLite and on PostgreSQL cursors;
+expiry is `OrmError::Timeout`.
 
 Inside a `Uow`, statements run in its transaction, which carries
 `navree.actor` and `navree.request_id` (and, with navree-workspace,
@@ -579,10 +658,13 @@ requested type.
 | `MassAssignment { model, columns, totally_guarded }` | `fill` on a model that declares neither `fillable` nor `guarded`, or keys it may not set when discarding them is refused (`DiscardPolicy::Fail`, or the strict mode `prevent_discarding_attributes`) | 500 |
 | `LazyLoading { model, relation }` | a relation loaded one record at a time (strict mode) | 500 |
 | `Serialize { model, column, message }` | a record did not serialize (the column, accessor or relation is named when known) | 500 |
+| `Connection { connection, message }` | an unknown connection name, or a unit of work of another connection | 500 |
+| `Timeout { timeout, source }` | the database stopped a read that outran the query's `timeout` | 500 |
 
-`is_not_found()` and `is_unique_violation()` classify. Messages name the
-model, the column and the operation; no SQL or values reach clients
-(navree-http logs the source of 500s).
+`is_not_found()`, `is_unique_violation()`, `is_timeout()` and
+`is_lost_connection()` classify. Messages name the model, the column and
+the operation; no SQL or values reach clients (navree-http logs the
+source of 500s).
 
 ## 9. Casts, collections, pagination
 
@@ -627,8 +709,12 @@ extractor (400 for a malformed cursor or limit).
   aggregates, plucks, pagination, collections, scopes, soft deletes,
   timestamps with a fixed clock, hooks from an app, the unit of work
   (events, rollback, joining, after-commit), casts, HTTP (404 shape, page
-  shapes, extractors, request transactions), `TableBuilder`, and the
-  document-driver reference. `tests/orm/attributes/` covers the attribute
+  shapes, extractors, request transactions), `TableBuilder`, the
+  document-driver reference, streams (`streams.rs`), raw statements
+  (`raw.rs`), bulk writes (`bulk.rs`), locks (`locks.rs`), compound
+  queries (`compound.rs`), JSON and operators (`json.rs`), and connections
+  (`connections.rs`: named connections, scopes, replicas, sticky reads,
+  statement hooks). `tests/orm/attributes/` covers the attribute
   layer: mass assignment (`fill.rs`), casts (`casts.rs`), encryption and
   hashing (`secrets.rs`), serialization (`serialize.rs`), API resources
   and OpenAPI schemas (`resources.rs`) and model references (`refs.rs`).
@@ -964,20 +1050,79 @@ fewer than two columns, `cast` with `inbound`, accessor signatures,
 setters that would shadow record methods, and `appends(..)` names that are
 not accessors.
 
-### orm-streams
+### orm-streams (shipped)
 
-- Owns `src/streams.rs` (`chunk`, `chunk_by_id`, `each`, `lazy`,
-  `lazy_by_id`, `cursor` as async streams over `Builder::fetch` with
-  pages or keysets), `src/query/bulk.rs` (`insert`, `insert_or_ignore`,
-  `upsert` of many models, `delete_where`; `InsertIr` gains an
-  `on_conflict`), JSON path assignments in mass updates (the check in
-  `query/write.rs::sets`), PostgreSQL-specific JSON clauses (key
-  existence, `@>` on paths) and lateral joins (separate functions in
-  `sql/filter.rs` / `sql/select.rs`), and multiple connections
-  (`#[model(connection)]`, already in `ModelMeta::connection_name`,
-  resolved through `ExecContext::app`).
-- Core already has unions, row locks, sub-joins and subquery tables, full
-  text on PostgreSQL and MySQL, and the TimescaleDB helpers.
+- **Streams** (`src/streams.rs`). Both builders have `chunk(exec, n, f)`
+  (the callback returns `ControlFlow` to stop), `chunk_map`, `each`,
+  `chunk_by_id` / `chunk_by_id_desc` / `chunk_by_column(col, alias)`
+  (keysets, safe while the callback updates the rows), `each_by_id`,
+  `lazy`, `lazy_by_id`, `lazy_by_id_desc`, `lazy_by_column` (async streams
+  of records or rows fetched a page at a time, through `Builder::fetch`, so
+  `Retrieved` hooks fire and the eager loads of the relations track will
+  apply per page), and `cursor` (one statement whose rows stream as the
+  database sends them; it holds its connection, and inside a transaction
+  other statements on that transaction fail fast instead of waiting for
+  it). `navree_orm::cursor(exec, raw(..))` streams a raw statement. Chunks
+  without an order are ordered by key. Lazy-collection helpers are the
+  `futures` adapters (`StreamExt`, `TryStreamExt`, in the prelude without
+  their names): `map_ok`, `try_filter`, `take`, `chunks`, ...
+- **Bulk writes** (`src/query/bulk.rs`) and **JSON path updates**: see
+  section 5.
+- **Raw statements** (`src/raw.rs`): `raw(sql, values)` with portable `?`
+  placeholders as an expression, a condition or a select item, and
+  `select`, `select_one`, `scalar`, `statement`, `affecting_statement`,
+  `unprepared` running one.
+- **Compound queries**: derived tables, table functions, sub-joins,
+  lateral joins, limits per group, unions with orders and limits (section
+  5). **Row locks** with modes, `SKIP LOCKED`, `NOWAIT`;
+  `Record::refresh_for_update` reloads under a lock. **JSON, operators,
+  full text and vectors** (section 5; `src/operators.rs`).
+- **Connections** live in navree-db and the executor (section 6):
+  `[database.connections.<name>]` opens named connections on first use
+  (`DbConnections::get`, `Db::connection(name)`, named `Db` providers
+  `ctx.get_named::<Db>(name)`; `DbConnections::names()` lists every
+  configured one); `#[model(connection = "..")]`, `on_connection`,
+  `M::on_connection(name)` and `using_connection(name, fut)` route ORM
+  operations; `read_urls` adds read replicas with `sticky` reads after a
+  write, `use_write()`, `M::on_write_connection()` and `using_writer(fut)`
+  read from the writer; `direct_url` is a direct connection past a
+  transaction-mode pooler (`Db::direct`) for migrations and session work.
+  Pool settings (`max_connections`, `min_connections`,
+  `connect_timeout_secs`, `test_before_acquire`, `idle_timeout_secs`,
+  `max_lifetime_secs`),
+  `[database.postgres]` session settings and `[database.sqlite]` pragmas
+  shape every connection; `Db::pool_stats`, `Db::open_connections`,
+  `Db::server_version`, `database_name`, `is_mariadb`, `has_timescaledb`
+  report.
+- **Watching statements** (navree-db's `queries.rs`): `QueryLog::capture(fut)`
+  returns the statements a future ran (`LoggedQuery { sql, values,
+  duration, failed, connection }`, `raw_sql()` with values written in),
+  `Db::on_query` listens to every statement, `Db::before_executing` and
+  `Db::before_starting_transaction` run before the ORM's statements and
+  transactions, `Db::when_querying_for_longer_than` runs once per unit of
+  work over a total, and every unit of work counts its statements
+  (`Uow::query_stats`, `total_query_duration`,
+  `reset_total_query_duration`, `allow_duration_handlers_again`), logging
+  a summary when it finishes and warning about a statement that repeated
+  ten times or more. `[database] log_queries` and `slow_query_ms` log
+  through `tracing`.
+- **Events and commands**: `db.connection_established`
+  (`ConnectionEstablished`) when a connection's pool opens and `db.busy`
+  (`DatabaseBusy`) from `db:monitor [--databases a,b] [--max N]`, both
+  through the app's `dyn EventSink`; `navree db [connection] [--read |
+  --write]` opens `psql`, `mysql`, `mariadb`, `sqlite3` or `mongosh` with
+  the configured credentials (passwords through the environment).
+- **Not ported, by design.** Table prefixes per connection (PostgreSQL
+  schemas or a separate database instead: prefixes would leak into raw
+  SQL, row-level security policies and hypertable names). Low-level
+  handles (raw driver connections, separate read and write handles,
+  reconnector callbacks, swapping grammars, processors or the resolver
+  models use): the pool owns its connections and replaces lost ones,
+  executors are explicit, and tests boot their own app. Moving one record
+  to another connection at runtime: pass that connection's executor.
+- **Waiting on the relations track**: eager loads per chunk of `chunk`,
+  `each` and `lazy` (every page already runs through `Builder::fetch`,
+  where eager loading plugs in).
 
 ### orm-factories
 

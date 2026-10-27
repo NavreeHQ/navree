@@ -14,11 +14,14 @@ pub use crate::relations::{
     AnyRecord, BelongsTo, BelongsToMany, HasMany, HasManyThrough, HasOne, HasOneThrough, MorphMany,
     MorphOne, MorphTo, MorphToMany, MorphWith, Pivot, Relationships,
 };
+// The stream adapters (`try_next`, `map_ok`, `try_collect`, ...) for
+// `lazy`, `cursor` and friends, without their names.
+pub use crate::streams::{StreamExt as _, TryStreamExt as _};
 pub use crate::{
     Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect, Executor,
     Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, ModelLifecycle,
-    ModuleBuilderOrmExt, Observer, OrmError, OrmModule, PageRequest, Record, Scoped, SimplePage,
-    SoftDeleting, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as, scopes, table,
-    without_events,
+    ModuleBuilderOrmExt, Observer, OrmError, OrmModule, PageRequest, Raw, Record, RowStream,
+    Scoped, SimplePage, SoftDeleting, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as,
+    raw, scopes, table, without_events,
 };
 pub use crate::{accessors, attrs};

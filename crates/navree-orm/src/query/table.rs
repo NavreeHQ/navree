@@ -9,8 +9,8 @@ use crate::column::{Assignment, IntoExpr, IntoQuery};
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, Target};
 use crate::ir::{
-    Aggregate, AggregateFunction, ArithmeticOp, ColumnRef, DeleteIr, Distinct, Expr, InsertIr,
-    QueryIr, SelectItem, TableRef, UpdateIr, WhereClause,
+    Aggregate, AggregateFunction, ArithmeticOp, ColumnRef, DeleteIr, Distinct, Expr, InValues,
+    QueryIr, SelectItem, TableRef, UpdateIr, Where, WhereClause,
 };
 use crate::pagination::{Page, PageRequest};
 use crate::query::clauses::{HasQuery, clauses};
@@ -70,6 +70,94 @@ impl TableBuilder {
     filters!();
     clauses!();
 
+    /// Names the query's table `alias` (`FROM deals AS d`); qualify its
+    /// columns with the alias (`d.title`).
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, col, table};
+    ///
+    /// let sql = table("deals").from_as("d").where_(col("d.stage").eq("won")).to_sql(Dialect::Sqlite).unwrap();
+    /// assert_eq!(sql.sql, r#"SELECT * FROM "deals" AS "d" WHERE "d"."stage" = ?"#);
+    /// ```
+    pub fn from_as(mut self, alias: impl Into<Cow<'static, str>>) -> Self {
+        let alias = alias.into();
+        let table = &mut self.ir.table;
+        if table.subquery.is_some() || table.function.is_some() {
+            table.name = alias.clone();
+        }
+        table.alias = Some(alias);
+        self
+    }
+
+    /// Reads the rows of the set-returning function call `call` (an
+    /// [`Expr::func`]) instead of a table, named `alias`: `FROM
+    /// generate_series(..) AS alias`. SQL databases only.
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, Expr, table};
+    ///
+    /// let numbers = table("ignored").from_function(Expr::func("generate_series", [Expr::val(1), Expr::val(3)]), "n");
+    /// assert_eq!(
+    ///     numbers.to_sql(Dialect::Postgres).unwrap().sql,
+    ///     r#"SELECT * FROM generate_series($1, $2) AS "n""#
+    /// );
+    /// ```
+    pub fn from_function(
+        mut self,
+        call: impl Into<Expr>,
+        alias: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        match call.into() {
+            call @ Expr::Function { .. } => self.ir.table = TableRef::function(call, alias),
+            other => self.ir.errors.push(format!(
+                "from_function takes a function call (Expr::func), not {other:?}"
+            )),
+        }
+        self
+    }
+
+    /// Reads the rows of a table function written as raw SQL, with `?`
+    /// placeholders for `values`: `name(arguments) [AS] alias` (the alias
+    /// defaults to the function's name). For a derived table, use
+    /// [`from_sub`](Self::from_sub).
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, table};
+    ///
+    /// let days = table("ignored").from_raw("generate_series(?::date, ?::date, '1 day') AS day", ["2026-10-01", "2026-10-31"]);
+    /// assert_eq!(
+    ///     days.to_sql(Dialect::Postgres).unwrap().sql,
+    ///     r#"SELECT * FROM generate_series($1::date, $2::date, '1 day') AS "day""#
+    /// );
+    /// ```
+    pub fn from_raw(
+        mut self,
+        sql: impl Into<Cow<'static, str>>,
+        values: impl IntoIterator<Item = impl Into<Value>>,
+    ) -> Self {
+        let sql = sql.into();
+        let values: Vec<Value> = values.into_iter().map(Into::into).collect();
+        match crate::query::clauses::parse_table_function(&sql) {
+            Ok((name, arguments, alias)) => {
+                let args = if arguments.trim().is_empty() && values.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![Expr::Raw {
+                        sql: arguments.into(),
+                        values,
+                    }]
+                };
+                let call = Expr::Function {
+                    name: name.into(),
+                    args,
+                };
+                self.ir.table = TableRef::function(call, alias);
+            }
+            Err(message) => self.ir.errors.push(message),
+        }
+        self
+    }
+
     /// Newest first by `created_at`.
     pub fn latest(self) -> Self {
         self.latest_by("created_at")
@@ -90,15 +178,67 @@ impl TableBuilder {
         self.ir
     }
 
+    /// Where the query asks to run: the connection it names and whether
+    /// its reads go to the writer.
+    pub(crate) fn route(&self) -> crate::Route<'_> {
+        self.ir.route(None)
+    }
+
     /// The statement the query compiles to for `dialect`, without running
     /// it.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Statement> {
         compile_select(&self.ir, dialect)
     }
 
+    /// The statement [`update`](Self::update) would run on `dialect` with
+    /// `assignments`, without running it.
+    ///
+    /// ```
+    /// use navree_orm::{Dialect, col, table};
+    ///
+    /// let sql = table("deals")
+    ///     .where_(col("stage").eq("open"))
+    ///     .order_by("created_at")
+    ///     .limit(100)
+    ///     .to_update_sql(Dialect::Postgres, [col("stage").set("stale")])
+    ///     .unwrap();
+    /// assert_eq!(
+    ///     sql.sql,
+    ///     r#"UPDATE "deals" SET "stage" = $1 WHERE "ctid" IN (SELECT "deals"."ctid" FROM "deals" WHERE "stage" = $2 ORDER BY "created_at" ASC LIMIT $3)"#
+    /// );
+    /// ```
+    pub fn to_update_sql(
+        &self,
+        dialect: Dialect,
+        assignments: impl IntoIterator<Item = Assignment>,
+    ) -> Result<Statement> {
+        let sets = assignments
+            .into_iter()
+            .map(|assignment| assignment.into_set().map_err(OrmError::invalid))
+            .collect::<Result<Vec<_>>>()?;
+        let (table, wheres) = self.clone().write_target("update", Some(dialect))?;
+        crate::sql::compile_update(
+            &UpdateIr {
+                table,
+                sets,
+                wheres,
+            },
+            dialect,
+        )
+    }
+
+    /// The statement [`delete`](Self::delete) would run on `dialect`,
+    /// without running it.
+    pub fn to_delete_sql(&self, dialect: Dialect) -> Result<Statement> {
+        let (table, wheres) = self.clone().write_target("delete", Some(dialect))?;
+        crate::sql::compile_delete(&DeleteIr { table, wheres }, dialect)
+    }
+
     /// The query's rows.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Vec<Row>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         target.fetch(&self.ir).await
     }
 
@@ -107,13 +247,9 @@ impl TableBuilder {
         Ok(self.limit(1).get(exec).await?.into_iter().next())
     }
 
-    async fn select_rows(
-        mut self,
-        target: &Target<'_>,
-        items: Vec<SelectItem>,
-    ) -> Result<Vec<Row>> {
-        self.ir.columns = items;
-        target.fetch(&self.ir).await
+    async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
+        let query = crate::query::reading_values(self.ir, items, Vec::new());
+        target.fetch(&query).await
     }
 
     fn table_name(&self) -> String {
@@ -128,7 +264,9 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -150,7 +288,9 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -179,7 +319,9 @@ impl TableBuilder {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let items = vec![
             SelectItem {
@@ -207,7 +349,7 @@ impl TableBuilder {
 
     /// Whether the query has any row.
     pub async fn exists<E: Executor + ?Sized>(self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         target.exists(&self.ir).await
     }
 
@@ -293,7 +435,7 @@ impl TableBuilder {
         argument: Option<Expr>,
         distinct: bool,
     ) -> Result<Option<T>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let name = self.table_name();
         let aggregate = Aggregate {
             function,
@@ -317,7 +459,7 @@ impl TableBuilder {
             page: page.page.max(1),
             per_page: page.per_page.unwrap_or(TABLE_PER_PAGE).max(1),
         };
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let aggregate = Aggregate {
             function: AggregateFunction::Count,
             arg: None,
@@ -339,102 +481,81 @@ impl TableBuilder {
         Ok(Page::new(data, query, total))
     }
 
-    /// The table a write goes to, and its conditions. Writes take plain
-    /// conditions only: a table query has no key to narrow joined or
-    /// limited rows by.
-    fn write_target(self, what: &str) -> Result<(TableRef, Vec<WhereClause>)> {
+    /// The table a write on `dialect` goes to, and its conditions. Plain
+    /// conditions go into the `WHERE` as they are. A query with joins,
+    /// orders, a limit, an offset or `DISTINCT` narrows the rows by their
+    /// physical row id instead: `ctid IN (SELECT t.ctid ..)` on PostgreSQL,
+    /// `rowid IN (SELECT t.rowid ..)` on SQLite. MySQL has no row id
+    /// (model queries narrow by key there), and groups, unions and
+    /// subquery tables never write.
+    pub(crate) fn write_target(
+        self,
+        what: &str,
+        dialect: Option<Dialect>,
+    ) -> Result<(TableRef, Vec<WhereClause>)> {
         let ir = self.ir;
         ir.check()?;
         if ir.table.subquery.is_some()
-            || !ir.joins.is_empty()
             || !ir.groups.is_empty()
             || !ir.havings.is_empty()
             || !ir.unions.is_empty()
-            || ir.limit.is_some()
-            || ir.offset.is_some()
-            || !matches!(ir.distinct, Distinct::No)
         {
             return Err(OrmError::invalid(format!(
-                "a table {what} takes where conditions only (no joins, groups, limits or subquery tables); use a model query for those"
+                "a table {what} cannot have groups, unions or a subquery as its table; use a model query"
             )));
         }
-        Ok((TableRef::new(ir.table.name), ir.wheres))
-    }
-
-    /// Inserts `rows` (each a list of `(column, value)` pairs, every row
-    /// with the same columns) in one statement; returns how many were
-    /// inserted.
-    ///
-    /// ```no_run
-    /// # use navree_orm::__doc_models::*;
-    /// # async fn demo(uow: Uow, deal: Uuid, tag: i64) -> Result<()> {
-    /// table("deal_tag")
-    ///     .insert(&uow, [[("deal_id", Value::from(deal)), ("tag_id", Value::from(tag))]])
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    pub async fn insert<E, R, C, V>(
-        self,
-        exec: &E,
-        rows: impl IntoIterator<Item = R>,
-    ) -> Result<u64>
-    where
-        E: Executor + ?Sized,
-        R: IntoIterator<Item = (C, V)>,
-        C: Into<Cow<'static, str>>,
-        V: Into<Value>,
-    {
-        let (table, _) = self.write_target("insert")?;
-        let mut columns: Vec<Cow<'static, str>> = Vec::new();
-        let mut values: Vec<Vec<Expr>> = Vec::new();
-        for (index, row) in rows.into_iter().enumerate() {
-            let pairs: Vec<(Cow<'static, str>, Value)> = row
-                .into_iter()
-                .map(|(column, value)| (column.into(), value.into()))
-                .collect();
-            if index == 0 {
-                columns = pairs.iter().map(|(column, _)| column.clone()).collect();
-            }
-            if pairs.len() != columns.len() {
-                return Err(OrmError::invalid(format!(
-                    "row {} of an insert into `{}` has {} columns, the first has {}",
-                    index + 1,
-                    table.name,
-                    pairs.len(),
-                    columns.len()
-                )));
-            }
-            let mut ordered = Vec::with_capacity(columns.len());
-            for column in &columns {
-                let value = pairs
-                    .iter()
-                    .find(|(name, _)| name == column)
-                    .map(|(_, value)| value.clone())
-                    .ok_or_else(|| {
-                        OrmError::invalid(format!(
-                            "row {} of an insert into `{}` has no `{column}` column",
-                            index + 1,
-                            table.name
-                        ))
-                    })?;
-                ordered.push(Expr::Value(value));
-            }
-            values.push(ordered);
+        let simple = ir.joins.is_empty()
+            && ir.limit.is_none()
+            && ir.offset.is_none()
+            && matches!(ir.distinct, Distinct::No);
+        if simple {
+            return Ok((TableRef::new(ir.table.name), ir.wheres));
         }
-        if values.is_empty() {
-            return Ok(0);
-        }
-        let insert = InsertIr {
-            table: table.name,
-            columns,
-            rows: values,
-            returning: Vec::new(),
+        let row_id = match dialect {
+            Some(Dialect::Postgres) => "ctid",
+            Some(Dialect::Sqlite) => "rowid",
+            Some(Dialect::MySql) => {
+                return Err(OrmError::unsupported(
+                    format!(
+                        "a table {what} with joins, a limit or an offset (MySQL has no row id; a model query narrows the rows by key)"
+                    ),
+                    "MySQL",
+                ));
+            }
+            None => {
+                return Err(OrmError::unsupported(
+                    format!("a table {what} with joins, a limit or an offset"),
+                    "a document store",
+                ));
+            }
         };
-        let target = exec.target(Access::Write).await?;
-        Ok(target.insert(&insert).await?.rows_affected)
+        let table = TableRef::new(ir.table.name.clone());
+        let mut rows = ir;
+        rows.columns = vec![SelectItem {
+            expr: Expr::Column(ColumnRef::new(
+                Some(rows.table.qualifier().to_owned()),
+                row_id,
+            )),
+            alias: None,
+        }];
+        rows.lock = None;
+        if rows.limit.is_none() && rows.offset.is_none() {
+            rows.orders.clear();
+        }
+        Ok((
+            table,
+            vec![WhereClause::and(Where::In {
+                expr: Expr::Column(ColumnRef::new(None::<&str>, row_id)),
+                values: InValues::Subquery(Box::new(rows)),
+                not: false,
+            })],
+        ))
     }
 
-    /// Sets columns on every matching row; returns how many changed.
+    /// Sets columns on every matching row; returns how many changed. An
+    /// assignment to a JSON path (`col("meta->status").set("won")`)
+    /// changes that value inside the column. A query with joins, orders or
+    /// a limit updates the rows it selects (see the row ids above).
     pub async fn update<E: Executor + ?Sized>(
         self,
         exec: &E,
@@ -444,8 +565,8 @@ impl TableBuilder {
             .into_iter()
             .map(|assignment| assignment.into_set().map_err(OrmError::invalid))
             .collect::<Result<Vec<_>>>()?;
-        let (table, wheres) = self.write_target("update")?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
+        let (table, wheres) = self.write_target("update", target.dialect())?;
         target
             .update(&UpdateIr {
                 table,
@@ -455,10 +576,11 @@ impl TableBuilder {
             .await
     }
 
-    /// Deletes every matching row; returns how many were deleted.
+    /// Deletes every matching row; returns how many were deleted. A query
+    /// with joins, orders or a limit deletes the rows it selects.
     pub async fn delete<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
-        let (table, wheres) = self.write_target("delete")?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
+        let (table, wheres) = self.write_target("delete", target.dialect())?;
         target.delete(&DeleteIr { table, wheres }).await
     }
 
@@ -500,8 +622,8 @@ impl TableBuilder {
                 right: Box::new(Expr::Value(amount)),
             },
         )];
-        let (table, wheres) = self.write_target("update")?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
+        let (table, wheres) = self.write_target("update", target.dialect())?;
         target
             .update(&UpdateIr {
                 table,

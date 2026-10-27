@@ -75,12 +75,7 @@ fn insert(ledger: &Ledger, dialect: Dialect) -> navree_orm::Result<navree_orm::S
         .map(|(column, value)| (Cow::Borrowed(column), IrExpr::Value(value)))
         .unzip();
     compile_insert(
-        &InsertIr {
-            table: Cow::Borrowed("ledgers"),
-            columns,
-            rows: vec![row],
-            returning: Vec::new(),
-        },
+        &InsertIr::new(Cow::Borrowed("ledgers"), columns, vec![row]),
         dialect,
     )
 }

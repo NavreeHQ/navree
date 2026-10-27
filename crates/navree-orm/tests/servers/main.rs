@@ -72,6 +72,71 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_json_patterns_and_vectors() {
+    run(Server::Postgres, |db| {
+        scenarios::json_patterns_and_vectors(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_json_patterns_and_vectors() {
+    run(Server::MySql, |db| {
+        scenarios::json_patterns_and_vectors(db, Server::MySql)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn postgres_compound_queries() {
+    run(Server::Postgres, |db| {
+        scenarios::compound(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_compound_queries() {
+    run(Server::MySql, |db| scenarios::compound(db, Server::MySql)).await;
+}
+
+#[tokio::test]
+async fn postgres_locks() {
+    run(Server::Postgres, scenarios::locks).await;
+}
+
+#[tokio::test]
+async fn mysql_locks() {
+    run(Server::MySql, scenarios::locks).await;
+}
+
+#[tokio::test]
+async fn postgres_bulk_writes() {
+    run(Server::Postgres, |db| {
+        scenarios::bulk_writes(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_bulk_writes() {
+    run(Server::MySql, |db| {
+        scenarios::bulk_writes(db, Server::MySql)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn postgres_streams() {
+    run(Server::Postgres, scenarios::streams).await;
+}
+
+#[tokio::test]
+async fn mysql_streams() {
+    run(Server::MySql, scenarios::streams).await;
+}
+
+#[tokio::test]
 async fn timescaledb_time_buckets() {
     run(Server::Postgres, |db| {
         scenarios::time_buckets(db, Server::Postgres)
@@ -139,4 +204,22 @@ async fn mysql_time_buckets() {
         scenarios::time_buckets(db, Server::MySql)
     })
     .await;
+}
+
+#[tokio::test]
+async fn postgres_timeouts() {
+    run(Server::Postgres, |db| {
+        scenarios::timeouts(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_timeouts() {
+    run(Server::MySql, |db| scenarios::timeouts(db, Server::MySql)).await;
+}
+
+#[tokio::test]
+async fn postgres_lost_connections() {
+    run(Server::Postgres, scenarios::lost_connections).await;
 }

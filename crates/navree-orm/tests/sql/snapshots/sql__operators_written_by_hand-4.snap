@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"deals\").select_expr(Expr::col(\"title\").binary(\"||\",\nExpr::val(\"!\")), \"loud\"))"
+---
+PostgreSQL: SELECT ("title" || $1) AS "loud" FROM "deals"
+  values: [String(Some("!"))]
+MySQL: error: invalid query: `||` is not an operator MySQL expressions take (they take: +, -, *, /, %, DIV, MOD, &, |, ^, <<, >>, ->, ->>)
+SQLite: SELECT ("title" || ?) AS "loud" FROM "deals"
+  values: [String(Some("!"))]

@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 
 use crate::column::{Assignment, Column};
 use crate::error::{OrmError, Result};
-use crate::exec::{Access, ExecContext, Executor, Target};
+use crate::exec::{Access, Executor, Target};
 use crate::ir::{
     ArithmeticOp, ColumnRef, DeleteIr, Distinct, Expr, InValues, QueryIr, SelectItem, TableRef,
     UpdateIr, Where, WhereClause,
@@ -31,8 +31,8 @@ const KEYS_ALIAS: &str = "navree_keys";
 
 impl<M: Model> Builder<M> {
     /// The rows a mass write touches: the query's conditions, or, for a
-    /// query with joins, groups, a limit or an offset, the keys of the rows
-    /// it selects.
+    /// query with joins, groups, a limit, an offset, a per-group limit or a
+    /// derived table, the keys of the rows it selects.
     pub(crate) fn write_target(self) -> Result<(TableRef, Vec<WhereClause>)> {
         let ir = self.apply_global_scopes().ir;
         ir.check()?;
@@ -44,13 +44,19 @@ impl<M: Model> Builder<M> {
             && ir.unions.is_empty()
             && ir.limit.is_none()
             && ir.offset.is_none()
+            && ir.group_limit.is_none()
+            && ir.table.subquery.is_none()
+            && ir.table.function.is_none()
             && matches!(ir.distinct, Distinct::No);
         if simple {
             return Ok((table, ir.wheres));
         }
         let mut inner = ir;
         inner.columns = vec![SelectItem {
-            expr: key_expr::<M>(),
+            expr: Expr::Column(ColumnRef::new(
+                Some(inner.table.qualifier().to_owned()),
+                meta.key_column(),
+            )),
             alias: None,
         }];
         inner.lock = None;
@@ -58,7 +64,7 @@ impl<M: Model> Builder<M> {
         // unless the derived table is materialized: a LIMIT does that,
         // otherwise DISTINCT (the order is moot without a limit, and DISTINCT
         // would need the ordered columns selected).
-        if inner.limit.is_none() && inner.offset.is_none() {
+        if inner.limit.is_none() && inner.offset.is_none() && inner.group_limit.is_none() {
             inner.orders.clear();
             inner.distinct = Distinct::Yes;
         }
@@ -79,23 +85,16 @@ impl<M: Model> Builder<M> {
     }
 
     /// `SET` items from assignments, plus the update timestamp (at `now`)
-    /// unless an assignment sets it.
-    fn sets(
-        ctx: &ExecContext,
+    /// unless an assignment sets it. An assignment to a JSON path
+    /// (`col("meta->status").set("won")`) changes that value inside the
+    /// column (see [`compile_update`](crate::sql::compile_update)).
+    pub(crate) fn sets(
         now: DateTime<Utc>,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<Vec<(Cow<'static, str>, Expr)>> {
         let mut sets = Vec::new();
         for assignment in assignments {
             let (column, expr) = assignment.into_set().map_err(OrmError::invalid)?;
-            if column.contains("->") {
-                return Err(OrmError::unsupported(
-                    format!(
-                        "setting the JSON path `{column}` in a mass update (set the whole column)"
-                    ),
-                    ctx.database(),
-                ));
-            }
             sets.push((column, expr));
         }
         let meta = M::meta();
@@ -128,10 +127,10 @@ impl<M: Model> Builder<M> {
         exec: &E,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let ctx = target.context();
         let now = ctx.now().await;
-        let sets = Self::sets(&ctx, now, assignments)?;
+        let sets = Self::sets(now, assignments)?;
         let (table, wheres) = self.write_target()?;
         target
             .update(&UpdateIr {
@@ -149,13 +148,13 @@ impl<M: Model> Builder<M> {
         let meta = M::meta();
         match meta.deleted_at() {
             Some(deleted_at) => {
-                let target = exec.target(Access::Write).await?;
+                let target = exec.target_routed(Access::Write, self.route()).await?;
                 let ctx = target.context();
                 let now = ctx.now().await;
                 let value = M::timestamp_value(deleted_at, now).ok_or_else(|| {
                     crate::model::derive_support::not_a_timestamp::<M>(deleted_at)
                 })?;
-                let sets = Self::sets(&ctx, now, [Assignment::value(deleted_at, value)])?;
+                let sets = Self::sets(now, [Assignment::value(deleted_at, value)])?;
                 let (table, wheres) = self.write_target()?;
                 target
                     .update(&UpdateIr {
@@ -172,7 +171,7 @@ impl<M: Model> Builder<M> {
     /// Removes every matching row in one statement, also for a
     /// soft-deleting model (no hooks, no change events).
     pub(crate) async fn delete_rows<E: Executor + ?Sized>(self, exec: &E) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let (table, wheres) = self.write_target()?;
         target.delete(&DeleteIr { table, wheres }).await
     }
@@ -262,10 +261,10 @@ impl<M: Model> Builder<M> {
             op,
             right: Box::new(Expr::Value(amount.to_value())),
         });
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let ctx = target.context();
         let now = ctx.now().await;
-        let sets = Self::sets(&ctx, now, std::iter::once(step).chain(extra))?;
+        let sets = Self::sets(now, std::iter::once(step).chain(extra))?;
         let (table, wheres) = self.write_target()?;
         target
             .update(&UpdateIr {
@@ -305,7 +304,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         if let Some(found) = self.matching(&attributes).first_on(&target).await? {
             return Ok(found);
         }
@@ -326,7 +325,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         if let Some(found) = self.clone().matching(&attributes).first_on(&target).await? {
             return Ok(found);
         }
@@ -347,7 +346,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         self.create_or_first_on(&target, &attributes, fill).await
     }
 
@@ -372,7 +371,7 @@ impl<M: Model> Builder<M> {
         M: Default,
     {
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let mut record = match self.clone().matching(&attributes).first_on(&target).await? {
             Some(found) => found,
             None => self.create_or_first_on(&target, &attributes, &fill).await?,

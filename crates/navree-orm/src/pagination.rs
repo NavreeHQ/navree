@@ -462,7 +462,7 @@ impl<M: Model> Builder<M> {
         page: impl Into<PageRequest>,
     ) -> Result<Page<Record<M>>> {
         let page = page.into().resolve(M::meta().default_per_page());
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let total = self.clone().count_on(&target).await?;
         let past_the_end = (page.page - 1)
             .checked_mul(page.per_page)
@@ -487,7 +487,7 @@ impl<M: Model> Builder<M> {
         page: impl Into<PageRequest>,
     ) -> Result<SimplePage<Record<M>>> {
         let page = page.into().resolve(M::meta().default_per_page());
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         let offset = (page.page - 1).saturating_mul(page.per_page);
         let mut data = self
             .offset(offset)
@@ -561,7 +561,7 @@ impl<M: Model> Builder<M> {
             }
         }
 
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, query.route()).await?;
         let mut data = query
             .limit(per_page.saturating_add(1))
             .fetch(&target)

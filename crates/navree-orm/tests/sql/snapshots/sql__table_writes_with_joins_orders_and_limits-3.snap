@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\ntable(\"sessions\").where_(col(\"user_id\").eq(7)).to_delete_sql(d))"
+---
+PostgreSQL: DELETE FROM "sessions" WHERE "user_id" = $1
+  values: [Int(Some(7))]
+MySQL: DELETE FROM `sessions` WHERE `user_id` = ?
+  values: [Int(Some(7))]
+SQLite: DELETE FROM "sessions" WHERE "user_id" = ?
+  values: [Int(Some(7))]

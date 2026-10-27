@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_json_contains_key(Deal::TAGS))"
+---
+PostgreSQL: error: invalid query: a JSON key check takes a path to the key (`deals.tags->key`), not the column alone
+MySQL: error: invalid query: a JSON key check takes a path to the key (`deals.tags->key`), not the column alone
+SQLite: error: invalid query: a JSON key check takes a path to the key (`deals.tags->key`), not the column alone

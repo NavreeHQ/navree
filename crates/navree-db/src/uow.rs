@@ -2,7 +2,9 @@
 
 use std::fmt;
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use navree_kernel::BoxFuture;
 use sea_orm::{
@@ -12,7 +14,8 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Db, mysql};
+use crate::queries::{QueryCounter, log_stats};
+use crate::{Db, QueryStats, mysql};
 
 /// What happened to a record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -167,6 +170,10 @@ struct UowInner {
     tx: tokio::sync::Mutex<TxState>,
     changes: Mutex<Vec<Recorded>>,
     after_commit: Mutex<Vec<AfterCommit>>,
+    /// Whether anything was written through the unit of work.
+    modified: AtomicBool,
+    /// Its statements: how many, how long, which repeat.
+    queries: Mutex<QueryCounter>,
 }
 
 tokio::task_local! {
@@ -219,8 +226,66 @@ impl Uow {
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 changes: Mutex::new(Vec::new()),
                 after_commit: Mutex::new(Vec::new()),
+                modified: AtomicBool::new(false),
+                queries: Mutex::new(QueryCounter::default()),
             }),
         }
+    }
+
+    /// The statements the unit of work ran on its connection while it was
+    /// [current](Uow::current): how many, their total time, and the ones
+    /// that ran more than once. A summary is logged at debug level (target
+    /// `navree_db::uow`) when it finishes, with a warning for a statement
+    /// that ran ten times or more.
+    pub fn query_stats(&self) -> QueryStats {
+        lock(&self.inner.queries).stats()
+    }
+
+    /// The total time of the unit of work's statements so far (see
+    /// [`query_stats`](Uow::query_stats)).
+    pub fn total_query_duration(&self) -> Duration {
+        lock(&self.inner.queries).total()
+    }
+
+    /// Starts the total time of the unit of work's statements again from
+    /// zero (the statement count stays).
+    pub fn reset_total_query_duration(&self) {
+        lock(&self.inner.queries).reset_total();
+    }
+
+    /// Lets the [`Db::when_querying_for_longer_than`] handlers that ran
+    /// for this unit of work run again.
+    pub fn allow_duration_handlers_again(&self) {
+        lock(&self.inner.queries).allow_handlers_again();
+    }
+
+    /// Counts a statement; returns the total time so far.
+    pub(crate) fn count_query(&self, sql: &str, elapsed: Duration) -> Duration {
+        lock(&self.inner.queries).count(sql, elapsed)
+    }
+
+    /// Whether duration handler `id` may run for this unit of work.
+    pub(crate) fn claim_duration_handler(&self, id: usize) -> bool {
+        lock(&self.inner.queries).claim(id)
+    }
+
+    /// Logs the statistics of the finished unit of work.
+    fn log_query_stats(&self) {
+        log_stats(&self.query_stats(), self.request_id());
+    }
+
+    /// Notes that something was written through the unit of work (the
+    /// ORM's writes, [`Repo`](crate::Repo) and recorded changes do it);
+    /// see [`has_modified_records`](Uow::has_modified_records).
+    pub fn mark_modified(&self) {
+        self.inner.modified.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether anything was written through the unit of work (also after it
+    /// committed). With read replicas and `sticky` (the default), the
+    /// task's reads then go to the writer, so it reads its own writes.
+    pub fn has_modified_records(&self) -> bool {
+        self.inner.modified.load(Ordering::Relaxed)
     }
 
     /// The transaction, begun on the first call. Drop the returned `Arc`
@@ -272,8 +337,10 @@ impl Uow {
         &self.inner.db
     }
 
-    /// Records a change for the [`ChangeObserver`]s.
+    /// Records a change for the [`ChangeObserver`]s (the unit of work then
+    /// [has modified records](Uow::has_modified_records)).
     pub fn record_change(&self, ev: ChangeEvent) {
+        self.mark_modified();
         lock(&self.inner.changes).push(Recorded::Ready(ev));
     }
 
@@ -286,6 +353,7 @@ impl Uow {
                 self.record_change(event);
             }
         } else {
+            self.mark_modified();
             lock(&self.inner.changes).push(Recorded::Deferred(prepare));
         }
         Ok(())
@@ -344,6 +412,9 @@ impl Uow {
     async fn commit_tx(&self) -> Result<bool, DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
+        if !matches!(current, TxState::Done) {
+            self.log_query_stats();
+        }
         let tx = match current {
             TxState::Done => return Ok(false),
             TxState::Open(tx) => Some(tx),
@@ -385,6 +456,9 @@ impl Uow {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         lock(&self.inner.changes).clear();
         lock(&self.inner.after_commit).clear();
+        if !matches!(current, TxState::Done) {
+            self.log_query_stats();
+        }
         match current {
             TxState::Open(tx) => {
                 end_session_or_warn(&self.inner.db, &tx).await;
@@ -407,6 +481,7 @@ impl Uow {
 
     async fn begin(&self) -> Result<DatabaseTransaction, DbErr> {
         let db = &self.inner.db;
+        db.run_before_starting_transaction();
         let backend = match db.backend() {
             // Nothing to set: `database.transaction_settings` is off.
             DbBackend::Postgres | DbBackend::MySql if !db.transaction_settings() => {

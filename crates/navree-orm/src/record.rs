@@ -419,7 +419,9 @@ impl<M: Model> Record<M> {
     /// unit of work, the change is recorded for its observers (the audit
     /// trail).
     pub async fn save<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::save(&target, self).await
     }
 
@@ -449,7 +451,9 @@ impl<M: Model> Record<M> {
     /// deleted-at column). Returns `false` for a record that is not stored,
     /// or when a hook cancelled the delete.
     pub async fn delete<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::delete(&target, self).await
     }
 
@@ -458,14 +462,41 @@ impl<M: Model> Record<M> {
     /// record that is not stored. [`OrmError::ModelNotFound`] when the row
     /// is gone.
     pub async fn refresh<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<()> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(Access::Read, crate::query::model_route::<M>())
+            .await?;
         persist::refresh(&target, self).await
+    }
+
+    /// Reloads the record's columns and locks its row for update until the
+    /// unit of work ends (`SELECT … FOR UPDATE`; SQLite's write transaction
+    /// holds the whole database already). Call it in a unit of work before
+    /// changing the record, so no other transaction changes the row in
+    /// between; through `&Db` it joins the task's unit of work.
+    /// [`OrmError::ModelNotFound`] when the row is gone,
+    /// [`OrmError::NotPersisted`] for a record that was never stored.
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow, mut deal: Record<Deal>) -> Result<()> {
+    /// deal.refresh_for_update(&uow).await?;
+    /// deal.amount_cents += 500; // based on the latest stored amount
+    /// deal.save(&uow).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn refresh_for_update<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<()> {
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
+        persist::refresh_for_update(&target, self).await
     }
 
     /// The record as it is now in the database (ignoring global scopes);
     /// `None` when it is gone or was never stored.
     pub async fn fresh<E: Executor + ?Sized>(&self, exec: &E) -> Result<Option<Record<M>>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec
+            .target_routed(Access::Read, crate::query::model_route::<M>())
+            .await?;
         persist::fresh(&target, self).await
     }
 
@@ -486,7 +517,9 @@ impl<M: Model> Record<M> {
     /// other changes). Returns `false` when the model keeps no update
     /// timestamp.
     pub async fn touch<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::touch(&target, self, None).await
     }
 
@@ -496,7 +529,9 @@ impl<M: Model> Record<M> {
         exec: &E,
         column: impl ColumnName,
     ) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         let column = column.column_name().into_owned();
         persist::touch(&target, self, Some(&column)).await
     }
@@ -539,7 +574,9 @@ impl<M: Model> Record<M> {
         T: Numeric,
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment(&target, self, vec![(column, amount)], false, extra).await
     }
 
@@ -564,7 +601,9 @@ impl<M: Model> Record<M> {
         T: Numeric,
     {
         let steps: Vec<(Column<M, T>, T)> = steps.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment(&target, self, steps, false, Vec::new()).await
     }
 
@@ -580,7 +619,9 @@ impl<M: Model> Record<M> {
         T: Numeric,
     {
         let steps: Vec<(Column<M, T>, T)> = steps.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment(&target, self, steps, true, Vec::new()).await
     }
 
@@ -613,7 +654,9 @@ impl<M: Model> Record<M> {
         T: Numeric,
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment(&target, self, vec![(column, amount)], true, extra).await
     }
 

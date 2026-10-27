@@ -216,6 +216,8 @@ async fn database_commands_are_registered() {
         "migrate:fresh",
         "migrate:status",
         "db:seed",
+        "db:monitor",
+        "db",
     ] {
         assert!(names.contains(&name), "{name} in {names:?}");
     }

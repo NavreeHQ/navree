@@ -17,6 +17,7 @@ mod connect;
 mod errors;
 mod health;
 mod migrations;
+mod monitor;
 mod paginate;
 mod repo;
 mod text;

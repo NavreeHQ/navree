@@ -133,6 +133,39 @@ impl Expr {
         Expr::Subquery(Box::new(query.into_query()))
     }
 
+    /// In an upsert's update: the value `column` would have been inserted
+    /// with, e.g. to add to a counter instead of replacing it.
+    ///
+    /// ```
+    /// use navree_orm::ir::{InsertIr, OnConflict};
+    /// use navree_orm::sql::{Dialect, compile_insert};
+    /// use navree_orm::{Expr, Value};
+    ///
+    /// let insert = InsertIr::new(
+    ///     "page_views",
+    ///     vec!["path".into(), "views".into()],
+    ///     vec![vec![Expr::val("/pricing"), Expr::val(1)]],
+    /// )
+    /// .on_conflict(OnConflict::Update {
+    ///     target: vec!["path".into()],
+    ///     sets: vec![("views".into(), Expr::col("page_views.views").add(Expr::excluded("views")))],
+    /// });
+    /// assert_eq!(
+    ///     compile_insert(&insert, Dialect::Postgres).unwrap().sql,
+    ///     r#"INSERT INTO "page_views" ("path", "views") VALUES ($1, $2) ON CONFLICT ("path") DO UPDATE SET "views" = "page_views"."views" + "excluded"."views""#
+    /// );
+    /// assert_eq!(
+    ///     compile_insert(&insert, Dialect::MySql).unwrap().sql,
+    ///     "INSERT INTO `page_views` (`path`, `views`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `views` = `page_views`.`views` + VALUES(`views`)"
+    /// );
+    /// # let _ = Value::from(1);
+    /// ```
+    pub fn excluded(column: impl Into<Cow<'static, str>>) -> Expr {
+        Expr::Excluded {
+            column: column.into(),
+        }
+    }
+
     /// TimescaleDB's `time_bucket(width, expr)`: the start of the bucket of
     /// width `width` (`"5 minutes"`, `"1 hour"`, `"1 day"`, `"1 week"`,
     /// `"1 month"`) that `expr` falls in.

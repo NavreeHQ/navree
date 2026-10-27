@@ -9,6 +9,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+mod bulk;
 pub(crate) mod clauses;
 mod fetch;
 pub(crate) mod filters;
@@ -16,6 +17,7 @@ mod join;
 mod table;
 mod write;
 
+pub use bulk::ConflictUpdate;
 pub use clauses::{HasQuery, IntoSelect};
 pub use fetch::Selectable;
 pub use filters::{HasWheres, WhereGroup};
@@ -152,6 +154,26 @@ impl<M: Model> Builder<M> {
         self
     }
 
+    /// Reads the model's rows from `query` (a derived table) instead of its
+    /// table: `FROM (subquery) AS <the model's table>`. The derived table
+    /// takes the table's name, so typed columns, keys and scopes keep
+    /// working; the subquery must return the model's columns. Useful for a
+    /// union of model queries, or a window over rows before filtering.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// let either = Deal::query()
+    ///     .where_(Deal::STAGE.eq(Stage::Won))
+    ///     .union(Deal::query().where_(Deal::AMOUNT_CENTS.gte(100_000)));
+    /// let sql = Deal::query().from_sub(either).order_by_desc(Deal::AMOUNT_CENTS).limit(10).to_sql(Dialect::Postgres)?;
+    /// assert!(sql.sql.ends_with(r#") AS "deals" ORDER BY "deals"."amount_cents" DESC LIMIT $3"#));
+    /// # Ok::<(), navree_orm::OrmError>(())
+    /// ```
+    pub fn from_sub(mut self, query: impl IntoQuery) -> Self {
+        self.ir.table = crate::ir::TableRef::subquery(query.into_query(), M::meta().table());
+        self
+    }
+
     /// Leaves out global scope `S` for this query.
     pub fn without_global_scope<S: GlobalScope<M>>(mut self) -> Self {
         self.scopes.ids.push(std::any::TypeId::of::<S>());
@@ -194,6 +216,12 @@ impl<M: Model> Builder<M> {
                 M::meta().name()
             )),
         }
+    }
+
+    /// Where the query asks to run: the connection it names, the model's
+    /// connection, and whether its reads go to the writer.
+    pub(crate) fn route(&self) -> crate::Route<'_> {
+        self.ir.route(M::meta().connection_name())
     }
 
     /// Records a problem found while building; the query fails with it
@@ -269,6 +297,75 @@ impl<M: Model> Builder<M> {
         }
         self
     }
+}
+
+/// `query` reading `items` (`value`, `pluck`) instead of its select list.
+/// A query with unions keeps its select list (every part must line up with
+/// the first) and reads `items` from the union as a derived table named
+/// like its table, in the union's order.
+pub(crate) fn reading_values(
+    mut query: QueryIr,
+    items: Vec<SelectItem>,
+    default_columns: Vec<SelectItem>,
+) -> QueryIr {
+    if query.unions.is_empty() {
+        query.columns = items;
+        return query;
+    }
+    let qualifier = query.table.qualifier().to_owned();
+    if query.columns.is_empty() {
+        query.columns = default_columns;
+    }
+    let mut outer = QueryIr::new(qualifier.clone());
+    // The union's order sorts the values; inside, it only picks the rows
+    // under a limit or an offset.
+    outer.orders = query
+        .orders
+        .iter()
+        .map(|order| match order {
+            crate::ir::Order::By {
+                expr: Expr::Column(column),
+                direction,
+                nulls,
+            } => crate::ir::Order::By {
+                expr: Expr::Column(ColumnRef {
+                    table: Some(qualifier.clone().into()),
+                    ..column.clone()
+                }),
+                direction: *direction,
+                nulls: *nulls,
+            },
+            other => other.clone(),
+        })
+        .collect();
+    if query.limit.is_none() && query.offset.is_none() {
+        query.orders.clear();
+    }
+    // Where and how long the query runs stay with it.
+    outer.connection = query.connection.clone();
+    outer.use_writer = query.use_writer;
+    outer.timeout = query.timeout;
+    outer.table = crate::ir::TableRef::subquery(query, qualifier);
+    outer.columns = items;
+    outer
+}
+
+/// Where a read of `query` runs: a locking read where the executor writes
+/// (`&Db` joins the task's unit of work, beginning its transaction, since
+/// a lock outside a transaction ends with the statement); others where it
+/// reads.
+pub(crate) fn read_access(query: &QueryIr) -> crate::exec::Access {
+    if query.lock.is_some() {
+        crate::exec::Access::Write
+    } else {
+        crate::exec::Access::Read
+    }
+}
+
+/// Where an operation of model `M` that has no query runs (a record's
+/// save, delete or refresh): on the model's connection.
+pub(crate) fn model_route<M: Model>() -> crate::Route<'static> {
+    crate::Route::new().for_model(M::meta().connection_name())
 }
 
 /// The model's key column, qualified by its table.

@@ -26,10 +26,18 @@
 //!   `force_delete`, `only_trashed`), global scopes registered at boot,
 //!   [`strict`] modes, and [`prune`] (`model:prune`), configured by
 //!   [`OrmModule`].
+//! - **Streams and bulk writes**: chunks, lazy streams and cursors
+//!   ([`streams`]), raw statements ([`raw()`]), multi-row inserts,
+//!   insert-or-ignore, upserts and the other writes without events
+//!   ([`Builder::insert`], [`TableBuilder::upsert`], ...).
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
 //!   change events (the audit trail), exactly like navree-db's repositories.
+//!   Models and queries can live on named connections
+//!   (`#[model(connection = "..")]`, `on_connection`, [`using_connection`])
+//!   and read from the writer when replicas exist (`use_write`,
+//!   [`using_writer`]); see [`Route`].
 //!
 //! ```
 //! use chrono::{DateTime, Utc};
@@ -116,6 +124,7 @@ pub mod ir;
 mod lifecycle;
 mod model;
 mod module;
+mod operators;
 mod options;
 pub mod pagination;
 mod persist;
@@ -123,12 +132,14 @@ pub mod prelude;
 pub mod prune;
 mod query;
 mod quiet;
+mod raw;
 mod record;
 pub mod relations;
 mod row;
 mod scope;
 mod soft_deletes;
 pub mod sql;
+pub mod streams;
 pub mod strict;
 mod ulid;
 mod value;
@@ -141,9 +152,12 @@ pub use column::{
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
 pub use events::{Observer, ObserverHook, without_events};
-pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
+pub use exec::{
+    Access, DocumentTarget, ExecContext, Executor, Route, RowsStream, SqlTarget, Target,
+    scoped_connection, using_connection, using_writer,
+};
 pub use global_scopes::ClosureScope;
-pub use ir::Expr;
+pub use ir::{Expr, LockMode, VectorMetric};
 pub use lifecycle::ModelLifecycle;
 pub use model::{
     ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, Timestamp,
@@ -157,14 +171,16 @@ pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
 pub use query::{
-    Builder, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder, WhereGroup,
-    table,
+    Builder, ConflictUpdate, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder,
+    WhereGroup, table,
 };
+pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
 pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use soft_deletes::SoftDeleting;
 pub use sql::{Dialect, Statement};
+pub use streams::{RowStream, cursor};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
     Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,

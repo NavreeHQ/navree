@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "locked(Company::query().lock(LockMode::NoKeyUpdate).skip_locked())"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = $1 FOR NO KEY UPDATE SKIP LOCKED
+  values: [BigInt(Some(1))]
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` = ? FOR UPDATE SKIP LOCKED
+  values: [BigInt(Some(1))]
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = ?
+  values: [BigInt(Some(1))]

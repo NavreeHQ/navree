@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"documents\").select_expr(Expr::vector_distance(Expr::col(\"embedding\"),\n&[f32::NAN]), \"bad\"))"
+---
+PostgreSQL: error: invalid query: a vector to compare with must hold at least one number, and only finite ones
+MySQL: error: invalid query: a vector to compare with must hold at least one number, and only finite ones
+SQLite: error: invalid query: a vector to compare with must hold at least one number, and only finite ones
