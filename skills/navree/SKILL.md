@@ -100,6 +100,7 @@ navree list                                 # every command of the app
 | Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
 | Events and listeners, live updates over WebSockets, private channels | `navree-events-and-broadcasting` |
 | Emails, templates, notifications | `navree-mail-and-notifications` |
+| SES, Mailgun, Postmark or Resend; customers' own mail transports or domains; bounces, complaints, suppressions; the mail log; holding mail for approval; open and click tracking; SPF, DKIM and DMARC | `navree-mail-delivery` |
 | Uploads, downloads, disks, signed links | `navree-storage` |
 | Caching, locks, calling third-party APIs | `navree-cache-and-http-client` |
 | API docs, OpenAPI document, TypeScript clients | `navree-openapi` |

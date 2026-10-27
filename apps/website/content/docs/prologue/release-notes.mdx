@@ -54,7 +54,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Communication
 
-- **`navree-mail`**: mailables rendered from templates, with SMTP, log, array and failover transports, and queued sending.
+- **`navree-mail`**: mailables rendered from templates, with CSS inlined and a text body generated; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending. For products that send for their customers: transports per sending domain, workspace and organization, a delivery log fed by provider webhooks, automatic suppressions, mail held for approval, open and click tracking, and SPF, DKIM and DMARC checks.
 - **`navree-notify`**: notifications over mail, the database and broadcasts, with read state.
 - **`navree-realtime`**: an in-process WebSocket server that speaks the Pusher protocol, so pusher-js and any Pusher client connects, with public, private and presence channels and a signed relay that lets workers broadcast through the serving process.
 - **`navree-view`**: MiniJinja templates for mail and other text.
