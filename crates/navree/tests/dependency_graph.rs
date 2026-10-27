@@ -270,6 +270,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-view", "navree-db", "navree-observe", "navree-queue",
         "navree-access",
     ]),
+    // Media: files attached to entities (rows in navree-db, bytes on
+    // navree-storage disks), remote files fetched through navree-http-client
+    // (its SSRF guard), conversions queued as jobs and regenerated in
+    // navree-queue batches.
+    rule("navree-media", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-http-client",
+        "navree-db", "navree-storage", "navree-queue",
+    ]),
     // Helm: the admin panel. navree-crypto seals its session cookie.
     rule("navree-helm", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
@@ -361,6 +369,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-micro",
     "navree-fleet",
     "navree-helm",
+    "navree-media",
     "navree-i18n",
     "navree-i18n-macros",
 ];
