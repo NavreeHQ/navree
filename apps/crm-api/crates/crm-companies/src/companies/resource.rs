@@ -1,9 +1,13 @@
 //! The API's company shapes (spec §7 `Company`).
 
 use chrono::{DateTime, Utc};
-use crm_core::entities::company;
+use crm_core::models::Company;
+use crm_core::subjects::COMPANY;
 use crm_core::{CompanySize, OwnerRef};
+use navree::api::ApiResource;
 use navree::db::Page;
+use navree::orm::attributes::Resource;
+use navree::orm::{OrmError, Record};
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -58,26 +62,31 @@ pub struct CompanyResource {
 }
 
 impl CompanyResource {
-    /// `company` with its `owner` (`None` only if the owner row is gone:
-    /// then the owner embed has an empty name).
-    pub fn new(company: company::Model, owner: Option<OwnerRef>) -> Self {
-        let owner = owner.unwrap_or_else(|| OwnerRef {
-            id: company.owner_id,
-            name: String::new(),
-        });
+    /// The relations a company's resource embeds: load them with the
+    /// records (`Company::query().with_all(CompanyResource::EMBEDS)`).
+    pub const EMBEDS: [&'static str; 1] = ["owner"];
+}
+
+impl ApiResource for CompanyResource {
+    const TYPE: &'static str = COMPANY;
+}
+
+impl Resource<Company> for CompanyResource {
+    /// `company` with its loaded `owner`.
+    fn from_record(company: &Record<Company>) -> Self {
         CompanyResource {
             resource_type: CompanyType::Company,
             id: company.id,
-            name: company.name,
-            domain: company.domain,
-            industry: company.industry,
+            name: company.name.clone(),
+            domain: company.domain.clone(),
+            industry: company.industry.clone(),
             size: company.size,
-            phone: company.phone,
-            website: company.website,
-            city: company.city,
-            country: company.country,
+            phone: company.phone.clone(),
+            website: company.website.clone(),
+            city: company.city.clone(),
+            country: company.country.clone(),
             owner_id: company.owner_id,
-            owner,
+            owner: OwnerRef::loaded(company.loaded(Company::owner), company.owner_id),
             created_at: company.created_at,
             updated_at: company.updated_at,
         }
@@ -97,6 +106,28 @@ pub struct CompanyDetail {
     pub open_deals_count: u64,
     /// The sum of the open deals' `amount_cents`, across currencies.
     pub open_deals_amount_cents: i64,
+}
+
+impl CompanyDetail {
+    /// The detail of `company`, loaded with its `owner`, the counts of its
+    /// `contacts` and `open_deals` (`load_count`) and the sum of the open
+    /// deals' `amount_cents` (`load_sum`).
+    pub fn from_record(company: &Record<Company>) -> Result<Self, OrmError> {
+        let count = |relation: &str| -> Result<u64, OrmError> {
+            let count = company.extra::<i64>(&format!("{relation}_count"))?;
+            Ok(count.map_or(0, |count| u64::try_from(count).unwrap_or_default()))
+        };
+        Ok(CompanyDetail {
+            company: CompanyResource::from_record(company),
+            contacts_count: count("contacts")?,
+            open_deals_count: count("open_deals")?,
+            // No open deals: the sum is `NULL`, shown as zero.
+            open_deals_amount_cents: company
+                .extra::<Option<i64>>("open_deals_sum_amount_cents")?
+                .flatten()
+                .unwrap_or(0),
+        })
+    }
 }
 
 /// A page of companies: `{data: Company[], meta}`.

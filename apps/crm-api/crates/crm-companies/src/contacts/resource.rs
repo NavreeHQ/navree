@@ -1,9 +1,13 @@
 //! The API's contact shapes (spec §7 `Contact`).
 
 use chrono::{DateTime, Utc};
-use crm_core::entities::contact;
+use crm_core::models::Contact;
+use crm_core::subjects::CONTACT;
 use crm_core::{CompanyRef, ContactStatus, OwnerRef};
+use navree::api::ApiResource;
 use navree::db::Page;
+use navree::orm::Record;
+use navree::orm::attributes::Resource;
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -61,31 +65,35 @@ pub struct ContactResource {
 }
 
 impl ContactResource {
-    /// `contact` with its `company` and `owner` embeds (an owner row that
-    /// is gone gives an owner embed with an empty name).
-    pub fn new(
-        contact: contact::Model,
-        company: Option<CompanyRef>,
-        owner: Option<OwnerRef>,
-    ) -> Self {
-        let owner = owner.unwrap_or_else(|| OwnerRef {
-            id: contact.owner_id,
-            name: String::new(),
-        });
+    /// The relations a contact's resource embeds: load them with the
+    /// records (`Contact::query().with_all(ContactResource::EMBEDS)`).
+    pub const EMBEDS: [&'static str; 2] = ["company", "owner"];
+}
+
+impl ApiResource for ContactResource {
+    const TYPE: &'static str = CONTACT;
+}
+
+impl Resource<Contact> for ContactResource {
+    /// `contact` with its loaded `company` (deleted or not) and `owner`.
+    fn from_record(contact: &Record<Contact>) -> Self {
         ContactResource {
             resource_type: ContactType::Contact,
             id: contact.id,
+            first_name: contact.first_name.clone(),
+            last_name: contact.last_name.clone(),
             full_name: contact.full_name(),
-            first_name: contact.first_name,
-            last_name: contact.last_name,
-            email: contact.email,
-            phone: contact.phone,
-            title: contact.title,
+            email: contact.email.clone(),
+            phone: contact.phone.clone(),
+            title: contact.title.clone(),
             status: contact.status,
             company_id: contact.company_id,
-            company,
+            company: contact
+                .loaded(Contact::company)
+                .and_then(Option::as_ref)
+                .map(CompanyRef::from),
             owner_id: contact.owner_id,
-            owner,
+            owner: OwnerRef::loaded(contact.loaded(Contact::owner), contact.owner_id),
             created_at: contact.created_at,
             updated_at: contact.updated_at,
         }

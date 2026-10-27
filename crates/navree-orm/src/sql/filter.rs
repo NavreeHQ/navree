@@ -7,8 +7,8 @@ use sea_query::{Alias, BinOper, Condition, ExprTrait, Func};
 use super::{Compiler, Dialect, raw_sql};
 use crate::error::OrmError;
 use crate::ir::{
-    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, JsonSegment, Operator, QueryIr,
-    SelectItem, Where, WhereClause,
+    Boolean, DatePart, Expr, FullText, FullTextMode, IgnoreCaseMode, InValues, JsonSegment,
+    Operator, QueryIr, SelectItem, Where, WhereClause,
 };
 use crate::value::{Field, Value, to_json};
 
@@ -94,6 +94,7 @@ impl Compiler {
                 case_sensitive,
                 not,
             } => self.like(expr, pattern, *case_sensitive, *not)?,
+            Where::IgnoreCase { expr, text, mode } => self.ignore_case(expr, text, *mode)?,
             Where::DatePart {
                 part,
                 expr,
@@ -359,6 +360,25 @@ impl Compiler {
                     right,
                 )
             }
+        })
+    }
+
+    /// Text compared ignoring case with navree-db's helpers, which fold
+    /// non-ASCII letters on every database: a `GLOB` of each letter's case
+    /// variants on SQLite (whose `LOWER` and `LIKE` fold ASCII only),
+    /// lower-cased bytes on MySQL (whatever the column's collation),
+    /// `LOWER(..) LIKE` or `=` on PostgreSQL. The text is literal.
+    fn ignore_case(
+        &self,
+        expr: &Expr,
+        text: &str,
+        mode: IgnoreCaseMode,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let expr = self.expr(expr)?;
+        let backend = self.dialect.backend();
+        Ok(match mode {
+            IgnoreCaseMode::Contains => navree_db::contains_ignore_case(backend, expr, text),
+            IgnoreCaseMode::Equals => navree_db::eq_ignore_case(backend, expr, text),
         })
     }
 

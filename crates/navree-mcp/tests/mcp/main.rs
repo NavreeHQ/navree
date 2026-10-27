@@ -12,4 +12,5 @@ mod prompts;
 mod resources;
 mod stateless;
 mod stdio;
+mod subjects;
 mod tools;
