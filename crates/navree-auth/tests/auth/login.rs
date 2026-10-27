@@ -43,10 +43,11 @@ async fn bad_credentials_401_and_audited() {
 
     login(&client, "ada@example.com", "wrong password")
         .await
-        .assert_error(401, "Invalid credentials");
+        .assert_error(401, "Invalid credentials")
+        .assert_error_code(401, "invalid_credentials");
     login(&client, "nobody@example.com", PASSWORD)
         .await
-        .assert_error(401, "Invalid credentials");
+        .assert_error_code(401, "invalid_credentials");
 
     let failed = sink.with_action("auth.login_failed");
     assert_eq!(failed.len(), 2, "{failed:?}");

@@ -10,20 +10,20 @@ use sea_orm::DbErr;
 /// A workspace-module error. Returned from handlers with `?`, it becomes an
 /// error response in Navree's JSON error shape:
 ///
-/// | Error | Status | Message |
-/// |---|---|---|
-/// | `NoWorkspace` | 400 | `The request names no workspace.` |
-/// | `WorkspaceNotFound` | 404 | `Workspace not found.` |
-/// | `NotMember` | 403 | `You are not a member of this workspace.` |
-/// | `Invalid` | 400 | the field's message, under `errors.<field>` |
-/// | `AlreadyMember` | 409 | `The user is already a member of this workspace.` |
-/// | `MemberNotFound` | 404 | `Member not found.` |
-/// | `OwnerRequired` | 409 | `The workspace owner can't be removed or demoted; transfer ownership first.` |
-/// | `InvitationNotFound` | 404 | `Invitation not found.` |
-/// | `InvitationExpired` | 410 | `The invitation has expired.` |
-/// | `InvitationEmailMismatch` | 403 | `This invitation was sent to a different email address.` |
-/// | `Db` | as navree-db maps it (404, 409) or 500 | |
-/// | `Other` | 500 | |
+/// | Error | Status | `code` | Message |
+/// |---|---|---|---|
+/// | `NoWorkspace` | 400 | `workspace_required` | `The request names no workspace.` |
+/// | `WorkspaceNotFound` | 404 | `workspace_not_found` | `Workspace not found.` |
+/// | `NotMember` | 403 | `not_a_member` | `You are not a member of this workspace.` |
+/// | `Invalid` | 400 | `validation_failed` | the field's message, under `errors.<field>` |
+/// | `AlreadyMember` | 409 | `already_a_member` | `The user is already a member of this workspace.` |
+/// | `MemberNotFound` | 404 | `member_not_found` | `Member not found.` |
+/// | `OwnerRequired` | 409 | `owner_required` | `The workspace owner can't be removed or demoted; transfer ownership first.` |
+/// | `InvitationNotFound` | 404 | `invitation_not_found` | `Invitation not found.` |
+/// | `InvitationExpired` | 410 | `invitation_expired` | `The invitation has expired.` |
+/// | `InvitationEmailMismatch` | 403 | `invitation_email_mismatch` | `This invitation was sent to a different email address.` |
+/// | `Db` | as navree-db maps it (404, 409) or 500 | | |
+/// | `Other` | 500 | `internal_error` | |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum WorkspaceError {
@@ -89,31 +89,38 @@ impl WorkspaceError {
 /// a 500.
 pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
     Some(match error {
-        WorkspaceError::NoWorkspace => AppError::bad_request("The request names no workspace."),
-        WorkspaceError::WorkspaceNotFound(_) => {
-            AppError::not_found().with_detail("Workspace not found.")
+        WorkspaceError::NoWorkspace => {
+            AppError::bad_request("The request names no workspace.").with_code("workspace_required")
         }
-        WorkspaceError::NotMember => {
-            AppError::forbidden().with_detail("You are not a member of this workspace.")
-        }
+        WorkspaceError::WorkspaceNotFound(_) => AppError::not_found()
+            .with_code("workspace_not_found")
+            .with_detail("Workspace not found."),
+        WorkspaceError::NotMember => AppError::forbidden()
+            .with_code("not_a_member")
+            .with_detail("You are not a member of this workspace."),
         WorkspaceError::Invalid { field, message } => AppError::validation(BTreeMap::from([(
             (*field).to_owned(),
             vec![message.clone()],
         )])),
         WorkspaceError::AlreadyMember => {
             AppError::conflict("The user is already a member of this workspace.")
+                .with_code("already_a_member")
         }
-        WorkspaceError::MemberNotFound => AppError::not_found().with_detail("Member not found."),
+        WorkspaceError::MemberNotFound => AppError::not_found()
+            .with_code("member_not_found")
+            .with_detail("Member not found."),
         WorkspaceError::OwnerRequired => AppError::conflict(
             "The workspace owner can't be removed or demoted; transfer ownership first.",
-        ),
-        WorkspaceError::InvitationNotFound => {
-            AppError::not_found().with_detail("Invitation not found.")
-        }
-        WorkspaceError::InvitationExpired => {
-            AppError::from_status(StatusCode::GONE).with_detail("The invitation has expired.")
-        }
+        )
+        .with_code("owner_required"),
+        WorkspaceError::InvitationNotFound => AppError::not_found()
+            .with_code("invitation_not_found")
+            .with_detail("Invitation not found."),
+        WorkspaceError::InvitationExpired => AppError::from_status(StatusCode::GONE)
+            .with_code("invitation_expired")
+            .with_detail("The invitation has expired."),
         WorkspaceError::InvitationEmailMismatch => AppError::forbidden()
+            .with_code("invitation_email_mismatch")
             .with_detail("This invitation was sent to a different email address."),
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
         WorkspaceError::Other(_) => return None,
@@ -125,29 +132,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn errors_map_to_statuses() {
+    fn errors_map_to_statuses_and_codes() {
         let cases = [
-            (WorkspaceError::NoWorkspace, 400),
-            (WorkspaceError::WorkspaceNotFound("acme".into()), 404),
-            (WorkspaceError::NotMember, 403),
+            (WorkspaceError::NoWorkspace, 400, "workspace_required"),
+            (
+                WorkspaceError::WorkspaceNotFound("acme".into()),
+                404,
+                "workspace_not_found",
+            ),
+            (WorkspaceError::NotMember, 403, "not_a_member"),
             (
                 WorkspaceError::invalid("slug", "slug has already been taken"),
                 400,
+                "validation_failed",
             ),
-            (WorkspaceError::AlreadyMember, 409),
-            (WorkspaceError::MemberNotFound, 404),
-            (WorkspaceError::OwnerRequired, 409),
-            (WorkspaceError::InvitationNotFound, 404),
-            (WorkspaceError::InvitationExpired, 410),
-            (WorkspaceError::InvitationEmailMismatch, 403),
+            (WorkspaceError::AlreadyMember, 409, "already_a_member"),
+            (WorkspaceError::MemberNotFound, 404, "member_not_found"),
+            (WorkspaceError::OwnerRequired, 409, "owner_required"),
+            (
+                WorkspaceError::InvitationNotFound,
+                404,
+                "invitation_not_found",
+            ),
+            (WorkspaceError::InvitationExpired, 410, "invitation_expired"),
+            (
+                WorkspaceError::InvitationEmailMismatch,
+                403,
+                "invitation_email_mismatch",
+            ),
             (
                 WorkspaceError::Db(DbErr::RecordNotFound("workspaces x".into())),
                 404,
+                "not_found",
             ),
-            (WorkspaceError::Other("boom".into()), 500),
+            (WorkspaceError::Other("boom".into()), 500, "internal_error"),
         ];
-        for (error, status) in cases {
-            assert_eq!(error.to_app_error().status.as_u16(), status, "{error}");
+        for (error, status, code) in cases {
+            let app_error = error.to_app_error();
+            assert_eq!(app_error.status.as_u16(), status, "{error}");
+            assert_eq!(app_error.body()["code"], code, "{error}");
+            assert!(navree_http::codes::is_valid(code), "{code}");
         }
         let body = WorkspaceError::invalid("slug", "slug has already been taken")
             .to_app_error()

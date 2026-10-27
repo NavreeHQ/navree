@@ -128,6 +128,7 @@ rep.get("/api/v1/deals")
 | `assert_json_path(path, json!(..))` | The JSON value at `path` equals the expected value. |
 | `assert_error(404, "Not Found")` | A Navree error response with that status and message. |
 | `assert_error(404, None)` | The same, without checking the message. |
+| `assert_error_code(409, "campaign_already_running")` | A Navree error response with that status and [error code](/docs/basics/errors/#error-codes). |
 | `assert_validation_error("title")` | A 400 validation error with at least one message for the field. |
 
 A JSON path is a dotted path through objects, where a number indexes an array: `"data.0.owner.name"`. The empty path is the whole body. When the path doesn't exist, the failure names the first missing segment.
@@ -143,6 +144,15 @@ app.acting_as(principal(Uuid::now_v7()))
     .assert_error(409, "The change conflicts with a related record.");
 ```
 
+`assert_error_code` checks the same and the body's machine-readable `code`, which is what a front end branches on and translates. Assert it for every refusal your users can see, so a renamed code fails a test:
+
+```rust
+login(&client, "ada@example.com", "wrong password")
+    .await
+    .assert_error(401, "Invalid credentials")
+    .assert_error_code(401, "invalid_credentials");
+```
+
 `assert_validation_error` checks for a 400 error with at least one message for the field in `errors`. Nested fields have dotted names there, such as `customer.address.city` or `items.0.quantity`. It chains, so one call per field checks several:
 
 ```rust
@@ -155,7 +165,7 @@ client
     .assert_validation_error("body");
 ```
 
-`assert_problem` is deprecated (errors no longer use RFC 9457); use `assert_error`.
+`assert_problem` is deprecated (errors no longer use RFC 9457); use `assert_error` and `assert_error_code`.
 
 To look at a response yourself:
 

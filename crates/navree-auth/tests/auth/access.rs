@@ -69,7 +69,8 @@ async fn expired_or_tampered_access_token_is_401() {
         .bearer("not.a.jwt")
         .send()
         .await
-        .assert_error(401, "Invalid token");
+        .assert_error(401, "Invalid token")
+        .assert_error_code(401, "invalid_token");
 
     // Expired: 15 minutes plus the 30 s leeway later.
     clock.advance(Duration::from_secs(900 + 31));
@@ -78,7 +79,8 @@ async fn expired_or_tampered_access_token_is_401() {
         .bearer(&access)
         .send()
         .await
-        .assert_error(401, "Token expired");
+        .assert_error(401, "Token expired")
+        .assert_error_code(401, "token_expired");
     assert!(
         expired
             .header("www-authenticate")

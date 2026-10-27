@@ -89,6 +89,7 @@ Requests: `.get/.post/.put/.patch/.delete(path)` with the full path
 `.send().await`. Assertions chain and print the body on failure:
 `assert_status(201)`, `assert_json_path("data.0.name", json!("x"))`,
 `assert_error(404, "Not Found")` or `assert_error(404, None)`,
+`assert_error_code(401, "invalid_credentials")` (the error `code`),
 `assert_validation_error("field")`; then `json_value()`, `json::<T>()`,
 `header("location")`, `text()`.
 

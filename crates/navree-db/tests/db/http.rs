@@ -340,6 +340,7 @@ async fn unique_violation_maps_to_409() {
             "statusCode": 409,
             "message": "A record with the same unique value already exists.",
             "error": "Conflict",
+            "code": "conflict",
         })
     );
     assert!(
@@ -365,7 +366,7 @@ async fn record_not_found_maps_to_404() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(
         body,
-        serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        serde_json::json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"})
     );
 }
 

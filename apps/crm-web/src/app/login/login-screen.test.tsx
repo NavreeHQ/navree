@@ -118,7 +118,12 @@ describe("Login screen", () => {
       "POST /api/auth/2fa/verify": () =>
         ++attempts === 1
           ? Response.json(
-              { statusCode: 401, message: "Invalid two-factor code", error: "Unauthorized" },
+              {
+                statusCode: 401,
+                message: "Invalid two-factor code",
+                error: "Unauthorized",
+                code: "invalid_two_factor_code",
+              },
               { status: 401 },
             )
           : Response.json({ user }),
@@ -140,7 +145,12 @@ describe("Login screen", () => {
       "POST /api/auth/login": () => Response.json({ two_factor_required: true, expires_in: 300 }),
       "POST /api/auth/2fa/verify": () =>
         Response.json(
-          { statusCode: 401, message: "Your sign-in attempt expired. Sign in again.", error: "Unauthorized" },
+          {
+            statusCode: 401,
+            message: "Your sign-in attempt expired. Sign in again.",
+            error: "Unauthorized",
+            code: "two_factor_challenge_expired",
+          },
           { status: 401 },
         ),
     });

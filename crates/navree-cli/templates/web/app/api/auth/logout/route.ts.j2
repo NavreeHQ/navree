@@ -2,7 +2,7 @@ import { ACCESS_COOKIE, clearTokenCookies, error, navree, originAllowed, readCoo
 
 /** Revokes the refresh token at Navree and clears the cookies. */
 export async function POST(request: Request): Promise<Response> {
-  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden");
+  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden", "cross_origin_refused");
   const access = readCookie(request, ACCESS_COOKIE);
   const refresh = readCookie(request, REFRESH_COOKIE);
   if (access) {

@@ -307,7 +307,8 @@ async fn recovery_code_single_use() {
         json!({ "challenge_token": challenge_token, "recovery_code": first }),
     )
     .await
-    .assert_error(401, "Invalid two-factor code");
+    .assert_error(401, "Invalid two-factor code")
+    .assert_error_code(401, "invalid_two_factor_code");
     verify(
         &client,
         json!({ "challenge_token": challenge_token, "recovery_code": enabled.recovery_codes[1] }),
