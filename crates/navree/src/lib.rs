@@ -59,6 +59,7 @@
 //! | `micro` | navree-micro | `micro` (opt-in) | `MicroModule`, `ServiceClient`: messages and events between services over TCP, NATS (`micro-nats`), Kafka (`micro-kafka`), RabbitMQ (`micro-rabbitmq`), Redis Streams (`micro-redis`) or MQTT (`micro-mqtt`) |
 //! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
 //! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
+//! | `workflows` | navree-workflows (plus `#[workflow]`, `#[trigger]`, `#[condition]`, `#[action]`) | `workflows` | `WorkflowsModule`: durable workflows (steps replayed on resume, timers, event waits, versions) and end-user automations |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `browser` | navree-browser | `browser` (opt-in) | Browser testing: `Browser`, `Page`, `TestServer`, `FrontEnd` over the Chrome DevTools Protocol |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
@@ -286,6 +287,13 @@ pub mod mcp {
 // L7: packages built on other packages.
 #[cfg(feature = "helm")]
 pub use navree_helm as helm;
+
+/// Durable workflows and end-user automations (the `workflows` feature):
+/// navree-workflows re-exported whole, with `#[workflow]`, `#[trigger]`,
+/// `#[condition]` and `#[action]`
+/// (`use navree::workflows::{WorkflowCtx, workflow};`).
+#[cfg(feature = "workflows")]
+pub use navree_workflows as workflows;
 
 // L7 (opt-in)
 #[cfg(feature = "billing")]

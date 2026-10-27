@@ -73,6 +73,7 @@ conventions, and says which skill to load for each task.
 | [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
 | [`navree-documents`](navree-documents/SKILL.md) | PDF from HTML templates (native engine or Chrome) or `PdfDocument`, DOCX, merge and stamps, queued renders, `DocumentsFake` (feature `documents`) |
 | [`navree-sheets`](navree-sheets/SKILL.md) | CSV and Excel exports (downloads, queued files with signed links) and imports (encoding detection, header mapping, a staging preview, duplicate modes, error files) (feature `sheets`) |
+| [`navree-workflows`](navree-workflows/SKILL.md) | Durable workflows (`#[workflow]`, steps, sleeps, event waits, versions) and end-user automations (`#[trigger]`, `#[condition]`, `#[action]`, versioned definitions, enrollments, simulation) (feature `workflows`) |
 
 ## Installing
 

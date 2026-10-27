@@ -136,6 +136,8 @@ pub use navree_fleet::FleetModule;
 pub use navree_lighthouse::{LighthouseModule, ModuleBuilderLighthouseExt as _};
 #[cfg(feature = "logbook")]
 pub use navree_logbook::LogbookModule;
+#[cfg(feature = "workflows")]
+pub use navree_workflows::{ModuleBuilderWorkflowsExt as _, WorkflowsModule};
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{

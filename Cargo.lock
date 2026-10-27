@@ -4845,6 +4845,7 @@ dependencies = [
  "navree-validation",
  "navree-view",
  "navree-webhooks",
+ "navree-workflows",
  "navree-workspace",
  "prost",
  "sea-orm",
@@ -6646,6 +6647,37 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-workflows"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "futures-util",
+ "http",
+ "navree-access",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-kernel",
+ "navree-macros",
+ "navree-queue",
+ "navree-schedule",
+ "navree-testing",
+ "navree-workspace",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
  "utoipa",
  "uuid",
 ]
