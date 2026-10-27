@@ -9,7 +9,7 @@ use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resol
 use navree_telemetry::{Telemetry, TracePolicy};
 
 use crate::store::{DatabaseStore, MemoryStore, Store};
-use crate::{Queue, QueueDriver, QueueOptions, commands, migration};
+use crate::{Queue, QueueDriver, QueueOptions, QueueStore, commands, migration};
 
 /// The queue module. Global; provides and exports [`Queue`] (also as the
 /// app's `dyn Dispatcher`, so mail, events, notifications and schedules
@@ -115,6 +115,16 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                         Store::Database(DatabaseStore::new((*r.get::<Db>().await?).clone()))
                     }
                     QueueDriver::Memory => Store::Memory(MemoryStore::default()),
+                    QueueDriver::Redis => {
+                        let store = r.app().get_named::<dyn QueueStore>("redis").await.map_err(
+                            |error| {
+                                format!(
+                                    "queue.driver = \"redis\" needs RedisModule (navree-redis) in the app: {error}"
+                                )
+                            },
+                        )?;
+                        Store::Custom("Redis", store)
+                    }
                 };
                 let app = r.app();
                 let clock = app.try_get::<dyn Clock>().await;

@@ -16,7 +16,7 @@ L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
-L5  navree-auth  navree-workspace
+L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
@@ -55,6 +55,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
@@ -87,6 +88,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
 | `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
+| `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |

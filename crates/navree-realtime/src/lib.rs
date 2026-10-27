@@ -41,9 +41,18 @@
 //! - **Shutdown**: connections are tracked by the app's task tracker and
 //!   closed with 4200 (reconnect now) when the app shuts down.
 //!
+//! - **Backplane** across `serve` processes: with
+//!   [`RealtimeOptions::backplane`] (`redis`: the [`Backplane`] provider
+//!   named `redis`, from navree-redis's `RedisModule`), every process shares
+//!   broadcasts, presence members and user disconnections, so several
+//!   `serve` processes can sit behind a load balancer; workers broadcast
+//!   through it without the relay. [`MemoryBackplane`] joins the apps of
+//!   one process, for tests.
+//!
 //! Client events (`client-…`) are not relayed, and there is no Pusher HTTP
-//! publishing API; broadcast from the app instead. Several `serve`
-//! processes behind a load balancer each reach only their own sockets.
+//! publishing API; broadcast from the app instead. Without a backplane,
+//! several `serve` processes behind a load balancer each reach only their
+//! own sockets.
 //!
 //! ```
 //! use std::collections::HashMap;
@@ -90,7 +99,9 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod backplane;
 mod channel;
+mod cluster;
 mod controller;
 mod module;
 mod options;
@@ -99,6 +110,7 @@ mod realtime;
 mod relay;
 mod socket;
 
+pub use backplane::{Backplane, BackplaneHandler, MemoryBackplane};
 pub use module::{ChannelDecision, ModuleBuilderRealtimeExt, RealtimeModule};
-pub use options::RealtimeOptions;
+pub use options::{BackplaneKind, RealtimeOptions};
 pub use realtime::{Realtime, RealtimeError};

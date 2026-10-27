@@ -109,7 +109,7 @@ L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai (ecosystem libraries)
-L5  navree-auth  navree-workspace
+L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
@@ -130,18 +130,18 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`) |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
-| L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
+| L2 | `navree-cache` | Cache stores (memory on moka; Redis with navree-redis), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
 | L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
-| L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
+| L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels), a signed relay for other processes, and a backplane (Redis with navree-redis) for several serving processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
-| L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
+| L4 | `navree-session` | Encrypted session cookies, memory, database and Redis stores, CSRF (optional; the CRM doesn't use it) |
 | L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules |
-| L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
+| L4 | `navree-queue` | Database, memory and Redis job queues (the `QueueStore` driver trait), workers, retries with backoff, unique and delayed jobs |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
 | L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
@@ -149,6 +149,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |

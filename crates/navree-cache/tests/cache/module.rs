@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use navree_cache::{
-    Cache, CacheModule, CacheOptions, CacheStore, CacheStoreKind, LockStore, Locks, MemoryStore,
-    Ttl,
+    Cache, CacheModule, CacheOptions, CacheStore, CacheStoreKind, LockStore, Locks,
+    MemoryLockStore, MemoryStore, Ttl,
 };
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{HealthCheck, HealthStatus};
@@ -158,6 +158,92 @@ async fn zero_default_ttl_fails_the_boot() {
         .await
         .unwrap_err();
     assert!(errors.to_string().contains("default_ttl_secs"), "{errors}");
+}
+
+/// Provides the `redis` stores the way navree-redis does: named
+/// `dyn CacheStore` and `dyn LockStore` providers (memory-backed here).
+struct NamedStoresModule {
+    store: Arc<MemoryStore>,
+    locks: Arc<MemoryLockStore>,
+}
+
+impl Module for NamedStoresModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let store = self.store.clone();
+        let locks = self.locks.clone();
+        m.factory(
+            Factory::<dyn CacheStore>::new(move |_| {
+                let store = store.clone();
+                async move { Ok(store as Arc<dyn CacheStore>) }
+            })
+            .named("redis"),
+        )
+        .factory(
+            Factory::<dyn LockStore>::new(move |_| {
+                let locks = locks.clone();
+                async move { Ok(locks as Arc<dyn LockStore>) }
+            })
+            .named("redis"),
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_redis_store_uses_the_providers_named_redis() {
+    let store = Arc::new(MemoryStore::new());
+    let locks = Arc::new(MemoryLockStore::new());
+    let sources = ConfigSources::new().set("cache", json!({"store": "redis", "prefix": "crm:"}));
+    let app = Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(CacheModule::from_config())
+        .module(NamedStoresModule {
+            store: store.clone(),
+            locks: locks.clone(),
+        })
+        .boot()
+        .await
+        .unwrap();
+
+    let options = app.ctx().get::<CacheOptions>().await.unwrap();
+    assert_eq!(options.store, CacheStoreKind::Redis);
+    assert_eq!(CacheStoreKind::Redis.as_str(), "redis");
+
+    let cache = app.ctx().get::<Cache>().await.unwrap();
+    cache.put("k", &1, MINUTE).await.unwrap();
+    assert!(
+        store.get("crm:k").await.unwrap().is_some(),
+        "the named store holds the entry"
+    );
+    let held = app
+        .ctx()
+        .get::<Locks>()
+        .await
+        .unwrap()
+        .lock("job", MINUTE)
+        .acquire()
+        .await
+        .unwrap();
+    assert!(held.is_some());
+    assert!(
+        !locks
+            .acquire("crm:lock:job", "someone", MINUTE)
+            .await
+            .unwrap(),
+        "the named lock store holds the lock"
+    );
+}
+
+#[tokio::test]
+async fn a_redis_store_without_its_provider_fails_the_boot() {
+    let sources = ConfigSources::new().set("cache", json!({"store": "redis"}));
+    let errors = boot_with_config(sources, CacheModule::from_config())
+        .await
+        .unwrap_err();
+    let message = errors.to_string();
+    assert!(
+        message.contains("cache.store = \"redis\"") && message.contains("RedisModule"),
+        "{message}"
+    );
 }
 
 #[tokio::test]

@@ -78,9 +78,11 @@ let Some(_guard) = lock.acquire().await? else {
 hand the lock to another task.
 
 **One process only:** the memory store is per process, so `serve` and
-`queue:work`, or two servers, don't share entries or locks. For
-once-per-cluster work use the scheduler (runs each tick once) or unique
-jobs. `cache:clear` in a new process doesn't clear a running server.
+`queue:work`, or two servers, don't share entries or locks. To share them,
+use `cache.store = "redis"` with `RedisModule` (skill `navree-redis`). For
+once-per-cluster work you can also use the scheduler (runs each tick once)
+or unique jobs. With the memory store, `cache:clear` in a new process
+doesn't clear a running server.
 
 ## HTTP client
 

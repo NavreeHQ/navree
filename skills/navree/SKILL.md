@@ -121,6 +121,7 @@ navree list                                 # every command of the app
 | A gRPC API (tonic services, `.proto` files, gRPC-Web, Connect), calling another gRPC service | `navree-grpc` |
 | Tools, resources or prompts for Claude, ChatGPT, Cursor and other MCP clients (`#[mcp_server]`, `/mcp`, `mcp:serve`) | `navree-mcp` |
 | AI features: summaries, drafts, extraction, an assistant that calls your services, answers from your own data, embeddings and vector search | `navree-ai` |
+| Several processes or servers sharing the cache, locks, jobs, sessions, rate limits or WebSocket broadcasts; Redis commands | `navree-redis` |
 
 ## Common mistakes
 

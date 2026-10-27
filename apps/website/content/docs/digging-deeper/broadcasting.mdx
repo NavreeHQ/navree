@@ -1,6 +1,6 @@
 ---
 title: "Real-time broadcasting"
-description: "A Pusher-protocol WebSocket server inside your app: public, private and presence channels, channel authorisation, a signed relay for workers, and pusher-js on the front end."
+description: "A Pusher-protocol WebSocket server inside your app: public, private and presence channels, channel authorisation, a signed relay for workers, a Redis backplane for several servers, and pusher-js on the front end."
 ---
 
 <Badge feature="realtime" /> When a deal moves on one person's board, everyone else looking at the board should see it move. `navree-realtime` makes that possible without an external service: it is a [Pusher](https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/)-protocol (version 7) WebSocket server that runs inside your app's own HTTP server. [pusher-js](https://github.com/pusher/pusher-js) and any other Pusher client connect to it unchanged.
@@ -9,7 +9,7 @@ You get public, private and presence channels, an endpoint that authorises priva
 
 <Callout type="note" title="Limits">
 
-- **One serving process.** Each `serve` process only reaches the sockets connected to it. Running several behind a load balancer needs a shared backplane; a Redis backplane is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
+- **One serving process, unless you add a backplane.** Each `serve` process only reaches the sockets connected to it. To run several behind a load balancer, connect them with the [Redis backplane](#several-serving-processes).
 - **No client events.** `client-…` events sent by browsers are ignored, not relayed to other subscribers.
 - **No Pusher HTTP API.** You can't trigger events with a Pusher server SDK; broadcast from your app instead. Pusher's user authentication (`pusher:signin`) and webhooks are not supported either.
 
@@ -52,6 +52,7 @@ relay_url = "auto"
 | `realtime.allowed_origins` | `[]` | Origins whose pages may connect, or `*`. Empty means `http.cors.allowed_origins`. See [Allowed origins](#allowed-origins). |
 | `realtime.activity_timeout_secs` | `120` | Seconds of silence before the server pings a client (at least 1). |
 | `realtime.relay_url` | empty | Where other processes send their broadcasts: empty, `auto` or a URL. See [Broadcasting from workers](#broadcasting-from-workers). |
+| `realtime.backplane` | `none` | `none`, or `redis` to share broadcasts and presence between processes. Needs `realtime.secret`. See [Several serving processes](#several-serving-processes). |
 
 From the environment, lists are comma-separated: `APP_REALTIME__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. Invalid options fail the boot, naming the key and never echoing the secret. In code, use `RealtimeModule::for_root(RealtimeOptions { key, allowed_origins, ..RealtimeOptions::default() })`.
 
@@ -268,9 +269,9 @@ Event names are 1 to 200 characters and may not start with `pusher:` or `pusher_
 let delivered = realtime.broadcast(["announcements"], "announcement.created", json!({ "text": text }))?;
 ```
 
-<Callout type="warning" title="Realtime::broadcast never leaves its process">
+<Callout type="warning" title="Realtime::broadcast doesn't use the relay">
 
-`Realtime::broadcast` only reaches connections held by the process it runs in. Called from `queue:work`, `schedule:work` or a command, it reaches nobody and still succeeds. In code that may run in a worker (jobs, listeners, scheduled tasks, services they call), use `dyn Broadcaster`, which relays.
+Without a backplane, `Realtime::broadcast` only reaches connections held by the process it runs in. Called from `queue:work`, `schedule:work` or a command, it reaches nobody and still succeeds. In code that may run in a worker (jobs, listeners, scheduled tasks, services they call), use `dyn Broadcaster`, which relays. With a [backplane](#several-serving-processes), both reach every process; the count `Realtime::broadcast` returns is still this process's deliveries.
 
 </Callout>
 
@@ -296,6 +297,46 @@ Two more things to know:
 
 - **Maintenance mode blocks the relay.** `/apps/{app_id}/events` is not in `http.maintenance_except` by default, so while the app is [down](/docs/digging-deeper/maintenance-mode/), workers' broadcasts fail with `503`. Add the path to the list if workers keep running during maintenance.
 - **Commands warn when `serve` isn't running.** Anything that ends subscriptions or broadcasts from a command, such as `db:seed` assigning roles, logs a warning for each relay attempt that can't reach `serve`. The command still succeeds.
+
+## Several serving processes
+
+<Badge feature="redis" /> Behind a load balancer, the users on one board may be connected to different `serve` processes. A **backplane** connects the processes: with `realtime.backplane = "redis"`, every process publishes its broadcasts on a Redis pub/sub channel and delivers the others' to its own sockets. Add [`RedisModule`](/docs/digging-deeper/redis/) and give every process the same secret:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(AuthModule::from_config())
+    .module(RedisModule::from_config())
+    .module(RealtimeModule::from_config())
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://10.0.0.5:6379"
+
+[realtime]
+key = "navree-crm-key"
+backplane = "redis"
+```
+
+```env title=".env"
+APP_REALTIME__SECRET=a-long-random-string-shared-by-every-process
+```
+
+`realtime.secret` is required with a backplane, because the process that signs a subscription (the one that answered `/broadcasting/auth`) is often not the one holding the socket; without it the boot fails. In code: `RealtimeOptions { backplane: BackplaneKind::Redis, secret, ..RealtimeOptions::default() }` (`navree::realtime::BackplaneKind`).
+
+What the processes share:
+
+- **Broadcasts.** `dyn Broadcaster` and `Realtime::broadcast` reach the sockets of every process. Workers (`queue:work`, `schedule:work`, commands) publish on the backplane directly, so with a backplane they need no `relay_url`.
+- **Presence.** A presence channel lists its members across all processes, and `member_added` / `member_removed` go out once per user: when their first connection anywhere joins, and when their last one leaves. `Realtime::members(channel)` returns the user ids across all processes.
+- **Disconnections.** `end_user_subscriptions` and `disconnect_user` close the user's connections in every process. Both still return the number closed in the calling process.
+
+How it holds together: each process has a random node id, says hello when it starts (the others answer with their presence members), sends a heartbeat every 5 seconds, resends all its members every 30 seconds and says goodbye when it shuts down. A process that stops sending heartbeats for 20 seconds, because it crashed, is forgotten along with its members, which are announced as removed. Redis pub/sub delivers at most once: a process that loses its connection to Redis misses the broadcasts sent meanwhile (it subscribes again by itself) and catches up on presence at the next 30-second resend. A process that starts while Redis is down boots anyway and keeps trying to subscribe.
+
+The backplane uses the connection `redis.connections.realtime` when you define one. Anyone who can publish to the channel `<redis.prefix>realtime:<app_id>` can broadcast to your users, so keep Redis on a private network with a password, as you would anyway. `Realtime::has_backplane()` tells whether the process is on one.
 
 ## Client setup
 
@@ -375,7 +416,7 @@ A private subscription is authorised once, when it is made. If a user then loses
 - [navree-access](/docs/security/authorization/) does it after a change commits: a user's roles or direct permissions change, a role loses permissions (for all its members) or a role is deleted;
 - [navree-auth](/docs/security/authentication/) does it when a user signs out.
 
-Both call `Broadcaster::end_user_subscriptions(user_id)`, which also works from workers through the relay. The user's connections close with `4200`; the client reconnects and authorises each private channel again with the user's current access, so the channels they may no longer join stay closed. A failure is logged and the change itself stands.
+Both call `Broadcaster::end_user_subscriptions(user_id)`, which also works from workers through the relay or the backplane. The user's connections close with `4200`; the client reconnects and authorises each private channel again with the user's current access, so the channels they may no longer join stay closed. A failure is logged and the change itself stands.
 
 You can do the same yourself with `Realtime`:
 
@@ -389,7 +430,7 @@ realtime.end_user_subscriptions(user_id);
 realtime.disconnect_user(user_id);
 ```
 
-Both return the number of connections closed in this process. A connection belongs to a user once the auth endpoint has signed a channel for it on their behalf, it has joined a presence channel as them, or its WebSocket handshake was authenticated. A connection that only joined public channels belongs to nobody.
+Both return the number of connections closed in this process; with a backplane, the other processes close the user's connections too. A connection belongs to a user once the auth endpoint has signed a channel for it on their behalf, it has joined a presence channel as them, or its WebSocket handshake was authenticated. A connection that only joined public channels belongs to nobody.
 
 ## Testing
 
@@ -460,6 +501,32 @@ async fn announcements_are_broadcast() {
     let sent = broadcasts.0.lock().unwrap().clone();
     assert_eq!(sent[0].1, "announcement.created");
     app.shutdown().await.unwrap();
+}
+```
+
+To test code that runs on several processes, give two test apps one `MemoryBackplane` (`navree::realtime::MemoryBackplane`), the in-process stand-in for Redis. When `realtime.backplane` is `none`, an unnamed `dyn Backplane` the app provides is used, so `override_value` plugs it in. A broadcast in one app then reaches the other app's sockets, and their presence lists agree:
+
+```rust title="tests/backplane.rs"
+use navree::prelude::*;
+use navree::realtime::{Backplane, MemoryBackplane, Realtime};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn broadcasts_reach_the_other_process() {
+    let backplane = MemoryBackplane::new();
+    let app = || {
+        TestApp::builder()
+            .config("realtime.secret", "test-secret")
+            .override_value::<dyn Backplane>(Arc::new(backplane.clone()))
+            .module(RealtimeModule::from_config())
+            .build()
+    };
+    let (first, second) = (app().await, app().await);
+    let realtime = first.get::<Realtime>().await;
+    assert!(realtime.has_backplane() && second.get::<Realtime>().await.has_backplane());
+    // A client connected to `second` receives this:
+    realtime.broadcast(["announcements"], "posted", json!({ "id": 1 })).unwrap();
 }
 ```
 

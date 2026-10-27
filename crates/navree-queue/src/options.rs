@@ -18,13 +18,28 @@ pub enum QueueDriver {
     /// In-process memory (`"memory"`): jobs are lost when the process
     /// exits. For tests and single-process development.
     Memory,
+    /// Redis (`"redis"`): the `dyn QueueStore` provider named `redis`,
+    /// which navree-redis's `RedisModule` registers; every process using
+    /// the same Redis server shares the jobs. Needs `RedisModule`.
+    Redis,
+}
+
+impl QueueDriver {
+    /// The configuration name: `database`, `memory` or `redis`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QueueDriver::Database => "database",
+            QueueDriver::Memory => "memory",
+            QueueDriver::Redis => "redis",
+        }
+    }
 }
 
 /// `QueueModule` settings: configuration section `queue`.
 ///
 /// ```toml
 /// [queue]
-/// driver = "database"          # or "memory"
+/// driver = "database"          # or "memory", "redis"
 /// default_queue = "default"    # where jobs with an empty queue name go
 /// workers = 4                  # concurrent jobs per `queue:work` process
 /// poll_interval_ms = 1000      # how long an idle worker waits before polling again
@@ -177,6 +192,24 @@ mod tests {
             vec!["high".to_owned(), "default".to_owned()]
         );
         assert_eq!(options.worker_queues(), options.queues);
+    }
+
+    #[test]
+    fn redis_is_a_driver_name() {
+        let sources = ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "redis")]);
+        let options = config(sources).typed::<QueueOptions>().expect("valid");
+        assert_eq!(options.driver, QueueDriver::Redis);
+        assert_eq!(
+            [
+                QueueDriver::Database,
+                QueueDriver::Memory,
+                QueueDriver::Redis
+            ]
+            .map(QueueDriver::as_str),
+            ["database", "memory", "redis"]
+        );
+        let sources = ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "carrier")]);
+        assert!(config(sources).typed::<QueueOptions>().is_err());
     }
 
     #[test]

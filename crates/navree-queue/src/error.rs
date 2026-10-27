@@ -26,6 +26,10 @@ pub enum QueueError {
     /// A database error (database driver).
     #[error(transparent)]
     Db(#[from] DbErr),
+    /// A driver from another crate failed (a [`QueueStore`](crate::QueueStore)
+    /// such as navree-redis's): connection, protocol, ...
+    #[error("the queue driver failed: {0}")]
+    Store(navree_contracts::BoxError),
     /// The app owning the queue has been dropped.
     #[error("the app owning this queue has shut down")]
     ShutDown,

@@ -1,6 +1,6 @@
 ---
 title: "Rate limiting"
-description: "The per-IP limit every app gets, throttles on single routes, the login throttle, and how client addresses work behind proxies."
+description: "The per-IP limit every app gets, throttles on single routes, the login throttle, limits shared by every process with Redis, and how client addresses work behind proxies."
 ---
 
 Navree limits how fast clients can call your API at two levels. Every app has a **per-IP limit**, 600 requests a minute by default, that runs before routing. On top of it, any route can declare its own **throttle**, counted per user. Both answer `429 Too Many Requests` with a `Retry-After` header. The auth module adds a **login throttle** for failed sign-ins.
@@ -120,7 +120,7 @@ How route throttles work:
 
 <Callout type="note" title="No named limiters">
 
-Limits are declared per route, with a fixed number per period. They can't depend on the user's plan or on the request, and there are no named limiters shared between routes. For limits like those, write a [guard](/docs/basics/access-control/) that counts requests itself.
+Limits are declared per route, with a fixed number per period. They can't depend on the user's plan or on the request, and there are no named limiters shared between routes. For limits like those, use the Redis [`RateLimiter`](#shared-limits-with-redis) in the handler or in a [guard](/docs/basics/access-control/).
 
 </Callout>
 
@@ -178,9 +178,44 @@ async fn whoami(&self, ClientIp(ip): ClientIp) -> String {
 
 ## Limits of the built-in limiter
 
-- Counters are kept in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. A shared Redis store is on the [roadmap](/docs/prologue/roadmap/#more-drivers).
-- Counters are lost when the process restarts.
-- The login throttle keeps its counters in the cache module instead; with the memory cache store, the only one so far, that's per process too.
+- The per-IP limit and route throttles keep their counters in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. Keep the limits per instance in mind when you size them, or enforce a global limit at your load balancer.
+- Those counters are lost when the process restarts.
+- The login, two-factor and password-reset throttles keep their counters in the [cache](/docs/digging-deeper/cache/) instead. With the memory cache store that is per process too; with `cache.store = "redis"` every instance shares them, so a client gets five failed logins a minute in total, not five per instance.
+
+## Shared limits with Redis
+
+<Badge feature="redis" /> `RateLimiter` (`navree::redis::RateLimiter`, provided by [`RedisModule`](/docs/digging-deeper/redis/)) counts in Redis, so every process of your app enforces one limit together. It uses the same rule as the per-IP limit: a burst of `limit` requests, then one more every `per / limit`. Use it for limits by name: per plan, per API key, or one budget for several routes.
+
+```rust title="src/modules/reports/controller.rs"
+use std::time::Duration;
+
+use navree::prelude::*;
+use navree::redis::{RateLimit, RateLimiter};
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct ReportsController {
+    limiter: Arc<RateLimiter>,
+}
+
+#[controller("/reports", version = "1")]
+#[authenticated]
+impl ReportsController {
+    #[post("/")]
+    async fn generate(&self, CurrentUser(user): CurrentUser) -> Result<Json<Value>> {
+        // Ten reports an hour per user, whichever server takes the request.
+        let key = format!("reports:{}", user.id);
+        if let RateLimit::Limited { retry_after } =
+            self.limiter.hit(&key, 10, Duration::from_secs(3600)).await?
+        {
+            return Err(AppError::too_many_requests(retry_after));
+        }
+        Ok(Json(json!({ "queued": true })))
+    }
+}
+```
+
+`AppError::too_many_requests(retry_after)` answers the same `429` with `Retry-After` as the built-in limits. `hit` returns `RateLimit::Allowed { remaining }` or `RateLimit::Limited { retry_after }`, a refused request doesn't count, and `reset(key)` forgets a key's requests. The window is measured on the Redis server's clock, so instances whose clocks drift still agree. The per-IP limit and `#[throttle]` stay in memory: they run on every request, before routing, where a network round trip would cost every request. See [Redis](/docs/digging-deeper/redis/#shared-rate-limits) for the details.
 
 ## Testing
 

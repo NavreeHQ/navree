@@ -12,6 +12,8 @@ workspace = true
 
 [dependencies]
 axum = { workspace = true }
+# Backplane messages.
+bytes = { workspace = true }
 dashmap = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }

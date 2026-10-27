@@ -18,7 +18,7 @@ use serde_json::Value;
 use crate::controller::RealtimeController;
 use crate::realtime::Relay;
 use crate::relay::{self, RelayClient};
-use crate::{Realtime, RealtimeOptions};
+use crate::{Backplane, BackplaneKind, Realtime, RealtimeOptions};
 
 /// The realtime module: a Pusher-protocol (version 7) WebSocket server in
 /// the app's own HTTP server, so `pusher-js` and any Pusher client work
@@ -118,7 +118,7 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
                 Some(http) => http.cors.allowed_origins.clone(),
                 None => Vec::new(),
             };
-            let realtime = Realtime::new(
+            let mut realtime = Realtime::new(
                 (*options).clone(),
                 cors_origins,
                 app.contributions::<ChannelRegistration>(),
@@ -126,7 +126,12 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
                 app.tracker(),
             )?
             .with_relay(relay_of(&options, &app).await?);
-            Ok(Arc::new(realtime))
+            if let Some(backplane) = backplane_of(&options, &app).await? {
+                realtime = realtime.with_backplane(backplane);
+            }
+            let realtime = Arc::new(realtime);
+            realtime.start_backplane().await?;
+            Ok(realtime)
         })
         .deps(vec![ProviderKey::of::<RealtimeOptions>()]),
     )
@@ -140,6 +145,27 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
     )
     .exports::<dyn Broadcaster>()
     .controller::<RealtimeController>();
+}
+
+/// The backplane of this process: the `dyn Backplane` provider named after
+/// `realtime.backplane` (`redis`), or, with `none`, an unnamed one the app
+/// provides (a test's [`MemoryBackplane`](crate::MemoryBackplane)).
+async fn backplane_of(
+    options: &RealtimeOptions,
+    app: &AppContext,
+) -> Result<Option<Arc<dyn Backplane>>, BoxError> {
+    match options.backplane {
+        BackplaneKind::None => Ok(app.try_get::<dyn Backplane>().await),
+        kind => {
+            let name = kind.as_str();
+            let backplane = app.get_named::<dyn Backplane>(name).await.map_err(|error| {
+                format!(
+                    "realtime.backplane = \"{name}\" needs RedisModule (navree-redis) in the app: {error}"
+                )
+            })?;
+            Ok(Some(backplane))
+        }
+    }
 }
 
 /// The relay of this process: the key (from `realtime.secret`, else the
