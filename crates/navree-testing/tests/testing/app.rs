@@ -320,3 +320,29 @@ async fn the_per_ip_rate_limit_can_be_switched_off_for_request_heavy_tests() {
         Some(600)
     );
 }
+
+#[tokio::test]
+async fn logbook_is_off_unless_a_test_turns_it_on() {
+    let app = TestApp::builder().build().await;
+    let config = app.get::<Config>().await;
+    assert_eq!(config.get_bool("logbook.enabled"), Some(false));
+
+    let on = TestApp::builder()
+        .config("logbook.enabled", true)
+        .build()
+        .await;
+    assert_eq!(
+        on.get::<Config>().await.get_bool("logbook.enabled"),
+        Some(true)
+    );
+
+    // Replaced sources are taken as they are.
+    let custom = TestApp::builder()
+        .sources(ConfigSources::new().set("app.name", "demo"))
+        .build()
+        .await;
+    assert_eq!(
+        custom.get::<Config>().await.get_bool("logbook.enabled"),
+        None
+    );
+}

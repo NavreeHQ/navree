@@ -4,9 +4,11 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock};
+use std::time::Instant;
 
 use navree_contracts::EventSink;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, RequestScope, WeakAppContext};
+use navree_telemetry::{EventEmitted, EventKind, Telemetry, TelemetryEvent};
 use serde_json::Value;
 use tokio::sync::broadcast;
 
@@ -36,6 +38,10 @@ const JSON_CHANNEL_CAPACITY: usize = 256;
 /// delivery, and one that depends on the provider being built would wait for
 /// it forever. Emit from methods, lifecycle hooks, commands or handlers.
 ///
+/// Each emit and publish is reported to the app's telemetry sinks that want
+/// events, as an [`EventEmitted`] with the payload and the listeners that
+/// ran, were queued or failed (nothing is built when no sink wants it).
+///
 /// The bus holds the app weakly, so it never keeps the app alive. After
 /// graceful shutdown ([`App::shutdown`]), whose `on_shutdown` hook detaches
 /// the bus, or once the app is dropped, every emit fails with
@@ -53,10 +59,20 @@ pub struct EventBus {
     json: Mutex<HashMap<String, broadcast::Sender<Value>>>,
     /// Whether the "queued listener ran inline" warning was logged.
     warned_inline: AtomicBool,
+    /// The app's telemetry (disabled without sinks).
+    telemetry: Telemetry,
+}
+
+/// What happened to each listener of one emit, for [`EventEmitted`].
+#[derive(Default)]
+struct Report {
+    listeners: Vec<String>,
+    queued: Vec<String>,
+    failed: Vec<String>,
 }
 
 impl EventBus {
-    pub(crate) fn new(app: AppContext) -> Self {
+    pub(crate) fn new(app: AppContext, telemetry: Telemetry) -> Self {
         let mut by_type: HashMap<TypeId, Vec<Contributed<ListenerRegistration>>> = HashMap::new();
         let mut by_name: HashMap<&'static str, Vec<(TypeId, DecodeFn)>> = HashMap::new();
         for registration in app.contributions::<ListenerRegistration>() {
@@ -75,6 +91,7 @@ impl EventBus {
             by_name,
             json: Mutex::default(),
             warned_inline: AtomicBool::new(false),
+            telemetry,
         }
     }
 
@@ -88,8 +105,32 @@ impl EventBus {
     pub async fn emit<E: Event>(&self, event: E) -> Result<(), BoxError> {
         let app = self.app()?;
         self.broadcast_json(E::NAME, || serde_json::to_value(&event));
-        let failures = self.deliver(&app, E::NAME, TypeId::of::<E>(), &event).await;
+        let started = Instant::now();
+        let mut report = self
+            .telemetry
+            .enabled(EventKind::EventEmitted)
+            .then(Report::default);
+        let failures = self
+            .deliver(&app, E::NAME, TypeId::of::<E>(), &event, report.as_mut())
+            .await;
+        if let Some(report) = report {
+            let payload = serde_json::to_value(&event).unwrap_or(Value::Null);
+            self.report(E::NAME, payload, report, started);
+        }
         into_result(E::NAME, failures)
+    }
+
+    /// Emits an [`EventEmitted`] telemetry event for one delivery.
+    fn report(&self, name: &str, payload: Value, report: Report, started: Instant) {
+        self.telemetry
+            .emit(TelemetryEvent::EventEmitted(EventEmitted {
+                name: name.to_owned(),
+                payload,
+                listeners: report.listeners,
+                queued: report.queued,
+                failed: report.failed,
+                duration: started.elapsed(),
+            }));
     }
 
     /// Publishes event `name` with a JSON payload (what
@@ -111,22 +152,36 @@ impl EventBus {
             })?;
             decoded.push((*event_type, event));
         }
+        let started = Instant::now();
+        let mut report = self
+            .telemetry
+            .enabled(EventKind::EventEmitted)
+            .then(|| (Report::default(), payload.clone()));
         self.broadcast_json(name, || Ok(payload));
         let mut failures = Vec::new();
         for (event_type, event) in &decoded {
-            failures.extend(self.deliver(&app, name, *event_type, event.as_ref()).await);
+            let delivery = report.as_mut().map(|(report, _)| report);
+            failures.extend(
+                self.deliver(&app, name, *event_type, event.as_ref(), delivery)
+                    .await,
+            );
+        }
+        if let Some((report, payload)) = report {
+            self.report(name, payload, report, started);
         }
         into_result(name, failures)
     }
 
     /// Runs (or queues) every listener of `event_type`, in registration order,
-    /// and returns the failures.
+    /// and returns the failures; notes what happened to each listener in
+    /// `report` when telemetry wants it.
     async fn deliver(
         &self,
         app: &AppContext,
         name: &str,
         event_type: TypeId,
         event: &(dyn Any + Send + Sync),
+        mut report: Option<&mut Report>,
     ) -> Vec<ListenerFailure> {
         let registrations = self.by_type.get(&event_type).map_or(&[][..], Vec::as_slice);
         tracing::debug!(
@@ -144,7 +199,16 @@ impl EventBus {
             let module = registration.module.name;
             let delivered =
                 (registration.value.deliver)(app, registration.module.id, &scope, event);
-            match delivered.await {
+            let delivered = delivered.await;
+            if let Some(report) = report.as_deref_mut() {
+                let list = match &delivered {
+                    Ok(Delivered::Handled | Delivered::Inline) => &mut report.listeners,
+                    Ok(Delivered::Queued) => &mut report.queued,
+                    Err(_) => &mut report.failed,
+                };
+                list.push(listener.to_owned());
+            }
+            match delivered {
                 Ok(Delivered::Inline) => self.warn_inline(name, listener),
                 Ok(Delivered::Handled | Delivered::Queued) => {}
                 Err(error) => {

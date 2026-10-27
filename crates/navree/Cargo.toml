@@ -26,6 +26,7 @@ full = [
     "http",
     "http-client",
     "log",
+    "logbook",
     "mail",
     "notify",
     "observe",
@@ -50,7 +51,7 @@ telemetry = ["dep:navree-telemetry"]
 http = ["dep:navree-http", "dep:axum", "telemetry"]
 log = ["dep:navree-log", "telemetry"]
 crypto = ["dep:navree-crypto"]
-events = ["dep:navree-events"]
+events = ["dep:navree-events", "telemetry"]
 view = ["dep:navree-view"]
 cache = ["dep:navree-cache", "telemetry"]
 http-client = ["dep:navree-http-client", "telemetry"]
@@ -168,6 +169,18 @@ billing = [
     "auth",
     "workspace",
 ]
+## L7 (in `full`)
+## Logbook: the local debugging timeline at `/_logbook` (requests, queries,
+## jobs, mail, events, cache, logs) with filters and request replay. Off in
+## release builds unless `logbook.enabled = true`.
+logbook = [
+    "dep:navree-logbook",
+    "telemetry",
+    "http",
+    "view",
+    "db",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -201,6 +214,7 @@ navree-graphql = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
+navree-logbook = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }

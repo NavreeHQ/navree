@@ -182,11 +182,18 @@ impl std::fmt::Debug for TestApp {
 /// `HttpModule::for_root(..)` added with [`module`](TestAppBuilder::module)
 /// takes its place) and the added modules, in order. Do not add a
 /// `ConfigModule` yourself: it would be configured twice.
+///
+/// Logbook is off in test apps (`logbook.enabled = false` under the
+/// default sources); turn it back on with
+/// `.config("logbook.enabled", true)`, usually with
+/// `.config("logbook.store", "memory")`.
 #[derive(Default)]
 pub struct TestAppBuilder {
     app: AppBuilder,
     modules: Vec<Box<dyn Module>>,
     sources: ConfigSources,
+    /// Whether [`sources`](TestAppBuilder::sources) replaced the defaults.
+    custom_sources: bool,
     /// `config` values, set over `sources` at build time.
     config: Vec<(String, serde_json::Value)>,
     fake_auth: bool,
@@ -199,6 +206,7 @@ impl TestAppBuilder {
     /// environment; [`config`](TestAppBuilder::config) values still go on top.
     pub fn sources(mut self, sources: ConfigSources) -> Self {
         self.sources = sources;
+        self.custom_sources = true;
         self
     }
 
@@ -254,12 +262,16 @@ impl TestAppBuilder {
 
     /// Boots the app, returning the boot error instead of panicking.
     pub async fn try_build(self) -> Result<TestApp, BoxError> {
+        let base = if self.custom_sources {
+            self.sources
+        } else {
+            // Logbook records nothing in tests unless a test turns it on.
+            self.sources.set("logbook.enabled", false)
+        };
         let sources = self
             .config
             .into_iter()
-            .fold(self.sources, |sources, (key, value)| {
-                sources.set(&key, value)
-            });
+            .fold(base, |sources, (key, value)| sources.set(&key, value));
         let mut builder = self
             .app
             .module(ConfigModule::for_root(sources))
@@ -284,6 +296,7 @@ impl std::fmt::Debug for TestAppBuilder {
                 &self.modules.iter().map(|m| m.name()).collect::<Vec<_>>(),
             )
             .field("sources", &self.sources)
+            .field("custom_sources", &self.custom_sources)
             .field(
                 "config",
                 &self.config.iter().map(|(key, _)| key).collect::<Vec<_>>(),

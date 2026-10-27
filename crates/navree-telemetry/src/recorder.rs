@@ -8,8 +8,8 @@ use navree_kernel::{Module, ModuleBuilder};
 use tokio::sync::Notify;
 
 use crate::{
-    CacheEvent, EventKind, ExceptionReported, HttpClientRequest, Interest, JobFailed, JobProcessed,
-    LogRecord, MailSent, ModuleBuilderTelemetryExt, NotificationSent, QueryExecuted,
+    CacheEvent, EventEmitted, EventKind, ExceptionReported, HttpClientRequest, Interest, JobFailed,
+    JobProcessed, LogRecord, MailSent, ModuleBuilderTelemetryExt, NotificationSent, QueryExecuted,
     RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetryRecord, TelemetrySink,
 };
 
@@ -224,6 +224,14 @@ impl TelemetryRecorder {
     pub fn logs(&self) -> Vec<LogRecord> {
         self.collect(|e| match e {
             TelemetryEvent::Log(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`EventEmitted`] events (app events on the event bus).
+    pub fn emitted_events(&self) -> Vec<EventEmitted> {
+        self.collect(|e| match e {
+            TelemetryEvent::EventEmitted(x) => Some(x),
             _ => None,
         })
     }

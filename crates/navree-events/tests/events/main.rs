@@ -8,4 +8,5 @@ mod lifecycle;
 mod listeners;
 mod queued;
 mod scopes;
+mod telemetry;
 mod wiring;

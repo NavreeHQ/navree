@@ -1,0 +1,53 @@
+[package]
+name = "navree-logbook"
+description = "Navree Logbook: a local debugging timeline of every request, query, job, mail, event, cache call and log line, grouped by request and job, with filters, tags and request replay."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-view = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+wildmatch = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-cache = { workspace = true }
+navree-crypto = { workspace = true }
+navree-events = { workspace = true }
+navree-http-client = { workspace = true }
+navree-mail = { workspace = true }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
