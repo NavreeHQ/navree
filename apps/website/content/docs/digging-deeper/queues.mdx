@@ -1,6 +1,6 @@
 ---
 title: "Queues"
-description: "Background jobs on the database or memory driver: dispatching, delays, unique jobs, retries with backoff, failed jobs, `queue:work` and testing with `QueueFake`."
+description: "Background jobs on the database or memory driver: dispatching, delays, unique jobs, retries with backoff, failed jobs, `queue:work`, batches and operations, and testing with `QueueFake`."
 ---
 
 ## Introduction
@@ -13,6 +13,8 @@ description: "Background jobs on the database or memory driver: dispatching, del
 - **memory**: in the process's memory, for tests and single-process development.
 
 The rest of the framework queues through the same module: queued [mail](/docs/digging-deeper/mail/), queued [event listeners](/docs/digging-deeper/events/#queued-listeners), queued [notifications](/docs/digging-deeper/notifications/) and scheduled jobs all become jobs on it.
+
+For work bigger than one job, the same module runs [batches](/docs/digging-deeper/batches-and-operations/#batches) (jobs followed as one, with `then`, `catch` and `finally` callbacks) and [operations](/docs/digging-deeper/batches-and-operations/#operations) (long work your users follow, with progress, an SSE stream and cancel).
 
 <Callout type="note" title="Drivers">
 
@@ -53,6 +55,8 @@ queues = ["high", "default"] # what `queue:work` processes, highest priority fir
 | `queue.poll_interval_ms` | `1000` | How long an idle worker waits before polling again. At least 1. |
 | `queue.queues` | `[]` | The queues workers process, in priority order; empty means `default_queue` alone. |
 
+Operations have their own subsection, `[queue.operations]`; see [batches and operations](/docs/digging-deeper/batches-and-operations/#configuration).
+
 As environment variables: `APP_QUEUE__DRIVER=memory`, `APP_QUEUE__WORKERS=8`, and `queues` as one comma-separated string, `APP_QUEUE__QUEUES=high,default`. An invalid value fails the boot.
 
 To configure the module in code instead, use `for_root`:
@@ -68,7 +72,7 @@ Navree::app().module(QueueModule::for_root(QueueOptions {
 
 ### The database driver
 
-The module contributes a migration set named `queue` that creates `jobs` and `failed_jobs`; `migrate` runs it with your app's [migrations](/docs/database/migrations/). Workers reserve jobs atomically, so any number of worker processes, on any number of servers, can share one database. On SQLite a reservation is an `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING …`; PostgreSQL adds `FOR UPDATE SKIP LOCKED`.
+The module contributes a migration set named `queue` that creates `jobs` and `failed_jobs` (plus `job_batches` and `operations`, for [batches and operations](/docs/digging-deeper/batches-and-operations/#tables)); `migrate` runs it with your app's [migrations](/docs/database/migrations/). Workers reserve jobs atomically, so any number of worker processes, on any number of servers, can share one database. On SQLite a reservation is an `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING …`; PostgreSQL adds `FOR UPDATE SKIP LOCKED`.
 
 ### The memory driver
 
@@ -112,7 +116,7 @@ impl Job for ExportContacts {
 ```
 
 - `NAME` is the job type stored with each queued job. Keep it stable: a worker finds the handler by this name.
-- `handle` consumes the job and gets a `JobContext`: `ctx.app` to resolve services, `ctx.job_id`, and `ctx.attempt` (starting at 1).
+- `handle` consumes the job and gets a `JobContext`: `ctx.app` to resolve services, `ctx.job_id`, and `ctx.attempt` (starting at 1). Long jobs report how far they got with [`ctx.progress(done, total, note)`](/docs/digging-deeper/batches-and-operations/#reporting-progress-from-a-job).
 - Keep the payload small and free of secrets: store ids and look records up in `handle`.
 
 A job doesn't run inside a unit of work. When it writes to the database, open a transaction:
@@ -288,7 +292,7 @@ cargo run -- queue:work
 ```
 
 ```text
-Processed 12 job attempt(s): 11 succeeded, 1 released for retry, 0 failed.
+Processed 12 job attempt(s): 11 succeeded, 1 released for retry, 0 failed, 0 cancelled.
 ```
 
 `navree queue:work` does the same from the CLI, and in production you run the built binary, as in `./crm-api queue:work`. The worker runs until it is stopped, then prints what it did. Its options:
@@ -310,7 +314,7 @@ A `queue:work` process runs `queue.workers` loops at once (one with `--once`). E
 - A job whose type has no handler in this binary fails at once, without retries.
 - If a worker dies mid-job (a crash, `kill -9`), the job stays reserved. Once the reservation is older than the job's timeout plus 30 seconds, another worker takes it over as a new attempt. A job without a time limit waits one day.
 
-Every attempt is logged at target `navree::job` with the job type (`name`), `job_id`, `queue`, `attempt`, `duration_ms` and `outcome` (`succeeded`, `released` or `failed`). Payloads are never logged.
+Every attempt is logged at target `navree::job` with the job type (`name`), `job_id`, `queue`, `attempt`, `duration_ms` and `outcome` (`succeeded`, `released`, `failed`, or `cancelled` for a job of a cancelled [batch or operation](/docs/digging-deeper/batches-and-operations/#failures-and-cancellation)). Payloads are never logged.
 
 ### Stopping workers
 
@@ -360,6 +364,18 @@ queue.retry("all").await?;     // or a job id
 queue.flush_failed().await?;
 let waiting = queue.pending_count("default").await?; // waiting, delayed or running
 ```
+
+## Batches and operations
+
+A batch dispatches many jobs as one and runs callbacks when they are done; an operation shows long work to the user who started it. Both have their own page, [batches and operations](/docs/digging-deeper/batches-and-operations/), and their own commands:
+
+```sh
+cargo run -- queue:batches --limit 20   # the most recent batches and their progress
+cargo run -- queue:watchdog             # fail or restart operations that stopped responding
+cargo run -- queue:prune --hours 168    # delete finished batches and operations
+```
+
+With `ScheduleModule` in the app, the watchdog is already scheduled every minute.
 
 ## Running workers in production
 
@@ -430,10 +446,11 @@ async fn changing_a_calendar_queues_a_sync() {
 - `dispatched::<J>()` returns the recorded jobs of a type, `envelopes()` every recorded envelope (type, payload, options, delay), and `assert_nothing_dispatched()` and `clear()` do what they say.
 - A job passed to `dispatch_in` is recorded when its unit of work commits, and not at all if it rolls back. A plain `dispatch` (or `later`, `push`, `dyn Dispatcher`) is recorded at once, even inside a unit of work that later rolls back, where the real queue would drop it.
 - The fake accepts any job type, registered or not, where the real queue fails with `QueueError::UnknownJob`, and it never runs anything. A test can therefore pass with a job that production refuses: keep one test that dispatches through the real queue.
+- Batches are recorded apart from single jobs: see [faking batches](/docs/digging-deeper/batches-and-operations/#faking-batches).
 
 ### Running queued jobs in tests
 
-To test what jobs do, keep a real queue and run it. `run_pending` runs every job that is available now, one at a time, and returns a `WorkStats` (`processed`, `succeeded`, `released`, `failed`). Jobs released for a retry and delayed jobs stay queued.
+To test what jobs do, keep a real queue and run it. `run_pending` runs every job that is available now, one at a time, and returns a `WorkStats` (`processed`, `succeeded`, `released`, `failed`, `cancelled`). Jobs released for a retry and delayed jobs stay queued.
 
 ```rust
 let stats = app.get::<Queue>().await.run_pending().await.unwrap();
@@ -451,6 +468,9 @@ app.run_command("queue:work", &["--queue", "sync", "--stop-when-empty"])
 The CRM's tests do this through `TestCrm::run_queue`, with the database driver and a fixed clock, so delayed jobs run once the test moves the clock past their delay. See [fakes](/docs/testing/fakes/) for the other fakes.
 
 <LinkCards>
+  <LinkCard href="/docs/digging-deeper/batches-and-operations/" title="Batches and operations">
+    Jobs followed as one, and long work users follow.
+  </LinkCard>
   <LinkCard href="/docs/digging-deeper/events/" title="Events">
     Queued listeners run as jobs.
   </LinkCard>
