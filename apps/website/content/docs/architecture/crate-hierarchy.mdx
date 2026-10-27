@@ -5,7 +5,7 @@ description: "The layers of Navree crates, the rule that a crate depends only on
 
 ## Introduction
 
-Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) through the ecosystem libraries (L6), such as [feature flags](/docs/packages/feature-flags/), and the packages built on them (L7) to L8 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
+Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) through the ecosystem libraries (L6), such as [feature flags](/docs/packages/feature-flags/), and the packages built on them (L7), such as [Helm](/docs/tools/helm/), to L8 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
 
 This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows nothing about databases, and authentication builds on everything else rather than the other way round. You can read, test or use any crate with only what's below it. Most apps never see the split, because they depend on the facade, but it explains why things are where they are.
 
@@ -14,7 +14,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ```text
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
-L7  navree-billing  navree-search  navree-lighthouse  navree-logbook (packages built on other packages)
+L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
@@ -65,6 +65,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
 | L7 | `navree-logbook` | [Logbook](/docs/tools/logbook/): the local debugging timeline at `/_logbook`, with filters, duplicate-query detection and request replay |
+| L7 | `navree-helm` | [Helm](/docs/tools/helm/): the admin panel at `/admin` generated from your entities, checked against your access rules |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 
@@ -99,6 +100,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree-lighthouse` | kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth |
 | `navree-logbook` | kernel, contracts, config, telemetry, http, view, db, auth |
+| `navree-helm` | kernel, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | `navree-dock` only (for `navree dock`): everything else it knows about the framework is in the code it generates |
 

@@ -50,6 +50,7 @@
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
 //! | `micro` | navree-micro | `micro` (opt-in) | `MicroModule`, `ServiceClient`: messages and events between services over TCP, NATS (`micro-nats`), Kafka (`micro-kafka`), RabbitMQ (`micro-rabbitmq`), Redis Streams (`micro-redis`) or MQTT (`micro-mqtt`) |
 //! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
+//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
@@ -239,6 +240,10 @@ pub mod mcp {
     pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
     pub use navree_mcp::*;
 }
+
+// L7: packages built on other packages.
+#[cfg(feature = "helm")]
+pub use navree_helm as helm;
 
 // L7 (opt-in)
 #[cfg(feature = "billing")]

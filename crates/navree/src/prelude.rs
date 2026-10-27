@@ -4,7 +4,8 @@
 //! an app root imports, the extractors and responses handlers use, the
 //! access markers, and every `ModuleBuilder` extension trait (imported as
 //! `_`, so `m.migrations(..)`, `m.controller::<C>()`, `m.job::<J>()`,
-//! `m.templates(..)` and friends resolve without naming the traits).
+//! `m.templates(..)`, `m.resource::<R>()` and friends resolve without
+//! naming the traits).
 //!
 //! Every name is gated by the feature of the crate it comes from. With
 //! `http`, `Result` here is `navree::Result` (error type `AppError` by
@@ -135,5 +136,7 @@ pub use navree_micro::{MicroModule, ModuleBuilderMicroExt as _, Payload, Service
 #[cfg(feature = "oauth")]
 pub use navree_oauth::{OAuthServerModule, OAuthToken};
 
+#[cfg(feature = "helm")]
+pub use navree_helm::{HelmModule, ModuleBuilderHelmExt as _};
 #[cfg(feature = "search")]
 pub use navree_search::SearchModule;

@@ -56,6 +56,7 @@ conventions, and says which skill to load for each task.
 | [`navree-redis`](navree-redis/SKILL.md) | Redis connections and the Redis cache, locks, queue, sessions, rate limits and real-time backplane (feature `redis`) |
 | [`navree-logbook`](navree-logbook/SKILL.md) | The local debugging timeline at `/_logbook`: filters, N+1 queries, replay, query counts in tests |
 | [`navree-microservices`](navree-microservices/SKILL.md) | Messages and events between services: handlers, `ServiceClient`, the outbox and inbox, dead letters, the transports, and `MicroFake` tests (feature `micro`) |
+| [`navree-helm`](navree-helm/SKILL.md) | The Helm admin panel: resources, fields, filters, actions, metrics, custom pages |
 
 ## Installing
 

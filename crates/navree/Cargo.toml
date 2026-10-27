@@ -24,6 +24,7 @@ full = [
     "db",
     "events",
     "fleet",
+    "helm",
     "http",
     "http-client",
     "lighthouse",
@@ -295,6 +296,20 @@ fleet = [
     "telemetry",
     "view",
 ]
+## L7 (in `full`)
+## Helm: the admin panel generated from your entities.
+helm = [
+    "dep:navree-helm",
+    "http",
+    "view",
+    "db",
+    "crypto",
+    "storage",
+    "validation",
+    "audit",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -336,6 +351,7 @@ navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
+navree-helm = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-lighthouse = { workspace = true, optional = true }
