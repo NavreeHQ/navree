@@ -159,6 +159,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-testing",
         // Workspace time zones and countries, and its `dyn ZoneSource`.
         "navree-time",
+        // The workspace tables are navree-orm models.
+        "navree-orm",
     ]),
     // Redis: the shared connections and the Redis drivers of the cache,
     // the queue, sessions and the real-time backplane (ecosystem build

@@ -34,6 +34,8 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
+# The workspace tables are models (`Workspace`, `Member`, `Organization`, ...).
+navree-orm = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-time = { workspace = true }
