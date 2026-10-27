@@ -225,7 +225,10 @@ impl<M: Model, C: Model> HasMany<M, C> {
     }
 
     /// The column values that point a child at `parent`.
-    pub(crate) fn assignments(&self, parent: &Record<M>) -> Result<Vec<(Cow<'static, str>, Value)>> {
+    pub(crate) fn assignments(
+        &self,
+        parent: &Record<M>,
+    ) -> Result<Vec<(Cow<'static, str>, Value)>> {
         let value = match &self.local_key {
             None => parent.key().to_value(),
             Some(column) => parent
@@ -523,7 +526,11 @@ impl<M: Model> Relationships<M> {
 
     /// `name` are the `R` records attached to an `M` record through
     /// `pivot`.
-    pub fn belongs_to_many<R: Model>(&mut self, name: &'static str, pivot: Pivot<M, R>) -> &mut Self {
+    pub fn belongs_to_many<R: Model>(
+        &mut self,
+        name: &'static str,
+        pivot: Pivot<M, R>,
+    ) -> &mut Self {
         let via = pivot.table().to_owned();
         self.push::<R>(name, Kind::BelongsToMany, via, Arc::new(pivot));
         self

@@ -140,7 +140,9 @@ pub(crate) fn route_value(meta: &ColumnMeta, text: &str) -> Option<Value> {
     let last = inner.rsplit("::").next().unwrap_or(inner);
     match last {
         "Uuid" => Uuid::parse_str(text).ok().map(Value::from),
-        "Ulid" => Ulid::from_str(text).ok().map(|ulid| Value::from(ulid.to_string())),
+        "Ulid" => Ulid::from_str(text)
+            .ok()
+            .map(|ulid| Value::from(ulid.to_string())),
         "i8" | "i16" | "i32" | "i64" | "isize" => text.parse::<i64>().ok().map(Value::from),
         "u8" | "u16" | "u32" | "u64" | "usize" => text.parse::<u64>().ok().map(Value::from),
         "bool" => text.parse::<bool>().ok().map(Value::from),
@@ -426,7 +428,8 @@ pub(crate) fn snake_case(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     for (index, c) in chars.iter().enumerate() {
         if c.is_uppercase() {
-            let previous_lower = index > 0 && !chars[index - 1].is_uppercase() && chars[index - 1] != '_';
+            let previous_lower =
+                index > 0 && !chars[index - 1].is_uppercase() && chars[index - 1] != '_';
             let next_lower = chars.get(index + 1).is_some_and(|next| next.is_lowercase());
             let previous_upper = index > 0 && chars[index - 1].is_uppercase();
             if index > 0 && (previous_lower || (previous_upper && next_lower)) {

@@ -60,13 +60,24 @@ async fn queries_return_what_the_rules_allow() {
     let made = tickets(&test.db, alice, bob).await;
     let ability = abilities_of(alice);
 
-    assert_eq!(Ticket::query().accessible(&ability, Read).count(&test.db).await.unwrap(), 4);
+    assert_eq!(
+        Ticket::query()
+            .accessible(&ability, Read)
+            .count(&test.db)
+            .await
+            .unwrap(),
+        4
+    );
     let updatable = Ticket::query()
         .accessible(&ability, Update)
         .get(&test.db)
         .await
         .unwrap();
-    assert_eq!(updatable.model_keys(), [made[0].id], "her own open ticket only");
+    assert_eq!(
+        updatable.model_keys(),
+        [made[0].id],
+        "her own open ticket only"
+    );
     assert_eq!(
         Ticket::query()
             .accessible_for(&ability, "update")
@@ -92,7 +103,14 @@ async fn queries_return_what_the_rules_allow() {
     );
     // A guest may do nothing.
     let guest = Rules::new().try_build().unwrap();
-    assert_eq!(Ticket::query().accessible(&guest, Read).count(&test.db).await.unwrap(), 0);
+    assert_eq!(
+        Ticket::query()
+            .accessible(&guest, Read)
+            .count(&test.db)
+            .await
+            .unwrap(),
+        0
+    );
 }
 
 #[tokio::test]
@@ -140,7 +158,8 @@ enum Condition {
 fn condition() -> impl Strategy<Value = Condition> {
     prop_oneof![
         prop::sample::select(vec!["open", "closed", "waiting"]).prop_map(Condition::StatusEq),
-        prop::sample::subsequence(vec!["open", "closed", "waiting"], 0..3).prop_map(Condition::StatusIn),
+        prop::sample::subsequence(vec!["open", "closed", "waiting"], 0..3)
+            .prop_map(Condition::StatusIn),
         (0i64..6).prop_map(Condition::PriorityGt),
         (0i64..6).prop_map(Condition::PriorityLte),
         (0usize..3).prop_map(Condition::OwnerEq),
@@ -243,17 +262,23 @@ impl Controller for Routes {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
-            RouteDef::on(Method::GET, "/", |tickets: Accessible<Ticket, Read>, uow: navree_db::Uow| async move {
-                let count = tickets.query().count(&uow).await?;
-                Ok::<_, AppError>(Json(json!({ "count": count })))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/",
+                |tickets: Accessible<Ticket, Read>, uow: navree_db::Uow| async move {
+                    let count = tickets.query().count(&uow).await?;
+                    Ok::<_, AppError>(Json(json!({ "count": count })))
+                },
+            )
             .authenticated(),
             RouteDef::on(
                 Method::PATCH,
                 "/{ticket}",
                 |ticket: Authorized<Ticket, Update>, uow: navree_db::Uow| async move {
                     let mut ticket: Record<Ticket> = ticket.into_inner();
-                    ticket.update(&uow, |t| t.title = "Edited".to_owned()).await?;
+                    ticket
+                        .update(&uow, |t| t.title = "Edited".to_owned())
+                        .await?;
                     Ok::<_, AppError>(Json(json!({ "title": ticket.title })))
                 },
             )

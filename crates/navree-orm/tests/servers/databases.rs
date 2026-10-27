@@ -81,7 +81,11 @@ async fn copies_truncation_and_cleanup(server: TestServer, first: TestDb, second
     first.db().conn().execute_unprepared(insert).await.unwrap();
     assert_eq!(count(first.db(), "notes").await, 1);
     assert_eq!(count(second.db(), "notes").await, 0);
-    assert_eq!(count(second.db(), "authors").await, 1, "the template's rows");
+    assert_eq!(
+        count(second.db(), "authors").await,
+        1,
+        "the template's rows"
+    );
     // The copy keeps the foreign key.
     let orphan = "INSERT INTO notes (author_id, body) VALUES (99, 'orphan')";
     assert!(second.db().conn().execute_unprepared(orphan).await.is_err());

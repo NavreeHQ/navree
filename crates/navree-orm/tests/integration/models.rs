@@ -162,7 +162,11 @@ impl ModelFactory for DealFactory {
     fn definition(&self, ctx: &mut FactoryContext<'_, Deal>) -> Deal {
         Deal {
             company_id: ctx.belongs_to(Deal::COMPANY_ID, Company::factory()),
-            slug: format!("{}-{}", ctx.fake().slug(), ctx.fake().alphanumeric(8).to_lowercase()),
+            slug: format!(
+                "{}-{}",
+                ctx.fake().slug(),
+                ctx.fake().alphanumeric(8).to_lowercase()
+            ),
             title: ctx.fake().title(),
             amount_cents: ctx.fake().number(1_000..=500_000),
             ..Deal::default()

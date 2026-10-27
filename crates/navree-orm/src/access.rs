@@ -129,7 +129,9 @@ impl<M: Model> SqlColumns for ModelColumns<M> {
         let typed = stored::<M>(field).and_then(|stored| {
             let text = value.as_str();
             match stored {
-                Stored::Uuid => text.and_then(|t| uuid::Uuid::parse_str(t).ok()).map(Value::from),
+                Stored::Uuid => text
+                    .and_then(|t| uuid::Uuid::parse_str(t).ok())
+                    .map(Value::from),
                 Stored::DateTimeUtc => text
                     .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
                     .map(|at| Value::from(at.with_timezone(&Utc))),
@@ -157,7 +159,11 @@ impl<M: Model> SqlColumns for ModelColumns<M> {
             Some(Stored::Bool) => value.is_boolean(),
             Some(Stored::Number) => value.is_number(),
             Some(
-                Stored::Text | Stored::Uuid | Stored::DateTimeUtc | Stored::NaiveDateTime | Stored::Date,
+                Stored::Text
+                | Stored::Uuid
+                | Stored::DateTimeUtc
+                | Stored::NaiveDateTime
+                | Stored::Date,
             ) => value.is_string(),
             Some(Stored::Decimal | Stored::Other) => true,
         }
@@ -253,7 +259,11 @@ pub trait AbilityExt {
 
     /// `Ok` when action `A` is allowed on `record`, else a 403 in Navree's
     /// error shape.
-    fn authorize<M: Model + Subject, A: ActionMarker>(&self, action: A, record: &Record<M>) -> Result<(), AppError>;
+    fn authorize<M: Model + Subject, A: ActionMarker>(
+        &self,
+        action: A,
+        record: &Record<M>,
+    ) -> Result<(), AppError>;
 }
 
 impl AbilityExt for Ability {
@@ -266,7 +276,11 @@ impl AbilityExt for Ability {
         self.can(action, M::SUBJECT, Some(&record_json(record)))
     }
 
-    fn authorize<M: Model + Subject, A: ActionMarker>(&self, action: A, record: &Record<M>) -> Result<(), AppError> {
+    fn authorize<M: Model + Subject, A: ActionMarker>(
+        &self,
+        action: A,
+        record: &Record<M>,
+    ) -> Result<(), AppError> {
         if self.allows(action, record) {
             Ok(())
         } else {
@@ -281,7 +295,10 @@ impl AbilityExt for Ability {
 /// workspace), locked `FOR UPDATE` where the database supports it, in
 /// `uow`'s transaction. `None` when there is none or `id` cannot be a route
 /// key.
-pub fn load_record<'a, M: Model>(uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Result<Option<Record<M>>, BoxError>> {
+pub fn load_record<'a, M: Model>(
+    uow: &'a Uow,
+    id: &'a str,
+) -> BoxFuture<'a, Result<Option<Record<M>>, BoxError>> {
     Box::pin(async move {
         let column = M::route_key_name();
         let Some(meta) = M::meta().column(column) else {
@@ -290,7 +307,8 @@ pub fn load_record<'a, M: Model>(uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Res
         let Some(value) = route_value(meta, id) else {
             return Ok(None);
         };
-        let mut query = M::query().where_(col(Cow::Owned(format!("{}.{column}", M::meta().table()))).eq(value));
+        let mut query =
+            M::query().where_(col(Cow::Owned(format!("{}.{column}", M::meta().table()))).eq(value));
         if uow.lock_for_update() {
             query = query.lock_for_update();
         }

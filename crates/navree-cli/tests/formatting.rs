@@ -97,9 +97,25 @@ fn generated_rust_is_rustfmt_clean() {
         controller: true,
         ..Companions::default()
     };
-    make_model(&root, "src/modules", &name("tags"), &name("badge"), badge, now).unwrap();
+    make_model(
+        &root,
+        "src/modules",
+        &name("tags"),
+        &name("badge"),
+        badge,
+        now,
+    )
+    .unwrap();
     let pivot = Companions::all_for_pivot();
-    make_model(&root, "src/modules", &name("tags"), &name("post_tag"), pivot, now).unwrap();
+    make_model(
+        &root,
+        "src/modules",
+        &name("tags"),
+        &name("post_tag"),
+        pivot,
+        now,
+    )
+    .unwrap();
     let for_badges = MakeOptions {
         model: Some(name("badge")),
         ..MakeOptions::default()

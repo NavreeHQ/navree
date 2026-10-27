@@ -349,7 +349,12 @@ async fn db_seed_seeds_a_named_database_and_guards_production() {
     assert!(refused.contains("pass --force"), "{refused}");
     app.run_command(
         "db:seed",
-        vec!["notes".into(), "--database".into(), "archive".into(), "--force".into()],
+        vec![
+            "notes".into(),
+            "--database".into(),
+            "archive".into(),
+            "--force".into(),
+        ],
     )
     .await
     .expect("seeds the archive");
@@ -358,11 +363,17 @@ async fn db_seed_seeds_a_named_database_and_guards_production() {
     let named = app.ctx().get_named::<Db>("archive").await.unwrap();
     assert_eq!(count(&named, "notes").await, 3);
     let unknown = app
-        .run_command("db:seed", vec!["--database=nowhere".into(), "--force".into()])
+        .run_command(
+            "db:seed",
+            vec!["--database=nowhere".into(), "--force".into()],
+        )
         .await
         .unwrap_err()
         .to_string();
-    assert!(unknown.contains("no database connection named `nowhere`"), "{unknown}");
+    assert!(
+        unknown.contains("no database connection named `nowhere`"),
+        "{unknown}"
+    );
 }
 
 #[tokio::test]

@@ -76,14 +76,21 @@ async fn new_records_get_the_current_workspace() {
         .get(&test.db)
         .await
         .unwrap();
-    assert!(tasks.iter().all(|t| t.workspace_id == two.a), "children too");
+    assert!(
+        tasks.iter().all(|t| t.workspace_id == two.a),
+        "children too"
+    );
 
     // Bulk inserts fill it as well.
     let uow = uow_in(&test.db, two.a).await;
     assert_eq!(Project::factory().count(3).insert(&uow).await.unwrap(), 3);
     uow.commit().await.unwrap();
     assert_eq!(
-        Project::query().for_workspace(two.a).count(&test.db).await.unwrap(),
+        Project::query()
+            .for_workspace(two.a)
+            .count(&test.db)
+            .await
+            .unwrap(),
         5
     );
 }
@@ -108,7 +115,13 @@ async fn reads_see_the_current_workspace_only() {
             .unwrap_err()
             .is_not_found()
     );
-    assert_eq!(Project::find_many(&uow, [a_key, b_key]).await.unwrap().len(), 1);
+    assert_eq!(
+        Project::find_many(&uow, [a_key, b_key])
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(
         Project::query()
             .where_key(b_key)
@@ -117,11 +130,20 @@ async fn reads_see_the_current_workspace_only() {
             .unwrap()
             .is_none()
     );
-    assert!(Project::query().where_key(b_key).doesnt_exist(&uow).await.unwrap());
+    assert!(
+        Project::query()
+            .where_key(b_key)
+            .doesnt_exist(&uow)
+            .await
+            .unwrap()
+    );
     assert_eq!(Project::query().count(&uow).await.unwrap(), 2);
     let a_budget: i64 = two.a_projects.iter().map(|p| p.budget).sum();
     assert_eq!(
-        Project::query().sum::<i64>(&uow, Project::BUDGET).await.unwrap(),
+        Project::query()
+            .sum::<i64>(&uow, Project::BUDGET)
+            .await
+            .unwrap(),
         a_budget
     );
     let names = Project::query().pluck(&uow, Project::NAME).await.unwrap();
@@ -136,7 +158,10 @@ async fn reads_see_the_current_workspace_only() {
     );
     let page = Project::query().paginate(&uow, (1, 10)).await.unwrap();
     assert_eq!(page.meta.total, 2);
-    let simple = Project::query().simple_paginate(&uow, (1, 10)).await.unwrap();
+    let simple = Project::query()
+        .simple_paginate(&uow, (1, 10))
+        .await
+        .unwrap();
     assert_eq!(simple.data.len(), 2);
     assert_eq!(Task::query().count(&uow).await.unwrap(), 4);
 }
@@ -256,7 +281,11 @@ async fn writes_never_reach_another_workspaces_records() {
         0
     );
     assert_eq!(
-        Task::query().for_workspace(two.b).count(&test.db).await.unwrap(),
+        Task::query()
+            .for_workspace(two.b)
+            .count(&test.db)
+            .await
+            .unwrap(),
         4
     );
     assert_database_count(&test.db, "tasks", 4).await;
@@ -271,7 +300,10 @@ async fn find_or_create_stays_inside_the_workspace() {
     let created = Project::first_or_create(&uow, [Project::NAME.set(b_name.clone())], |_| {})
         .await
         .unwrap();
-    assert!(created.was_recently_created(), "B's project is not found from A");
+    assert!(
+        created.was_recently_created(),
+        "B's project is not found from A"
+    );
     assert_eq!(created.workspace_id, two.a);
     let updated = Project::update_or_create(&uow, [Project::NAME.set(b_name)], |p| p.budget = 1)
         .await
@@ -288,13 +320,18 @@ async fn the_current_workspace_has_several_sources() {
     // No workspace at all: the query fails instead of reading everything.
     let error = Project::query().count(db).await.unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("Project is scoped to workspaces, but there is no current workspace to query it in"),
+        error.to_string().contains(
+            "Project is scoped to workspaces, but there is no current workspace to query it in"
+        ),
         "{error}"
     );
     let error = Project::create(db, Project::default()).await.unwrap_err();
-    assert!(error.to_string().contains("no current workspace to create it in"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("no current workspace to create it in"),
+        "{error}"
+    );
 
     // The executor's unit of work.
     let in_b = uow_in(db, two.b).await;
@@ -323,7 +360,11 @@ async fn the_current_workspace_has_several_sources() {
         4
     );
     assert_eq!(
-        Project::query().for_workspace(two.b).count(db).await.unwrap(),
+        Project::query()
+            .for_workspace(two.b)
+            .count(db)
+            .await
+            .unwrap(),
         2
     );
     // Creating with an explicit workspace needs no current one.
@@ -344,7 +385,12 @@ async fn the_current_workspace_has_several_sources() {
         .count(db)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("Tag is not scoped to workspaces"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("Tag is not scoped to workspaces"),
+        "{error}"
+    );
 }
 
 /// Enters the workspace named by `X-Workspace` on the request's unit of
@@ -435,5 +481,8 @@ async fn binding_another_workspaces_record_is_a_404() {
         .await
         .assert_status(200)
         .assert_json_path("workspace_id", json!(two.a));
-    assert_eq!(<Project as Model>::meta().workspace_column(), Some("workspace_id"));
+    assert_eq!(
+        <Project as Model>::meta().workspace_column(),
+        Some("workspace_id")
+    );
 }

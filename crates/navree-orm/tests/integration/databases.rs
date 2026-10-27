@@ -66,7 +66,11 @@ async fn every_copy_starts_from_the_template() {
         .unwrap();
     assert_eq!(count(first.db(), "notes").await, 1);
     assert_eq!(count(second.db(), "notes").await, 0);
-    assert_eq!(count(second.db(), "authors").await, 1, "the template's rows");
+    assert_eq!(
+        count(second.db(), "authors").await,
+        1,
+        "the template's rows"
+    );
     assert_eq!(
         BUILDS.load(Ordering::SeqCst),
         1,
@@ -156,9 +160,11 @@ impl Controller for Routes {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
-            RouteDef::on(Method::GET, "/deals/{deal}", |deal: Bound<Deal>| async move {
-                Json(json!({ "title": deal.title }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/deals/{deal}",
+                |deal: Bound<Deal>| async move { Json(json!({ "title": deal.title })) },
+            )
             .public(),
         ]
     }

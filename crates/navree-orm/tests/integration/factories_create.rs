@@ -58,7 +58,11 @@ async fn states_and_sets_override_a_definitions_parent() {
         .await
         .unwrap();
     assert!(deals.iter().all(|d| d.company_id == Some(acme.id)));
-    assert_eq!(count_rows(&test.db, "companies").await, 1, "no parent created");
+    assert_eq!(
+        count_rows(&test.db, "companies").await,
+        1,
+        "no parent created"
+    );
 }
 
 #[tokio::test]
@@ -66,7 +70,10 @@ async fn for_shares_one_parent_across_the_batch() {
     let test = sqlite().await;
     let deals = Deal::factory()
         .count(3)
-        .for_(Company::factory().set(Company::NAME, "Acme"), Deal::COMPANY_ID)
+        .for_(
+            Company::factory().set(Company::NAME, "Acme"),
+            Deal::COMPANY_ID,
+        )
         .create(&test.db)
         .await
         .unwrap();
@@ -202,7 +209,10 @@ async fn has_creates_children_for_each_record() {
     let test = sqlite().await;
     let deals = Deal::factory()
         .count(2)
-        .has(crate::models::Activity::factory().count(3), Activity::DEAL_ID)
+        .has(
+            crate::models::Activity::factory().count(3),
+            Activity::DEAL_ID,
+        )
         .create(&test.db)
         .await
         .unwrap();
@@ -268,10 +278,18 @@ async fn polymorphic_children_and_parents_get_their_type() {
 #[tokio::test]
 async fn has_attached_links_records_through_the_pivot() {
     let (_app, db, _clock) = app(Vec::new()).await;
-    let vip = Tag::factory().set(Tag::NAME, "vip").create_one(&*db).await.unwrap();
+    let vip = Tag::factory()
+        .set(Tag::NAME, "vip")
+        .create_one(&*db)
+        .await
+        .unwrap();
     let deals = Deal::factory()
         .count(2)
-        .has_attached(Tag::factory().count(2), [("source", Value::from("import"))], "tags")
+        .has_attached(
+            Tag::factory().count(2),
+            [("source", Value::from("import"))],
+            "tags",
+        )
         .has_attached(
             &vip,
             [],
@@ -280,7 +298,11 @@ async fn has_attached_links_records_through_the_pivot() {
         .create(&*db)
         .await
         .unwrap();
-    assert_eq!(count_rows(&db, "tags").await, 5, "two new tags per deal, plus vip");
+    assert_eq!(
+        count_rows(&db, "tags").await,
+        5,
+        "two new tags per deal, plus vip"
+    );
     for deal in &deals {
         let rows = table("deal_tag")
             .where_(col("deal_id").eq(deal.id))
@@ -410,7 +432,11 @@ async fn insert_writes_one_statement_without_events_or_relationships() {
     assert_eq!(count_rows(&db, "companies").await, 0, "no parents");
     let deals = Deal::all(&*db).await.unwrap();
     assert_eq!(deals.len(), 4);
-    assert!(deals.iter().all(|d| d.stage == Stage::Won && !d.id.is_nil()));
+    assert!(
+        deals
+            .iter()
+            .all(|d| d.stage == Stage::Won && !d.id.is_nil())
+    );
     assert!(deals.iter().all(|d| d.created_at == epoch()));
 
     // Incrementing keys are left to the database.
@@ -528,7 +554,9 @@ async fn named_parents_of_the_wrong_model_fail_before_writing() {
         .await
         .unwrap_err();
     assert!(
-        error.to_string().ends_with("`company` of Deal links Company records, not Tag"),
+        error
+            .to_string()
+            .ends_with("`company` of Deal links Company records, not Tag"),
         "{error}"
     );
     assert_eq!(count_rows(&test.db, "deals").await, 0);

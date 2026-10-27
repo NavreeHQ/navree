@@ -109,7 +109,9 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
         ));
     }
     let krate = paths::orm(sig.ident.span())?;
-    let database = options.database.map_or(Database::Sqlite, |(database, _)| database);
+    let database = options
+        .database
+        .map_or(Database::Sqlite, |(database, _)| database);
     if let (Some(template), Database::Memory) = (&options.template, database) {
         return Err(syn::Error::new(
             template.span(),

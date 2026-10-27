@@ -122,9 +122,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             // Models (and what is named after them) may be given as types:
             // `make:model crm Deal`.
             let given = match kind {
-                MakeKind::Model | MakeKind::Factory | MakeKind::Seeder => {
-                    args.name.to_snake_case()
-                }
+                MakeKind::Model | MakeKind::Factory | MakeKind::Seeder => args.name.to_snake_case(),
                 _ => args.name.clone(),
             };
             let name = Name::parse(kind.noun(), &given)?;

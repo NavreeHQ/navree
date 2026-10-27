@@ -296,7 +296,11 @@ impl<M: Model> ModelHook<M> for WorkspaceHook {
 
 /// A 404 when `record` (whose workspace is `stored`) is not in the
 /// `current` workspace.
-fn check_belongs<M: Model>(record: &Record<M>, stored: Option<Uuid>, current: Option<Uuid>) -> Result<()> {
+fn check_belongs<M: Model>(
+    record: &Record<M>,
+    stored: Option<Uuid>,
+    current: Option<Uuid>,
+) -> Result<()> {
     match (stored, current) {
         (Some(own), Some(workspace)) if own != workspace => Err(OrmError::not_found(
             M::meta().name(),
