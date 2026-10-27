@@ -276,6 +276,8 @@ typst-pdf = "0.15.1"
 typst-layout = "0.15.1"
 docx-rs = { version = "0.4.22", default-features = false }
 lopdf = { version = "0.46.0", default-features = false }
+# Reading DOCX archives back in navree-documents tests (the version docx-rs uses).
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI
