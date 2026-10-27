@@ -12,7 +12,7 @@ use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde_json::json;
 
 use crate::metrics::{BearerToken, MetricsRecorder};
-use crate::{Health, ObserveOptions};
+use crate::{COLLECT_TIMEOUT, Health, MetricsCollector, ObserveOptions};
 
 /// The Prometheus text exposition format.
 const PROMETHEUS_TEXT: &str = "text/plain; version=0.0.4; charset=utf-8";
@@ -26,6 +26,7 @@ pub(crate) struct ObserveController {
     health: Arc<Health>,
     options: Arc<ObserveOptions>,
     metrics: Arc<MetricsRecorder>,
+    collectors: Arc<[Arc<dyn MetricsCollector>]>,
 }
 
 impl Injectable for ObserveController {
@@ -43,6 +44,7 @@ impl Injectable for ObserveController {
                 health: r.get::<Health>().await?,
                 options: r.get::<ObserveOptions>().await?,
                 metrics: r.get::<MetricsRecorder>().await?,
+                collectors: r.get_all::<dyn MetricsCollector>().await?.into(),
             })
         })
     }
@@ -72,9 +74,14 @@ impl Controller for ObserveController {
             )),
         ];
         if let Some(handle) = self.metrics.handle().cloned() {
+            let collectors = self.collectors.clone();
             let mut route = RouteDef::on(Method::GET, "!/metrics", move || {
                 let handle = handle.clone();
-                async move { metrics(&handle) }
+                let collectors = collectors.clone();
+                async move {
+                    collect(&collectors).await;
+                    metrics(&handle)
+                }
             })
             .public()
             .name("metrics");
@@ -120,6 +127,22 @@ async fn ready(health: &Health) -> Response {
         StatusCode::SERVICE_UNAVAILABLE
     };
     (status, no_store(), Json(report)).into_response()
+}
+
+/// Runs every collector, each within [`COLLECT_TIMEOUT`].
+async fn collect(collectors: &[Arc<dyn MetricsCollector>]) {
+    for collector in collectors {
+        if tokio::time::timeout(COLLECT_TIMEOUT, collector.collect())
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                target: "navree::observe",
+                "a metrics collector took longer than {} s; serving its previous values",
+                COLLECT_TIMEOUT.as_secs()
+            );
+        }
+    }
 }
 
 /// The Prometheus exposition of every metric recorded in the process.
