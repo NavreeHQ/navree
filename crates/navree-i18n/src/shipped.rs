@@ -57,9 +57,7 @@ mod tests {
             let ids: Vec<String> = resource
                 .entries()
                 .filter_map(|entry| match entry {
-                    fluent_syntax::ast::Entry::Message(message) => {
-                        Some(message.id.name.to_owned())
-                    }
+                    fluent_syntax::ast::Entry::Message(message) => Some(message.id.name.to_owned()),
                     _ => None,
                 })
                 .collect();

@@ -46,10 +46,7 @@ pub(crate) struct LocaleBundle {
 /// The result of a lookup.
 pub(crate) enum Lookup {
     /// The formatted message, and what went wrong while formatting it.
-    Found {
-        text: String,
-        errors: Vec<String>,
-    },
+    Found { text: String, errors: Vec<String> },
     /// No locale in the chain defines it.
     Missing,
 }
@@ -205,10 +202,13 @@ impl Catalog {
             .iter()
             .filter_map(|tag| self.bundles.get(tag))
             .any(|bundle| {
-                bundle.bundle.get_message(message).is_some_and(|found| match attribute {
-                    Some(attribute) => found.get_attribute(attribute).is_some(),
-                    None => found.value().is_some(),
-                })
+                bundle
+                    .bundle
+                    .get_message(message)
+                    .is_some_and(|found| match attribute {
+                        Some(attribute) => found.get_attribute(attribute).is_some(),
+                        None => found.value().is_some(),
+                    })
             })
     }
 
@@ -238,7 +238,11 @@ impl Catalog {
     /// The number of messages (not terms) the default locale's files define.
     pub(crate) fn message_count(&self) -> usize {
         self.bundles.get(&self.default).map_or(0, |bundle| {
-            bundle.messages.keys().filter(|id| !id.starts_with('-')).count()
+            bundle
+                .messages
+                .keys()
+                .filter(|id| !id.starts_with('-'))
+                .count()
         })
     }
 
@@ -316,7 +320,11 @@ fn split_id(id: &str) -> (&str, Option<&str>) {
 }
 
 /// `id` formatted with `bundle`, if the bundle has it.
-pub(crate) fn format_in(bundle: &LocaleBundle, id: &str, args: Option<&FluentArgs<'_>>) -> Option<Lookup> {
+pub(crate) fn format_in(
+    bundle: &LocaleBundle,
+    id: &str,
+    args: Option<&FluentArgs<'_>>,
+) -> Option<Lookup> {
     let (message, attribute) = split_id(id);
     let found = bundle.bundle.get_message(message)?;
     let pattern = match attribute {
@@ -606,12 +614,30 @@ mod tests {
     #[test]
     fn lookups_fall_back_through_the_chain() {
         let catalog = catalog();
-        assert_eq!(text(catalog.format("fr", "hello", Some(&args("Ada")))), "Bonjour, Ada !");
-        assert_eq!(text(catalog.format("fr-CA", "hello", Some(&args("Ada")))), "Allô, Ada !");
-        assert_eq!(text(catalog.format("fr-CA", "only-en", None)), "English only");
-        assert_eq!(text(catalog.format("fr", "login.title", None)), "Sign in to your account");
-        assert!(matches!(catalog.format("fr", "nope", None), Lookup::Missing));
-        assert!(matches!(catalog.format("en", "login.nope", None), Lookup::Missing));
+        assert_eq!(
+            text(catalog.format("fr", "hello", Some(&args("Ada")))),
+            "Bonjour, Ada !"
+        );
+        assert_eq!(
+            text(catalog.format("fr-CA", "hello", Some(&args("Ada")))),
+            "Allô, Ada !"
+        );
+        assert_eq!(
+            text(catalog.format("fr-CA", "only-en", None)),
+            "English only"
+        );
+        assert_eq!(
+            text(catalog.format("fr", "login.title", None)),
+            "Sign in to your account"
+        );
+        assert!(matches!(
+            catalog.format("fr", "nope", None),
+            Lookup::Missing
+        ));
+        assert!(matches!(
+            catalog.format("en", "login.nope", None),
+            Lookup::Missing
+        ));
     }
 
     #[test]
@@ -645,7 +671,10 @@ mod tests {
         let polish = "files = { $count ->\n    [one] Jeden plik\n    [few] { $count } pliki\n    [many] { $count } plików\n   *[other] { $count } pliku\n}\n";
         let catalog = Catalog::build(
             &options(&["en", "pl"], "en"),
-            vec![file("en", "main.ftl", source), file("pl", "main.ftl", polish)],
+            vec![
+                file("en", "main.ftl", source),
+                file("pl", "main.ftl", polish),
+            ],
             false,
         )
         .unwrap();
@@ -654,11 +683,26 @@ mod tests {
             args.set("count", n);
             args
         };
-        assert_eq!(text(catalog.format("en", "files", Some(&count(1)))), "One file");
-        assert_eq!(text(catalog.format("en", "files", Some(&count(3)))), "3 files");
-        assert_eq!(text(catalog.format("en", "files", Some(&count(1000)))), "1,000 files");
-        assert_eq!(text(catalog.format("pl", "files", Some(&count(3)))), "3 pliki");
-        assert_eq!(text(catalog.format("pl", "files", Some(&count(5)))), "5 plików");
+        assert_eq!(
+            text(catalog.format("en", "files", Some(&count(1)))),
+            "One file"
+        );
+        assert_eq!(
+            text(catalog.format("en", "files", Some(&count(3)))),
+            "3 files"
+        );
+        assert_eq!(
+            text(catalog.format("en", "files", Some(&count(1000)))),
+            "1,000 files"
+        );
+        assert_eq!(
+            text(catalog.format("pl", "files", Some(&count(3)))),
+            "3 pliki"
+        );
+        assert_eq!(
+            text(catalog.format("pl", "files", Some(&count(5)))),
+            "5 plików"
+        );
     }
 
     #[test]
@@ -674,7 +718,10 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(errors.len(), 2, "{errors:?}");
-        assert!(errors[0].starts_with("locales/en/a.ftl:3: syntax error"), "{errors:?}");
+        assert!(
+            errors[0].starts_with("locales/en/a.ftl:3: syntax error"),
+            "{errors:?}"
+        );
         assert_eq!(
             errors[1],
             "locales/en/b.ftl:2: `ok` is already defined in locales/en/a.ftl:1"
@@ -698,7 +745,11 @@ mod tests {
         let catalog = Catalog::build(
             &options(&["en", "fr", "pt", "pt-BR"], "en"),
             vec![
-                file("en", "deals.ftl", "deal-won = Won\n-brand = Acme\ndeal-lost = Lost\n"),
+                file(
+                    "en",
+                    "deals.ftl",
+                    "deal-won = Won\n-brand = Acme\ndeal-lost = Lost\n",
+                ),
                 file("fr", "deals.ftl", "deal-won = Gagné\n"),
                 file("pt", "deals.ftl", "deal-won = Ganho\ndeal-lost = Perdido\n"),
                 file("pt-BR", "deals.ftl", "deal-won = Ganhou\n"),
@@ -749,7 +800,10 @@ mod tests {
             ]
         };
         let catalog = Catalog::build(&options(&["en", "ar"], "en"), files(), false).unwrap();
-        assert_eq!(text(catalog.format("en", "hello", Some(&args("Ada")))), "Hello Ada");
+        assert_eq!(
+            text(catalog.format("en", "hello", Some(&args("Ada")))),
+            "Hello Ada"
+        );
         assert_eq!(
             text(catalog.format("ar", "hello", Some(&args("Ada")))),
             "مرحبا \u{2068}Ada\u{2069}"
@@ -781,7 +835,10 @@ mod tests {
         let paths: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
         assert_eq!(paths.len(), 3);
         assert!(paths[0].ends_with("/en/mail/welcome.ftl"), "{paths:?}");
-        assert_eq!(ids(&files), std::collections::BTreeSet::from(["a".to_owned(), "b".to_owned()]));
+        assert_eq!(
+            ids(&files),
+            std::collections::BTreeSet::from(["a".to_owned(), "b".to_owned()])
+        );
         assert!(read_dir(&dir.path().join("missing")).unwrap().is_empty());
         assert_eq!(fingerprint(dir.path()).len(), 3);
     }

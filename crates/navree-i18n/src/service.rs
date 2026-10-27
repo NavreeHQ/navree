@@ -423,16 +423,28 @@ mod tests {
     #[test]
     fn translates_in_an_explicit_locale() {
         let i18n = fixtures(Missing::Warn);
-        assert_eq!(i18n.t("en", "deal-created", args!(count = 1)).unwrap(), "One deal created");
-        assert_eq!(i18n.t("fr", "deal-created", args!(count = 3)).unwrap(), "3 affaires créées");
+        assert_eq!(
+            i18n.t("en", "deal-created", args!(count = 1)).unwrap(),
+            "One deal created"
+        );
+        assert_eq!(
+            i18n.t("fr", "deal-created", args!(count = 3)).unwrap(),
+            "3 affaires créées"
+        );
         assert_eq!(
             i18n.t("pt-BR", "deal-created", args!(count = 2)).unwrap(),
             "2 negócios criados"
         );
         // fr-CA is not supported: fr is its nearest supported locale.
-        assert_eq!(i18n.t("fr-CA", "deal-created", args!(count = 1)).unwrap(), "Une affaire créée");
+        assert_eq!(
+            i18n.t("fr-CA", "deal-created", args!(count = 1)).unwrap(),
+            "Une affaire créée"
+        );
         // Unsupported languages use the default locale.
-        assert_eq!(i18n.t("ja", "deal-created", args!(count = 2)).unwrap(), "2 deals created");
+        assert_eq!(
+            i18n.t("ja", "deal-created", args!(count = 2)).unwrap(),
+            "2 deals created"
+        );
         assert!(matches!(
             i18n.t("not a tag", "deal-created", Args::new()),
             Err(I18nError::InvalidLocale(_))
@@ -441,8 +453,16 @@ mod tests {
 
     #[test]
     fn missing_messages_follow_the_setting() {
-        assert_eq!(fixtures(Missing::Warn).t("fr", "nope", Args::new()).unwrap(), "nope");
-        assert_eq!(fixtures(Missing::Id).t("fr", "nope", Args::new()).unwrap(), "nope");
+        assert_eq!(
+            fixtures(Missing::Warn)
+                .t("fr", "nope", Args::new())
+                .unwrap(),
+            "nope"
+        );
+        assert_eq!(
+            fixtures(Missing::Id).t("fr", "nope", Args::new()).unwrap(),
+            "nope"
+        );
         assert!(matches!(
             fixtures(Missing::Error).t("fr", "nope", Args::new()),
             Err(I18nError::MissingMessage { .. })
@@ -453,7 +473,9 @@ mod tests {
             Err(I18nError::Format { .. })
         ));
         assert_eq!(
-            fixtures(Missing::Warn).t("en", "deal-won", args!(owner = "Ada")).unwrap(),
+            fixtures(Missing::Warn)
+                .t("en", "deal-won", args!(owner = "Ada"))
+                .unwrap(),
             "Ada won {$title}."
         );
     }
@@ -467,8 +489,15 @@ mod tests {
         assert_eq!(i18n.default_locale(), "en");
         assert_eq!(i18n.locale("pt").tag(), "pt-BR");
         assert!(i18n.matching("ja").is_none());
-        assert!(i18n.missing("de").unwrap().contains(&"pipeline-empty".to_owned()));
-        assert!(matches!(i18n.missing("ja"), Err(I18nError::UnsupportedLocale { .. })));
+        assert!(
+            i18n.missing("de")
+                .unwrap()
+                .contains(&"pipeline-empty".to_owned())
+        );
+        assert!(matches!(
+            i18n.missing("ja"),
+            Err(I18nError::UnsupportedLocale { .. })
+        ));
     }
 
     #[test]

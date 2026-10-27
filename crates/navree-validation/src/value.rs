@@ -55,12 +55,24 @@ where
         Ok(value) => value,
         Err(error) => {
             let failure = failure::from_serde(error.path(), &error.inner().to_string());
-            return Err(failure::render(&[failure], messages, None, Some(input), ROOT));
+            return Err(failure::render(
+                &[failure],
+                messages,
+                None,
+                Some(input),
+                ROOT,
+            ));
         }
     };
     match check(&value) {
         Ok(()) => Ok(value),
-        Err(failures) => Err(failure::render(&failures, messages, None, Some(input), ROOT)),
+        Err(failures) => Err(failure::render(
+            &failures,
+            messages,
+            None,
+            Some(input),
+            ROOT,
+        )),
     }
 }
 

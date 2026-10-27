@@ -78,16 +78,23 @@ async fn embedded_files_need_no_directory() {
 async fn a_syntax_error_fails_the_boot_naming_the_file_and_line() {
     let dir = tempfile::tempdir().unwrap();
     fs::create_dir_all(dir.path().join("en")).unwrap();
-    fs::write(dir.path().join("en/main.ftl"), "ok = Fine\n\nbroken = { $count\n").unwrap();
+    fs::write(
+        dir.path().join("en/main.ftl"),
+        "ok = Fine\n\nbroken = { $count\n",
+    )
+    .unwrap();
     let error = TestApp::builder()
         .config("i18n.dir", dir.path().to_string_lossy().as_ref())
         .module(I18nModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+        .map(|_| ())
+        .expect_err("the boot fails");
     let message = error.to_string();
-    assert!(message.contains("/en/main.ftl:3: syntax error"), "{message}");
+    assert!(
+        message.contains("/en/main.ftl:3: syntax error"),
+        "{message}"
+    );
 }
 
 #[tokio::test]
@@ -98,10 +105,12 @@ async fn invalid_settings_fail_the_boot_naming_the_key() {
         .module(I18nModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+        .map(|_| ())
+        .expect_err("the boot fails");
     assert!(
-        error.to_string().contains("i18n.default_locale `de` must be one of i18n.locales"),
+        error
+            .to_string()
+            .contains("i18n.default_locale `de` must be one of i18n.locales"),
         "{error}"
     );
     let error = TestApp::builder()
@@ -111,8 +120,8 @@ async fn invalid_settings_fail_the_boot_naming_the_key() {
         }))
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+        .map(|_| ())
+        .expect_err("the boot fails");
     assert!(error.to_string().contains("`not a tag!`"), "{error}");
 }
 
@@ -122,7 +131,10 @@ async fn saved_locales_need_a_database() {
     let i18n = app.get::<I18n>().await;
     // Without a database nothing is saved: the default locale.
     assert_eq!(i18n.user_locale(Uuid::now_v7()).await.unwrap().tag(), "en");
-    assert_eq!(i18n.workspace_locale(Uuid::now_v7()).await.unwrap().tag(), "en");
+    assert_eq!(
+        i18n.workspace_locale(Uuid::now_v7()).await.unwrap().tag(),
+        "en"
+    );
     app.shutdown().await.unwrap();
 }
 

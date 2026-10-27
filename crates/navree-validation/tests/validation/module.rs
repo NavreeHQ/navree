@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use navree_testing::TestApp;
-use navree_validation::{Messages, MessageTranslator, ValidationModule, ValidationOptions};
+use navree_validation::{MessageTranslator, Messages, ValidationModule, ValidationOptions};
 use serde_json::{Value, json};
 
 use crate::support::{ValidationTestModule, errors};
@@ -220,7 +220,10 @@ async fn a_registered_translator_renders_every_message() {
 #[test]
 fn lookup_and_fill_expose_the_templates() {
     let messages = Messages::default().with_message("email.unique", "Taken: :attribute");
-    assert_eq!(messages.lookup("email", "unique"), Some("Taken: :attribute"));
+    assert_eq!(
+        messages.lookup("email", "unique"),
+        Some("Taken: :attribute")
+    );
     assert_eq!(
         messages.lookup("name", "unique"),
         Some(":attribute has already been taken")

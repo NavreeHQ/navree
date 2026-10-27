@@ -31,7 +31,10 @@ fn configuration_keys() {
     assert_eq!(default_locale, "en");
     assert_eq!(locales, ["en"]);
     assert_eq!(dir, PathBuf::from("locales"));
-    assert_eq!(negotiation, [Source::User, Source::Workspace, Source::Header]);
+    assert_eq!(
+        negotiation,
+        [Source::User, Source::Workspace, Source::Header]
+    );
     assert_eq!(query_param, "locale");
     assert_eq!(cookie, "locale");
     assert_eq!(missing, Missing::Warn);
@@ -49,8 +52,15 @@ fn configuration_keys() {
         let parsed: Source = serde_json::from_value(json!(source.as_str())).unwrap();
         assert_eq!(parsed, source);
     }
-    for (name, missing) in [("warn", Missing::Warn), ("error", Missing::Error), ("id", Missing::Id)] {
-        assert_eq!(serde_json::from_value::<Missing>(json!(name)).unwrap(), missing);
+    for (name, missing) in [
+        ("warn", Missing::Warn),
+        ("error", Missing::Error),
+        ("id", Missing::Id),
+    ] {
+        assert_eq!(
+            serde_json::from_value::<Missing>(json!(name)).unwrap(),
+            missing
+        );
     }
     let _: LocaleFiles = embed_locales!("tests/fixtures/locales");
     assert_eq!(I18N_MIGRATIONS, "i18n");
@@ -69,7 +79,12 @@ async fn locale_and_i18n_methods() {
     let _: Vec<String> = i18n.locales();
     let _ = (I18n::user_locale, I18n::set_user_locale);
     let _ = (I18n::workspace_locale, I18n::set_workspace_locale);
-    let _ = (I18n::reload, I18n::missing, I18n::default_locale, I18n::matching);
+    let _ = (
+        I18n::reload,
+        I18n::missing,
+        I18n::default_locale,
+        I18n::matching,
+    );
 
     let locale: Locale = i18n.locale("fr");
     let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
@@ -79,7 +94,10 @@ async fn locale_and_i18n_methods() {
     let _: String = locale.format_date_with(day, DateStyle::Long);
     let _: String = locale.format_number(1234.5);
     let _: Locale = Locale::current();
-    let _: String = Locale::scope(locale.clone().into_locale(), async { t!("deal-created", count = 1) }).await;
+    let _: String = Locale::scope(locale.clone().into_locale(), async {
+        t!("deal-created", count = 1)
+    })
+    .await;
     let _: Arg = Money::new(1, "EUR").into();
     let _: Args = Args::new().with("count", 1);
 }
@@ -97,7 +115,12 @@ async fn routes_and_commands() {
         .module(I18nModule::from_config())
         .build()
         .await;
-    let commands: Vec<&str> = app.ctx().commands().iter().map(|command| command.name).collect();
+    let commands: Vec<&str> = app
+        .ctx()
+        .commands()
+        .iter()
+        .map(|command| command.name)
+        .collect();
     for name in ["i18n:check", "i18n:missing", "i18n:publish"] {
         assert!(commands.contains(&name), "{commands:?}");
     }

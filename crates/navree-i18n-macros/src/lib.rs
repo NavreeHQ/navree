@@ -204,13 +204,23 @@ mod tests {
     #[test]
     fn syntax_errors_name_the_file_and_line() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(), "en/main.ftl", "ok = Fine\n\nbroken = { $count\n");
+        write(
+            dir.path(),
+            "en/main.ftl",
+            "ok = Fine\n\nbroken = { $count\n",
+        );
         write(dir.path(), "de/main.ftl", "also-broken\n");
 
         let errors = collect(dir.path(), "locales").unwrap_err();
         assert_eq!(errors.len(), 2, "{errors:?}");
-        assert!(errors[0].starts_with("locales/de/main.ftl:1: syntax error"), "{errors:?}");
-        assert!(errors[1].starts_with("locales/en/main.ftl:3: syntax error"), "{errors:?}");
+        assert!(
+            errors[0].starts_with("locales/de/main.ftl:1: syntax error"),
+            "{errors:?}"
+        );
+        assert!(
+            errors[1].starts_with("locales/en/main.ftl:3: syntax error"),
+            "{errors:?}"
+        );
     }
 
     #[test]

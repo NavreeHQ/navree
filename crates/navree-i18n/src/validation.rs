@@ -42,7 +42,13 @@ impl Translator {
         }
     }
 
-    fn display_name(&self, catalog: &Catalog, tag: &str, messages: &Messages, field: &str) -> String {
+    fn display_name(
+        &self,
+        catalog: &Catalog,
+        tag: &str,
+        messages: &Messages,
+        field: &str,
+    ) -> String {
         let id = format!("field-{}", field.replace('.', "-"));
         let (own, fallback) = catalog.split_chain(tag);
         own.into_iter()
@@ -98,12 +104,11 @@ impl MessageTranslator for Translator {
         let shipped = |bundles: &[&LocaleBundle]| {
             bundles
                 .iter()
-                .find(|bundle| {
-                    !bundle.messages.contains_key(&id) && bundle.bundle.has_message(&id)
-                })
+                .find(|bundle| !bundle.messages.contains_key(&id) && bundle.bundle.has_message(&id))
                 .and_then(|bundle| found(format_in(bundle, &id, args.fluent())))
         };
-        let overridden = || overridden(messages, field, rule).map(|template| Messages::fill(template, &values));
+        let overridden =
+            || overridden(messages, field, rule).map(|template| Messages::fill(template, &values));
         let default_language = catalog
             .default
             .split('-')
@@ -188,9 +193,18 @@ mod tests {
         }
     }
 
-    fn render(translator: &Translator, tag: &str, messages: &Messages, field: &str, rule: &str, params: &[(&str, String)]) -> String {
+    fn render(
+        translator: &Translator,
+        tag: &str,
+        messages: &Messages,
+        field: &str,
+        rule: &str,
+        params: &[(&str, String)],
+    ) -> String {
         let locale = translator.i18n.locale(tag);
-        let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
         runtime.block_on(Locale::scope(locale, async {
             translator.message(messages, field, rule, params)
         }))
@@ -231,19 +245,47 @@ mod tests {
             "adresse e-mail doit être une adresse e-mail valide"
         );
         assert_eq!(
-            render(&translator, "fr", &messages, "last_name", "min.string", &[("min", "1".into())]),
+            render(
+                &translator,
+                "fr",
+                &messages,
+                "last_name",
+                "min.string",
+                &[("min", "1".into())]
+            ),
             "nom doit contenir au moins 1 caractère"
         );
         assert_eq!(
-            render(&translator, "fr", &messages, "last_name", "min.string", &[("min", "3".into())]),
+            render(
+                &translator,
+                "fr",
+                &messages,
+                "last_name",
+                "min.string",
+                &[("min", "3".into())]
+            ),
             "nom doit contenir au moins 3 caractères"
         );
         assert_eq!(
-            render(&translator, "de", &messages, "tags", "min.array", &[("min", "2".into())]),
+            render(
+                &translator,
+                "de",
+                &messages,
+                "tags",
+                "min.array",
+                &[("min", "2".into())]
+            ),
             "tags muss mindestens 2 Elemente enthalten"
         );
         assert_eq!(
-            render(&translator, "fr", &messages, "password", "same", &[("other", "first_name".into())]),
+            render(
+                &translator,
+                "fr",
+                &messages,
+                "password",
+                "same",
+                &[("other", "first_name".into())]
+            ),
             "password doit correspondre à prénom"
         );
     }
@@ -260,21 +302,41 @@ mod tests {
             "adresse e-mail est déjà prise"
         );
         // In English (the default language) the override beats the shipped message.
-        assert_eq!(render(&translator, "en", &messages, "name", "email", &[]), "name looks wrong");
+        assert_eq!(
+            render(&translator, "en", &messages, "name", "email", &[]),
+            "name looks wrong"
+        );
         // In German the shipped message beats the English override.
         assert_eq!(
             render(&translator, "de", &messages, "name", "email", &[]),
             "name muss eine gültige E-Mail-Adresse sein"
         );
         // Japanese has nothing of its own: the override, then the default locale.
-        assert_eq!(render(&translator, "ja", &messages, "name", "email", &[]), "name looks wrong");
         assert_eq!(
-            render(&translator, "ja", &Messages::default(), "name", "required", &[]),
+            render(&translator, "ja", &messages, "name", "email", &[]),
+            "name looks wrong"
+        );
+        assert_eq!(
+            render(
+                &translator,
+                "ja",
+                &Messages::default(),
+                "name",
+                "required",
+                &[]
+            ),
             "name should not be empty"
         );
         // Unknown rules use the `invalid` template.
         assert_eq!(
-            render(&translator, "fr", &Messages::default(), "name", "no_such_rule", &[]),
+            render(
+                &translator,
+                "fr",
+                &Messages::default(),
+                "name",
+                "no_such_rule",
+                &[]
+            ),
             "name n'est pas valide"
         );
     }
@@ -282,15 +344,19 @@ mod tests {
     #[test]
     fn attributes_are_translated() {
         let translator = translator("tests/fixtures/locales", "en");
-        let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
         let name = runtime.block_on(translator.i18n.scope("fr", async {
             translator.attribute(&Messages::default(), "first_name")
         }));
         assert_eq!(name, "prénom");
         let messages = Messages::default().with_attribute("company", "the company");
-        let name = runtime.block_on(translator.i18n.scope("fr", async {
-            translator.attribute(&messages, "company")
-        }));
+        let name = runtime.block_on(
+            translator
+                .i18n
+                .scope("fr", async { translator.attribute(&messages, "company") }),
+        );
         assert_eq!(name, "the company");
     }
 }

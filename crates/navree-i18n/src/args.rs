@@ -63,9 +63,7 @@ impl Args {
 
 impl fmt::Debug for Args {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map()
-            .entries(self.0.iter().map(|(name, value)| (name, value)))
-            .finish()
+        f.debug_map().entries(self.0.iter()).finish()
     }
 }
 
@@ -372,7 +370,10 @@ mod tests {
         assert!(matches!(Arg::from(true).0, FluentValue::String(s) if s == "true"));
         assert!(matches!(Arg::from(None::<&str>).0, FluentValue::None));
         assert!(matches!(Arg::from(Some(1_u8)).0, FluentValue::Number(_)));
-        assert!(matches!(Arg::from(Money::new(1, "EUR")).0, FluentValue::Custom(_)));
+        assert!(matches!(
+            Arg::from(Money::new(1, "EUR")).0,
+            FluentValue::Custom(_)
+        ));
         let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
         assert!(matches!(Arg::from(day).0, FluentValue::Custom(_)));
     }
@@ -384,9 +385,15 @@ mod tests {
         assert_eq!(date.time, NaiveTime::from_hms_opt(14, 30, 0));
         assert_eq!(parse_date("2026-10-26").unwrap().time, None);
         assert!(parse_date("26/10/2026").is_none());
-        let from_number =
-            to_date(&FluentValue::Number(FluentNumber::new(0.0, Default::default()))).unwrap();
-        assert_eq!(from_number.date, NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
+        let from_number = to_date(&FluentValue::Number(FluentNumber::new(
+            0.0,
+            Default::default(),
+        )))
+        .unwrap();
+        assert_eq!(
+            from_number.date,
+            NaiveDate::from_ymd_opt(1970, 1, 1).unwrap()
+        );
     }
 
     #[test]

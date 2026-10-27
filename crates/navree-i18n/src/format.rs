@@ -68,13 +68,16 @@ enum DateFormatter {
     DateTime(FixedCalendarDateTimeFormatter<Gregorian, YMDT>),
 }
 
+/// Date formatters by style, built on first use (`None`: no data).
+type DateFormatters = HashMap<(DateStyle, Option<TimeStyle>), Option<Arc<DateFormatter>>>;
+
 /// The formatters of one locale, built on first use and kept.
 pub(crate) struct Formats {
     langid: LanguageIdentifier,
     icu: Option<icu_locale_core::Locale>,
     grouped: OnceLock<Option<DecimalFormatter>>,
     ungrouped: OnceLock<Option<DecimalFormatter>>,
-    dates: Mutex<HashMap<(DateStyle, Option<TimeStyle>), Option<Arc<DateFormatter>>>>,
+    dates: Mutex<DateFormatters>,
 }
 
 impl Formats {
@@ -188,7 +191,9 @@ impl Formats {
         };
         let symbol = currency_symbol(code);
         match placement(&self.langid) {
-            Placement::Before if symbol.is_some() => format!("{sign}{}{digits}", symbol.unwrap_or(code)),
+            Placement::Before if symbol.is_some() => {
+                format!("{sign}{}{digits}", symbol.unwrap_or(code))
+            }
             Placement::Before | Placement::BeforeSpace => {
                 format!("{sign}{}\u{a0}{digits}", symbol.unwrap_or(code))
             }
@@ -216,7 +221,9 @@ impl Formats {
         let time_style = time.and(time_style);
         let formatter = self.date_formatter(style, time_style);
         let fallback = || match (time, time_style) {
-            (Some(time), Some(_)) => format!("{} {}", date.format("%Y-%m-%d"), time.format("%H:%M")),
+            (Some(time), Some(_)) => {
+                format!("{} {}", date.format("%Y-%m-%d"), time.format("%H:%M"))
+            }
             _ => date.format("%Y-%m-%d").to_string(),
         };
         let Some(formatter) = formatter else {
@@ -391,7 +398,10 @@ mod tests {
     fn money_places_the_symbol_like_the_locale() {
         assert_eq!(formats("en").money(4_200_000, "EUR"), "€42,000.00");
         assert_eq!(formats("en").money(4_200_000, "usd"), "$42,000.00");
-        assert_eq!(formats("fr").money(4_200_000, "EUR"), "42\u{202f}000,00\u{a0}€");
+        assert_eq!(
+            formats("fr").money(4_200_000, "EUR"),
+            "42\u{202f}000,00\u{a0}€"
+        );
         assert_eq!(formats("de").money(1999, "EUR"), "19,99\u{a0}€");
         assert_eq!(formats("nl").money(1999, "EUR"), "€\u{a0}19,99");
         assert_eq!(formats("pt-BR").money(1999, "BRL"), "R$\u{a0}19,99");
@@ -406,46 +416,64 @@ mod tests {
         let number = |value, options| FluentNumber::new(value, options);
         let en = formats("en");
         assert_eq!(
-            en.fluent_number(&number(42000.0, FluentNumberOptions {
-                style: FluentNumberStyle::Currency,
-                currency: Some("EUR".into()),
-                ..FluentNumberOptions::default()
-            })),
+            en.fluent_number(&number(
+                42000.0,
+                FluentNumberOptions {
+                    style: FluentNumberStyle::Currency,
+                    currency: Some("EUR".into()),
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("€42,000.00".to_owned())
         );
         assert_eq!(
-            en.fluent_number(&number(0.256, FluentNumberOptions {
-                style: FluentNumberStyle::Percent,
-                ..FluentNumberOptions::default()
-            })),
+            en.fluent_number(&number(
+                0.256,
+                FluentNumberOptions {
+                    style: FluentNumberStyle::Percent,
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("26%".to_owned())
         );
         assert_eq!(
-            en.fluent_number(&number(2026.0, FluentNumberOptions {
-                use_grouping: false,
-                ..FluentNumberOptions::default()
-            })),
+            en.fluent_number(&number(
+                2026.0,
+                FluentNumberOptions {
+                    use_grouping: false,
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("2026".to_owned())
         );
         assert_eq!(
-            en.fluent_number(&number(3.0, FluentNumberOptions {
-                minimum_fraction_digits: Some(2),
-                ..FluentNumberOptions::default()
-            })),
+            en.fluent_number(&number(
+                3.0,
+                FluentNumberOptions {
+                    minimum_fraction_digits: Some(2),
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("3.00".to_owned())
         );
         assert_eq!(
-            en.fluent_number(&number(7.0, FluentNumberOptions {
-                minimum_integer_digits: Some(3),
-                ..FluentNumberOptions::default()
-            })),
+            en.fluent_number(&number(
+                7.0,
+                FluentNumberOptions {
+                    minimum_integer_digits: Some(3),
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("007".to_owned())
         );
         assert_eq!(
-            formats("fr").fluent_number(&number(0.5, FluentNumberOptions {
-                style: FluentNumberStyle::Percent,
-                ..FluentNumberOptions::default()
-            })),
+            formats("fr").fluent_number(&number(
+                0.5,
+                FluentNumberOptions {
+                    style: FluentNumberStyle::Percent,
+                    ..FluentNumberOptions::default()
+                }
+            )),
             Some("50\u{a0}%".to_owned())
         );
     }
@@ -453,10 +481,22 @@ mod tests {
     #[test]
     fn dates_follow_the_locale_pattern() {
         let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-        assert_eq!(formats("en").date(day, None, DateStyle::Medium, None), "Oct 26, 2026");
-        assert_eq!(formats("fr").date(day, None, DateStyle::Medium, None), "26 oct. 2026");
-        assert_eq!(formats("de").date(day, None, DateStyle::Long, None), "26. Oktober 2026");
-        assert_eq!(formats("en").date(day, None, DateStyle::Short, None), "10/26/26");
+        assert_eq!(
+            formats("en").date(day, None, DateStyle::Medium, None),
+            "Oct 26, 2026"
+        );
+        assert_eq!(
+            formats("fr").date(day, None, DateStyle::Medium, None),
+            "26 oct. 2026"
+        );
+        assert_eq!(
+            formats("de").date(day, None, DateStyle::Long, None),
+            "26. Oktober 2026"
+        );
+        assert_eq!(
+            formats("en").date(day, None, DateStyle::Short, None),
+            "10/26/26"
+        );
         let at = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
         assert_eq!(
             formats("en").date(day, Some(at), DateStyle::Medium, Some(TimeStyle::Short)),
@@ -467,6 +507,9 @@ mod tests {
             "26 oct. 2026, 14:30"
         );
         // A time is shown only when a time style asks for it.
-        assert_eq!(formats("en").date(day, Some(at), DateStyle::Medium, None), "Oct 26, 2026");
+        assert_eq!(
+            formats("en").date(day, Some(at), DateStyle::Medium, None),
+            "Oct 26, 2026"
+        );
     }
 }

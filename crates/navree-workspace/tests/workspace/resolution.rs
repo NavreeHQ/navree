@@ -294,7 +294,11 @@ fn requested_workspace_reads_the_configured_resolvers_without_loading_anything()
     let parts = |request: http::request::Builder| request.body(()).unwrap().into_parts().0;
     let config = WorkspaceConfig::default();
 
-    let header = parts(http::Request::builder().uri("/api/deals").header("X-Workspace", "acme"));
+    let header = parts(
+        http::Request::builder()
+            .uri("/api/deals")
+            .header("X-Workspace", "acme"),
+    );
     assert_eq!(
         requested_workspace(&config, &header),
         Some((ResolverKind::Header, "acme".to_owned()))

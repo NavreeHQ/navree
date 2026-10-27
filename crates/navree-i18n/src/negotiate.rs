@@ -13,10 +13,10 @@ use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, WorkspaceConfig, Workspaces, requested_workspace};
 use uuid::Uuid;
 
+use crate::I18n;
 use crate::locale::Locale;
 use crate::options::Source;
 use crate::service::{Owner, Shared};
-use crate::I18n;
 
 /// At most this many `Accept-Language` entries are considered.
 const MAX_ACCEPT_LANGUAGES: usize = 16;
@@ -51,7 +51,7 @@ pub(crate) fn accept_language(header: &str) -> Vec<String> {
         })
         .collect();
     // A stable sort keeps header order among equal qualities.
-    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     entries.into_iter().map(|(tag, _)| tag).collect()
 }
 
@@ -210,11 +210,16 @@ mod tests {
 
     #[test]
     fn cookies_and_query_parameters() {
-        assert_eq!(cookie("a=1; locale=fr; b=2", "locale"), Some("fr".to_owned()));
+        assert_eq!(
+            cookie("a=1; locale=fr; b=2", "locale"),
+            Some("fr".to_owned())
+        );
         assert_eq!(cookie("locale=\"de\"", "locale"), Some("de".to_owned()));
         assert_eq!(cookie("a=1", "locale"), None);
-        assert_eq!(query_param("page=2&locale=pt-BR", "locale"), Some("pt-BR".to_owned()));
+        assert_eq!(
+            query_param("page=2&locale=pt-BR", "locale"),
+            Some("pt-BR".to_owned())
+        );
         assert_eq!(query_param("page=2", "locale"), None);
     }
 }
-
