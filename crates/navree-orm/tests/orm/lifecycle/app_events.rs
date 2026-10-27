@@ -37,11 +37,10 @@ impl Listener<OrderPlaced> for OrderListener {
         event: &'a OrderPlaced,
         _ctx: &'a AppContext,
     ) -> BoxFuture<'a, Result<(), BoxError>> {
-        self.0
-            .0
-            .lock()
-            .unwrap()
-            .push(format!("placed {} for {}", event.reference, event.total_cents));
+        self.0.0.lock().unwrap().push(format!(
+            "placed {} for {}",
+            event.reference, event.total_cents
+        ));
         Box::pin(async { Ok(()) })
     }
 }
@@ -113,12 +112,20 @@ async fn model_events_reach_the_app_as_typed_events_after_the_commit() {
     let mut placed = Order::create(&uow, order("A-1", 4200)).await.unwrap();
     assert_eq!(heard.take(), ["saving A-1"], "-ing events at once");
     uow.commit().await.unwrap();
-    assert_eq!(heard.take(), ["placed A-1 for 4200"], "-ed events after the commit");
+    assert_eq!(
+        heard.take(),
+        ["placed A-1 for 4200"],
+        "-ed events after the commit"
+    );
 
     let uow = db.uow(None, None).await;
     Order::create(&uow, order("B-2", 100)).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(heard.take(), ["saving B-2"], "never for a rolled-back write");
+    assert_eq!(
+        heard.take(),
+        ["saving B-2"],
+        "never for a rolled-back write"
+    );
 
     placed.delete(&*db).await.unwrap();
     assert_eq!(heard.take(), ["removed A-1"]);
@@ -135,7 +142,10 @@ async fn a_failing_listener_of_an_ing_event_refuses_the_write() {
         message.starts_with("a Order hook failed: event `order.saving`:"),
         "{message}"
     );
-    assert!(message.contains("orders named `refused` are refused"), "{message}");
+    assert!(
+        message.contains("orders named `refused` are refused"),
+        "{message}"
+    );
     assert_eq!(count_rows(&db, "orders").await, 0);
 }
 

@@ -190,7 +190,10 @@ async fn prune_record<M: Prunable, E: Executor + ?Sized>(
 }
 
 /// [`MassPrunable::prune_all`].
-async fn prune_mass<M: MassPrunable, E: Executor + ?Sized>(exec: &E, chunk_size: u64) -> Result<u64> {
+async fn prune_mass<M: MassPrunable, E: Executor + ?Sized>(
+    exec: &E,
+    chunk_size: u64,
+) -> Result<u64> {
     let mut query = M::prunable(M::query());
     if query.ir.limit.is_none() {
         query = query.limit(chunk_size.max(1));
@@ -424,7 +427,12 @@ pub async fn prune(app: &AppContext, run: &PruneRun) -> std::result::Result<Vec<
     }
     let prunable: Vec<(&'static str, Pruning)> = crate::module::registered_models(app)
         .into_iter()
-        .filter_map(|model| model.meta().pruning().map(|pruning| (model.name(), *pruning)))
+        .filter_map(|model| {
+            model
+                .meta()
+                .pruning()
+                .map(|pruning| (model.name(), *pruning))
+        })
         .collect();
     for name in &run.models {
         if !prunable.iter().any(|(known, _)| known == name) {
@@ -463,7 +471,13 @@ pub async fn prune(app: &AppContext, run: &PruneRun) -> std::result::Result<Vec<
         }
         return Ok(done);
     }
-    announce_in(app, ModelPruningStarting { models: names.clone() }).await;
+    announce_in(
+        app,
+        ModelPruningStarting {
+            models: names.clone(),
+        },
+    )
+    .await;
     for (model, pruning) in chosen {
         let chunk = pruning.chunk_size().unwrap_or(default_chunk);
         done.push(Pruned {
@@ -477,7 +491,10 @@ pub async fn prune(app: &AppContext, run: &PruneRun) -> std::result::Result<Vec<
 
 /// The `model:prune` command: `[--model M]... [--except M]... [--chunk N]
 /// [--pretend]`.
-pub(crate) async fn prune_command(app: AppContext, args: Vec<String>) -> std::result::Result<(), BoxError> {
+pub(crate) async fn prune_command(
+    app: AppContext,
+    args: Vec<String>,
+) -> std::result::Result<(), BoxError> {
     let run = parse_args(&args).map_err(|message| format!("model:prune: {message}"))?;
     let pruned = prune(&app, &run)
         .await

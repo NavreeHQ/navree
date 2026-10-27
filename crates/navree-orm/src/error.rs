@@ -264,7 +264,10 @@ mod tests {
             model: "Deal".into(),
             relation: "company".into(),
         };
-        assert!(lazy.to_string().starts_with("relation `company` of Deal was loaded lazily"));
+        assert!(
+            lazy.to_string()
+                .starts_with("relation `company` of Deal was loaded lazily")
+        );
     }
 
     #[test]

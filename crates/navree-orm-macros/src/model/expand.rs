@@ -304,8 +304,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     // Lifecycle: the model's own hooks (observers, typed events, ...).
     let hook_entries = super::lifecycle::hook_entries(&model.lifecycle, krate);
     let hooks = super::lifecycle::hooks_fn(ident, &hook_entries, krate);
-    let capabilities =
-        super::lifecycle::capability_impls(ident, model.deleted_at.is_some(), krate);
+    let capabilities = super::lifecycle::capability_impls(ident, model.deleted_at.is_some(), krate);
 
     // Column constants.
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {

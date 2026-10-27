@@ -305,7 +305,10 @@ impl fmt::Debug for Strictness {
             .field("lazy_loading", &self.lazy_loading)
             .field("auto_eager_load", &self.auto_eager_load)
             .field("on_missing_attribute", &self.on_missing_attribute.is_some())
-            .field("on_discarded_attributes", &self.on_discarded_attributes.is_some())
+            .field(
+                "on_discarded_attributes",
+                &self.on_discarded_attributes.is_some(),
+            )
             .field("on_lazy_loading", &self.on_lazy_loading.is_some())
             .finish()
     }
@@ -435,7 +438,12 @@ mod tests {
         assert!(current().prevents_missing_attributes());
         scope(Strictness::lenient(), async {
             assert!(!current().prevents_missing_attributes());
-            assert!(!ExecContext::default().strictness().await.prevents_missing_attributes());
+            assert!(
+                !ExecContext::default()
+                    .strictness()
+                    .await
+                    .prevents_missing_attributes()
+            );
         })
         .await;
         sync_scope(Strictness::lenient(), || {

@@ -105,12 +105,24 @@ async fn quiet_writes_reach_the_database_and_the_audit_trail_only() {
     clock.advance(Duration::from_secs(5));
     acme.name = "Acme Corp".into();
     assert!(acme.save_quietly(&uow).await.unwrap());
-    assert!(acme.update_quietly(&uow, |c| c.employees = 9).await.unwrap());
+    assert!(
+        acme.update_quietly(&uow, |c| c.employees = 9)
+            .await
+            .unwrap()
+    );
     clock.advance(Duration::from_secs(5));
     assert!(acme.touch_quietly(&uow).await.unwrap());
-    assert!(acme.increment_quietly(&uow, Company::EMPLOYEES, 3).await.unwrap());
+    assert!(
+        acme.increment_quietly(&uow, Company::EMPLOYEES, 3)
+            .await
+            .unwrap()
+    );
     assert_eq!(acme.employees, 12);
-    assert!(acme.decrement_quietly(&uow, Company::EMPLOYEES, 2).await.unwrap());
+    assert!(
+        acme.decrement_quietly(&uow, Company::EMPLOYEES, 2)
+            .await
+            .unwrap()
+    );
     assert_eq!(acme.employees, 10);
     assert!(globex.delete_quietly(&uow).await.unwrap());
 
@@ -121,7 +133,10 @@ async fn quiet_writes_reach_the_database_and_the_audit_trail_only() {
         "two creates, five updates and a delete in the audit trail"
     );
     uow.commit().await.unwrap();
-    assert!(heard.take().is_empty(), "nothing waited for the commit either");
+    assert!(
+        heard.take().is_empty(),
+        "nothing waited for the commit either"
+    );
     assert_eq!(count_rows(&db, "companies").await, 1);
     let stored = Company::find_or_fail(&*db, acme.id).await.unwrap();
     assert_eq!((stored.name.as_str(), stored.employees), ("Acme Corp", 10));
@@ -140,9 +155,15 @@ async fn several_columns_step_in_one_statement_quietly_or_not() {
     heard.take();
 
     assert!(
-        deal.increment_each(&*db, [(Deal::AMOUNT_CENTS, 50), (Deal::AMOUNT_CENTS.unqualified(), 1)])
-            .await
-            .is_err(),
+        deal.increment_each(
+            &*db,
+            [
+                (Deal::AMOUNT_CENTS, 50),
+                (Deal::AMOUNT_CENTS.unqualified(), 1)
+            ]
+        )
+        .await
+        .is_err(),
         "a column steps once per statement"
     );
     deal.discard_changes();
@@ -179,7 +200,10 @@ async fn several_columns_step_in_one_statement_quietly_or_not() {
     assert_eq!(acme.employees, 12);
     assert!(acme.is_clean());
     assert_eq!(
-        Company::find_or_fail(&*db, acme.id).await.unwrap().employees,
+        Company::find_or_fail(&*db, acme.id)
+            .await
+            .unwrap()
+            .employees,
         12
     );
 

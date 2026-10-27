@@ -59,7 +59,10 @@ async fn the_fake_records_events_instead_of_running_listeners() {
     uow.commit().await.unwrap();
     fake.assert_fired::<Company>(ModelEvent::Created);
     fake.assert_fired_times::<Company>(ModelEvent::Saved, 1);
-    assert_eq!(fake.keys::<Company>(ModelEvent::Created), [acme.id.to_string()]);
+    assert_eq!(
+        fake.keys::<Company>(ModelEvent::Created),
+        [acme.id.to_string()]
+    );
 
     acme.delete_quietly(&*db).await.unwrap();
     fake.assert_not_fired::<Company>(ModelEvent::Deleted);

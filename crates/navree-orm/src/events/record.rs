@@ -26,7 +26,11 @@ impl<M: Model> Record<M> {
     /// }
     /// # Ok(()) }
     /// ```
-    pub async fn fire<E: Executor + ?Sized>(&mut self, exec: &E, event: &'static str) -> Result<Flow> {
+    pub async fn fire<E: Executor + ?Sized>(
+        &mut self,
+        exec: &E,
+        event: &'static str,
+    ) -> Result<Flow> {
         if ModelEvent::from_name(event).is_some() {
             return Err(OrmError::invalid(format!(
                 "`{event}` is a built-in model event: fire events of your own (`archived`, `escalated`, ...)"
@@ -58,7 +62,9 @@ impl<M: Model> Record<M> {
         let target = exec.target(Access::Read).await?;
         let ctx = target.context();
         let hooks = Hooks::<M>::resolve(&ctx).await?;
-        hooks.after(ModelEvent::Replicating, &ctx, &mut copy).await?;
+        hooks
+            .after(ModelEvent::Replicating, &ctx, &mut copy)
+            .await?;
         Ok(copy)
     }
 

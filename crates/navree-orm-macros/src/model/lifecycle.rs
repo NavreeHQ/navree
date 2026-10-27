@@ -73,14 +73,18 @@ fn flag(meta: &ParseNestedMeta<'_>, what: &str) -> syn::Result<()> {
 }
 
 /// Parses `meta` when it is a lifecycle key; `Ok(false)` when it is not.
-pub(crate) fn parse_key(lifecycle: &mut Lifecycle, meta: &ParseNestedMeta<'_>) -> syn::Result<bool> {
+pub(crate) fn parse_key(
+    lifecycle: &mut Lifecycle,
+    meta: &ParseNestedMeta<'_>,
+) -> syn::Result<bool> {
     let path = &meta.path;
     if path.is_ident("observers") {
         let content;
         syn::parenthesized!(content in meta.input);
         let observers = Punctuated::<syn::Expr, Token![,]>::parse_terminated(&content)?;
         if observers.is_empty() {
-            return Err(meta.error("observers(..) needs at least one observer, e.g. observers(DealObserver)"));
+            return Err(meta
+                .error("observers(..) needs at least one observer, e.g. observers(DealObserver)"));
         }
         lifecycle.observers.extend(observers);
         Ok(true)
@@ -132,7 +136,11 @@ pub(crate) fn parse_key(lifecycle: &mut Lifecycle, meta: &ParseNestedMeta<'_>) -
 }
 
 /// What the lifecycle adds to the model's `ModelMeta`: how it is pruned.
-pub(crate) fn meta_additions(lifecycle: &Lifecycle, model: &Ident, krate: &TokenStream) -> TokenStream {
+pub(crate) fn meta_additions(
+    lifecycle: &Lifecycle,
+    model: &Ident,
+    krate: &TokenStream,
+) -> TokenStream {
     match lifecycle.prune {
         Some(Prune::Each) => quote!(.pruned(#krate::prune::Pruning::each::<#model>())),
         Some(Prune::Mass) => quote!(.pruned(#krate::prune::Pruning::mass::<#model>())),
@@ -162,7 +170,11 @@ pub(crate) fn hook_entries(lifecycle: &Lifecycle, krate: &TokenStream) -> Vec<To
 
 /// The capability traits a model's declarations give it:
 /// `SoftDeleting` for `soft_deletes`.
-pub(crate) fn capability_impls(model: &Ident, soft_deletes: bool, krate: &TokenStream) -> TokenStream {
+pub(crate) fn capability_impls(
+    model: &Ident,
+    soft_deletes: bool,
+    krate: &TokenStream,
+) -> TokenStream {
     let mut impls = TokenStream::new();
     if soft_deletes {
         impls.extend(quote! {

@@ -411,7 +411,11 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
     {
         return Err(OrmError::invalid(format!(
             "{} `{twice}` of {} is listed twice: each column steps once per statement",
-            if decrement { "decrementing" } else { "incrementing" },
+            if decrement {
+                "decrementing"
+            } else {
+                "incrementing"
+            },
             meta.name()
         )));
     }

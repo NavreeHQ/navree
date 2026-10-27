@@ -72,7 +72,11 @@ async fn modules_register_global_scopes_that_queries_can_leave_out() {
         ["off", "on", "pinned"]
     );
     assert_eq!(
-        Gadget::query().without_global_scopes().count(&*db).await.unwrap(),
+        Gadget::query()
+            .without_global_scopes()
+            .count(&*db)
+            .await
+            .unwrap(),
         4
     );
 
@@ -116,8 +120,14 @@ fn declared_scopes_and_soft_deletes_have_names_too() {
     assert_eq!(Article::global_scope_names(), ["Published", "ByAuthor"]);
     assert_eq!(Deal::global_scope_names(), ["SoftDeletes"]);
     assert!(Deal::has_global_scope("SoftDeletes"));
-    assert_eq!(Deal::query().with_trashed().removed_scopes(), ["SoftDeletes"]);
-    assert_eq!(Deal::query().only_trashed().removed_scopes(), ["SoftDeletes"]);
+    assert_eq!(
+        Deal::query().with_trashed().removed_scopes(),
+        ["SoftDeletes"]
+    );
+    assert_eq!(
+        Deal::query().only_trashed().removed_scopes(),
+        ["SoftDeletes"]
+    );
     assert!(Deal::query().removed_scopes().is_empty());
     assert_eq!(
         Article::query()

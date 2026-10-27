@@ -275,7 +275,9 @@ impl RegisteredModel {
 
 impl fmt::Debug for RegisteredModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("RegisteredModel").field(&self.name()).finish()
+        f.debug_tuple("RegisteredModel")
+            .field(&self.name())
+            .finish()
     }
 }
 
@@ -371,7 +373,8 @@ pub trait ModuleBuilderOrmExt {
 
 impl ModuleBuilderOrmExt for ModuleBuilder {
     fn model<M: Model>(&mut self) -> &mut Self {
-        self.import(OrmModule).contribute(RegisteredModel::of::<M>())
+        self.import(OrmModule)
+            .contribute(RegisteredModel::of::<M>())
     }
 
     fn observe<M: Model>(&mut self, observer: impl Observer<M>) -> &mut Self {

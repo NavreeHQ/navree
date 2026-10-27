@@ -178,7 +178,14 @@ pub async fn scenario(db: Db, server: Server) {
             format!("force_deleted stay gone [{server:?}]"),
         ]
     );
-    assert!(Memo::query().with_trashed().find(&db, gone.id).await.unwrap().is_none());
+    assert!(
+        Memo::query()
+            .with_trashed()
+            .find(&db, gone.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
 
     // In bulk: restore trashed matches, force delete with a limit (a keyed
     // subquery MySQL accepts).
