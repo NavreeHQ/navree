@@ -387,6 +387,8 @@ async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<String>, App
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InWorkspace {
     source: Source,
+    /// Refuses guests of a demo workspace (`workspace.demo.guest_role`).
+    members_only: bool,
 }
 
 impl InWorkspace {
@@ -394,6 +396,7 @@ impl InWorkspace {
     pub fn guard() -> Arc<dyn Guard> {
         Arc::new(InWorkspace {
             source: Source::Configured,
+            members_only: false,
         })
     }
 
@@ -403,6 +406,17 @@ impl InWorkspace {
     pub fn from_path(param: &'static str) -> Arc<dyn Guard> {
         Arc::new(InWorkspace {
             source: Source::PathParam(param),
+            members_only: false,
+        })
+    }
+
+    /// [`from_path`](Self::from_path) that also refuses a demo workspace's
+    /// guests (403): the module's routes about members, invitations and
+    /// the workspace's settings.
+    pub(crate) fn members_from_path(param: &'static str) -> Arc<dyn Guard> {
+        Arc::new(InWorkspace {
+            source: Source::PathParam(param),
+            members_only: true,
         })
     }
 }
@@ -411,6 +425,10 @@ impl Guard for InWorkspace {
     fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
             let current = resolve_request(parts, &self.source).await?;
+            if self.members_only && current.is_guest() {
+                return Err(AppError::forbidden()
+                    .with_detail("Only members of this workspace can do this."));
+            }
             check_scoped_record(parts, &current).await
         })
     }

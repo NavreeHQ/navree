@@ -255,8 +255,10 @@ pub struct AcceptedInvitationResource {
 ///
 /// Granting the `owner` role, or changing or removing a member who has it,
 /// also takes the `owner` role (a 403 otherwise). In a read-only demo
-/// workspace the routes that write answer 403 (`demo_read_only`). `POST
-/// /invitations/accept` is [`InvitationController`].
+/// workspace the routes that write answer 403 (`demo_read_only`); a demo's
+/// guests (`workspace.demo.guest_role`) get `GET /workspaces/{workspace}`
+/// and a 403 from the others. `POST /invitations/accept` is
+/// [`InvitationController`].
 pub struct WorkspaceController {
     workspaces: Arc<Workspaces>,
     members: Arc<Members>,
@@ -521,6 +523,8 @@ impl Controller for WorkspaceController {
                 }
             };
         let guard = || InWorkspace::from_path(WORKSPACE_PARAM);
+        // Everything but `show` is for members: a demo's guests see the workspace only.
+        let members_only = || InWorkspace::members_from_path(WORKSPACE_PARAM);
         vec![
             RouteDef::on(Method::GET, "/", index)
                 .authenticated()
@@ -550,7 +554,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::PATCH, "/{workspace}", rename)
                 .permissions(&["workspace.update"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.update")
                 .api(api(
                     "Rename a workspace",
@@ -560,7 +564,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::DELETE, "/{workspace}", destroy)
                 .permissions(&["workspace.delete"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.destroy")
                 .api(ApiMeta {
                     success_status: 204,
@@ -568,7 +572,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::POST, "/{workspace}/transfer", transfer)
                 .permissions(&["workspace.transfer"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.transfer")
                 .api(api(
                     "Transfer a workspace to another member",
@@ -578,7 +582,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/leave", leave)
                 .authenticated()
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.leave")
                 .api(ApiMeta {
                     success_status: 204,
@@ -586,7 +590,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::GET, "/{workspace}/members", list_members)
                 .permissions(&["workspace.members.read"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.index")
                 .api(api(
                     "List a workspace's members",
@@ -596,7 +600,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/members", add_member)
                 .permissions(&["workspace.members.create"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.store")
                 .api(ApiMeta {
                     success_status: 201,
@@ -609,7 +613,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::PATCH, "/{workspace}/members/{user}", change_role)
                 .permissions(&["workspace.members.update"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.update")
                 .api(api(
                     "Change a member's role",
@@ -619,7 +623,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::DELETE, "/{workspace}/members/{user}", remove_member)
                 .permissions(&["workspace.members.delete"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.destroy")
                 .api(ApiMeta {
                     success_status: 204,
@@ -627,7 +631,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::GET, "/{workspace}/invitations", list_invitations)
                 .permissions(&["workspace.invitations.read"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.invitations.index")
                 .api(api(
                     "List pending invitations",
@@ -637,7 +641,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/invitations", invite)
                 .permissions(&["workspace.invitations.create"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.invitations.store")
                 .api(ApiMeta {
                     success_status: 201,
@@ -654,7 +658,7 @@ impl Controller for WorkspaceController {
                 revoke,
             )
             .permissions(&["workspace.invitations.delete"])
-            .guard(guard())
+            .guard(members_only())
             .name("workspaces.invitations.destroy")
             .api(ApiMeta {
                 success_status: 204,

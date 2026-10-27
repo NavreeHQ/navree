@@ -566,6 +566,63 @@ async fn guests_enter_demos_with_the_guest_role() {
         .send()
         .await
         .assert_error(403, "Demo workspaces are read-only.");
+    // They see the workspace, but not its members or invitations.
+    guest
+        .get("/api/workspaces/acme-demo")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("role", json!("viewer"))
+        .assert_json_path("kind", json!("demo"));
+    for path in [
+        "/api/workspaces/acme-demo/members",
+        "/api/workspaces/acme-demo/invitations",
+    ] {
+        guest
+            .get(path)
+            .send()
+            .await
+            .assert_error(403, "Only members of this workspace can do this.");
+    }
+    world
+        .as_user(ada)
+        .get("/api/workspaces/acme-demo/members")
+        .send()
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn reset_demo_guests_write_with_their_role_but_never_manage_the_workspace() {
+    let dir = fixtures();
+    let world = world_with(&dir, |b| {
+        b.config("workspace.demo.mode", "reset")
+            .config("workspace.demo.guest_role", "member")
+    })
+    .await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let grace = world.user("Grace", "grace@example.com").await;
+    let demo = world.demo(ada, "Acme demo").await;
+    let guest = world.as_user(grace);
+    guest
+        .post("/api/deals")
+        .header("x-workspace", "acme-demo")
+        .json(&json!({ "title": "Guest's deal" }))
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(world.deal_titles(demo.id).await.len(), 4);
+    guest
+        .post("/api/workspaces/acme-demo/invitations")
+        .json(&json!({ "email": "friend@example.com" }))
+        .send()
+        .await
+        .assert_error(403, "Only members of this workspace can do this.");
+    guest
+        .post("/api/workspaces/acme-demo/leave")
+        .send()
+        .await
+        .assert_error(403, "Only members of this workspace can do this.");
 }
 
 #[tokio::test]
