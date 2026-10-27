@@ -7,7 +7,7 @@ use sea_orm::ConnectionTrait;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{database_app, errors, insert};
+use crate::support::{NotReserved, database_app, errors, insert};
 
 #[tokio::test]
 async fn unique_rule_rejects_existing_and_ignores_self() {
@@ -199,4 +199,59 @@ async fn async_rules_without_database_module_are_a_server_error() {
         .send()
         .await
         .assert_status(200);
+}
+
+#[tokio::test]
+async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter() {
+    let app = database_app().await;
+
+    let response = app
+        .client()
+        .post("/db/handles")
+        .json(&json!({ "code": "admin" }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "code": ["code has already been taken"] })
+    );
+    for code in [json!("bob"), json!(null)] {
+        app.client()
+            .post("/db/handles")
+            .json(&json!({ "code": code }))
+            .send()
+            .await
+            .assert_status(200);
+    }
+    // The route's `{code}` reaches the check: the record keeps its own code.
+    app.client()
+        .patch("/db/handles/admin")
+        .json(&json!({ "code": "admin" }))
+        .send()
+        .await
+        .assert_status(200);
+    app.client()
+        .patch("/db/handles/bob")
+        .json(&json!({ "code": "admin" }))
+        .send()
+        .await
+        .assert_error(400, None);
+
+    // Outside a request: in a unit of work, not on a bare connection.
+    let db = app.get::<Db>().await;
+    let rule = || AsyncRule::check("code", "unique", NotReserved("admin".into()));
+    let error = rule().passes(db.conn()).await.unwrap_err();
+    assert!(
+        matches!(error, RuleError::NeedsUnitOfWork { rule: "unique", .. }),
+        "{error}"
+    );
+    let uow = db.uow(None, None).await;
+    assert!(!rule().passes_in(&uow).await.unwrap());
+    assert!(
+        rule().skipped_when(true).passes_in(&uow).await.unwrap(),
+        "a null value passes"
+    );
+    let plain = AsyncRule::exists("name", "companies", "name", "Acme");
+    assert!(!plain.passes_in(&uow).await.unwrap());
 }
