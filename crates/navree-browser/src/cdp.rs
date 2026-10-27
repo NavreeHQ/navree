@@ -47,9 +47,15 @@ impl CdpError {
             "Inspected target navigated or closed",
             "uniqueContextId not found",
             "Execution context with given id not found",
+            "Not attached to an active page",
         ]
         .iter()
         .any(|needle| self.message.contains(needle))
+    }
+
+    /// The page is switching documents and cannot answer this moment.
+    pub(crate) fn is_between_documents(&self) -> bool {
+        self.message.contains("Not attached to an active page")
     }
 
     /// The page's session is gone (the page or its browser closed).
@@ -634,6 +640,17 @@ mod tests {
         );
         assert_eq!(answer.unwrap().1["promptText"], "Ada");
         assert_eq!(log.lines[0], "[dialog] confirm(\"Delete the deal?\") accepted");
+    }
+
+    #[test]
+    fn a_page_between_documents_is_retried_not_failed() {
+        let error = CdpError {
+            code: -32000,
+            message: "Not attached to an active page".to_owned(),
+        };
+        assert!(error.is_between_documents());
+        assert!(error.is_context_lost());
+        assert!(!error.is_session_gone());
     }
 
     #[test]

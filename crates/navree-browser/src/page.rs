@@ -308,11 +308,20 @@ impl Scope {
         }
     }
 
+    /// Sends a page command. Right after a navigation the page can be
+    /// between documents for a moment; such answers are retried.
     async fn cdp(&self, method: &str, params: Value) -> Result<Value, Fail> {
-        self.core
-            .call(method, params)
-            .await
-            .map_err(|e| self.refused(method, e))
+        let mut attempts = 0;
+        loop {
+            match self.core.call(method, params.clone()).await {
+                Ok(answer) => return Ok(answer),
+                Err(error) if error.is_between_documents() && attempts < 40 => {
+                    attempts += 1;
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                Err(error) => return Err(self.refused(method, error)),
+            }
+        }
     }
 
     async fn evaluate(&self, expression: String, by_value: bool) -> Result<Value, EvalError> {
