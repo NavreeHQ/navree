@@ -1151,6 +1151,16 @@ impl<P: Model> ErasedRelation<P> for MorphTo<P> {
 
 /// The models a polymorphic existence check covers: listed by name,
 /// listed by model, or every known model.
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::relations::MorphTypes;
+///
+/// let deals_or_companies = MorphTypes::of::<Deal>().and::<Company>();
+/// let by_name: MorphTypes = ["deal", "company"].into();
+/// let notes = Note::query().has_morph("notable", deals_or_companies);
+/// # let _ = (by_name, notes, MorphTypes::all());
+/// ```
 #[derive(Clone, Debug, Default)]
 pub struct MorphTypes {
     names: Option<Vec<String>>,
@@ -1204,6 +1214,19 @@ impl From<Vec<String>> for MorphTypes {
 /// What a `morph_to` points at, for [`where_morphed_to`](Builder::where_morphed_to):
 /// a record (`&deal`), several records of one model (`&deals`), any record
 /// of a model ([`MorphRef::type_of`]), or nothing ([`MorphRef::null`]).
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::relations::MorphRef;
+///
+/// let sql = Note::query()
+///     .where_morphed_to("notable", MorphRef::type_of::<Deal>())
+///     .to_sql(Dialect::Sqlite)
+///     .unwrap();
+/// assert!(sql.sql.ends_with(r#"WHERE "notes"."notable_type" = ?"#));
+/// let loose = Note::query().where_morphed_to("notable", MorphRef::null());
+/// # let _ = loose;
+/// ```
 #[derive(Clone, Debug)]
 pub struct MorphRef {
     kind: MorphRefKind,

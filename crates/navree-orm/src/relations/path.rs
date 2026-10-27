@@ -78,6 +78,16 @@ fn is_name(text: &str) -> bool {
 /// Implemented for `&str`, `String` and `&String`, and for every function
 /// `Fn(&M) -> R` where `R` is a relation of `M` (relation methods; `M`
 /// implements `Default`, as models with relations do).
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// // The same eager load, typed and by name.
+/// let typed = Deal::query().with(Deal::company);
+/// let named = Deal::query().with("company");
+/// assert_eq!(typed.eager_loads(), named.eager_loads());
+/// let nested = Deal::query().with("company.deals:id,company_id,title");
+/// assert_eq!(nested.eager_loads(), ["company", "company.deals"]);
+/// ```
 pub trait RelationPath<M: Model> {
     /// The path as text.
     #[doc(hidden)]

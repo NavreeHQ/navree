@@ -608,6 +608,18 @@ impl<R: Model> RelatedId<R> for Record<R> {
 }
 
 /// What a `sync` (or `toggle`) changed, by related id.
+///
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(uow: Uow, deal: Record<Deal>) -> Result<()> {
+/// let changes = deal.tags().sync(&uow, [1_i64, 2]).await?;
+/// let attached: Vec<i64> = changes.attached_as()?;
+/// let detached: Vec<i64> = changes.detached_as()?;
+/// if !changes.is_empty() {
+///     println!("tags +{attached:?} -{detached:?}");
+/// }
+/// # Ok(()) }
+/// ```
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SyncChanges {
     /// The ids attached.
