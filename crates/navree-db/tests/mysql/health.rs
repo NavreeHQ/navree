@@ -54,7 +54,11 @@ async fn the_database_health_check_follows_the_server() {
         ))
         .await
         .expect("creates the database again");
-    assert_eq!(database.check().await, HealthStatus::Up, "the pool reconnects");
+    assert_eq!(
+        database.check().await,
+        HealthStatus::Up,
+        "the pool reconnects"
+    );
     admin.close().await.unwrap();
     app.shutdown().await.unwrap();
 }

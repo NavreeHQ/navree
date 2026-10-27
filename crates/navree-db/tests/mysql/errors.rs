@@ -91,11 +91,7 @@ async fn constraint_errors_map_to_conflicts() {
         .unwrap_err();
     assert_eq!(mapped(&referenced), Some((409, fk)), "{referenced}");
 
-    let syntax = db
-        .conn()
-        .execute_unprepared("SELEC 1")
-        .await
-        .unwrap_err();
+    let syntax = db.conn().execute_unprepared("SELEC 1").await.unwrap_err();
     assert_eq!(mapped(&syntax), None, "anything else stays a 500");
 }
 
@@ -187,7 +183,10 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
     let router = build_router(app.ctx()).await.expect("router builds");
     let db = app.ctx().get::<Db>().await.unwrap();
 
-    assert_eq!(send(&router, post("/api/notes/kept")).await.0, StatusCode::CREATED);
+    assert_eq!(
+        send(&router, post("/api/notes/kept")).await.0,
+        StatusCode::CREATED
+    );
     assert_eq!(count(db.conn(), "notes").await, 1);
 
     let (status, body) = send(&router, post("/api/notes/dropped/fail")).await;
@@ -221,7 +220,10 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
         body,
         json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
     );
-    assert_eq!(send(&router, post("/api/notes/after")).await.0, StatusCode::CREATED);
+    assert_eq!(
+        send(&router, post("/api/notes/after")).await.0,
+        StatusCode::CREATED
+    );
     assert_eq!(count(db.conn(), "notes").await, 2);
     app.shutdown().await.unwrap();
 }

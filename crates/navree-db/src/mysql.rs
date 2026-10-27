@@ -36,7 +36,10 @@ pub(crate) fn session_statements(options: &MySqlOptions) -> Vec<String> {
     let mode = match &options.modes {
         Some(modes) => {
             let modes: Vec<String> = modes.iter().map(|m| m.to_ascii_uppercase()).collect();
-            format!("SET SESSION sql_mode = {}", string_literal(&modes.join(",")))
+            format!(
+                "SET SESSION sql_mode = {}",
+                string_literal(&modes.join(","))
+            )
         }
         None if options.strict => STRICT_SESSION.to_owned(),
         None => LENIENT_SESSION.to_owned(),
@@ -166,11 +169,9 @@ mod tests {
     fn lenient_sessions_remove_the_strict_modes() {
         assert_eq!(
             session_statements(&options(|o| o.strict = false)),
-            [
-                "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
+            ["SET SESSION sql_mode = TRIM(BOTH ',' FROM \
                  REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
-                 ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))"
-            ]
+                 ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))"]
         );
     }
 

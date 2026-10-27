@@ -112,7 +112,15 @@ async fn mysql_settings_come_from_the_database_mysql_section() {
         .boot()
         .await
         .expect("boots");
-    assert!(defaults.ctx().get::<DbOptions>().await.unwrap().mysql.strict);
+    assert!(
+        defaults
+            .ctx()
+            .get::<DbOptions>()
+            .await
+            .unwrap()
+            .mysql
+            .strict
+    );
 }
 
 #[tokio::test]

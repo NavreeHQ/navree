@@ -99,7 +99,10 @@ async fn mysql_urls_name_the_feature_they_need() {
     let (mysql_error, mariadb_error) = tokio::join!(connect(mysql), connect(mariadb));
     for (url, error) in [(mysql, mysql_error), (mariadb, mariadb_error)] {
         assert!(
-            error.contains(&format!("cannot connect to {}", url.replace("hunter2", "***"))),
+            error.contains(&format!(
+                "cannot connect to {}",
+                url.replace("hunter2", "***")
+            )),
             "{error}"
         );
         assert!(!error.contains("hunter2"), "{error}");

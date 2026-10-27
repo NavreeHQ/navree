@@ -138,12 +138,14 @@ impl MigrationTrait for CreateTable {
             .col(ColumnDef::new("id").uuid().not_null().primary_key())
             .col(ColumnDef::new("title").string().not_null().unique_key());
         if let Some((parent, on_delete)) = self.references {
-            table.col(ColumnDef::new("owner_id").uuid().null()).foreign_key(
-                ForeignKey::create()
-                    .from(self.table, "owner_id")
-                    .to(parent, "id")
-                    .on_delete(on_delete),
-            );
+            table
+                .col(ColumnDef::new("owner_id").uuid().null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(self.table, "owner_id")
+                        .to(parent, "id")
+                        .on_delete(on_delete),
+                );
         }
         manager.create_table(table).await
     }

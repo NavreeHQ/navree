@@ -80,8 +80,7 @@ async fn repo_reads_inside_the_unit_of_work() {
 
 #[tokio::test]
 async fn repo_update_and_delete_of_missing_records_fail() {
-    let Some(scratch) = Scratch::new("repo_update_and_delete_of_missing_records_fail").await
-    else {
+    let Some(scratch) = Scratch::new("repo_update_and_delete_of_missing_records_fail").await else {
         return;
     };
     let db = scratch.db().await;
@@ -159,7 +158,10 @@ async fn find_for_update_makes_a_second_unit_of_work_wait() {
         Ok::<_, DbErr>(seen)
     });
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(!second.is_finished(), "the second unit of work waits for the lock");
+    assert!(
+        !second.is_finished(),
+        "the second unit of work waits for the lock"
+    );
 
     let mut changed = locked.into_active_model();
     changed.body = Set("changed by the first".into());

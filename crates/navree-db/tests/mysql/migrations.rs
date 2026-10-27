@@ -317,8 +317,7 @@ async fn status_of(app: &App) -> Vec<MigrationStatus> {
 /// created, and is not recorded.
 #[tokio::test]
 async fn a_failed_migration_keeps_its_ddl_and_is_not_recorded() {
-    let Some(scratch) =
-        Scratch::new("a_failed_migration_keeps_its_ddl_and_is_not_recorded").await
+    let Some(scratch) = Scratch::new("a_failed_migration_keeps_its_ddl_and_is_not_recorded").await
     else {
         return;
     };
