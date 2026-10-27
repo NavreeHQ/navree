@@ -124,6 +124,9 @@ pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};
 #[cfg(feature = "documents")]
 pub use navree_documents::{DocumentsModule, ModuleBuilderDocumentsExt as _};
 
+#[cfg(feature = "media")]
+pub use navree_media::{HasMedia, Media, MediaModule, ModuleBuilderMediaExt as _};
+
 #[cfg(feature = "billing")]
 pub use navree_billing::BillingModule;
 

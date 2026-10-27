@@ -1,0 +1,65 @@
+[package]
+name = "navree-media"
+description = "Navree MediaModule: files attached to entities in collections, image conversions and responsive variants, safe remote downloads, zip archives with zip-slip and size-bomb guards, text extraction from PDF, DOCX and HTML, and video through an FFmpeg sidecar."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Video and audio through an FFmpeg sidecar (`ffmpeg` and `ffprobe` on the
+# PATH or configured): probe, transcode and poster frames (navree's
+# `media-ffmpeg`).
+ffmpeg = ["dep:tempfile"]
+# The database drivers of the gated server tests (`tests/media/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
+[dependencies]
+bytes = { workspace = true }
+chrono = { workspace = true }
+fast_image_resize = { workspace = true }
+futures-util = { workspace = true }
+html5ever = { workspace = true }
+http = { workspace = true }
+image = { workspace = true }
+infer = { workspace = true }
+lopdf = { workspace = true }
+mime_guess = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+# `media` is a navree-orm model.
+navree-orm = { workspace = true }
+# Batches of `media.conversions` jobs (`media:regenerate --queue`).
+navree-queue = { workspace = true }
+navree-storage = { workspace = true }
+percent-encoding = { workspace = true }
+quick-xml = { workspace = true }
+resvg = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+navree-media = { path = ".", features = ["ffmpeg"] }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }
