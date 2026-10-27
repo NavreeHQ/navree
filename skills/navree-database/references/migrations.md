@@ -134,11 +134,17 @@ the app is ignored.
 
 ## Transactions
 
-Each migration runs in its own transaction with its record row, so a failed
-migration leaves nothing behind. For statements that can't run in a
-transaction (PostgreSQL `CREATE INDEX CONCURRENTLY`, SQLite table rebuilds
-needing `PRAGMA foreign_keys`), override
+On SQLite and PostgreSQL each migration runs in its own transaction with its
+record row, so a failed migration leaves nothing behind. For statements that
+can't run in a transaction (PostgreSQL `CREATE INDEX CONCURRENTLY`, SQLite
+table rebuilds needing `PRAGMA foreign_keys`), override
 `fn use_transaction(&self) -> Option<bool> { Some(false) }`.
+
+MySQL and MariaDB commit DDL on their own, so there a migration runs outside
+a transaction unless it returns `Some(true)` (do that for data migrations:
+their rows then roll back with the record row). A MySQL migration that fails
+part way keeps what ran before the failure and isn't recorded: one DDL
+statement per migration, or an `up` that can run again (`if_not_exists()`).
 
 ## Commands
 

@@ -143,7 +143,7 @@ enum Deals {
 }
 ```
 
-Write migrations with SeaORM's schema builder rather than raw SQL, so the same migration produces the right SQL for SQLite and for PostgreSQL. (Navree's own migrations haven't been run against a PostgreSQL server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql).) Two habits keep them portable:
+Write migrations with SeaORM's schema builder rather than raw SQL, so the same migration produces the right SQL for SQLite, PostgreSQL and MySQL. (Navree's own migrations haven't been run against a PostgreSQL or MySQL server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql). MySQL's column types are in [types and collations](/docs/database/getting-started/#types-and-collations).) Two habits keep them portable:
 
 - Store timestamps with `timestamp_with_time_zone()` and UUIDs with `uuid()`, matching `DateTimeUtc` and `Uuid` on the entity.
 - Index the columns you filter and join on (foreign keys, `deleted_at`, status columns) with `manager.create_index(..)` in the same migration.
@@ -214,7 +214,9 @@ A table with a foreign key to `users` runs after `auth`. The CRM's single set is
 
 ### Transactions
 
-Each migration runs in its own transaction, together with the `navree_migrations` row that records it. SQLite and PostgreSQL both roll back schema changes, so a migration that fails part way leaves nothing behind and isn't recorded; you fix it and run `migrate` again. Migrations that ran before it in the same run stay applied.
+On SQLite and PostgreSQL, each migration runs in its own transaction, together with the `navree_migrations` row that records it. Both roll back schema changes, so a migration that fails part way leaves nothing behind and isn't recorded; you fix it and run `migrate` again. Migrations that ran before it in the same run stay applied.
+
+MySQL and MariaDB commit every DDL statement on its own, so there a migration runs outside a transaction unless it asks for one by returning `Some(true)` from `use_transaction`. That's worth it for a data migration: its `INSERT`s and `UPDATE`s then roll back together with its `navree_migrations` row. A MySQL migration that fails part way keeps the statements that ran before the failure and isn't recorded, so keep one DDL statement per migration, or write `up` so that it can run again (`if_not_exists()`).
 
 Some statements can't run in a transaction: PostgreSQL's `CREATE INDEX CONCURRENTLY`, or SQLite's `PRAGMA foreign_keys`, which a table rebuild needs and which has no effect inside one. Opt such a migration out:
 
@@ -270,7 +272,7 @@ There is no `--step` option, and no `migrate:reset` or `migrate:refresh`. To rol
 
 ### Starting over
 
-`migrate:fresh` drops **every table in the database**, including tables no migration created, then runs every migration again as batch 1. On SQLite it drops them on one connection with foreign key checks off; on PostgreSQL it drops every table of the current schema with `CASCADE`.
+`migrate:fresh` drops **every table in the database**, including tables no migration created, then runs every migration again as batch 1. On SQLite it drops them on one connection with foreign key checks off; on PostgreSQL it drops every table of the current schema with `CASCADE`; on MySQL and MariaDB it drops every base table of the current database in one `DROP TABLE`, on one connection with `FOREIGN_KEY_CHECKS = 0`, and turns the checks back on before that connection returns to the pool.
 
 <Callout type="warning" title="Never run migrate:fresh against production">
 

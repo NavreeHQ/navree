@@ -1,12 +1,14 @@
 ---
 name: navree-database
-description: "Works with the database in a Navree app: SeaORM entities with UUID v7 keys, `Repo` writes with change events, the per-request unit of work (`Uow`), transactions in jobs and commands, module-owned migrations, seeders, factories, offset and cursor pagination, soft deletes, SQLite and PostgreSQL. Use when adding a table, entity, column, migration, query, seeder, factory or paginated list, writing data outside a request, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
+description: "Works with the database in a Navree app: SeaORM entities with UUID v7 keys, `Repo` writes with change events, the per-request unit of work (`Uow`), transactions in jobs and commands, module-owned migrations, seeders, factories, offset and cursor pagination, soft deletes, SQLite, PostgreSQL and MySQL/MariaDB. Use when adding a table, entity, column, migration, query, seeder, factory or paginated list, writing data outside a request, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
 ---
 
 # The database
 
 Navree uses SeaORM 2 on SQLx. SQLite is the default (compiled in, no server);
-PostgreSQL is the `postgres` feature of `navree`. What Navree adds: a
+PostgreSQL is the `postgres` feature of `navree`, MySQL and MariaDB the
+`mysql` feature (`mysql://` or `mariadb://` URLs; add `mysql-rsa` for MySQL 8
+accounts that sign in without TLS). What Navree adds: a
 connection pool from the `database` section, a **unit of work** per request
 (one lazy transaction, committed when the response status is below 400),
 `Repo<E>` writes that record **change events** (the audit log), module-owned
@@ -114,7 +116,7 @@ uow: Uow, ...)` then `self.posts.create(&uow, input).await?`.
 | `update(&uow, active)` | the updated model; records `updated` with changed fields (re-reads the row first) |
 | `delete(&uow, model)` | `()`; records `deleted` |
 | `find(&uow, id)` / `find_or_fail(&uow, id)` | `Option<Model>` / the model or `RecordNotFound` (404 over HTTP) |
-| `find_for_update(&uow, id)` | `Option<Model>`, row locked on PostgreSQL |
+| `find_for_update(&uow, id)` | `Option<Model>`, row locked on PostgreSQL and MySQL |
 
 Use plain SeaORM through `&*uow.tx().await?` for reads, joins, counts,
 `update_many`/`delete_many` and upserts (they record no change events; call
@@ -179,7 +181,9 @@ pub fn migrations() -> MigrationSet {
 ```
 
 A migration is a SeaORM `MigrationTrait` with `up` and `down`, written with
-the schema builder (portable across SQLite and PostgreSQL); see
+the schema builder (portable across SQLite, PostgreSQL and MySQL; on MySQL
+DDL commits on its own, so a migration runs outside a transaction unless
+`use_transaction` returns `Some(true)`); see
 `references/migrations.md` for a create-table, an add-column, indexes,
 foreign keys and the commands. Never edit a migration that has run
 anywhere: add a new one.
@@ -204,11 +208,21 @@ Column::Id, conn, CursorQuery)` returns `CursorPage<T>` (`{data, next_cursor}`).
 
 ```toml
 [database]
-url = "sqlite://storage/app.db?mode=rwc"   # or postgres://... with the `postgres` feature
+url = "sqlite://storage/app.db?mode=rwc"   # or postgres://... (`postgres`), mysql://... (`mysql`)
 max_connections = 10
 migrate_on_boot = false                    # a new app sets true for development
 slow_query_ms = 200
+
+[database.mysql]                           # MySQL and MariaDB only
+strict = true                              # strict SQL mode plus ONLY_FULL_GROUP_BY (default)
+# isolation_level = "read_committed"       # the server's (REPEATABLE READ) when unset
+# modes = ["STRICT_ALL_TABLES"]            # the exact SQL mode instead of `strict`
 ```
+
+On MySQL the unit of work sets `@navree_actor` and `@navree_request_id`
+(cleared before commit or rollback) where PostgreSQL uses `set_config`, ids
+are `BINARY(16)`, and workspace isolation is query scoping only (no
+row-level security): every workspace query must go through `WorkspaceRepo`.
 
 Override in production with `APP_DATABASE__URL` (an environment variable,
 not `.env`, since `config/app.toml` sets it). `Arc<Db>` is injectable
