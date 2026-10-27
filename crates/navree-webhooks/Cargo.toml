@@ -1,6 +1,6 @@
 [package]
 name = "navree-webhooks"
-description = "Navree WebhooksModule: signed outgoing webhooks with queue-backed retries, a delivery log and endpoint management, and verified incoming webhooks from Stripe, GitHub, Paddle, Standard Webhooks senders, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun and Postmark."
+description = "Navree WebhooksModule: signed outgoing webhooks with queue-backed retries, a delivery log and endpoint management, and verified incoming webhooks from Stripe, GitHub, Paddle, Standard Webhooks senders, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark, Vonage and Meta."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+## The provider callbacks of navree-notify's SMS and WhatsApp channels
+## (`NotifyCallbacksController`): Twilio, Vonage and Meta statuses and
+## STOP replies applied to the notification delivery log and opt-outs.
+notify = ["dep:navree-notify"]
 
 [dependencies]
 axum = { workspace = true }
@@ -27,6 +33,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+navree-notify = { workspace = true, optional = true }
 # The webhook tables are models (endpoints, deliveries, attempts, receipts).
 navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
@@ -50,5 +57,7 @@ uuid = { workspace = true }
 navree-access = { workspace = true }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }
+# The notification callback routes are tested with the `notify` feature on.
+navree-webhooks = { workspace = true, features = ["notify"] }
 tokio = { workspace = true }
 toml = { workspace = true }

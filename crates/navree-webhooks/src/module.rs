@@ -167,6 +167,9 @@ fn register(m: &mut ModuleBuilder, options: Option<WebhooksOptions>) {
     for command in commands() {
         m.command(command);
     }
+    // The provider callbacks of navree-notify's channels.
+    #[cfg(feature = "notify")]
+    m.controller::<crate::NotifyCallbacksController>();
 }
 
 /// `WebhooksModule::for_feature::<E>()`.

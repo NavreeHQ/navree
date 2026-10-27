@@ -20,10 +20,18 @@
 //! with the source's verifier and secret before the handler runs:
 //! [`Stripe`], [`GitHub`], [`Paddle`], [`StandardWebhooks`], [`AwsSns`],
 //! [`GooglePubSub`], [`MicrosoftGraph`], [`Twilio`], [`Slack`],
-//! [`Mailgun`], [`Postmark`] or the configurable [`Hmac`]; handshakes
-//! (Graph's `validationToken`, Slack's `url_verification`, SNS
-//! subscription confirmations) are answered without running the handler;
+//! [`Mailgun`], [`Postmark`], [`Vonage`], [`Meta`] or the configurable
+//! [`Hmac`]; handshakes (Graph's `validationToken`, Slack's
+//! `url_verification`, SNS subscription confirmations, Meta's
+//! `hub.challenge`) are answered without running the handler;
 //! [`VerifiedWebhook::mark_processed`] drops redeliveries.
+//!
+//! **Notification callbacks** (crate feature `notify`): with navree-notify,
+//! `WebhooksModule` mounts `POST {api_prefix}/webhooks/notify/twilio`,
+//! `/vonage` and `GET`/`POST /meta` for each of those sources that is
+//! configured, verified like any route of the source, which apply the
+//! providers' status callbacks and STOP replies to the notification
+//! delivery log and opt-outs ([`NotifyCallbacksController`]).
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -61,6 +69,8 @@ mod jobs;
 mod keys;
 mod migration;
 mod module;
+#[cfg(feature = "notify")]
+mod notify;
 mod options;
 mod request;
 mod resources;
@@ -70,6 +80,8 @@ mod sources;
 mod template;
 mod verify;
 
+#[cfg(feature = "notify")]
+pub use notify::{NOTIFY_CALLBACKS_PREFIX, NotifyCallbacksController};
 pub use controller::{
     CreateEndpointInput, MANAGE_PERMISSION, RotatedSecret, UpdateEndpointInput, WebhooksController,
 };
@@ -94,8 +106,8 @@ pub use service::{
 };
 pub use signing::{SECRET_PREFIX, generate_secret};
 pub use sources::{
-    AwsSns, GooglePubSub, GraphNotification, GraphNotifications, Mailgun, MicrosoftGraph, Postmark,
-    PubSubMessage, PubSubPush, Slack, SnsMessage, Twilio,
+    AwsSns, GooglePubSub, GraphNotification, GraphNotifications, Mailgun, Meta, MicrosoftGraph,
+    Postmark, PubSubMessage, PubSubPush, Slack, SnsMessage, Twilio, Vonage,
 };
 pub use verify::{
     GitHub, Hmac, Paddle, StandardWebhooks, Stripe, Tolerance, Verified, VerifyError,

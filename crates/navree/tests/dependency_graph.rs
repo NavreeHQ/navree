@@ -211,11 +211,13 @@ const HIERARCHY: &[Rule] = &[
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the
     // database, routes scoped to the request's workspace. The webhook tables
-    // are navree-orm models.
+    // are navree-orm models. With its `notify` feature it verifies the
+    // provider callbacks of navree-notify's channels and applies them to
+    // the notification delivery log.
     rule("navree-webhooks", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
-        "navree-workspace", "navree-orm",
+        "navree-workspace", "navree-orm", "navree-notify",
     ]),
     // Integrations: workspace and organization connections to third-party
     // APIs. Credentials encrypted with navree-crypto (service-account JWTs
