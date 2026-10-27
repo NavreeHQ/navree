@@ -6,7 +6,8 @@ use navree::testing::{TempDirGuard, TestApp, TestAuthenticator, principal, temp_
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Hermetic settings: no `.env`, a fresh database, fast password hashing.
+/// Hermetic settings: no `.env`, a fresh database, fast password hashing,
+/// Logbook off.
 fn sources() -> (ConfigSources, TempDirGuard) {
     let (url, guard) = temp_sqlite_url();
     let sources = ConfigSources::new()
@@ -16,6 +17,7 @@ fn sources() -> (ConfigSources, TempDirGuard) {
         .set("http.per_ip_rate_limit", Value::Null)
         .set("mail.transport", "array")
         .set("observe.metrics", false)
+        .set("logbook.enabled", false)
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1);
     (sources, guard)

@@ -98,6 +98,9 @@ pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};
 #[cfg(feature = "billing")]
 pub use navree_billing::BillingModule;
 
+#[cfg(feature = "logbook")]
+pub use navree_logbook::LogbookModule;
+
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
