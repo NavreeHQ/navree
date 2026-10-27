@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_db::Db;
-use sea_orm::sea_query::{Expr, ExprTrait, OnConflict, Query};
+use sea_orm::sea_query::{Expr, OnConflict, Query};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
@@ -509,6 +509,10 @@ pub(crate) struct Candidate {
 
 const CHUNK: usize = 100;
 
+/// Aggregate rows of one key merged over a period: the key, the summed
+/// values, and (count, errors) per bucket.
+type Merged = (String, Values, BTreeMap<DateTime<Utc>, (i64, i64)>);
+
 impl LighthouseStore {
     pub(crate) fn new(
         db: Db,
@@ -533,6 +537,19 @@ impl LighthouseStore {
     /// The dashboard's base URL (`https://api.example.com/_lighthouse`).
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    /// The release label of this process.
+    pub fn release(&self) -> &str {
+        &self.release
+    }
+
+    /// How many issues are open.
+    pub async fn open_issue_count(&self) -> Result<u64, LighthouseError> {
+        Ok(issue::Entity::find()
+            .filter(issue::Column::Status.eq(IssueStatus::Open.as_str()))
+            .count(self.db.conn())
+            .await?)
     }
 
     /// The URL of an issue's page.
@@ -689,13 +706,11 @@ impl LighthouseStore {
                     }
                 }
             }
-            let new_level = Level::parse(&current.level)
-                .unwrap_or_default()
-                .max(level);
+            let new_level = Level::parse(&current.level).unwrap_or_default().max(level);
             let mut update = issue::Entity::update_many()
                 .col_expr(
                     issue::Column::Count,
-                    Expr::col(issue::Column::Count).add(n),
+                    sea_orm::sea_query::ExprTrait::add(Expr::col(issue::Column::Count), n),
                 )
                 .col_expr(
                     issue::Column::LastSeen,
@@ -713,16 +728,34 @@ impl LighthouseStore {
                 .col_expr(issue::Column::UpdatedAt, Expr::value(now));
             if reopened {
                 update = update
-                    .col_expr(issue::Column::Status, Expr::value(IssueStatus::Open.as_str()))
-                    .col_expr(issue::Column::ResolvedAt, Expr::value(Option::<DateTime<Utc>>::None))
-                    .col_expr(issue::Column::ResolvedInRelease, Expr::value(Option::<String>::None))
-                    .col_expr(issue::Column::IgnoredUntil, Expr::value(Option::<DateTime<Utc>>::None))
-                    .col_expr(issue::Column::IgnoreRemaining, Expr::value(Option::<i64>::None));
+                    .col_expr(
+                        issue::Column::Status,
+                        Expr::value(IssueStatus::Open.as_str()),
+                    )
+                    .col_expr(
+                        issue::Column::ResolvedAt,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(
+                        issue::Column::ResolvedInRelease,
+                        Expr::value(Option::<String>::None),
+                    )
+                    .col_expr(
+                        issue::Column::IgnoredUntil,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(
+                        issue::Column::IgnoreRemaining,
+                        Expr::value(Option::<i64>::None),
+                    );
                 if regression {
                     update = update.col_expr(issue::Column::RegressedAt, Expr::value(now));
                 }
             } else if ignore_remaining != current.ignore_remaining {
-                update = update.col_expr(issue::Column::IgnoreRemaining, Expr::value(ignore_remaining));
+                update = update.col_expr(
+                    issue::Column::IgnoreRemaining,
+                    Expr::value(ignore_remaining),
+                );
             }
             update
                 .filter(issue::Column::Id.eq(current.id))
@@ -833,7 +866,11 @@ impl LighthouseStore {
 
     /// Occurrences of `fingerprint` counted since `since` (minute rows of
     /// every process).
-    async fn issue_count_since(&self, fingerprint: &str, since: DateTime<Utc>) -> Result<i64, DbErr> {
+    async fn issue_count_since(
+        &self,
+        fingerprint: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64, DbErr> {
         let rows = aggregate::Entity::find()
             .filter(aggregate::Column::Kind.eq(kind::ISSUE))
             .filter(aggregate::Column::Resolution.eq(MINUTE))
@@ -903,7 +940,10 @@ impl LighthouseStore {
     // -----------------------------------------------------------------
 
     /// A page of issues.
-    pub async fn issues(&self, filter: &IssueFilter) -> Result<ListPage<IssueSummary>, LighthouseError> {
+    pub async fn issues(
+        &self,
+        filter: &IssueFilter,
+    ) -> Result<ListPage<IssueSummary>, LighthouseError> {
         let per_page = filter.per_page.unwrap_or(25).clamp(1, 100);
         let page = filter.page.unwrap_or(1).max(1);
         let mut query = issue::Entity::find();
@@ -919,16 +959,27 @@ impl LighthouseStore {
         if let Some(environment) = non_empty(&filter.environment) {
             query = query.filter(issue::Column::Environment.eq(environment));
         }
-        for culprit in [non_empty(&filter.route), non_empty(&filter.job)].into_iter().flatten() {
+        for culprit in [non_empty(&filter.route), non_empty(&filter.job)]
+            .into_iter()
+            .flatten()
+        {
             query = query.filter(issue::Column::Culprit.contains(culprit));
         }
         if let Some(search) = non_empty(&filter.search) {
             query = query.filter(issue::Column::Title.contains(search));
         }
         let occurrence_filters: Vec<(occurrence::Column, String, bool)> = [
-            (occurrence::Column::Release, non_empty(&filter.release), false),
+            (
+                occurrence::Column::Release,
+                non_empty(&filter.release),
+                false,
+            ),
             (occurrence::Column::UserId, non_empty(&filter.user), false),
-            (occurrence::Column::WorkspaceId, non_empty(&filter.workspace), false),
+            (
+                occurrence::Column::WorkspaceId,
+                non_empty(&filter.workspace),
+                false,
+            ),
         ]
         .into_iter()
         .filter_map(|(column, value, like)| value.map(|value| (column, value.to_owned(), like)))
@@ -936,16 +987,21 @@ impl LighthouseStore {
             let (key, value) = tag.split_once(':')?;
             Some((
                 occurrence::Column::Context,
-                format!("%{}%", serde_json::to_string(&serde_json::json!({ key.trim(): value.trim() })).ok()?.trim_matches(['{', '}'])),
+                format!(
+                    "%{}%",
+                    serde_json::to_string(&serde_json::json!({ key.trim(): value.trim() }))
+                        .ok()?
+                        .trim_matches(['{', '}'])
+                ),
                 true,
             ))
         }))
         .collect();
         for (column, value, like) in occurrence_filters {
             let condition = if like {
-                Expr::col(column).like(value)
+                sea_orm::sea_query::ExprTrait::like(Expr::col(column), value)
             } else {
-                Expr::col(column).eq(value)
+                sea_orm::sea_query::ExprTrait::eq(Expr::col(column), value)
             };
             query = query.filter(
                 issue::Column::Id.in_subquery(
@@ -968,7 +1024,12 @@ impl LighthouseStore {
         let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
         let reach = self.reach(&ids).await?;
         let sparklines = self
-            .sparklines(&rows.iter().map(|row| row.fingerprint.clone()).collect::<Vec<_>>())
+            .sparklines(
+                &rows
+                    .iter()
+                    .map(|row| row.fingerprint.clone())
+                    .collect::<Vec<_>>(),
+            )
             .await?;
         let data = rows
             .iter()
@@ -996,7 +1057,10 @@ impl LighthouseStore {
     }
 
     /// Hourly occurrence counts of the last 24 hours, per fingerprint hash.
-    async fn sparklines(&self, fingerprints: &[String]) -> Result<HashMap<String, Vec<i64>>, DbErr> {
+    async fn sparklines(
+        &self,
+        fingerprints: &[String],
+    ) -> Result<HashMap<String, Vec<i64>>, DbErr> {
         let now = Utc::now();
         let start = bucket_start(now, HOUR) - TimeDelta::hours(23);
         let mut out: HashMap<String, Vec<i64>> = HashMap::new();
@@ -1011,7 +1075,8 @@ impl LighthouseStore {
                 .await?;
             for row in rows {
                 let index = ((row.bucket - start).num_hours()).clamp(0, 23) as usize;
-                out.entry(row.key_hash.clone()).or_insert_with(|| vec![0; 24])[index] += row.count;
+                out.entry(row.key_hash.clone())
+                    .or_insert_with(|| vec![0; 24])[index] += row.count;
             }
         }
         Ok(out)
@@ -1153,7 +1218,10 @@ impl LighthouseStore {
         self.issue_row(id).await?;
         let now = Utc::now();
         let (status, release) = if in_next_release {
-            (IssueStatus::ResolvedInNextRelease, Some(self.release.to_string()))
+            (
+                IssueStatus::ResolvedInNextRelease,
+                Some(self.release.to_string()),
+            )
         } else {
             (IssueStatus::Resolved, None)
         };
@@ -1161,8 +1229,14 @@ impl LighthouseStore {
             .col_expr(issue::Column::Status, Expr::value(status.as_str()))
             .col_expr(issue::Column::ResolvedAt, Expr::value(now))
             .col_expr(issue::Column::ResolvedInRelease, Expr::value(release))
-            .col_expr(issue::Column::IgnoredUntil, Expr::value(Option::<DateTime<Utc>>::None))
-            .col_expr(issue::Column::IgnoreRemaining, Expr::value(Option::<i64>::None))
+            .col_expr(
+                issue::Column::IgnoredUntil,
+                Expr::value(Option::<DateTime<Utc>>::None),
+            )
+            .col_expr(
+                issue::Column::IgnoreRemaining,
+                Expr::value(Option::<i64>::None),
+            )
             .col_expr(issue::Column::Comment, Expr::value(comment))
             .col_expr(issue::Column::UpdatedAt, Expr::value(now))
             .filter(issue::Column::Id.eq(id))
@@ -1190,7 +1264,10 @@ impl LighthouseStore {
             }
         };
         issue::Entity::update_many()
-            .col_expr(issue::Column::Status, Expr::value(IssueStatus::Ignored.as_str()))
+            .col_expr(
+                issue::Column::Status,
+                Expr::value(IssueStatus::Ignored.as_str()),
+            )
             .col_expr(issue::Column::IgnoredUntil, Expr::value(until))
             .col_expr(issue::Column::IgnoreRemaining, Expr::value(remaining))
             .col_expr(issue::Column::Comment, Expr::value(comment))
@@ -1205,11 +1282,26 @@ impl LighthouseStore {
     pub async fn reopen(&self, id: Uuid) -> Result<Issue, LighthouseError> {
         self.issue_row(id).await?;
         issue::Entity::update_many()
-            .col_expr(issue::Column::Status, Expr::value(IssueStatus::Open.as_str()))
-            .col_expr(issue::Column::ResolvedAt, Expr::value(Option::<DateTime<Utc>>::None))
-            .col_expr(issue::Column::ResolvedInRelease, Expr::value(Option::<String>::None))
-            .col_expr(issue::Column::IgnoredUntil, Expr::value(Option::<DateTime<Utc>>::None))
-            .col_expr(issue::Column::IgnoreRemaining, Expr::value(Option::<i64>::None))
+            .col_expr(
+                issue::Column::Status,
+                Expr::value(IssueStatus::Open.as_str()),
+            )
+            .col_expr(
+                issue::Column::ResolvedAt,
+                Expr::value(Option::<DateTime<Utc>>::None),
+            )
+            .col_expr(
+                issue::Column::ResolvedInRelease,
+                Expr::value(Option::<String>::None),
+            )
+            .col_expr(
+                issue::Column::IgnoredUntil,
+                Expr::value(Option::<DateTime<Utc>>::None),
+            )
+            .col_expr(
+                issue::Column::IgnoreRemaining,
+                Expr::value(Option::<i64>::None),
+            )
             .col_expr(issue::Column::UpdatedAt, Expr::value(Utc::now()))
             .filter(issue::Column::Id.eq(id))
             .exec(self.db.conn())
@@ -1248,7 +1340,7 @@ impl LighthouseStore {
         kind: &str,
         period: Period,
         key: Option<&str>,
-    ) -> Result<Vec<(String, Values, BTreeMap<DateTime<Utc>, (i64, i64)>)>, DbErr> {
+    ) -> Result<Vec<Merged>, DbErr> {
         let now = Utc::now();
         let resolution = period.resolution();
         let start = period_start(now, period);
@@ -1260,8 +1352,7 @@ impl LighthouseStore {
             query = query.filter(aggregate::Column::KeyHash.eq(key_hash(key)));
         }
         let rows = query.all(self.db.conn()).await?;
-        let mut merged: BTreeMap<String, (String, Values, BTreeMap<DateTime<Utc>, (i64, i64)>)> =
-            BTreeMap::new();
+        let mut merged: BTreeMap<String, Merged> = BTreeMap::new();
         for row in rows {
             let values = Values {
                 count: row.count,
@@ -1303,13 +1394,15 @@ impl LighthouseStore {
         let step = i64::from(period.resolution());
         for (_, _, points) in &requests {
             for (at, (count, _)) in points {
-                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
+                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1)
+                    as usize;
                 timeline[index].count += count;
             }
         }
         for (_, _, points) in &exceptions {
             for (at, (count, _)) in points {
-                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
+                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1)
+                    as usize;
                 timeline[index].errors += count;
             }
         }
@@ -1377,7 +1470,11 @@ impl LighthouseStore {
     }
 
     /// One route: its figures, timeline and slowest stored traces.
-    pub async fn route(&self, endpoint: &str, period: Period) -> Result<RouteDetail, LighthouseError> {
+    pub async fn route(
+        &self,
+        endpoint: &str,
+        period: Period,
+    ) -> Result<RouteDetail, LighthouseError> {
         let merged = self.merged(kind::REQUEST, period, Some(endpoint)).await?;
         let (values, points) = merged
             .into_iter()
@@ -1389,7 +1486,8 @@ impl LighthouseStore {
         let step = i64::from(period.resolution());
         let mut timeline = empty_timeline(now, period);
         for (at, (count, errors)) in points {
-            let index = ((at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
+            let index =
+                ((at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
             timeline[index].count += count;
             timeline[index].errors += errors;
         }
@@ -1450,7 +1548,7 @@ impl LighthouseStore {
                 max_ms: round2(values.max_ms()),
             })
             .collect();
-        jobs.sort_by(|a, b| b.attempts.cmp(&a.attempts));
+        jobs.sort_by_key(|job| std::cmp::Reverse(job.attempts));
         Ok(jobs)
     }
 
@@ -1617,7 +1715,10 @@ impl LighthouseStore {
 }
 
 fn non_empty(value: &Option<String>) -> Option<&str> {
-    value.as_deref().map(str::trim).filter(|value| !value.is_empty())
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 fn ratio(part: i64, whole: i64) -> f64 {
@@ -1645,7 +1746,7 @@ fn origins(detail: &Detail) -> Vec<Origin> {
             count: *count,
         })
         .collect();
-    origins.sort_by(|a, b| b.count.cmp(&a.count));
+    origins.sort_by_key(|origin| std::cmp::Reverse(origin.count));
     origins.truncate(10);
     origins
 }

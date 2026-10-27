@@ -1,11 +1,10 @@
 //! The `lighthouse` migration set: five tables prefixed `lighthouse_`.
 //!
-//! With `lighthouse.database_url` set, the same migration creates (and
-//! drops) the tables in that database instead of the app's.
+//! With `lighthouse.database_url` set, Lighthouse also creates the same
+//! tables (when missing) in that database as it connects at boot, and
+//! reads and writes there.
 
-use std::sync::{Arc, OnceLock};
-
-use navree_db::{Db, MigrationSet};
+use navree_db::MigrationSet;
 use sea_orm::DbErr;
 use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
 use sea_orm_migration::async_trait::async_trait;
@@ -14,31 +13,13 @@ use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 /// The name of the Lighthouse migration set.
 pub const LIGHTHOUSE_MIGRATIONS: &str = "lighthouse";
 
-/// Where Lighthouse's tables live, decided when the module's store is
-/// built (before any migration runs): `None` for the app's database.
-#[derive(Clone, Default)]
-pub(crate) struct SeparateDb(Arc<OnceLock<Option<Db>>>);
-
-impl SeparateDb {
-    pub(crate) fn set(&self, db: Option<Db>) {
-        let _ = self.0.set(db);
-    }
-
-    fn get(&self) -> Option<Db> {
-        self.0.get().cloned().flatten()
-    }
-}
-
 /// The Lighthouse migration set.
-pub(crate) fn migrations(separate: SeparateDb) -> MigrationSet {
-    MigrationSet::new(LIGHTHOUSE_MIGRATIONS).migration(CreateLighthouseTables { separate })
+pub(crate) fn migrations() -> MigrationSet {
+    MigrationSet::new(LIGHTHOUSE_MIGRATIONS).migration(CreateLighthouseTables)
 }
 
-/// Creates the five tables in the app's database or in
-/// `lighthouse.database_url`'s.
-pub(crate) struct CreateLighthouseTables {
-    separate: SeparateDb,
-}
+/// Creates the five tables.
+pub(crate) struct CreateLighthouseTables;
 
 impl MigrationName for CreateLighthouseTables {
     fn name(&self) -> &str {
@@ -49,17 +30,11 @@ impl MigrationName for CreateLighthouseTables {
 #[async_trait]
 impl MigrationTrait for CreateLighthouseTables {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        match self.separate.get() {
-            Some(db) => create_tables(&SchemaManager::new(db.conn())).await,
-            None => create_tables(manager).await,
-        }
+        create_tables(manager).await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        match self.separate.get() {
-            Some(db) => drop_tables(&SchemaManager::new(db.conn())).await,
-            None => drop_tables(manager).await,
-        }
+        drop_tables(manager).await
     }
 }
 

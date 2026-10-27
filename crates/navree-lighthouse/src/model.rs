@@ -97,7 +97,9 @@ impl IssueKind {
 
     /// Parses the snake_case name.
     pub fn parse(text: &str) -> Option<IssueKind> {
-        IssueKind::ALL.into_iter().find(|kind| kind.as_str() == text)
+        IssueKind::ALL
+            .into_iter()
+            .find(|kind| kind.as_str() == text)
     }
 
     /// A label for people (`Slow request`).

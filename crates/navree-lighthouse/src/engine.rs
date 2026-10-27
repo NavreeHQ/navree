@@ -456,7 +456,8 @@ impl Processor {
                 .is_none_or(|created| created.elapsed() < STALE_AFTER)
         });
         let hour = now.timestamp() / 3600;
-        self.budgets.retain(|_, (budget_hour, _)| *budget_hour >= hour - 1);
+        self.budgets
+            .retain(|_, (budget_hour, _)| *budget_hour >= hour - 1);
     }
 
     /// Handles one input.
@@ -551,7 +552,13 @@ impl Processor {
         }
     }
 
-    fn report(&mut self, report: Report, context: EventContext, at: DateTime<Utc>, now: DateTime<Utc>) {
+    fn report(
+        &mut self,
+        report: Report,
+        context: EventContext,
+        at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) {
         let exception = PendingException {
             at,
             context,
@@ -607,7 +614,13 @@ impl Processor {
         self.exception_hit(exception, &culprit, &Origin::default(), None, now);
     }
 
-    fn query(&mut self, at: DateTime<Utc>, context: EventContext, query: &QueryExecuted, now: DateTime<Utc>) {
+    fn query(
+        &mut self,
+        at: DateTime<Utc>,
+        context: EventContext,
+        query: &QueryExecuted,
+        now: DateTime<Utc>,
+    ) {
         let duration_ms = millis(query.duration);
         let pending = PendingQuery {
             at,
@@ -633,7 +646,13 @@ impl Processor {
         self.query_done(pending, &origin, &Origin::default(), now);
     }
 
-    fn call(&mut self, at: DateTime<Utc>, context: EventContext, call: HttpClientRequest, now: DateTime<Utc>) {
+    fn call(
+        &mut self,
+        at: DateTime<Utc>,
+        context: EventContext,
+        call: HttpClientRequest,
+        now: DateTime<Utc>,
+    ) {
         let pending = PendingCall {
             at,
             context: context.clone(),
@@ -745,7 +764,12 @@ impl Processor {
         let request_details = self.request_details(request, unit.capture.as_ref());
         let origin = Origin {
             method: Some(request.method.clone()),
-            route: Some(request.route.clone().unwrap_or_else(|| "unmatched".to_owned())),
+            route: Some(
+                request
+                    .route
+                    .clone()
+                    .unwrap_or_else(|| "unmatched".to_owned()),
+            ),
             path: Some(request.path.clone()),
             status: Some(request.status),
             sample_id,
@@ -841,7 +865,13 @@ impl Processor {
         Value::Object(details)
     }
 
-    fn finish_job(&mut self, at: DateTime<Utc>, context: &EventContext, job: JobEnd, now: DateTime<Utc>) {
+    fn finish_job(
+        &mut self,
+        at: DateTime<Utc>,
+        context: &EventContext,
+        job: JobEnd,
+        now: DateTime<Utc>,
+    ) {
         let unit = self
             .units
             .remove(&UnitKey::Job(job.job_id.clone()))
@@ -866,7 +896,10 @@ impl Processor {
         let keep = slow
             || failed
             || !unit.exceptions.is_empty()
-            || sampled(&format!("{}#{}", job.job_id, job.attempt), self.options.sample.jobs);
+            || sampled(
+                &format!("{}#{}", job.job_id, job.attempt),
+                self.options.sample.jobs,
+            );
         let sample_id = keep.then(Uuid::now_v7);
         let mut context = context.clone();
         context.job_id = Some(job.job_id.clone());
@@ -954,13 +987,22 @@ impl Processor {
         for exception in &unit.exceptions {
             let mut origin = origin.clone();
             for (key, value) in &unit.tags {
-                origin.tags.entry(key.clone()).or_insert_with(|| value.clone());
+                origin
+                    .tags
+                    .entry(key.clone())
+                    .or_insert_with(|| value.clone());
             }
             self.exception_hit(exception.clone(), culprit, &origin, Some(unit), now);
         }
     }
 
-    fn query_done(&mut self, query: PendingQuery, origin_name: &str, origin: &Origin, now: DateTime<Utc>) {
+    fn query_done(
+        &mut self,
+        query: PendingQuery,
+        origin_name: &str,
+        origin: &Origin,
+        now: DateTime<Utc>,
+    ) {
         self.aggregates.observe(
             now,
             kind::QUERY,
@@ -1006,7 +1048,13 @@ impl Processor {
         );
     }
 
-    fn call_done(&mut self, pending: PendingCall, origin_name: &str, origin: &Origin, now: DateTime<Utc>) {
+    fn call_done(
+        &mut self,
+        pending: PendingCall,
+        origin_name: &str,
+        origin: &Origin,
+        now: DateTime<Utc>,
+    ) {
         let call = &pending.call;
         let host = url_host(&call.url);
         let duration_ms = millis(call.duration);
@@ -1049,7 +1097,12 @@ impl Processor {
                 call.url,
                 duration_ms.round()
             ),
-            (None, None) => format!("{} {} took {} ms", call.method, call.url, duration_ms.round()),
+            (None, None) => format!(
+                "{} {} took {} ms",
+                call.method,
+                call.url,
+                duration_ms.round()
+            ),
         };
         let occurrence = self.occurrence(
             &fingerprint,
@@ -1115,8 +1168,9 @@ impl Processor {
         if !exception.values.is_empty() {
             extra.insert(
                 "context".into(),
-                self.redactor
-                    .value(Value::Object(exception.values.clone().into_iter().collect())),
+                self.redactor.value(Value::Object(
+                    exception.values.clone().into_iter().collect(),
+                )),
             );
         }
         let mut origin = origin.clone();
@@ -1143,12 +1197,8 @@ impl Processor {
             occurrence.backtrace.clone_from(&exception.backtrace);
             occurrence.location.clone_from(&exception.location);
         }
-        self.aggregates.observe(
-            now,
-            kind::EXCEPTION,
-            "all",
-            &Observation::default(),
-        );
+        self.aggregates
+            .observe(now, kind::EXCEPTION, "all", &Observation::default());
         self.push_hit(
             Hit {
                 fingerprint,
@@ -1229,7 +1279,10 @@ impl Processor {
             location: None,
             request_id: context.request_id.clone(),
             job_id: context.job_id.clone(),
-            trace_id: context.trace.as_ref().map(|trace| trace.trace_id.to_string()),
+            trace_id: context
+                .trace
+                .as_ref()
+                .map(|trace| trace.trace_id.to_string()),
             user_id: context.user_id.clone(),
             workspace_id: context.workspace_id.clone(),
             method: origin.method.clone(),
@@ -1242,12 +1295,8 @@ impl Processor {
     }
 
     fn push_hit(&mut self, hit: Hit, now: DateTime<Utc>) {
-        self.aggregates.observe(
-            now,
-            kind::ISSUE,
-            &hit.fingerprint,
-            &Observation::default(),
-        );
+        self.aggregates
+            .observe(now, kind::ISSUE, &hit.fingerprint, &Observation::default());
         self.hits.push(hit);
     }
 
@@ -1352,12 +1401,18 @@ pub(crate) fn sampled(key: &str, rate: f64) -> bool {
     if rate <= 0.0 {
         return false;
     }
+    // FNV-1a, then the SplitMix64 finalizer so similar keys spread evenly.
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in key.bytes() {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0100_0000_01b3);
     }
-    (hash as f64 / u64::MAX as f64) < rate
+    hash ^= hash >> 30;
+    hash = hash.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    hash ^= hash >> 27;
+    hash = hash.wrapping_mul(0x94d0_49bb_1331_11eb);
+    hash ^= hash >> 31;
+    ((hash >> 11) as f64 / (1u64 << 53) as f64) < rate
 }
 
 #[cfg(test)]
@@ -1436,7 +1491,13 @@ mod tests {
         let mut p = processor(LighthouseOptions::default());
         let now = Utc::now();
         for _ in 0..3 {
-            p.handle(record(in_request("r1"), query("SELECT * FROM contacts WHERE id = $1", 300)), now);
+            p.handle(
+                record(
+                    in_request("r1"),
+                    query("SELECT * FROM contacts WHERE id = $1", 300),
+                ),
+                now,
+            );
         }
         p.handle(
             record(
@@ -1449,11 +1510,22 @@ mod tests {
             ),
             now,
         );
-        p.handle(record(in_request("r1"), request("r1", "/api/v1/deals/board", 200, 1412)), now);
+        p.handle(
+            record(
+                in_request("r1"),
+                request("r1", "/api/v1/deals/board", 200, 1412),
+            ),
+            now,
+        );
         let kinds: Vec<IssueKind> = p.pending_hits().iter().map(|hit| hit.kind).collect();
         assert_eq!(
             kinds,
-            [IssueKind::SlowQuery, IssueKind::SlowQuery, IssueKind::SlowQuery, IssueKind::SlowRequest]
+            [
+                IssueKind::SlowQuery,
+                IssueKind::SlowQuery,
+                IssueKind::SlowQuery,
+                IssueKind::SlowRequest
+            ]
         );
         let slow_query = &p.pending_hits()[0];
         assert_eq!(slow_query.culprit, "GET /api/v1/deals/board");
@@ -1474,8 +1546,17 @@ mod tests {
     fn exceptions_take_the_route_of_their_request() {
         let mut p = processor(LighthouseOptions::default());
         let now = Utc::now();
-        p.handle(record(in_request("r2"), exception("deal 42 not found")), now);
-        p.handle(record(in_request("r2"), request("r2", "/api/v1/deals/{id}", 500, 5)), now);
+        p.handle(
+            record(in_request("r2"), exception("deal 42 not found")),
+            now,
+        );
+        p.handle(
+            record(
+                in_request("r2"),
+                request("r2", "/api/v1/deals/{id}", 500, 5),
+            ),
+            now,
+        );
         let hit = &p.pending_hits()[0];
         assert_eq!(hit.kind, IssueKind::Exception);
         assert_eq!(hit.culprit, "GET /api/v1/deals/{id}");
@@ -1491,8 +1572,17 @@ mod tests {
         let mut p = processor(LighthouseOptions::default());
         let now = Utc::now();
         p.handle(record(in_request("a"), exception("boom")), now);
-        p.handle(record(in_request("a"), request("a", "/health/live", 500, 5)), now);
-        p.handle(record(in_request("b"), request("b", "/_lighthouse/issues", 200, 5000)), now);
+        p.handle(
+            record(in_request("a"), request("a", "/health/live", 500, 5)),
+            now,
+        );
+        p.handle(
+            record(
+                in_request("b"),
+                request("b", "/_lighthouse/issues", 200, 5000),
+            ),
+            now,
+        );
         assert!(p.pending_hits().is_empty());
         assert!(p.pending_samples().is_empty());
         assert!(p.aggregates.take_dirty().is_empty());
@@ -1538,9 +1628,10 @@ mod tests {
 
     #[test]
     fn a_full_buffer_drops_samples_before_occurrences() {
-        let mut options = LighthouseOptions::default();
-        options.buffer = 100;
-        let mut p = processor(options);
+        let mut p = processor(LighthouseOptions {
+            buffer: 100,
+            ..LighthouseOptions::default()
+        });
         let now = Utc::now();
         for i in 0..100 {
             let id = format!("s{i}");
@@ -1576,7 +1667,10 @@ mod tests {
         };
         p.handle(record(in_job.clone(), query("SELECT 1", 2)), now);
         p.handle(record(in_job.clone(), failed(true)), now);
-        assert!(p.pending_hits().is_empty(), "an attempt to retry is no issue");
+        assert!(
+            p.pending_hits().is_empty(),
+            "an attempt to retry is no issue"
+        );
         assert_eq!(p.pending_samples()[0].outcome, "failed_attempt");
         p.handle(record(in_job.clone(), failed(false)), now);
         let hit = &p.pending_hits()[0];
@@ -1601,7 +1695,11 @@ mod tests {
             ),
             now,
         );
-        assert_eq!(p.pending_hits().len(), 1, "alert deliveries are never recorded");
+        assert_eq!(
+            p.pending_hits().len(),
+            1,
+            "alert deliveries are never recorded"
+        );
     }
 
     #[test]
@@ -1611,7 +1709,10 @@ mod tests {
             job_id: Some(INTERNAL_UNIT.into()),
             ..EventContext::default()
         };
-        p.handle(record(internal, query("INSERT INTO lighthouse_issues", 900)), Utc::now());
+        p.handle(
+            record(internal, query("INSERT INTO lighthouse_issues", 900)),
+            Utc::now(),
+        );
         assert!(p.pending_hits().is_empty());
         assert!(p.aggregates.take_dirty().is_empty());
     }
@@ -1621,7 +1722,9 @@ mod tests {
         assert!(sampled("x", 1.0));
         assert!(!sampled("x", 0.0));
         assert_eq!(sampled("abc", 0.5), sampled("abc", 0.5));
-        let kept = (0..10_000).filter(|i| sampled(&format!("req-{i}"), 0.1)).count();
+        let kept = (0..10_000)
+            .filter(|i| sampled(&format!("req-{i}"), 0.1))
+            .count();
         assert!((800..1200).contains(&kept), "{kept}");
     }
 }

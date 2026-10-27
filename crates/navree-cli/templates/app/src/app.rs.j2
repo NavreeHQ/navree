@@ -10,6 +10,7 @@ use navree::db::DatabaseModule;
 use navree::events::EventsModule;
 use navree::http::HttpModule;
 use navree::kernel::{AppBuilder, Navree};
+use navree::lighthouse::LighthouseModule;
 use navree::log::LoggerModule;
 use navree::mail::MailModule;
 use navree::observe::ObserveModule;
@@ -45,6 +46,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         // OpenAPI (`/api/openapi.json`, `/api/docs`), health and metrics.
         .module(ApiModule::from_config())
         .module(ObserveModule::from_config())
+        // Monitoring: issues, traces and alerts, the dashboard at `/_lighthouse`.
+        .module(LighthouseModule::from_config())
         // Feature modules (`navree make:module` adds new ones above the marker).
         .module(modules::users::UsersModule)
     // navree:modules

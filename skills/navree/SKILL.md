@@ -109,6 +109,7 @@ navree list                                 # every command of the app
 | Security review before a release | `navree-security-checklist` |
 | Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
 | Paid plans, subscriptions, trials, usage billing, invoices, Stripe or Paddle webhooks | `navree-billing` |
+| Production errors and slow requests: issues, reporting handled errors, alerts, the `/_lighthouse` dashboard, reading issues from a script or agent | `navree-lighthouse` |
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |

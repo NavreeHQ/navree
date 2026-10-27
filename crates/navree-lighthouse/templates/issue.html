@@ -1,0 +1,118 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div>
+  <div class="actions">
+    <span class="badge {{ issue.level }}">{{ issue.level }}</span>
+    <span class="badge">{{ issue.kind|replace("_", " ") }}</span>
+    <span class="badge{% if issue.status == 'open' %} error{% else %} ok{% endif %}">{{ issue.status|replace("_", " ") }}</span>
+    {% if issue.regressed_at %}<span class="badge warning">regressed {{ issue.regressed_at|date("%Y-%m-%d %H:%M") }}</span>{% endif %}
+  </div>
+  <h1>{{ issue.title }}</h1>
+  <div class="muted small">{{ issue.culprit }} · {{ issue.count }} events · {{ issue.users }} users · {{ issue.workspaces }} workspaces · first seen {{ issue.first_seen|date("%Y-%m-%d %H:%M") }}{% if issue.first_release %} in {{ issue.first_release }}{% endif %} · last seen {{ issue.last_seen|date("%Y-%m-%d %H:%M") }}{% if issue.last_release %} in {{ issue.last_release }}{% endif %}</div>
+</div>
+{% if can_resolve %}
+<div class="card actions">
+  {% if issue.status == "open" %}
+  <button class="primary" type="button" data-action="resolve" data-issue="{{ issue.id }}">Resolve</button>
+  <button type="button" data-action="resolve-next" data-issue="{{ issue.id }}">Resolve in next release</button>
+  <select id="ignore-for" aria-label="Ignore for">
+    <option value="forever">Ignore forever</option>
+    <option value="hours:1">Ignore for an hour</option>
+    <option value="hours:24">Ignore for a day</option>
+    <option value="occurrences:100">Ignore for 100 more events</option>
+  </select>
+  <button type="button" data-action="ignore" data-issue="{{ issue.id }}">Ignore</button>
+  <input id="comment" placeholder="Comment (optional)">
+  {% else %}
+  <button type="button" data-action="reopen" data-issue="{{ issue.id }}">Reopen</button>
+  {% if issue.comment %}<span class="muted small">{{ issue.comment }}</span>{% endif %}
+  {% endif %}
+  <span class="error-text small" id="action-error"></span>
+</div>
+{% endif %}
+<div class="grid-2">
+  <div class="card">
+    <h2>Message</h2>
+    <pre>{{ issue.message }}</pre>
+    {% if issue.chain|length > 1 %}
+    <h2>Caused by</h2>
+    <ol class="chain">{% for cause in issue.chain[1:] %}<li class="mono">{{ cause }}</li>{% endfor %}</ol>
+    {% endif %}
+    {% if issue.latest and issue.latest.backtrace %}
+    <h2>Backtrace</h2>
+    <pre>{{ issue.latest.backtrace }}</pre>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Latest event</h2>
+    {% if issue.latest %}
+    <dl class="kv">
+      <dt>When</dt><dd>{{ issue.latest.at|date("%Y-%m-%d %H:%M:%S") }}</dd>
+      {% if issue.latest.method %}<dt>Request</dt><dd class="mono">{{ issue.latest.method }} {{ issue.latest.route or issue.latest.path }}{% if issue.latest.status %} → {{ issue.latest.status }}{% endif %}</dd>{% endif %}
+      {% if issue.latest.job_id %}<dt>Job</dt><dd class="mono">{{ issue.latest.job_id }}</dd>{% endif %}
+      {% if issue.latest.request_id %}<dt>Request id</dt><dd class="mono">{{ issue.latest.request_id }}</dd>{% endif %}
+      {% if issue.latest.trace_id %}<dt>Trace id</dt><dd class="mono">{% if trace_link %}<a href="{{ trace_link }}" rel="noopener noreferrer">{{ issue.latest.trace_id }}</a>{% else %}{{ issue.latest.trace_id }}{% endif %}</dd>{% endif %}
+      {% if issue.latest.user_id %}<dt>User</dt><dd class="mono">{{ issue.latest.user_id }}</dd>{% endif %}
+      {% if issue.latest.workspace_id %}<dt>Workspace</dt><dd class="mono">{{ issue.latest.workspace_id }}</dd>{% endif %}
+      {% if issue.latest.location %}<dt>Location</dt><dd class="mono">{{ issue.latest.location }}</dd>{% endif %}
+      <dt>Release</dt><dd>{{ issue.latest.release or "" }}</dd>
+      <dt>Environment</dt><dd>{{ issue.latest.environment or "" }}</dd>
+      <dt>Server</dt><dd>{{ issue.latest.server or "" }} · {{ issue.latest.process or "" }}</dd>
+      {% if issue.latest.sample_id %}<dt>Trace</dt><dd><a href="{{ mount }}/traces/{{ issue.latest.sample_id }}">Open the trace</a></dd>{% endif %}
+    </dl>
+    {% else %}
+    <div class="muted small">No stored event (sampling, or pruned).</div>
+    {% endif %}
+  </div>
+</div>
+{% if latest_context %}
+<div class="card">
+  <h2>Context</h2>
+  <pre>{{ latest_context }}</pre>
+</div>
+{% endif %}
+<div class="card">
+  <h2>Events over the last 7 days</h2>
+  <svg class="chart" viewBox="0 0 960 80" role="img" aria-label="Events per hour">
+    {% for b in timeline_bars %}<rect class="bar issue" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }}</title></rect>{% endfor %}
+  </svg>
+</div>
+<div class="card table-card">
+  <table>
+    <thead><tr><th>When</th><th>Where</th><th>User</th><th>Release</th><th>Server</th><th>Trace</th></tr></thead>
+    <tbody>
+    {% for o in occurrences %}
+      <tr>
+        <td class="sub">{{ o.at|date("%Y-%m-%d %H:%M:%S") }}</td>
+        <td class="mono">{% if o.method %}{{ o.method }} {{ o.route or o.path }}{% elif o.job_id %}job {{ o.job_id }}{% else %}{{ o.process or "" }}{% endif %}</td>
+        <td class="mono">{{ o.user_id or "" }}</td>
+        <td>{{ o.release or "" }}</td>
+        <td>{{ o.server or "" }}</td>
+        <td>{% if o.sample_id %}<a href="{{ mount }}/traces/{{ o.sample_id }}">Trace</a>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No stored events.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if issue.alerts %}
+<div class="card table-card">
+  <table>
+    <thead><tr><th>Alert</th><th>Channel</th><th>Status</th><th class="num">Attempts</th><th>Raised</th><th>Error</th></tr></thead>
+    <tbody>
+    {% for a in issue.alerts %}
+      <tr>
+        <td>{{ a.kind|replace("_", " ") }}</td>
+        <td>{{ a.channel }}</td>
+        <td><span class="badge{% if a.status == 'delivered' %} ok{% elif a.status == 'failed' %} error{% endif %}">{{ a.status }}</span></td>
+        <td class="num">{{ a.attempts }}</td>
+        <td class="sub">{{ a.created_at|date("%Y-%m-%d %H:%M") }}</td>
+        <td class="sub">{{ a.error or "" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

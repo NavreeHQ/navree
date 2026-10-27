@@ -103,6 +103,17 @@ impl Default for IgnoreOptions {
     }
 }
 
+/// Where Lighthouse keeps what it records (`lighthouse.store`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoreKind {
+    /// In the app's database, or `lighthouse.database_url`'s (the default).
+    #[default]
+    Database,
+    /// Nowhere: nothing is recorded and the dashboard is not mounted.
+    Off,
+}
+
 /// When occurrences make a spike (`lighthouse.alerts.spike`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
@@ -221,6 +232,8 @@ pub struct LighthouseOptions {
     /// Record anything at all. When off, the dashboard still shows what was
     /// recorded.
     pub enabled: bool,
+    /// Where records are kept: `database` (the default) or `off`.
+    pub store: StoreKind,
     /// A separate database for Lighthouse's tables (same forms as
     /// `database.url`); the app's database when unset.
     pub database_url: Option<Secret<String>>,
@@ -234,7 +247,8 @@ pub struct LighthouseOptions {
     /// The environment label; `production` in release builds and
     /// `development` in debug builds when unset.
     pub environment: Option<String>,
-    /// The release label; `app.version`, else `unknown`, when unset.
+    /// The release label; `app.version`, else `unknown`, when unset
+    /// (`APP_LIGHTHOUSE__RELEASE`, which deploys set).
     pub release: Option<String>,
     /// The server label; the host name when unset.
     pub server: Option<String>,
@@ -264,6 +278,7 @@ impl Default for LighthouseOptions {
     fn default() -> Self {
         Self {
             enabled: true,
+            store: StoreKind::Database,
             database_url: None,
             dashboard: true,
             path: "/_lighthouse".to_owned(),
@@ -360,25 +375,22 @@ impl LighthouseOptions {
                 "lighthouse.alerts.slack.webhook_url must be an absolute http(s) URL".to_owned(),
             );
         }
-        match (&self.alerts.webhook.url, &self.alerts.webhook.secret) {
-            (Some(url), secret) => {
-                if !is_http_url(url) {
-                    errors.push(format!(
-                        "lighthouse.alerts.webhook.url must be an absolute http(s) URL (got {url:?})"
-                    ));
-                }
-                match secret {
-                    None => errors.push(
-                        "lighthouse.alerts.webhook.secret is required with lighthouse.alerts.webhook.url"
-                            .to_owned(),
-                    ),
-                    Some(secret) if secret.expose().len() < 32 => errors.push(
-                        "lighthouse.alerts.webhook.secret must be at least 32 bytes".to_owned(),
-                    ),
-                    Some(_) => {}
-                }
+        if let Some(url) = &self.alerts.webhook.url {
+            if !is_http_url(url) {
+                errors.push(format!(
+                    "lighthouse.alerts.webhook.url must be an absolute http(s) URL (got {url:?})"
+                ));
             }
-            (None, _) => {}
+            match &self.alerts.webhook.secret {
+                None => errors.push(
+                    "lighthouse.alerts.webhook.secret is required with lighthouse.alerts.webhook.url"
+                        .to_owned(),
+                ),
+                Some(secret) if secret.expose().len() < 32 => errors.push(
+                    "lighthouse.alerts.webhook.secret must be at least 32 bytes".to_owned(),
+                ),
+                Some(_) => {}
+            }
         }
         if errors.is_empty() {
             Ok(())
@@ -523,7 +535,9 @@ impl Period {
 
     /// Parses `1h`, `24h` or `7d`.
     pub fn parse(text: &str) -> Option<Period> {
-        Period::ALL.into_iter().find(|period| period.as_str() == text)
+        Period::ALL
+            .into_iter()
+            .find(|period| period.as_str() == text)
     }
 
     /// The period's length in minutes.
@@ -558,7 +572,9 @@ mod tests {
 
     fn load(sources: ConfigSources) -> Result<LighthouseOptions, String> {
         let config = Config::load(&sources).map_err(|e| e.to_string())?;
-        config.typed::<LighthouseOptions>().map_err(|e| e.to_string())
+        config
+            .typed::<LighthouseOptions>()
+            .map_err(|e| e.to_string())
     }
 
     #[test]
@@ -600,7 +616,10 @@ mod tests {
             [
                 ("APP_LIGHTHOUSE__RETENTION_DAYS", "30"),
                 ("APP_LIGHTHOUSE__SAMPLE__REQUESTS", "0.1"),
-                ("APP_LIGHTHOUSE__IGNORE__ROUTES", "/health/*,/metrics,/internal/*"),
+                (
+                    "APP_LIGHTHOUSE__IGNORE__ROUTES",
+                    "/health/*,/metrics,/internal/*",
+                ),
                 (
                     "APP_LIGHTHOUSE__ALERTS__EMAIL__TO",
                     "oncall@example.com,cto@example.com",
@@ -629,8 +648,8 @@ mod tests {
 
     #[test]
     fn invalid_values_name_their_key() {
-        let error = load(ConfigSources::new().set("lighthouse.sample.requests", json!(1.5)))
-            .unwrap_err();
+        let error =
+            load(ConfigSources::new().set("lighthouse.sample.requests", json!(1.5))).unwrap_err();
         assert!(error.contains("lighthouse.sample.requests"), "{error}");
         let error = load(
             ConfigSources::new().set("lighthouse.alerts.email.on", json!(["new_issue", "nope"])),

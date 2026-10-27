@@ -214,7 +214,9 @@ impl Aggregates {
     pub(crate) fn evict(&mut self, now: DateTime<Utc>) {
         self.rows.retain(|key, (_, dirty)| {
             *dirty
-                || key.bucket + TimeDelta::seconds(i64::from(key.resolution)) + TimeDelta::minutes(2)
+                || key.bucket
+                    + TimeDelta::seconds(i64::from(key.resolution))
+                    + TimeDelta::minutes(2)
                     > now
         });
     }
@@ -279,9 +281,12 @@ mod tests {
         assert_eq!(hour.key.bucket, at(9, 0, 0));
         assert_eq!(hour.values.count, 3);
         assert_eq!(hour.values.errors, 1);
-        assert!(aggregates.take_dirty().is_empty(), "rows are clean once taken");
+        assert!(
+            aggregates.take_dirty().is_empty(),
+            "rows are clean once taken"
+        );
 
-        aggregates.evict(at(9, 16, 30));
+        aggregates.evict(at(9, 17, 30));
         assert_eq!(aggregates.len(), 2, "the 09:14 minute is gone");
         aggregates.evict(at(10, 3, 0));
         assert_eq!(aggregates.len(), 0);

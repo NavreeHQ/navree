@@ -1,0 +1,27 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div>
+  <h1>Queries</h1>
+  <div class="muted small">Normalized statements in the last {{ period }}, by total time.</div>
+</div>
+<div class="card table-card">
+  <table>
+    <thead><tr><th>Statement</th><th class="num">Runs</th><th class="num">Total</th><th class="num">Average</th><th class="num">p95</th><th class="num">Slowest</th><th>Run by</th></tr></thead>
+    <tbody>
+    {% for q in queries %}
+      <tr>
+        <td class="mono wrap">{{ q.statement }}{% if q.errors %} <span class="badge error">{{ q.errors }} failed</span>{% endif %}</td>
+        <td class="num">{{ q.count }}</td>
+        <td class="num">{{ q.total_ms|round|int }} ms</td>
+        <td class="num">{{ q.avg_ms|round(1) }} ms</td>
+        <td class="num">{{ q.p95_ms|round(1) }} ms</td>
+        <td class="num">{{ q.max_ms|round(1) }} ms</td>
+        <td class="wrap sub">{% for o in q.origins[:3] %}{{ o.name }} ({{ o.count }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">No queries in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

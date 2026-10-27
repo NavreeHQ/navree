@@ -11,7 +11,9 @@ use chrono::{DateTime, Utc};
 use hmac::{KeyInit as _, Mac as _};
 use navree_contracts::{Backoff, Job, JobContext, JobOptions};
 use navree_http_client::HttpClient;
-use navree_kernel::{BoxError, BoxFuture, Factory, Injectable, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{
+    BoxError, BoxFuture, Factory, Injectable, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_mail::{Mailer, Message};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -60,7 +62,9 @@ impl AlertKind {
 
     /// Parses the snake_case name.
     pub fn parse(text: &str) -> Option<AlertKind> {
-        AlertKind::ALL.into_iter().find(|kind| kind.as_str() == text)
+        AlertKind::ALL
+            .into_iter()
+            .find(|kind| kind.as_str() == text)
     }
 
     /// A label for people (`New issue`).
@@ -463,13 +467,25 @@ mod tests {
         assert_eq!(payload["issue"]["kind"], "exception");
         assert_eq!(payload["issue"]["status"], "open");
         assert_eq!(payload["issue"]["level"], "error");
-        assert_eq!(payload["issue"]["culprit"], "POST /api/v1/invoices/{id}/charge");
+        assert_eq!(
+            payload["issue"]["culprit"],
+            "POST /api/v1/invoices/{id}/charge"
+        );
         assert_eq!(payload["environment"], "production");
         assert_eq!(payload["release"], "20261026-091512-3f2a9c1");
         assert!(payload.get("test").is_none());
         for key in [
-            "id", "title", "kind", "level", "status", "culprit", "count", "users",
-            "first_seen", "last_seen", "url",
+            "id",
+            "title",
+            "kind",
+            "level",
+            "status",
+            "culprit",
+            "count",
+            "users",
+            "first_seen",
+            "last_seen",
+            "url",
         ] {
             assert!(payload["issue"].get(key).is_some(), "{key}");
         }
@@ -490,7 +506,10 @@ mod tests {
         for kind in AlertKind::ALL {
             assert_eq!(AlertKind::parse(kind.as_str()), Some(kind));
         }
-        assert_eq!(escape("<a href='x'>&</a>"), "&lt;a href=&#39;x&#39;&gt;&amp;&lt;/a&gt;");
+        assert_eq!(
+            escape("<a href='x'>&</a>"),
+            "&lt;a href=&#39;x&#39;&gt;&amp;&lt;/a&gt;"
+        );
         assert!(email_text(&alert()).contains("Open in Lighthouse: https://"));
     }
 }

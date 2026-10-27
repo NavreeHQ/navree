@@ -1,0 +1,28 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div>
+  <h1>Requests</h1>
+  <div class="muted small">Every route in the last {{ period }}, slowest first. Percentiles come from every request.</div>
+</div>
+<div class="card table-card">
+  <table>
+    <thead><tr><th>Route</th><th class="num">Requests</th><th class="num">Per minute</th><th class="num">Error rate</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th><th class="num">Slowest</th></tr></thead>
+    <tbody>
+    {% for r in routes %}
+      <tr>
+        <td class="mono title-cell"><a href="{{ mount }}/requests/route?endpoint={{ r.link }}&amp;period={{ period }}">{{ r.endpoint }}</a></td>
+        <td class="num">{{ r.count }}</td>
+        <td class="num">{{ r.throughput_per_minute }}</td>
+        <td class="num{% if r.server_errors %} error-text{% endif %}">{{ r.error_percent }}%</td>
+        <td class="num">{{ r.p50_ms|round|int }} ms</td>
+        <td class="num">{{ r.p95_ms|round|int }} ms</td>
+        <td class="num">{{ r.p99_ms|round|int }} ms</td>
+        <td class="num">{{ r.max_ms|round|int }} ms</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="empty">No requests in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
