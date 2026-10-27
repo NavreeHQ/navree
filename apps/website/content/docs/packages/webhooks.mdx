@@ -344,6 +344,8 @@ Each built-in source is a type you name in `VerifiedWebhook<S>`, configured unde
 | `Slack` | `slack` | `secret`: the signing secret | `X-Slack-Signature` (`v0=`) over `X-Slack-Request-Timestamp` and the body |
 | `Mailgun` | `mailgun` | `secret`: the webhook signing key | The body's `timestamp`, `token` and `signature`, as JSON (event webhooks) or form fields (routes) |
 | `Postmark` | `postmark` | `secret`: `username:password` | The `Authorization: Basic` credentials of the webhook URL |
+| `Vonage` | `vonage` | `secret`: the signature secret (signed webhooks on) | The `Authorization: Bearer` JWT: HS256 with the secret, its `payload_hash` equal to the body's SHA-256, its `iat` within the tolerance |
+| `Meta` | `meta` | `secret`: the app secret; `verify_token` for the handshake | `X-Hub-Signature-256` (`sha256=`) over the body |
 
 What each one says about a request:
 
@@ -360,10 +362,12 @@ What each one says about a request:
 | `Slack` | `event_id` (Events API) | `event.type`, else `type` | `X-Slack-Request-Timestamp` |
 | `Mailgun` | `event-data.id`, else the token | `event-data.event` | `timestamp` |
 | `Postmark` | `MessageID` | `RecordType` (`Delivery`, `Bounce`...) | None |
+| `Vonage` | The token's `jti` | The body's `status`, else its `message_type` | The token's `iat` |
+| `Meta` | The body's SHA-256 | The body's `object` (`whatsapp_business_account`) | None |
 
-GitHub, Twilio, Postmark and Graph sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for a while, so its `Timestamp` is checked only against the source's own `tolerance_secs`, when you set one.
+GitHub, Twilio, Postmark, Graph and Meta sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for a while, so its `Timestamp` is checked only against the source's own `tolerance_secs`, when you set one.
 
-The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)` or `Slack::verify(secret, headers, body, tolerance)`, so a module that keeps its own secrets can check requests with them; [Billing](/docs/packages/billing/) uses them for its Stripe and Paddle webhooks.
+The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them; [Billing](/docs/packages/billing/) uses them for its Stripe and Paddle webhooks.
 
 A source table (`[webhooks.incoming.<source>]`) with an empty secret fails the boot, naming the key, unless it sets `topics` or `service_account`. A request for a source that lacks its secret or required setting, including one with no table at all, is answered with 500, and the error log names the missing key.
 
@@ -466,6 +470,9 @@ Some senders check that your URL answers before they send it anything. The extra
 | `Slack` | A signed Events API request with `"type": "url_verification"` | Its `challenge` |
 | `AwsSns` | A signed `SubscriptionConfirmation` | Confirms it by fetching its `SubscribeURL` (on an SNS host), then an empty `200` |
 | `AwsSns` | A signed `UnsubscribeConfirmation` | An empty `200` |
+| `Meta` | `GET ?hub.mode=subscribe&hub.verify_token=..&hub.challenge=..`, when the webhook is set up | The challenge, when the token equals the source's `verify_token`; otherwise a `400` |
+
+A Meta route answers the handshake only if it is mounted for `GET` as well as `POST`.
 
 With `auto_confirm = false`, SNS confirmations reach your handler instead (`event_type()` is `SubscriptionConfirmation` or `UnsubscribeConfirmation`), and you confirm with `SnsMessage::subscribe_url` yourself.
 
@@ -565,6 +572,18 @@ impl WebhookSource for Partner {
 ```
 
 A verifier that needs a setting other than `secret` says so in `missing_setting`, so a request for a source without it is a 500 that names the key.
+
+### Notification callbacks
+
+With [notifications](/docs/digging-deeper/notification-channels/) in the app too (the `notify` feature; `webhooks` and `notify` are both in `full`), `WebhooksModule` receives the status callbacks and replies of the SMS and WhatsApp providers. It mounts a public route for each of these sources you configure:
+
+| Route | Source |
+|---|---|
+| `POST /api/webhooks/notify/twilio` | `Twilio`: message statuses, and incoming SMS and WhatsApp messages |
+| `POST /api/webhooks/notify/vonage` | `Vonage`: Messages API statuses and inbound messages |
+| `GET`, `POST /api/webhooks/notify/meta` | `Meta`: the WhatsApp Cloud API's handshake, statuses and messages |
+
+Each request is verified like any `VerifiedWebhook<S>` of its source, then applied to the notification delivery log: statuses move deliveries forward, and replies of STOP or START update the opt-outs. Nothing is mounted without `NotifyModule`. [Provider callbacks](/docs/digging-deeper/notification-channels/#provider-callbacks) says which URL to give each provider.
 
 ## Testing
 

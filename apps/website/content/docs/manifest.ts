@@ -178,6 +178,7 @@ export const sections: DocsSection[] = [
       "mail",
       "mail-delivery",
       "notifications",
+      "notification-channels", // Owner: notify-channels
       // Owner: F
       "storage",
       "http-client",
