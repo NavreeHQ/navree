@@ -318,7 +318,7 @@ async fn an_unverified_provider_email_never_links_an_account() {
     let world = support::world().await;
     let provider = Provider::start().await;
     connection(&world, &provider, Provisioning::default()).await;
-    world.create_user("Jane", "jane@acme.test").await;
+    world.create_verified_user("Jane", "jane@acme.test").await;
     let query = authorize(&world).await;
     provider
         .token_response(json!({

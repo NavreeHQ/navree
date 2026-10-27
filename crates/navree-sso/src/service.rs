@@ -967,6 +967,15 @@ impl Sso {
         format!("navree-sso:state:{}", sha256_hex(key.as_bytes()))
     }
 
+    /// The value under `key`, removed: only the caller whose `forget`
+    /// removes the entry gets it, so two concurrent uses never both succeed.
+    async fn take<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Result<Option<T>, SsoError> {
+        let Some(value) = self.cache.get::<T>(key).await? else {
+            return Ok(None);
+        };
+        Ok(self.cache.forget(key).await?.then_some(value))
+    }
+
     fn enabled(loaded: Loaded) -> Result<Loaded, SsoError> {
         if loaded.model.enabled {
             Ok(loaded)
@@ -1055,7 +1064,7 @@ impl Sso {
         key: &str,
         connection: Uuid,
     ) -> Result<Option<LoginState>, SsoError> {
-        let Some(state) = self.cache.pull::<LoginState>(&Self::state_key(key)).await? else {
+        let Some(state) = self.take::<LoginState>(&Self::state_key(key)).await? else {
             return Ok(None);
         };
         if state.connection_id != connection || state.exp <= self.now().timestamp() {
@@ -1401,10 +1410,13 @@ impl Sso {
                     (verified, existing)
                 };
                 // The identity provider vouches for the email only within
-                // the connection's verified domains.
+                // the connection's verified domains, and an account links
+                // only when its owner proved the address too (an account
+                // someone registered with an address they don't own, or
+                // created through another connection, never links).
                 let trusted = verified && profile.email_verified != Some(false);
                 let (user, created) = match existing {
-                    Some(user) if trusted => (user, false),
+                    Some(user) if trusted && user.email_verified_at.is_some() => (user, false),
                     Some(_) => return Err(SsoError::EmailTaken),
                     None if !loaded.provisioning.jit => return Err(SsoError::ProvisioningDisabled),
                     None if !trusted && !loaded.provisioning.allow_unverified_emails => {
@@ -1611,8 +1623,7 @@ impl Sso {
         meta: &ClientMeta,
     ) -> Result<(User, navree_auth::TokenPair, Option<String>), SsoError> {
         let pending: PendingCode = self
-            .cache
-            .pull(&format!(
+            .take(&format!(
                 "navree-sso:code:{}",
                 sha256_hex(code.trim().as_bytes())
             ))

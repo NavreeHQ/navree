@@ -29,7 +29,9 @@ fn rules() -> Provisioning {
 async fn workspace_members_get_the_role_of_their_groups() {
     let world = support::world().await;
     let fake = SsoFake::new();
-    let owner = world.create_user("Olive Owner", "olive@acme.test").await;
+    let owner = world
+        .create_verified_user("Olive Owner", "olive@acme.test")
+        .await;
     let workspaces = world.app.get::<Workspaces>().await;
     let workspace = world
         .write(|uow| async move {

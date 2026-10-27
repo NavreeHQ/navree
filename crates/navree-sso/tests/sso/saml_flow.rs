@@ -155,8 +155,10 @@ async fn emails_outside_verified_domains_are_not_trusted() {
         .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())
         .await;
     world.verified_domain(&connection, "acme.test").await;
-    world.create_user("Victim", "victim@other.test").await;
-    world.create_user("Ann", "ann@acme.test").await;
+    world.create_verified_user("Victim", "victim@other.test").await;
+    world.create_verified_user("Ann", "ann@acme.test").await;
+    // Someone registered an address of the domain without proving it.
+    world.create_user("Squatter", "ceo@acme.test").await;
 
     // An identity provider claiming someone else's address takes nothing
     // over, and cannot squat an address outside its domains.
@@ -168,7 +170,12 @@ async fn emails_outside_verified_domains_are_not_trusted() {
         .saml_sign_in(&fake, "acme", "new@other.test", &[])
         .await
         .assert_error_code(403, "unverified_domain");
-    // An existing user of a verified domain is linked.
+    // An account whose owner never verified the address doesn't link.
+    world
+        .saml_sign_in(&fake, "acme", "ceo@acme.test", &[])
+        .await
+        .assert_error_code(409, "email_taken");
+    // An existing, verified user of a verified domain is linked.
     let ann = world
         .saml_sign_in(&fake, "acme", "ann@acme.test", &[])
         .await

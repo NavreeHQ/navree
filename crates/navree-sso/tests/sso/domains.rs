@@ -81,7 +81,7 @@ async fn discovery_and_password_enforcement() {
     let connection = world
         .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())
         .await;
-    world.create_user("Ann", "ann@acme.test").await;
+    world.create_verified_user("Ann", "ann@acme.test").await;
     world.create_user("Ola", "ola@other.test").await;
 
     let discover = |email: &str| {
