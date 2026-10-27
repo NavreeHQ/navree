@@ -82,6 +82,14 @@ impl CurrentWorkspace {
         &self.0.workspace
     }
 
+    /// The scope to send this workspace's mail with
+    /// (`mailer.for_scope(&workspace.mail_scope())`): the workspace and its
+    /// organization, so their transports, suppressions and delivery log
+    /// apply.
+    pub fn mail_scope(&self) -> navree_mail::MailScope {
+        navree_mail::MailScope::from(&self.0.workspace)
+    }
+
     /// The signed-in user's membership. For a user who enters through an
     /// organization grant it is not stored: it carries the organization
     /// membership's id and dates and the mapped role
