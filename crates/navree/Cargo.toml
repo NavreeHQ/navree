@@ -168,6 +168,27 @@ billing = [
     "auth",
     "workspace",
 ]
+## L6 (opt-in, not in `full`)
+## Microservices: message and event handlers, `ServiceClient`, the TCP and
+## in-memory transports. Each broker is a feature of its own (below).
+micro = [
+    "dep:navree-micro",
+    "http",
+    "events",
+    "db",
+    "testing",
+    "validation",
+]
+## NATS for `micro` (async-nats; core request-reply, JetStream for events).
+micro-nats = ["micro", "navree-micro/nats"]
+## Kafka for `micro` (a pure-Rust client).
+micro-kafka = ["micro", "navree-micro/kafka"]
+## RabbitMQ (AMQP 0-9-1) for `micro` (lapin).
+micro-rabbitmq = ["micro", "navree-micro/rabbitmq"]
+## Redis Streams for `micro`.
+micro-redis = ["micro", "navree-micro/redis"]
+## MQTT 5 for `micro` (rumqttc).
+micro-mqtt = ["micro", "navree-micro/mqtt"]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -202,6 +223,7 @@ navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
+navree-micro = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
 navree-queue = { workspace = true, optional = true }

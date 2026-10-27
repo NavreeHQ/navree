@@ -586,7 +586,7 @@ pub(crate) fn access_calls(attrs: &RouteAttrs, access_crate: Option<&TokenStream
 
 /// `.can(action, subject, from)`: marker types become their constants
 /// (`<Update as ActionMarker>::NAME`, `<Deal as Subject>::SUBJECT`).
-fn can_call(can: &Can, access_crate: Option<&TokenStream>) -> TokenStream {
+pub(crate) fn can_call(can: &Can, access_crate: Option<&TokenStream>) -> TokenStream {
     let name = |name: &Name, marker: &str, constant: &str| match name {
         Name::Literal(literal) => literal.to_token_stream(),
         Name::Type(ty) => {
