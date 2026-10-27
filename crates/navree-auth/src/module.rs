@@ -14,7 +14,7 @@ use crate::error::map_auth_error;
 use crate::service::clock_of;
 use crate::{
     AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, Strategy, StrategyAuthenticator,
-    UserResourceExtension, migration,
+    PasswordSignInPolicy, UserResourceExtension, migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.
@@ -194,6 +194,9 @@ pub trait ModuleBuilderAuthExt {
 
     /// Registers `E` as a `dyn UserResourceExtension` multi-binding.
     fn user_resource_extension<E: UserResourceExtension + Injectable>(&mut self) -> &mut Self;
+
+    /// Registers `P` as a `dyn PasswordSignInPolicy` multi-binding.
+    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self;
 }
 
 impl ModuleBuilderAuthExt for ModuleBuilder {
@@ -212,6 +215,15 @@ impl ModuleBuilderAuthExt for ModuleBuilder {
                 Ok(Arc::new(E::construct(r).await?) as Arc<dyn UserResourceExtension>)
             })
             .deps(E::dependencies()),
+        )
+    }
+
+    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self {
+        self.multi(
+            Factory::<dyn PasswordSignInPolicy>::new(|r: Resolver| async move {
+                Ok(Arc::new(P::construct(r).await?) as Arc<dyn PasswordSignInPolicy>)
+            })
+            .deps(P::dependencies()),
         )
     }
 }

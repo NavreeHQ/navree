@@ -147,6 +147,7 @@ mod mail;
 mod migration;
 mod module;
 mod options;
+mod policy;
 mod resource;
 mod service;
 mod strategy;
@@ -173,6 +174,7 @@ pub use options::{
     AuthOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN, PasswordResetOptions,
     TwoFactorOptions, VerificationOptions,
 };
+pub use policy::PasswordSignInPolicy;
 pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResourceExtension};
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
