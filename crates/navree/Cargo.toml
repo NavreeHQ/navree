@@ -644,6 +644,12 @@ required-features = ["redis"]
 name = "documents"
 required-features = ["documents"]
 
+# The media docs examples through the facade
+# (`cargo test -p navree --features media --test media`).
+[[test]]
+name = "media"
+required-features = ["media"]
+
 # The request-pipeline micro-benchmarks: `/json` through the whole router,
 # a pool read, a validated insert and a unit of work on SQLite
 # (`cargo bench -p navree --bench pipeline`).
