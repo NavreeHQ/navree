@@ -26,14 +26,6 @@ pub enum RedisError {
         #[source]
         source: redis::RedisError,
     },
-    /// A value read from Redis is not what the driver stored.
-    #[error("unexpected data under Redis key `{key}`: {message}")]
-    Data {
-        /// The key (prefix included).
-        key: String,
-        /// What is wrong.
-        message: String,
-    },
 }
 
 impl RedisError {

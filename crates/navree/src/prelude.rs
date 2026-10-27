@@ -87,6 +87,9 @@ pub use navree_validation::{Valid, ValidAsync, ValidationModule};
 #[cfg(feature = "auth")]
 pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt as _};
 
+#[cfg(feature = "redis")]
+pub use navree_redis::RedisModule;
+
 #[cfg(feature = "flags")]
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 #[cfg(feature = "graphql")]

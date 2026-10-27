@@ -1,0 +1,272 @@
+---
+title: "Redis"
+description: "`RedisModule`: shared Redis connections, and Redis drivers so every process of your app shares the cache, locks, the queue, sessions, rate limits and WebSocket broadcasts."
+---
+
+## Introduction
+
+<Badge feature="redis" /> An app that runs one process can keep its cache, its locks and its sessions in memory. Most production apps run several: two or more API servers behind a load balancer, plus `queue:work` and `schedule:work`. Memory isn't shared between them, so a lock taken by one server doesn't stop another, a session created on one server is unknown to the next, and a WebSocket broadcast only reaches the clients connected to the process that sent it.
+
+`navree-redis` moves that state to a Redis server that every process shares. `RedisModule` opens the connections once for the whole app and registers a Redis driver for each module that keeps state:
+
+| Setting | What lives in Redis |
+|---|---|
+| `cache.store = "redis"` | [Cache](/docs/digging-deeper/cache/#the-redis-store) entries and atomic locks |
+| `queue.driver = "redis"` | [Queued jobs](/docs/digging-deeper/queues/#the-redis-driver), delayed and failed jobs |
+| `session.store = "redis"` | [Session](/docs/basics/sessions-and-csrf/#the-redis-store) records |
+| `realtime.backplane = "redis"` | Nothing stored: [broadcasts and presence](/docs/digging-deeper/broadcasting/#several-serving-processes) travel between processes over Redis pub/sub |
+
+It also gives you the connections themselves, for your own commands, and a [`RateLimiter`](#shared-rate-limits) whose counts every process shares.
+
+Each driver is opt-in: adding `RedisModule` changes nothing until a module's setting names `redis`. You can move the cache to Redis and keep the queue in the database.
+
+## Installation
+
+Turn on the `redis` feature of the `navree` facade. It brings `navree-redis` and the cache, queue, session and realtime features it builds on. Redis is opt-in: the default `full` feature leaves it out. The client is pure Rust; `rediss://` connections use rustls.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["redis"] }
+```
+
+Add `RedisModule` to your app root, next to the modules whose driver you switch:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(RedisModule::from_config()) // section `redis`
+        .module(CacheModule::from_config()) // cache.store = "redis"
+        .module(DatabaseModule::from_config())
+        .module(QueueModule::from_config()) // queue.driver = "redis"
+}
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://127.0.0.1:6379"
+
+[cache]
+store = "redis"
+
+[queue]
+driver = "redis"
+```
+
+`RedisModule` is global, so modules use it without importing it. A module set to `redis` without `RedisModule` in the app fails the boot with a message that says so, for example `cache.store = "redis" needs RedisModule (navree-redis) in the app`.
+
+## Configuration
+
+`RedisModule::from_config()`, and a plain `.module(RedisModule)`, read the `redis` section. Every key has a default:
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://127.0.0.1:6379"   # rediss:// for TLS
+prefix = "navree:"               # starts every key the drivers write
+connect_timeout_ms = 5000
+response_timeout_ms = 5000
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `redis.url` | `redis://127.0.0.1:6379` | The server. `redis://[user][:password@]host[:port][/db]`, `rediss://…` for TLS, or `unix:///path/to/redis.sock`. |
+| `redis.prefix` | `navree:` | Starts every key the drivers write. Give each app that shares a server its own prefix. |
+| `redis.connect_timeout_ms` | `5000` | How long opening a connection may take. At least 1. |
+| `redis.response_timeout_ms` | `5000` | How long a command may wait for its answer. At least 1. |
+| `redis.connections.<name>.url` | none | More servers, by name. See [separate servers](#separate-servers). |
+
+Environment variables override the file: `APP_REDIS__URL=rediss://default:secret@cache.internal:6380/0`, `APP_REDIS__PREFIX=crm:`. Put the URL, with its password, in the environment rather than in `config/app.toml`. Invalid options fail the boot; the messages name the key and never repeat a URL. `Debug` output of the options masks passwords.
+
+To configure the module in code instead, use `for_root`:
+
+```rust
+use navree::redis::RedisOptions;
+
+Navree::app().module(RedisModule::for_root(RedisOptions {
+    url: "redis://127.0.0.1:6379/1".into(),
+    prefix: "crm:".into(),
+    ..RedisOptions::default()
+}))
+```
+
+### Connections open on first use
+
+Booting doesn't connect. The first command opens the connection, and a lost connection is opened again on the next command, after up to two quick retries. So an app starts while Redis is down, and commands fail until it is back. To know whether Redis answers, `RedisModule` registers a readiness check named `redis` that sends `PING` to every configured server; [health and metrics](/docs/digging-deeper/health-and-metrics/) shows where it is reported. A server that doesn't answer turns readiness down with a reason such as ``Redis connection `default`: Connection refused``.
+
+### TLS
+
+A `rediss://` URL connects over TLS with rustls, checking the server's certificate against the system's root certificates. Managed Redis services (and Redis started with `--tls-port`) take this form:
+
+```env title=".env"
+APP_REDIS__URL=rediss://default:secret@redis.example.com:6380/0
+```
+
+### Separate servers
+
+Name more servers under `redis.connections`. A driver uses the connection named after it when there is one, and the default connection (`redis.url`) otherwise:
+
+| Connection name | Used by |
+|---|---|
+| `cache` | the cache store and the locks |
+| `queue` | the queue driver |
+| `session` | the session store |
+| `realtime` | the real-time backplane |
+| `rate_limiter` | `RateLimiter` |
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://10.0.0.5:6379"            # sessions, locks, rate limits, broadcasts
+
+[redis.connections.cache]
+url = "redis://10.0.0.6:6379"            # a server that may evict entries
+
+[redis.connections.queue]
+url = "redis://10.0.0.7:6379"            # a server that keeps every job
+```
+
+Names are lowercase letters, digits, `_` and `-`; `default` is reserved for `redis.url`. Other names are yours: `redis.named("analytics")` returns that connection.
+
+## Using Redis directly
+
+Inject `Arc<Redis>` for commands of your own. `manager()` is the default connection's manager: one multiplexed connection that every task shares (it is cheap to clone) and that reconnects by itself. The [redis-rs](https://docs.rs/redis) client is re-exported as `navree::redis::redis`:
+
+```rust title="src/modules/views/services/preferences.rs"
+use navree::prelude::*;
+use navree::redis::Redis;
+use navree::redis::redis::AsyncCommands;
+use uuid::Uuid;
+
+#[injectable]
+pub struct ViewPreferences {
+    redis: Arc<Redis>,
+}
+
+impl ViewPreferences {
+    pub async fn save(&self, user_id: Uuid, view: &str) -> Result<(), BoxError> {
+        let key = self.redis.key(&format!("views:{user_id}")); // "navree:views:…"
+        let _: () = self.redis.manager().set_ex(&key, view, 30 * 86_400).await?;
+        Ok(())
+    }
+
+    pub async fn load(&self, user_id: Uuid) -> Result<Option<String>, BoxError> {
+        let key = self.redis.key(&format!("views:{user_id}"));
+        Ok(self.redis.manager().get(&key).await?)
+    }
+}
+```
+
+| `Redis` | Returns |
+|---|---|
+| `manager()` | The default connection's `ConnectionManager`. |
+| `connection()` | The default connection, a `RedisConnection`. |
+| `named(name)` | The connection `redis.connections.<name>`, or `RedisError::UnknownConnection`. |
+| `connection_for(name)` | The connection `name` if it is configured, the default one otherwise (what the drivers use). |
+| `connections()` | Every connection, the default one first. |
+| `prefix()`, `key(key)` | `redis.prefix`, and `key` with the prefix in front. |
+| `error(source)` | A redis-rs error on the default connection as a `RedisError`. |
+
+A `RedisConnection` has the same `manager()`, plus `dedicated()`, a connection of its own without a response timeout, for blocking commands such as `BLPOP` that would hold up the shared manager, `pubsub()` for `SUBSCRIBE`, `ping()`, `client()` (the redis-rs `Client`) and `name()`.
+
+Errors are `RedisError`: `Command { connection, source }` for a failed command or connection, `UnknownConnection { name }` and `Options`. Messages name the connection, never its URL. In a handler, `?` turns one into a 500 [error response](/docs/basics/errors/).
+
+## Shared rate limits
+
+The per-IP limit and the route throttles of `HttpModule` count in each process's memory (see [rate limiting](/docs/basics/rate-limiting/)). `RateLimiter`, which `RedisModule` provides, counts in Redis instead, so every process enforces one limit together. Use it for limits a route throttle can't express: per plan, per API key, or shared by several routes.
+
+```rust title="src/modules/contacts/controller.rs"
+use std::time::Duration;
+
+use navree::prelude::*;
+use navree::redis::{RateLimit, RateLimiter};
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct ExportsController {
+    limiter: Arc<RateLimiter>,
+}
+
+#[controller("/exports", version = "1")]
+#[authenticated]
+impl ExportsController {
+    #[post("/")]
+    async fn create(&self, CurrentUser(user): CurrentUser) -> Result<Json<Value>> {
+        let key = format!("exports:{}", user.id);
+        match self.limiter.hit(&key, 10, Duration::from_secs(3600)).await? {
+            RateLimit::Allowed { remaining } => Ok(Json(json!({ "queued": true, "remaining": remaining }))),
+            RateLimit::Limited { retry_after } => Err(AppError::too_many_requests(retry_after)),
+        }
+    }
+}
+```
+
+- `hit(key, limit, per)` counts a request against `key`: at most `limit` per `per`, as a burst, then one more every `per / limit`, the same rule as the [per-IP limit](/docs/basics/rate-limiting/#the-per-ip-limit). It returns `RateLimit::Allowed { remaining }` or `RateLimit::Limited { retry_after }`; `is_allowed()` tells them apart. A refused request doesn't count.
+- `reset(key)` forgets the requests counted against `key`, for example after a successful sign-in.
+- Each key is one Redis value under `<prefix>limit:`, which expires on its own once the window has passed. The time comes from the Redis server, so app servers whose clocks drift still count the same window.
+
+## Keys
+
+Everything the drivers write starts with `redis.prefix`:
+
+| Keys | What |
+|---|---|
+| `<prefix>cache:<key>` | Cache entries (`<key>` includes `cache.prefix`) |
+| `<prefix>locks:<name>` | Locks |
+| `<prefix>queue:…` | Jobs, the queues' pending and reserved sets, unique keys and failed jobs |
+| `<prefix>session:<id>` | Session records |
+| `<prefix>limit:<key>` | `RateLimiter` counts |
+| `<prefix>realtime:<app_id>` | The backplane's pub/sub channel (not a key) |
+
+`cache:clear` deletes the `cache:` keys only, so the queue, sessions and locks on the same server survive it.
+
+## Running Redis
+
+[Dock](/docs/tools/dock/) runs Redis for development on `127.0.0.1:6379`, which is `redis.url`'s default, so the app reaches it with no setting. In production, use a Redis server you run yourself or a managed one, and keep these in mind:
+
+- **Eviction.** When Redis reaches its `maxmemory`, its `maxmemory-policy` decides what goes. `allkeys-lru` may evict queued jobs, sessions and locks along with cache entries. With the queue or sessions on Redis, use `volatile-lru` (only keys with an expiry are evicted: cache entries, sessions and locks have one, jobs don't) or `noeviction`, or give the cache its own server with `redis.connections.cache` and let that one evict.
+- **Persistence.** Jobs only survive a Redis restart if Redis saves them: turn on the append-only file (`appendonly yes`) on the server that holds the queue.
+- **Supported servers.** One Redis server (Redis 6 or later, or a compatible server such as Valkey), or a primary with replicas behind one address. Redis Cluster is not supported: the queue's Lua scripts touch keys that are only known while the script runs.
+
+## Testing
+
+Tests don't need Redis: keep the memory drivers there, which behave the same as the Redis ones (`cache.store = "memory"` and `session.store = "memory"`, the defaults, and `queue.driver = "memory"` or the database driver on a temporary database). To share a [real-time](/docs/digging-deeper/broadcasting/#several-serving-processes) backplane between two test apps in one process, use `navree::realtime::MemoryBackplane`.
+
+To run code against a real server, point a test at one and give each test its own prefix, so tests never see each other's keys:
+
+```rust title="tests/redis.rs"
+use navree::prelude::*;
+use navree::redis::{Redis, RedisOptions};
+
+#[tokio::test]
+async fn preferences_round_trip() {
+    let Ok(url) = std::env::var("REDIS_URL") else {
+        return; // no server on this machine
+    };
+    let options = RedisOptions {
+        url,
+        prefix: format!("test:{}:", uuid::Uuid::new_v4().simple()),
+        ..RedisOptions::default()
+    };
+    let redis = Redis::new(&options).unwrap();
+    redis.connection().ping().await.unwrap();
+    // ...
+}
+```
+
+`Redis::new` opens nothing until the first command, like the module, and needs a Tokio runtime.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/cache/" title="Cache">
+    The Redis cache store and shared locks.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    The Redis queue driver.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Real-time broadcasting">
+    Several serving processes on one backplane.
+  </LinkCard>
+  <LinkCard href="/docs/basics/rate-limiting/" title="Rate limiting">
+    The built-in limits, and limits shared by every process.
+  </LinkCard>
+</LinkCards>

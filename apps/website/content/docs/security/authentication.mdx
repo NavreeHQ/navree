@@ -617,7 +617,7 @@ Content-Type: application/json
 - The first refusal in each window is written to the audit log as `auth.throttled` (kind `security`), with the email address in its metadata.
 - `auth.login_throttle_per_minute = 0` turns the throttle off.
 
-The counters live in the app's cache when `CacheModule` is in the app, and in a private in-process cache otherwise. The only cache store today is the in-memory one (Redis drivers are on the [roadmap](/docs/prologue/roadmap/#more-drivers)), so with several API instances each counts attempts on its own.
+The counters live in the app's cache when `CacheModule` is in the app, and in a private in-process cache otherwise. With the memory cache store, each API instance counts attempts on its own; with the [Redis store](/docs/digging-deeper/cache/#the-redis-store) (`cache.store = "redis"`), every instance shares the counts.
 
 The throttle is only as good as the client address. Behind a reverse proxy or a BFF, list the proxy in `http.trusted_proxies`, or every client shares the proxy's address and one person's wrong passwords lock everyone out of that account. See [Rate limiting](/docs/basics/rate-limiting/).
 

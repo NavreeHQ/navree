@@ -47,6 +47,7 @@ conventions, and says which skill to load for each task.
 | [`navree-telemetry`](navree-telemetry/SKILL.md) | Telemetry events and sinks, OpenTelemetry tracing and OTLP export, trace context, `TelemetryRecorder` and `SpanRecorder` in tests |
 | [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
 | [`navree-grpc`](navree-grpc/SKILL.md) | gRPC, gRPC-Web and Connect services in modules, gRPC clients, and their tests |
+| [`navree-redis`](navree-redis/SKILL.md) | Redis connections and the Redis cache, locks, queue, sessions, rate limits and real-time backplane (feature `redis`) |
 
 ## Installing
 

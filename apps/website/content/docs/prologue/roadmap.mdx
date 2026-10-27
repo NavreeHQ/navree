@@ -22,9 +22,9 @@ From 1.0, Navree publishes a support policy: how long each release line gets bug
 
 Every module talks to its backend through a driver trait, so new drivers arrive without changes to your code:
 
-- **Redis** for the cache, the queue, sessions, locks and the rate limiter, and as a backplane that lets several `serve` processes share WebSocket broadcasts.
 - **Object storage** disks for S3 and S3-compatible stores, Google Cloud Storage and Azure Blob Storage.
-- **More queue backends** alongside the database and memory drivers.
+- **More queue backends** alongside the database, memory and [Redis](/docs/digging-deeper/redis/) drivers, through the `QueueStore` driver trait.
+- **Shared HTTP limits.** A Redis store for the per-IP limit and route throttles, which count per process today.
 
 ## More starter kits
 
