@@ -173,6 +173,27 @@ fn register(m: &mut ModuleBuilder, options: Option<IntegrationsOptions>) {
         .deps(vec![ProviderKey::of::<Integrations>()]),
     )
     .exports::<dyn navree_notify::ConnectionTokens>();
+    // Watched mailboxes: their routes, `integrations:mailboxes` and the
+    // hourly renewal.
+    #[cfg(feature = "mail")]
+    {
+        m.factory(
+            Factory::<crate::MailboxWatches>::new(|r: Resolver| async move {
+                Ok(Arc::new(crate::MailboxWatches::new(
+                    r.get::<Integrations>().await?,
+                )))
+            })
+            .deps(vec![ProviderKey::of::<Integrations>()]),
+        )
+        .exports::<crate::MailboxWatches>()
+        .controller::<crate::MailboxesController>()
+        .command(crate::mailboxes::command())
+        .schedule(|s| {
+            s.command("integrations:mailboxes", &["--renew"])
+                .hourly()
+                .without_overlapping();
+        });
+    }
 }
 
 /// `IntegrationsModule::for_feature::<S>()`.

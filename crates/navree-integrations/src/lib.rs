@@ -34,6 +34,10 @@
 //! - **Notifications** (crate feature `notify`): the module registers
 //!   navree-notify's `dyn ConnectionTokens` (`IntegrationTokens`), so Slack
 //!   and Teams bot routes that name a connection send with its token.
+//! - **Mailboxes** (crate feature `mail`): [`MailboxWatches`] watches a
+//!   connection's Microsoft 365 or Gmail mailboxes and hands each new
+//!   message to navree-mail's inbound pipeline (`/api/mail/inbound/graph`,
+//!   `/api/mail/inbound/gmail`, `integrations:mailboxes`).
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -71,6 +75,8 @@ mod error;
 mod extract;
 mod fake;
 mod flow;
+#[cfg(feature = "mail")]
+mod mailboxes;
 mod migration;
 mod model;
 mod module;
@@ -98,6 +104,10 @@ pub use fake::{FakeGrant, IntegrationsFake, Minted};
 pub use flow::{
     CompletedConnection, ConnectCallback, ConnectOptions, ConnectRedirect, NewApiKey,
     NewServiceAccount,
+};
+#[cfg(feature = "mail")]
+pub use mailboxes::{
+    MailboxWatch, MailboxWatches, MailboxesController, MailboxesOptions, RenewSummary,
 };
 pub use migration::INTEGRATIONS_MIGRATIONS;
 pub use model::IntegrationConnection;

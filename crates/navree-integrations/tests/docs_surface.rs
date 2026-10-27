@@ -38,7 +38,18 @@ fn the_configuration_keys_have_their_documented_defaults() {
         unhealthy_after,
         lock_timeout_secs,
         providers,
+        mailboxes,
     } = IntegrationsOptions::default();
+    // Feature `mail` (on in the tests): `integrations.mailboxes`.
+    let navree_integrations::MailboxesOptions {
+        graph_notification_url,
+        gmail_topic,
+        gmail_token,
+        renew_before_hours,
+    } = mailboxes;
+    assert_eq!((graph_notification_url, gmail_topic), (None, None));
+    assert!(gmail_token.is_none());
+    assert_eq!(renew_before_hours, 24);
     assert_eq!(redirect_base, None);
     assert!(routes);
     assert_eq!(level, Level::Workspace);

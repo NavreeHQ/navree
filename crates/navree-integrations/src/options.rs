@@ -62,6 +62,10 @@ pub struct IntegrationsOptions {
     /// The providers, by key (`microsoft`, `google`, `slack`, or your own
     /// key with a `type`).
     pub providers: BTreeMap<String, ProviderConfig>,
+    /// Watched mailboxes (crate feature `mail`): where Microsoft Graph and
+    /// Gmail send their notifications.
+    #[cfg(feature = "mail")]
+    pub mailboxes: crate::MailboxesOptions,
 }
 
 impl Default for IntegrationsOptions {
@@ -75,6 +79,8 @@ impl Default for IntegrationsOptions {
             unhealthy_after: 3,
             lock_timeout_secs: 15,
             providers: BTreeMap::new(),
+            #[cfg(feature = "mail")]
+            mailboxes: crate::MailboxesOptions::default(),
         }
     }
 }
@@ -114,6 +120,8 @@ impl IntegrationsOptions {
         for (key, provider) in &self.providers {
             provider.check(key, self.redirect_base.is_some(), &mut errors);
         }
+        #[cfg(feature = "mail")]
+        self.mailboxes.check(&mut errors);
         if errors.is_empty() {
             Ok(())
         } else {

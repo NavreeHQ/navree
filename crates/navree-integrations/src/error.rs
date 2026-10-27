@@ -136,6 +136,15 @@ pub enum IntegrationsError {
     /// A provider the service needs could not be resolved.
     #[error("integrations provider error: {0}")]
     Kernel(#[from] KernelError),
+    /// No mailbox watch has this id (crate feature `mail`).
+    #[cfg(feature = "mail")]
+    #[error("mailbox watch not found")]
+    MailboxWatchNotFound,
+    /// The inbound pipeline refused or failed a message of a watched
+    /// mailbox (crate feature `mail`).
+    #[cfg(feature = "mail")]
+    #[error(transparent)]
+    Inbound(#[from] navree_mail::InboundError),
 }
 
 impl IntegrationsError {
@@ -197,6 +206,12 @@ impl IntegrationsError {
                 .with_code("integration_unavailable")
                 .with_detail("The integration is unavailable. Please try again."),
             IntegrationsError::Db(error) => return navree_db::map_db_error(error),
+            #[cfg(feature = "mail")]
+            IntegrationsError::MailboxWatchNotFound => AppError::not_found()
+                .with_code("mailbox_watch_not_found")
+                .with_detail("Mailbox watch not found"),
+            #[cfg(feature = "mail")]
+            IntegrationsError::Inbound(error) => return error.to_app_error(),
             IntegrationsError::ForeignUrl { .. }
             | IntegrationsError::NotBound
             | IntegrationsError::Config(_)

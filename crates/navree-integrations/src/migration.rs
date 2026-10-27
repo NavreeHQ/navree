@@ -14,10 +14,14 @@ pub(crate) const CONNECTIONS_TABLE: &str = "integration_connections";
 
 /// The integrations module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(INTEGRATIONS_MIGRATIONS).migration(SchemaMigration::new(
+    let set = MigrationSet::new(INTEGRATIONS_MIGRATIONS).migration(SchemaMigration::new(
         "m20261027_000001_create_integration_connections_table",
         CreateIntegrationConnections,
-    ))
+    ));
+    // `integration_mailbox_watches` (crate feature `mail`).
+    #[cfg(feature = "mail")]
+    let set = crate::mailboxes::add_migrations(set);
+    set
 }
 
 /// Creates `integration_connections`: unique per owner, provider and scope
