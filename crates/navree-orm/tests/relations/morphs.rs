@@ -7,9 +7,7 @@ use navree_orm::prelude::*;
 use navree_orm::relations::{AnyRecord, MorphMap, MorphRef, MorphTypes};
 
 use crate::fixtures::seed;
-use crate::models::{
-    Activity, Attachment, Company, Deal, Event, Image, Mark, Note, Ticket, User,
-};
+use crate::models::{Activity, Attachment, Company, Deal, Event, Image, Mark, Note, Ticket, User};
 use crate::support::sqlite;
 
 navree_orm::morph_types! {
@@ -30,7 +28,13 @@ async fn notes(db: &navree_db::Db, crm: &crate::fixtures::Crm) -> Vec<Record<Not
             .await
             .unwrap(),
     );
-    notes.push(crm.acme.notes().create(db, Note::new("acme lunch")).await.unwrap());
+    notes.push(
+        crm.acme
+            .notes()
+            .create(db, Note::new("acme lunch"))
+            .await
+            .unwrap(),
+    );
     notes.push(
         crm.globex
             .notes()
@@ -43,7 +47,9 @@ async fn notes(db: &navree_db::Db, crm: &crate::fixtures::Crm) -> Vec<Record<Not
 }
 
 fn notable(note: &Record<Note>) -> Option<&AnyRecord> {
-    note.loaded(Note::notable).expect("notable is loaded").as_ref()
+    note.loaded(Note::notable)
+        .expect("notable is loaded")
+        .as_ref()
 }
 
 #[tokio::test]
@@ -134,7 +140,13 @@ async fn morph_to_results_are_typed() {
     }
     let record: Record<Deal> = notable(&notes[0]).unwrap().clone().downcast().unwrap();
     assert_eq!(record.id, crm.renewal.id);
-    assert!(notable(&notes[0]).unwrap().clone().downcast::<Company>().is_err());
+    assert!(
+        notable(&notes[0])
+            .unwrap()
+            .clone()
+            .downcast::<Company>()
+            .is_err()
+    );
 
     // Queried directly, and loaded afterwards.
     let any = created[1].notable().get(&t.db).await.unwrap().unwrap();
@@ -144,7 +156,10 @@ async fn morph_to_results_are_typed() {
     note.load(&t.db, "notable").await.unwrap();
     assert!(notable(&note).unwrap().is::<Deal>());
     assert!(created[0].notable().is(&crm.renewal));
-    assert!(created[0].notable().is_not(&crm.acme), "same key, other type");
+    assert!(
+        created[0].notable().is_not(&crm.acme),
+        "same key, other type"
+    );
 
     // Serialized as the related record.
     let json = serde_json::to_value(&notes[1]).unwrap();
@@ -184,7 +199,10 @@ async fn morph_to_loads_nested_relations_per_type() {
         "Acme"
     );
     assert_eq!(renewal.loaded(Deal::activities).unwrap().len(), 3);
-    let acme = notable(&notes[1]).unwrap().downcast_ref::<Company>().unwrap();
+    let acme = notable(&notes[1])
+        .unwrap()
+        .downcast_ref::<Company>()
+        .unwrap();
     assert_eq!(acme.loaded(Company::contacts).unwrap().len(), 2);
     assert_eq!(acme.extra::<i64>("deals_count").unwrap(), Some(2));
     assert!(!acme.relation_loaded("activities"));
@@ -218,30 +236,51 @@ async fn morph_loads_after_the_fact() {
         deal.loaded(Deal::owner).unwrap().as_ref().unwrap().name,
         "Ada"
     );
-    note.load_morph_count(&t.db, "notable", MorphWith::new().count_on::<Deal>(["activities"]))
-        .await
-        .unwrap();
-    let deal = notable(&note).unwrap().downcast_ref::<Deal>().unwrap();
-    assert_eq!(deal.extra::<i64>("activities_count").unwrap(), Some(3));
-    let with = || MorphWith::new().count_on::<Deal>(["activities"]);
-    note.load_morph_sum(&t.db, "notable", with(), Activity::MINUTES).await.unwrap();
-    note.load_morph_min(&t.db, "notable", with(), Activity::MINUTES).await.unwrap();
-    note.load_morph_max(&t.db, "notable", with(), Activity::MINUTES).await.unwrap();
-    note.load_morph_avg(&t.db, "notable", with(), Activity::MINUTES).await.unwrap();
-    let deal = notable(&note).unwrap().downcast_ref::<Deal>().unwrap();
-    assert_eq!(deal.extra::<i64>("activities_sum_minutes").unwrap(), Some(80));
-    assert_eq!(deal.extra::<i64>("activities_min_minutes").unwrap(), Some(5));
-    assert_eq!(deal.extra::<i64>("activities_max_minutes").unwrap(), Some(45));
-    assert!(deal.extra::<f64>("activities_avg_minutes").unwrap().is_some());
-
-    let mut all = Note::query().order_by(Note::ID).get(&t.db).await.unwrap();
-    all.load_morph(
+    note.load_morph_count(
         &t.db,
         "notable",
-        MorphWith::new().on::<Company>(["owner"]),
+        MorphWith::new().count_on::<Deal>(["activities"]),
     )
     .await
     .unwrap();
+    let deal = notable(&note).unwrap().downcast_ref::<Deal>().unwrap();
+    assert_eq!(deal.extra::<i64>("activities_count").unwrap(), Some(3));
+    let with = || MorphWith::new().count_on::<Deal>(["activities"]);
+    note.load_morph_sum(&t.db, "notable", with(), Activity::MINUTES)
+        .await
+        .unwrap();
+    note.load_morph_min(&t.db, "notable", with(), Activity::MINUTES)
+        .await
+        .unwrap();
+    note.load_morph_max(&t.db, "notable", with(), Activity::MINUTES)
+        .await
+        .unwrap();
+    note.load_morph_avg(&t.db, "notable", with(), Activity::MINUTES)
+        .await
+        .unwrap();
+    let deal = notable(&note).unwrap().downcast_ref::<Deal>().unwrap();
+    assert_eq!(
+        deal.extra::<i64>("activities_sum_minutes").unwrap(),
+        Some(80)
+    );
+    assert_eq!(
+        deal.extra::<i64>("activities_min_minutes").unwrap(),
+        Some(5)
+    );
+    assert_eq!(
+        deal.extra::<i64>("activities_max_minutes").unwrap(),
+        Some(45)
+    );
+    assert!(
+        deal.extra::<f64>("activities_avg_minutes")
+            .unwrap()
+            .is_some()
+    );
+
+    let mut all = Note::query().order_by(Note::ID).get(&t.db).await.unwrap();
+    all.load_morph(&t.db, "notable", MorphWith::new().on::<Company>(["owner"]))
+        .await
+        .unwrap();
     let acme = notable(&all[1]).unwrap().downcast_ref::<Company>().unwrap();
     assert_eq!(
         acme.loaded(Company::owner).unwrap().as_ref().unwrap().name,
@@ -265,7 +304,12 @@ async fn morph_loads_after_the_fact() {
     navree_orm::relations::load_missing_chain::<Company, _>(&t.db, &mut mixed, ["contacts"])
         .await
         .unwrap();
-    assert!(!mixed[0].downcast_ref::<Deal>().unwrap().relation_loaded("contacts"));
+    assert!(
+        !mixed[0]
+            .downcast_ref::<Deal>()
+            .unwrap()
+            .relation_loaded("contacts")
+    );
     assert_eq!(
         mixed[1]
             .downcast_ref::<Company>()
@@ -275,14 +319,23 @@ async fn morph_loads_after_the_fact() {
             .len(),
         2
     );
-    assert!(mixed[1].downcast_ref::<Company>().unwrap().relation_loaded("owner"), "kept");
+    assert!(
+        mixed[1]
+            .downcast_ref::<Company>()
+            .unwrap()
+            .relation_loaded("owner"),
+        "kept"
+    );
 
     // `load_morph` on another kind of relation is an error.
     let error = note
         .load_morph(&t.db, "notable_typo", MorphWith::new())
         .await
         .unwrap_err();
-    assert!(matches!(error, OrmError::RelationNotFound { .. }), "{error:?}");
+    assert!(
+        matches!(error, OrmError::RelationNotFound { .. }),
+        "{error:?}"
+    );
     let mut deal = Deal::find_or_fail(&t.db, crm.renewal.id).await.unwrap();
     let error = deal
         .load_morph(&t.db, "company", MorphWith::new())
@@ -295,7 +348,11 @@ async fn morph_loads_after_the_fact() {
 async fn morph_to_soft_delete_visibility() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    for (type_, id) in [("deal", crm.renewal.id), ("deal", crm.upgrade.id), ("company", crm.acme.id)] {
+    for (type_, id) in [
+        ("deal", crm.renewal.id),
+        ("deal", crm.upgrade.id),
+        ("company", crm.acme.id),
+    ] {
         Image::create(
             &t.db,
             Image {
@@ -314,12 +371,7 @@ async fn morph_to_soft_delete_visibility() {
     let found = |images: &Collection<Image>, name: &str| -> Vec<bool> {
         images
             .iter()
-            .map(|image| {
-                image
-                    .relation::<Option<AnyRecord>>(name)
-                    .unwrap()
-                    .is_some()
-            })
+            .map(|image| image.relation::<Option<AnyRecord>>(name).unwrap().is_some())
             .collect()
     };
     let images = Image::query()
@@ -333,7 +385,10 @@ async fn morph_to_soft_delete_visibility() {
     assert_eq!(found(&images, "imageable"), [true, false, true]);
     assert_eq!(found(&images, "imageable_with_trashed"), [true, true, true]);
     // Only trashed records of the soft-deleting models; others as usual.
-    assert_eq!(found(&images, "imageable_only_trashed"), [false, true, true]);
+    assert_eq!(
+        found(&images, "imageable_only_trashed"),
+        [false, true, true]
+    );
 }
 
 #[tokio::test]
@@ -400,11 +455,7 @@ async fn a_required_morph_map_refuses_unmapped_models() {
     )
     .await
     .unwrap();
-    let error = Note::query()
-        .with("notable")
-        .get(&t.db)
-        .await
-        .unwrap_err();
+    let error = Note::query().with("notable").get(&t.db).await.unwrap_err();
     let OrmError::UnknownMorph { name } = &error else {
         panic!("{error:?}");
     };
@@ -415,7 +466,15 @@ async fn a_required_morph_map_refuses_unmapped_models() {
         "UPDATE notes SET notable_type = 'deal' WHERE notable_type = 'opportunity'",
     )
     .await;
-    assert_eq!(Note::query().with("notable").get(&t.db).await.unwrap().len(), 2);
+    assert_eq!(
+        Note::query()
+            .with("notable")
+            .get(&t.db)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[tokio::test]
@@ -442,7 +501,11 @@ async fn morph_ids_of_every_key_type() {
         )
         .await
         .unwrap();
-    let attachments = Attachment::query().with("attachable").get(&t.db).await.unwrap();
+    let attachments = Attachment::query()
+        .with("attachable")
+        .get(&t.db)
+        .await
+        .unwrap();
     let loaded = attachments[0]
         .loaded(Attachment::attachable)
         .unwrap()
@@ -547,25 +610,31 @@ async fn polymorphic_existence_queries() {
 
     // With conditions per type: the closure gets the type's name.
     let named_a = ordered()
-        .where_has_morph("notable", MorphTypes::of::<Deal>().and::<Company>(), |q, type_| {
-            match type_ {
+        .where_has_morph(
+            "notable",
+            MorphTypes::of::<Deal>().and::<Company>(),
+            |q, type_| match type_ {
                 "deal" => q.where_(col("title").like("R%")),
                 _ => q.where_(col("name").like("A%")),
-            }
-        })
+            },
+        )
         .get(&t.db)
         .await
         .unwrap();
     assert_eq!(bodies(&named_a), ["renewal call", "acme lunch"]);
     let either = ordered()
         .where_(Note::BODY.eq("loose"))
-        .or_where_has_morph("notable", ["company"], |q, _| q.where_(col("name").eq("Globex")))
+        .or_where_has_morph("notable", ["company"], |q, _| {
+            q.where_(col("name").eq("Globex"))
+        })
         .get(&t.db)
         .await
         .unwrap();
     assert_eq!(bodies(&either), ["globex visit", "loose"]);
     let not_globex = ordered()
-        .where_doesnt_have_morph("notable", ["company"], |q, _| q.where_(col("name").eq("Globex")))
+        .where_doesnt_have_morph("notable", ["company"], |q, _| {
+            q.where_(col("name").eq("Globex"))
+        })
         .get(&t.db)
         .await
         .unwrap();

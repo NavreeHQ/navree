@@ -19,7 +19,11 @@ fn hidden(name: &str) -> Contact {
 async fn global_scopes_apply_wherever_relations_query() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    crm.acme.contacts().create(&t.db, hidden("Ghost")).await.unwrap();
+    crm.acme
+        .contacts()
+        .create(&t.db, hidden("Ghost"))
+        .await
+        .unwrap();
     let ghost_town = Company::create(&t.db, Company::named("Ghost Town"))
         .await
         .unwrap();
@@ -63,8 +67,14 @@ async fn global_scopes_apply_wherever_relations_query() {
         .await
         .unwrap();
     assert_eq!(companies[0].loaded(Company::contacts).unwrap().len(), 2);
-    assert_eq!(companies[0].extra::<i64>("contacts_count").unwrap(), Some(2));
-    assert_eq!(companies[3].extra::<i64>("contacts_count").unwrap(), Some(0));
+    assert_eq!(
+        companies[0].extra::<i64>("contacts_count").unwrap(),
+        Some(2)
+    );
+    assert_eq!(
+        companies[3].extra::<i64>("contacts_count").unwrap(),
+        Some(0)
+    );
     let unscoped = Company::query()
         .with_count_constrained(Company::contacts, |q| q.without_global_scopes())
         .where_key(ghost_town.id)

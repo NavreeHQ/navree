@@ -132,9 +132,11 @@ fn existence_queries() {
     );
     insta::assert_snapshot!(
         "nested_where_has",
-        query(Deal::query().where_has("company.contacts", |q: Builder<Contact>| {
-            q.where_(Contact::NAME.like("A%"))
-        }))
+        query(
+            Deal::query().where_has("company.contacts", |q: Builder<Contact>| {
+                q.where_(Contact::NAME.like("A%"))
+            })
+        )
     );
     insta::assert_snapshot!(
         "doesnt_have_or_where_relation",
@@ -146,9 +148,11 @@ fn existence_queries() {
     );
     insta::assert_snapshot!(
         "self_relation",
-        query(Company::query().where_has("subsidiaries.subsidiaries", |q: Builder<Company>| {
-            q.where_(Company::ACTIVE.eq(true))
-        }))
+        query(
+            Company::query().where_has("subsidiaries.subsidiaries", |q: Builder<Company>| {
+                q.where_(Company::ACTIVE.eq(true))
+            })
+        )
     );
     insta::assert_snapshot!(
         "through_existence",

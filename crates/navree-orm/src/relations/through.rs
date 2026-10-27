@@ -30,7 +30,7 @@ use crate::relations::has::{HasMany, HasOne, drop_row_numbers, limit_per_parent}
 use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
 use crate::relations::one_of_many::OneOfMany;
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
-use crate::relations::{Relation, RelatedTo, private};
+use crate::relations::{RelatedTo, Relation, private};
 use crate::value::{Value, is_null};
 
 /// The column the intermediate model's first key is read back as.
@@ -153,7 +153,9 @@ impl ThroughDef {
             |query, alias| {
                 let query = self.joined(query, if through_aliased { alias } else { None });
                 match one_of_many {
-                    Some(one) => one.apply(query, relation, &group_by, Vec::new(), &|query| self.joined(query, None)),
+                    Some(one) => one.apply(query, relation, &group_by, Vec::new(), &|query| {
+                        self.joined(query, None)
+                    }),
                     None => query,
                 }
             },
@@ -178,7 +180,10 @@ impl ThroughDef {
         node: &EagerNode,
         relation: &str,
         one_of_many: Option<&OneOfMany<R>>,
-    ) -> Result<(Vec<Option<RelationKey>>, HashMap<RelationKey, Vec<Record<R>>>)> {
+    ) -> Result<(
+        Vec<Option<RelationKey>>,
+        HashMap<RelationKey, Vec<Record<R>>>,
+    )> {
         let values = column_values(parents, &self.local_key, relation)?;
         let parent_keys: Vec<Option<RelationKey>> = values.iter().map(key_of).collect();
         let keys = distinct_keys(values);
@@ -191,7 +196,13 @@ impl ThroughDef {
         let first = qualified(self.through.table(), &self.first_key);
         let conditions = vec![in_keys_on(target, first.clone(), &keys)];
         let query = match one_of_many {
-            Some(one) => one.apply(query, relation, std::slice::from_ref(&first), conditions, &|query| self.joined(query, None)),
+            Some(one) => one.apply(
+                query,
+                relation,
+                std::slice::from_ref(&first),
+                conditions,
+                &|query| self.joined(query, None),
+            ),
             None => constrain(query, conditions),
         };
         let query = limit_per_parent(query, Expr::Column(first));
@@ -314,7 +325,9 @@ macro_rules! through_methods {
         pub(crate) fn bound(self) -> Result<Bound<R>> {
             let parent = self.core.parent()?.clone();
             let value = column_value(&parent, &self.def.local_key, &self.core.name)?;
-            let query = self.def.with_through_key(self.def.joined(self.core.query.clone(), None));
+            let query = self
+                .def
+                .with_through_key(self.def.joined(self.core.query.clone(), None));
             if is_null(&value) {
                 return Ok(Bound::nothing(query));
             }
@@ -329,12 +342,13 @@ macro_rules! through_methods {
                 ),
                 None => constrain(query, conditions),
             };
-            let finish: crate::relations::core::Finisher<R> = Box::new(|records: &mut [Record<R>]| {
-                for record in records {
-                    take_through_key(record);
-                }
-                Ok(())
-            });
+            let finish: crate::relations::core::Finisher<R> =
+                Box::new(|records: &mut [Record<R>]| {
+                    for record in records {
+                        take_through_key(record);
+                    }
+                    Ok(())
+                });
             Ok(Bound::new(query).finishing(Some(finish)))
         }
     };
@@ -591,7 +605,11 @@ impl<P: Model, R: Model> private::Erase<P> for HasManyThrough<P, R> {
     }
 }
 
-fn through_meta<P: Model, R: Model>(name: &str, kind: RelationKind, def: &ThroughDef) -> RelationMeta {
+fn through_meta<P: Model, R: Model>(
+    name: &str,
+    kind: RelationKind,
+    def: &ThroughDef,
+) -> RelationMeta {
     let mut meta = RelationMeta::new::<P>(name, kind)
         .related::<R>()
         .keys(&def.first_key, &def.local_key);
@@ -689,8 +707,12 @@ impl<P: Model, R: Model> ErasedRelation<P> for HasOneThrough<P, R> {
     }
 
     fn exists_query(&self, request: ExistsRequest) -> Result<QueryIr> {
-        self.def
-            .exists::<P, R>(&self.core.query, request, &self.core.name, self.one_of_many.as_ref())
+        self.def.exists::<P, R>(
+            &self.core.query,
+            request,
+            &self.core.name,
+            self.one_of_many.as_ref(),
+        )
     }
 
     fn touch<'a, 'b>(
@@ -705,7 +727,10 @@ impl<P: Model, R: Model> ErasedRelation<P> for HasOneThrough<P, R> {
             if !bound.empty {
                 let ids: Vec<Value> = bound
                     .query
-                    .pluck(target, Expr::Column(qualified(R::meta().table(), R::meta().key_column())))
+                    .pluck(
+                        target,
+                        Expr::Column(qualified(R::meta().table(), R::meta().key_column())),
+                    )
                     .await?;
                 touch_ids::<R>(target, ids).await?;
             }
@@ -751,7 +776,14 @@ impl<P: Model, R: Model> ErasedRelation<P> for HasManyThrough<P, R> {
             let relation = constrained(self.clone(), node)?;
             let (parent_keys, groups) = relation
                 .def
-                .load(target, parents, relation.core.query.clone(), node, &self.core.name, None)
+                .load(
+                    target,
+                    parents,
+                    relation.core.query.clone(),
+                    node,
+                    &self.core.name,
+                    None,
+                )
                 .await?;
             for (parent, value) in parents.iter_mut().zip(distribute(groups, &parent_keys)) {
                 parent.relations.set_relation(
@@ -780,7 +812,10 @@ impl<P: Model, R: Model> ErasedRelation<P> for HasManyThrough<P, R> {
             if !bound.empty {
                 let ids: Vec<Value> = bound
                     .query
-                    .pluck(target, Expr::Column(qualified(R::meta().table(), R::meta().key_column())))
+                    .pluck(
+                        target,
+                        Expr::Column(qualified(R::meta().table(), R::meta().key_column())),
+                    )
                     .await?;
                 touch_ids::<R>(target, ids).await?;
             }
@@ -809,10 +844,12 @@ async fn touch_ids<R: Model>(target: &Target<'_>, ids: Vec<Value>) -> Result<()>
         return Ok(());
     }
     let keys = distinct_keys(ids);
-    let query = Builder::<R>::new().without_global_scopes().where_(Filter::from(in_keys(
-        qualified(R::meta().table(), R::meta().key_column()),
-        &keys,
-    )));
+    let query = Builder::<R>::new()
+        .without_global_scopes()
+        .where_(Filter::from(in_keys(
+            qualified(R::meta().table(), R::meta().key_column()),
+            &keys,
+        )));
     crate::relations::touch::touch_related(Some(query), target).await?;
     Ok(())
 }
@@ -890,7 +927,11 @@ impl<A: Model, B: Model> ThroughLeg<A> for BelongsTo<A, B> {
     }
 }
 
-fn has_leg<A: Model, B: Model>(local: &Cow<'static, str>, foreign: &Cow<'static, str>, morph: Option<&str>) -> Leg {
+fn has_leg<A: Model, B: Model>(
+    local: &Cow<'static, str>,
+    foreign: &Cow<'static, str>,
+    morph: Option<&str>,
+) -> Leg {
     Leg {
         parent_column: local.clone(),
         child_column: foreign.clone(),
@@ -915,15 +956,25 @@ fn compose<P: Model>(through: &'static ModelMeta, local: Leg, distant: Leg) -> T
     let mut def = ThroughDef::new::<P>(through, local.child_column, distant.child_column);
     def.local_key = local.parent_column;
     def.second_local_key = distant.parent_column;
-    def.conditions = local.condition.into_iter().chain(distant.condition).collect();
+    def.conditions = local
+        .condition
+        .into_iter()
+        .chain(distant.condition)
+        .collect();
     def
 }
 
 impl<P: Model, R: Model> ThroughOf<P, R> for One {
     type Relation = HasOneThrough<P, R>;
 
-    fn make(parent: P, through: &'static ModelMeta, local: Leg, distant: Leg) -> HasOneThrough<P, R> {
-        let mut relation = HasOneThrough::new(Some(parent), through, Cow::Borrowed(""), Cow::Borrowed(""));
+    fn make(
+        parent: P,
+        through: &'static ModelMeta,
+        local: Leg,
+        distant: Leg,
+    ) -> HasOneThrough<P, R> {
+        let mut relation =
+            HasOneThrough::new(Some(parent), through, Cow::Borrowed(""), Cow::Borrowed(""));
         relation.def = compose::<P>(through, local, distant);
         relation
     }
@@ -932,8 +983,14 @@ impl<P: Model, R: Model> ThroughOf<P, R> for One {
 impl<P: Model, R: Model> ThroughOf<P, R> for Many {
     type Relation = HasManyThrough<P, R>;
 
-    fn make(parent: P, through: &'static ModelMeta, local: Leg, distant: Leg) -> HasManyThrough<P, R> {
-        let mut relation = HasManyThrough::new(Some(parent), through, Cow::Borrowed(""), Cow::Borrowed(""));
+    fn make(
+        parent: P,
+        through: &'static ModelMeta,
+        local: Leg,
+        distant: Leg,
+    ) -> HasManyThrough<P, R> {
+        let mut relation =
+            HasManyThrough::new(Some(parent), through, Cow::Borrowed(""), Cow::Borrowed(""));
         relation.def = compose::<P>(through, local, distant);
         relation
     }

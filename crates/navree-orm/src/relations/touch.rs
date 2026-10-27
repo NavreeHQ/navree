@@ -112,7 +112,10 @@ pub(crate) fn touch_owners<'a, 'b, M: Model>(
         }
         if TOUCHING.try_with(|_| ()).is_err() {
             return TOUCHING
-                .scope(RefCell::new(Vec::new()), touch_owners_in_scope(target, record))
+                .scope(
+                    RefCell::new(Vec::new()),
+                    touch_owners_in_scope(target, record),
+                )
                 .await;
         }
         touch_owners_in_scope(target, record).await

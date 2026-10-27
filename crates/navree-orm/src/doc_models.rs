@@ -75,7 +75,9 @@ impl Deal {
 
     /// The deal's tags, through `deal_tag`.
     pub fn tags(&self) -> BelongsToMany<Deal, Tag> {
-        self.belongs_to_many("deal_tag").with_pivot(["role"]).with_timestamps()
+        self.belongs_to_many("deal_tag")
+            .with_pivot(["role"])
+            .with_timestamps()
     }
 
     /// The notes on the deal.
@@ -145,7 +147,9 @@ pub struct Tag {
 impl Tag {
     /// The deals with the tag.
     pub fn deals(&self) -> BelongsToMany<Tag, Deal> {
-        self.belongs_to_many("deal_tag").with_pivot(["role"]).with_timestamps()
+        self.belongs_to_many("deal_tag")
+            .with_pivot(["role"])
+            .with_timestamps()
     }
 }
 

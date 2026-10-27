@@ -114,14 +114,12 @@ impl MorphMap {
 
     /// The map in effect: the scoped one, else the process-wide one.
     pub(crate) fn current() -> MorphMap {
-        SCOPED
-            .try_with(MorphMap::clone)
-            .unwrap_or_else(|_| {
-                global()
-                    .read()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .clone()
-            })
+        SCOPED.try_with(MorphMap::clone).unwrap_or_else(|_| {
+            global()
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        })
     }
 
     /// Runs `future` with this map in place of the process-wide one.

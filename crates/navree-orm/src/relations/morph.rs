@@ -17,14 +17,16 @@ use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, Target};
 use crate::ir::{Boolean, Expr, Operator, QueryIr, Where, WhereClause};
 use crate::model::{Model, ModelMeta};
-use crate::query::{Builder, WhereGroup};
 use crate::query::filters::HasWheres;
+use crate::query::{Builder, WhereGroup};
 use crate::record::Record;
+use crate::relations::access::AccessConstraint;
 use crate::relations::any::AnyRecord;
 use crate::relations::core::{column_value, qualified};
-use crate::relations::access::AccessConstraint;
 use crate::relations::eager::{Constraint, ConstraintFn, EagerNode, EagerTree};
-use crate::relations::existence::{ExistsRequest, ExistsSelect, Refine, build_subquery, columns_equal};
+use crate::relations::existence::{
+    ExistsRequest, ExistsSelect, Refine, build_subquery, columns_equal,
+};
 use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
 use crate::relations::morph_map::{MorphMap, type_name_of};
 use crate::relations::path::{ParsedPath, RelationPath};
@@ -96,7 +98,10 @@ impl MorphTypeLoads {
             return Err(OrmError::invalid(error.clone()));
         }
         for constraint in &self.constraints {
-            match constraint.closure.downcast_ref::<ConstraintFn<Builder<M>>>() {
+            match constraint
+                .closure
+                .downcast_ref::<ConstraintFn<Builder<M>>>()
+            {
                 Some(apply) => query = (apply.0)(query),
                 None => {
                     return Err(OrmError::invalid(format!(
@@ -182,7 +187,10 @@ impl MorphWith {
 
     /// Counts the related records of `paths` on the loaded records of
     /// model `M` (`{relation}_count` extras).
-    pub fn count_on<M: Model>(mut self, paths: impl IntoIterator<Item = impl RelationPath<M>>) -> Self {
+    pub fn count_on<M: Model>(
+        mut self,
+        paths: impl IntoIterator<Item = impl RelationPath<M>>,
+    ) -> Self {
         let loads = self.loads::<M>();
         for path in paths {
             loads.counts.push(path.relation_path().into_owned());
@@ -195,7 +203,9 @@ impl MorphWith {
         mut self,
         constraint: impl Fn(Builder<M>) -> Builder<M> + Send + Sync + 'static,
     ) -> Self {
-        self.loads::<M>().constraints.push(Constraint::new(constraint));
+        self.loads::<M>()
+            .constraints
+            .push(Constraint::new(constraint));
         self
     }
 
@@ -419,8 +429,10 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
                             paths.push(counted.clone());
                         }
                     }
-                    crate::relations::aggregates::load_aggregate_on(target, &mut typed, &paths, spec)
-                        .await?;
+                    crate::relations::aggregates::load_aggregate_on(
+                        target, &mut typed, &paths, spec,
+                    )
+                    .await?;
                 }
             }
             Ok(typed.into_iter().map(AnyRecord::new).collect())
@@ -442,10 +454,7 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
 
     fn exists_query(&self, request: MorphExists<'_>) -> Result<QueryIr> {
         let meta = M::meta();
-        let owner_key = request
-            .owner_key
-            .unwrap_or(meta.key_column())
-            .to_owned();
+        let owner_key = request.owner_key.unwrap_or(meta.key_column()).to_owned();
         let aliased = (meta.table() == request.parent.table()).then_some(meta.table());
         let definition = request.trashed.apply(Builder::<M>::new());
         let refine = match request.condition {
@@ -601,7 +610,8 @@ impl<P: Model> MorphTo<P> {
 
     /// Lists model `M` among the models the relation loads.
     pub fn target<M: Model>(mut self) -> Self {
-        self.targets.retain(|target| target.type_id() != TypeId::of::<M>());
+        self.targets
+            .retain(|target| target.type_id() != TypeId::of::<M>());
         self.targets.push(Arc::new(MorphTargetOf::<M>::new()));
         self
     }
@@ -786,7 +796,10 @@ impl<P: Model> MorphTo<P> {
                 access.push(constraint.clone());
                 continue;
             }
-            match constraint.closure.downcast_ref::<ConstraintFn<MorphTo<P>>>() {
+            match constraint
+                .closure
+                .downcast_ref::<ConstraintFn<MorphTo<P>>>()
+            {
                 Some(apply) => relation = (apply.0)(relation),
                 None => {
                     return Err(OrmError::invalid(format!(
@@ -841,16 +854,16 @@ impl<P: Model> MorphTo<P> {
                 .await?;
             for (index, id) in members {
                 let key = key_of(&morph_target.normalize_key(id, relation.owner_key.as_deref()));
-                if let Some((_, record)) = records.iter().find(|(found_key, _)| Some(found_key) == key.as_ref())
+                if let Some((_, record)) = records
+                    .iter()
+                    .find(|(found_key, _)| Some(found_key) == key.as_ref())
                 {
                     found[index] = Some(record.clone());
                 }
             }
         }
         for (parent, value) in parents.iter_mut().zip(found) {
-            parent
-                .relations
-                .set_relation(node.name.clone(), value);
+            parent.relations.set_relation(node.name.clone(), value);
         }
         Ok(())
     }
@@ -1292,23 +1305,48 @@ impl<M: Model> Builder<M> {
     /// `MorphTypes::of::<Deal>()`, or `MorphTypes::all()`).
     pub fn has_morph(self, path: impl RelationPath<M>, types: impl Into<MorphTypes>) -> Self {
         let text = path.relation_path().into_owned();
-        self.push_has_morph(Boolean::And, &text, types.into(), Operator::Gte, 1, &mut |_| None)
+        self.push_has_morph(
+            Boolean::And,
+            &text,
+            types.into(),
+            Operator::Gte,
+            1,
+            &mut |_| None,
+        )
     }
 
     /// `OR` records whose `morph_to` points at an existing record of one
     /// of `types`.
     pub fn or_has_morph(self, path: impl RelationPath<M>, types: impl Into<MorphTypes>) -> Self {
         let text = path.relation_path().into_owned();
-        self.push_has_morph(Boolean::Or, &text, types.into(), Operator::Gte, 1, &mut |_| None)
+        self.push_has_morph(
+            Boolean::Or,
+            &text,
+            types.into(),
+            Operator::Gte,
+            1,
+            &mut |_| None,
+        )
     }
 
     /// Only records whose `morph_to` relation `path` is of one of `types`
     /// but points at no existing record (a note about a deleted deal).
     /// Records of other types are left out; over every type
     /// (`MorphTypes::all()`), records with a NULL type are included.
-    pub fn doesnt_have_morph(self, path: impl RelationPath<M>, types: impl Into<MorphTypes>) -> Self {
+    pub fn doesnt_have_morph(
+        self,
+        path: impl RelationPath<M>,
+        types: impl Into<MorphTypes>,
+    ) -> Self {
         let text = path.relation_path().into_owned();
-        self.push_has_morph(Boolean::And, &text, types.into(), Operator::Lt, 1, &mut |_| None)
+        self.push_has_morph(
+            Boolean::And,
+            &text,
+            types.into(),
+            Operator::Lt,
+            1,
+            &mut |_| None,
+        )
     }
 
     /// `OR` records whose `morph_to` is of one of `types` but points at no
@@ -1319,7 +1357,14 @@ impl<M: Model> Builder<M> {
         types: impl Into<MorphTypes>,
     ) -> Self {
         let text = path.relation_path().into_owned();
-        self.push_has_morph(Boolean::Or, &text, types.into(), Operator::Lt, 1, &mut |_| None)
+        self.push_has_morph(
+            Boolean::Or,
+            &text,
+            types.into(),
+            Operator::Lt,
+            1,
+            &mut |_| None,
+        )
     }
 
     /// Only records whose `morph_to` points at a record of one of `types`
@@ -1418,9 +1463,14 @@ impl<M: Model> Builder<M> {
     ) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
-        self.push_has_morph(Boolean::And, &text, types.into(), Operator::Gte, 1, &mut |_| {
-            Some(filter.clone())
-        })
+        self.push_has_morph(
+            Boolean::And,
+            &text,
+            types.into(),
+            Operator::Gte,
+            1,
+            &mut |_| Some(filter.clone()),
+        )
     }
 
     /// `OR` records whose `morph_to` points at a record matching `filter`.
@@ -1432,9 +1482,14 @@ impl<M: Model> Builder<M> {
     ) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
-        self.push_has_morph(Boolean::Or, &text, types.into(), Operator::Gte, 1, &mut |_| {
-            Some(filter.clone())
-        })
+        self.push_has_morph(
+            Boolean::Or,
+            &text,
+            types.into(),
+            Operator::Gte,
+            1,
+            &mut |_| Some(filter.clone()),
+        )
     }
 
     /// Only records whose `morph_to` is of one of `types` but points at no
@@ -1447,9 +1502,14 @@ impl<M: Model> Builder<M> {
     ) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
-        self.push_has_morph(Boolean::And, &text, types.into(), Operator::Lt, 1, &mut |_| {
-            Some(filter.clone())
-        })
+        self.push_has_morph(
+            Boolean::And,
+            &text,
+            types.into(),
+            Operator::Lt,
+            1,
+            &mut |_| Some(filter.clone()),
+        )
     }
 
     /// `OR` records whose `morph_to` is of one of `types` but points at no
@@ -1462,9 +1522,14 @@ impl<M: Model> Builder<M> {
     ) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
-        self.push_has_morph(Boolean::Or, &text, types.into(), Operator::Lt, 1, &mut |_| {
-            Some(filter.clone())
-        })
+        self.push_has_morph(
+            Boolean::Or,
+            &text,
+            types.into(),
+            Operator::Lt,
+            1,
+            &mut |_| Some(filter.clone()),
+        )
     }
 
     /// Only records whose `morph_to` relation `path` points at `target`: a
@@ -1485,13 +1550,21 @@ impl<M: Model> Builder<M> {
     }
 
     /// Only records whose `morph_to` does not point at `target`.
-    pub fn where_not_morphed_to(self, path: impl RelationPath<M>, target: impl Into<MorphRef>) -> Self {
+    pub fn where_not_morphed_to(
+        self,
+        path: impl RelationPath<M>,
+        target: impl Into<MorphRef>,
+    ) -> Self {
         let text = path.relation_path().into_owned();
         self.push_morphed_to(Boolean::And, &text, target.into(), true)
     }
 
     /// `OR` records whose `morph_to` points at `target`.
-    pub fn or_where_morphed_to(self, path: impl RelationPath<M>, target: impl Into<MorphRef>) -> Self {
+    pub fn or_where_morphed_to(
+        self,
+        path: impl RelationPath<M>,
+        target: impl Into<MorphRef>,
+    ) -> Self {
         let text = path.relation_path().into_owned();
         self.push_morphed_to(Boolean::Or, &text, target.into(), false)
     }
@@ -1506,7 +1579,13 @@ impl<M: Model> Builder<M> {
         self.push_morphed_to(Boolean::Or, &text, target.into(), true)
     }
 
-    fn push_morphed_to(mut self, boolean: Boolean, path: &str, target: MorphRef, not: bool) -> Self {
+    fn push_morphed_to(
+        mut self,
+        boolean: Boolean,
+        path: &str,
+        target: MorphRef,
+        not: bool,
+    ) -> Self {
         match morphed_to_filter::<M>(path, target, not) {
             Ok(filter) => {
                 self.push_where(boolean, false, filter);

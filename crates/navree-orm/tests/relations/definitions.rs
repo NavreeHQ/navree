@@ -26,17 +26,27 @@ fn relation_methods_are_registered_under_their_names() {
         "labels",
         "contacts",
     ] {
-        assert!(names.iter().any(|known| known == name), "{name} in {names:?}");
+        assert!(
+            names.iter().any(|known| known == name),
+            "{name} in {names:?}"
+        );
     }
-    let kind = |relation: Option<navree_orm::relations::DynRelation<Deal>>| relation.unwrap().kind();
+    let kind =
+        |relation: Option<navree_orm::relations::DynRelation<Deal>>| relation.unwrap().kind();
     assert_eq!(kind(Deal::relation("company")), RelationKind::BelongsTo);
     assert_eq!(kind(Deal::relation("activities")), RelationKind::HasMany);
-    assert_eq!(kind(Deal::relation("latest_activity")), RelationKind::HasOne);
+    assert_eq!(
+        kind(Deal::relation("latest_activity")),
+        RelationKind::HasOne
+    );
     assert_eq!(kind(Deal::relation("tags")), RelationKind::BelongsToMany);
     assert_eq!(kind(Deal::relation("notes")), RelationKind::MorphMany);
     assert_eq!(kind(Deal::relation("image")), RelationKind::MorphOne);
     assert_eq!(kind(Deal::relation("labels")), RelationKind::MorphToMany);
-    assert_eq!(kind(Deal::relation("contacts")), RelationKind::HasManyThrough);
+    assert_eq!(
+        kind(Deal::relation("contacts")),
+        RelationKind::HasManyThrough
+    );
     assert_eq!(
         Tag::relation("labeled_deals").unwrap().kind(),
         RelationKind::MorphedByMany
@@ -59,7 +69,11 @@ fn relation_methods_are_registered_under_their_names() {
     assert_eq!(deal.latest_activity().name(), "latest_activity");
     assert_eq!(deal.tags().relation_name(), "tags");
     assert!(Deal::relation("nope").is_none());
-    assert!(Contact::relation_names().iter().any(|name| name == "company"));
+    assert!(
+        Contact::relation_names()
+            .iter()
+            .any(|name| name == "company")
+    );
 }
 
 #[test]
@@ -196,7 +210,11 @@ async fn other_modules_add_relations_by_name() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     RelationRegistry::define("long_calls", <Deal as DealCalls>::long_calls);
-    assert!(Deal::relation_names().iter().any(|name| name == "long_calls"));
+    assert!(
+        Deal::relation_names()
+            .iter()
+            .any(|name| name == "long_calls")
+    );
     assert_eq!(
         Deal::relation("long_calls").unwrap().kind(),
         RelationKind::HasMany
@@ -258,7 +276,11 @@ async fn unknown_relations_name_the_model_and_the_relation() {
     // Existence queries and aggregates too.
     for error in [
         Deal::query().has("nope").get(&t.db).await.unwrap_err(),
-        Deal::query().with_count("nope").get(&t.db).await.unwrap_err(),
+        Deal::query()
+            .with_count("nope")
+            .get(&t.db)
+            .await
+            .unwrap_err(),
         Deal::query()
             .where_relation("nope", Company::NAME.eq("x"))
             .get(&t.db)

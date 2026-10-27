@@ -7,6 +7,9 @@
 //!   named fields and gives it one typed column constant per column.
 //! - `#[scopes]` on an `impl` block turns its `#[scope]` functions into
 //!   methods of the model's query builders.
+//! - `#[relations]` on an `impl` block names each of its relation methods
+//!   after itself and registers them, so relation paths
+//!   (`"company.owner"`) find them.
 //!
 //! The expansions name the runtime crate as `::navree_orm` when the crate
 //! being compiled depends on navree-orm, else as `::navree::orm` through
@@ -47,6 +50,13 @@ mod scopes;
 /// the key's type), `timestamps` or `timestamps(created_at = "...",
 /// updated_at = false)`, `soft_deletes` or `soft_deletes = "..."`,
 /// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`.
+/// Relation attributes: `touches = ["company"]` (relations whose records
+/// are touched when a record is saved or deleted), `morph_name = "deal"`
+/// (stored in polymorphic type columns; default: the snake_case name),
+/// `with = ["company.owner"]` and `with_count = ["notes"]` (loaded and
+/// counted by every query), `pivot(foreign_key = "deal_id", related_key =
+/// "tag_id")` (a pivot model; without an `id` field it is keyed by the
+/// related pivot column and identified by both).
 ///
 /// Field attributes: `column = "..."`, `cast = "json" | "string_enum" |
 /// "int_enum" | path::to::Cast`, `default` (a row without the column reads

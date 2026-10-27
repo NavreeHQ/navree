@@ -11,11 +11,14 @@ use crate::models::{Activity, Company, Contact, Deal, Tag, User};
 use crate::support::sqlite;
 
 fn company_of(deal: &Record<Deal>) -> Option<&Record<Company>> {
-    deal.loaded(Deal::company).expect("company is loaded").as_ref()
+    deal.loaded(Deal::company)
+        .expect("company is loaded")
+        .as_ref()
 }
 
 fn activities_of(deal: &Record<Deal>) -> &Collection<Activity> {
-    deal.loaded(Deal::activities).expect("activities are loaded")
+    deal.loaded(Deal::activities)
+        .expect("activities are loaded")
 }
 
 #[tokio::test]
@@ -271,7 +274,9 @@ async fn records_load_relations_afterwards() {
         deal.loaded(Deal::owner).unwrap().as_ref().unwrap().name,
         "Ada"
     );
-    deal.load_missing(&t.db, ["company.contacts"]).await.unwrap();
+    deal.load_missing(&t.db, ["company.contacts"])
+        .await
+        .unwrap();
     let contacts = company_of(&deal)
         .unwrap()
         .relation::<Collection<Contact>>("contacts")
@@ -308,7 +313,10 @@ async fn collections_load_relations_afterwards() {
         .await
         .unwrap();
     assert_eq!(t.log.selects().len(), 1, "only owners were missing");
-    deals.load_all(&t.db, ["company.owner", "tags"]).await.unwrap();
+    deals
+        .load_all(&t.db, ["company.owner", "tags"])
+        .await
+        .unwrap();
     assert!(deals.iter().all(|deal| deal.relation_loaded("tags")));
 }
 
@@ -350,7 +358,10 @@ async fn loaded_relations_live_on_the_record() {
     assert!(without.relation_loaded("company") && !without.relation_loaded("activities"));
     let bare = deal.without_relations();
     assert!(bare.relations().is_empty());
-    assert!(deal.relation_loaded("activities"), "the original keeps them");
+    assert!(
+        deal.relation_loaded("activities"),
+        "the original keeps them"
+    );
 
     deal.unset_relation("company");
     assert!(!deal.relation_loaded("company"));
@@ -391,7 +402,10 @@ async fn eager_loads_respect_the_related_models_global_scopes() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(titles(acme.loaded(Company::deals).unwrap()), ["Renewal", "Upgrade"]);
+    assert_eq!(
+        titles(acme.loaded(Company::deals).unwrap()),
+        ["Renewal", "Upgrade"]
+    );
 
     // The same for a belongs-to.
     let activity = Activity::query()

@@ -54,9 +54,17 @@ async fn records_without_related_records() {
     let t = sqlite().await;
     seed(&t.db).await;
     let ordered = || Deal::query().order_by(Deal::ID);
-    let idle = ordered().doesnt_have("activities").get(&t.db).await.unwrap();
+    let idle = ordered()
+        .doesnt_have("activities")
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&idle), ["Platform", "Orphan"]);
-    let without_company = ordered().doesnt_have(Deal::company).get(&t.db).await.unwrap();
+    let without_company = ordered()
+        .doesnt_have(Deal::company)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&without_company), ["Orphan"]);
     let either = ordered()
         .where_(Deal::TITLE.eq("Renewal"))
@@ -208,7 +216,10 @@ async fn conditions_on_one_related_column() {
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(titles(&either), ["Renewal", "Upgrade", "Platform", "Orphan"]);
+    assert_eq!(
+        titles(&either),
+        ["Renewal", "Upgrade", "Platform", "Orphan"]
+    );
 }
 
 #[tokio::test]
@@ -218,7 +229,11 @@ async fn belongs_to_a_record_or_one_of_several() {
     let ordered = || Deal::query().order_by(Deal::ID);
 
     // Through the relation named after the owner's model (`company`).
-    let acme = ordered().where_belongs_to(&crm.acme).get(&t.db).await.unwrap();
+    let acme = ordered()
+        .where_belongs_to(&crm.acme)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&acme), ["Renewal", "Upgrade"]);
     // Through a named relation.
     let ada = ordered()
@@ -248,7 +263,11 @@ async fn belongs_to_a_record_or_one_of_several() {
 
     // Without a relation named after the model (`user`), the only
     // belongs-to relation to it (`owner`).
-    let ada = ordered().where_belongs_to(&crm.ada).get(&t.db).await.unwrap();
+    let ada = ordered()
+        .where_belongs_to(&crm.ada)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&ada), ["Renewal", "Platform"]);
 
     // The relation must be a belongs-to to the owner's model.
@@ -258,7 +277,9 @@ async fn belongs_to_a_record_or_one_of_several() {
         .await
         .unwrap_err();
     assert!(
-        error.to_string().contains("a belongs_to relation of Deal to Tag"),
+        error
+            .to_string()
+            .contains("a belongs_to relation of Deal to Tag"),
         "{error}"
     );
     let error = ordered()
@@ -278,10 +299,18 @@ async fn attached_to_a_record_or_records() {
         .attach(&t.db, [crm.vip.id, crm.q1.id])
         .await
         .unwrap();
-    crm.platform.tags().attach(&t.db, [crm.q1.id]).await.unwrap();
+    crm.platform
+        .tags()
+        .attach(&t.db, [crm.q1.id])
+        .await
+        .unwrap();
     let ordered = || Deal::query().order_by(Deal::ID);
 
-    let vip = ordered().where_attached_to(&crm.vip).get(&t.db).await.unwrap();
+    let vip = ordered()
+        .where_attached_to(&crm.vip)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&vip), ["Renewal"]);
     let q1 = ordered()
         .where_attached_to_named(&crm.q1, "tags")
@@ -294,7 +323,11 @@ async fn attached_to_a_record_or_records() {
         .get(&t.db)
         .await
         .unwrap();
-    let any = ordered().where_attached_to_any(&tags).get(&t.db).await.unwrap();
+    let any = ordered()
+        .where_attached_to_any(&tags)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&any), ["Renewal"]);
     let either = ordered()
         .where_(Deal::TITLE.eq("Orphan"))
@@ -322,11 +355,7 @@ async fn self_relations_alias_the_inner_table() {
         .await
         .unwrap();
     assert_eq!(names(&parents), ["Acme"]);
-    let children = Company::query()
-        .has("parent")
-        .get(&t.db)
-        .await
-        .unwrap();
+    let children = Company::query().has("parent").get(&t.db).await.unwrap();
     assert_eq!(names(&children), ["Acme Labs"]);
     let of_acme = Company::query()
         .where_relation("parent", Company::NAME.eq("Acme"))

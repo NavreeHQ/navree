@@ -22,7 +22,7 @@ use crate::relations::eager::{EagerNode, EagerTree, RelationParts, constrained, 
 use crate::relations::existence::{ExistsRequest, build_subquery, columns_equal};
 use crate::relations::keys::{RelationKey, distinct_keys, in_keys_on, key_of};
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
-use crate::relations::{Relation, RelatedTo, private};
+use crate::relations::{RelatedTo, Relation, private};
 use crate::value::{Value, is_null};
 
 /// Makes a default related record for a parent.
@@ -298,7 +298,9 @@ impl<P: Model, R: Model> ErasedRelation<P> for BelongsTo<P, R> {
                     }
                 }
                 if node.autoload {
-                    crate::relations::lazy::group_records(related.iter_mut().map(|(_, record)| record));
+                    crate::relations::lazy::group_records(
+                        related.iter_mut().map(|(_, record)| record),
+                    );
                 }
             }
             for (parent, value) in parents.iter_mut().zip(values) {

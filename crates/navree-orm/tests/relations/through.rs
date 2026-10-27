@@ -11,7 +11,13 @@ use crate::support::sqlite;
 async fn has_many_through_an_intermediate_model() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    let deals = crm.team.deals().order_by(Deal::ID).get(&t.db).await.unwrap();
+    let deals = crm
+        .team
+        .deals()
+        .order_by(Deal::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&deals), ["Renewal", "Upgrade", "Platform"]);
     let big = crm
         .team
@@ -87,8 +93,20 @@ async fn has_one_through_an_intermediate_model() {
         .as_ref()
         .unwrap();
     assert_eq!(loaded.title, "Platform");
-    assert!(crm.team.biggest_deal().is(&t.db, &crm.platform).await.unwrap());
-    assert!(crm.team.biggest_deal().is_not(&t.db, &crm.renewal).await.unwrap());
+    assert!(
+        crm.team
+            .biggest_deal()
+            .is(&t.db, &crm.platform)
+            .await
+            .unwrap()
+    );
+    assert!(
+        crm.team
+            .biggest_deal()
+            .is_not(&t.db, &crm.renewal)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -126,7 +144,13 @@ async fn through_relations_composed_from_two_relations() {
     assert_eq!(titles(&reachable), ["Platform"]);
 
     // Two has-manys: a team's reps' deals.
-    let rep_deals = crm.team.rep_deals().order_by(Deal::ID).get(&t.db).await.unwrap();
+    let rep_deals = crm
+        .team
+        .rep_deals()
+        .order_by(Deal::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&rep_deals), ["Renewal", "Upgrade", "Platform"]);
 }
 
@@ -137,9 +161,25 @@ async fn soft_deleted_intermediate_records_are_left_out() {
     let mut bob = User::find_or_fail(&t.db, crm.bob.id).await.unwrap();
     bob.delete(&t.db).await.unwrap();
 
-    let deals = crm.team.deals().order_by(Deal::ID).get(&t.db).await.unwrap();
-    assert_eq!(titles(&deals), ["Renewal", "Platform"], "Bob's Upgrade is out");
-    let all = crm.team.all_deals().order_by(Deal::ID).get(&t.db).await.unwrap();
+    let deals = crm
+        .team
+        .deals()
+        .order_by(Deal::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        titles(&deals),
+        ["Renewal", "Platform"],
+        "Bob's Upgrade is out"
+    );
+    let all = crm
+        .team
+        .all_deals()
+        .order_by(Deal::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
     assert_eq!(titles(&all), ["Renewal", "Upgrade", "Platform"]);
     let counted = Team::query()
         .with_count("deals")

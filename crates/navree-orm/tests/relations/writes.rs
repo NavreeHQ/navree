@@ -2,8 +2,8 @@
 //! associating and dissociating, attaching, detaching, syncing and
 //! toggling, pivot updates, and atomic pivot writes.
 
-use navree_orm::prelude::*;
 use navree_orm::OrmError;
+use navree_orm::prelude::*;
 
 use crate::fixtures::{seed, titles};
 use crate::models::{Activity, Company, Contact, Deal, Image, Note, Tag};
@@ -20,7 +20,13 @@ async fn saving_related_records_sets_the_foreign_key() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     let mut call = Record::new(Activity::new("call", 12));
-    assert!(crm.platform.activities().save(&t.db, &mut call).await.unwrap());
+    assert!(
+        crm.platform
+            .activities()
+            .save(&t.db, &mut call)
+            .await
+            .unwrap()
+    );
     assert!(call.exists());
     assert_eq!(call.deal_id, Some(crm.platform.id));
 
@@ -37,7 +43,10 @@ async fn saving_related_records_sets_the_foreign_key() {
         .await
         .unwrap();
     assert_eq!(
-        Activity::find_or_fail(&t.db, meeting.id).await.unwrap().deal_id,
+        Activity::find_or_fail(&t.db, meeting.id)
+            .await
+            .unwrap()
+            .deal_id,
         Some(crm.platform.id)
     );
 
@@ -45,7 +54,13 @@ async fn saving_related_records_sets_the_foreign_key() {
         Record::new(Activity::new("email", 1)),
         Record::new(Activity::new("email", 2)),
     ];
-    assert!(crm.orphan.activities().save_many(&t.db, &mut many).await.unwrap());
+    assert!(
+        crm.orphan
+            .activities()
+            .save_many(&t.db, &mut many)
+            .await
+            .unwrap()
+    );
     crm.orphan
         .activities()
         .save_many_quietly(&t.db, &mut [Record::new(Activity::new("sms", 1))])
@@ -68,7 +83,10 @@ async fn saving_related_records_sets_the_foreign_key() {
         crm.acme.notes().first(&t.db).await.unwrap().unwrap().body,
         "call back"
     );
-    assert!(crm.renewal.notes().first(&t.db).await.unwrap().is_none(), "same id, other type");
+    assert!(
+        crm.renewal.notes().first(&t.db).await.unwrap().is_none(),
+        "same id, other type"
+    );
 }
 
 #[tokio::test]
@@ -107,7 +125,10 @@ async fn creating_related_records() {
         .create_many(&t.db, [Activity::new("call", 1), Activity::new("call", 2)])
         .await
         .unwrap();
-    assert!(many.iter().all(|a| a.deal_id == Some(crm.platform.id) && a.exists()));
+    assert!(
+        many.iter()
+            .all(|a| a.deal_id == Some(crm.platform.id) && a.exists())
+    );
     crm.platform
         .activities()
         .create_many_quietly(&t.db, [Activity::new("email", 1)])
@@ -120,10 +141,16 @@ async fn creating_related_records() {
     let forced = crm
         .orphan
         .activities()
-        .force_create(&t.db, [Activity::KIND.set("visit"), Activity::MINUTES.set(90)])
+        .force_create(
+            &t.db,
+            [Activity::KIND.set("visit"), Activity::MINUTES.set(90)],
+        )
         .await
         .unwrap();
-    assert_eq!((forced.kind.as_str(), forced.deal_id), ("visit", Some(crm.orphan.id)));
+    assert_eq!(
+        (forced.kind.as_str(), forced.deal_id),
+        ("visit", Some(crm.orphan.id))
+    );
     crm.orphan
         .activities()
         .force_create_quietly(&t.db, [col("kind").set("visit")])
@@ -134,10 +161,7 @@ async fn creating_related_records() {
         .activities()
         .force_create_many(
             &t.db,
-            [
-                vec![Activity::KIND.set("a")],
-                vec![Activity::KIND.set("b")],
-            ],
+            [vec![Activity::KIND.set("a")], vec![Activity::KIND.set("b")]],
         )
         .await
         .unwrap();
@@ -180,7 +204,11 @@ async fn associating_and_dissociating() {
         Some(crm.globex.id)
     );
 
-    deal.dissociate(Deal::company).unwrap().save(&t.db).await.unwrap();
+    deal.dissociate(Deal::company)
+        .unwrap()
+        .save(&t.db)
+        .await
+        .unwrap();
     assert_eq!(deal.company_id, None);
     assert!(deal.loaded(Deal::company).unwrap().is_none());
     assert_eq!(
@@ -195,7 +223,10 @@ async fn associating_and_dissociating() {
     assert_eq!(note.notable_id, Some(crm.renewal.id));
     note.save(&t.db).await.unwrap();
     note.dissociate(Note::notable).unwrap();
-    assert_eq!((note.notable_type.as_deref(), note.notable_id), (None, None));
+    assert_eq!(
+        (note.notable_type.as_deref(), note.notable_id),
+        (None, None)
+    );
     assert!(note.loaded(Note::notable).unwrap().is_none());
 }
 
@@ -204,7 +235,11 @@ async fn attaching_and_detaching() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     // By key, by record, with pivot values.
-    crm.renewal.tags().attach(&t.db, [crm.vip.id]).await.unwrap();
+    crm.renewal
+        .tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap();
     crm.renewal.tags().attach(&t.db, [&crm.q1]).await.unwrap();
     crm.renewal
         .tags()
@@ -212,23 +247,34 @@ async fn attaching_and_detaching() {
         .await
         .unwrap();
     assert_eq!(count_rows(&t.db, "deal_tag").await, 3);
-    let attached: Vec<i64> = crm
-        .renewal
-        .tags()
-        .pluck(&t.db, Tag::ID)
-        .await
-        .unwrap();
+    let attached: Vec<i64> = crm.renewal.tags().pluck(&t.db, Tag::ID).await.unwrap();
     assert_eq!(ids(&attached), ids(&[crm.vip.id, crm.q1.id, crm.hot.id]));
 
     // Attaching twice is the database's error (the pivot's primary key).
-    let error = crm.renewal.tags().attach(&t.db, [crm.vip.id]).await.unwrap_err();
+    let error = crm
+        .renewal
+        .tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap_err();
     assert!(error.is_unique_violation(), "{error:?}");
 
     assert_eq!(
-        crm.renewal.tags().detach(&t.db, [crm.vip.id, crm.vip.id]).await.unwrap(),
+        crm.renewal
+            .tags()
+            .detach(&t.db, [crm.vip.id, crm.vip.id])
+            .await
+            .unwrap(),
         1
     );
-    assert_eq!(crm.renewal.tags().detach(&t.db, Vec::<i64>::new()).await.unwrap(), 0);
+    assert_eq!(
+        crm.renewal
+            .tags()
+            .detach(&t.db, Vec::<i64>::new())
+            .await
+            .unwrap(),
+        0
+    );
     assert_eq!(crm.renewal.tags().detach_all(&t.db).await.unwrap(), 2);
     assert_eq!(count_rows(&t.db, "deal_tag").await, 0);
 }
@@ -294,7 +340,10 @@ async fn syncing_reports_what_changed() {
         .await
         .unwrap();
     assert_eq!(changes.detached_as::<i64>().unwrap(), [crm.q1.id]);
-    assert_eq!(ids(&changes.updated_as::<i64>().unwrap()), ids(&[crm.vip.id, crm.hot.id]));
+    assert_eq!(
+        ids(&changes.updated_as::<i64>().unwrap()),
+        ids(&[crm.vip.id, crm.hot.id])
+    );
     let roles: Vec<Option<String>> = crm
         .renewal
         .tags()
@@ -307,7 +356,12 @@ async fn syncing_reports_what_changed() {
     assert_eq!(roles, [Some("x".to_owned()), Some("x".to_owned())]);
 
     // Syncing to nothing detaches everything.
-    let changes = crm.renewal.tags().sync(&t.db, Vec::<i64>::new()).await.unwrap();
+    let changes = crm
+        .renewal
+        .tags()
+        .sync(&t.db, Vec::<i64>::new())
+        .await
+        .unwrap();
     assert_eq!(changes.detached.len(), 2);
 }
 
@@ -315,7 +369,11 @@ async fn syncing_reports_what_changed() {
 async fn toggling_and_updating_pivot_rows() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    crm.renewal.tags().attach(&t.db, [crm.vip.id]).await.unwrap();
+    crm.renewal
+        .tags()
+        .attach(&t.db, [crm.vip.id])
+        .await
+        .unwrap();
     let changes = crm
         .renewal
         .tags()
@@ -353,14 +411,20 @@ async fn toggling_and_updating_pivot_rows() {
         .pivot()
         .unwrap()
         .clone();
-    assert_eq!(after.value::<String>("role").unwrap().as_deref(), Some("lead"));
+    assert_eq!(
+        after.value::<String>("role").unwrap().as_deref(),
+        Some("lead")
+    );
     let stamp = |pivot: &navree_orm::relations::Pivot| {
         pivot
             .value::<chrono::DateTime<chrono::Utc>>("updated_at")
             .unwrap()
             .unwrap()
     };
-    assert!(stamp(&after) > stamp(&before), "the pivot's update timestamp");
+    assert!(
+        stamp(&after) > stamp(&before),
+        "the pivot's update timestamp"
+    );
 }
 
 #[tokio::test]
@@ -377,16 +441,28 @@ async fn pivot_writes_are_atomic() {
         .await
         .unwrap_err();
     assert!(error.is_unique_violation(), "{error:?}");
-    assert_eq!(count_rows(&t.db, "deal_tag").await, 1, "vip was rolled back");
+    assert_eq!(
+        count_rows(&t.db, "deal_tag").await,
+        1,
+        "vip was rolled back"
+    );
 
     // In a unit of work, the writes are part of its transaction.
     let uow = t.db.uow(None, None).await;
-    crm.renewal.tags().sync(&uow, [crm.vip.id, crm.hot.id]).await.unwrap();
+    crm.renewal
+        .tags()
+        .sync(&uow, [crm.vip.id, crm.hot.id])
+        .await
+        .unwrap();
     crm.upgrade.tags().attach(&uow, [crm.vip.id]).await.unwrap();
     uow.rollback().await.unwrap();
     assert_eq!(count_rows(&t.db, "deal_tag").await, 1);
     let uow = t.db.uow(None, None).await;
-    crm.renewal.tags().sync(&uow, [crm.vip.id, crm.hot.id]).await.unwrap();
+    crm.renewal
+        .tags()
+        .sync(&uow, [crm.vip.id, crm.hot.id])
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
     assert_eq!(count_rows(&t.db, "deal_tag").await, 2);
 }
@@ -416,7 +492,11 @@ async fn saving_and_creating_many_to_many_records() {
         .await
         .unwrap();
     let mut pair = vec![Record::new(Tag::named("a")), Record::new(Tag::named("b"))];
-    crm.renewal.tags().save_many(&t.db, &mut pair).await.unwrap();
+    crm.renewal
+        .tags()
+        .save_many(&t.db, &mut pair)
+        .await
+        .unwrap();
     crm.renewal
         .tags()
         .create_many(&t.db, [Tag::named("c")])
@@ -424,7 +504,11 @@ async fn saving_and_creating_many_to_many_records() {
         .unwrap();
     crm.renewal
         .tags()
-        .force_create(&t.db, [Tag::NAME.set("forced")], [col("role").set("forced")])
+        .force_create(
+            &t.db,
+            [Tag::NAME.set("forced")],
+            [col("role").set("forced")],
+        )
         .await
         .unwrap();
     assert_eq!(crm.renewal.tags().count(&t.db).await.unwrap(), 7);
@@ -437,7 +521,14 @@ async fn saving_and_creating_many_to_many_records() {
         .unwrap()
         .unwrap();
     assert_eq!(owner.id, cold.id);
-    assert!(crm.renewal.tags().find(&t.db, warm.id).await.unwrap().is_some());
+    assert!(
+        crm.renewal
+            .tags()
+            .find(&t.db, warm.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     // A failing save attaches nothing.
     let mut duplicate = Record::new(Tag::named("warm"));

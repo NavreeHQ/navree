@@ -193,7 +193,11 @@ impl Relations {
     }
 
     fn put(&mut self, slot: Slot) {
-        match self.slots.iter_mut().find(|existing| existing.name == slot.name) {
+        match self
+            .slots
+            .iter_mut()
+            .find(|existing| existing.name == slot.name)
+        {
             Some(existing) => *existing = slot,
             None => self.slots.push(slot),
         }

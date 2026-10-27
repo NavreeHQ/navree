@@ -103,7 +103,11 @@ pub(crate) fn in_keys(column: ColumnRef, keys: &[(RelationKey, Value)]) -> Where
 /// on SQL, integer keys are written into the statement (they are numbers,
 /// and large batches stay clear of bound-parameter limits) and the others
 /// are bound; a document driver gets every key as a value.
-pub(crate) fn in_keys_on(target: &Target<'_>, column: ColumnRef, keys: &[(RelationKey, Value)]) -> Where {
+pub(crate) fn in_keys_on(
+    target: &Target<'_>,
+    column: ColumnRef,
+    keys: &[(RelationKey, Value)],
+) -> Where {
     in_list(column, keys, target.dialect().is_some())
 }
 

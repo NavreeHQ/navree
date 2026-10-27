@@ -89,11 +89,7 @@ pub async fn sqlite() -> TestDb {
     let db = Db::from_connection(conn);
     create_tables(&db).await;
     log.clear();
-    TestDb {
-        db,
-        log,
-        _dir: dir,
-    }
+    TestDb { db, log, _dir: dir }
 }
 
 /// The moment the fixed clock of [`app`] starts at.

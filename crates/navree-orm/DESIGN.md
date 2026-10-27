@@ -36,7 +36,7 @@ Principles:
 | Crate | Layer | Role |
 |---|---|---|
 | `navree-orm` | L4 | Models, records, collections, the builders, the IR, SQL per dialect, execution on `Db`/`Uow`, casts, scopes, hooks, pagination, the relation and document-driver seams |
-| `navree-orm-macros` | L0 | `#[derive(Model)]` and `#[scopes]` (proc macros; no runtime navree dependencies) |
+| `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]` and `#[relations]` (proc macros; no runtime navree dependencies) |
 | `navree-orm-mongodb` | L5 | MongoDB: implements `DocumentDriver` (mongodb track) |
 | `navree-schema` | L3/L4 | Migrations and the schema builder (own design; the ORM does not depend on it) |
 
@@ -89,7 +89,8 @@ src/
   cast.rs           Cast, CastError, AsJson, StringEnum, IntEnum, encode/decode helpers
   scope.rs          GlobalScope, Scoped, SoftDeletes, scope grouping
   expr.rs           Expr constructors: col, val, raw, func, aggregates, arithmetic, subquery, time_bucket, first, last
-  relations.rs      Relation<P>, Relations (loaded relations on a record)
+  relations/        relationships (section 11, orm-relations): definitions, relation queries,
+                    eager and lazy loading, existence, aggregates, pivots, morphs, touches
   driver.rs         DocumentDriver, InsertOutcome
   doc_models.rs     `__doc_models` (hidden): the models the doc examples use, so every example compiles
   exec.rs           Executor, Access, Target, SqlTarget, DocumentTarget, ExecContext
@@ -530,39 +531,129 @@ and re-exports, `prelude.rs`, the facade prelude, the macro parsers' key
 lists. The seams below exist so tracks fill them instead of rewriting core
 flows.
 
-### orm-relations
+### orm-relations (shipped)
 
-- Owns `src/relations.rs`, which it may turn into `src/relations/`
-  (`mod.rs` keeping `Relation` and `Relations`, plus `belongs_to.rs`,
-  `has_one.rs`, `has_many.rs`, `belongs_to_many.rs`, `through.rs`,
-  `morph.rs`, `eager.rs`, `existence.rs`, `aggregates.rs`, `pivot.rs`,
-  `morph_map.rs`).
-- Core provides: `Relation<P>` (`type Related`, `name`, `query_for(parent)
-  -> Builder<Related>`), the per-record `Relations` store (typed
-  `get`/`get_mut`/`set`/`take`/`is_loaded`/`unset`, serialized with the
-  record), `Record::relations[_mut]`, `Builder::into_ir`, `IntoQuery` for
-  builders (correlated `where_exists`, `select_sub` for `with_count` and
-  friends), `where_in`/`where_key_in` for batched loads, `TableBuilder`
-  insert/update/delete for pivots, and `ModelHook<M>` after `Saved` and
-  `Deleted` for touching parents.
-- Adds: relation definitions (methods returning typed relations: belongs
-  to, has one, has many, many to many with pivots, has one/many through,
-  polymorphic), registered by name for string paths (`"company.owner"`);
-  `with`, `with_count`, `with_sum`/`with_avg`/`with_min`/`with_max`,
-  `with_exists`, constrained eager loads; `load`, `load_missing`,
-  `load_count` on records and collections; `has`, `where_has`,
-  `doesnt_have`, `where_relation`, `where_belongs_to`; writing through
-  relations (`save`, `create`, `associate`, `dissociate`, `attach`,
-  `detach`, `sync`, `toggle`, `update_existing_pivot`); the morph map;
-  strict lazy-loading checks.
-- Eager loading needs one edit in core: a field on `Builder<M>`
-  (`query/mod.rs`) holding the requested loads, and a call at the end of
-  `Builder::fetch` (`query/fetch.rs`, after the `Retrieved` hooks) that
-  loads them into the records.
-- Macro attributes: `touches = [..]`, `morph_name = ".."` and relation
-  declarations in `navree-orm-macros/src/model/relations.rs`, one line each
-  in the key lists and parsers of `model/container.rs` / `model/field.rs`;
-  `touches` generates `fn hooks()` entries.
+Relationships live in `src/relations/`:
+
+```text
+mod.rs            Relation<P>, RelatedTo<P>, the sealed Erase, derive_support (what #[relations] expands to)
+define.rs         Relationships: belongs_to, has_one, has_many, belongs_to_many, has_one_through,
+                  has_many_through, morph_one, morph_many, morph_to, morph_to_many, morphed_by_many,
+                  through(..).has(..); KeyColumn
+core.rs           RelationCore (parent + query of the related model), the builder/retrieval macros,
+                  Bound (a relation's query for one parent, with a finisher), find-or-create helpers
+belongs_to.rs     BelongsTo (owner key, defaults, associate/dissociate)
+has.rs            HasOne, HasMany (and their morph forms), writes, inverses, per-parent limits
+one_of_many.rs    latest/oldest/of_many: joins on grouped subqueries
+belongs_to_many.rs, pivot.rs   BelongsToMany (and MorphToMany), Pivot, PivotKind (typed pivots),
+                  RelatedId, SyncChanges, attach/detach/sync/toggle/update_existing_pivot
+through.rs        HasOneThrough, HasManyThrough, composed through relations (Cardinality, ThroughLeg)
+morph.rs, morph_map.rs, any.rs   MorphTo, MorphWith, MorphTypes, MorphRef, polymorphic existence,
+                  MorphMap, AnyRecord, morph_types!
+registry.rs       RelationKind, RelationMeta, ErasedRelation, DynRelation, RelationRegistry, find
+path.rs           RelationPath, RelationPathTo, ConstrainPath, ParsedPath ("a.b:c,d as e")
+eager.rs          EagerTree/EagerNode, Builder::with*, load_tree, constraint closures
+existence.rs, requalify.rs   has/where_has/where_relation/where_belongs_to/where_attached_to,
+                  correlated subqueries, self-relation aliases
+aggregates.rs     with_count/sum/avg/min/max/exists, load_* aggregates
+lazy.rs           Record and Collection load*, LazyLoading, relation_or_load, push, associate,
+                  pivots on records, refresh's reload of relations, load_missing_chain
+touch.rs          touches, without_touching(_on), is_ignoring_touch
+store.rs, keys.rs Relations (loaded values), RelationValue; RelationKey and batched IN lists
+access.rs         AccessFilter, with_accessible
+```
+
+How the pieces fit:
+
+- **Definitions.** A `#[relations]` impl block's methods return typed
+  relations built from `self` (`self.belongs_to(Deal::COMPANY_ID)`). The
+  macro (`navree-orm-macros/src/relations.rs`) names each relation after
+  its method and adds `__navree_relations(name)` and
+  `__navree_relation_names()`; the derive's `Model::relation` and
+  `relation_names` call them by inherent-method shadowing (the
+  `derive_support::NoRelations` fallback answers for models without a
+  block), then the `RelationRegistry` (relations other modules define).
+  Definitions are read from `M::default()`: models with relations
+  implement `Default` (`ModelWithRelations` reports a missing one once).
+- **Typed and string paths.** Relation methods are paths (`Deal::company`)
+  and fix the closure types of constrained loads and existence checks
+  (`ConstrainPath<M, Q>`, `RelationPathTo<M, T>`); strings (`"company.owner"`,
+  `"company:id,name"`, `"activities as open_count"`) resolve through
+  `Model::relation`, and an unknown name is `OrmError::RelationNotFound`
+  naming the model, the relation and the known ones.
+- **Relation queries.** Every builder method works on a relation; its own
+  conditions come first and the caller's are grouped (`core::constrain`),
+  so an `OR` never reaches other parents' records. A NULL parent key
+  relates nothing without a query.
+- **Eager loading.** `Builder<M>` holds an `EagerState` (the tree, the
+  model's default counts, the existence depth); `fetch` takes the tree and
+  calls `eager::after_fetch`, which marks the result for the lazy-loading
+  rules and loads each relation with one batched `IN` query per level
+  (integer keys written into SQL, bound for document drivers; no query
+  when every key is NULL). Limits in a constrained load apply per parent
+  through `Expr::RowNumber` in a derived table (`navree_row`,
+  `navree_table`; MySQL sorts NULLs with an `IS NULL` key).
+  `#[model(with = [..], with_count = [..])]` apply in `Model::query`.
+- **Existence and aggregates.** Correlated `EXISTS` (at least one) or
+  `COUNT` subqueries, nested by path; the related model's global scopes
+  apply; a relation to its own table aliases the inner one `navree_{depth}`
+  (`requalify` moves the caller's conditions onto the alias). Aggregates
+  are correlated subqueries in the select list (`Expr::Exists` for
+  `with_exists`); `load_*` runs one query of the parents' keys.
+- **Pivots.** Many-to-many queries join the pivot table and select its
+  columns as `pivot_*`, hydrated into a `Pivot` or the typed pivot model's
+  record under the accessor (`pivot`, or `as_`). Pivot writes are atomic:
+  a transaction of their own on a pool, the unit of work's otherwise;
+  typed pivots write through their model, so its hooks run. A pivot model
+  without an id is identified by both pivot columns (`persist::identity`).
+- **Polymorphism.** Type columns hold `Model::morph_name`; a `morph_to`
+  loads the models it lists (`target`, `targets`) or the `MorphMap`'s
+  (process-wide `register`, `scope` for one future, `require` to refuse
+  unmapped models with `MorphNotMapped`); stored ids are normalized to the
+  target key type. Renaming a morph name needs a data migration rewriting
+  the stored names (documented on `MorphMap`).
+- **Lazy loading.** `Record::relation_or_load` / `related` follow
+  `LazyLoading` (prevented: `OrmError::LazyLoading` or a handler;
+  automatic: the record's result loads together, `with_relationship_
+  autoloading` for one collection or record).
+- **Touching.** `#[model(touches = [..])]`: `persist::save` (when the record
+  changed) and `delete` call `touch::touch_owners`, which touches each
+  relation's records and theirs, once per record (cycles end);
+  many-to-many writes touch the parent when the related model touches the
+  relation named after the parent's table.
+- **Access.** `with_accessible(path, &filter)` adds an `AccessFilter`'s
+  condition for each related model along the path (`morph_to`: per model).
+
+Core edits it made: the `Builder` field and the `fetch` call; `Model::relation`,
+`relation_names`, `relation_meta`, `morph_name`, `foreign_key_name`,
+`touched_relations`, and `query()` applying the model's defaults (`where_`
+too); `ModelMeta`'s relation metadata (`morph_name`, `foreign_key`,
+`touches`, `with`, `with_count`, `pivot_keys`); `persist` (touches,
+pivot-model identity, `refresh` reloading loaded relations); `hooks::quietly`
+(a task-local for the `*_quietly` writes); `exec` (`begin_transaction`,
+`Executor for Target`); the IR's `Expr::Exists` and `Expr::RowNumber`;
+`Record::stored`. Macro attributes `touches`, `morph_name`, `with`,
+`with_count` and `pivot(foreign_key, related_key)` live in
+`navree-orm-macros/src/model/relations.rs`.
+
+Seams left for other tracks:
+
+- **orm-streams.** Relation `upsert` (filling the foreign key and morph
+  type) waits for `InsertIr::on_conflict`; chunks and streams on relations
+  build on `into_query()` and the relation's finisher (pivots); relations
+  to models on other connections need named connections (existence
+  subqueries across connections will be refused with `Unsupported`, eager
+  loads will run on the related model's connection).
+- **orm-lifecycle (`OrmModule`).** Boot steps: register the morph map and
+  `MorphMap::require` from `[orm] require_morph_map`; install
+  `LazyLoading` from `[orm] prevent_lazy_loading` / `auto_eager_load`, with
+  a violation handler that logs.
+- **Access.** navree-access's `Ability` implements `AccessFilter` where both
+  crates meet (the facade, or an adapter crate): navree-orm cannot depend
+  on navree-access.
+- **Document drivers.** Belongs-to, has-one/many and morph eager loads are
+  plain batched `IN` queries any driver answers; pivot and through
+  relations join, and per-parent limits use a window, so they need SQL.
 
 ### orm-lifecycle
 
@@ -575,9 +666,10 @@ flows.
   `Builder::delete_rows` (`query/write.rs`) removes rows for good, and
   `without_global_scope::<SoftDeletes>()` reaches trashed ones),
   `src/prune.rs` (`Prunable`, `MassPrunable`, the `model:prune` command),
-  `src/strict.rs` (strict modes: lazy loading, silently discarded
-  attributes, missing attributes) and `src/module.rs` (`OrmModule`, which
-  other tracks extend with their boot steps as separate lines).
+  `src/strict.rs` (strict modes: silently discarded attributes, missing
+  attributes; lazy loading's rules are `relations::LazyLoading`, which
+  `OrmModule` installs) and `src/module.rs` (`OrmModule`, which other
+  tracks extend with their boot steps as separate lines).
 - Seams: `Hooks::resolve` (`hooks.rs`) is the single place hooks are
   gathered (`M::hooks()`, then the app's); `without_events` adds one check
   there (a task-local set by `without_events(fut)`). Core already fires

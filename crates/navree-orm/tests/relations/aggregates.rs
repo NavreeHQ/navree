@@ -68,17 +68,26 @@ async fn sums_averages_minima_maxima_and_existence() {
         .unwrap();
     let renewal = &deals[0];
     assert_eq!(extra_i64(renewal, "activities_sum_minutes"), Some(80));
-    let avg = renewal.extra::<f64>("activities_avg_minutes").unwrap().unwrap();
+    let avg = renewal
+        .extra::<f64>("activities_avg_minutes")
+        .unwrap()
+        .unwrap();
     assert!((avg - 80.0 / 3.0).abs() < 1e-9, "{avg}");
     assert_eq!(extra_i64(renewal, "activities_min_minutes"), Some(5));
     assert_eq!(extra_i64(renewal, "longest"), Some(45));
     assert_eq!(extra_i64(renewal, "calls_sum_minutes"), Some(75));
-    assert_eq!(renewal.extra::<bool>("activities_exists").unwrap(), Some(true));
+    assert_eq!(
+        renewal.extra::<bool>("activities_exists").unwrap(),
+        Some(true)
+    );
     assert_eq!(renewal.extra::<bool>("company_exists").unwrap(), Some(true));
 
     let orphan = &deals[3];
     assert_eq!(extra_i64(orphan, "activities_sum_minutes"), None);
-    assert_eq!(orphan.extra::<bool>("activities_exists").unwrap(), Some(false));
+    assert_eq!(
+        orphan.extra::<bool>("activities_exists").unwrap(),
+        Some(false)
+    );
     assert_eq!(orphan.extra::<bool>("company_exists").unwrap(), Some(false));
 
     // An aggregate takes a column.
@@ -95,13 +104,23 @@ async fn records_load_aggregates_afterwards() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     let mut deal = Deal::find_or_fail(&t.db, crm.renewal.id).await.unwrap();
-    deal.load_count(&t.db, ["activities", "calls"]).await.unwrap();
+    deal.load_count(&t.db, ["activities", "calls"])
+        .await
+        .unwrap();
     assert_eq!(extra_i64(&deal, "activities_count"), Some(3));
     assert_eq!(extra_i64(&deal, "calls_count"), Some(2));
-    deal.load_sum(&t.db, "activities", Activity::MINUTES).await.unwrap();
-    deal.load_min(&t.db, Deal::activities, Activity::MINUTES).await.unwrap();
-    deal.load_max(&t.db, "activities", Activity::MINUTES).await.unwrap();
-    deal.load_avg(&t.db, "calls", Activity::MINUTES).await.unwrap();
+    deal.load_sum(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
+    deal.load_min(&t.db, Deal::activities, Activity::MINUTES)
+        .await
+        .unwrap();
+    deal.load_max(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
+    deal.load_avg(&t.db, "calls", Activity::MINUTES)
+        .await
+        .unwrap();
     deal.load_aggregate(&t.db, "activities", Activity::ID, AggregateFunction::Count)
         .await
         .unwrap();
@@ -109,10 +128,7 @@ async fn records_load_aggregates_afterwards() {
     assert_eq!(extra_i64(&deal, "activities_sum_minutes"), Some(80));
     assert_eq!(extra_i64(&deal, "activities_min_minutes"), Some(5));
     assert_eq!(extra_i64(&deal, "activities_max_minutes"), Some(45));
-    assert_eq!(
-        deal.extra::<f64>("calls_avg_minutes").unwrap(),
-        Some(37.5)
-    );
+    assert_eq!(deal.extra::<f64>("calls_avg_minutes").unwrap(), Some(37.5));
     assert_eq!(extra_i64(&deal, "activities_count_id"), Some(3));
     assert_eq!(deal.extra::<bool>("company_exists").unwrap(), Some(true));
     assert_eq!(deal.extra::<bool>("tags_exists").unwrap(), Some(false));
@@ -133,13 +149,30 @@ async fn collections_load_aggregates_in_one_query() {
         .map(|deal| extra_i64(deal, "activities_count"))
         .collect();
     assert_eq!(counts, [Some(3), Some(1), Some(0), Some(0)]);
-    deals.load_sum(&t.db, "activities", Activity::MINUTES).await.unwrap();
-    deals.load_avg(&t.db, "activities", Activity::MINUTES).await.unwrap();
-    deals.load_min(&t.db, "activities", Activity::MINUTES).await.unwrap();
-    deals.load_max(&t.db, "activities", Activity::MINUTES).await.unwrap();
+    deals
+        .load_sum(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
+    deals
+        .load_avg(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
+    deals
+        .load_min(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
+    deals
+        .load_max(&t.db, "activities", Activity::MINUTES)
+        .await
+        .unwrap();
     deals.load_exists(&t.db, ["company"]).await.unwrap();
     deals
-        .load_aggregate(&t.db, "activities", Activity::MINUTES, AggregateFunction::Max)
+        .load_aggregate(
+            &t.db,
+            "activities",
+            Activity::MINUTES,
+            AggregateFunction::Max,
+        )
         .await
         .unwrap();
     assert_eq!(extra_i64(&deals[1], "activities_sum_minutes"), Some(60));
@@ -149,10 +182,20 @@ async fn collections_load_aggregates_in_one_query() {
         Some(60.0)
     );
     assert_eq!(extra_i64(&deals[0], "activities_min_minutes"), Some(5));
-    assert_eq!(deals[3].extra::<bool>("company_exists").unwrap(), Some(false));
+    assert_eq!(
+        deals[3].extra::<bool>("company_exists").unwrap(),
+        Some(false)
+    );
 
-    let mut companies = Company::query().order_by(Company::ID).get(&t.db).await.unwrap();
-    companies.load_count(&t.db, ["deals", "contacts"]).await.unwrap();
+    let mut companies = Company::query()
+        .order_by(Company::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    companies
+        .load_count(&t.db, ["deals", "contacts"])
+        .await
+        .unwrap();
     let counts: Vec<(Option<i64>, Option<i64>)> = companies
         .iter()
         .map(|company| {
@@ -162,5 +205,8 @@ async fn collections_load_aggregates_in_one_query() {
             )
         })
         .collect();
-    assert_eq!(counts, [(Some(2), Some(2)), (Some(0), Some(0)), (Some(1), Some(1))]);
+    assert_eq!(
+        counts,
+        [(Some(2), Some(2)), (Some(0), Some(0)), (Some(1), Some(1))]
+    );
 }

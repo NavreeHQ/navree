@@ -127,11 +127,7 @@ async fn typed_pivot_writes_fire_the_pivot_models_events() {
     );
 
     // Syncing attaches and detaches through the model as well.
-    crm.renewal
-        .watchers()
-        .sync(db, [crm.bob.id])
-        .await
-        .unwrap();
+    crm.renewal.watchers().sync(db, [crm.bob.id]).await.unwrap();
     let bob = crm.bob.id;
     assert_eq!(
         seen.take(),

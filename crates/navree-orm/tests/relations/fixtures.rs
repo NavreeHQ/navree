@@ -95,7 +95,9 @@ pub async fn seed(db: &Db) -> Crm {
     let platform = Deal::create(db, deal("Platform", 90_000, Some(globex.id), Some(ada.id)))
         .await
         .unwrap();
-    let orphan = Deal::create(db, deal("Orphan", 50, None, None)).await.unwrap();
+    let orphan = Deal::create(db, deal("Orphan", 50, None, None))
+        .await
+        .unwrap();
 
     for (deal_id, kind, minutes) in [
         (renewal.id, "call", 30),
@@ -164,5 +166,8 @@ pub fn titles(deals: &Collection<Deal>) -> Vec<String> {
 
 /// The names of `companies`, in order.
 pub fn names(companies: &Collection<Company>) -> Vec<String> {
-    companies.iter().map(|company| company.name.clone()).collect()
+    companies
+        .iter()
+        .map(|company| company.name.clone())
+        .collect()
 }

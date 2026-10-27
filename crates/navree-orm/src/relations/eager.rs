@@ -296,7 +296,9 @@ impl<M: Model> Builder<M> {
 
     /// Stops eager loading every relation path of `paths`.
     pub fn without_eager_load(self, paths: impl IntoIterator<Item = impl RelationPath<M>>) -> Self {
-        paths.into_iter().fold(self, |query, path| query.without(path))
+        paths
+            .into_iter()
+            .fold(self, |query, path| query.without(path))
     }
 
     /// Eager loads exactly `paths`, replacing the loads asked for so far
