@@ -1,0 +1,8 @@
+allowBuilds:
+  esbuild: true
+  "@parcel/watcher": true
+  vue-demi: true
+  msw: false
+minimumReleaseAgeExclude:
+  - '@tanstack/query-core@5.105.0'
+  - '@tanstack/vue-query@5.105.0'
