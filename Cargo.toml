@@ -70,6 +70,7 @@ navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
 navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
+navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -315,6 +316,13 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# Spreadsheets (navree-sheets): XLSX writing (pure Rust; never the `zlib`
+# feature, which builds C), XLSX/XLS/ODS reading, and encoding detection
+# for uploaded CSV files (encoding_rs decodes, chardetng guesses).
+rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["chrono", "constant_memory"] }
+calamine = { version = "0.37.0", default-features = false, features = ["dates"] }
+encoding_rs = "0.8.42"
+chardetng = "1.0.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
 # The resident memory of the current process (navree-fleet workers recycle
