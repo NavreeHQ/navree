@@ -22,6 +22,7 @@ mod select;
 mod timescale;
 mod write;
 
+pub(crate) use select::timeout_millis;
 pub use select::{compile_aggregate, compile_exists, compile_select};
 pub use write::{
     compile_delete, compile_insert, compile_truncate, compile_update, compile_update_from,

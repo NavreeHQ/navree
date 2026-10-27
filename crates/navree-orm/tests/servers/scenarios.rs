@@ -1258,3 +1258,101 @@ pub async fn time_buckets(db: Db, server: Server) {
         assert_eq!(first_last, [(10.0, 11.0), (15.0, 13.0), (9.0, 9.0)]);
     }
 }
+
+/// Statement timeouts: a slow read is stopped with `OrmError::Timeout`,
+/// quick ones run, and a unit of work survives a stopped read (PostgreSQL
+/// runs it in a savepoint and restores the transaction's own timeout).
+pub async fn timeouts(db: Db, server: Server) {
+    use std::time::{Duration as StdDuration, Instant};
+
+    Company::create(
+        &db,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    let slow_select = match server {
+        Server::Postgres => "pg_sleep(3) AS slept",
+        // MySQL stops a statement under MAX_EXECUTION_TIME between rows;
+        // this one reads billions of them.
+        Server::MySql => {
+            "(SELECT COUNT(*) FROM information_schema.columns a CROSS JOIN information_schema.columns b CROSS JOIN information_schema.columns c) AS rows_read"
+        }
+    };
+    let slow = || {
+        table("companies")
+            .select_raw(slow_select, Vec::<Value>::new())
+            .timeout(StdDuration::from_millis(200))
+    };
+    let started = Instant::now();
+    let error = slow().get(&db).await.unwrap_err();
+    assert!(error.is_timeout(), "{error:?}");
+    assert!(
+        started.elapsed() < StdDuration::from_secs(3),
+        "stopped early: {:?}",
+        started.elapsed()
+    );
+    assert!(
+        error.to_string().contains("ran longer than its timeout"),
+        "{error}"
+    );
+    assert_eq!(
+        table("companies")
+            .timeout(StdDuration::from_secs(10))
+            .count(&db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        Company::query()
+            .timeout(StdDuration::from_secs(10))
+            .pluck(&db, Company::NAME)
+            .await
+            .unwrap(),
+        ["Acme"]
+    );
+
+    let uow = db.uow(None, None).await;
+    Company::create(
+        &uow,
+        Company {
+            name: "Globex".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    let error = slow().get(&uow).await.unwrap_err();
+    assert!(error.is_timeout(), "{error:?}");
+    assert_eq!(
+        Company::query()
+            .timeout(StdDuration::from_secs(10))
+            .count(&uow)
+            .await
+            .unwrap(),
+        2,
+        "the unit of work goes on"
+    );
+    if server == Server::Postgres {
+        let setting: Option<String> = navree_orm::scalar(
+            &uow,
+            navree_orm::raw(
+                "SELECT current_setting('statement_timeout')",
+                Vec::<Value>::new(),
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            setting.as_deref(),
+            Some("0"),
+            "the transaction's own timeout is back"
+        );
+    }
+    uow.commit().await.unwrap();
+    assert_eq!(Company::query().count(&db).await.unwrap(), 2);
+}

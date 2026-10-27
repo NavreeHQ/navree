@@ -150,3 +150,16 @@ async fn mysql_time_buckets() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn postgres_timeouts() {
+    run(Server::Postgres, |db| {
+        scenarios::timeouts(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_timeouts() {
+    run(Server::MySql, |db| scenarios::timeouts(db, Server::MySql)).await;
+}
