@@ -20,7 +20,7 @@ use crate::relations::core::{
 use crate::relations::define::KeyColumn;
 use crate::relations::eager::{EagerNode, EagerTree, RelationParts, constrained, prepare_query};
 use crate::relations::existence::{ExistsRequest, build_subquery, columns_equal};
-use crate::relations::keys::{RelationKey, distinct_keys, in_keys, key_of};
+use crate::relations::keys::{RelationKey, distinct_keys, in_keys_on, key_of};
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
 use crate::relations::{Relation, RelatedTo, private};
 use crate::value::{Value, is_null};
@@ -287,7 +287,10 @@ impl<P: Model, R: Model> ErasedRelation<P> for BelongsTo<P, R> {
                 let relation = constrained(self.clone(), node)?;
                 let table = R::meta().table();
                 let query = prepare_query(relation.core.query, node, table, &[&self.owner_key])?;
-                let query = constrain(query, vec![in_keys(qualified(table, &self.owner_key), &keys)]);
+                let query = constrain(
+                    query,
+                    vec![in_keys_on(target, qualified(table, &self.owner_key), &keys)],
+                );
                 for record in query.fetch(target).await? {
                     let owner = column_value(&record.model, &self.owner_key, &self.core.name)?;
                     if let Some(key) = key_of(&owner) {

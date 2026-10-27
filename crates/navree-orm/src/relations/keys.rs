@@ -5,6 +5,7 @@ use std::borrow::Cow;
 
 use uuid::Uuid;
 
+use crate::exec::Target;
 use crate::ir::{ColumnRef, Expr, InValues, Where};
 use crate::value::{Decimal, Value, is_null, to_json};
 
@@ -93,14 +94,24 @@ pub(crate) fn distinct_keys(values: impl IntoIterator<Item = Value>) -> Vec<(Rel
     keys
 }
 
-/// `column IN (values)`: integer keys are written into the SQL (they are
-/// numbers, and large batches stay clear of bound-parameter limits), the
-/// others are bound.
+/// `column IN (keys)`, every key bound.
 pub(crate) fn in_keys(column: ColumnRef, keys: &[(RelationKey, Value)]) -> Where {
+    in_list(column, keys, false)
+}
+
+/// `column IN (keys)` for the batched query of an eager load on `target`:
+/// on SQL, integer keys are written into the statement (they are numbers,
+/// and large batches stay clear of bound-parameter limits) and the others
+/// are bound; a document driver gets every key as a value.
+pub(crate) fn in_keys_on(target: &Target<'_>, column: ColumnRef, keys: &[(RelationKey, Value)]) -> Where {
+    in_list(column, keys, target.dialect().is_some())
+}
+
+fn in_list(column: ColumnRef, keys: &[(RelationKey, Value)], inline_integers: bool) -> Where {
     let values = keys
         .iter()
         .map(|(key, value)| match key {
-            RelationKey::Int(int) if is_integer(value) => Expr::Raw {
+            RelationKey::Int(int) if inline_integers && is_integer(value) => Expr::Raw {
                 sql: Cow::Owned(int.to_string()),
                 values: Vec::new(),
             },
@@ -171,25 +182,26 @@ mod tests {
         assert_eq!(ints, [RelationKey::Int(1), RelationKey::Int(3)]);
     }
 
+    fn list(filter: Where) -> Vec<Expr> {
+        let Where::In {
+            values: InValues::List(list),
+            ..
+        } = filter
+        else {
+            panic!("an IN list");
+        };
+        list
+    }
+
     #[test]
-    fn integer_keys_are_inlined_others_bound() {
+    fn integer_keys_are_inlined_for_sql_others_bound() {
         let keys = distinct_keys([Value::BigInt(Some(2)), Value::BigInt(Some(1))]);
-        let Where::In {
-            values: InValues::List(list),
-            ..
-        } = in_keys(ColumnRef::new(Some("t"), "id"), &keys)
-        else {
-            panic!("an IN list");
-        };
-        assert!(matches!(&list[0], Expr::Raw { sql, .. } if sql == "1"));
+        let inlined = list(in_list(ColumnRef::new(Some("t"), "id"), &keys, true));
+        assert!(matches!(&inlined[0], Expr::Raw { sql, .. } if sql == "1"));
+        let bound = list(in_keys(ColumnRef::new(Some("t"), "id"), &keys));
+        assert!(matches!(&bound[0], Expr::Value(Value::BigInt(Some(1)))));
         let keys = distinct_keys([Value::from("a")]);
-        let Where::In {
-            values: InValues::List(list),
-            ..
-        } = in_keys(ColumnRef::new(Some("t"), "id"), &keys)
-        else {
-            panic!("an IN list");
-        };
-        assert!(matches!(&list[0], Expr::Value(_)));
+        let text = list(in_list(ColumnRef::new(Some("t"), "id"), &keys, true));
+        assert!(matches!(&text[0], Expr::Value(_)));
     }
 }

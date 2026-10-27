@@ -292,13 +292,15 @@ macro_rules! morph_types {
             }
         }
 
-        impl ::serde::Serialize for $name {
-            fn serialize<S: ::serde::Serializer>(
+        impl $crate::__private::serde::Serialize for $name {
+            fn serialize<S: $crate::__private::serde::Serializer>(
                 &self,
                 serializer: S,
             ) -> ::core::result::Result<S::Ok, S::Error> {
                 match self {
-                    $($name::$variant(record) => ::serde::Serialize::serialize(record, serializer),)+
+                    $($name::$variant(record) => {
+                        $crate::__private::serde::Serialize::serialize(record, serializer)
+                    })+
                 }
             }
         }

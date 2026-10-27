@@ -24,7 +24,7 @@ use crate::relations::any::AnyRecord;
 use crate::relations::core::{column_value, qualified};
 use crate::relations::eager::{Constraint, ConstraintFn, EagerNode, EagerTree};
 use crate::relations::existence::{ExistsRequest, ExistsSelect, Refine, build_subquery, columns_equal};
-use crate::relations::keys::{RelationKey, distinct_keys, in_keys, key_of};
+use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
 use crate::relations::morph_map::{MorphMap, type_name_of};
 use crate::relations::path::{ParsedPath, RelationPath};
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta, find};
@@ -359,7 +359,8 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
                 query = query.where_(condition.clone());
             }
             query.eager.tree.merge(request.children);
-            let query = query.where_(Filter::from(in_keys(
+            let query = query.where_(Filter::from(in_keys_on(
+                target,
                 qualified(meta.table(), owner_key),
                 &keys,
             )));

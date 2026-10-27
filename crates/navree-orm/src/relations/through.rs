@@ -27,7 +27,7 @@ use crate::relations::define::KeyColumn;
 use crate::relations::eager::{EagerNode, EagerTree, RelationParts, constrained, prepare_query};
 use crate::relations::existence::{ExistsRequest, build_subquery, columns_equal};
 use crate::relations::has::{HasMany, HasOne, drop_row_numbers, limit_per_parent};
-use crate::relations::keys::{RelationKey, distinct_keys, in_keys, key_of};
+use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
 use crate::relations::one_of_many::OneOfMany;
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
 use crate::relations::{Relation, RelatedTo, private};
@@ -189,7 +189,7 @@ impl ThroughDef {
         let query = prepare_query(query, node, R::meta().table(), &[])?;
         let query = self.with_through_key(self.joined(query, None));
         let first = qualified(self.through.table(), &self.first_key);
-        let conditions = vec![in_keys(first.clone(), &keys)];
+        let conditions = vec![in_keys_on(target, first.clone(), &keys)];
         let query = match one_of_many {
             Some(one) => one.apply(query, relation, std::slice::from_ref(&first), conditions),
             None => constrain(query, conditions),
