@@ -41,7 +41,7 @@ impl CacheStoreKind {
 ///
 /// ```toml
 /// [cache]
-/// store = "memory"
+/// store = "memory"   # or "redis" (with navree-redis's RedisModule)
 /// prefix = "crm:"
 /// default_ttl_secs = 3600
 /// ```
@@ -50,7 +50,8 @@ impl CacheStoreKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CacheOptions {
-    /// The backend (default `memory`).
+    /// The backend (default `memory`; `redis` needs navree-redis's
+    /// `RedisModule`).
     pub store: CacheStoreKind,
     /// Prepended to every cache key and lock name (default empty).
     pub prefix: String,
