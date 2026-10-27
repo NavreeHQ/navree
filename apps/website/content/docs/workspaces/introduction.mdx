@@ -248,7 +248,7 @@ A workspace comes back as:
 }
 ```
 
-`timezone` is an IANA zone, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`), and `country` an ISO 3166-1 alpha-2 code; both are optional, and `PUT .../time-zone` replaces both (`null` clears one). An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. They give the workspace's requests and per-workspace schedules their zone: see [time zones](/docs/digging-deeper/time-zones/#workspaces).
+`timezone` is an IANA zone, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`), and `country` an ISO 3166-1 alpha-2 code; both are optional, and `PUT .../time-zone` replaces both (`null` clears one). An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. They give the workspace's requests and per-workspace schedules their zone: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
 
 Lists are `{"data": [...]}`. The routes are in the OpenAPI document under the `Workspaces` tag. Set `workspace.routes = false` to write your own with the services.
 
