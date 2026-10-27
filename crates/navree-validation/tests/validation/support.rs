@@ -299,6 +299,27 @@ pub async fn insert(app: &TestApp, table: &str, id: uuid::Uuid, value: &str) {
         .expect("insert");
 }
 
+/// Records the type of the deserializer that read it (and skips its value).
+#[derive(Debug, Serialize)]
+pub struct Probe(pub String);
+
+impl<'de> Deserialize<'de> for Probe {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = std::any::type_name::<D>().to_owned();
+        serde::de::IgnoredAny::deserialize(deserializer)?;
+        Ok(Probe(name))
+    }
+}
+
+/// A body with a [`Probe`].
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct Probed {
+    #[garde(skip)]
+    pub probe: Probe,
+    #[garde(length(min = 1))]
+    pub name: String,
+}
+
 /// The routes of [`ValidationTestModule`].
 pub struct TestController;
 
@@ -359,6 +380,12 @@ impl Controller for TestController {
                 Method::POST,
                 "/schedule",
                 |Valid(Json(input)): Valid<Json<Schedule>>| async move { ok(&input) },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "/probe",
+                |Valid(Json(input)): Valid<Json<Probed>>| async move { ok(&input) },
             )
             .public(),
             RouteDef::on(

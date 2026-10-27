@@ -131,6 +131,7 @@ navree list                                 # every command of the app
 | An admin panel or back office: list, edit and act on records at `/admin` (`make:resource`, Helm) | `navree-helm` |
 | Connecting a coding agent to the app (`navree mcp`, Navigator's routes, module graph, schema, read-only SQL, logs and docs tools), installing the skills (`navree skills:install`) | `navree-navigator` |
 | Testing a user journey in a real browser: sign-in forms, the front end and its BFF, drag and drop, phone layouts, failure screenshots | `navree-browser-testing` |
+| Measuring or lowering per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits | `navree-performance` |
 
 ## Common mistakes
 

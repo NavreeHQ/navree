@@ -388,6 +388,9 @@ proptest = "1.12.0"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).
 wiremock = "0.6.5"
+# The request-pipeline micro-benchmarks (`crates/navree/benches/pipeline.rs`):
+# no plots, no rayon; Tokio for the async routines.
+criterion = { version = "0.8.2", default-features = false, features = ["async_tokio", "cargo_bench_support"] }
 
 # Keep debug info small: less memory, faster links (many agents build at once).
 [profile.dev]

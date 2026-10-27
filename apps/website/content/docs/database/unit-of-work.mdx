@@ -12,7 +12,7 @@ So a handler that fails halfway leaves nothing behind, and side effects that mus
 `DatabaseModule` adds a layer to the request pipeline, after authentication and before routing. For each request it:
 
 1. creates a lazy `Uow` holding the actor (the user id of the authenticated principal, if any) and the request id;
-2. runs the rest of the request (routing, access checks and your handler) with that unit of work as the [current one](#the-current-unit-of-work), in a task on the app's task tracker, so the request runs to completion even if the client disconnects;
+2. runs the rest of the request (routing, access checks and your handler) with that unit of work as the [current one](#the-current-unit-of-work), in the task that serves the request. If the request is dropped before it finishes, because the client disconnected or the request timed out, what is left of it moves to a task on the app's task tracker, so the request still runs to completion;
 3. when the response status is **below 400**, commits: [change observers](#change-events-and-observers) run inside the transaction, the transaction commits, then the [after-commit hooks](#after-commit-hooks) run;
 4. otherwise (a 4xx, a 5xx, or a panic, which becomes a 500), rolls back and drops the recorded changes and hooks.
 
@@ -72,6 +72,8 @@ How the transaction begins depends on the database:
 - **SQLite**: `BEGIN IMMEDIATE`, which takes the write lock at once ([SQLite and concurrency](#sqlite-and-concurrency)).
 - **PostgreSQL**: `BEGIN`, then `set_config` makes the actor and request id available to SQL as `current_setting('navree.actor', true)` and `current_setting('navree.request_id', true)` for the rest of the transaction.
 - **MySQL and MariaDB**: `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?` makes them available as session variables. Session variables outlive the transaction on the pooled connection, so Navree clears them right before `COMMIT` or `ROLLBACK` ([how Navree behaves on MySQL](/docs/database/getting-started/#how-navree-behaves-on-mysql)).
+
+When no trigger or policy of yours reads the actor or the request id, set `database.transaction_settings = false`: PostgreSQL, MySQL and MariaDB transactions then start with a plain `BEGIN`, one statement (on MySQL two) fewer per unit of work. `uow.actor()` and `uow.request_id()` are unaffected.
 
 Besides your own calls, `Repo` functions and the record checks of `#[can(.., from = "id")]` routes begin the transaction too.
 
