@@ -652,3 +652,70 @@ async fn foreign_key_check<C: ConnectionTrait>(conn: &C) -> Result<(), DbErr> {
 fn schema_error(error: SchemaError) -> MigrationError {
     MigrationError::Db(DbErr::from(error))
 }
+
+#[cfg(test)]
+mod tests {
+    use sea_orm_migration::MigrationName;
+    use sea_orm_migration::async_trait::async_trait;
+
+    use super::*;
+
+    struct Named(&'static str);
+
+    impl MigrationName for Named {
+        fn name(&self) -> &str {
+            self.0
+        }
+    }
+
+    #[async_trait]
+    impl MigrationTrait for Named {
+        async fn up(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+            Ok(())
+        }
+    }
+
+    fn applied(rows: &[(&str, i64)]) -> HashMap<(String, String), Applied> {
+        rows.iter()
+            .map(|(name, batch)| {
+                (
+                    ("crm".to_owned(), (*name).to_owned()),
+                    Applied {
+                        batch: *batch,
+                        applied_at: None,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn rollbacks_go_newest_first_by_batch_then_run_order() {
+        let (a, b, c) = (Named("m1_a"), Named("m2_b"), Named("m3_c"));
+        let steps = [&a, &b, &c].map(|migration| Step {
+            module: "crm",
+            migration,
+        });
+        let order = newest_first(
+            &steps,
+            &applied(&[("m1_a", 1), ("m2_b", 2), ("m3_c", 2), ("m9_gone", 2)]),
+        );
+        let names: Vec<(&str, i64)> = order
+            .iter()
+            .map(|((_, name), batch)| (name.as_str(), *batch))
+            .collect();
+        assert_eq!(
+            names,
+            [("m9_gone", 2), ("m3_c", 2), ("m2_b", 2), ("m1_a", 1)],
+            "a migration no module registers sorts first in its batch, so a rollback reaches it and says so"
+        );
+    }
+
+    #[test]
+    fn transactions_follow_the_database_unless_the_migration_says() {
+        let plain = Named("m1");
+        assert!(transactional(DbBackend::Postgres, &plain));
+        assert!(transactional(DbBackend::Sqlite, &plain));
+        assert!(!transactional(DbBackend::MySql, &plain));
+    }
+}

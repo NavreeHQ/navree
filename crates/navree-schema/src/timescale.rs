@@ -178,6 +178,22 @@ impl Hypertable {
         self.reorder_index.as_deref()
     }
 
+    /// Whether converting an existing table moves its rows into chunks.
+    pub fn migrates_data(&self) -> bool {
+        self.migrate_data
+    }
+
+    /// Whether TimescaleDB creates its default time index.
+    pub fn creates_default_indexes(&self) -> bool {
+        self.create_default_indexes
+    }
+
+    /// The primary-key strategy set on this hypertable (`None`: the
+    /// `schema.hypertable_keys` option).
+    pub fn key_strategy(&self) -> Option<KeyStrategy> {
+        self.keys
+    }
+
     /// The columns every primary key and unique index must include: the
     /// time column, then the space-partition column.
     pub fn partitioning_columns(&self) -> Vec<&str> {
@@ -333,6 +349,44 @@ impl RefreshPolicy {
     pub fn schedule(&self) -> &str {
         &self.schedule_interval
     }
+}
+
+/// What a continuous aggregate selects, as
+/// [`ContinuousAggregate::query`] shows it to tools and document drivers
+/// that compile aggregates themselves.
+///
+/// ```
+/// use navree_schema::{AggregateSpec, ContinuousAggregate};
+///
+/// let daily = ContinuousAggregate::over("events_daily", "events")
+///     .time_bucket("1 day", "occurred_at", "day")
+///     .aggregate("count(*)", "total");
+/// match daily.query() {
+///     AggregateSpec::Described { from, bucket, .. } => {
+///         assert_eq!(from, "events");
+///         assert_eq!(bucket, Some(("1 day", "occurred_at", "day")));
+///     }
+///     other => panic!("{other:?}"),
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AggregateSpec<'a> {
+    /// SQL, as written.
+    Sql(&'a str),
+    /// A described aggregate.
+    Described {
+        /// The source table.
+        from: &'a str,
+        /// The time bucket: `(width, column, alias)`.
+        bucket: Option<(&'a str, &'a str, &'a str)>,
+        /// The group-by columns.
+        groups: &'a [String],
+        /// The aggregates: `(expression, alias)`.
+        aggregates: &'a [(String, String)],
+        /// The filter, as SQL.
+        filter: Option<&'a str>,
+    },
 }
 
 /// What a continuous aggregate selects.
@@ -493,6 +547,34 @@ impl ContinuousAggregate {
     /// The refresh policy.
     pub fn refresh_policy(&self) -> Option<&RefreshPolicy> {
         self.refresh.as_ref()
+    }
+
+    /// What the aggregate selects: its SQL, or its description.
+    pub fn query(&self) -> AggregateSpec<'_> {
+        match &self.query {
+            AggregateQuery::Raw(sql) => AggregateSpec::Sql(sql),
+            AggregateQuery::Structured {
+                from,
+                bucket,
+                groups,
+                aggregates,
+                filter,
+            } => AggregateSpec::Described {
+                from,
+                bucket: bucket
+                    .as_ref()
+                    .map(|b| (b.width.as_str(), b.column.as_str(), b.alias.as_str())),
+                groups,
+                aggregates,
+                filter: filter.as_deref(),
+            },
+        }
+    }
+
+    /// Whether queries read only materialized data (`None`: TimescaleDB's
+    /// default).
+    pub fn materialized_only_value(&self) -> Option<bool> {
+        self.materialized_only
     }
 }
 

@@ -682,6 +682,24 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         .await
         .unwrap();
     assert_eq!(schema.statements().len(), before);
+
+    // Declaring the hypertable while altering a table converts it too.
+    schema
+        .create("readings", |t| {
+            t.id();
+            t.timestamp("taken_at");
+        })
+        .await
+        .unwrap();
+    schema
+        .table("readings", |t| {
+            t.double("value").nullable();
+            t.hypertable("taken_at");
+        })
+        .await
+        .unwrap();
+    assert!(schema.has_column("readings", "value").await.unwrap());
+    assert!(schema.has_index("readings", ["taken_at"], None).await.unwrap());
 }
 
 #[tokio::test]
