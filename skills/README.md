@@ -53,6 +53,7 @@ conventions, and says which skill to load for each task.
 | [`navree-mcp`](navree-mcp/SKILL.md) | An MCP server for the product: tools, resources and prompts for AI clients |
 | [`navree-ai`](navree-ai/SKILL.md) | Models in your app: text, structured output, streaming, failover, budgets, agents with tools, embeddings, vector stores, `AiFake` |
 | [`navree-redis`](navree-redis/SKILL.md) | Redis connections and the Redis cache, locks, queue, sessions, rate limits and real-time backplane (feature `redis`) |
+| [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
 
 ## Installing
 
