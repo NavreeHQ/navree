@@ -26,11 +26,30 @@
 //!   | `POST /auth/2fa/disable` `{password}` | authenticated | 204; 400 `errors.password` |
 //!   | `POST /auth/2fa/recovery-codes` | authenticated | 200 `{recovery_codes}` (the old ones stop working) |
 //!   | `POST /auth/2fa/verify` `{challenge_token, code \| recovery_code}` | public; 5 wrong codes per user per minute, then 429 | 200 like login; 401 "Invalid two-factor code" / "Invalid token" / "Token expired" |
+//!   | `GET /auth/sessions` | authenticated | 200 `{data: [SessionResource]}` (the user's live sessions) |
+//!   | `DELETE /auth/sessions/{id}` | authenticated, not while impersonating | 204; 404 for a session that is not the user's |
+//!   | `POST /auth/confirm` `{password \| code}` | authenticated, not while impersonating | 200 [`ConfirmedToken`] (a new access token with `auth_time` now) |
+//!   | `POST /auth/impersonate/{user}` `{reason}` | permission `users.impersonate`; when `auth.impersonation.enabled` | 200 like login plus `impersonator_id` |
+//!   | `DELETE /auth/impersonate` | an impersonation session | 204 |
+//!   | `POST /auth/magic-link` `{email}`, `POST /auth/magic-link/verify` `{token}` | public; when `auth.magic_link.enabled` | 202 `{message}`; 200 like login |
+//!   | `POST /auth/otp` `{email}`, `POST /auth/otp/verify` `{email, code}` | public; when `auth.otp.enabled` | 202 `{message}`; 200 like login |
+//!   | `/auth/passkeys/{register/options, register, login/options, login}`, `GET /auth/passkeys`, `DELETE /auth/passkeys/{id}` | when `auth.passkeys.enabled` | WebAuthn ceremonies (ES256, EdDSA) |
+//!   | `POST /auth/platform/login`, `POST /auth/platform/2fa/verify` | public; when `auth.platform.enabled` | a challenge; 200 a platform session |
+//!   | `POST /auth/exchange` `{token}` | public; when `auth.trusted_issuers` is set | 200 like login for a trusted issuer's JWT |
 //!
 //! - **Access tokens** are HS256 JWTs ([`Claims`]: `sub`, `iat`, `exp`,
-//!   `iss`, `aud`, `jti`, `typ`), 15 minutes by default, signed with
+//!   `iss`, `aud`, `jti`, `typ`, and the session claims `sid`, `auth_time`
+//!   and, for impersonation, `act`), 15 minutes by default, signed with
 //!   `auth.jwt.secret` or a key derived from the application key. They are
 //!   stateless: logout does not end them before they expire.
+//! - **Sessions** are refresh-token families ([`AuthService::sessions`]);
+//!   `#[recent_auth(minutes = N)]` ([`recent_auth`]) needs a sign-in or a
+//!   confirmation (`POST /auth/confirm`) within N minutes, and
+//!   `#[not_while_impersonating]` ([`not_while_impersonating`]) refuses
+//!   impersonation sessions. [`AccessClaims`] and [`Actor`] read the token.
+//! - **Two-factor policy**: `auth.two_factor.required_for` roles and
+//!   [`TwoFactorPolicy`]s limit users without two-factor authentication to
+//!   the setup routes (403 `two_factor_required` elsewhere).
 //! - **Refresh tokens** are opaque `<id>.<48 base62>` strings stored as
 //!   SHA-256 digests in `refresh_tokens`, valid 30 days and single-use:
 //!   every refresh revokes the presented token and issues the next one of
@@ -141,16 +160,26 @@ mod controller;
 mod disconnect;
 mod entity;
 mod error;
+mod exchange;
 mod extract;
+mod guards;
+mod impersonation;
 mod jwt;
 mod mail;
 mod migration;
 mod module;
 mod options;
+mod passkeys;
+mod password_policy;
+mod passwordless;
+mod platform;
 mod policy;
 mod resource;
 mod service;
+mod session_controller;
+mod sessions;
 mod strategy;
+pub mod testing;
 mod throttle;
 mod token;
 mod two_factor;
@@ -164,18 +193,33 @@ pub use account_controller::{
 pub use controller::{
     LoginInput, LoginResponse, LogoutInput, RefreshInput, RegisterInput, TwoFactorChallenge,
 };
-pub use entity::{User, password_reset_token, refresh_token, user};
+pub use entity::{Passkey, User, login_token, passkey, password_reset_token, refresh_token, user};
 pub use error::AuthError;
 pub use extract::CurrentUser;
-pub use jwt::{Claims, JwtService, LEEWAY_SECS, TokenType};
+pub use guards::{AccessClaims, Actor, not_while_impersonating, platform_session, recent_auth};
+pub use impersonation::MAX_IMPERSONATION_REASON;
+pub use jwt::{ActorClaim, Claims, JwtService, LEEWAY_SECS, SessionClaims, TokenType};
 pub use migration::AUTH_MIGRATIONS;
 pub use module::{AuthModule, ModuleBuilderAuthExt};
 pub use options::{
-    AuthOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN, PasswordResetOptions,
-    TwoFactorOptions, VerificationOptions,
+    AuthOptions, ImpersonationOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN,
+    MagicLinkOptions, OtpOptions, PasskeyOptions, PasswordResetOptions, PlatformOptions,
+    TrustedIssuerOptions, TwoFactorOptions, VerificationOptions,
 };
-pub use policy::PasswordSignInPolicy;
+pub use passkeys::controller::{
+    PasskeyList, PasskeyLoginInput, PasskeyLoginOptionsInput, PasskeyOptionsResponse,
+    PasskeyRegisterInput,
+};
+pub use passkeys::{MAX_PASSKEY_NAME, PasskeyResource};
+pub use password_policy::PasswordSignInPolicy;
+pub use platform::PlatformAdmin;
+pub use policy::TwoFactorPolicy;
 pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResourceExtension};
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
+pub use session_controller::{
+    ConfirmInput, ExchangeInput, ImpersonateInput, MagicLinkVerifyInput, OtpVerifyInput,
+    PasswordlessInput, SessionList,
+};
+pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
 pub use two_factor::{LoginOutcome, TwoFactorProof, TwoFactorSetup, two_factor_enabled};

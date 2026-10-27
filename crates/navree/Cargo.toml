@@ -13,7 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`).
+## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`,
+## `i18n`, `dock`, `navigator`, `browser`).
 full = [
     "access",
     "api",
@@ -112,6 +113,7 @@ auth = [
     "cache",
     "mail",
     "access",
+    "http-client",
 ]
 ## Workspaces: multi-tenancy with members, roles, invitations and isolation.
 workspace = [
@@ -283,6 +285,18 @@ micro-rabbitmq = ["micro", "navree-micro/rabbitmq"]
 micro-redis = ["micro", "navree-micro/redis"]
 ## MQTT 5 for `micro` (rumqttc).
 micro-mqtt = ["micro", "navree-micro/mqtt"]
+## L6 (opt-in, not in `full`: it compiles in ICU4X's locale data)
+## Localization: `I18nModule`, Fluent files, `t!`, the `Locale` extractor,
+## translated validation messages, templates and notifications.
+i18n = [
+    "dep:navree-i18n",
+    "http",
+    "view",
+    "db",
+    "validation",
+    "notify",
+    "workspace",
+]
 ## L7 (in `full`)
 ## Lighthouse: application monitoring inside the app. Issues grouped by
 ## fingerprint, traces, aggregates, alerts and the `/_lighthouse` dashboard.
@@ -353,6 +367,14 @@ validation-html = ["validation", "navree-validation/html"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
+## Opt-in, not in `full`: Navigator's library (the MCP server for coding
+## agents behind `navree mcp`, its tools, and the embedded agent skills of
+## `navree skills:install`), for tools and tests. The CLI does not need it.
+navigator = ["dep:navree-navigator", "dock"]
+## Opt-in, not in `full`: browser testing (navree-browser) for tests, usually
+## turned on in `[dev-dependencies]`; it drives Chrome or Chromium over the
+## DevTools Protocol, so it needs a browser on the machine at test time.
+browser = ["dep:navree-browser", "http"]
 ## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
 ## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
 otel = ["observe", "navree-observe/otel"]
@@ -372,6 +394,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-billing = { workspace = true, optional = true }
+navree-browser = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
 navree-oauth = { workspace = true, optional = true }
 navree-flags = { workspace = true, optional = true }
@@ -382,12 +405,14 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
 navree-helm = { workspace = true, optional = true }
 navree-harbor = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
+navree-i18n = { workspace = true, optional = true }
 navree-lighthouse = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-logbook = { workspace = true, optional = true }
@@ -424,7 +449,10 @@ async-graphql = { workspace = true }
 # `tests/jose_docs.rs` builds fixture keys by hand.
 base64 = { workspace = true }
 chrono = { workspace = true }
+# The request-pipeline benchmarks (`benches/pipeline.rs`).
+criterion = { workspace = true }
 garde = { workspace = true }
+http-body-util = { workspace = true }
 metrics = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
@@ -432,6 +460,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
 # The gRPC docs example: tonic's generated code names these crates.
@@ -453,3 +482,11 @@ required-features = ["grpc"]
 [[test]]
 name = "redis"
 required-features = ["redis"]
+
+# The request-pipeline micro-benchmarks: `/json` through the whole router,
+# a pool read, a validated insert and a unit of work on SQLite
+# (`cargo bench -p navree --bench pipeline`).
+[[bench]]
+name = "pipeline"
+harness = false
+required-features = ["db", "validation"]

@@ -102,6 +102,14 @@ pub enum Command {
     /// harbor:run, harbor:ssh, harbor:backup, harbor:ci and build:image.
     #[command(flatten)]
     Harbor(navree_harbor::HarborCommand),
+    /// Start Navigator, the MCP server for your coding agent, on stdin/stdout.
+    Mcp(McpArgs),
+    /// Install the Navree agent skills into .claude/skills and .agents/skills.
+    #[command(name = "skills:install")]
+    SkillsInstall(SkillsInstallArgs),
+    /// Download Chrome for Testing into Navree's cache, for navree-browser.
+    #[command(name = "browser:install")]
+    BrowserInstall(BrowserInstallArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -292,6 +300,31 @@ pub struct DockAddArgs {
     pub service: String,
 }
 
+/// `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]`.
+#[derive(Debug, Args, PartialEq, Eq)]
+pub struct McpArgs {
+    /// The app to serve, instead of the current directory.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
+    /// Never run `cargo build`; use the last built binary, or answer without one.
+    #[arg(long)]
+    pub no_build: bool,
+    /// Let query_database and describe_schema connect to a database that isn't on this machine.
+    #[arg(long)]
+    pub allow_remote_database: bool,
+    /// Never download docs; use the cache or the docs built into Navigator.
+    #[arg(long)]
+    pub docs_offline: bool,
+}
+
+/// `navree skills:install [--path <dir>]`.
+#[derive(Debug, Args, PartialEq, Eq)]
+pub struct SkillsInstallArgs {
+    /// The project to install into, instead of the current directory.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
+}
+
 /// `navree dock:remove <service> [--volumes]`.
 #[derive(Debug, Args)]
 pub struct DockRemoveArgs {
@@ -300,6 +333,17 @@ pub struct DockRemoveArgs {
     /// Also delete its data (the volume).
     #[arg(long)]
     pub volumes: bool,
+}
+
+/// `navree browser:install [--version <version>] [--force]`.
+#[derive(Debug, Args)]
+pub struct BrowserInstallArgs {
+    /// The Chrome for Testing version (default: the one this navree pins).
+    #[arg(long = "version", value_name = "VERSION")]
+    pub chrome_version: Option<String>,
+    /// Download again even if that version is installed.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[cfg(test)]
@@ -546,6 +590,64 @@ mod tests {
         assert_eq!(args.only, ["fmt"]);
         assert!(args.keep_going && args.no_lock);
         assert_eq!(args.web.as_deref(), Some(std::path::Path::new("frontend")));
+    }
+
+    #[test]
+    fn mcp_options() {
+        let Command::Mcp(args) = parse(&["mcp"]) else {
+            panic!("expected mcp");
+        };
+        assert_eq!(
+            args,
+            McpArgs {
+                path: None,
+                no_build: false,
+                allow_remote_database: false,
+                docs_offline: false
+            }
+        );
+        let Command::Mcp(args) = parse(&[
+            "mcp",
+            "--path",
+            "/home/ada/code/crm",
+            "--no-build",
+            "--allow-remote-database",
+            "--docs-offline",
+        ]) else {
+            panic!("expected mcp");
+        };
+        assert_eq!(
+            args.path.as_deref(),
+            Some(std::path::Path::new("/home/ada/code/crm"))
+        );
+        assert!(args.no_build && args.allow_remote_database && args.docs_offline);
+    }
+
+    #[test]
+    fn skills_install_options() {
+        let Command::SkillsInstall(args) = parse(&["skills:install"]) else {
+            panic!("expected skills:install");
+        };
+        assert_eq!(args, SkillsInstallArgs { path: None });
+        let Command::SkillsInstall(args) = parse(&["skills:install", "--path", "../crm"]) else {
+            panic!("expected skills:install");
+        };
+        assert_eq!(args.path.as_deref(), Some(std::path::Path::new("../crm")));
+    }
+
+    #[test]
+    fn browser_install_options() {
+        let Command::BrowserInstall(args) = parse(&["browser:install"]) else {
+            panic!("expected browser:install");
+        };
+        assert_eq!((args.chrome_version, args.force), (None, false));
+        let Command::BrowserInstall(args) =
+            parse(&["browser:install", "--version", "141.0.7390.54", "--force"])
+        else {
+            panic!("expected browser:install");
+        };
+        assert_eq!(args.chrome_version.as_deref(), Some("141.0.7390.54"));
+        assert!(args.force);
     }
 
     #[test]

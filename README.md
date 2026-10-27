@@ -107,15 +107,15 @@ each test run.
 
 ```
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock and navree-harbor)
+L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
-L6  navree-social  navree-sso  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro (ecosystem libraries)
+L6  navree-social  navree-sso  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
-L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
-L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros  navree-orm-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel                                navree-macros  navree-orm-macros  navree-i18n-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -123,6 +123,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
+| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, their syntax checked at compile time (used through navree-i18n) |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
 | L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |
@@ -136,6 +137,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L2 | `navree-cache` | Cache stores (memory on moka; Redis with navree-redis), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder: tables, columns, indexes and foreign keys in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |
+| L2 | `navree-navigator` | Navigator, the MCP server for coding agents behind `navree mcp`: routes, the module graph and providers, the schema, read-only SQL, logs and the last error, redacted configuration and the docs of the app's Navree version; and the agent skills of `navree skills:install` (a dev tool; opt-in facade feature `navigator`) |
 | L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations (schema and SeaORM, batches, steps, rollback, reset, refresh, fresh, `--pretend`, `schema:dump`), seeders, factories, pagination |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes, cross-tenant isolation suites generated from a module's routes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
@@ -152,12 +154,13 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
 | L4 | `navree-orm` | The ORM: `#[derive(Model)]` models with typed columns and keys (integers, UUID v7, ULID), a query builder with every where variant, joins, groups, subqueries, unions, locks and TimescaleDB's `time_bucket`/`first`/`last`, records with dirty tracking, casts, scopes, lifecycle hooks, collections and offset, simple and cursor pagination, on PostgreSQL/TimescaleDB, MySQL and SQLite through the unit of work, and a document-driver interface (facade feature `orm`) |
-| L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
+| L4 | `navree-browser` | Browser testing: Chrome, Chromium or Edge over the DevTools Protocol, actions and assertions that wait, failure screenshots, `TestServer` on a real port and `FrontEnd` sessions (a dev-dependency; opt-in facade feature `browser`; `navree browser:install` downloads Chrome for Testing) |
+| L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA and two-factor policy, sessions, step-up, impersonation, magic links and email codes, platform sign-in, token exchange, passkeys |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation; organizations above workspaces and partitions inside them; entity classification and isolation checks, workspace isolation suites (feature `testing`) |
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-sso` | Single sign-on: SAML 2.0 and OpenID Connect connections per organization or workspace, verified email domains that route sign-in and can refuse passwords, just-in-time provisioning with group to role mapping; XML signatures verified on `ring` |
-| L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
+| L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark) with their handshakes answered |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
 | L6 | `navree-graphql` | GraphQL on async-graphql: `#[resolver]` fields in modules with route-style access, per-request dataloaders, subscriptions over WebSockets, GraphiQL, `graphql:schema` (facade feature `graphql`, opt-in) |
@@ -165,6 +168,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L6 | `navree-mcp` | MCP servers: `#[mcp_server]` tools, resources and prompts over streamable HTTP at `/mcp` and stdio (`mcp:serve`), behind the app's authenticators and per-tool access checks (opt-in facade feature `mcp`) |
 | L6 | `navree-ai` | AI SDK: text, typed structured output and SSE streams from Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, failover, token budgets, agents with `#[tool]` methods run as the user, conversation memory, embeddings, vector stores (memory, pgvector, Qdrant) and `AiFake` (facade feature `ai`, opt-in) |
 | L6 | `navree-micro` | Microservices: `#[message_pattern]` and `#[event_pattern]` handlers with the same guards, access, validation and unit of work as routes, `ServiceClient` (`send` with deadlines, `emit`), retries, dead letters, an outbox and an inbox, `MicroFake`; TCP and in-memory transports, NATS, Kafka, RabbitMQ, Redis Streams and MQTT behind features (facade features `micro`, `micro-nats`, ..., opt-in) |
+| L6 | `navree-i18n` | Localization: Fluent files per locale with plurals, variables and fallbacks, `t!`, the request's `Locale` negotiated from the query, the user's and workspace's saved locale, a cookie and `Accept-Language`, ICU4X number, money and date formatting, translated validation messages (seven languages shipped), `t()` in templates, notifications in the recipient's locale, `i18n:check` (facade feature `i18n`, opt-in) |
 | L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
 | L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue (facade feature `search`, opt-in) |
 | L7 | `navree-lighthouse` | Application monitoring inside the app: a telemetry sink grouping exceptions, slow requests and queries, failed jobs and failing outgoing calls into issues, per-minute aggregates and sampled traces in the app's database, alerts (mail, Slack, signed webhooks, your own channels) through the queue, the `/_lighthouse` dashboard and its JSON API, MCP tools for agents (with `mcp`), `lighthouse:prune` (facade feature `lighthouse`, in `full`) |
@@ -172,7 +176,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L7 | `navree-fleet` | Fleet: a supervisor of queue worker processes (`fleet`) with auto-balancing, recycling and graceful restarts; throughput, wait and runtime metrics; failed jobs; pause and continue; long-wait alerts; a dashboard at `/_fleet` (facade feature `fleet`, in `full`) |
 | L7 | `navree-helm` | Helm: the admin panel at `/admin` generated from your entities (resources with fields, filters, search, actions and metrics), checked against your access rules, audited, server-rendered with an embedded stylesheet and script, plus its JSON API |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),

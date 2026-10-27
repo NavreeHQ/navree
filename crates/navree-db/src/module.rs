@@ -105,7 +105,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                 let telemetry = Telemetry::from_app(&r.app()).await;
                 let db = Db::connect_with_telemetry(&options, telemetry)
                     .await?
-                    .with_app(r.app().downgrade());
+                    .with_app(&r.app());
                 if options.migrate_on_boot {
                     migrate::migrate_on_boot(&db, &r.app(), &options.url).await?;
                 }
@@ -161,7 +161,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         ))
         .command(CommandSpec::new(
             "migrate:status",
-            "Show which migrations have run ([--pending])",
+            "Show which migrations have run ([--pending] [--json])",
             commands::status,
         ))
         .command(CommandSpec::new(

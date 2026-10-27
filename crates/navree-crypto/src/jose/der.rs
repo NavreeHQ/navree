@@ -276,32 +276,37 @@ pub(crate) enum PublicKeyInfo<'a> {
 
 /// Reads a SubjectPublicKeyInfo (`PUBLIC KEY`).
 pub(crate) fn public_key_info(der: &[u8]) -> Option<PublicKeyInfo<'_>> {
-    spki_contents(Reader::only(der, SEQUENCE)?)
+    subject_public_key_info(Reader::only(der, SEQUENCE)?)
 }
 
-/// Reads the subjectPublicKeyInfo of an X.509 certificate (`CERTIFICATE`,
-/// RFC 5280 §4.1). Only the key is read: the certificate's signature,
-/// validity and extensions are not checked.
+/// Reads the public key of an X.509 `Certificate` (RFC 5280 §4.1): the
+/// `subjectPublicKeyInfo` of its `tbsCertificate`. Nothing else is
+/// checked.
 pub(crate) fn certificate_public_key_info(der: &[u8]) -> Option<PublicKeyInfo<'_>> {
     let mut certificate = Reader::new(Reader::only(der, SEQUENCE)?);
     let mut tbs = Reader::new(certificate.expect(SEQUENCE)?);
-    // `version [0] EXPLICIT` is optional (absent in v1 certificates).
-    let (mut tag, _) = tbs.read()?;
-    if tag == CONTEXT_0 {
-        (tag, _) = tbs.read()?;
-    }
-    // serialNumber, then signature, issuer, validity and subject.
-    if tag != INTEGER {
+    certificate.expect(SEQUENCE)?; // signatureAlgorithm
+    certificate.expect(BIT_STRING)?; // signatureValue
+    if !certificate.is_empty() {
         return None;
     }
-    for _ in 0..4 {
-        tbs.expect(SEQUENCE)?;
+    // `[0] EXPLICIT version` is absent from v1 certificates.
+    match tbs.read()? {
+        (CONTEXT_0, _) => {
+            tbs.expect(INTEGER)?;
+        }
+        (INTEGER, _) => {}
+        _ => return None,
     }
-    spki_contents(tbs.expect(SEQUENCE)?)
+    tbs.expect(SEQUENCE)?; // signature
+    tbs.expect(SEQUENCE)?; // issuer
+    tbs.expect(SEQUENCE)?; // validity
+    tbs.expect(SEQUENCE)?; // subject
+    subject_public_key_info(tbs.expect(SEQUENCE)?)
 }
 
-/// The contents of a SubjectPublicKeyInfo SEQUENCE.
-fn spki_contents(contents: &[u8]) -> Option<PublicKeyInfo<'_>> {
+/// The contents of a `SubjectPublicKeyInfo` SEQUENCE.
+fn subject_public_key_info(contents: &[u8]) -> Option<PublicKeyInfo<'_>> {
     let mut reader = Reader::new(contents);
     let mut algorithm = Reader::new(reader.expect(SEQUENCE)?);
     let key = bit_string(reader.expect(BIT_STRING)?)?;

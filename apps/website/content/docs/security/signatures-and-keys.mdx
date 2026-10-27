@@ -199,9 +199,9 @@ Signatures say who signed a token, not whether it is still valid. Checking `exp`
 
 | Constructor | |
 |---|---|
-| `VerifyingKey::from_pem(&str)` | `PUBLIC KEY` (SubjectPublicKeyInfo: RSA, P-256, P-384, Ed25519), `RSA PUBLIC KEY` (PKCS#1) or `CERTIFICATE` (its public key) |
+| `VerifyingKey::from_pem(&str)` | `PUBLIC KEY` (SubjectPublicKeyInfo: RSA, P-256, P-384, Ed25519), `RSA PUBLIC KEY` (PKCS#1) or the key of a `CERTIFICATE` |
 | `VerifyingKey::from_spki_der(&[u8])` | A SubjectPublicKeyInfo document as DER |
-| `VerifyingKey::from_certificate_der(&[u8])` | The public key of an X.509 certificate (DER); `from_pem` reads a `CERTIFICATE` too. Only the key is read: the certificate's own signature, dates and extensions are not checked |
+| `VerifyingKey::from_certificate_der(&[u8])` | The public key of an X.509 certificate as DER. Only the key is read: the certificate's own signature, validity and extensions aren't checked, so trust it for where it came from, such as an HTTPS download from the signer's host |
 | `VerifyingKey::from_jwk(&jwk)` | A JWK's public members; its `kid` carries over and its `alg` pins the algorithm |
 | `VerifyingKey::rsa(n, e)` | An RSA modulus and exponent, big-endian |
 | `VerifyingKey::ec(alg, x, y)` | P-256 (`ES256`) or P-384 (`ES384`) coordinates |
@@ -209,7 +209,7 @@ Signatures say who signed a token, not whether it is still valid. Checking `exp`
 | `VerifyingKey::hmac(alg, secret)` | An HMAC secret |
 | `signing_key.verifying_key()` | The public half of a `SigningKey` (or the same secret, for HMAC) |
 
-`verify(alg, message, signature)` checks a raw signature outside a JWS. `verify_der` does the same with ECDSA signatures in their DER form, the form WebAuthn authenticators send; JWS uses the fixed-width `R || S` form. `to_jwk()` turns a public key into a JWK.
+`verify(alg, message, signature)` checks a raw signature outside a JWS. `verify_der` does the same with ECDSA signatures in their DER form, the form WebAuthn authenticators send; JWS uses the fixed-width `R || S` form. `verify_legacy_sha1(message, signature)` checks an RSA PKCS#1 v1.5 signature with SHA-1, for senders that still sign that way (AWS SNS signature version 1, which [incoming webhooks](/docs/packages/webhooks/#senders-that-sign-with-their-own-keys) verify); SHA-1 is no JWS algorithm, so no token can ask for it, and only an RSA key that isn't pinned to an algorithm accepts it. `to_jwk()` turns a public key into a JWK.
 
 ## Verifying against a key set
 

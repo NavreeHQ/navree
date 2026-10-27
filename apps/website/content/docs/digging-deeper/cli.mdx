@@ -208,6 +208,7 @@ The tools of the ecosystem add their own commands to the CLI:
 | `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
 | `navree check` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/) (`--only`, `--json`). |
 | `navree gate` | Runs fmt, clippy, the tests, `navree check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. |
+| `navree browser:install` | Downloads Chrome for Testing into Navree's cache for [browser tests](/docs/packages/browser-testing/) (`--version <version>`, `--force`). |
 
 ## Running your app's commands
 
@@ -229,7 +230,7 @@ fn main() -> Result<(), navree::kernel::BoxError> {
 ```
 
 - With no command, it runs `serve` when a module registers it (`HttpModule` does), otherwise it prints the help.
-- `help` (also `list`, `--help` and `-h`) lists every command, and `check [--graph]` validates the module graph; neither boots the app. Through the CLI, use `navree list`: `navree help` and `navree --help` print the CLI's own help.
+- `help` (also `list`, `--help` and `-h`) lists every command, `check [--graph]` validates the module graph, and `introspect --json` prints the module graph and the commands as JSON; none of them boots the app. Through the CLI, use `navree list`: `navree help` and `navree --help` print the CLI's own help.
 - Every other command **boots the whole app** (configuration, database, every module), runs, then shuts the app down gracefully. A command therefore needs a working configuration and database, even `key:generate`.
 - An unknown command fails before the app boots. A failing command prints its error and exits with status 1. The error is printed in its `Debug` form, because `main` returns it (`Error: UnknownCommand { name: "x" }`). Ctrl-C (and `SIGTERM` on Unix) stops long-running commands such as `serve` and `queue:work` gracefully.
 
@@ -241,6 +242,7 @@ Usage: <command> [args...]
 Built-in commands:
   check [--graph]     Validate the module graph without constructing providers
   help                List the available commands
+  introspect --json   Print the module graph and commands as JSON without constructing providers
 
 Commands:
   key:generate        Print a new application key for `app.key` (APP_KEY)
@@ -254,7 +256,7 @@ Commands:
   migrate:reset       Roll back every migration ([--pretend] [--force])
   migrate:refresh     Roll back every migration (or --step <n>), then migrate ([--seed] [--force])
   migrate:fresh       Drop every table and run every migration ([--seed] [--drop-views] [--drop-types] [--force])
-  migrate:status      Show which migrations have run ([--pending])
+  migrate:status      Show which migrations have run ([--pending] [--json])
   schema:dump         Write the schema and the migrations table to database/schema/<driver>-schema.sql ([--path <path>])
   db:seed             Run the seeders ([name...] to run only some)
   cache:clear         Remove every entry from the cache store
@@ -286,6 +288,8 @@ module graph OK: 33 modules, 84 providers
 ```
 
 `check --graph` prints the module tree instead: each module with its providers, their dependencies, its exports and its commands.
+
+`introspect --json` prints the same graph as JSON for tools, again without constructing anything: the Navree version, every module (dependency order, the implicit root `App` last) with `global`, `imports`, `exports`, its `providers` (`type`, `scope`, `exported`, `multi`, `dependencies`) and `commands`, then every command with its module. [Navigator](/docs/ai/navigator/) reads it.
 
 `navree check` runs this `check` first, then the app's `conformity:check` command when a module registers it (`ApiModule` and `WorkspaceModule` do): it boots the app once and verifies that every route is documented and that workspace data stays in its workspace. See [Conformity checks](/docs/testing/conformity-checks/).
 

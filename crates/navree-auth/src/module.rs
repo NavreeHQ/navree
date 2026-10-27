@@ -2,19 +2,22 @@
 
 use std::sync::Arc;
 
+use http::Method;
 use navree_config::ModuleBuilderConfigExt;
 use navree_crypto::{Encrypter, random_token};
 use navree_db::ModuleBuilderDbExt;
-use navree_http::{Authenticator, ModuleBuilderHttpExt};
+use navree_http::{Authenticator, HttpOptions, ModuleBuilderHttpExt};
 use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
 use crate::account_controller::AccountController;
 use crate::controller::AuthController;
 use crate::error::map_auth_error;
+use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
+use crate::session_controller::SessionController;
 use crate::{
     AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, PasswordSignInPolicy, Strategy,
-    StrategyAuthenticator, UserResourceExtension, migration,
+    StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.
@@ -145,9 +148,19 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .multi(
             Factory::<dyn Strategy>::new(|r: Resolver| async move {
                 let jwt = r.get::<JwtService>().await?;
-                Ok(Arc::new(JwtStrategy::new(jwt)) as Arc<dyn Strategy>)
+                let options = r.get::<AuthOptions>().await?;
+                let api_prefix = match r.app().try_get::<HttpOptions>().await {
+                    Some(http) => http.api_prefix.clone(),
+                    None => String::new(),
+                };
+                let strategy =
+                    JwtStrategy::new(jwt).with_setup_routes(setup_routes(&api_prefix, &options));
+                Ok(Arc::new(strategy) as Arc<dyn Strategy>)
             })
-            .deps(vec![ProviderKey::of::<JwtService>()]),
+            .deps(vec![
+                ProviderKey::of::<JwtService>(),
+                ProviderKey::of::<AuthOptions>(),
+            ]),
         )
         .factory(Factory::<dyn Authenticator>::new(|r: Resolver| async move {
             let strategies = r.get_all::<dyn Strategy>().await?;
@@ -158,8 +171,32 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .exports::<dyn Authenticator>()
         .controller::<AuthController>()
         .controller::<AccountController>()
+        .controller::<SessionController>()
+        .controller::<PasskeyController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
+}
+
+/// The routes a two-factor setup token reaches: setting two-factor
+/// authentication up, reading the user, signing out and refreshing.
+fn setup_routes(api_prefix: &str, options: &AuthOptions) -> Vec<(Method, String)> {
+    let prefix = format!(
+        "/{}/{}",
+        api_prefix.trim_matches('/'),
+        options.routes_prefix.trim_matches('/')
+    )
+    .replace("//", "/");
+    let prefix = prefix.trim_end_matches('/');
+    [
+        (Method::POST, "/2fa/enable"),
+        (Method::POST, "/2fa/confirm"),
+        (Method::GET, "/me"),
+        (Method::POST, "/logout"),
+        (Method::POST, "/refresh"),
+    ]
+    .into_iter()
+    .map(|(method, path)| (method, format!("{prefix}{path}")))
+    .collect()
 }
 
 /// `auth.jwt.secret`, else a key derived from the application key, else a
@@ -197,6 +234,9 @@ pub trait ModuleBuilderAuthExt {
 
     /// Registers `P` as a `dyn PasswordSignInPolicy` multi-binding.
     fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self;
+    /// Registers `P` as a `dyn TwoFactorPolicy` multi-binding: users it
+    /// requires two-factor authentication of must set it up first.
+    fn two_factor_policy<P: TwoFactorPolicy + Injectable>(&mut self) -> &mut Self;
 }
 
 impl ModuleBuilderAuthExt for ModuleBuilder {
@@ -225,5 +265,40 @@ impl ModuleBuilderAuthExt for ModuleBuilder {
             })
             .deps(P::dependencies()),
         )
+    }
+
+    fn two_factor_policy<P: TwoFactorPolicy + Injectable>(&mut self) -> &mut Self {
+        self.multi(
+            Factory::<dyn TwoFactorPolicy>::new(|r: Resolver| async move {
+                Ok(Arc::new(P::construct(r).await?) as Arc<dyn TwoFactorPolicy>)
+            })
+            .deps(P::dependencies()),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_routes_live_under_the_api_and_auth_prefixes() {
+        let routes = setup_routes("/api", &AuthOptions::default());
+        assert!(routes.contains(&(Method::POST, "/api/auth/2fa/enable".to_owned())));
+        assert!(routes.contains(&(Method::GET, "/api/auth/me".to_owned())));
+        let options = AuthOptions {
+            routes_prefix: "/identity/".to_owned(),
+            ..AuthOptions::default()
+        };
+        let routes = setup_routes("", &options);
+        assert!(routes.contains(&(Method::POST, "/identity/refresh".to_owned())));
+        let routes = setup_routes(
+            "/api/",
+            &AuthOptions {
+                routes_prefix: String::new(),
+                ..AuthOptions::default()
+            },
+        );
+        assert!(routes.contains(&(Method::POST, "/api/logout".to_owned())));
     }
 }

@@ -23,7 +23,9 @@
 //! - [`Messages`] holds the templates ([`DEFAULT_MESSAGES`] plus overrides by
 //!   rule, by `field.rule` and attribute names). [`ValidationModule`]
 //!   (global) provides them from [`ValidationOptions`] or the `validation`
-//!   config section; without the module the defaults apply.
+//!   config section; without the module the defaults apply. A
+//!   [`MessageTranslator`] in the app (navree-i18n registers one) renders
+//!   the messages in the request's language instead.
 //! - International input: [`rules::unicode_name`] (names in any script),
 //!   [`fold_digits`] and [`Folded`] (Arabic-Indic, Persian, Devanagari and
 //!   every other script's digits as ASCII before rules run), [`Country`]
@@ -102,7 +104,7 @@ pub use html::HtmlPolicy;
 #[cfg(feature = "html")]
 pub use html::SafeHtml;
 pub use locale::{InvalidLocale, Locale};
-pub use messages::{DEFAULT_MESSAGES, Messages};
+pub use messages::{DEFAULT_MESSAGES, MessageTranslator, Messages};
 pub use module::{
     CONFIG_SECTION, ModuleBuilderValidationExt, PhoneOptions, ValidationModule, ValidationOptions,
 };

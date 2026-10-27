@@ -73,38 +73,6 @@ fn pkcs8_loading_detects_the_key_type() {
     }
 }
 
-/// Certificates made with `openssl req -x509 -key <fixture>` from the RSA
-/// and P-256 fixture keys.
-#[test]
-fn certificates_give_their_public_key() {
-    for (key, cert, alg) in [
-        ("rsa-2048.pem", "rsa-2048.crt", Algorithm::RS256),
-        ("apple-authkey.p8", "apple-authkey.crt", Algorithm::ES256),
-    ] {
-        let signer = SigningKey::from_pem(&fixture(key)).unwrap();
-        let signature = signer.sign(b"signed by the certificate's key").unwrap();
-        let pem = fixture(cert);
-        for verifier in [
-            VerifyingKey::from_pem(&pem).unwrap(),
-            VerifyingKey::from_certificate_der(&der(&pem)).unwrap(),
-        ] {
-            assert_eq!(verifier.to_jwk().unwrap().n, signer.public_jwk().unwrap().n);
-            verifier
-                .verify(alg, b"signed by the certificate's key", &signature)
-                .unwrap();
-            assert!(verifier.verify(alg, b"something else", &signature).is_err());
-        }
-    }
-    // A SubjectPublicKeyInfo is not a certificate, and a truncated
-    // certificate is refused.
-    let v = json_fixture("independent-vectors.json");
-    let spki = der(v["p256"]["public_pem"].as_str().unwrap());
-    assert!(VerifyingKey::from_certificate_der(&spki).is_err());
-    let mut short = der(&fixture("rsa-2048.crt"));
-    short.truncate(200);
-    assert!(VerifyingKey::from_certificate_der(&short).is_err());
-}
-
 #[test]
 fn bad_keys_are_refused_with_a_reason() {
     let v = json_fixture("independent-vectors.json");
@@ -440,4 +408,92 @@ fn public_jwks_and_thumbprint_kids() {
     assert_eq!(hs.verifying_key().to_jwk(), None);
     assert_eq!(hs.to_pkcs8_der(), None);
     assert_eq!(hs.with_thumbprint_kid().kid(), None);
+}
+
+/// `SHA1_MESSAGE` signed with `rsa-2048.pem`, RSASSA-PKCS1-v1_5 with SHA-1
+/// (`openssl dgst -sha1 -sign rsa-2048.pem`).
+const SHA1_SIGNATURE: &str = "XaJsUEJFU1/p/22GDwzjo66FKHJml1jaw7YiI9IxWrSyiP3/40puvx2r+GlQ6dAEsqbZ3B6IVzk+8XyaQGWaCOmfWnM7706wKl/N5UFDZXD+TOV2sGvzjNrLm705qm1488Iui7SdzHKkc2iHB96JIy91mwprfs2cWKQ2X7F6LzXVEKhO8yH9BfA5ymSVqPfwKKIziy6j4IztYv/PJUiOqbJ8X3960n6fkO/IkI/5e+LHq9tsafAoxgpjavlrbn45N2OlSpYER9Qoih7jsdmxUR8+VEfY1DlFkDh0kQQzu2OMd9wuYawMKg+34S2OCK3b+wvzidO+IkQoP7vy6vDcPQ==";
+const SHA1_MESSAGE: &[u8] = b"Message\nHello world!\nMessageId\n1\nType\nNotification\n";
+
+#[test]
+fn certificates_give_their_public_keys() {
+    // RSA (made with `openssl req -x509` from rsa-2048.pem): the
+    // certificate's key verifies what the private key signs, in PEM and DER.
+    let signer = SigningKey::from_pem(&fixture("rsa-2048.pem")).unwrap();
+    let token = signer.sign_jwt(&json!({ "sub": "42" })).unwrap();
+    let cert_pem = fixture("rsa-2048-cert.pem");
+    let public = VerifyingKey::from_pem(&fixture("rsa-2048-public.pem"))
+        .unwrap()
+        .to_jwk()
+        .unwrap();
+    for key in [
+        VerifyingKey::from_pem(&cert_pem).unwrap(),
+        VerifyingKey::from_certificate_der(&der(&cert_pem)).unwrap(),
+    ] {
+        Jws::parse(&token).unwrap().verify(&key).unwrap();
+        let jwk = key.to_jwk().unwrap();
+        assert_eq!((&jwk.n, &jwk.e), (&public.n, &public.e));
+    }
+
+    // P-256: the same point as the public key PEM.
+    let ec = VerifyingKey::from_pem(&fixture("p256-cert.pem")).unwrap();
+    assert_eq!(ec.algorithm(), Some(Algorithm::ES256));
+    assert_eq!(
+        ec.to_jwk(),
+        VerifyingKey::from_pem(&fixture("p256-cert-public.pem"))
+            .unwrap()
+            .to_jwk()
+    );
+}
+
+#[test]
+fn malformed_certificates_are_refused() {
+    let cert = der(&fixture("rsa-2048-cert.pem"));
+    let public_key = der(&fixture("rsa-2048-public.pem"));
+    let mut trailing = cert.clone();
+    trailing.push(0);
+    for bad in [
+        &b""[..],
+        &b"\x30\x00"[..],
+        &cert[..cert.len() - 1],
+        &trailing[..],
+        // A SubjectPublicKeyInfo is not a certificate.
+        &public_key[..],
+    ] {
+        assert!(
+            matches!(
+                VerifyingKey::from_certificate_der(bad),
+                Err(JoseError::InvalidKey(_))
+            ),
+            "{} bytes",
+            bad.len()
+        );
+    }
+}
+
+#[test]
+fn legacy_sha1_signatures_verify_with_rsa_keys_only() {
+    let key = VerifyingKey::from_pem(&fixture("rsa-2048-cert.pem")).unwrap();
+    let signature = STANDARD.decode(SHA1_SIGNATURE).unwrap();
+    key.verify_legacy_sha1(SHA1_MESSAGE, &signature).unwrap();
+    assert_eq!(
+        key.verify_legacy_sha1(b"Message\nHello world?\n", &signature),
+        Err(JoseError::BadSignature)
+    );
+    // Not an RS256 signature of the same message.
+    assert_eq!(
+        key.verify(Algorithm::RS256, SHA1_MESSAGE, &signature),
+        Err(JoseError::BadSignature)
+    );
+    // Only RSA keys verify SHA-1 signatures.
+    let ec = VerifyingKey::from_pem(&fixture("p256-cert.pem")).unwrap();
+    assert_eq!(
+        ec.verify_legacy_sha1(SHA1_MESSAGE, &signature),
+        Err(JoseError::NoKey)
+    );
+    let hmac = VerifyingKey::hmac(Algorithm::HS256, [7_u8; 32]).unwrap();
+    assert_eq!(
+        hmac.verify_legacy_sha1(SHA1_MESSAGE, &signature),
+        Err(JoseError::NoKey)
+    );
 }

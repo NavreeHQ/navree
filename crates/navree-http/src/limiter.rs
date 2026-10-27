@@ -1,26 +1,31 @@
 //! An in-memory keyed rate limiter (GCRA), used for the per-IP limit and
 //! per-route throttles.
 
-use std::collections::HashMap;
+use std::cell::Cell;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
+use dashmap::DashMap;
 use tokio::time::Instant;
 
-/// How often (in checks) expired keys are swept.
+/// How often (in checks on one thread) expired keys are swept.
 const SWEEP_EVERY: u64 = 1024;
+
+thread_local! {
+    /// Checks made on this thread, counting to the next sweep: a shared
+    /// counter would be one more cache line every request writes.
+    static CHECKS: Cell<u64> = const { Cell::new(0) };
+}
 
 /// Allows `limit` requests per `per` and key, as a burst, refilling one
 /// request every `per / limit` (generic cell rate algorithm: one timestamp
-/// per key).
+/// per key). The keys are sharded, so concurrent requests from different
+/// keys rarely wait for each other.
 #[derive(Debug)]
-pub(crate) struct RateLimiter<K> {
+pub(crate) struct RateLimiter<K: Hash + Eq> {
     interval: Duration,
     period: Duration,
-    state: Mutex<HashMap<K, Slot>>,
-    checks: AtomicU64,
+    state: DashMap<K, Slot>,
 }
 
 /// A key's state.
@@ -48,19 +53,20 @@ impl<K: Hash + Eq + Clone> RateLimiter<K> {
         Self {
             interval: per / limit.max(1),
             period: per,
-            state: Mutex::new(HashMap::new()),
-            checks: AtomicU64::new(0),
+            state: DashMap::new(),
         }
     }
 
     /// Counts a request for `key`: [`Limited`] when over the limit.
     pub(crate) fn check(&self, key: &K) -> Result<(), Limited> {
         let now = Instant::now();
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        if self.checks.fetch_add(1, Ordering::Relaxed) % SWEEP_EVERY == SWEEP_EVERY - 1 {
-            state.retain(|_, slot| slot.tat > now);
+        let checks = CHECKS.get().wrapping_add(1);
+        CHECKS.set(checks);
+        if checks.is_multiple_of(SWEEP_EVERY) {
+            self.state.retain(|_, slot| slot.tat > now);
         }
-        let slot = state.entry(key.clone()).or_insert(Slot {
+        // Holds the lock of the key's shard until the slot is updated.
+        let mut slot = self.state.entry(key.clone()).or_insert(Slot {
             tat: now,
             reported: None,
         });
@@ -112,6 +118,29 @@ mod tests {
         tokio::time::advance(Duration::from_secs(10)).await;
         assert!(limiter.check(&1).is_ok());
         assert!(limiter.check(&1).unwrap_err().report, "a new window");
+    }
+
+    /// Checks of one key from many threads at once allow exactly the burst.
+    #[test]
+    fn concurrent_checks_never_allow_more_than_the_limit() {
+        let limiter = RateLimiter::new(100, Duration::from_secs(3600));
+        let allowed = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    for _ in 0..50 {
+                        if limiter.check(&"shared").is_ok() {
+                            allowed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        });
+        assert_eq!(allowed.into_inner(), 100);
+        assert!(
+            limiter.check(&"another key").is_ok(),
+            "keys are independent"
+        );
     }
 
     #[tokio::test(start_paused = true)]

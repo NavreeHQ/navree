@@ -542,3 +542,36 @@ async fn api_attribute_documents_the_route() {
     );
     assert!(doc["paths"]["/api/notes/{id}/archive"]["post"].is_object());
 }
+
+// ---------------------------------------------------------------------------
+// Security attributes: the guards come from `::navree::auth`.
+
+/// Closing an account: refused while impersonating, and only within 15
+/// minutes of signing in or confirming.
+#[injectable]
+pub struct AccountController;
+
+#[controller("/account")]
+#[authenticated]
+#[not_while_impersonating]
+impl AccountController {
+    #[delete("/")]
+    #[recent_auth(minutes = 15)]
+    async fn close(&self) -> &'static str {
+        "closed"
+    }
+}
+
+#[test]
+fn security_attributes_expand_through_the_facade() {
+    use navree::http::Controller;
+
+    let routes = Arc::new(AccountController).routes();
+    let guards: Vec<String> = routes[0]
+        .meta
+        .guards
+        .iter()
+        .map(|guard| format!("{guard:?}"))
+        .collect();
+    assert_eq!(guards, ["not_while_impersonating", "recent_auth(900s)"]);
+}

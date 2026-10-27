@@ -598,8 +598,8 @@ impl VerifyingKey {
     }
 
     /// Reads a PEM public key: `PUBLIC KEY` (SubjectPublicKeyInfo: RSA,
-    /// P-256, P-384 or Ed25519), `RSA PUBLIC KEY` (PKCS#1) or the public
-    /// key of a `CERTIFICATE` (see
+    /// P-256, P-384 or Ed25519), `RSA PUBLIC KEY` (PKCS#1) or the public key
+    /// of a `CERTIFICATE` (see
     /// [`from_certificate_der`](VerifyingKey::from_certificate_der)).
     pub fn from_pem(pem: &str) -> Result<Self, JoseError> {
         let pem = der::decode_pem(pem)?;
@@ -618,11 +618,10 @@ impl VerifyingKey {
         Self::from_public_key_info(der::public_key_info(der))
     }
 
-    /// Reads the public key of an X.509 certificate (DER), such as the
-    /// signing certificate in a SAML identity provider's metadata. Only
-    /// the key is read: the certificate's own signature, validity dates and
-    /// extensions are not checked, so trust the certificate for where it
-    /// came from (configured metadata), not for what it says.
+    /// Reads the public key of an X.509 certificate (DER). Only the key is
+    /// read: the certificate's own signature, validity and extensions are
+    /// not checked, so trust the certificate for how it was obtained (an
+    /// HTTPS download from the signer's own host, for instance).
     pub fn from_certificate_der(der: &[u8]) -> Result<Self, JoseError> {
         Self::from_public_key_info(der::certificate_public_key_info(der))
     }
@@ -706,6 +705,24 @@ impl VerifyingKey {
         signature: &[u8],
     ) -> Result<(), JoseError> {
         self.check(alg, message, signature, true)
+    }
+
+    /// Verifies an RSASSA-PKCS1-v1_5 signature with SHA-1 of `message`, for
+    /// senders that still sign that way (AWS SNS signature version 1).
+    /// SHA-1 is no JWS algorithm, so no token can ask for it:
+    /// [`JoseError::NoKey`] for a key that is not RSA or is pinned to an
+    /// algorithm, [`JoseError::BadSignature`] when the signature is wrong.
+    pub fn verify_legacy_sha1(&self, message: &[u8], signature: &[u8]) -> Result<(), JoseError> {
+        let (Public::Rsa { n, e }, None) = (&self.public, self.alg) else {
+            return Err(JoseError::NoKey);
+        };
+        RsaPublicKeyComponents { n, e }
+            .verify(
+                &signature::RSA_PKCS1_2048_8192_SHA1_FOR_LEGACY_USE_ONLY,
+                message,
+                signature,
+            )
+            .map_err(|_| JoseError::BadSignature)
     }
 
     fn check(

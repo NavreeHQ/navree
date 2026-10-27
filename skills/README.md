@@ -25,7 +25,7 @@ conventions, and says which skill to load for each task.
 | [`navree-validation`](navree-validation/SKILL.md) | Validate request bodies and query strings |
 | [`navree-errors-and-responses`](navree-errors-and-responses/SKILL.md) | Return errors in Navree's JSON shape, map error types, shape responses |
 | [`navree-database`](navree-database/SKILL.md) | Entities, `Repo`, the unit of work, migrations, seeders, factories, pagination |
-| [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor |
+| [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor, sessions and step-up, impersonation, passwordless and passkeys, platform sign-in, token exchange |
 | [`navree-access-control`](navree-access-control/SKILL.md) | Roles, permissions, abilities, record checks and SQL list filters |
 | [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs, batches, operations with progress, and cron-style schedules |
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |
@@ -60,6 +60,10 @@ conventions, and says which skill to load for each task.
 | [`navree-logbook`](navree-logbook/SKILL.md) | The local debugging timeline at `/_logbook`: filters, N+1 queries, replay, query counts in tests |
 | [`navree-microservices`](navree-microservices/SKILL.md) | Messages and events between services: handlers, `ServiceClient`, the outbox and inbox, dead letters, the transports, and `MicroFake` tests (feature `micro`) |
 | [`navree-helm`](navree-helm/SKILL.md) | The Helm admin panel: resources, fields, filters, actions, metrics, custom pages |
+| [`navree-navigator`](navree-navigator/SKILL.md) | Connect a coding agent to Navigator (`navree mcp`), use its tools, install the skills |
+| [`navree-i18n`](navree-i18n/SKILL.md) | Localization: Fluent files, `t!`, the request's locale, formatting, translated validation, mail and notifications (feature `i18n`) |
+| [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
+| [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
 
 ## Installing
 
@@ -71,9 +75,10 @@ Pick one:
   `.claude/skills/` (Claude Code) or `.agents/skills/` (other agents). Copy
   only the ones you need if you like, but keep `navree`: it indexes the
   rest.
-- **With the navree CLI:** `navree skills:install` (part of Navigator,
-  Navree's MCP server for coding agents) copies them into the current
-  project.
+- **With the navree CLI:** `navree skills:install` copies the skills of
+  the CLI's Navree version into the current project's `.claude/skills/`
+  and `.agents/skills/` (`--path <dir>` names another project), replacing
+  the `navree` and `navree-*` folders and leaving other skills alone.
 
 Apps created with `navree new` also get an `AGENTS.md` with the project's
 conventions (and a `CLAUDE.md` that imports it), so an agent knows the

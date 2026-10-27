@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 const RSA_PEM: &str = include_str!("../../navree-crypto/tests/fixtures/jose/rsa-2048.pem");
 
 /// A self-signed certificate of [`RSA_PEM`]'s key.
-const RSA_CERT: &str = include_str!("../../navree-crypto/tests/fixtures/jose/rsa-2048.crt");
+const RSA_CERT: &str = include_str!("../../navree-crypto/tests/fixtures/jose/rsa-2048-cert.pem");
 
 /// "Verifying keys": a certificate (PEM or DER) gives its public key.
 #[test]

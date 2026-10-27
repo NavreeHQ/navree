@@ -1,0 +1,15 @@
+# The fixture app of `tests/navigator.rs`. The test copies this directory,
+# writes this file as `Cargo.toml` with `{navree}` replaced by the path of
+# the workspace's facade crate, and points `navree mcp` at the copy.
+
+[package]
+name = "navigator-app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# A project of its own, not a member of the Navree workspace.
+[workspace]
+
+[dependencies]
+navree = { path = "{navree}" }

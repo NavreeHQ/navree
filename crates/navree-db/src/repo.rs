@@ -16,6 +16,10 @@ use crate::{ChangeEvent, ChangeOp, Uow};
 /// [`ChangeEvent`] for every write, so audit trails and other
 /// [`ChangeObserver`](crate::ChangeObserver)s see them.
 ///
+/// An event carries the record as JSON. In an app with no change observer
+/// (decided at boot), that JSON is only made if [`Uow::changes`] asks for
+/// it, so writes pay nothing for events nobody reads.
+///
 /// ```ignore
 /// type Deals = Repo<deal::Entity>;
 /// let deal = Deals::insert(&uow, deal::ActiveModel { .. }).await?;
@@ -32,13 +36,16 @@ where
     pub async fn insert(uow: &Uow, am: E::ActiveModel) -> Result<E::Model, DbErr> {
         let tx = uow.tx().await?;
         let model = am.insert(&*tx).await?;
-        uow.record_change(ChangeEvent {
-            entity: table::<E>(),
-            id: key_string(&model.get_primary_key_value()),
-            op: ChangeOp::Created,
-            old: None,
-            new: Some(to_json(&model)?),
-        });
+        let created = model.clone();
+        uow.record_with(Box::new(move || {
+            Ok(Some(ChangeEvent {
+                entity: table::<E>(),
+                id: key_string(&created.get_primary_key_value()),
+                op: ChangeOp::Created,
+                old: None,
+                new: Some(to_json(&created)?),
+            }))
+        }))?;
         Ok(model)
     }
 
@@ -56,16 +63,17 @@ where
             .await?
             .ok_or_else(|| not_found::<E>(&key))?;
         let new = am.update(&*tx).await?;
-        let (old_fields, new_fields) = diff(to_json(&old)?, to_json(&new)?);
-        if !new_fields.is_empty() {
-            uow.record_change(ChangeEvent {
+        let updated = new.clone();
+        uow.record_with(Box::new(move || {
+            let (old_fields, new_fields) = diff(to_json(&old)?, to_json(&updated)?);
+            Ok((!new_fields.is_empty()).then(|| ChangeEvent {
                 entity: table::<E>(),
                 id: key_string(&key),
                 op: ChangeOp::Updated,
                 old: Some(old_fields.into()),
                 new: Some(new_fields.into()),
-            });
-        }
+            }))
+        }))?;
         Ok(new)
     }
 
@@ -78,14 +86,15 @@ where
         if result.rows_affected == 0 {
             return Err(not_found::<E>(&key));
         }
-        uow.record_change(ChangeEvent {
-            entity: table::<E>(),
-            id: key_string(&key),
-            op: ChangeOp::Deleted,
-            old: Some(to_json(&model)?),
-            new: None,
-        });
-        Ok(())
+        uow.record_with(Box::new(move || {
+            Ok(Some(ChangeEvent {
+                entity: table::<E>(),
+                id: key_string(&key),
+                op: ChangeOp::Deleted,
+                old: Some(to_json(&model)?),
+                new: None,
+            }))
+        }))
     }
 
     /// The record with primary key `id` (single-column keys), read in the
