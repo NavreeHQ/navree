@@ -1,6 +1,6 @@
 [package]
 name = "navree-validation"
-description = "Navree ValidationModule: Valid<T> extractors on garde, field-level messages, async unique/exists rules."
+description = "Navree ValidationModule: Valid<T> extractors on garde, field-level messages, async unique/exists rules, international input (phone numbers, sanitized HTML, names and digits in any script, countries, locales)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,23 +10,34 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## `Phone`: E.164 phone numbers (the phonenumber crate) and `rules::phone`.
+phone = ["dep:phonenumber"]
+## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (ammonia).
+html = ["dep:ammonia"]
+
 [dependencies]
+ammonia = { workspace = true, optional = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
+http-body-util = { workspace = true }
+icu_locale_core = { workspace = true }
 navree-config = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+phonenumber = { workspace = true, optional = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
+unicode-properties = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

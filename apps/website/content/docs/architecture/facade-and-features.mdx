@@ -155,6 +155,10 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
+| `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the phonenumber crate) |
+| `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized with ammonia) |
+
+`validation-phone` and `validation-html` are part of `full`. They add the [international types](/docs/basics/validation/#international-input) that need a dependency of their own; names, digits, countries and locales come with `validation` alone.
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 

@@ -243,6 +243,13 @@ jsonwebtoken = { version = "11.1.0", default-features = false }
 # Module capabilities
 # ---------------------------------------------------------------------------
 garde = { version = "0.23.0", features = ["derive", "email", "regex", "serde", "unicode", "url"] }
+# International input (navree-validation): E.164 phone numbers (feature
+# `phone`), HTML sanitizing (feature `html`), general categories for names in
+# any script, BCP 47 locales (icu_locale_core is already in the tree via url).
+phonenumber = "0.3.10"
+ammonia = "4.2.4"
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
+icu_locale_core = { version = "2.4.0", features = ["alloc"] }
 minijinja = { version = "3.0.3", features = ["json", "loop_controls", "serde", "urlencode"] }
 lettre = { version = "0.11.23", default-features = false, features = [
     "builder",
