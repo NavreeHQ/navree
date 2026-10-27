@@ -1,0 +1,5 @@
+error: Deal has no field for its primary key `id`: add one, or name the key column with #[model(primary_key = "...")]
+ --> tests/ui/model_without_key.rs:5:8
+  |
+5 | struct Deal {
+  |        ^^^^

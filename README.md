@@ -110,17 +110,18 @@ L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no 
 L7  navree-billing (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc (ecosystem libraries)
 L5  navree-auth  navree-workspace
-L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-orm
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock (dev tool; no navree deps)
+L0  navree-kernel                                navree-macros  navree-orm-macros (proc-macros; no runtime navree deps)   navree-dock (dev tool; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
+| L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
@@ -146,6 +147,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
+| L4 | `navree-orm` | The ORM: `#[derive(Model)]` models with typed columns and keys (integers, UUID v7, ULID), a query builder with every where variant, joins, groups, subqueries, unions, locks and TimescaleDB's `time_bucket`/`first`/`last`, records with dirty tracking, casts, scopes, lifecycle hooks, collections and offset, simple and cursor pagination, on PostgreSQL/TimescaleDB, MySQL and SQLite through the unit of work, and a document-driver interface (facade feature `orm`) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
