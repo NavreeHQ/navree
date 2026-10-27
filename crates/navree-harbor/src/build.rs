@@ -203,7 +203,9 @@ impl CargoBuild<'_> {
         }
     }
 
-    fn cargo_args(&self) -> Vec<String> {
+    /// `cargo build` for `target`, so the binary lands in
+    /// `<target dir>/<triple>/release/<app>` however it is built.
+    fn cargo_args(&self, target: &Target) -> Vec<String> {
         let mut args = vec![
             "build".to_owned(),
             "--release".to_owned(),
@@ -214,14 +216,14 @@ impl CargoBuild<'_> {
             args.push("--features".to_owned());
             args.push(self.config.build.features.join(","));
         }
+        args.push("--target".to_owned());
+        args.push(target.triple.clone());
         args
     }
 
     /// Builds the binary natively; returns its path.
     fn native(&self, workspace: &Workspace, target: &Target) -> Result<PathBuf> {
-        let mut args = self.cargo_args();
-        args.push("--target".to_owned());
-        args.push(target.triple.clone());
+        let args = self.cargo_args(target);
         let status = self
             .exec
             .interactive(&Cmd::new("cargo").args(args.clone()).cwd(&self.dir))?;
@@ -286,9 +288,17 @@ impl CargoBuild<'_> {
         };
         let arch = target.platform.trim_start_matches("linux/");
         let app = &self.config.app;
+        let triple = &target.triple;
+        // The builder image has the toolchain of its own platform; a target
+        // set in `build.target` (musl, say) is added to it first.
+        let install = if self.config.build.target.is_some() {
+            format!("rustup target add {triple} && ")
+        } else {
+            String::new()
+        };
         let script = format!(
-            "cargo {} && cp /target/release/{app} /out/{app}",
-            self.cargo_args().join(" ")
+            "{install}cargo {} && cp /target/{triple}/release/{app} /out/{app}",
+            self.cargo_args(target).join(" ")
         );
         Cmd::new(engine).args([
             "run".to_owned(),
@@ -579,6 +589,67 @@ mod tests {
         );
         assert_eq!(relative(Path::new("/home/me"), Path::new("/home/me")), "");
         assert!(Workspace::parse("{}").is_err());
+    }
+
+    /// The `sh -c` script of a container build of `crm-api` for `target`.
+    fn container_script(harbor: &str, target: &Target) -> (Vec<String>, String) {
+        let config = HarborConfig::parse(harbor, Path::new("harbor.toml")).unwrap();
+        let info = AppInfo::default();
+        let build = CargoBuild {
+            exec: Arc::new(FakeExecutor::default()),
+            config: &config,
+            dir: PathBuf::from("/home/me/crm/api"),
+            info: &info,
+            host_os: "macos".into(),
+            host_arch: "aarch64".into(),
+        };
+        let workspace = Workspace {
+            root: PathBuf::from("/home/me/crm"),
+            target_dir: PathBuf::from("/home/me/crm/target"),
+            local_packages: vec![PathBuf::from("/home/me/crm/api")],
+        };
+        let cmd = build.container_command(
+            "docker",
+            "navree-harbor-builder:jammy-amd64",
+            &workspace,
+            target,
+            Path::new("/tmp/out"),
+        );
+        let script = cmd.args.last().unwrap().clone();
+        (cmd.args, script)
+    }
+
+    #[test]
+    fn container_builds_name_the_servers_target() {
+        let harbor = "app = \"crm-api\"\n\n[build]\nfeatures = [\"postgres\"]\n";
+        let target = Target::new("x86_64", Some("2.35".into()), None);
+        let (args, script) = container_script(harbor, &target);
+        assert_eq!(
+            script,
+            "cargo build --release --package crm-api --features postgres --target x86_64-unknown-linux-gnu && cp /target/x86_64-unknown-linux-gnu/release/crm-api /out/crm-api"
+        );
+        let joined = args.join(" ");
+        assert!(joined.starts_with("run --rm --platform linux/amd64 "), "{joined}");
+        assert!(
+            joined.contains("--mount type=bind,source=/home/me/crm,target=/src"),
+            "{joined}"
+        );
+        assert!(joined.contains("--workdir /src/api"), "{joined}");
+        assert!(
+            joined.contains("source=navree-harbor-target-crm-api-amd64,target=/target"),
+            "{joined}"
+        );
+    }
+
+    #[test]
+    fn container_builds_install_an_overridden_target() {
+        let harbor = "app = \"crm-api\"\n\n[build]\ntarget = \"x86_64-unknown-linux-musl\"\n";
+        let target = Target::new("x86_64", None, Some("x86_64-unknown-linux-musl"));
+        let (_, script) = container_script(harbor, &target);
+        assert_eq!(
+            script,
+            "rustup target add x86_64-unknown-linux-musl && cargo build --release --package crm-api --target x86_64-unknown-linux-musl && cp /target/x86_64-unknown-linux-musl/release/crm-api /out/crm-api"
+        );
     }
 
     #[test]
