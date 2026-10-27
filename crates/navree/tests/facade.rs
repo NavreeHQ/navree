@@ -237,9 +237,9 @@ struct Features {
 /// runtime never needs (`dock`), and ecosystem libraries and packages an app
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
-/// `features = ["billing"]`).
+/// `features = ["billing"]`, `features = ["mcp"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "social", "oauth", "flags", "graphql", "grpc", "billing",
+    "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "mcp",
 ];
 
 /// Always compiled into the facade (not behind a feature).

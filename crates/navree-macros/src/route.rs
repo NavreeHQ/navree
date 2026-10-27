@@ -718,7 +718,7 @@ pub(crate) fn strings(attr: &Attribute, example: &str) -> syn::Result<Vec<LitStr
 }
 
 /// `value`, unless it is empty or blank.
-fn non_empty(value: LitStr) -> syn::Result<LitStr> {
+pub(crate) fn non_empty(value: LitStr) -> syn::Result<LitStr> {
     if value.value().trim().is_empty() {
         Err(syn::Error::new(value.span(), "must not be empty"))
     } else {

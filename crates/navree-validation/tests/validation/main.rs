@@ -8,3 +8,4 @@ mod module;
 mod rules;
 mod support;
 mod values;
+mod value;

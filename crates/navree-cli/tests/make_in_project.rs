@@ -228,6 +228,11 @@ fn every_kind_generates_into_its_directory() {
             "profile_rules",
             "src/modules/users/tests/profile_rules.rs",
         ),
+        (
+            MakeKind::Mcp,
+            "assistant",
+            "src/modules/users/mcp/assistant.rs",
+        ),
     ];
     for (kind, item, path) in cases {
         make_item(
@@ -248,6 +253,7 @@ fn every_kind_generates_into_its_directory() {
         "m.provider::<services::pricing::PricingService>();",
         "navree::view::ModuleBuilderViewExt::templates(m, mail::welcome::TEMPLATES);",
         "m.command(commands::prune_profiles::command());",
+        "navree::mcp::ModuleBuilderMcpExt::mcp_server::<mcp::assistant::AssistantMcp>(m);",
     ] {
         assert!(module.contains(line), "missing `{line}` in\n{module}");
     }
@@ -300,6 +306,55 @@ fn listener_with_event_subscribes_it() {
         ),
         "{module}"
     );
+}
+
+#[test]
+fn make_mcp_generates_a_server_and_registers_it() {
+    let (_dir, root) = project();
+    let report = make_item(
+        &root,
+        "src/modules",
+        MakeKind::Mcp,
+        &name("users"),
+        &name("crm"),
+        &MakeOptions::default(),
+        now(),
+    )
+    .unwrap();
+    let server = read(&root, "src/modules/users/mcp/crm.rs");
+    for expected in [
+        "use navree::mcp::{McpContext, mcp_server};",
+        "#[injectable]\npub struct CrmMcp;",
+        "#[mcp_server]\nimpl CrmMcp {",
+        "    #[mcp_tool(read_only, idempotent)]\n    #[authenticated]\n    async fn crm_echo(",
+        "#[derive(Debug, Deserialize, ToSchema, Validate)]\npub struct CrmEchoArgs {",
+    ] {
+        assert!(
+            server.contains(expected),
+            "missing `{expected}` in\n{server}"
+        );
+    }
+    assert_eq!(
+        read(&root, "src/modules/users/mcp/mod.rs"),
+        "//! MCP servers of the users module.\n\npub mod crm;\n"
+    );
+    let module = read(&root, "src/modules/users/mod.rs");
+    assert!(module.contains("pub mod mcp;\n"), "{module}");
+    assert!(
+        module.contains(
+            "        navree::mcp::ModuleBuilderMcpExt::mcp_server::<mcp::crm::CrmMcp>(m);\n        // navree:wire\n"
+        ),
+        "{module}"
+    );
+    // What the generator does not edit is left as steps.
+    let hints = report.hints.join("\n");
+    for step in [
+        "features = [\"mcp\"]",
+        "utoipa",
+        ".module(McpModule::from_config())",
+    ] {
+        assert!(hints.contains(step), "missing `{step}` in\n{hints}");
+    }
 }
 
 #[test]
