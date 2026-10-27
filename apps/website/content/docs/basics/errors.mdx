@@ -294,6 +294,10 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | storage | `invalid_content_type` | 400 | ``The declared content type is not a valid `type/subtype`.`` |
 | storage | `empty_file` | 400 | `The file should not be empty.` |
 | storage | `upload_size_mismatch` | 400 | `The upload must be exactly 2048 bytes long.` |
+| sheets | `unsupported_file` | 400 | `The file is not a valid Excel or OpenDocument workbook.` (an upload that is not a spreadsheet, or is empty) |
+| sheets | `too_many_rows` | 400 | `The file has more than 100000 rows.` |
+| sheets | `import_not_ready` | 409 | `Choose a mapping for the file's columns first.` (applying, mapping or discarding an import in the wrong status) |
+| sheets | `import_has_duplicates` | 409 | `3 rows are duplicates. Fix them, or apply with duplicates set to skip or update.` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 

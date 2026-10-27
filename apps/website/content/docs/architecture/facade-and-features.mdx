@@ -65,7 +65,8 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
 | `navree::schema` | navree-schema | `schema` | The [schema builder](/docs/database/schema-builder/): tables, columns, indexes, foreign keys, [TimescaleDB](/docs/database/timescaledb/) hypertables, schema dumps |
-| `navree::db` | navree-db | `db` | `DatabaseModule`: SeaORM, unit of work, migrations, pagination |
+| `navree::db` | navree-db | `db` | `DatabaseModule`: connections, unit of work, migrations, seeders, pagination |
+| `navree::orm` | navree-orm | `orm` | `OrmModule`: the [ORM](/docs/orm/getting-started/), models, the query builder, records, relationships, factories and testing helpers |
 | `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
 | `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
@@ -83,9 +84,11 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::ui` | navree-ui | `ui` | `UiModule`: the app shell and components of server-rendered tools, embedded assets |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless sign-in and passkeys |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation and demo workspaces |
+| `navree::mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: [MongoDB](/docs/orm/mongodb/) connections, the ORM's document driver, collections and their migrations |
 | `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
 | `navree::sso` | navree-sso | `sso` | `SsoModule`: [single sign-on](/docs/security/single-sign-on/) with SAML 2.0 and OpenID Connect per organization or workspace, verified domains, just-in-time provisioning |
+| `navree::sheets` | navree-sheets, plus `#[derive(Exportable)]` and `#[derive(Importable)]` | `sheets` | `SheetsModule`: [CSV and Excel exports and imports](/docs/packages/imports-and-exports/) with header mapping, a staging preview and error files |
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
 | `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
@@ -134,6 +137,7 @@ The facade's root also has:
 | AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 | Microservices (`micro`) | `MicroModule`, `ServiceClient`, `Payload`, `message_handlers` |
 | Documents (`documents`) | `DocumentsModule` |
+| Imports and exports (`sheets`) | `SheetsModule` (and `m.export::<E>()`, `m.importer::<I>()` through `ModuleBuilderSheetsExt`) |
 | Billing (`billing`) | `BillingModule` |
 | Localization (`i18n`) | `I18nModule`, `Locale` |
 | Search (`search`) | `SearchModule` |
@@ -152,7 +156,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, `mongo`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -173,11 +177,13 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `queue` | `db` |
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail` |
+| `orm` | `db`, `events`, `http`, `crypto`, `api` (and `telemetry`) |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule` |
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
 | `sso` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `workspace` |
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
+| `sheets` | `http`, `db`, `storage`, `validation`, `queue`, `workspace`; with `i18n` on too, translated export headers |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
@@ -190,12 +196,14 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `i18n` (opt-in, not in `full`) | `http`, `view`, `db`, `validation`, `notify`, `workspace` |
 | `lighthouse` | `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth` |
 | `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
+| `mongo`, `mongodb` (opt-in, not in `full`) | `schema`, `db`, `orm` (and `telemetry`) |
 | `logbook` | `http`, `view`, `db`, `auth` |
 | `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `testing`, `validation` |
 | `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
 | `fleet` | `http`, `events`, `view`, `db`, `observe`, `queue`, `access` (and `telemetry`) |
 | `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
+| `mysql` | `db`, and navree-db's MySQL and MariaDB driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the rlibphonenumber crate) |
 | `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized with ammonia) |
 | `storage-s3` (in `full`) | `storage`, and navree-storage's S3 driver (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces) |
@@ -205,9 +213,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 With `workspace` on too, `testing` also adds `navree::workspace::testing`, the [isolation suites](/docs/testing/isolation-tests/); neither feature turns the other on.
 
-SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
+SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL, and `mysql` the driver for MySQL and MariaDB. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`), which you list yourself: `features = ["billing"]`.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`, `mongo`), which you list yourself: `features = ["billing"]`.
 
 <Callout type="note">
 

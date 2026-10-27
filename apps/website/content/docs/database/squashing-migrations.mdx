@@ -1,0 +1,64 @@
+---
+title: "Squashing migrations"
+description: "`schema:dump` writes the schema your migrations produce as one SQL file, read from the database's catalogs; `migrate` loads it into an empty database and runs only the newer migrations."
+---
+
+Over time an app collects hundreds of migrations, and every new database (a fresh checkout, a CI run, a new tenant database) runs them all, one by one. Squashing replaces that history with a snapshot: `schema:dump` writes the schema the migrations produced as one SQL file, together with the rows of the migrations table, and `migrate` loads that file into an empty database before running only the migrations it doesn't record.
+
+```sh
+navree schema:dump
+```
+
+```text
+Dumped the schema to database/schema/postgres-schema.sql. `navree migrate` loads it into an empty database.
+```
+
+Commit the dump. Keep the migration files: they are compiled into the app, and the ones the dump records are skipped.
+
+## Loading the dump
+
+When `migrate` (or `migrate:fresh`) finds an empty database (no tables, or only an empty migrations table) and the dump exists, it loads the dump first, in one transaction (on MySQL, on one pinned connection), then runs the migrations added since:
+
+```text
+Loaded the schema dump database/schema/postgres-schema.sql (214 statements).
+Migrated: deals/m20261101_090000_add_probability_to_deals (5 ms)
+```
+
+A database that already has tables never loads the dump: it runs its pending migrations as usual. So production, which has run every migration, is unaffected, and new databases get the same structure in one step.
+
+| Option | Does |
+|---|---|
+| `schema:dump --path <path>` | Writes the dump elsewhere. |
+| `migrate --schema-path <path>` | Loads the dump from elsewhere. |
+| `schema.dump_path` (configuration) | The directory, `database/schema` by default; the file is `<driver>-schema.sql` (`postgres`, `mysql` or `sqlite`). |
+
+Dump each database you run: a PostgreSQL dump only loads into PostgreSQL. Tests on SQLite with an app made for TimescaleDB keep running the migrations, unless you dump SQLite too.
+
+## What a dump holds
+
+The dump is read from the database's own catalogs, so it needs no `pg_dump` or `mysqldump`:
+
+- **PostgreSQL**: from the schemas on the search path, every object an extension doesn't own: schemas, extensions, enum, range, domain and composite types, functions and procedures, sequences, tables (identity options, generated columns, collations, partitions, `UNLOGGED`, storage options), keys and checks, indexes, foreign keys, views and materialized views in dependency order, triggers, row-level security (enabled, forced, policies) and comments.
+- **TimescaleDB**: hypertables re-created through TimescaleDB's own functions, with their dimensions, compression settings, continuous aggregates (as continuous aggregates, not plain views) and the compression, retention, reorder and refresh policies.
+- **MySQL and MariaDB**: `SHOW CREATE TABLE` without the `AUTO_INCREMENT` counter, routines and triggers without definers, and views after the views they read, between `SET FOREIGN_KEY_CHECKS=0` and `=1`.
+- **SQLite**: the `CREATE` statements of tables, indexes, views and triggers, without SQLite's internal tables.
+- **Data**: the rows of the migrations table, as `INSERT`s, each value written as a literal by the database itself.
+
+A dump loaded into an empty database and dumped again gives the same file; the real-server tests check this on every database.
+
+## When to squash
+
+Squash when running the history has become slow or noisy, typically after a release. Run `schema:dump` against a database that has run every migration (your development database after `migrate`), commit the file with the migrations it records, and from then on every new database starts from it.
+
+The dump captures the structure, not your seeders' data: run [`db:seed`](/docs/database/seeding-and-factories/) (or `migrate --seed`) after loading it as before.
+
+From code, `Migrator::dump(&ctx, None)` writes the dump and returns its path. On a [schema](/docs/database/schema-builder/), `schema.dump(&DumpOptions { .. })` returns the script without writing it (its `data` option lists tables whose rows to include as `INSERT`s), and `schema.load(script)` runs one. `navree::schema::split_statements(dialect, script)` cuts an SQL script into statements the way each database's client does: strings, quoted identifiers, comments, PostgreSQL's dollar quotes, SQLite trigger bodies and MySQL's `DELIMITER`.
+
+<LinkCards>
+  <LinkCard href="/docs/database/running-migrations/" title="Running migrations">
+    `migrate`, `migrate:fresh` and the rest.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    The hypertables a dump re-creates.
+  </LinkCard>
+</LinkCards>

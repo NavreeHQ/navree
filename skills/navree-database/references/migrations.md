@@ -1,5 +1,9 @@
 # Migrations in Navree
 
+A summary. The `navree-migrations` skill covers migrations in full: every
+column type per database, indexes and foreign keys, the commands, testing
+and squashing.
+
 Each module owns its migrations as one `MigrationSet`. The app's migrator
 runs every set: sets in dependency order (`.after([..])`, otherwise
 alphabetical), migrations inside a set in name order (names start with a
@@ -53,7 +57,9 @@ impl navree::schema::Migration for Migration {
 }
 ```
 
-Match the entity: `uuid` for `Uuid`, `timestamp_tz` for `DateTimeUtc`,
+Match the model or entity (on MySQL a `Uuid` written by either needs
+`t.binary(..).length(16).fixed()`, not `uuid`, which is `CHAR(36)` there):
+`uuid` for `Uuid`, `timestamp_tz` for `DateTimeUtc`,
 `boolean` for `bool`, `big_integer` for `i64`, `string`/`text` for
 `String`, `.nullable()` for `Option<T>`. Columns are `NOT NULL` unless
 `.nullable()`. Helpers: `timestamps_tz()` (nullable created/updated_at),

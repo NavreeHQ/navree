@@ -79,6 +79,7 @@ navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
 navree-time = { path = "crates/navree-time", version = "0.1.0" }
 navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
 navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
+navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -357,6 +358,13 @@ csv = "1.4.0"
 # archives back in navree-documents tests: deflate through flate2 on
 # zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Spreadsheets (navree-sheets): XLSX writing (pure Rust; never the `zlib`
+# feature, which builds C), XLSX/XLS/ODS reading, and encoding detection
+# for uploaded CSV files (encoding_rs decodes, chardetng guesses).
+rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["chrono", "constant_memory"] }
+calamine = { version = "0.37.0", default-features = false, features = ["dates"] }
+encoding_rs = "0.8.42"
+chardetng = "1.0.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
 # The resident memory of the current process (navree-fleet workers recycle

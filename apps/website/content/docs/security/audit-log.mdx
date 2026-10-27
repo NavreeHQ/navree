@@ -25,7 +25,7 @@ The module also mounts `GET /api/audit`, which requires the permission `audit.re
 
 ### Data changes
 
-Every insert, update and delete you make through `Repo` in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits, so a change that rolls back leaves no entry, and an entry never exists without its change.
+Every insert, update and delete you make through a [model](/docs/orm/models/) or `Repo` in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits, so a change that rolls back leaves no entry, and an entry never exists without its change.
 
 ```json
 {
@@ -53,9 +53,9 @@ Every insert, update and delete you make through `Repo` in a unit of work become
 
 Data entries don't carry the client's IP address or user agent. To see where a change came from, match its `request_id` with the request's [log](/docs/basics/logging/) lines or its other audit entries.
 
-<Callout type="warning" title="Only changes through Repo">
+<Callout type="warning" title="Only changes the unit of work records">
 
-The audit log sees the changes that `Repo` records in the unit of work. Writes made around it, with raw SQL, `Entity::update_many` or an active model saved straight to a connection, aren't audited. Add an entry yourself when such a write matters (see [Adding entries](#adding-entries)).
+The audit log sees the changes that models and `Repo` record in the unit of work. Writes made around it, with raw SQL, mass updates and deletes (a model query's `update` or `delete`, `Entity::update_many`), or a record or active model saved straight to a connection, aren't audited. Add an entry yourself when such a write matters (see [Adding entries](#adding-entries)).
 
 </Callout>
 
@@ -429,7 +429,7 @@ async fn entries(crm: &TestCrm, action: &str) -> Vec<AuditRecord> {
 
 ## Limits
 
-- Data changes are seen only through `Repo` and the unit of work.
+- Data changes are seen only through models, `Repo` and the unit of work.
 - Entries are ordinary rows in your database: there is no tamper protection, and anyone who can write to the table can change it.
 - Under extreme load, `record` drops entries once 4,096 are waiting, with a warning in the log.
 - There is no export or forwarding to an external log service.

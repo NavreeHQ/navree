@@ -1,0 +1,173 @@
+---
+title: "Pagination and streaming"
+description: "Pages for API responses (numbered, simple and cursor pages), and chunks, lazy streams and cursors for reading large results with constant memory."
+---
+
+A list endpoint answers one page at a time, and a job that touches every record reads them a batch at a time. Both start from an ordered query.
+
+## Paginating
+
+`paginate` reads one page and the total in two queries, and returns navree-db's `Page`, which a handler returns as it is:
+
+```rust
+async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+    Ok(Deal::query().latest().paginate(&uow, page).await?)
+}
+```
+
+`GET /api/v1/deals?page=1&per_page=2` answers:
+
+```json
+{
+  "data": [
+    { "id": "0199a7a0-...", "title": "Acme renewal", ... },
+    { "id": "0199a7a0-...", "title": "Globex expansion", ... }
+  ],
+  "meta": { "current_page": 1, "per_page": 2, "total": 3, "last_page": 2 }
+}
+```
+
+The `PageQuery` extractor reads `?page=` (default 1) and `?per_page=` (default 15, at most 100), and answers a malformed value with a 400. The page can also be a number, with the model's page size (`#[model(per_page = 25)]`, else 15), or a `(page, per_page)` pair:
+
+```rust
+let second = Deal::query().latest().paginate(&db, 2).await?;
+let wide = Deal::query().latest().paginate(&db, (2, 50)).await?;
+```
+
+Order the query, ending with a unique column, or rows can move between pages; `latest()` orders by creation time, and with UUID v7 keys `order_by_desc(Deal::ID)` does the same with an index. A page past the end is empty and its rows aren't queried. `page.map(|deal| ..)` turns the records into another type, such as an API resource, keeping the metadata. [Pagination](/docs/database/pagination/) covers `Page` and `PageQuery` in detail.
+
+### Without a total
+
+Counting every matching row costs a query, and on a large table a slow one. `simple_paginate` reads one record more than the page instead, which tells whether another page follows:
+
+```rust
+async fn index(&self, uow: Uow, page: PageQuery) -> Result<SimplePage<Record<Deal>>> {
+    Ok(Deal::query().latest().simple_paginate(&uow, page).await?)
+}
+```
+
+```json
+{
+  "data": [ ... ],
+  "meta": { "current_page": 1, "per_page": 2, "has_more": true }
+}
+```
+
+### Cursor pagination
+
+Offset pages get slower the further you go, and shift when rows are added. Cursor pagination reads the rows after the last one seen, through the query's order, with no count and no offset:
+
+```rust
+async fn feed(&self, uow: Uow, cursor: CursorRequest) -> Result<CursorPage<Record<Activity>>> {
+    Ok(Activity::query().latest().cursor_paginate(&uow, cursor).await?)
+}
+```
+
+```json
+{
+  "data": [ ... ],
+  "next_cursor": "eyJjIjpbImlkIl0sImQiOiJuIiwidiI6W1siaTY0IiwyXV19",
+  "prev_cursor": null
+}
+```
+
+The client passes a cursor back as `?cursor=` for the next or the previous page; `null` means there is none. `CursorRequest` reads `?cursor=` and `?limit=` (default: the model's page size, at most 100), and answers a malformed cursor or limit with a 400. In code, `CursorRequest::first().limit(20)` and `CursorRequest::after(cursor)` build one.
+
+The order can be any mix of directions over plain, non-`NULL` columns; the key is added as a tie-breaker, and an unordered query pages by key. A cursor encodes the order's columns and the last row's values, and a cursor that doesn't match the query is refused.
+
+## Chunks and streams
+
+To process every record of a large result without holding it in memory, read it a page at a time:
+
+```rust
+use std::ops::ControlFlow;
+
+let mut total = 0;
+Deal::query()
+    .chunk(&db, 200, |deals| {
+        total += deals.iter().map(|deal| deal.amount_cents).sum::<i64>();
+        async { Ok(ControlFlow::Continue(())) }
+    })
+    .await?;
+```
+
+The callback gets a `Collection` per page and returns `ControlFlow::Break(())` to stop; `chunk` returns `false` when it stopped. Each page is one query, and relations you eager load are loaded for each page.
+
+| Method | Reads | Writes in between |
+|---|---|---|
+| `chunk`, `each`, `chunk_map` | a page per query, with `LIMIT` and `OFFSET`, in the query's order (the key's when it has none) | rows that stop matching shift later pages: use the `_by_id` forms |
+| `chunk_by_id`, `each_by_id`, `chunk_by_column` | a page after the last key: `WHERE id > ? ORDER BY id LIMIT ?` | safe |
+| `lazy`, `lazy_by_id`, `lazy_by_column` | the same pages, as a `Stream` of records | as above |
+| `cursor` | one query, row by row as the database sends them | not through the same connection |
+
+When the callback changes the rows it reads, page by key, so pages stay correct:
+
+```rust
+let cutoff = Utc::now() - Duration::days(90);
+let db2 = db.clone();
+Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Lead))
+    .where_(Deal::UPDATED_AT.lt(cutoff))
+    .chunk_by_id(&db, 500, move |deals| {
+        let db = db2.clone();
+        async move {
+            deals.to_query().update(&db, [Deal::STAGE.set(Stage::Lost)]).await?;
+            Ok(ControlFlow::Continue(()))
+        }
+    })
+    .await?;
+```
+
+`chunk_by_id` replaces the query's order with the key's; `chunk_by_id_desc` walks backwards, and `chunk_by_column(column, alias)` pages by another unique column. `each` and `each_by_id` call the callback once per record, still reading a page at a time, and `chunk_map(&db, 500, |deal| ..)` collects what it returns for every record.
+
+### Lazy streams
+
+`lazy` and `lazy_by_id` return the same pages as a `Stream` of records, so a loop reads one page at a time and can stop early:
+
+```rust
+use navree::orm::streams::TryStreamExt;
+
+let mut deals = Deal::query().lazy_by_id(&db, 1000);
+while let Some(mut deal) = deals.try_next().await? {
+    deal.amount_cents += 100;
+    deal.save(&db).await?; // fine between pages
+}
+```
+
+The streams take every adapter of `futures`' `StreamExt` and `TryStreamExt` (re-exported by `navree::orm::streams`, and in the ORM prelude without their names): `map_ok`, `try_filter`, `take`, `chunks`, `try_collect`, ...
+
+```rust
+let big: Vec<Record<Deal>> = Deal::query()
+    .lazy(&db, 500)
+    .try_filter(|deal| std::future::ready(deal.amount_cents > 100_000))
+    .take(10)
+    .try_collect()
+    .await?;
+```
+
+No connection is held between pages, and nothing is read until the stream is polled.
+
+### Cursors
+
+`cursor` runs one query and decodes the rows as the database sends them, holding one row in memory however many match:
+
+```rust
+let mut won = Deal::query().where_(Deal::STAGE.eq(Stage::Won)).cursor(&db);
+let mut total = 0;
+while let Some(deal) = won.try_next().await? {
+    total += deal.amount_cents;
+}
+```
+
+The stream holds its connection until it ends or is dropped. Inside a unit of work that is the transaction's connection, so other statements through the same unit of work fail fast with an error until the cursor is done, instead of waiting for it forever; to write while iterating, use `lazy_by_id`. Eager loads don't apply to a cursor. `navree::orm::cursor(&db, raw(..))` streams the rows of SQL you write, and [table queries](/docs/orm/query-builder/#queries-without-a-model) have the same chunks, streams and cursors over `Row`s.
+
+Every form runs the model's `retrieved` [events](/docs/orm/events-and-observers/) for each record.
+
+<LinkCards>
+  <LinkCard href="/docs/database/pagination/" title="Pagination">
+    `Page`, `PageQuery` and the page shape.
+  </LinkCard>
+  <LinkCard href="/docs/orm/query-builder/" title="Query builder">
+    Ordering, mass updates and table queries.
+  </LinkCard>
+</LinkCards>
