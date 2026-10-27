@@ -167,12 +167,12 @@ impl Default for DeliveryOptions {
 /// opens = true                          # a 1x1 image in the HTML body
 /// clicks = true                         # links go through a signed redirect
 /// base_url = "https://links.acme.test"  # default: app.url
-/// key = "..."                           # default: derived from app.key
+/// ttl_days = 365                        # how long links stay valid
 /// ```
 ///
 /// Tracking needs `mail.delivery.enabled`: links and the image name the
 /// delivery, and each open or click is logged as an event on it.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct TrackingOptions {
     /// Add an open-tracking image to HTML mail (default `false`).
@@ -183,9 +183,21 @@ pub struct TrackingOptions {
     /// Where the tracking routes are served, without a trailing slash
     /// (default: `app.url`).
     pub base_url: Option<String>,
-    /// The key that signs tracking links (default: derived from the app
-    /// key, so `CryptoModule` with `app.key` is needed).
-    pub key: Option<Secret<String>>,
+    /// How long tracked links stay valid, in days (default 365). Links are
+    /// signed with the app's `UrlSigner` (`http.signing_key`, or a key
+    /// derived from `app.key`).
+    pub ttl_days: u32,
+}
+
+impl Default for TrackingOptions {
+    fn default() -> Self {
+        Self {
+            opens: false,
+            clicks: false,
+            base_url: None,
+            ttl_days: 365,
+        }
+    }
 }
 
 impl TrackingOptions {

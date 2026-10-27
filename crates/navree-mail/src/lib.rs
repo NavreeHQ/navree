@@ -72,10 +72,12 @@
 
 mod array;
 mod api;
+mod commands;
 mod delivery;
 mod dkim;
 mod domains;
 mod error;
+mod fake;
 mod job;
 mod mailable;
 mod mailer;
@@ -93,12 +95,26 @@ pub use api::postmark::{PostmarkConfig, PostmarkTransport};
 pub use api::resend::{ResendConfig, ResendTransport};
 pub use api::ses::{SesConfig, SesTransport};
 pub use array::ArrayTransport;
+pub use delivery::controller::{
+    AddSuppressionInput, DeliveryWithEvents, INVALID_SIGNATURE_CODE, MANAGE_PERMISSION,
+    MailController, ReleasedMail, UNUSABLE_TRANSPORT_CODE, UsableTransport,
+};
+pub use delivery::ingest::{MailEventKind, ProviderEvent};
+pub use delivery::log::{Deliveries, Delivery, DeliveryEvent, DeliveryFilter};
+pub use delivery::migration::MAIL_MIGRATIONS;
+pub use delivery::outbox::{HeldMail, Outbox, OutboxStatus};
+pub use delivery::resolver::{
+    ResolvedTransport, StoredTransport, TransportOwner, TransportResolver,
+};
+pub use delivery::suppressions::{Suppression, SuppressionReason, Suppressions};
+pub use delivery::{entity, events};
 pub use dkim::{DEFAULT_SIGNED_HEADERS, DkimAlgorithm, DkimConfig, DkimSigner};
 pub use domains::{
     CheckStatus, DkimCheck, DnsResolver, DomainExpectations, DomainReport, RecordCheck,
     SendingDomains, StaticResolver, SystemResolver,
 };
 pub use error::MailError;
+pub use fake::MailFake;
 pub use job::SendMailJob;
 pub use mailable::{Held, Mailable, TemplateMail};
 pub use mailer::{Mailer, ScopedMailer};

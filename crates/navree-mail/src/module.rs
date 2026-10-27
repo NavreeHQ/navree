@@ -3,13 +3,21 @@
 use std::sync::Arc;
 
 use navree_config::{Config, ConfigSection};
-use navree_contracts::ModuleBuilderJobsExt;
+use navree_contracts::{Clock, ModuleBuilderJobsExt, SystemClock};
+use navree_db::{Db, ModuleBuilderDbExt};
+use navree_http::{ModuleBuilderHttpExt, UrlSigner};
 use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 use navree_telemetry::Telemetry;
 use navree_view::Views;
 
+use crate::commands::commands;
+use crate::delivery::controller::{MailController, map_mail_error};
+use crate::delivery::migration::migrations;
+use crate::delivery::tracking::Tracking;
+use crate::delivery::{Pipeline, Store};
 use crate::{
-    DnsResolver, MailOptions, MailTransport, Mailer, SendMailJob, SendingDomains, SystemResolver,
+    Deliveries, DnsResolver, MailError, MailOptions, MailTransport, Mailer, Outbox, SendMailJob,
+    SendingDomains, Suppressions, SystemResolver, TransportResolver,
 };
 
 /// The global mail module: provides and exports [`Mailer`] and
@@ -120,8 +128,10 @@ impl Source {
     }
 }
 
-/// Global; provides the options (private), the transport and the mailer
-/// (exported), and registers the send job.
+/// Global; provides the options (private), the transport, the mailer, the
+/// delivery services and the domain checks (exported), and registers the
+/// send job, the `mail` migrations, the routes, the commands and the error
+/// mapping.
 fn register(m: &mut ModuleBuilder, source: Source) {
     let deps = source.deps();
     m.global()
@@ -140,6 +150,43 @@ fn register(m: &mut ModuleBuilder, source: Source) {
             .deps(vec![ProviderKey::of::<MailOptions>()]),
         )
         .factory(
+            Factory::<Store>::new(|r| async move {
+                let options = r.get::<MailOptions>().await?;
+                Ok(Arc::new(Store::new(&r.app(), options)))
+            })
+            .deps(vec![ProviderKey::of::<MailOptions>()]),
+        )
+        .factory(
+            Factory::<Suppressions>::new(|r| async move {
+                Ok(Arc::new(Suppressions::new(r.get::<Store>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Store>()]),
+        )
+        .factory(
+            Factory::<Deliveries>::new(|r| async move {
+                Ok(Arc::new(Deliveries::new(
+                    r.get::<Store>().await?,
+                    r.get::<Suppressions>().await?,
+                )))
+            })
+            .deps(vec![
+                ProviderKey::of::<Store>(),
+                ProviderKey::of::<Suppressions>(),
+            ]),
+        )
+        .factory(
+            Factory::<Outbox>::new(|r| async move {
+                Ok(Arc::new(Outbox::new(r.get::<Store>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Store>()]),
+        )
+        .factory(
+            Factory::<TransportResolver>::new(|r| async move {
+                Ok(Arc::new(TransportResolver::new(r.get::<Store>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Store>()]),
+        )
+        .factory(
             Factory::<Mailer>::new(|r| async move {
                 let options = r.get::<MailOptions>().await?;
                 let transport = r.get::<dyn MailTransport>().await?;
@@ -152,16 +199,27 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 for (name, config) in &options.transports {
                     mailer = mailer.with_transport(name.clone(), config.build()?);
                 }
+                if options.delivery.enabled {
+                    mailer = mailer.with_pipeline(Arc::new(pipeline(&r, &options).await?));
+                }
                 Ok(Arc::new(mailer))
             })
             .deps(vec![
                 ProviderKey::of::<MailOptions>(),
                 ProviderKey::of::<dyn MailTransport>(),
                 ProviderKey::of::<Views>(),
+                ProviderKey::of::<Store>(),
+                ProviderKey::of::<Suppressions>(),
+                ProviderKey::of::<Outbox>(),
+                ProviderKey::of::<TransportResolver>(),
             ]),
         )
         .exports::<Mailer>()
         .exports::<dyn MailTransport>()
+        .exports::<Deliveries>()
+        .exports::<Suppressions>()
+        .exports::<Outbox>()
+        .exports::<TransportResolver>()
         .factory(Factory::<dyn DnsResolver>::new(|_| async move {
             Ok(Arc::new(SystemResolver::new()) as Arc<dyn DnsResolver>)
         }))
@@ -173,5 +231,60 @@ fn register(m: &mut ModuleBuilder, source: Source) {
         )
         .exports::<dyn DnsResolver>()
         .exports::<SendingDomains>()
-        .job::<SendMailJob>();
+        .job::<SendMailJob>()
+        .controller::<MailController>()
+        .migrations(migrations())
+        .map_error::<MailError>(map_mail_error);
+    for command in commands() {
+        m.command(command);
+    }
+}
+
+/// The delivery pipeline (`mail.delivery.enabled`): needs `DatabaseModule`;
+/// tracking also needs the app's `UrlSigner` (`HttpModule`) and a base URL.
+async fn pipeline(r: &Resolver, options: &MailOptions) -> Result<Pipeline, BoxError> {
+    let app = r.app();
+    if app.try_get::<Db>().await.is_none() {
+        return Err("`mail.delivery.enabled` needs DatabaseModule (the mail tables)".into());
+    }
+    let tracking = if options.tracking.is_on() {
+        let signer = app.try_get::<UrlSigner>().await.ok_or(
+            "mail tracking needs HttpModule: its UrlSigner signs the tracked links",
+        )?;
+        let base = match options
+            .tracking
+            .base_url
+            .clone()
+            .filter(|base| !base.is_empty())
+        {
+            Some(base) => base,
+            None => app
+                .try_get::<Config>()
+                .await
+                .and_then(|config| config.get_string("app.url"))
+                .filter(|url| !url.is_empty())
+                .ok_or("mail tracking needs `mail.tracking.base_url` or `app.url`")?,
+        };
+        let clock: Arc<dyn Clock> = match app.try_get::<dyn Clock>().await {
+            Some(clock) => clock,
+            None => Arc::new(SystemClock),
+        };
+        Some(Tracking::new(
+            signer,
+            clock,
+            &base,
+            options.tracking.ttl_days,
+            options.tracking.opens,
+            options.tracking.clicks,
+        ))
+    } else {
+        None
+    };
+    Ok(Pipeline::new(
+        r.get::<Store>().await?,
+        r.get::<Suppressions>().await?,
+        r.get::<Outbox>().await?,
+        r.get::<TransportResolver>().await?,
+        tracking,
+    ))
 }
