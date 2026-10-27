@@ -461,8 +461,22 @@ async fn only_timescaledb_has_hypertables() {
             "{}",
             target.describe()
         );
+        assert_eq!(
+            schema.time_dimension("events").await.unwrap(),
+            None,
+            "{}",
+            target.describe()
+        );
         assert!(schema.statements().is_empty());
     }
+    let error = Schema::offline(timescaledb())
+        .time_dimension("events")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "reading the time dimension of `events` needs a database connection; this schema is offline (it only records statements)"
+    );
 }
 
 #[tokio::test]
