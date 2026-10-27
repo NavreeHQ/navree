@@ -47,6 +47,15 @@ pub fn compile_aggregate(
             inner.orders.clear();
         }
         inner.lock = None;
+        // A grouped query without a select list counts its groups.
+        if inner.columns.is_empty() && !inner.groups.is_empty() {
+            inner.columns = inner
+                .groups
+                .iter()
+                .cloned()
+                .map(|expr| crate::ir::SelectItem { expr, alias: None })
+                .collect();
+        }
         let inner = compiler.select(&inner)?;
         let arg = aggregate.arg.as_ref().map(unqualified);
         let expr = compiler.expr(&Expr::Aggregate {

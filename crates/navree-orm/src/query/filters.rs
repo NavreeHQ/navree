@@ -12,7 +12,7 @@ use crate::column::{AsExpr, ColumnOf, Filter, IntoQuery};
 use crate::ir::{
     Boolean, ColumnRef, DatePart, Expr, FullText, InValues, Operator, TableRef, Where, WhereClause,
 };
-use crate::value::Value;
+use crate::value::{Value, ValueFor};
 
 /// A builder with a list of where clauses (implemented by every builder).
 pub trait HasWheres {
@@ -128,7 +128,7 @@ macro_rules! filters {
         pub fn where_in<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            values: impl IntoIterator<Item = impl Into<T>>,
+            values: impl IntoIterator<Item = impl $crate::ValueFor<T>>,
         ) -> Self {
             let filter = $crate::query::filters::in_list(&column, values, false);
             self.where_(filter)
@@ -138,7 +138,7 @@ macro_rules! filters {
         pub fn or_where_in<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            values: impl IntoIterator<Item = impl Into<T>>,
+            values: impl IntoIterator<Item = impl $crate::ValueFor<T>>,
         ) -> Self {
             let filter = $crate::query::filters::in_list(&column, values, false);
             self.or_where(filter)
@@ -148,7 +148,7 @@ macro_rules! filters {
         pub fn where_not_in<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            values: impl IntoIterator<Item = impl Into<T>>,
+            values: impl IntoIterator<Item = impl $crate::ValueFor<T>>,
         ) -> Self {
             let filter = $crate::query::filters::in_list(&column, values, true);
             self.where_(filter)
@@ -158,7 +158,7 @@ macro_rules! filters {
         pub fn or_where_not_in<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            values: impl IntoIterator<Item = impl Into<T>>,
+            values: impl IntoIterator<Item = impl $crate::ValueFor<T>>,
         ) -> Self {
             let filter = $crate::query::filters::in_list(&column, values, true);
             self.or_where(filter)
@@ -206,10 +206,10 @@ macro_rules! filters {
         pub fn where_between<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            low: impl Into<T>,
-            high: impl Into<T>,
+            low: impl $crate::ValueFor<T>,
+            high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, low.into(), high.into(), false);
+            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), false);
             self.where_(filter)
         }
 
@@ -217,10 +217,10 @@ macro_rules! filters {
         pub fn or_where_between<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            low: impl Into<T>,
-            high: impl Into<T>,
+            low: impl $crate::ValueFor<T>,
+            high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, low.into(), high.into(), false);
+            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), false);
             self.or_where(filter)
         }
 
@@ -228,10 +228,10 @@ macro_rules! filters {
         pub fn where_not_between<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            low: impl Into<T>,
-            high: impl Into<T>,
+            low: impl $crate::ValueFor<T>,
+            high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, low.into(), high.into(), true);
+            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), true);
             self.where_(filter)
         }
 
@@ -239,10 +239,10 @@ macro_rules! filters {
         pub fn or_where_not_between<T>(
             self,
             column: impl $crate::ColumnOf<T>,
-            low: impl Into<T>,
-            high: impl Into<T>,
+            low: impl $crate::ValueFor<T>,
+            high: impl $crate::ValueFor<T>,
         ) -> Self {
-            let filter = $crate::query::filters::between(&column, low.into(), high.into(), true);
+            let filter = $crate::query::filters::between(&column, $crate::ValueFor::into_value_for(low), $crate::ValueFor::into_value_for(high), true);
             self.or_where(filter)
         }
 
@@ -657,12 +657,16 @@ impl HasWheres for WhereGroup {
 /// `column [NOT] IN (values)`, each value encoded as the column stores it.
 pub(crate) fn in_list<T>(
     column: &impl ColumnOf<T>,
-    values: impl IntoIterator<Item = impl Into<T>>,
+    values: impl IntoIterator<Item = impl ValueFor<T>>,
     not: bool,
 ) -> Filter {
     let encoded: Result<Vec<Expr>, String> = values
         .into_iter()
-        .map(|value| column.encode_value(&value.into()).map(Expr::Value))
+        .map(|value| {
+            column
+                .encode_value(&value.into_value_for())
+                .map(Expr::Value)
+        })
         .collect();
     match encoded {
         Ok(values) => Filter(Where::In {

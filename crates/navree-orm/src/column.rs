@@ -9,7 +9,7 @@ use crate::ir::{
     Boolean, ColumnRef, Expr, InValues, Operator, Order, QueryIr, Where, WhereClause,
 };
 use crate::row::Row;
-use crate::value::{Field, FieldError, Value, is_null};
+use crate::value::{Field, FieldError, Value, ValueFor, is_null};
 
 /// Encodes a field value as a column value (with the field's cast, if any).
 pub type Encoder<T> = fn(&T) -> Result<Value, String>;
@@ -188,44 +188,44 @@ impl<M, T> Column<M, T> {
     }
 
     /// `column = value` (`IS NULL` for a NULL value).
-    pub fn eq(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Eq, value.into())
+    pub fn eq(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Eq, value.into_value_for())
     }
 
     /// `column <> value` (`IS NOT NULL` for a NULL value).
-    pub fn ne(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Ne, value.into())
+    pub fn ne(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Ne, value.into_value_for())
     }
 
     /// `column > value`.
-    pub fn gt(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Gt, value.into())
+    pub fn gt(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Gt, value.into_value_for())
     }
 
     /// `column >= value`.
-    pub fn gte(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Gte, value.into())
+    pub fn gte(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Gte, value.into_value_for())
     }
 
     /// `column < value`.
-    pub fn lt(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Lt, value.into())
+    pub fn lt(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Lt, value.into_value_for())
     }
 
     /// `column <= value`.
-    pub fn lte(&self, value: impl Into<T>) -> Filter {
-        self.compare(Operator::Lte, value.into())
+    pub fn lte(&self, value: impl ValueFor<T>) -> Filter {
+        self.compare(Operator::Lte, value.into_value_for())
     }
 
     /// `column <op> value` for any [`Operator`] (`">="`, `"<>"`, `"like"`,
     /// PostgreSQL's `"@>"`, ...).
-    pub fn op(&self, op: impl Into<Operator>, value: impl Into<T>) -> Filter {
-        self.compare(op.into(), value.into())
+    pub fn op(&self, op: impl Into<Operator>, value: impl ValueFor<T>) -> Filter {
+        self.compare(op.into(), value.into_value_for())
     }
 
     /// Null-safe equality: true when both sides are NULL.
-    pub fn null_safe_eq(&self, value: impl Into<T>) -> Filter {
-        match self.value_operand(&value.into()) {
+    pub fn null_safe_eq(&self, value: impl ValueFor<T>) -> Filter {
+        match self.value_operand(&value.into_value_for()) {
             Ok(right) => Filter(Where::Compare {
                 left: self.expr(),
                 op: Operator::NullSafeEq,
@@ -235,10 +235,10 @@ impl<M, T> Column<M, T> {
         }
     }
 
-    fn list(&self, values: impl IntoIterator<Item = impl Into<T>>, not: bool) -> Filter {
+    fn list(&self, values: impl IntoIterator<Item = impl ValueFor<T>>, not: bool) -> Filter {
         let encoded: Result<Vec<Expr>, String> = values
             .into_iter()
-            .map(|value| self.value_operand(&value.into()))
+            .map(|value| self.value_operand(&value.into_value_for()))
             .collect();
         match encoded {
             Ok(values) => Filter(Where::In {
@@ -251,12 +251,12 @@ impl<M, T> Column<M, T> {
     }
 
     /// `column IN (values)`; an empty list matches no row.
-    pub fn is_in(&self, values: impl IntoIterator<Item = impl Into<T>>) -> Filter {
+    pub fn is_in(&self, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Filter {
         self.list(values, false)
     }
 
     /// `column NOT IN (values)`; an empty list matches every row.
-    pub fn not_in(&self, values: impl IntoIterator<Item = impl Into<T>>) -> Filter {
+    pub fn not_in(&self, values: impl IntoIterator<Item = impl ValueFor<T>>) -> Filter {
         self.list(values, true)
     }
 
@@ -307,13 +307,13 @@ impl<M, T> Column<M, T> {
     }
 
     /// `column BETWEEN low AND high` (both ends included).
-    pub fn between(&self, low: impl Into<T>, high: impl Into<T>) -> Filter {
-        self.range(low.into(), high.into(), false)
+    pub fn between(&self, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Filter {
+        self.range(low.into_value_for(), high.into_value_for(), false)
     }
 
     /// `column NOT BETWEEN low AND high`.
-    pub fn not_between(&self, low: impl Into<T>, high: impl Into<T>) -> Filter {
-        self.range(low.into(), high.into(), true)
+    pub fn not_between(&self, low: impl ValueFor<T>, high: impl ValueFor<T>) -> Filter {
+        self.range(low.into_value_for(), high.into_value_for(), true)
     }
 
     /// `column = other` (another column).
@@ -337,8 +337,8 @@ impl<M, T> Column<M, T> {
     }
 
     /// `SET column = value` (mass updates, `first_or_create` attributes).
-    pub fn set(&self, value: impl Into<T>) -> Assignment {
-        match (self.encode)(&value.into()) {
+    pub fn set(&self, value: impl ValueFor<T>) -> Assignment {
+        match (self.encode)(&value.into_value_for()) {
             Ok(value) => Assignment::value(self.name.clone(), value),
             Err(error) => Assignment::invalid(
                 self.name.clone(),

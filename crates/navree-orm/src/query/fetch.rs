@@ -394,7 +394,10 @@ impl<M: Model> Builder<M> {
             arg: argument,
             distinct,
         };
-        let value = target.aggregate(&self.into_ir(), &aggregate).await?;
+        // Without the default columns: a grouped count selects only the
+        // groups (PostgreSQL refuses ungrouped columns).
+        let ir = self.apply_global_scopes().ir;
+        let value = target.aggregate(&ir, &aggregate).await?;
         <Option<T>>::from_value(value).map_err(|error| {
             decode_error(
                 M::meta().name(),

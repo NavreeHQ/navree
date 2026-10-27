@@ -133,7 +133,9 @@ pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
-pub use value::{Decimal, Field, FieldError, Numeric, Value, is_null, same_value, to_json};
+pub use value::{
+    Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
+};
 
 /// `#[derive(Model)]` and `#[scopes]` (see their documentation in
 /// navree-orm-macros).
