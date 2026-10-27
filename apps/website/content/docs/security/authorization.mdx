@@ -461,6 +461,17 @@ if moving.is_some() && !deal.ability().can(Move::NAME, DEAL, Some(deal.record())
 
 `CurrentAccess` gives more: the user's `roles`, `permissions`, access `version`, whether they are the `super_admin`, and the `ability`. Both extractors compute the user's access once per request, shared with the route authorizer.
 
+Outside a request, such as in a job or a channel authorizer, ask the `AbilityFactory` for a user's permission, checked the way `#[permissions]` checks it:
+
+```rust
+let factory = ctx.get::<AbilityFactory>().await?;
+if factory.has_permission(&principal, "reports.export").await? {
+    // ...
+}
+```
+
+Code that shouldn't depend on navree-access asks `navree::contracts::permitted(&ctx, &principal, "reports.export", workspace)` instead. `AccessModule` answers it with the user's global roles and permissions, and [`WorkspaceModule`](/docs/workspaces/members-and-roles/#checks-outside-a-request) with their role in the workspace, when one is given. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) decide who sees them this way.
+
 ## List filters in SQL
 
 A list endpoint must return only the rows the user may see, and it must agree with the record check, or users see records they then can't open. `Accessible<E, A>` compiles the same rules into one SQL `CASE` expression, so a row is listed exactly when `can(A, E, row)` would be true. Apply it to a SeaORM `Select`, as the `index` route above does. The CRM lists deals the same way:

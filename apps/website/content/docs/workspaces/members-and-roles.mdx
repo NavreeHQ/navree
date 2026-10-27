@@ -136,6 +136,20 @@ if ws.can("approve", "Deal") { /* ... */ }
 if ws.role() == &WorkspaceRole::Owner { /* ... */ }
 ```
 
+### Checks outside a request
+
+Code that runs outside a workspace request, such as a channel authorizer or a service deciding who may see a record, asks `navree::contracts::permitted` instead:
+
+```rust
+use navree::contracts::permitted;
+
+if permitted(&ctx, &principal, "operations.view", Some(workspace_id)).await? {
+    // show it
+}
+```
+
+`WorkspaceModule` answers with the user's role in that workspace, evaluated as behind the guard (a non-member is refused), and `AccessModule` answers with their global roles and permissions; either one granting it is enough. With no workspace given, only the global answer counts. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) use this to decide who sees them.
+
 ## Managing members
 
 The `Members` service changes memberships inside a unit of work:

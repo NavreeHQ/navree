@@ -120,6 +120,7 @@ export const sections: DocsSection[] = [
       "cache",
       "events",
       "queues",
+      "batches-and-operations",
       "scheduling",
       "mail",
       "notifications",
