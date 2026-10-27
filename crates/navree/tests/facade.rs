@@ -117,6 +117,18 @@ fn prelude_brings_the_everyday_types() {
         WorkspaceRepo<DummyEntity>,
         navree::workspace::WorkspaceRepo<DummyEntity>,
     >());
+    // Organizations and partitions.
+    assert!(same::<
+        CurrentOrganization,
+        navree::workspace::CurrentOrganization,
+    >());
+    assert!(same::<InOrganization, navree::workspace::InOrganization>());
+    assert!(same::<CurrentPartition, navree::workspace::CurrentPartition>());
+    assert!(same::<PartitionScope, navree::workspace::PartitionScope>());
+    assert!(same::<
+        OrgRepo<DummyEntity>,
+        navree::workspace::OrgRepo<DummyEntity>,
+    >());
     for (marker, name) in [
         (TypeId::of::<Read>(), Read::NAME),
         (TypeId::of::<Create>(), Create::NAME),

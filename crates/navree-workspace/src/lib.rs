@@ -27,8 +27,26 @@
 //!   request's transaction. `Schema`: one PostgreSQL schema per workspace,
 //!   selected with `search_path`. `Database`: one database per workspace
 //!   ([`WorkspaceDatabases`]), used through [`WorkspaceUow`].
+//! - **Organizations** (`workspace.organizations.enabled`). An optional
+//!   level above workspaces: [`Organizations`] creates them and attaches
+//!   workspaces; [`OrgMembers`] gives members an [`OrgRole`] that maps to a
+//!   workspace role in all or some of the organization's workspaces
+//!   ([`WorkspaceSelector`]), so [`CurrentWorkspace`] admits a member or an
+//!   organization grant; [`AccessRequests`] lets users ask to join.
+//!   [`CurrentOrganization`] and [`InOrganization`] resolve the request's
+//!   organization (`X-Organization`, `/o/acme/...`, a subdomain or a claim)
+//!   and [`OrgRepo`] reads across the workspaces the member reaches (on
+//!   PostgreSQL, through `navree.organization`).
+//! - **Partitions** (`workspace.partitions.enabled`). An optional level
+//!   inside a workspace: [`Partitions`] creates named slices of its data
+//!   (a `partition_id` column, [`PartitionScoped`]) and limits members to
+//!   all or some of them; [`CurrentPartition`] (`X-Partition`) and
+//!   [`PartitionScope`] keep a request to the partitions it may touch, with
+//!   [`PartitionRepo`] and, on PostgreSQL, `navree.partition`.
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
-//!   ([`WorkspaceController`], [`InvitationController`]), unless
+//!   ([`WorkspaceController`], [`InvitationController`]), plus
+//!   `/api/organizations...` ([`OrganizationController`]) and
+//!   `/api/workspaces/{workspace}/partitions` when those are on, unless
 //!   `workspace.routes` is false.
 //!
 //! ```no_run
