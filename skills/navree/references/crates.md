@@ -1,10 +1,11 @@
 # The navree facade: modules, crates and sections
 
-An app depends on the `navree` crate alone (plus `serde`, `sea-orm`,
-`sea-orm-migration` and `garde` for their derives). Its default `full`
+An app depends on the `navree` crate alone (plus `serde`, `garde` and
+`sea-orm` for their derives, and `chrono` and `uuid`). Its default `full`
 feature turns every module on; each module is also its own feature.
 `postgres` adds the PostgreSQL driver and `mysql` the MySQL and MariaDB
-driver; SQLite is the default and is compiled in.
+driver; SQLite is the default and is compiled in. `mongo` (opt-in) adds
+MongoDB.
 
 | Path | Crate | Feature | Module to add | Config section | What it gives |
 |---|---|---|---|---|---|
@@ -18,7 +19,10 @@ driver; SQLite is the default and is compiled in.
 | `navree::view` | navree-view | `view` | `ViewModule::from_config()` | `view` | MiniJinja templates, `Views` |
 | `navree::cache` | navree-cache | `cache` | `CacheModule::from_config()` | `cache` | `Cache`, `Locks` |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule::from_config()` | `http_client` | `HttpClient`, `HttpClient::fake()` |
-| `navree::db` | navree-db | `db` | `DatabaseModule::from_config()` | `database` | `Db`, `Uow`, `Repo`, `MigrationSet`, `Seeder`, `Factory`, `paginate`, `Page`, `PageQuery` |
+| `navree::schema` | navree-schema | `schema` | (used by migrations) | `schema` | `Schema`, `Blueprint`, `Migration`, `migration!`, `Target`, `Dialect` |
+| `navree::db` | navree-db | `db` | `DatabaseModule::from_config()` | `database` | `Db`, `Uow`, `Repo`, `MigrationSet`, `Migrator`, `Seeder`, `Factory`, `paginate`, `Page`, `PageQuery` |
+| `navree::orm` | navree-orm | `orm` | `OrmModule::from_config()` | `orm` | `#[derive(Model)]`, `Record`, `Collection`, `Builder`, `#[relations]`, `#[scopes]`, `binding::Bound`, `factory::ModelFactory`, `testing` |
+| `navree::mongo` | navree-mongo | `mongo` (opt-in, not in `full`) | `MongoModule::from_config()` | `database.mongodb` | `MongoDb`, models with `driver = "mongodb"`, collections and their migrations |
 | `navree::testing` | navree-testing | `testing` | | | `TestApp`, `TestClient`, `principal`, `temp_sqlite_url` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule::from_config()` | `observe` | `/health/live`, `/health/ready`, `/metrics` |
 | `navree::api` | navree-api | `api` | `ApiModule::from_config()` | `api` | `/api/openapi.json`, `/api/docs`, `openapi:export` |
@@ -59,6 +63,7 @@ Navree::app()
     .module(ViewModule::from_config())
     .module(MailModule::from_config())
     .module(QueueModule::from_config())
+    .module(OrmModule::from_config())
     .module(ValidationModule::from_config())
     .module(AuthModule::from_config())
     .module(AccessModule::for_root(AccessOptions {
