@@ -100,7 +100,8 @@ impl Default for DbOptions {
 /// ```
 /// use navree_db::{DbOptions, IsolationLevel, MySqlOptions};
 ///
-/// // Fewer gap locks than MySQL's default REPEATABLE READ, as on PostgreSQL.
+/// // READ COMMITTED, PostgreSQL's default: InnoDB then locks records but
+/// // not the gaps between them, as it does under REPEATABLE READ.
 /// let options = DbOptions {
 ///     url: "mysql://app:secret@127.0.0.1:3306/crm".into(),
 ///     mysql: MySqlOptions {
