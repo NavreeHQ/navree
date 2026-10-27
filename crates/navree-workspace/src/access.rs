@@ -135,7 +135,11 @@ pub(crate) async fn scoped_access(
         permission_subjects: subjects.clone(),
     };
     let mut rules = Rules::new();
-    (options.abilities)(&ability_ctx, &mut rules);
+    match &factory {
+        // The registered policies, then the app's abilities function.
+        Some(factory) => factory.define_rules(&ability_ctx, &mut rules),
+        None => (options.abilities)(&ability_ctx, &mut rules),
+    }
     if super_admin {
         rules.can(MANAGE, ALL).because("super admin");
     }

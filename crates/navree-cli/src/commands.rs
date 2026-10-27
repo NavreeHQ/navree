@@ -5,6 +5,7 @@ use std::process::{ExitCode, Stdio};
 use std::time::Duration;
 
 use anyhow::Context;
+use heck::ToSnakeCase;
 
 use crate::browser;
 use crate::check::{CheckOptions, run_check};
@@ -14,7 +15,7 @@ use crate::dev::{self, DevOptions};
 use crate::dock;
 use crate::forward::{ProcessRunner, forward};
 use crate::gate::{GateOptions, default_lock_path, run_gate};
-use crate::make::{MakeOptions, MakeReport, make_item, make_module};
+use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make_module};
 use crate::names::{AppName, Name};
 use crate::new_app::{NavreeSource, NewApp, create_app, created_message};
 use crate::project::{project_root, run_root};
@@ -147,24 +148,46 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 .map_or(ExitCode::FAILURE, ExitCode::from))
         }
         other => {
-            let (kind, args, event) = other
+            let (kind, args, flags) = other
                 .make_item()
                 .expect("every other command is a make:<kind>");
             let module = Name::parse("module", &args.module)?;
-            let name = Name::parse(kind.noun(), &args.name)?;
-            let options = MakeOptions {
-                event: event.map(|e| Name::parse("event", e)).transpose()?,
+            // Models (and what is named after them) may be given as types:
+            // `make:model crm Deal`.
+            let given = match kind {
+                MakeKind::Model | MakeKind::Factory | MakeKind::Seeder => args.name.to_snake_case(),
+                _ => args.name.clone(),
             };
+            let name = Name::parse(kind.noun(), &given)?;
             let root = app_root(cwd)?;
-            let report = make_item(
-                &root,
-                &args.path,
-                kind,
-                &module,
-                &name,
-                &options,
-                Timestamp::now(),
-            )?;
+            let report = if kind == MakeKind::Model {
+                make_model(
+                    &root,
+                    &args.path,
+                    &module,
+                    &name,
+                    flags.companions,
+                    Timestamp::now(),
+                )?
+            } else {
+                let options = MakeOptions {
+                    event: flags.event.map(|e| Name::parse("event", e)).transpose()?,
+                    model: flags
+                        .model
+                        .map(|m| Name::parse("model", &m.to_snake_case()))
+                        .transpose()?,
+                    companions: flags.companions,
+                };
+                make_item(
+                    &root,
+                    &args.path,
+                    kind,
+                    &module,
+                    &name,
+                    &options,
+                    Timestamp::now(),
+                )?
+            };
             finish(&root, &report);
             Ok(ExitCode::SUCCESS)
         }

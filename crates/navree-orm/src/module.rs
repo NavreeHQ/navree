@@ -1,6 +1,7 @@
 //! [`OrmModule`] (the `[orm]` options, strict modes, runtime global
-//! scopes, the model registry, `model:prune`) and [`ModuleBuilderOrmExt`]
-//! (observers, listeners, scopes and models registered by modules).
+//! scopes, the model registry, `model:prune` and `model:show`) and
+//! [`ModuleBuilderOrmExt`] (observers, listeners, scopes and models
+//! registered by modules).
 
 use std::borrow::Cow;
 use std::fmt;
@@ -9,7 +10,8 @@ use std::sync::Arc;
 use navree_config::Config;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_kernel::{
-    BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder, ModuleId, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder,
+    ModuleId, Resolver,
 };
 
 use crate::error::Result;
@@ -22,6 +24,7 @@ use crate::options::OrmOptions;
 use crate::query::Builder;
 use crate::record::Record;
 use crate::scope::GlobalScope;
+use crate::show::ModelDescription;
 use crate::strict::{self, Strictness, Violation};
 
 /// The ORM's module. Global; provides and exports [`OrmRuntime`].
@@ -32,8 +35,9 @@ use crate::strict::{self, Strictness, Violation};
 ///   ([`ModuleBuilderOrmExt::global_scope`]);
 /// - keeps the registry of the app's models
 ///   ([`ModuleBuilderOrmExt::model`]) for tooling;
-/// - registers the command `model:prune` (see [`prune`](crate::prune)) and
-///   the job `orm.broadcast` (queued model broadcasts, see
+/// - registers the commands `model:prune` (see [`prune`](crate::prune))
+///   and `model:show` (see [`show`](crate::show)) and the job
+///   `orm.broadcast` (queued model broadcasts, see
 ///   [`broadcast`](crate::broadcast)).
 ///
 /// The ORM works without it (models need no module); add it to configure
@@ -200,7 +204,8 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
             "model:prune",
             "Prune the registered prunable models ([--model M]... [--except M]... [--chunk N] [--pretend])",
             crate::prune::prune_command,
-        ));
+        ))
+        .command(crate::show::command());
 }
 
 /// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
@@ -250,16 +255,24 @@ struct ScopeRegistration {
     install: Box<dyn Fn() + Send + Sync>,
 }
 
+/// Describes model `M` with the hooks the app registers for it.
+type Describe =
+    fn(AppContext) -> BoxFuture<'static, std::result::Result<ModelDescription, BoxError>>;
+
 /// A model a module registered (see [`ModuleBuilderOrmExt::model`]).
 #[derive(Clone, Copy)]
 pub struct RegisteredModel {
     meta: fn() -> &'static ModelMeta,
+    describe: Describe,
 }
 
 impl RegisteredModel {
     /// The registration of model `M`.
     pub fn of<M: Model>() -> Self {
-        RegisteredModel { meta: M::meta }
+        RegisteredModel {
+            meta: M::meta,
+            describe: describe::<M>,
+        }
     }
 
     /// The model's metadata.
@@ -271,6 +284,15 @@ impl RegisteredModel {
     pub fn name(&self) -> &'static str {
         self.meta().name()
     }
+
+    /// The model as `model:show` shows it, with the hooks `app` registers
+    /// for it.
+    pub async fn describe(
+        &self,
+        app: &AppContext,
+    ) -> std::result::Result<ModelDescription, BoxError> {
+        (self.describe)(app.clone()).await
+    }
 }
 
 impl fmt::Debug for RegisteredModel {
@@ -281,9 +303,20 @@ impl fmt::Debug for RegisteredModel {
     }
 }
 
+/// `M`'s description, with the hooks `app` registers for it.
+fn describe<M: Model>(
+    app: AppContext,
+) -> BoxFuture<'static, std::result::Result<ModelDescription, BoxError>> {
+    Box::pin(async move {
+        let registered = app.get_all::<dyn ModelHook<M>>().await?;
+        let app_hooks = registered.iter().map(|hook| hook.name()).collect();
+        Ok(ModelDescription::of::<M>(app_hooks))
+    })
+}
+
 /// The models the app's modules registered, in module dependency order
 /// (each once).
-pub fn registered_models(app: &navree_kernel::AppContext) -> Vec<RegisteredModel> {
+pub fn registered_models(app: &AppContext) -> Vec<RegisteredModel> {
     let mut models: Vec<RegisteredModel> = Vec::new();
     for registration in app.contributions::<RegisteredModel>() {
         let model = *registration.value;
@@ -326,8 +359,8 @@ pub fn registered_models(app: &navree_kernel::AppContext) -> Vec<RegisteredModel
 /// ```
 pub trait ModuleBuilderOrmExt {
     /// Registers model `M` with the app, so commands and tooling find it
-    /// (`model:prune`, ...). Rust cannot discover types at run time: a
-    /// module lists its models once.
+    /// (`model:prune`, `model:show`, ...). Rust cannot discover types at
+    /// run time: a module lists its models once. Imports [`OrmModule`].
     fn model<M: Model>(&mut self) -> &mut Self;
 
     /// Registers `observer` for model `M`'s events (a `dyn ModelHook<M>`

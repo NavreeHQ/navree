@@ -1,8 +1,10 @@
 //! The ORM through the facade: a model declared and queried with
 //! `navree::prelude` and `navree::orm`, inside a unit of work.
 
+use navree::BoxError;
 use navree::db::sea_orm::ConnectionTrait;
 use navree::db::{Db, DbOptions};
+use navree::orm::testing::database::{Template, TestDb};
 use navree::orm::{Dialect, col};
 use navree::prelude::*;
 use serde::Serialize;
@@ -176,4 +178,38 @@ async fn relations_work_through_the_facade() {
             .name,
         "Acme"
     );
+}
+
+/// The contacts table, built once for the tests below.
+static CONTACTS: Template = Template::new("facade contacts", |template| {
+    Box::pin(async move {
+        template
+            .db()
+            .conn()
+            .execute_unprepared(
+                "CREATE TABLE contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            )
+            .await?;
+        Ok(())
+    })
+});
+
+#[navree::test(template = CONTACTS)]
+async fn navree_test_gives_each_test_a_copy_of_the_template(db: TestDb) {
+    Contact::create(
+        db.db(),
+        Contact {
+            name: "Ada".into(),
+            ..Contact::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(Contact::query().count(db.db()).await.unwrap(), 1);
+}
+
+#[navree::test(template = CONTACTS)]
+async fn navree_test_copies_are_independent(db: TestDb) -> navree::Result<(), BoxError> {
+    assert_eq!(Contact::query().count(db.db()).await?, 0);
+    Ok(())
 }

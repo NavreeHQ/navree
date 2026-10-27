@@ -36,7 +36,7 @@ Principles:
 | Crate | Layer | Role |
 |---|---|---|
 | `navree-orm` | L4 | Models, records, collections, the builders, the IR, SQL per dialect, execution on `Db`/`Uow`, casts, scopes, hooks, pagination, the relation and document-driver seams |
-| `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]`, `#[relations]` and `#[accessors]`/`#[accessor]` (proc macros; no runtime navree dependencies) |
+| `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]`, `#[relations]`, `#[accessors]`/`#[accessor]` and `#[test]` (proc macros; no runtime navree dependencies) |
 | `navree-orm-mongodb` | L5 | MongoDB: implements `DocumentDriver` (mongodb track) |
 | `navree-schema` | L3/L4 | Migrations and the schema builder (own design; the ORM does not depend on it) |
 
@@ -62,8 +62,13 @@ treats navree-orm-macros as a companion proc-macro crate of navree-orm
 
 Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, and
 SeaORM's pgvector values for `cast = "vector"`), `mysql` (navree-db's
-MySQL and MariaDB driver). SQL for every dialect is generated without any
-feature.
+MySQL and MariaDB driver), and three that pull in a same-layer crate (all
+optional, so the core needs none of them; the facade turns each on when
+both its features are on): `access` (navree-access: models as subjects,
+policies, accessible queries), `testing` (navree-testing: `TestAppExt`,
+test databases, `#[test]`) and `validation` (navree-validation: `unique`
+and `exists` rules on models). SQL for every dialect is generated without
+any feature.
 
 ### Paths in generated code
 
@@ -123,6 +128,15 @@ src/
                     eager and lazy loading, existence, aggregates, pivots, morphs, touches
   driver.rs         DocumentDriver, InsertOutcome
   doc_models.rs     `__doc_models` (hidden): the models the doc examples use, so every example compiles
+  doc_factories.rs  `__doc_factories` (hidden): models with factories for the factory, testing, binding and workspace examples
+  doc_access.rs     `__doc_access` (hidden, feature `access`): a subject with a policy
+  factory/          ModelFactory, HasFactory, Factory<F>; context.rs, faker.rs, relationships.rs, sequence.rs, sources.rs, bulk.rs, quiet.rs
+  testing/          database assertions (mod.rs), query counting (queries.rs), test databases (database.rs), TestAppExt (app.rs)
+  binding.rs        route model binding: Bound, RouteBinding, RouteKey, WithTrashed, ChildOf, BoundChild
+  workspace.rs      workspace scoping: the current workspace, WorkspaceScope, WorkspaceHook, opt-outs
+  access.rs         (feature `access`) ModelColumns, accessible queries, AbilityExt, record loading
+  validation.rs     (feature `validation`) unique / exists rules on models
+  show.rs           model:show: ModelDescription and the command
   exec.rs           Executor, Access, Route, Target, SqlTarget, DocumentTarget, ExecContext; using_connection, using_writer; timed reads
   ir.rs             QueryIr, Where, Expr, Order, Join, TableRef, FullText, Lock, GroupLimit, InsertIr (OnConflict), UpdateIr, DeleteIr, ...
   operators.rs      Column pattern, JSON and null-safe helpers (ilike, regex, similar_to, contains, has_key, ...), Filter::op_raw, Expr::binary, vector distances
@@ -732,13 +746,20 @@ extractor (400 for a malformed cursor or limit).
   through a recording document driver; `attributes.rs`: the stored form
   of cast fields in conditions, vectors per database, with and without
   the `postgres` feature).
+- `tests/integration/` (SQLite, apps booted with navree-testing):
+  factories (making and creating), seeding, the assertions, route model
+  binding, workspaces (every read and write path across two workspaces),
+  access (with property tests: a record check and a list filter never
+  disagree), validation rules, `model:show`, and the test databases.
 - `tests/servers/`: PostgreSQL with TimescaleDB and MySQL, gated by
-  `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` (`cargo test -p
-  navree-orm --features postgres,mysql --test servers`; a test skips with
-  a notice when its variable is unset); each test runs in a schema or
-  database of its own, dropped afterwards. `attributes.rs` runs every cast
-  against the servers' native column types, and vectors where the server
-  has a vector type (pgvector, MySQL 9; skipped with a notice otherwise).
+  `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL`, or
+  `target/test-databases.env` (`cargo test -p navree-orm --features
+  postgres,mysql --test servers`; a test skips with a notice when its
+  server is not configured); each test runs in a schema or database of
+  its own, dropped afterwards. `attributes.rs` runs every cast against the
+  servers' native column types, and vectors where the server has a vector
+  type (pgvector, MySQL 9; skipped with a notice otherwise). Template
+  copies and truncation run here on both servers.
 - `tests/compile_fail.rs` with `tests/ui/`: the macros' error messages.
 - Doctests on the public items: none is `ignore`d. Examples that need a
   database are `no_run` (compiled) over the hidden `__doc_models` models
@@ -1126,16 +1147,92 @@ not accessors.
 
 ### orm-factories
 
-- Owns `src/factory/` (`Model::factory()`, states, sequences, `count`,
-  `has`/`for`, `recycle`, `make`/`create`, after-making and
-  after-creating hooks), `src/testing.rs` (`assert_database_has`,
-  `assert_database_missing`, `assert_model_exists`, `assert_soft_deleted`,
-  `assert_database_count`, through `TableBuilder`), `src/binding.rs`
-  (route model binding: a `Bound<M>` extractor loading by route key,
-  soft-delete aware, workspace scoped, 404 through `ModelNotFound`), the
-  workspace-scoping trait (a `GlobalScope` plus a `Saving` hook filling
-  `workspace_id`), seeders on models, and `navree make:model` in
-  navree-cli.
+Built. What each part is and where it plugs in:
+
+- **Factories** (`src/factory/`): `ModelFactory` (a `definition` from a
+  `FactoryContext`: index, count, a seeded `Faker`, the clock,
+  `belongs_to` parents; `configure` for default hooks; `relationships`
+  naming the model's relationships), `HasFactory` with
+  `#[model(factory = F)]` (`Deal::factory()`), and the `Factory<F>`
+  builder: `count`, states (closures and functions, appended or
+  prepended), `set`, sequences (`Sequence::new`, `column`, `from_fn`,
+  `for_each_sequence`, `cross_join_sequence`), `trashed`/`trashed_at`,
+  `when`, `seed`, `connection`, `for_`/`for_record`/`has`/`has_attached`
+  through named relationships (`BelongsTo`, `HasMany`, `Pivot` links in a
+  `Relationships<M>` registry), `recycle`, `without_parents`, `lazy`,
+  after-making and after-creating hooks (removable), `make`/`raw`,
+  `create` (one `create_on` pass: parents, the records through
+  `Record::save`, children, pivot rows), `create_quietly` and `insert`
+  (one bulk INSERT, `bulk.rs`). `FactoryOptions` (an app binding) sets the
+  seed and whether definition parents are created. Quiet operations are a
+  task-local (`factory/quiet.rs`) that `Hooks::resolve` checks; the model's
+  own hooks (workspace scoping) still run.
+- **Seeders** (navree-db): roots, `ctx.call::<S>()` / `call_once` /
+  `call_silent` / `call_seeder`, `Seeder::without_model_events` (the
+  task-local `seeding_without_model_events`, read by the quiet check), and
+  `db:seed [names] [--database D] [--force]` (production needs `--force`).
+  `TestAppExt::seed::<S>()` / `seed_all()` (feature `testing`).
+- **Assertions** (`src/testing/`): `assert_database_has`/`missing` (closest
+  rows on failure), `assert_database_count`/`empty`,
+  `assert_model_exists`/`missing`, `assert_soft_deleted`/`not_soft_deleted`
+  (by record or by table), `json_value` for structural JSON, and
+  `expect_query_count`/`count_queries` (statements counted at the
+  executors).
+- **Test databases** (`src/testing/database.rs`, feature `testing`):
+  `Template` (built once per test binary, copied per test: SQLite file
+  copy, PostgreSQL `CREATE DATABASE … TEMPLATE`, MySQL tables and rows),
+  `TestDb` (`sqlite`, `memory`, `postgres`, `mysql`, `truncate`,
+  `transaction` — a unit of work ended by navree-db's
+  `Uow::rollback_as_committed`, so after-commit hooks run), `LazyTestDb`,
+  `TestServer` and `test_setting` (the `NAVREE_TEST_*_URL` variables or
+  `target/test-databases.env`), and `#[test]` (`#[navree::test]`,
+  navree-orm-macros: an async test on a runtime of its own, given a
+  `TestDb` from a template, memory or a server; skipped with a notice
+  without a server). `TestAppBuilder::memory_database()` (navree-testing)
+  boots apps on in-memory SQLite.
+- **Route model binding** (`src/binding.rs`): `Bound<M, B = RouteKey>`
+  (the model's route key, `#[model(route_key)]`, read as the column's type:
+  a malformed UUID or ULID is a 404 without a query), `RouteBinding` for
+  custom bindings and parameters, `WithTrashed<B>`, `BoundChild<P, C>`
+  through `ChildOf<P>`; loads run in the request's unit of work, so global
+  scopes (workspace included) apply.
+- **Workspaces** (`src/workspace.rs`): `#[model(workspace)]` adds the
+  built-in `WorkspaceScope` (`apply_global_scopes`) and `WorkspaceHook`
+  (first in `Hooks::resolve`: fills the column on create, refuses
+  changing it, treats another workspace's record as missing). The current
+  workspace is the explicit `workspace::scope`, else the executor's unit of
+  work (`Uow::workspace`, which navree-workspace sets on every isolation
+  strategy), else `Uow::current()`; without one, scoped queries fail
+  closed. Opt-outs: `without_workspace_scope()`, `for_workspace(id)`.
+  PostgreSQL row-level security and schema isolation cover ORM queries,
+  and a `WorkspaceUow` (database isolation) is an executor
+  (navree-workspace's tests).
+- **Access** (`src/access.rs`, feature `access`): `#[model(subject,
+  permission_prefix, policy)]` implements navree-access's `Subject` and
+  `SubjectRecords` (records load by route key in the unit of work, for
+  `Authorized<Model, A>`); `ModelColumns<M>` maps rule conditions to
+  columns, `Builder::accessible(&ability, A)` and `Accessible<M, A>`
+  (`AccessibleQuery`) filter queries (counts and pages included), and
+  `AbilityExt` checks records; policies are registered by
+  `AccessModule::for_feature::<Model>()`.
+- **Validation** (`src/validation.rs`, feature `validation`): `unique`
+  and `exists` build navree-validation `AsyncRule`s over a `UowCheck` that
+  queries the model in the request's unit of work (scopes and workspace
+  included; `ignore`, `ignore_path_param` by route key, `where_`,
+  `with_trashed`/`without_trashed`, `query`).
+- **`model:show`** (`src/show.rs`, `src/module.rs`): `OrmModule`
+  registers the command; `ModuleBuilderOrmExt::model::<M>()` registers a
+  model (`RegisteredModel`, `registered_models`) and imports the module.
+  The description comes from `ModelMeta` (which records the factory, its
+  relationships, the subject and the policy) and the app's hooks.
+- **Generators** (navree-cli): `make:model <module> <Name> [--migration
+  --factory --seeder --controller --policy --pivot | --all]` (the files
+  refer to each other: the model links its factory and policy, the
+  controller binds records by route key or checks abilities when there is
+  a policy, the seeder uses the factory; the module registers the model,
+  its access feature, seeder and controller), `make:factory <module> <name>
+  [--model M]`, `make:seeder <module> <name>`. `--resource` is not offered:
+  admin-panel resources are built from SeaORM entities.
 
 ### mongodb
 

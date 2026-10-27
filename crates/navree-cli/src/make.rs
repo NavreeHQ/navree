@@ -252,11 +252,17 @@ pub enum MakeKind {
     /// `mcp/<name>.rs`: an MCP server with one tool, registered with the
     /// module (needs navree's `mcp` feature and `McpModule`).
     Mcp,
+    /// `models/<name>.rs`: an ORM model of the `<names>` table.
+    Model,
+    /// `factories/<name>.rs`: a model factory (`--model` names the model).
+    Factory,
+    /// `seeders/<name>.rs`: a seeder, registered with the module.
+    Seeder,
 }
 
 impl MakeKind {
     /// Every kind, in `navree help` order.
-    pub const ALL: [MakeKind; 14] = [
+    pub const ALL: [MakeKind; 17] = [
         MakeKind::Controller,
         MakeKind::Service,
         MakeKind::Entity,
@@ -271,6 +277,9 @@ impl MakeKind {
         MakeKind::Agent,
         MakeKind::Test,
         MakeKind::Mcp,
+        MakeKind::Model,
+        MakeKind::Factory,
+        MakeKind::Seeder,
     ];
 
     /// `controller`, `service`, ...
@@ -290,6 +299,9 @@ impl MakeKind {
             MakeKind::Agent => "agent",
             MakeKind::Test => "test",
             MakeKind::Mcp => "mcp",
+            MakeKind::Model => "model",
+            MakeKind::Factory => "factory",
+            MakeKind::Seeder => "seeder",
         }
     }
 
@@ -310,6 +322,9 @@ impl MakeKind {
             MakeKind::Agent => "agents",
             MakeKind::Test => "tests",
             MakeKind::Mcp => "mcp",
+            MakeKind::Model => "models",
+            MakeKind::Factory => "factories",
+            MakeKind::Seeder => "seeders",
         }
     }
 
@@ -330,6 +345,9 @@ impl MakeKind {
             MakeKind::Agent => "AI agents",
             MakeKind::Test => "Tests",
             MakeKind::Mcp => "MCP servers",
+            MakeKind::Model => "ORM models",
+            MakeKind::Factory => "Model factories",
+            MakeKind::Seeder => "Seeders",
         };
         format!("//! {what} of the {module_words} module.\n")
     }
@@ -341,6 +359,69 @@ pub struct MakeOptions {
     /// `make:listener --event <event>`: the module's event the listener
     /// handles (in `events/<event>.rs`).
     pub event: Option<Name>,
+    /// `make:factory --model <model>`, and the model of the items
+    /// `make:model` generates: the module's model (in `models/<model>.rs`).
+    pub model: Option<Name>,
+    /// What `make:model` generates with the model: the template choices
+    /// that depend on it.
+    pub companions: Companions,
+}
+
+/// The companions `make:model` generates with a model, which its files
+/// refer to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Companions {
+    /// A migration creating the table (`--migration`).
+    pub migration: bool,
+    /// A factory, linked to the model (`--factory`).
+    pub factory: bool,
+    /// A seeder (`--seeder`).
+    pub seeder: bool,
+    /// A JSON controller (`--controller`).
+    pub controller: bool,
+    /// A policy attached to the model (`--policy`).
+    pub policy: bool,
+    /// The model is a pivot (`--pivot`): the table of a many-to-many
+    /// between the two models its name joins (`deal_tag`), holding their
+    /// keys instead of a name; it has no controller or policy of its own.
+    pub pivot: bool,
+}
+
+impl Companions {
+    /// Every companion (`--all`).
+    pub fn all() -> Self {
+        Companions {
+            migration: true,
+            factory: true,
+            seeder: true,
+            controller: true,
+            policy: true,
+            pivot: false,
+        }
+    }
+
+    /// Every companion a pivot model takes (`--pivot --all`): a migration,
+    /// a factory and a seeder.
+    pub fn all_for_pivot() -> Self {
+        Companions {
+            migration: true,
+            factory: true,
+            seeder: true,
+            controller: false,
+            policy: false,
+            pivot: true,
+        }
+    }
+}
+
+/// The key columns of pivot model `name` (`deal_tag`: `deal_id` and
+/// `tag_id`); `None` unless its name is two words.
+fn pivot_keys(name: &Name) -> Option<[String; 2]> {
+    let (left, right) = name.snake().split_once('_')?;
+    if right.contains('_') || left.is_empty() || right.is_empty() {
+        return None;
+    }
+    Some([format!("{left}_id"), format!("{right}_id")])
 }
 
 /// What the item templates are rendered with.
@@ -365,6 +446,34 @@ struct ItemContext {
     alter_table: bool,
     event: Option<String>,
     event_pascal: Option<String>,
+    /// The model a model's companion is for (`make:model`, `make:factory
+    /// --model`): `deal`, else the item's own name.
+    model_name: String,
+    /// `Deal`.
+    model_pascal: String,
+    /// `a deal`.
+    a_model: String,
+    /// `deals`: the model's table in words.
+    plural_words: String,
+    /// `deals`: the route of a model's controller.
+    route: String,
+    /// `{deal}`: the path parameter bound to a model's record.
+    route_param: String,
+    /// The model has a `name` column (as the models `make:model` writes do):
+    /// a created table gets it and a factory fills it.
+    with_name_column: bool,
+    /// The model comes with a migration creating its table.
+    with_migration: bool,
+    /// The model comes with a factory, linked by `#[model(factory = ...)]`.
+    with_factory: bool,
+    /// The model comes with a policy (`#[model(subject, policy = ...)]`).
+    with_policy: bool,
+    /// The factory is linked to its model, so `Model::factory()` exists.
+    linked: bool,
+    /// The model is a pivot; its two key columns (`deal_id`, `tag_id`),
+    /// which its table and its migration hold instead of a name.
+    pivot: bool,
+    pivot_keys: Vec<String>,
 }
 
 /// The table a migration named `create_<table>_table` / `create_<table>`
@@ -398,9 +507,36 @@ impl ItemContext {
         let altered = altered_table(name.snake()).filter(|_| migration && created.is_none());
         let create_table = created.is_some();
         let alter_table = altered.is_some();
-        let table = created.or(altered).unwrap_or_else(|| name.plural());
+        let companions = options.companions;
+        // A pivot's table is named as the model: `deal_tag`.
+        let pivot_model = (companions.pivot && kind == MakeKind::Model).then(|| name.clone());
+        let table = created
+            .or(altered)
+            .or(pivot_model)
+            .unwrap_or_else(|| name.plural());
         let words = name.snake().replace('_', " ");
+        let model = options.model.as_ref().unwrap_or(name);
+        let model_words = model.snake().replace('_', " ");
+        let pivot_keys: Vec<String> = match companions.pivot {
+            true => pivot_keys(model).map(Vec::from).unwrap_or_default(),
+            false => Vec::new(),
+        };
         Self {
+            pivot: companions.pivot,
+            pivot_keys,
+            model_name: model.snake().to_owned(),
+            model_pascal: model.pascal(),
+            a_model: with_article(&model_words, "a", "an"),
+            plural_words: model.plural().snake().replace('_', " "),
+            route: model.plural().kebab(),
+            route_param: format!("{{{}}}", model.snake()),
+            // A table created for a model: its migration adds the column
+            // (a pivot's holds the two keys instead).
+            with_name_column: migration && options.model.is_some() && !companions.pivot,
+            with_migration: companions.migration,
+            with_factory: companions.factory,
+            with_policy: companions.policy,
+            linked: companions.factory,
             module: module.snake().to_owned(),
             module_words: module.snake().replace('_', " "),
             module_kebab: module.kebab(),
@@ -423,6 +559,9 @@ impl ItemContext {
 
 /// rustfmt's line width.
 const MAX_WIDTH: usize = 100;
+
+/// rustfmt's `fn_call_width`: the widest arguments a call keeps on its line.
+const FN_CALL_WIDTH: usize = 60;
 
 /// The indentation of statements in a module's `wire` method.
 const WIRE_INDENT: usize = 8;
@@ -518,8 +657,59 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
             &[m, "migrations::migrations()".to_owned()],
             WIRE_INDENT,
         )),
+        MakeKind::Seeder => Some(generic_call(
+            "navree::db::ModuleBuilderDbExt::seeder",
+            &[format!("seeders::{stem}::{pascal}Seeder")],
+            "m",
+            WIRE_INDENT,
+        )),
+        // Registered for `model:show`; a model with a policy is also a
+        // subject: its records load for `#[can(.., from = ..)]` routes and
+        // its policy joins every user's rules.
+        MakeKind::Model => {
+            let model = format!("models::{stem}::{pascal}");
+            let mut block = generic_call(
+                "navree::orm::ModuleBuilderOrmExt::model",
+                std::slice::from_ref(&model),
+                "m",
+                WIRE_INDENT,
+            );
+            if ctx.with_policy {
+                let feature = format!("navree::access::AccessModule::for_feature::<{model}>()");
+                block.push('\n');
+                if feature.len() <= FN_CALL_WIDTH {
+                    block.push_str(&format!("m.import({feature});"));
+                } else {
+                    // As rustfmt lays out a wide last argument: broken at
+                    // its generic arguments.
+                    block.push_str(&format!(
+                        "m.import(navree::access::AccessModule::for_feature::<\n    {model},\n>());"
+                    ));
+                }
+            }
+            Some(block)
+        }
         _ => None,
     }
+}
+
+/// The template of a `kind` item: a model's controller and policy have
+/// their own.
+fn template(kind: MakeKind, options: &MakeOptions) -> String {
+    match kind {
+        MakeKind::Controller if options.model.is_some() => "make/model_controller.rs".to_owned(),
+        MakeKind::Policy if options.model.is_some() => "make/model_policy.rs".to_owned(),
+        _ => format!("make/{}.rs", kind.noun()),
+    }
+}
+
+/// Whether model source `src` declares a `name: String` field.
+fn has_name_field(src: &str) -> bool {
+    src.lines().any(|line| {
+        let line = line.trim();
+        let field = line.strip_prefix("pub ").unwrap_or(line);
+        field.starts_with("name: String")
+    })
 }
 
 /// Generates a `kind` item `name` in module `module` (under
@@ -557,7 +747,23 @@ pub fn make_item(
             );
         }
     }
-    let ctx = ItemContext::new(kind, module, name, options);
+    let mut ctx = ItemContext::new(kind, module, name, options);
+    if kind == MakeKind::Factory {
+        let model = options.model.as_ref().unwrap_or(name);
+        let path = module_dir
+            .join("models")
+            .join(format!("{}.rs", model.snake()));
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            anyhow::bail!(
+                "model `{model}` not found at {}; create it with `navree make:model {} {model}` \
+                 (or name another one with --model)",
+                path.display(),
+                module.snake(),
+                model = model.snake()
+            );
+        };
+        ctx.with_name_column = has_name_field(&src);
+    }
     let dir = kind.dir();
     let stem = match kind {
         MakeKind::Migration => format!("{}_{}", now.migration_prefix(), name.snake()),
@@ -567,7 +773,7 @@ pub fn make_item(
     let mut files = FileSet::new();
     files.add(
         format!("{dir}/{stem}.rs"),
-        render(&format!("make/{}.rs", kind.noun()), &ctx)?,
+        render(&template(kind, options), &ctx)?,
     );
     if kind == MakeKind::Mail {
         files.add(
@@ -643,7 +849,7 @@ pub fn make_item(
     }
 
     match kind {
-        MakeKind::Policy => {
+        MakeKind::Policy if options.model.is_none() => {
             let modules = rust_path(modules_dir).unwrap_or_else(|| "crate::modules".to_owned());
             let call = format!(
                 "{modules}::{}::policies::{stem}::define(ctx, rules);",
@@ -678,7 +884,95 @@ pub fn make_item(
             "subscribe it in the module's `wire`: navree::events::ModuleBuilderEventsExt::listen::<SomeEvent, listeners::{stem}::{}>(m);",
             ctx.pascal
         )),
+        MakeKind::Model if !ctx.with_migration => report.hints.push(format!(
+            "create its table: navree make:migration {} create_{}_table",
+            module.snake(),
+            ctx.table
+        )),
+        MakeKind::Factory if !ctx.linked => report.hints.push(format!(
+            "link it to the model so `{model}::factory()` exists: add \
+             `factory = super::super::factories::{stem}::{pascal}Factory` to `#[model(...)]` \
+             in models/{model_file}.rs",
+            model = ctx.model_pascal,
+            pascal = ctx.pascal,
+            model_file = ctx.model_name,
+        )),
+        MakeKind::Seeder => report.hints.push(format!(
+            "run it with `navree db:seed {stem}` (every seeder: `navree db:seed`)"
+        )),
         _ => {}
+    }
+    Ok(report)
+}
+
+/// Generates model `name` of module `module` (`models/<name>.rs`, the
+/// `<names>` table) with the companions asked for: a migration creating
+/// the table, a factory linked to the model, a seeder using the factory, a
+/// JSON controller binding records by route key, and a policy attaching
+/// ability rules to the model (which makes it an access subject).
+/// Companions refer to each other: the controller checks abilities when
+/// the model has a policy, and the seeder uses the factory when there is
+/// one. Nothing is written when the model's file exists.
+pub fn make_model(
+    root: &Path,
+    modules_dir: &str,
+    module: &Name,
+    name: &Name,
+    companions: Companions,
+    now: Timestamp,
+) -> anyhow::Result<MakeReport> {
+    if companions.pivot {
+        if pivot_keys(name).is_none() {
+            anyhow::bail!(
+                "a pivot model's name joins the two models it links, one word each: `deal_tag` (not `{}`)",
+                name.snake()
+            );
+        }
+        if companions.controller || companions.policy {
+            anyhow::bail!(
+                "a pivot model has no controller or policy of its own: drop --controller and --policy"
+            );
+        }
+    }
+    let options = MakeOptions {
+        event: None,
+        model: Some(name.clone()),
+        companions,
+    };
+    let mut report = make_item(
+        root,
+        modules_dir,
+        MakeKind::Model,
+        module,
+        name,
+        &options,
+        now,
+    )?;
+    let table = if companions.pivot {
+        name.clone()
+    } else {
+        name.plural()
+    };
+    let migration = Name::parse("migration", &format!("create_{}_table", table.snake()))?;
+    let items = [
+        (companions.migration, MakeKind::Migration, &migration),
+        (companions.factory, MakeKind::Factory, name),
+        (companions.seeder, MakeKind::Seeder, name),
+        (companions.policy, MakeKind::Policy, name),
+        (companions.controller, MakeKind::Controller, name),
+    ];
+    for (wanted, kind, item) in items {
+        if !wanted {
+            continue;
+        }
+        let made = make_item(root, modules_dir, kind, module, item, &options, now)?;
+        report.created.extend(made.created);
+        for path in made.updated {
+            if !report.updated.contains(&path) {
+                report.updated.push(path);
+            }
+        }
+        report.hints.extend(made.hints);
     }
     Ok(report)
 }

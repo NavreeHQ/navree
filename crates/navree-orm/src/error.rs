@@ -223,6 +223,26 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A workspace-scoped model was used outside the rules of workspaces:
+    /// no current workspace, a record created in or moved to another
+    /// workspace. (A record of another workspace is
+    /// [`ModelNotFound`](OrmError::ModelNotFound).)
+    #[error("{message}")]
+    Workspace {
+        /// The model.
+        model: Cow<'static, str>,
+        /// What went wrong, and how to fix it.
+        message: String,
+    },
+    /// A model factory could not build or create its records: a state
+    /// failed, a relationship is misdeclared, a hook cancelled a save.
+    #[error("the {model} factory failed: {message}")]
+    Factory {
+        /// The model the factory builds.
+        model: Cow<'static, str>,
+        /// What went wrong.
+        message: String,
+    },
 }
 
 fn known_relations(known: &[String]) -> String {
@@ -329,6 +349,13 @@ impl OrmError {
 
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
         OrmError::InvalidQuery(message.into())
+    }
+
+    pub(crate) fn factory(model: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+        OrmError::Factory {
+            model: model.into(),
+            message: message.into(),
+        }
     }
 
     pub(crate) fn unsupported(

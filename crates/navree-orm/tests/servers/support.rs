@@ -61,7 +61,7 @@ where
     F: FnOnce(Db) -> Fut,
     Fut: Future<Output = ()>,
 {
-    let Ok(url) = std::env::var(server.variable()) else {
+    let Some(url) = navree_orm::testing::database::test_setting(server.variable()) else {
         eprintln!(
             "skipped: set {} to run this test against a real server",
             server.variable()

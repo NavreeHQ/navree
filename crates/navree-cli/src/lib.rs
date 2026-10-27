@@ -13,7 +13,8 @@
 //! | `navree new <name> [--ui next\|none] [--navree-path <path>]` | A new app ([`new_app`]) |
 //! | `navree new <name> --kit saas\|api\|micro` | A new app from a starter kit ([`kits`]) |
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
-//! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test or MCP server in a module ([`make::make_item`]) |
+//! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, MCP server, factory (`--model <model>`) or seeder in a module ([`make::make_item`]) |
+//! | `navree make:model <module> <Name> [--migration --factory --seeder --controller --policy \| --all]` | An ORM model with the companions asked for, which refer to each other ([`make::make_model`]) |
 //! | `navree make:resource <module> <Entity> [--path src/modules]` | A Helm admin-panel resource for an entity, registered with its module ([`resource::make_resource`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree check [--graph] [--json] [--only <checks>]` | The module graph, then the app's conformity checks ([`check`]) |

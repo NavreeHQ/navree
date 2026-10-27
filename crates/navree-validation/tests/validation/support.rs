@@ -10,12 +10,14 @@ use std::sync::Arc;
 use axum::extract::{Form, Query};
 use garde::Validate;
 use http::Method;
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Uow};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{
+    BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
+};
 use navree_testing::TestApp;
 use navree_validation::rules::{self, confirmed};
-use navree_validation::{AsyncRule, AsyncRules, Valid, ValidAsync};
+use navree_validation::{AsyncRule, AsyncRules, UowCheck, Valid, ValidAsync};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -182,6 +184,42 @@ impl AsyncRules for NewDeal {
     }
 }
 
+/// A [`UowCheck`] rule: `code` may not be `admin` (a reserved handle),
+/// unless the route's `{code}` is `admin` (the record being updated).
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct Handle {
+    #[garde(skip)]
+    pub code: Option<String>,
+}
+
+/// The check of [`Handle`]: it runs in the unit of work.
+pub struct NotReserved(pub String);
+
+impl UowCheck for NotReserved {
+    fn passes<'a>(
+        &'a self,
+        uow: &'a Uow,
+        ignore: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<bool, BoxError>> {
+        Box::pin(async move {
+            let tx = uow.tx().await?;
+            tx.execute_unprepared("SELECT 1").await?;
+            Ok(self.0 != "admin" || ignore == Some("admin"))
+        })
+    }
+}
+
+impl AsyncRules for Handle {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        let code = self.code.clone().unwrap_or_default();
+        vec![
+            AsyncRule::check("code", "unique", NotReserved(code))
+                .skipped_when(self.code.is_none())
+                .ignore_path_param("code"),
+        ]
+    }
+}
+
 /// A rule with an identifier that is not a plain SQL name.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Sneaky {
@@ -244,6 +282,18 @@ impl Controller for DatabaseController {
                 Method::POST,
                 "/deals-form",
                 |ValidAsync(Form(input)): ValidAsync<Form<NewDeal>>| async move { ok(&input) },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "/handles",
+                |ValidAsync(Json(input)): ValidAsync<Json<Handle>>| async move { ok(&input) },
+            )
+            .public(),
+            RouteDef::on(
+                Method::PATCH,
+                "/handles/{code}",
+                |ValidAsync(Json(input)): ValidAsync<Json<Handle>>| async move { ok(&input) },
             )
             .public(),
             RouteDef::on(

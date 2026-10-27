@@ -1,0 +1,40 @@
+error: Deal has no column `slug` to bind routes by: name one of its columns
+ --> tests/ui/model_factory_misuse.rs:5:21
+  |
+5 | #[model(route_key = "slug", workspace)]
+  |                     ^^^^^^
+
+error: #[model(workspace)] needs a field for the `workspace_id` column (a `Uuid`), or name the column with workspace = "..."
+ --> tests/ui/model_factory_misuse.rs:5:29
+  |
+5 | #[model(route_key = "slug", workspace)]
+  |                             ^^^^^^^^^
+
+error: the workspace field cannot have a cast: use a `Uuid` field
+  --> tests/ui/model_factory_misuse.rs:16:5
+   |
+16 |     team_id: Vec<u8>,
+   |     ^^^^^^^
+
+error: the factory must be the path of a type implementing `ModelFactory`
+  --> tests/ui/model_factory_misuse.rs:20:19
+   |
+20 | #[model(factory = "not a path")]
+   |                   ^^^^^^^^^^^^
+
+error[E0271]: type mismatch resolving `<CompanyFactory as ModelFactory>::Model == Person`
+  --> tests/ui/model_factory_misuse.rs:44:19
+   |
+44 | #[model(factory = CompanyFactory)]
+   |                   ^^^^^^^^^^^^^^ type mismatch resolving `<CompanyFactory as ModelFactory>::Model == Person`
+   |
+note: expected this to be `Person`
+  --> tests/ui/model_factory_misuse.rs:35:18
+   |
+35 |     type Model = Company;
+   |                  ^^^^^^^
+note: required by a bound in `navree_orm::factory::HasFactory::Factory`
+  --> src/factory/mod.rs
+   |
+   |     type Factory: ModelFactory<Model = Self> + Default;
+   |                                ^^^^^^^^^^^^ required by this bound in `HasFactory::Factory`

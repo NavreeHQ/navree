@@ -1,11 +1,13 @@
 //! navree-orm against real servers: PostgreSQL with TimescaleDB
-//! (`NAVREE_TEST_POSTGRES_URL`) and MySQL (`NAVREE_TEST_MYSQL_URL`). Each
-//! test skips with a notice when its variable is unset, and runs in a
-//! schema (PostgreSQL) or database (MySQL) of its own.
+//! (`NAVREE_TEST_POSTGRES_URL`) and MySQL (`NAVREE_TEST_MYSQL_URL`), from
+//! the environment or `target/test-databases.env`. Each test skips with a
+//! notice when its server is not configured, and runs in a schema
+//! (PostgreSQL) or database (MySQL) of its own.
 //!
 //! `cargo test -p navree-orm --features postgres,mysql --test servers`
 
 mod attributes;
+mod databases;
 mod lifecycle;
 mod models;
 mod relations;

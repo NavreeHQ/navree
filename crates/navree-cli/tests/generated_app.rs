@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use navree_cli::clock::Timestamp;
-use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
+use navree_cli::make::{Companions, MakeKind, MakeOptions, make_item, make_model, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 use navree_cli::resource::make_resource;
@@ -112,6 +112,7 @@ fn navree_new_output_compiles_against_the_workspace() {
     }
     let with_event = MakeOptions {
         event: Some(name("post_published")),
+        ..MakeOptions::default()
     };
     make_item(
         &root,
@@ -135,6 +136,58 @@ fn navree_new_output_compiles_against_the_workspace() {
     .unwrap();
 
     make_resource(&root, "src/modules", &name("posts"), "Post").unwrap();
+
+    // ORM models: one with every companion (its controller checks
+    // abilities), one with a controller binding records for signed-in users,
+    // and a second factory of the first model.
+    make_model(
+        &root,
+        "src/modules",
+        &name("posts"),
+        &name("comment"),
+        Companions::all(),
+        now,
+    )
+    .unwrap();
+    let label = Companions {
+        migration: true,
+        controller: true,
+        seeder: true,
+        ..Companions::default()
+    };
+    make_model(
+        &root,
+        "src/modules",
+        &name("tags"),
+        &name("label"),
+        label,
+        now,
+    )
+    .unwrap();
+    let pivot = Companions::all_for_pivot();
+    make_model(
+        &root,
+        "src/modules",
+        &name("posts"),
+        &name("post_label"),
+        pivot,
+        now,
+    )
+    .unwrap();
+    let for_comments = MakeOptions {
+        model: Some(name("comment")),
+        ..MakeOptions::default()
+    };
+    make_item(
+        &root,
+        "src/modules",
+        MakeKind::Factory,
+        &name("posts"),
+        &name("pinned_comment"),
+        &for_comments,
+        now,
+    )
+    .unwrap();
 
     let ok = cargo(&root, &target, &["test", "--quiet"])
         && cargo(&root, &target, &["run", "--quiet", "--", "check"])

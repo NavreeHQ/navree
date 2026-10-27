@@ -107,6 +107,49 @@ async fn index(uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
     Ok(Json(json!({ "data": notes })))
 }
 
+/// `notes` as an ORM model: `WorkspaceUow` is its executor.
+mod orm_note {
+    use navree_orm::Model;
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    #[derive(Model, Clone, Debug, Default, Serialize)]
+    #[model(table = "notes")]
+    pub struct OrmNote {
+        pub id: Uuid,
+        pub body: String,
+    }
+}
+
+async fn orm_store(
+    _ws: CurrentWorkspace,
+    uow: WorkspaceUow,
+    Json(input): Json<Value>,
+) -> Result<Json<Value>, AppError> {
+    use navree_orm::Model;
+    let note = orm_note::OrmNote::create(
+        &*uow,
+        orm_note::OrmNote {
+            body: input["body"].as_str().unwrap_or_default().to_owned(),
+            ..orm_note::OrmNote::default()
+        },
+    )
+    .await?;
+    Ok(Json(json!({ "id": note.id, "body": note.body })))
+}
+
+async fn orm_index(uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
+    use navree_orm::Model;
+    let notes = orm_note::OrmNote::query()
+        .latest_by(orm_note::OrmNote::ID)
+        .get(&*uow)
+        .await?;
+    let bodies: Vec<&str> = notes.iter().map(|note| note.body.as_str()).collect();
+    Ok(Json(
+        json!({ "data": bodies, "count": orm_note::OrmNote::query().count(&*uow).await? }),
+    ))
+}
+
 impl Controller for NotesController {
     fn prefix(&self) -> &'static str {
         "/notes"
@@ -117,6 +160,8 @@ impl Controller for NotesController {
             RouteDef::on(Method::GET, "/", index).authenticated(),
             RouteDef::on(Method::POST, "/", store).authenticated(),
             RouteDef::on(Method::POST, "/fail", store_then_fail).authenticated(),
+            RouteDef::on(Method::GET, "/orm", orm_index).authenticated(),
+            RouteDef::on(Method::POST, "/orm", orm_store).authenticated(),
         ]
     }
 }
@@ -199,6 +244,62 @@ async fn each_workspace_writes_to_its_own_database() {
     );
     assert!(!has_table(world.db().await.conn(), "notes").await);
     assert!(has_table(databases.db(acme.id).await.unwrap().conn(), "notes").await);
+}
+
+#[tokio::test]
+async fn orm_models_run_in_the_workspace_database() {
+    let dir = TempDirGuard::new();
+    let world = world(&dir).await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let acme = world.workspace(ada, "Acme").await;
+    world.workspace(ada, "Globex").await;
+    let client = world.as_user(ada);
+
+    for body in ["First", "Second"] {
+        client
+            .post("/api/notes/orm")
+            .header("x-workspace", "acme")
+            .json(&json!({ "body": body }))
+            .send()
+            .await
+            .assert_status(200)
+            .assert_json_path("body", json!(body));
+    }
+    client
+        .get("/api/notes/orm")
+        .header("x-workspace", "acme")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data", json!(["Second", "First"]))
+        .assert_json_path("count", json!(2));
+    // The SeaORM route reads the same database.
+    client
+        .get("/api/notes")
+        .header("x-workspace", "acme")
+        .send()
+        .await
+        .assert_json_path("data.1.body", json!("Second"));
+    client
+        .get("/api/notes/orm")
+        .header("x-workspace", "globex")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data", json!([]))
+        .assert_json_path("count", json!(0));
+
+    // Outside a request: the workspace's own pool is an executor too.
+    let databases = world.app.get::<WorkspaceDatabases>().await;
+    let acme_db = databases.db(acme.id).await.unwrap();
+    {
+        use navree_orm::Model;
+        assert_eq!(
+            orm_note::OrmNote::query().count(&*acme_db).await.unwrap(),
+            2
+        );
+    }
+    assert!(!has_table(world.db().await.conn(), "notes").await);
 }
 
 #[tokio::test]

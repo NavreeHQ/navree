@@ -1,0 +1,138 @@
+//! `/api/v1/{{ route }}`: the `{{ model_pascal }}` routes of the {{ module_words }} module.
+
+{% if with_policy %}
+use navree::access::{Accessible, Authorized, Create, Delete, Read, Update};
+{% endif %}
+use navree::db::{Page, PageQuery, Uow};
+use navree::http::{Created, Json, NoContent, Result};
+{% if with_policy %}
+use navree::orm::access::AccessibleQuery;
+{% else %}
+use navree::orm::binding::Bound;
+{% endif %}
+use navree::orm::{Model, Record};
+use navree::validation::Valid;
+use navree::{controller, injectable};
+use serde::Deserialize;
+
+use super::super::models::{{ model_name }}::{{ model_pascal }};
+
+/// The body of a create or an update.
+#[derive(Debug, Deserialize, garde::Validate)]
+pub struct {{ model_pascal }}Input {
+    /// 1 to 255 characters.
+    #[garde(length(min = 1, max = 255))]
+    pub name: String,
+}
+
+{% if with_policy %}
+/// The {{ plural_words }} JSON API. Each route checks the caller's abilities on
+/// `{{ model_pascal }}` (its policy, role permissions and the app's abilities
+/// function); routes with `{{ route_param }}` load the record first (404 when
+/// there is none).
+{% else %}
+/// The {{ plural_words }} JSON API, for signed-in users. `{{ route_param }}` is
+/// bound to the record (404 when there is none).
+{% endif %}
+#[injectable]
+pub struct {{ pascal }}Controller;
+
+#[controller("/{{ route }}", version = "1")]
+{% if not with_policy %}
+#[authenticated]
+{% endif %}
+impl {{ pascal }}Controller {
+{% if with_policy %}
+    /// Lists the {{ plural_words }} the user may read, newest first
+    /// (`?page=2&per_page=50`).
+    #[get("/")]
+    #[can(Read, {{ model_pascal }})]
+    #[api(summary = "List {{ plural_words }}", tag = "{{ model_pascal }}")]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<{{ model_pascal }}, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Record<{{ model_pascal }}>>> {
+        Ok(scope.query().latest().paginate(&uow, page).await?)
+    }
+
+    /// Shows {{ a_model }}.
+    #[get("/{{ route_param }}")]
+    #[can(Read, {{ model_pascal }}, from = "{{ model_name }}")]
+    #[api(summary = "Show {{ a_model }}", tag = "{{ model_pascal }}")]
+    async fn show(&self, {{ model_name }}: Authorized<{{ model_pascal }}, Read>) -> Json<Record<{{ model_pascal }}>> {
+        Json({{ model_name }}.into_inner())
+    }
+{% else %}
+    /// Lists the {{ plural_words }}, newest first (`?page=2&per_page=50`).
+    #[get("/")]
+    #[api(summary = "List {{ plural_words }}", tag = "{{ model_pascal }}")]
+    async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<Record<{{ model_pascal }}>>> {
+        Ok({{ model_pascal }}::query().latest().paginate(&uow, page).await?)
+    }
+
+    /// Shows {{ a_model }}.
+    #[get("/{{ route_param }}")]
+    #[api(summary = "Show {{ a_model }}", tag = "{{ model_pascal }}")]
+    async fn show(&self, {{ model_name }}: Bound<{{ model_pascal }}>) -> Json<Record<{{ model_pascal }}>> {
+        Json({{ model_name }}.into_inner())
+    }
+{% endif %}
+
+    /// Creates {{ a_model }}.
+    #[post("/")]
+{% if with_policy %}
+    #[can(Create, {{ model_pascal }})]
+{% endif %}
+    #[api(summary = "Create {{ a_model }}", tag = "{{ model_pascal }}", status = 201)]
+    async fn store(
+        &self,
+        uow: Uow,
+        Valid(Json(input)): Valid<Json<{{ model_pascal }}Input>>,
+    ) -> Result<Created<Record<{{ model_pascal }}>>> {
+        let model = {{ model_pascal }} {
+            name: input.name,
+            ..{{ model_pascal }}::default()
+        };
+        let {{ model_name }} = {{ model_pascal }}::create(&uow, model).await?;
+        let location = format!("/api/v1/{{ route }}/{}", {{ model_name }}.id);
+        Ok(Created(location, {{ model_name }}))
+    }
+
+    /// Updates {{ a_model }}.
+    #[patch("/{{ route_param }}")]
+{% if with_policy %}
+    #[can(Update, {{ model_pascal }}, from = "{{ model_name }}")]
+{% endif %}
+    #[api(summary = "Update {{ a_model }}", tag = "{{ model_pascal }}")]
+    async fn update(
+        &self,
+        uow: Uow,
+{% if with_policy %}
+        {{ model_name }}: Authorized<{{ model_pascal }}, Update>,
+{% else %}
+        {{ model_name }}: Bound<{{ model_pascal }}>,
+{% endif %}
+        Valid(Json(input)): Valid<Json<{{ model_pascal }}Input>>,
+    ) -> Result<Json<Record<{{ model_pascal }}>>> {
+        let mut {{ model_name }} = {{ model_name }}.into_inner();
+        {{ model_name }}.update(&uow, |model| model.name = input.name).await?;
+        Ok(Json({{ model_name }}))
+    }
+
+    /// Deletes {{ a_model }}.
+    #[delete("/{{ route_param }}")]
+{% if with_policy %}
+    #[can(Delete, {{ model_pascal }}, from = "{{ model_name }}")]
+{% endif %}
+    #[api(summary = "Delete {{ a_model }}", tag = "{{ model_pascal }}", status = 204)]
+{% if with_policy %}
+    async fn destroy(&self, uow: Uow, {{ model_name }}: Authorized<{{ model_pascal }}, Delete>) -> Result<NoContent> {
+{% else %}
+    async fn destroy(&self, uow: Uow, {{ model_name }}: Bound<{{ model_pascal }}>) -> Result<NoContent> {
+{% endif %}
+        {{ model_name }}.into_inner().delete(&uow).await?;
+        Ok(NoContent)
+    }
+}

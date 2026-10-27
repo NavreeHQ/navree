@@ -173,7 +173,7 @@ const DUMP: Spec = Spec {
 };
 
 /// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
-async fn environment(ctx: &AppContext) -> Option<String> {
+pub(crate) async fn environment(ctx: &AppContext) -> Option<String> {
     let config = ctx.try_get::<Config>().await?;
     config
         .get_string("env")

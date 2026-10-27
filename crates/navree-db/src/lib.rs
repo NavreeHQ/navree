@@ -139,7 +139,10 @@ pub use paginate::{
 pub use queries::{LoggedQuery, QueryLog, QueryStats, RepeatedQuery};
 pub use reader::Reader;
 pub use repo::Repo;
-pub use seed::{Factory, Seeder, create, create_many, run_seeders};
+pub use seed::{
+    Factory, SeedOptions, Seeder, SeederCalls, create, create_many, run_seeders, run_seeders_with,
+    seeding_without_model_events,
+};
 pub use text::{contains_ignore_case, eq_ignore_case};
 pub use time_series::{TimePoint, prune_time_series};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};

@@ -1,0 +1,32 @@
+//! The `{{ name }}` seeder: `navree db:seed {{ name }}` (and `navree db:seed`).
+
+use navree::db::{Db, Seeder};
+use navree::injectable;
+use navree::kernel::{AppContext, BoxError, BoxFuture};
+{% if with_factory %}
+
+use super::super::models::{{ model_name }}::{{ model_pascal }};
+{% endif %}
+
+/// Fills the database with {{ words }} data.
+#[injectable]
+pub struct {{ pascal }}Seeder;
+
+impl Seeder for {{ pascal }}Seeder {
+    fn name(&self) -> &'static str {
+        "{{ name }}"
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+{% if with_factory %}
+            {{ model_pascal }}::factory().count(10).create(db).await?;
+{% else %}
+            // Create records, for example with a model factory:
+            // `Post::factory().count(10).create(db).await?;`
+            let _ = db;
+{% endif %}
+            Ok(())
+        })
+    }
+}

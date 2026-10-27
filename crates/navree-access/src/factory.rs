@@ -235,6 +235,19 @@ impl AbilityFactory {
         &self.subjects
     }
 
+    /// Adds the rules of the principal of `ctx`: the registered policies
+    /// ([`AccessModule::for_policy`](crate::AccessModule::for_policy), and
+    /// the policies of subjects registered with `for_feature`), then the
+    /// app's abilities function (which can override them). Code building
+    /// abilities for another scope (navree-workspace's workspace roles) calls
+    /// this, so policies apply there too.
+    pub fn define_rules(&self, ctx: &AbilityCtx, rules: &mut Rules) {
+        for define in &self.subjects.policies {
+            define(ctx, rules);
+        }
+        (self.options.abilities)(ctx, rules);
+    }
+
     fn build(
         &self,
         user: Option<Uuid>,
@@ -258,7 +271,7 @@ impl AbilityFactory {
             .as_ref()
             .is_some_and(|role| ctx.has_role(role));
         let mut rules = Rules::new();
-        (self.options.abilities)(&ctx, &mut rules);
+        self.define_rules(&ctx, &mut rules);
         if super_admin {
             // Last, so it wins over every `cannot` rule.
             rules.can(MANAGE, ALL).because("super admin");

@@ -15,7 +15,7 @@ use sea_orm::DbErr;
 use crate::events::publish;
 use crate::http::{map_db_error, uow_layer};
 use crate::migrate::{self, MigrationSet, commands};
-use crate::seed::run_seeders;
+use crate::seed::{SeedOptions, run_seeders_with};
 use crate::{
     ChangeObserver, ClientCommand, ConnectionEstablished, DEFAULT_CONNECTION, Db, DbConnections,
     DbOptions, Seeder,
@@ -224,7 +224,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         ))
         .command(CommandSpec::new(
             "db:seed",
-            "Run the seeders ([name...] to run only some)",
+            "Run the seeders: the root seeders, or every seeder ([name...] to run only some) ([--database <name>] [--force])",
             seed_command,
         ))
         .command(CommandSpec::new(
@@ -330,8 +330,43 @@ fn print_list(verb: &str, items: &[String], empty: &str) {
     }
 }
 
+/// `db:seed [name...] [--database <name>] [--force]`.
 async fn seed_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
-    let ran = run_seeders(&ctx, &args).await?;
+    let mut options = SeedOptions::new();
+    let mut force = false;
+    let mut names = Vec::new();
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--force" => force = true,
+            "--database" => {
+                let name = args
+                    .next()
+                    .ok_or("`--database` needs the name of a database connection")?;
+                options = options.database(name);
+            }
+            _ if arg.starts_with("--database=") => {
+                options = options.database(&arg["--database=".len()..]);
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!(
+                    "unknown option `{arg}` for db:seed; it takes seeder names, --database <name>, --force"
+                )
+                .into());
+            }
+            _ => names.push(arg),
+        }
+    }
+    if !force
+        && let Some(env) = crate::migrate::commands::environment(&ctx).await
+        && env.eq_ignore_ascii_case("production")
+    {
+        return Err(format!(
+            "db:seed would write to the database and this app runs in production (`env = \"{env}\"`); pass --force to run it anyway"
+        )
+        .into());
+    }
+    let ran = run_seeders_with(&ctx, &options.names(names)).await?;
     let ran: Vec<String> = ran.into_iter().map(str::to_owned).collect();
     print_list("Seeded", &ran, "No seeders are registered.");
     Ok(())

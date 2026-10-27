@@ -342,6 +342,11 @@ pub trait ModelHook<M: Model>: Send + Sync + 'static {
     fn kind(&self) -> HookKind {
         HookKind::Behaviour
     }
+
+    /// The hook's name, as `model:show` lists it (its type's).
+    fn name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
 }
 
 /// The hooks of model `M` for one operation: the model's own, then the
@@ -356,14 +361,22 @@ pub(crate) struct Hooks<M: Model> {
 }
 
 impl<M: Model> Hooks<M> {
-    /// The hooks that apply in `ctx`: the model's own and the app's;
-    /// behaviours only inside [`without_events`](crate::without_events);
-    /// behaviours and a recorder when the app has a
+    /// The hooks that apply in `ctx`: the model's intrinsic behaviour
+    /// first (workspace scoping), then its own hooks, then the app's (which
+    /// are skipped inside a factory's quiet operation, see
+    /// `crate::factory::quiet`); behaviours only inside
+    /// [`without_events`](crate::without_events); behaviours and a
+    /// recorder when the app has a
     /// [`ModelEventFake`](crate::events::ModelEventFake).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
+        if M::meta().is_workspace_scoped() {
+            hooks.insert(0, Arc::new(crate::workspace::WorkspaceHook));
+        }
         let mut fake = None;
-        if let Some(app) = ctx.app() {
+        if let Some(app) = ctx.app()
+            && !crate::factory::quiet::is_active()
+        {
             let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
                 crate::error::OrmError::Hook {
                     model: M::meta().name().into(),

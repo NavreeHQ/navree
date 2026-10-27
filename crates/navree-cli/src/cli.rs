@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 pub use crate::kits::Kit;
-use crate::make::MakeKind;
+use crate::make::{Companions, MakeKind};
 pub use crate::new_app::{Database, Ui};
 
 /// The default directory of feature modules.
@@ -21,7 +21,7 @@ pub const MODULES_DIR: &str = "src/modules";
     about = "Create Navree apps, generate code and run the dev loop",
     after_help = "Every other command runs in the app binary: `navree <command> [args...]` is \
                   `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, \
-                  queue:work, schedule:run, routes, openapi:export, key:generate, \
+                  model:show, queue:work, schedule:run, routes, openapi:export, key:generate, \
                   <module>:<command>, ...). `navree list` shows the app's commands."
 )]
 pub struct Cli {
@@ -80,6 +80,15 @@ pub enum Command {
     /// Generate an MCP server with one tool in a module (mcp/NAME.rs).
     #[command(name = "make:mcp")]
     MakeMcp(MakeArgs),
+    /// Generate an ORM model in a module (models/NAME.rs), with its migration, factory, seeder, controller and policy on request.
+    #[command(name = "make:model")]
+    MakeModel(MakeModelArgs),
+    /// Generate a model factory in a module (factories/NAME.rs).
+    #[command(name = "make:factory")]
+    MakeFactory(MakeFactoryArgs),
+    /// Generate a seeder in a module (seeders/NAME.rs), registered for db:seed.
+    #[command(name = "make:seeder")]
+    MakeSeeder(MakeArgs),
     /// Generate a Helm admin-panel resource for an entity of a module (resources/ENTITY.rs).
     #[command(name = "make:resource")]
     MakeResource(MakeResourceArgs),
@@ -116,30 +125,64 @@ pub enum Command {
     Forward(Vec<String>),
 }
 
+/// The options of a `make:<kind>` command line.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MakeFlags<'a> {
+    /// `make:listener --event <event>`.
+    pub event: Option<&'a str>,
+    /// `make:factory --model <model>`.
+    pub model: Option<&'a str>,
+    /// What `make:model` generates with the model.
+    pub companions: Companions,
+}
+
 impl Command {
-    /// The kind and arguments of a `make:<kind>` command (not `make:module`),
-    /// with the listener's `--event`.
-    pub fn make_item(&self) -> Option<(MakeKind, &MakeArgs, Option<&str>)> {
-        let (kind, args) = match self {
-            Command::MakeController(a) => (MakeKind::Controller, a),
-            Command::MakeService(a) => (MakeKind::Service, a),
-            Command::MakeEntity(a) => (MakeKind::Entity, a),
-            Command::MakeMigration(a) => (MakeKind::Migration, a),
-            Command::MakeJob(a) => (MakeKind::Job, a),
-            Command::MakeEvent(a) => (MakeKind::Event, a),
-            Command::MakeListener(a) => {
-                return Some((MakeKind::Listener, &a.item, a.event.as_deref()));
-            }
-            Command::MakeMail(a) => (MakeKind::Mail, a),
-            Command::MakeNotification(a) => (MakeKind::Notification, a),
-            Command::MakePolicy(a) => (MakeKind::Policy, a),
-            Command::MakeCommand(a) => (MakeKind::Command, a),
-            Command::MakeAgent(a) => (MakeKind::Agent, a),
-            Command::MakeTest(a) => (MakeKind::Test, a),
-            Command::MakeMcp(a) => (MakeKind::Mcp, a),
+    /// The kind, arguments and options of a `make:<kind>` command (not
+    /// `make:module`).
+    pub fn make_item(&self) -> Option<(MakeKind, &MakeArgs, MakeFlags<'_>)> {
+        let none = MakeFlags::default();
+        let (kind, args, flags) = match self {
+            Command::MakeController(a) => (MakeKind::Controller, a, none),
+            Command::MakeService(a) => (MakeKind::Service, a, none),
+            Command::MakeEntity(a) => (MakeKind::Entity, a, none),
+            Command::MakeMigration(a) => (MakeKind::Migration, a, none),
+            Command::MakeJob(a) => (MakeKind::Job, a, none),
+            Command::MakeEvent(a) => (MakeKind::Event, a, none),
+            Command::MakeListener(a) => (
+                MakeKind::Listener,
+                &a.item,
+                MakeFlags {
+                    event: a.event.as_deref(),
+                    ..none
+                },
+            ),
+            Command::MakeMail(a) => (MakeKind::Mail, a, none),
+            Command::MakeNotification(a) => (MakeKind::Notification, a, none),
+            Command::MakePolicy(a) => (MakeKind::Policy, a, none),
+            Command::MakeCommand(a) => (MakeKind::Command, a, none),
+            Command::MakeAgent(a) => (MakeKind::Agent, a, none),
+            Command::MakeTest(a) => (MakeKind::Test, a, none),
+            Command::MakeMcp(a) => (MakeKind::Mcp, a, none),
+            Command::MakeModel(a) => (
+                MakeKind::Model,
+                &a.item,
+                MakeFlags {
+                    companions: a.companions(),
+                    ..none
+                },
+            ),
+            Command::MakeFactory(a) => (
+                MakeKind::Factory,
+                &a.item,
+                MakeFlags {
+                    model: a.model.as_deref(),
+                    ..none
+                },
+            ),
+            Command::MakeSeeder(a) => (MakeKind::Seeder, a, none),
             _ => return None,
         };
-        Some((kind, args, None))
+        Some((kind, args, flags))
     }
 }
 
@@ -205,6 +248,65 @@ pub struct MakeResourceArgs {
     /// The directory holding feature modules, relative to the app.
     #[arg(long, default_value = MODULES_DIR)]
     pub path: String,
+}
+
+/// `navree make:model <module> <Name> [--migration] [--factory] [--seeder]
+/// [--controller] [--policy] [--all]`.
+#[derive(Debug, Args)]
+pub struct MakeModelArgs {
+    /// The module and the model name (`deal` or `Deal`).
+    #[command(flatten)]
+    pub item: MakeArgs,
+    /// Also a migration creating the table (create_NAMES_table, with an id, a name and timestamps).
+    #[arg(long, short = 'm')]
+    pub migration: bool,
+    /// Also a factory (factories/NAME.rs), linked to the model: `Model::factory()`.
+    #[arg(long, short = 'f')]
+    pub factory: bool,
+    /// Also a seeder (seeders/NAME.rs) for db:seed, using the factory when there is one.
+    #[arg(long, short = 's')]
+    pub seeder: bool,
+    /// Also a JSON controller (controllers/NAME.rs) with records bound by route key.
+    #[arg(long, short = 'c')]
+    pub controller: bool,
+    /// Also a policy (policies/NAME.rs) attached to the model, which makes it an access subject.
+    #[arg(long)]
+    pub policy: bool,
+    /// A pivot model: the table of a many-to-many between the two models NAME joins (deal_tag), holding their keys.
+    #[arg(long, short = 'p')]
+    pub pivot: bool,
+    /// All of the above (for a pivot: migration, factory and seeder).
+    #[arg(long, short = 'a')]
+    pub all: bool,
+}
+
+impl MakeModelArgs {
+    /// The companions asked for.
+    pub fn companions(&self) -> Companions {
+        match (self.all, self.pivot) {
+            (true, false) => Companions::all(),
+            (true, true) => Companions::all_for_pivot(),
+            (false, pivot) => Companions {
+                migration: self.migration,
+                factory: self.factory,
+                seeder: self.seeder,
+                controller: self.controller,
+                policy: self.policy,
+                pivot,
+            },
+        }
+    }
+}
+
+/// `navree make:factory <module> <name> [--model <model>]`.
+#[derive(Debug, Args)]
+pub struct MakeFactoryArgs {
+    /// The module and the factory name.
+    #[command(flatten)]
+    pub item: MakeArgs,
+    /// The module's model the factory builds (models/MODEL.rs); default: NAME.
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
 }
 
 /// `navree make:listener <module> <name> [--event <event>]`.
@@ -478,14 +580,14 @@ mod tests {
         for kind in MakeKind::ALL {
             let command = format!("make:{}", kind.noun());
             let parsed = parse(&[&command, "posts", "thing"]);
-            let (parsed_kind, args, event) =
+            let (parsed_kind, args, flags) =
                 parsed.make_item().unwrap_or_else(|| panic!("{command}"));
             assert_eq!(parsed_kind, kind);
             assert_eq!(
                 (args.module.as_str(), args.name.as_str()),
                 ("posts", "thing")
             );
-            assert_eq!(event, None);
+            assert_eq!(flags, MakeFlags::default());
         }
         let parsed = parse(&[
             "make:listener",
@@ -494,7 +596,54 @@ mod tests {
             "--event",
             "post_published",
         ]);
-        assert_eq!(parsed.make_item().unwrap().2, Some("post_published"));
+        assert_eq!(parsed.make_item().unwrap().2.event, Some("post_published"));
+        let parsed = parse(&["make:factory", "crm", "vip_deal", "--model", "deal"]);
+        assert_eq!(parsed.make_item().unwrap().2.model, Some("deal"));
+    }
+
+    #[test]
+    fn make_model_companions() {
+        let companions = |args: &[&str]| {
+            let parsed = parse(&[&["make:model", "crm", "Deal"], args].concat());
+            let (kind, item, flags) = parsed.make_item().unwrap();
+            assert_eq!((kind, item.name.as_str()), (MakeKind::Model, "Deal"));
+            flags.companions
+        };
+        assert_eq!(companions(&[]), Companions::default());
+        assert_eq!(
+            companions(&["--migration", "--factory", "--policy"]),
+            Companions {
+                migration: true,
+                factory: true,
+                policy: true,
+                ..Companions::default()
+            }
+        );
+        assert_eq!(
+            companions(&["-mfsc"]),
+            Companions {
+                migration: true,
+                factory: true,
+                seeder: true,
+                controller: true,
+                policy: false,
+                pivot: false,
+            }
+        );
+        assert_eq!(companions(&["--all"]), Companions::all());
+        assert_eq!(companions(&["-a", "--seeder"]), Companions::all());
+        assert_eq!(
+            companions(&["--pivot", "--all"]),
+            Companions::all_for_pivot()
+        );
+        assert_eq!(
+            companions(&["-pm"]),
+            Companions {
+                migration: true,
+                pivot: true,
+                ..Companions::default()
+            }
+        );
     }
 
     #[test]

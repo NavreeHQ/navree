@@ -19,7 +19,8 @@ use serde_json::Value;
 use crate::authorizer::AuthorizedRecord;
 use crate::engine::{Ability, ActionMarker, Subject};
 use crate::factory::{AbilityFactory, PrincipalAccess};
-use crate::subject::{EntityColumns, EntityLoader, SubjectLoader};
+use crate::records::SubjectRecords;
+use crate::subject::EntityColumns;
 
 /// The current principal's access, computed once per request (by the route
 /// authorizer or the first extractor that needs it) and kept in the request
@@ -107,21 +108,24 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentAccess {
     }
 }
 
-/// The record of a `can(A, E, from = "id")` route, loaded and authorized
-/// by the route authorizer before the handler runs.
+/// The record of a `can(A, S, from = "id")` route, loaded and authorized
+/// by the route authorizer before the handler runs. `S` is any
+/// [`SubjectRecords`]: a SeaORM entity (the record is its model) or an ORM
+/// model declared with `#[model(subject = "...")]` (the record is an ORM
+/// record).
 ///
 /// A 500 if the route does not declare that check (action `A::NAME` on
-/// subject `E::SUBJECT` with `from`).
-pub struct Authorized<E: EntityTrait, A> {
-    model: Arc<E::Model>,
+/// subject `S::SUBJECT` with `from`).
+pub struct Authorized<S: SubjectRecords, A> {
+    model: Arc<S::Record>,
     record: Arc<Value>,
     ability: Arc<Ability>,
     _action: PhantomData<fn() -> A>,
 }
 
-impl<E: EntityTrait, A> Authorized<E, A> {
+impl<S: SubjectRecords, A> Authorized<S, A> {
     pub(crate) fn from_parts(
-        model: Arc<E::Model>,
+        model: Arc<S::Record>,
         record: Arc<Value>,
         ability: Arc<Ability>,
     ) -> Self {
@@ -134,48 +138,33 @@ impl<E: EntityTrait, A> Authorized<E, A> {
     }
 }
 
-impl<E, A> Authorized<E, A>
+impl<S, A> Authorized<S, A>
 where
-    E: EntityTrait + Subject,
-    E::Model: Send + Sync + 'static,
+    S: SubjectRecords,
     A: ActionMarker,
 {
-    /// Loads the record of `E` whose primary key is `id` in `uow` (`FOR
-    /// UPDATE` where supported) and checks `A` on it with `ability`, outside
-    /// an HTTP request (MCP tools, agent tools, jobs). A 404 when there is no
-    /// such record (or `id` cannot be a key), a 403 when `ability` does not
-    /// allow `A` on it. `E` needs no
+    /// Loads the record of `S` whose id is `id` in `uow` (`FOR UPDATE`
+    /// where supported) and checks `A` on it with `ability`, outside an HTTP
+    /// request (MCP tools, agent tools, jobs). A 404 when there is no such
+    /// record (or `id` cannot name one), a 403 when `ability` does not allow
+    /// `A` on it. `S` needs no
     /// [`AccessModule::for_feature`](crate::AccessModule::for_feature)
     /// registration.
     pub async fn load(uow: &Uow, ability: Arc<Ability>, id: &str) -> Result<Self, AppError> {
-        let record = EntityLoader::<E>::new()
-            .load(uow, id)
+        let model = S::load(uow, id)
             .await
             .map_err(AppError::internal)?
             .ok_or_else(AppError::not_found)?;
-        if !ability.can(A::NAME, E::SUBJECT, Some(&record.json)) {
-            return Err(AppError::forbidden());
-        }
-        let model = record
-            .model
-            .downcast::<E::Model>()
-            .map_err(|_| AppError::internal("the loaded record is not the entity's model"))?;
-        Ok(Self::from_parts(model, Arc::new(record.json), ability))
+        Self::check(model, ability)
     }
-}
 
-impl<E, A> Authorized<E, A>
-where
-    E: EntityTrait + Subject,
-    A: ActionMarker,
-{
     /// Checks action `A` on `model` with `ability` outside a route (in an
     /// agent's tool, a job or a service): the record, as conditions see it
-    /// ([`record_json`](crate::record_json)), or a 403 when `ability`
-    /// does not allow `A` on it.
-    pub fn check(model: E::Model, ability: Arc<Ability>) -> Result<Self, AppError> {
-        let record = crate::subject::record_json(&model);
-        if !ability.can(A::NAME, E::SUBJECT, Some(&record)) {
+    /// ([`SubjectRecords::record_json`]), or a 403 when `ability` does not
+    /// allow `A` on it.
+    pub fn check(model: S::Record, ability: Arc<Ability>) -> Result<Self, AppError> {
+        let record = S::record_json(&model);
+        if !ability.can(A::NAME, S::SUBJECT, Some(&record)) {
             return Err(AppError::forbidden());
         }
         Ok(Self {
@@ -186,13 +175,13 @@ where
         })
     }
 
-    /// The model.
-    pub fn into_inner(self) -> E::Model {
+    /// The record.
+    pub fn into_inner(self) -> S::Record {
         Arc::try_unwrap(self.model).unwrap_or_else(|shared| (*shared).clone())
     }
 
-    /// The model.
-    pub fn model(&self) -> &E::Model {
+    /// The record.
+    pub fn model(&self) -> &S::Record {
         &self.model
     }
 
@@ -216,7 +205,7 @@ where
             .filter(|field| {
                 !self
                     .ability
-                    .can_field(A::NAME, E::SUBJECT, Some(&self.record), field)
+                    .can_field(A::NAME, S::SUBJECT, Some(&self.record), field)
             })
             .collect();
         if denied.is_empty() {
@@ -232,15 +221,15 @@ where
     }
 }
 
-impl<E: EntityTrait, A> Deref for Authorized<E, A> {
-    type Target = E::Model;
+impl<S: SubjectRecords, A> Deref for Authorized<S, A> {
+    type Target = S::Record;
 
-    fn deref(&self) -> &E::Model {
+    fn deref(&self) -> &S::Record {
         &self.model
     }
 }
 
-impl<E: EntityTrait, A> Clone for Authorized<E, A> {
+impl<S: SubjectRecords, A> Clone for Authorized<S, A> {
     fn clone(&self) -> Self {
         Self {
             model: self.model.clone(),
@@ -251,24 +240,24 @@ impl<E: EntityTrait, A> Clone for Authorized<E, A> {
     }
 }
 
-impl<E: EntityTrait, A> fmt::Debug for Authorized<E, A> {
+impl<S: SubjectRecords, A> fmt::Debug for Authorized<S, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Authorized")
-            .field("model", &self.model)
+            .field("subject", &S::SUBJECT)
+            .field("record", &self.record)
             .finish_non_exhaustive()
     }
 }
 
-impl<E, A, S> FromRequestParts<S> for Authorized<E, A>
+impl<E, A, St> FromRequestParts<St> for Authorized<E, A>
 where
-    E: EntityTrait + Subject,
-    E::Model: Sync,
+    E: SubjectRecords,
     A: ActionMarker,
-    S: Send + Sync,
+    St: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &St) -> Result<Self, Self::Rejection> {
         let missing = || {
             AppError::internal(format!(
                 "Authorized<{}, {}> needs the route to declare `can({}, {}, from = ..)`",
@@ -283,11 +272,7 @@ where
             .get::<AuthorizedRecord>()
             .cloned()
             .ok_or_else(missing)?;
-        if record.subject != E::SUBJECT || record.action != A::NAME {
-            return Err(missing());
-        }
-        let model = record.model.downcast::<E::Model>().map_err(|_| missing())?;
-        Ok(Self::from_parts(model, record.json, record.ability))
+        record.into_authorized::<E, A>().ok_or_else(missing)
     }
 }
 
@@ -301,6 +286,9 @@ where
 ///     Ok(paginate(select, &*uow.tx().await?, page).await?)
 /// }
 /// ```
+///
+/// For an ORM model (`Accessible<Deal, Read>`), navree-orm's
+/// `AccessibleQuery` applies it to the model's queries.
 pub struct Accessible<E, A> {
     ability: Arc<Ability>,
     _marker: PhantomData<fn() -> (E, A)>,
@@ -308,7 +296,7 @@ pub struct Accessible<E, A> {
 
 impl<E, A> Accessible<E, A>
 where
-    E: EntityTrait + Subject,
+    E: Subject,
     A: ActionMarker,
 {
     /// The filter for `ability`.
@@ -319,6 +307,17 @@ where
         }
     }
 
+    /// The principal's abilities.
+    pub fn ability(&self) -> &Arc<Ability> {
+        &self.ability
+    }
+}
+
+impl<E, A> Accessible<E, A>
+where
+    E: EntityTrait + Subject,
+    A: ActionMarker,
+{
     /// The SQL condition (see [`Ability::sql_filter_with`] and
     /// [`EntityColumns`]).
     pub fn condition(&self) -> SimpleExpr {
@@ -330,11 +329,6 @@ where
     pub fn apply(self, select: Select<E>) -> Select<E> {
         let condition = self.condition();
         select.filter(condition)
-    }
-
-    /// The principal's abilities.
-    pub fn ability(&self) -> &Arc<Ability> {
-        &self.ability
     }
 }
 
@@ -355,7 +349,7 @@ impl<E, A> fmt::Debug for Accessible<E, A> {
 
 impl<E, A, S> FromRequestParts<S> for Accessible<E, A>
 where
-    E: EntityTrait + Subject,
+    E: Subject,
     A: ActionMarker,
     S: Send + Sync,
 {
