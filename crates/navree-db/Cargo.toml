@@ -16,6 +16,10 @@ default = []
 postgres = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres"]
 ## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
 mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+## MySQL's RSA password exchange, for `caching_sha2_password` accounts on
+## connections without TLS (pure Rust; it only encrypts the password with
+## the server's public key). Without it, such accounts need TLS.
+mysql-rsa = ["mysql", "dep:sqlx", "sqlx/mysql-rsa"]
 
 [dependencies]
 axum = { workspace = true }
@@ -31,6 +35,9 @@ sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Only to turn on SQLx's `mysql-rsa` (the `mysql-rsa` feature); the code
+# uses SQLx through `sea_orm::sqlx`.
+sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

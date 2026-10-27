@@ -5,29 +5,50 @@
 //! (the `mysql` feature) and with a scripted connection in tests; only the
 //! connection hook needs the driver.
 
-/// Adds strict mode to the session's SQL mode (`database.mysql.strict =
-/// true`). `NULLIF` keeps an empty server mode from leaving a leading comma.
 #[cfg(any(feature = "mysql", test))]
-pub(crate) const STRICT_SESSION: &str = "SET SESSION sql_mode = CONCAT_WS(',', \
-     NULLIF(@@SESSION.sql_mode, ''), 'STRICT_TRANS_TABLES', 'NO_ZERO_IN_DATE', \
-     'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')";
+use crate::MySqlOptions;
+
+/// Adds strict mode to the session's SQL mode (`database.mysql.strict =
+/// true`). `NULLIF` keeps an empty server mode from leaving a leading comma;
+/// a mode the server already has is listed twice, which MySQL accepts.
+#[cfg(any(feature = "mysql", test))]
+const STRICT_SESSION: &str = "SET SESSION sql_mode = CONCAT_WS(',', \
+     NULLIF(@@SESSION.sql_mode, ''), 'ONLY_FULL_GROUP_BY', 'STRICT_TRANS_TABLES', \
+     'NO_ZERO_IN_DATE', 'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')";
 
 /// Removes strict mode from the session's SQL mode (`database.mysql.strict
 /// = false`). The server lists every mode once, so wrapping the list in
 /// commas and replacing `,MODE,` with `,` removes exactly that mode.
 #[cfg(any(feature = "mysql", test))]
-pub(crate) const LENIENT_SESSION: &str = "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
+const LENIENT_SESSION: &str = "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
      REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
      ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))";
 
-/// The statement a new connection runs for `database.mysql.strict`.
+/// The statements a new connection runs for `database.mysql`, in order:
+/// the SQL mode (`modes` exactly, else strict or lenient), then the
+/// isolation level when one is set.
+///
+/// The mode names in `modes` were validated as names (letters, digits and
+/// underscores) with the rest of `DbOptions`, so they are written into the
+/// statement as they are, upper-cased.
 #[cfg(any(feature = "mysql", test))]
-pub(crate) fn session_statement(strict: bool) -> &'static str {
-    if strict {
-        STRICT_SESSION
-    } else {
-        LENIENT_SESSION
+pub(crate) fn session_statements(options: &MySqlOptions) -> Vec<String> {
+    let mode = match &options.modes {
+        Some(modes) => {
+            let modes: Vec<String> = modes.iter().map(|m| m.to_ascii_uppercase()).collect();
+            format!("SET SESSION sql_mode = '{}'", modes.join(","))
+        }
+        None if options.strict => STRICT_SESSION.to_owned(),
+        None => LENIENT_SESSION.to_owned(),
+    };
+    let mut statements = vec![mode];
+    if let Some(level) = options.isolation_level {
+        statements.push(format!(
+            "SET SESSION TRANSACTION ISOLATION LEVEL {}",
+            level.as_sql()
+        ));
     }
+    statements
 }
 
 /// Sets the unit of work's actor and request id (`NULL` when absent) right
@@ -68,15 +89,27 @@ pub(crate) fn drop_tables(tables: &[String]) -> String {
     format!("DROP TABLE IF EXISTS {}", names.join(", "))
 }
 
-/// Installs [`session_statement`] as SQLx's `after_connect` hook: it runs
-/// once on every connection the pool opens.
+/// Installs [`session_statements`] as SQLx's `after_connect` hook: they run
+/// once on every connection the pool opens, after SQLx's own session
+/// settings (time zone, character set, `PIPES_AS_CONCAT`).
 #[cfg(feature = "mysql")]
-pub(crate) fn configure(connect: &mut sea_orm::ConnectOptions, options: &crate::MySqlOptions) {
-    let statement = session_statement(options.strict);
+pub(crate) fn configure(connect: &mut sea_orm::ConnectOptions, options: &MySqlOptions) {
+    use std::sync::Arc;
+
+    use sea_orm::sqlx::{AssertSqlSafe, raw_sql};
+
+    let statements: Arc<[String]> = session_statements(options).into();
     connect.map_sqlx_mysql_pool_opts(move |pool| {
+        let statements = Arc::clone(&statements);
         pool.after_connect(move |conn, _meta| {
+            let statements = Arc::clone(&statements);
             Box::pin(async move {
-                sea_orm::sqlx::raw_sql(statement).execute(conn).await?;
+                for statement in statements.iter() {
+                    // Built from validated options (see `session_statements`).
+                    raw_sql(AssertSqlSafe(statement.clone()))
+                        .execute(&mut *conn)
+                        .await?;
+                }
                 Ok(())
             })
         })
@@ -86,6 +119,7 @@ pub(crate) fn configure(connect: &mut sea_orm::ConnectOptions, options: &crate::
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{IsolationLevel, MySqlOptions};
 
     #[test]
     fn quotes_identifiers_with_backticks() {
@@ -101,11 +135,82 @@ mod tests {
         );
     }
 
+    fn options(f: impl FnOnce(&mut MySqlOptions)) -> MySqlOptions {
+        let mut options = MySqlOptions::default();
+        f(&mut options);
+        options
+    }
+
     #[test]
-    fn strict_and_lenient_sessions() {
-        assert_eq!(session_statement(true), STRICT_SESSION);
-        assert_eq!(session_statement(false), LENIENT_SESSION);
-        assert!(STRICT_SESSION.contains("'STRICT_TRANS_TABLES'"));
-        assert!(LENIENT_SESSION.contains("',STRICT_ALL_TABLES,'"));
+    fn strict_sessions_add_the_strict_modes_to_the_servers() {
+        assert_eq!(
+            session_statements(&MySqlOptions::default()),
+            [
+                "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), \
+                 'ONLY_FULL_GROUP_BY', 'STRICT_TRANS_TABLES', 'NO_ZERO_IN_DATE', \
+                 'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')"
+            ]
+        );
+    }
+
+    #[test]
+    fn lenient_sessions_remove_the_strict_modes() {
+        assert_eq!(
+            session_statements(&options(|o| o.strict = false)),
+            [
+                "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
+                 REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
+                 ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))"
+            ]
+        );
+    }
+
+    /// `modes` replaces the mode whatever `strict` says; names are
+    /// upper-cased.
+    #[test]
+    fn explicit_modes_replace_the_sql_mode() {
+        for strict in [true, false] {
+            let session = session_statements(&options(|o| {
+                o.strict = strict;
+                o.modes = Some(vec![
+                    "strict_all_tables".to_owned(),
+                    "NO_ENGINE_SUBSTITUTION".to_owned(),
+                ]);
+            }));
+            assert_eq!(
+                session,
+                ["SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION'"]
+            );
+        }
+        assert_eq!(
+            session_statements(&options(|o| o.modes = Some(Vec::new()))),
+            ["SET SESSION sql_mode = ''"]
+        );
+    }
+
+    #[test]
+    fn the_isolation_level_follows_the_sql_mode() {
+        let session = session_statements(&options(|o| {
+            o.modes = Some(vec!["ANSI".to_owned()]);
+            o.isolation_level = Some(IsolationLevel::ReadCommitted);
+        }));
+        assert_eq!(
+            session,
+            [
+                "SET SESSION sql_mode = 'ANSI'",
+                "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
+            ]
+        );
+        for (level, sql) in [
+            (IsolationLevel::ReadUncommitted, "READ UNCOMMITTED"),
+            (IsolationLevel::RepeatableRead, "REPEATABLE READ"),
+            (IsolationLevel::Serializable, "SERIALIZABLE"),
+        ] {
+            let session = session_statements(&options(|o| o.isolation_level = Some(level)));
+            assert_eq!(
+                session[1],
+                format!("SET SESSION TRANSACTION ISOLATION LEVEL {sql}")
+            );
+        }
     }
 }
