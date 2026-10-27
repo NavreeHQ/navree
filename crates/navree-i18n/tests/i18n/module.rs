@@ -5,7 +5,9 @@ use std::fs;
 use std::time::Duration;
 
 use navree_config::ConfigSources;
-use navree_i18n::{I18n, I18nError, I18nModule, I18nOptions, Missing, Source, args, embed_locales};
+use navree_i18n::{
+    I18n, I18nError, I18nModule, I18nOptions, Locale, Missing, Source, args, embed_locales, t,
+};
 use navree_testing::TestApp;
 use serde_json::json;
 use uuid::Uuid;
@@ -30,6 +32,31 @@ async fn boots_from_config_and_translates() {
         i18n.t("fr", "nope", args!()),
         Err(I18nError::MissingMessage { .. })
     ));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn validated_locales_scope_like_tags() {
+    // A `navree_validation::Locale` from a request body (a well-formed BCP
+    // 47 tag) is matched with the supported locales like a tag.
+    let app = support::builder().build().await;
+    let i18n = app.get::<I18n>().await;
+    let requested = navree_validation::Locale::parse("fr-CA").unwrap();
+    let current = || (Locale::current().tag().to_owned(), t!("deal-created", count = 3));
+    // Inside the app's scope, so the tag is matched with this app's locales.
+    let by_ref = i18n
+        .scope("en", async {
+            Locale::scope(&requested, async { current() }).await
+        })
+        .await;
+    assert_eq!(by_ref, ("fr".to_owned(), "3 affaires créées".to_owned()));
+    let unsupported = navree_validation::Locale::parse("ja").unwrap();
+    let by_value = i18n
+        .scope("de", async {
+            Locale::scope(unsupported, async { current() }).await
+        })
+        .await;
+    assert_eq!(by_value, ("en".to_owned(), "3 deals created".to_owned()));
     app.shutdown().await.unwrap();
 }
 
