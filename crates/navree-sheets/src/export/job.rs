@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use super::run::Progress;
 use super::service::{Exports, into_sheets_error};
-use crate::SheetFormat;
 use crate::support::in_locale;
+use crate::{SheetFormat, SheetsError};
 
 /// `sheets.export`: writes a queued export's file and finishes its
 /// operation with an [`ExportResult`](crate::ExportResult). Refusals
@@ -68,17 +68,19 @@ impl Job for QueuedExport {
                 Ok(())
             }
             Err(error) if error.is::<JobCancelled>() => Err(error),
-            Err(error) => match into_sheets_error(error) {
-                error @ (crate::SheetsError::TooManyRows { .. }
-                | crate::SheetsError::Invalid(_)
-                | crate::SheetsError::UnknownExport(_)) => {
-                    operations
-                        .fail(self.operation_id, error.to_string())
-                        .await?;
-                    Ok(())
-                }
-                other => Err(other.into()),
-            },
+            Err(error) => {
+                let message = match into_sheets_error(error) {
+                    SheetsError::TooManyRows { limit } => {
+                        format!("The export has more than {limit} rows.")
+                    }
+                    error @ (SheetsError::Invalid(_) | SheetsError::UnknownExport(_)) => {
+                        error.to_string()
+                    }
+                    other => return Err(other.into()),
+                };
+                operations.fail(self.operation_id, message).await?;
+                Ok(())
+            }
         }
     }
 }

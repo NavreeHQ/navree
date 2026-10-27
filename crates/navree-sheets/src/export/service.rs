@@ -180,6 +180,14 @@ impl Exports {
         }
     }
 
+    /// The most rows an export in `format` writes.
+    fn max_rows(&self, format: SheetFormat) -> u64 {
+        match format {
+            SheetFormat::Csv => self.options.exports.max_rows,
+            SheetFormat::Xlsx => self.options.exports.max_rows.min(crate::XLSX_MAX_ROWS),
+        }
+    }
+
     fn limits(&self) -> Limits {
         Limits {
             page_size: self.options.exports.page_size,
@@ -221,10 +229,7 @@ impl Exports {
         let ctx = self.context(app.clone(), request, locale.clone());
         let source = registration.open(app, params).await?;
         let total = source.count(&ctx).await.map_err(SheetsError::App)?;
-        let max_rows = match request.format {
-            SheetFormat::Csv => self.options.exports.max_rows,
-            SheetFormat::Xlsx => self.options.exports.max_rows.min(crate::XLSX_MAX_ROWS),
-        };
+        let max_rows = self.max_rows(request.format);
         if let Some(total) = total
             && total > max_rows
         {
@@ -240,6 +245,7 @@ impl Exports {
             total,
             progress: None,
             written: Arc::new(AtomicU64::new(0)),
+            exceeded: Arc::new(AtomicU64::new(0)),
         };
         match request.format {
             SheetFormat::Csv => {
@@ -327,6 +333,12 @@ impl Exports {
         };
         let source: Arc<dyn Source> = registration.open(app.clone(), job.params.clone()).await?;
         let total = source.count(&ctx).await?;
+        let max_rows = self.max_rows(job.format);
+        if let Some(total) = total
+            && total > max_rows
+        {
+            return Err(SheetsError::TooManyRows { limit: max_rows }.into());
+        }
         let columns = (registration.columns)();
         let headers = self.headers_in(&columns, job.locale.as_deref());
         let filename = with_extension(&source.filename(), job.format);
@@ -340,6 +352,7 @@ impl Exports {
             safe_filename(&filename)
         );
         let written = Arc::new(AtomicU64::new(0));
+        let exceeded = Arc::new(AtomicU64::new(0));
         let paging = Paging {
             source,
             ctx,
@@ -347,12 +360,21 @@ impl Exports {
             total,
             progress: Some(progress),
             written: written.clone(),
+            exceeded: exceeded.clone(),
         };
         let bytes = match job.format {
             SheetFormat::Csv => {
                 let encoder = Arc::new(CsvEncoder::new(self.options.csv.clone())?);
-                disk.put_stream(&path, csv_stream(paging, encoder, headers))
-                    .await?
+                match disk.put_stream(&path, csv_stream(paging, encoder, headers)).await {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        let _ = disk.delete(&path).await;
+                        return match exceeded.load(Ordering::Relaxed) {
+                            0 => Err(error.into()),
+                            limit => Err(SheetsError::TooManyRows { limit }.into()),
+                        };
+                    }
+                }
             }
             SheetFormat::Xlsx => {
                 let (file, _) =

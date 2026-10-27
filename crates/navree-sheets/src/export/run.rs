@@ -36,6 +36,9 @@ pub(crate) struct Paging {
     pub(crate) progress: Option<Progress>,
     /// Data rows written so far.
     pub(crate) written: Arc<AtomicU64>,
+    /// The row limit, once a page went past it (0: not yet): the refusal
+    /// is told apart from other errors after a stream fails.
+    pub(crate) exceeded: Arc<AtomicU64>,
 }
 
 impl Paging {
@@ -48,6 +51,7 @@ impl Paging {
         let rows = self.source.page(&self.ctx, page).await?;
         let done = offset + rows.len() as u64;
         if done > max_rows {
+            self.exceeded.store(max_rows.max(1), Ordering::Relaxed);
             return Err(SheetsError::TooManyRows { limit: max_rows }.into());
         }
         self.written.store(done, Ordering::Relaxed);

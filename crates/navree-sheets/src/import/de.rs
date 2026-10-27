@@ -4,8 +4,9 @@
 //! Text cells are parsed into what each field asks for: numbers (with any
 //! script's digits, and a decimal comma), booleans (`yes`, `no`, `1`, `0`,
 //! `true`, `false`, `y`, `n`, `on`, `off`), dates, enums by name, lists
-//! split on `,`, `;` or `|`. An empty cell is `None` for an `Option` and
-//! "should not be empty" for anything else but text.
+//! split on `,`, `;` or `|`. An empty cell is `None` for an `Option`, the
+//! default for a field with `#[serde(default)]`, and "should not be empty"
+//! for anything else.
 
 use std::fmt;
 
@@ -193,8 +194,12 @@ fn expected_rule(expected: &str) -> Rule {
     }
 }
 
-/// Reads `fields` (field name and cell) into `R`.
+/// Reads `fields` (field name and cell) into `R`. Empty cells are left
+/// out, as if the column were missing: an `Option` is `None`, a field with
+/// `#[serde(default)]` its default, and anything else "should not be
+/// empty".
 pub(crate) fn read_row<R: DeserializeOwned>(fields: Vec<(String, Cell)>) -> Result<R, ReadError> {
+    let fields = fields.into_iter().filter(|(_, cell)| !cell.is_empty()).collect();
     R::deserialize(RowDeserializer { fields })
 }
 
