@@ -4,12 +4,17 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use navree_config::ConfigSection;
+use navree_config::{Config, ConfigError, ConfigSection};
 use redis::IntoConnectionInfo;
 use serde::Deserialize;
 
 /// The name of the connection `redis.url` describes.
 pub const DEFAULT_CONNECTION: &str = "default";
+
+/// The environment variable [`RedisOptions::from_config`] (and so
+/// `RedisModule::from_config()`) reads when the configuration leaves
+/// `redis.url` out. `navree dock` and Harbor set it.
+pub const URL_ENV: &str = "REDIS_URL";
 
 /// The settings of `RedisModule`: the `redis` configuration section. Every
 /// key is optional.
@@ -26,7 +31,9 @@ pub const DEFAULT_CONNECTION: &str = "default";
 /// ```
 ///
 /// From the environment: `APP_REDIS__URL`, `APP_REDIS__PREFIX`,
-/// `APP_REDIS__CONNECTIONS__QUEUE__URL`. `Debug` masks URL passwords.
+/// `APP_REDIS__CONNECTIONS__QUEUE__URL`. When the configuration leaves
+/// `redis.url` out, [`from_config`](RedisOptions::from_config) takes it from
+/// `REDIS_URL` ([`URL_ENV`]). `Debug` masks URL passwords.
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct RedisOptions {
@@ -71,6 +78,36 @@ impl Default for RedisOptions {
 }
 
 impl RedisOptions {
+    /// The `redis` section of `config`, validated, with `redis.url` taken
+    /// from the `REDIS_URL` environment variable ([`URL_ENV`]) when the
+    /// configuration leaves it out. A configured `redis.url` (in a file or
+    /// as `APP_REDIS__URL`) wins; a blank `REDIS_URL` is ignored. This is
+    /// what `RedisModule::from_config()` reads at boot.
+    pub fn from_config(config: &Config) -> Result<RedisOptions, ConfigError> {
+        Self::from_config_with_env(config, |name| std::env::var(name).ok())
+    }
+
+    /// [`from_config`](RedisOptions::from_config) with `env` in place of the
+    /// process environment.
+    pub fn from_config_with_env(
+        config: &Config,
+        env: impl Fn(&str) -> Option<String>,
+    ) -> Result<RedisOptions, ConfigError> {
+        let mut options: RedisOptions = config.typed()?;
+        if config.get_string("redis.url").is_none()
+            && let Some(url) = env(URL_ENV).filter(|url| !url.trim().is_empty())
+        {
+            if let Some(problem) = url_problem(&url) {
+                return Err(ConfigError::Validation {
+                    key: <Self as ConfigSection>::KEY.to_owned(),
+                    message: format!("{URL_ENV} {problem}"),
+                });
+            }
+            options.url = url.trim().to_owned();
+        }
+        Ok(options)
+    }
+
     /// [`connect_timeout_ms`](RedisOptions::connect_timeout_ms) as a `Duration`.
     pub fn connect_timeout(&self) -> Duration {
         Duration::from_millis(self.connect_timeout_ms)
@@ -274,6 +311,84 @@ mod tests {
             assert!(error.contains(expected), "{section}: {error}");
             assert!(!error.contains("pw"), "{error}");
         }
+    }
+
+    /// An environment holding only `REDIS_URL = value`.
+    fn redis_url(value: &'static str) -> impl Fn(&str) -> Option<String> {
+        move |name| (name == URL_ENV).then(|| value.to_owned())
+    }
+
+    fn config(sources: ConfigSources) -> Config {
+        Config::load(&sources).unwrap()
+    }
+
+    #[test]
+    fn redis_url_fills_a_url_the_configuration_leaves_out() {
+        let options = RedisOptions::from_config_with_env(
+            &config(ConfigSources::new().set("redis", json!({ "prefix": "crm:" }))),
+            redis_url("redis://:s3cret@10.0.0.5:6379/0"),
+        )
+        .unwrap();
+        assert_eq!(URL_ENV, "REDIS_URL");
+        assert_eq!(options.url, "redis://:s3cret@10.0.0.5:6379/0");
+        assert_eq!(options.prefix, "crm:");
+
+        let options = RedisOptions::from_config_with_env(
+            &config(ConfigSources::new()),
+            redis_url("redis://dock:6380"),
+        )
+        .unwrap();
+        assert_eq!(options.url, "redis://dock:6380");
+    }
+
+    #[test]
+    fn a_configured_url_wins_over_redis_url() {
+        for sources in [
+            ConfigSources::new().set("redis", json!({ "url": "redis://from-toml:6379" })),
+            ConfigSources::new().env_vars("APP_", [("APP_REDIS__URL", "redis://from-toml:6379")]),
+        ] {
+            let options = RedisOptions::from_config_with_env(
+                &config(sources),
+                redis_url("redis://dock:6380"),
+            )
+            .unwrap();
+            assert_eq!(options.url, "redis://from-toml:6379");
+        }
+    }
+
+    #[test]
+    fn without_redis_url_the_default_applies() {
+        for env in [redis_url(""), redis_url("   ")] {
+            let options =
+                RedisOptions::from_config_with_env(&config(ConfigSources::new()), env).unwrap();
+            assert_eq!(options, RedisOptions::default());
+        }
+        let options =
+            RedisOptions::from_config_with_env(&config(ConfigSources::new()), |_| None).unwrap();
+        assert_eq!(options, RedisOptions::default());
+    }
+
+    #[test]
+    fn an_invalid_redis_url_names_the_variable_and_never_the_value() {
+        let error = RedisOptions::from_config_with_env(
+            &config(ConfigSources::new()),
+            redis_url("http://:pw@x"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("REDIS_URL is not a Redis URL"), "{error}");
+        assert!(!error.contains("pw"), "{error}");
+    }
+
+    #[test]
+    fn the_section_is_still_validated() {
+        let error = RedisOptions::from_config_with_env(
+            &config(ConfigSources::new().set("redis", json!({ "connect_timeout_ms": 0 }))),
+            redis_url("redis://dock:6380"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("redis.connect_timeout_ms"), "{error}");
     }
 
     #[test]
