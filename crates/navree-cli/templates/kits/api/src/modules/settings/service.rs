@@ -64,13 +64,13 @@ impl SettingsService {
             .filter(Column::UserId.eq(user))
             .one(&*uow.tx().await?)
             .await?;
-        Ok(saved.map_or_else(NotificationSettings::default, |row| {
-            NotificationSettings {
+        Ok(
+            saved.map_or_else(NotificationSettings::default, |row| NotificationSettings {
                 project_activity: row.project_activity,
                 weekly_summary: row.weekly_summary,
                 product_updates: row.product_updates,
-            }
-        }))
+            }),
+        )
     }
 
     /// Saves the fields present in `input`.

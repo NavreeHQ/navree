@@ -75,19 +75,27 @@ async fn projects_never_leave_their_workspace() {
     let olivia_token = sign_in(&app, "olivia@example.com").await;
     let grace_token = sign_in(&app, "grace@example.com").await;
 
-    let project = in_workspace(app.client().post("/api/v1/projects"), &olivia_token, &acme.slug)
-        .json(&json!({ "name": "Secret plan" }))
-        .send()
-        .await
-        .assert_status(201)
-        .json_value();
+    let project = in_workspace(
+        app.client().post("/api/v1/projects"),
+        &olivia_token,
+        &acme.slug,
+    )
+    .json(&json!({ "name": "Secret plan" }))
+    .send()
+    .await
+    .assert_status(201)
+    .json_value();
     let id = project["id"].as_str().expect("an id");
 
     // Another workspace's project is not found, even by id.
-    in_workspace(app.client().get("/api/v1/projects"), &grace_token, &globex.slug)
-        .send()
-        .await
-        .assert_json_path("meta.total", json!(0));
+    in_workspace(
+        app.client().get("/api/v1/projects"),
+        &grace_token,
+        &globex.slug,
+    )
+    .send()
+    .await
+    .assert_json_path("meta.total", json!(0));
     in_workspace(
         app.client().get(&format!("/api/v1/projects/{id}")),
         &grace_token,
@@ -97,10 +105,14 @@ async fn projects_never_leave_their_workspace() {
     .await
     .assert_status(404);
     // And a workspace someone is not a member of is closed to them.
-    in_workspace(app.client().get("/api/v1/projects"), &grace_token, &acme.slug)
-        .send()
-        .await
-        .assert_status(403);
+    in_workspace(
+        app.client().get("/api/v1/projects"),
+        &grace_token,
+        &acme.slug,
+    )
+    .send()
+    .await
+    .assert_status(403);
     // A request that names no workspace is a 400.
     app.client()
         .get("/api/v1/projects")
@@ -123,44 +135,70 @@ async fn roles_decide_who_changes_what() {
     let member_token = sign_in(&app, "max@example.com").await;
     let viewer_token = sign_in(&app, "vera@example.com").await;
 
-    let owners = in_workspace(app.client().post("/api/v1/projects"), &owner_token, &team.slug)
-        .json(&json!({ "name": "The owner's" }))
-        .send()
-        .await
-        .assert_status(201)
-        .json_value();
-    let members = in_workspace(app.client().post("/api/v1/projects"), &member_token, &team.slug)
-        .json(&json!({ "name": "The member's" }))
-        .send()
-        .await
-        .assert_status(201)
-        .json_value();
-    let path = |project: &serde_json::Value| format!("/api/v1/projects/{}", project["id"].as_str().unwrap());
+    let owners = in_workspace(
+        app.client().post("/api/v1/projects"),
+        &owner_token,
+        &team.slug,
+    )
+    .json(&json!({ "name": "The owner's" }))
+    .send()
+    .await
+    .assert_status(201)
+    .json_value();
+    let members = in_workspace(
+        app.client().post("/api/v1/projects"),
+        &member_token,
+        &team.slug,
+    )
+    .json(&json!({ "name": "The member's" }))
+    .send()
+    .await
+    .assert_status(201)
+    .json_value();
+    let path = |project: &serde_json::Value| {
+        format!("/api/v1/projects/{}", project["id"].as_str().unwrap())
+    };
 
     // Members change their own projects only.
-    in_workspace(app.client().patch(&path(&members)), &member_token, &team.slug)
-        .json(&json!({ "name": "Renamed" }))
-        .send()
-        .await
-        .assert_status(200);
-    in_workspace(app.client().patch(&path(&owners)), &member_token, &team.slug)
-        .json(&json!({ "name": "Mine now" }))
-        .send()
-        .await
-        .assert_status(403);
+    in_workspace(
+        app.client().patch(&path(&members)),
+        &member_token,
+        &team.slug,
+    )
+    .json(&json!({ "name": "Renamed" }))
+    .send()
+    .await
+    .assert_status(200);
+    in_workspace(
+        app.client().patch(&path(&owners)),
+        &member_token,
+        &team.slug,
+    )
+    .json(&json!({ "name": "Mine now" }))
+    .send()
+    .await
+    .assert_status(403);
     // Viewers read, and nothing else.
     in_workspace(app.client().get(&path(&owners)), &viewer_token, &team.slug)
         .send()
         .await
         .assert_status(200);
-    in_workspace(app.client().post("/api/v1/projects"), &viewer_token, &team.slug)
-        .json(&json!({ "name": "Nope" }))
-        .send()
-        .await
-        .assert_status(403);
+    in_workspace(
+        app.client().post("/api/v1/projects"),
+        &viewer_token,
+        &team.slug,
+    )
+    .json(&json!({ "name": "Nope" }))
+    .send()
+    .await
+    .assert_status(403);
     // Owners change and delete any project.
-    in_workspace(app.client().delete(&path(&members)), &owner_token, &team.slug)
-        .send()
-        .await
-        .assert_status(204);
+    in_workspace(
+        app.client().delete(&path(&members)),
+        &owner_token,
+        &team.slug,
+    )
+    .send()
+    .await
+    .assert_status(204);
 }

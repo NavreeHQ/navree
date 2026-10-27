@@ -104,9 +104,8 @@ impl ProjectService {
             active.status = Set(status.as_str().to_owned());
         }
         active.updated_at = Set(Utc::now());
-        let project = ProjectResource::from(
-            WorkspaceRepo::<Project>::update(uow, workspace, active).await?,
-        );
+        let project =
+            ProjectResource::from(WorkspaceRepo::<Project>::update(uow, workspace, active).await?);
         self.broadcast(uow, "updated", &project);
         Ok(project)
     }

@@ -41,7 +41,10 @@ impl SettingsModule {
     /// Registrations `#[module]` has no key for. `navree make:*` adds its
     /// lines above the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(migrations::migrations());
+        m.migrations(migrations::migrations())
+            // Rows belong to one workspace: `navree check` makes sure they
+            // are only read and written through `WorkspaceRepo`.
+            .workspace_entity::<entity::Entity>();
         // navree:wire
     }
 }

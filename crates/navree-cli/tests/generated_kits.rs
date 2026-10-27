@@ -17,7 +17,8 @@
 //! (default: the workspace's `crates/navree`). The projects build in
 //! `$CARGO_TARGET_DIR/generated-kits` (default `target/generated-kits`),
 //! with sccache when it is installed; on failure the project is kept and its
-//! path printed. `NAVREE_KEEP_GENERATED=1` keeps it on success too.
+//! path printed. `NAVREE_KEEP_GENERATED=1` keeps it on success too, and
+//! `NAVREE_KITS_TARGET_DIR` moves the target directory.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -34,8 +35,12 @@ fn workspace() -> PathBuf {
 }
 
 /// Where the generated projects build: one target directory for every kit,
-/// so the framework compiles once.
+/// so the framework compiles once. `NAVREE_KITS_TARGET_DIR` puts it
+/// elsewhere (another disk).
 fn target() -> PathBuf {
+    if let Some(dir) = std::env::var_os("NAVREE_KITS_TARGET_DIR") {
+        return PathBuf::from(dir);
+    }
     let workspace = workspace();
     match std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from) {
         Some(dir) if dir.is_absolute() => dir,

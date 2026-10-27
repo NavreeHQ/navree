@@ -1,0 +1,42 @@
+//! Boots the whole service, as `main` does, on a temporary database.
+
+mod support;
+
+use navree::micro::MicroFake;
+use support::{boot, sources};
+
+#[test]
+fn module_graph_is_valid() {
+    let (sources, _guard) = sources();
+    {{ crate_name }}::app(sources)
+        .validate()
+        .expect("every module's imports and providers line up");
+}
+
+#[tokio::test]
+async fn health_checks_answer_over_http() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    app.client()
+        .get("/health/live")
+        .send()
+        .await
+        .assert_status(200);
+    app.client()
+        .get("/health/ready")
+        .send()
+        .await
+        .assert_status(200);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_handlers_are_registered() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    // `micro:patterns` lists every message and event pattern.
+    app.run_command("micro:patterns", &[])
+        .await
+        .expect("micro:patterns");
+    app.shutdown().await.unwrap();
+}

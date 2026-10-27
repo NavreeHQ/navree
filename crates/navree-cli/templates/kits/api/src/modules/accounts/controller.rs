@@ -25,7 +25,11 @@ impl AccountController {
         response = SessionList,
         responses(401)
     )]
-    async fn sessions(&self, uow: Uow, CurrentUser(user): CurrentUser) -> Result<Json<SessionList>> {
+    async fn sessions(
+        &self,
+        uow: Uow,
+        CurrentUser(user): CurrentUser,
+    ) -> Result<Json<SessionList>> {
         let data = self.sessions.list(&uow, user.id).await?;
         Ok(Json(SessionList { data }))
     }
@@ -68,7 +72,10 @@ impl AccountController {
             .map_err(AppError::internal)?
             .into_iter()
             .map(|key| {
-                let name = self.social.provider_name(&key).unwrap_or_else(|_| key.clone());
+                let name = self
+                    .social
+                    .provider_name(&key)
+                    .unwrap_or_else(|_| key.clone());
                 ProviderResource { key, name }
             })
             .collect();

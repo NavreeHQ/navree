@@ -1,0 +1,92 @@
+//! The business logic of the invoices module. It doesn't know whether a
+//! message, a route or a job called it: callers pass their unit of work.
+
+use std::sync::Arc;
+
+use chrono::Utc;
+use navree::db::{Repo, Uow};
+use navree::events::Event;
+use navree::http::{AppError, Result};
+use navree::injectable;
+use navree::micro::ServiceClient;
+use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use uuid::Uuid;
+
+use {{ contracts_crate }}::{DealWon, Invoice, InvoiceDrafted, InvoiceStatus};
+
+use super::entity::{ActiveModel, Column, Entity, Model};
+
+/// Drafts and reads invoices.
+#[injectable]
+pub struct InvoiceService {
+    client: Arc<ServiceClient>,
+}
+
+impl InvoiceService {
+    /// The invoice `id`, or a 404.
+    pub async fn find(&self, uow: &Uow, id: Uuid) -> Result<Invoice> {
+        let invoice = Entity::find_by_id(id)
+            .one(&*uow.tx().await?)
+            .await?
+            .ok_or_else(|| AppError::not_found("Invoice not found"))?;
+        Ok(view(invoice))
+    }
+
+    /// The invoice of `deal_id`, if it has one.
+    pub async fn for_deal(&self, uow: &Uow, deal_id: Uuid) -> Result<Option<Invoice>> {
+        let invoice = Entity::find()
+            .filter(Column::DealId.eq(deal_id))
+            .one(&*uow.tx().await?)
+            .await?;
+        Ok(invoice.map(view))
+    }
+
+    /// Drafts the invoice of a won deal and publishes `invoice.drafted`
+    /// once `uow` commits (through the outbox). A deal that already has an
+    /// invoice keeps it: a repeated event changes nothing.
+    pub async fn draft_for_deal(&self, uow: &Uow, deal: &DealWon) -> Result<Invoice> {
+        if let Some(existing) = self.for_deal(uow, deal.deal_id).await? {
+            return Ok(existing);
+        }
+        let now = Utc::now();
+        let invoice = Repo::<Entity>::insert(
+            uow,
+            ActiveModel {
+                id: Set(Uuid::now_v7()),
+                deal_id: Set(deal.deal_id),
+                amount_cents: Set(deal.amount_cents),
+                currency: Set(deal.currency.to_uppercase()),
+                status: Set(InvoiceStatus::Draft.as_str().to_owned()),
+                created_at: Set(now),
+                updated_at: Set(now),
+            },
+        )
+        .await?;
+        self.client
+            .emit(
+                InvoiceDrafted::NAME,
+                &InvoiceDrafted {
+                    invoice_id: invoice.id,
+                    deal_id: invoice.deal_id,
+                    amount_cents: invoice.amount_cents,
+                    currency: invoice.currency.clone(),
+                },
+            )
+            // Events with the same key are handled in order.
+            .key(invoice.deal_id)
+            .await?;
+        Ok(view(invoice))
+    }
+}
+
+/// The row as other services see it.
+fn view(model: Model) -> Invoice {
+    Invoice {
+        id: model.id,
+        deal_id: model.deal_id,
+        amount_cents: model.amount_cents,
+        currency: model.currency,
+        status: InvoiceStatus::parse(&model.status).unwrap_or(InvoiceStatus::Draft),
+        created_at: model.created_at,
+    }
+}

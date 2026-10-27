@@ -58,21 +58,23 @@ impl Kit {
         }
     }
 
-    /// The template directories the kit is made of, in order.
-    fn parts(self) -> &'static [&'static str] {
+    /// The template directories the kit is made of, in order, each with
+    /// the directory of the app it is written to (`""` for the root).
+    fn parts(self) -> &'static [(&'static str, &'static str)] {
         match self {
-            Kit::Saas => &["api", "web"],
-            Kit::Api => &["api"],
-            Kit::Micro => &["micro"],
+            Kit::Saas => &[("api", ""), ("web", "web/")],
+            Kit::Api => &[("api", "")],
+            Kit::Micro => &[("micro", "")],
         }
     }
 
-    /// The navree features the kit's `Cargo.toml` turns on (on top of the
-    /// default `full`).
+    /// The navree features the kit's app turns on. `saas` and `api` add
+    /// them to the default `full`; the `micro` workspace declares navree
+    /// without default features, so its service names `full` too.
     pub fn navree_features(self) -> &'static [&'static str] {
         match self {
             Kit::Saas | Kit::Api => &["billing", "social", "postgres"],
-            Kit::Micro => &["micro", "micro-nats", "postgres"],
+            Kit::Micro => &["full", "micro", "micro-nats", "postgres"],
         }
     }
 
@@ -104,8 +106,13 @@ pub struct KitContext {
     /// The display name (`Acme cloud`).
     pub title: String,
     /// The right-hand side of `navree = ...` in `Cargo.toml`, with the
-    /// kit's features.
+    /// kit's features (`saas`, `api`).
     pub navree_dependency: String,
+    /// The right-hand side of `navree = ...` in a workspace's
+    /// `[workspace.dependencies]`: default features off (`micro`).
+    pub navree_workspace_dependency: String,
+    /// The kit's navree features as TOML strings: `"full", "micro", ...`.
+    pub navree_features: String,
     /// The prefix of the kit's migration names (`m20261027_101500`).
     pub migration_prefix: String,
     /// The contracts crate's package name (`billing-contracts`; micro).
@@ -125,6 +132,13 @@ impl KitContext {
             web: kit.has_web(),
             title: app.name.title(),
             navree_dependency: app.navree.dependency_with_features(kit.navree_features()),
+            navree_workspace_dependency: app.navree.dependency_without_default_features(),
+            navree_features: kit
+                .navree_features()
+                .iter()
+                .map(|feature| format!("{feature:?}"))
+                .collect::<Vec<_>>()
+                .join(", "),
             migration_prefix: now.migration_prefix(),
             contracts_package: format!("{package}-contracts"),
             contracts_crate: format!("{crate_name}_contracts"),
@@ -176,9 +190,9 @@ pub fn output_path(path: &str, ctx: &KitContext) -> String {
 pub fn kit_files(app: &NewApp, kit: Kit, now: Timestamp) -> Result<FileSet, TemplateError> {
     let ctx = KitContext::new(app, kit, now);
     let mut files = FileSet::new();
-    for part in kit.parts() {
+    for (part, into) in kit.parts() {
         for (path, contents) in embedded(part) {
-            let target = output_path(path, &ctx);
+            let target = format!("{into}{}", output_path(path, &ctx));
             let contents = if path.ends_with(".j2") {
                 render(&format!("{part}/{path}"), &ctx)?
             } else {

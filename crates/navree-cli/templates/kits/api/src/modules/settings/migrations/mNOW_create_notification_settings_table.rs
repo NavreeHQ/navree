@@ -26,7 +26,11 @@ impl MigrationTrait for Migration {
                             .uuid()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(NotificationSettings::UserId).uuid().not_null())
+                    .col(
+                        ColumnDef::new(NotificationSettings::UserId)
+                            .uuid()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(NotificationSettings::ProjectActivity)
                             .boolean()
