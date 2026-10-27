@@ -372,7 +372,7 @@ impl Document {
         if text.len() > limits.max_bytes {
             return Err(XmlError::TooLarge("too many bytes"));
         }
-        let text = normalize_line_ends(text);
+        let text = normalize_line_ends(text.strip_prefix('\u{feff}').unwrap_or(text));
         let mut reader = Reader::from_str(&text);
         {
             let config = reader.config_mut();

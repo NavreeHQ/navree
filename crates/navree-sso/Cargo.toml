@@ -49,6 +49,9 @@ uuid = { workspace = true }
 navree-access = { workspace = true }
 navree-api = { workspace = true }
 navree-testing = { workspace = true }
+# The tests check real SHA-1 signatures (refused by the verifier) to prove
+# the canonical form matches other signers'.
+ring = { workspace = true }
 # Checks the canonical form against real signed samples that still use SHA-1
 # digests (which the verifier itself refuses).
 sha1 = { workspace = true }
