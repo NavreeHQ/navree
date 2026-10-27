@@ -273,7 +273,7 @@ pub(super) async fn postgres(
             .fetch_all(AssertSqlSafe(format!(
                 "SELECT ic.relname, i.indisunique, \
                  array_to_string(ARRAY(SELECT pg_get_indexdef(i.indexrelid, k, true) \
-                 FROM generate_subscripts(i.indkey, 1) AS k ORDER BY k), ',') \
+                 FROM generate_series(1, i.indnatts) AS k ORDER BY k), ',') \
                  FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid \
                  WHERE i.indrelid = (quote_ident(current_schema()) || '.' || quote_ident({}))::regclass ORDER BY ic.relname",
                 literal(name)
