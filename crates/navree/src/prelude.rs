@@ -129,6 +129,9 @@ pub use navree_workspace::{
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 
+#[cfg(feature = "settings")]
+pub use navree_settings::{ModuleBuilderSettingsExt as _, Setting, SettingsModule};
+
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
 
