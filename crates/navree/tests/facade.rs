@@ -66,6 +66,7 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    assert!(same::<navree::sso::SsoModule, SsoModule>());
     // L7
     assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
     assert!(same::<
