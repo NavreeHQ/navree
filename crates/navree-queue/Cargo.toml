@@ -24,6 +24,8 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # The authorizer of the private channel `operations.{id}`.
 navree-realtime = { workspace = true }
+# The watchdog, scheduled every minute in apps with `ScheduleModule`.
+navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }

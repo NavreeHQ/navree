@@ -78,6 +78,7 @@ impl Default for QueueOptions {
 /// ```toml
 /// [queue.operations]
 /// routes = true                        # GET/DELETE /api/operations/{id}, the SSE stream
+/// watchdog = true                      # sweep stale operations every minute (with ScheduleModule)
 /// heartbeat_secs = 30                  # how often a running job's operation shows it is alive
 /// stale_after_secs = 300               # no heartbeat for this long: the watchdog steps in
 /// max_redispatches = 3                 # restarts of an idempotent operation's job
@@ -92,6 +93,11 @@ pub struct OperationsOptions {
     /// Mounts the `/api/operations` routes (default true; they also need
     /// `DatabaseModule` and an authenticator).
     pub routes: bool,
+    /// Schedules the watchdog ([`Operations::sweep`](crate::Operations::sweep))
+    /// every minute, as task `queue.watchdog`, in apps with
+    /// `ScheduleModule` (default true). Without `ScheduleModule`, run
+    /// `queue:watchdog` every minute from system cron instead.
+    pub watchdog: bool,
     /// How often the worker renews the heartbeat of a running job's
     /// operation, in seconds (default 30).
     pub heartbeat_secs: u64,
@@ -120,6 +126,7 @@ impl Default for OperationsOptions {
     fn default() -> Self {
         Self {
             routes: true,
+            watchdog: true,
             heartbeat_secs: 30,
             stale_after_secs: 300,
             max_redispatches: 3,

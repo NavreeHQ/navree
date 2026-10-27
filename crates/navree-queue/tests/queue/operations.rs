@@ -10,7 +10,7 @@ use navree_queue::{
     Batch, FAILED_MESSAGE, OPERATION_UPDATED_EVENT, Operation, OperationStatus, QueueDriver,
     STALLED_MESSAGE, SweepReport,
 };
-use sea_orm::ConnectionTrait;
+use sea_orm::{ConnectionTrait, Statement};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -572,6 +572,97 @@ async fn the_watchdog_restarts_idempotent_operations() {
     h.drain().await;
     let done = h.operations.find(op.id).await.unwrap().unwrap();
     assert_eq!(done.status, OperationStatus::Succeeded);
+}
+
+/// Two sweeps at once (two nodes, or the scheduled watchdog plus a manual
+/// `queue:watchdog`) restart a lost job once: the restart is claimed on the
+/// operation's row before the job is queued.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn overlapping_sweeps_restart_a_lost_job_once() {
+    let h = harness_with(one_worker(QueueDriver::Database)).await;
+    let db = h.app.get::<Db>().await;
+    let uow = db.uow(None, None).await;
+    let op = h
+        .operations
+        .start(&uow, Operation::new("export").idempotent())
+        .await
+        .unwrap();
+    h.operations
+        .dispatch(
+            &uow,
+            &op,
+            Export {
+                operation: op.id,
+                rows: 2,
+            },
+        )
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+    db.conn()
+        .execute_unprepared("DELETE FROM jobs")
+        .await
+        .unwrap();
+    h.advance(301);
+
+    let (first, second) = tokio::join!(h.operations.sweep(), h.operations.sweep());
+    let (first, second) = (first.unwrap(), second.unwrap());
+
+    assert_eq!(first.redispatched + second.redispatched, 1, "{first:?} {second:?}");
+    assert_eq!(first.failed + second.failed, 0, "{first:?} {second:?}");
+    let jobs = db
+        .conn()
+        .query_one_raw(Statement::from_string(
+            db.backend(),
+            "SELECT COUNT(*) AS n FROM jobs",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<i64>("", "n")
+        .unwrap();
+    assert_eq!(jobs, 1);
+    let restarted = h.operations.find(op.id).await.unwrap().unwrap();
+    assert_eq!(restarted.status, OperationStatus::Pending);
+}
+
+/// With `ScheduleModule` in the app, the watchdog runs every minute
+/// without being scheduled by hand; `queue.operations.watchdog = false`
+/// turns it off.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_watchdog_is_scheduled_every_minute() {
+    for enabled in [true, false] {
+        let mut options = one_worker(QueueDriver::Database);
+        options.operations.watchdog = enabled;
+        let h = harness_using(options, |builder| {
+            builder.module(navree_schedule::ScheduleModule::for_root())
+        })
+        .await;
+        let scheduler = h.app.get::<navree_schedule::Scheduler>().await;
+        let task = scheduler
+            .list(scheduler.now())
+            .into_iter()
+            .find(|task| task.name == "queue.watchdog")
+            .expect("the queue schedules its watchdog");
+        assert_eq!(task.expr, "* * * * *");
+        assert!(task.without_overlapping);
+
+        let stalled = started(&h, Operation::new("stalled")).await;
+        h.advance(301);
+        let outcomes = scheduler.tick(scheduler.now()).await.unwrap();
+        let ran = outcomes
+            .iter()
+            .find(|outcome| outcome.task == "queue.watchdog")
+            .expect("due every minute");
+        assert_eq!(ran.status, navree_schedule::RunStatus::Succeeded);
+        let status = h.operations.find(stalled.id).await.unwrap().unwrap().status;
+        let expected = if enabled {
+            OperationStatus::Failed
+        } else {
+            OperationStatus::Pending
+        };
+        assert_eq!(status, expected, "watchdog enabled: {enabled}");
+    }
 }
 
 /// A batch whose operation missed its finish (the worker stopped right

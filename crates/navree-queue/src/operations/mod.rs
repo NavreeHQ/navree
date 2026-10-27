@@ -484,11 +484,18 @@ impl Operations {
     /// - [`idempotent`](Operation::idempotent) with a job: the job is
     ///   dispatched again (at most `max_redispatches` times);
     /// - otherwise: `failed`, "The operation stopped responding.".
+    ///
+    /// Each step first claims the operation on its row (it must still be
+    /// stale), so sweeps that overlap (two nodes, or the schedule and a
+    /// manual `queue:watchdog`) restart or fail an operation once, and a
+    /// heartbeat that arrives during the sweep keeps it alive.
     pub async fn sweep(&self) -> Result<SweepReport, QueueError> {
         let now = self.queue.now_ms();
         let stale_ms = i64::try_from(self.options.stale_after_secs.saturating_mul(1000))
             .unwrap_or(i64::MAX);
-        let stale = sql::stale(self.db()?.conn(), self.db()?.backend(), now.saturating_sub(stale_ms)).await?;
+        let before = now.saturating_sub(stale_ms);
+        let backend = self.db()?.backend();
+        let stale = sql::stale(self.db()?.conn(), backend, before).await?;
         let mut report = SweepReport::default();
         for record in stale {
             let id = record.id.to_string();
@@ -499,17 +506,25 @@ impl Operations {
                 && let Some(row) = self.queue.inner.store.find_batch(batch_id).await?
                 && row.settled()
             {
-                self.finish_from_batch(record.id, &row).await?;
-                report.finished += 1;
+                let finish = self.batch_finish(record.id, &row, now)?;
+                if self.apply(record.id, finish).await?.0 {
+                    report.finished += 1;
+                }
                 continue;
             }
             if record.idempotent
-                && let Some(job) = record.job.clone().and_then(|job| serde_json::from_value::<JobEnvelope>(job).ok())
+                && let Some(job) = record
+                    .job
+                    .clone()
+                    .and_then(|job| serde_json::from_value::<JobEnvelope>(job).ok())
                 && record.redispatches < self.options.max_redispatches
             {
+                let claim = sql::redispatched(backend, record.id, before, now);
+                if !self.apply(record.id, claim).await?.0 {
+                    // Another sweep restarted it, or it came back to life.
+                    continue;
+                }
                 self.queue.push_for_operation(job, record.id).await?;
-                let stmt = sql::redispatched(self.db()?.backend(), record.id, now);
-                self.update(record.id, stmt).await?;
                 tracing::warn!(
                     target: "navree::job",
                     operation_id = %record.id,
@@ -520,7 +535,10 @@ impl Operations {
                 report.redispatched += 1;
                 continue;
             }
-            self.fail(record.id, STALLED_MESSAGE).await?;
+            let stalled = sql::stalled(backend, record.id, STALLED_MESSAGE, before, now);
+            if !self.apply(record.id, stalled).await?.0 {
+                continue;
+            }
             tracing::warn!(
                 target: "navree::job",
                 operation_id = %record.id,
@@ -593,19 +611,30 @@ impl Operations {
         id: Uuid,
         row: &crate::batch::BatchRow,
     ) -> Result<Option<OperationRecord>, QueueError> {
-        let now = self.queue.now_ms();
-        let stmt = if row.cancelled_at.is_some() && row.failed_jobs == 0 {
-            sql::finish(self.db()?.backend(), id, OperationStatus::Cancelled, None, None, now)?
+        let stmt = self.batch_finish(id, row, self.queue.now_ms())?;
+        self.update(id, stmt).await
+    }
+
+    /// The statement that finishes operation `id` the way its settled batch
+    /// `row` went.
+    fn batch_finish(
+        &self,
+        id: Uuid,
+        row: &crate::batch::BatchRow,
+        now: i64,
+    ) -> Result<Statement, QueueError> {
+        let backend = self.db()?.backend();
+        if row.cancelled_at.is_some() && row.failed_jobs == 0 {
+            sql::finish(backend, id, OperationStatus::Cancelled, None, None, now)
         } else if row.failed_jobs > 0 && !row.allow_failures {
             let error = format!("{} of {} jobs failed.", row.failed_jobs, row.total_jobs);
-            sql::finish(self.db()?.backend(), id, OperationStatus::Failed, None, Some(&error), now)?
+            sql::finish(backend, id, OperationStatus::Failed, None, Some(&error), now)
         } else if row.callbacks_failed > 0 {
             let error = "A follow-up job of the batch failed.";
-            sql::finish(self.db()?.backend(), id, OperationStatus::Failed, None, Some(error), now)?
+            sql::finish(backend, id, OperationStatus::Failed, None, Some(error), now)
         } else {
-            sql::finish(self.db()?.backend(), id, OperationStatus::Succeeded, None, None, now)?
-        };
-        self.update(id, stmt).await
+            sql::finish(backend, id, OperationStatus::Succeeded, None, None, now)
+        }
     }
 
     /// Records a batch's finished jobs as the operation's progress.
@@ -683,6 +712,16 @@ impl Operations {
         id: Uuid,
         stmt: Statement,
     ) -> Result<Option<OperationRecord>, QueueError> {
+        Ok(self.apply(id, stmt).await?.1)
+    }
+
+    /// [`update`](Operations::update), also telling whether `stmt` changed
+    /// the operation.
+    async fn apply(
+        &self,
+        id: Uuid,
+        stmt: Statement,
+    ) -> Result<(bool, Option<OperationRecord>), QueueError> {
         if let Some(uow) = Uow::current()
             && !uow.is_finished().await
         {
@@ -694,14 +733,14 @@ impl Operations {
                 let announcer = self.announcer();
                 uow.after_commit(move || Box::pin(async move { announcer.announce(&record).await }));
             }
-            return Ok(record);
+            return Ok((changed, record));
         }
         let changed = self.db()?.conn().execute_raw(stmt).await?.rows_affected() > 0;
         let record = self.find(id).await?;
         if changed && let Some(record) = &record {
             self.announcer().announce(record).await;
         }
-        Ok(record)
+        Ok((changed, record))
     }
 
     fn announcer(&self) -> Announcer {
