@@ -78,6 +78,7 @@ navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
 navree-time = { path = "crates/navree-time", version = "0.1.0" }
 navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
+navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -349,8 +350,9 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
-# Chrome for Testing archives (`navree browser:install`): deflate through
-# flate2 on zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
+# Chrome for Testing archives (`navree browser:install`), and reading DOCX
+# archives back in navree-documents tests: deflate through flate2 on
+# zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
@@ -373,6 +375,13 @@ async-trait = "0.1.92"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
+# Documents (navree-documents): the Typst compiler and its PDF exporter, a
+# DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-layout = "0.15.1"
+docx-rs = { version = "0.4.22", default-features = false }
+lopdf = { version = "0.46.0", default-features = false }
 
 # Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
 # formatting with compiled data (pure Rust; Gregorian dates only).

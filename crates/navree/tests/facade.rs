@@ -407,10 +407,11 @@ struct Features {
 /// runtime never needs (`dock`, `harbor`, `navigator`), and ecosystem
 /// libraries and packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
-/// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
-/// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
-/// `features = ["micro"]`, `features = ["i18n"]`, `features = ["mongodb"]`),
-/// and test-only crates (`features = ["browser"]` in `[dev-dependencies]`).
+/// `features = ["grpc"]`, `features = ["documents"]`, `features = ["billing"]`,
+/// `features = ["search"]`, `features = ["mcp"]`, `features = ["ai"]`,
+/// `features = ["redis"]`, `features = ["micro"]`, `features = ["i18n"]`,
+/// `features = ["mongodb"]`), and test-only crates (`features = ["browser"]`
+/// in `[dev-dependencies]`).
 const OPT_IN: &[&str] = &[
     "dock",
     "harbor",
@@ -420,6 +421,7 @@ const OPT_IN: &[&str] = &[
     "flags",
     "graphql",
     "grpc",
+    "documents",
     "billing",
     "search",
     "mcp",
@@ -890,4 +892,15 @@ fn micro_is_reexported_with_its_feature() {
         fake.transport().kind(),
         Some(navree::micro::TransportKind::Custom)
     );
+}
+
+/// `navree::documents` is navree-documents re-exported whole, and the
+/// `documents` feature puts its module in the prelude
+/// (`cargo test -p navree --features documents`).
+#[cfg(feature = "documents")]
+#[test]
+fn documents_is_reexported_with_its_feature() {
+    assert!(same::<navree::documents::DocumentsModule, DocumentsModule>());
+    let pdf = navree::documents::Pdf::from_lines(["Invoice 42"]);
+    assert_eq!(pdf.page_count().unwrap(), 1);
 }
