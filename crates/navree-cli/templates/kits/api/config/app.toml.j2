@@ -1,0 +1,128 @@
+# {{ title }}: settings for every environment.
+#
+# `.env` fills the keys this file leaves out (the database and mail settings
+# Dock writes, secrets), and APP_* environment variables override any key:
+# APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr. Secrets never go here.
+
+[app]
+{% if web %}
+# The web app's URL: links in mail (verification, password reset,
+# invitations) and where checkout returns.
+url = "http://localhost:3000"
+{% else %}
+# The URL links in mail point at: your front end's, once you have one.
+url = "http://localhost:8080"
+{% endif %}
+
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+{% if web %}
+# The web app's backend-for-frontend calls the API from loopback for every
+# browser and names the browser in X-Forwarded-For.
+trusted_proxies = ["127.0.0.1", "::1"]
+
+[http.cors]
+allowed_origins = ["http://localhost:3000"]
+{% endif %}
+
+[database]
+# The URL comes from .env (APP_DATABASE__URL, written by `navree dock up`).
+# Pending migrations run at boot in development; deploys run `navree migrate`.
+migrate_on_boot = true
+
+[mail]
+# The transport comes from .env (Mailpit, written by `navree dock up`).
+from = "{{ title }} <hello@{{ package }}.test>"
+
+[queue]
+driver = "database"
+
+[log]
+level = "info"
+
+[auth]
+# Public sign-up at POST /api/auth/register; false: accounts by invitation only.
+registration = true
+
+[auth.two_factor]
+issuer = "{{ title }}"
+{% if web %}
+
+[auth.password_reset]
+# The web app's page; the mail links to it with ?token=..&email=..
+url = "http://localhost:3000/reset-password"
+{% endif %}
+
+[workspace]
+# Where a request's workspace comes from: the X-Workspace header (the web
+# app's client sets it from the /w/<slug>/ URL; API clients send it).
+resolvers = ["header"]
+{% if web %}
+
+[workspace.invitations]
+# The web app's page; the mail links to it with ?token=..
+url = "http://localhost:3000/invitations/accept"
+{% endif %}
+
+# What each workspace role may do, on top of the built-in permissions
+# (`owner` may do everything; `admin` manages the workspace and its members).
+[workspace.roles.admin]
+permissions = ["projects.*", "billing.manage"]
+
+[workspace.roles.member]
+permissions = ["projects.read", "projects.create"]
+
+[workspace.roles.viewer]
+permissions = ["projects.read"]
+
+[billing]
+# `fake` needs no account: checkout completes in the app (development only).
+# Use "stripe" or "paddle" in production, with the keys in the environment.
+provider = "fake"
+{% if web %}
+# Where checkout returns; the web app's page sends people back to their
+# workspace's billing settings.
+return_url = "http://localhost:3000/billing/return"
+{% endif %}
+
+[billing.plans.starter]
+name = "Starter"
+prices = { monthly = "price_starter_monthly", yearly = "price_starter_yearly" }
+trial_days = 14
+seats = true
+
+[billing.plans.pro]
+name = "Pro"
+prices = { monthly = "price_pro_monthly", yearly = "price_pro_yearly" }
+trial_days = 14
+seats = true
+
+[social]
+# The front end's callback page: register `{redirect_base}/{provider}` with
+# each provider.
+redirect_base = "http://localhost:3000/auth/callback"
+
+# Each provider adds a sign-in button. Its secret goes in .env:
+# APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET=...
+#
+# [social.providers.github]
+# client_id = "Iv1.0123456789abcdef"
+#
+# [social.providers.google]
+# client_id = "0123456789-abc.apps.googleusercontent.com"
+
+[realtime]
+# Browsers connect to ws://127.0.0.1:8080/app/{{ package }}
+key = "{{ package }}"
+{% if web %}
+allowed_origins = ["http://localhost:3000"]
+{% endif %}
+# queue:work and schedule:work hand their broadcasts to `serve`.
+relay_url = "auto"
+
+[api]
+title = "{{ title }} API"
+
+[helm]
+title = "{{ title }} admin"
