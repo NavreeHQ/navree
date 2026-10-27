@@ -1,6 +1,6 @@
 ---
 name: navree-jose
-description: "JSON Web Signatures and JSON Web Keys with `navree::crypto::jose` (crate navree-crypto, facade feature `crypto`, in `full`): `SigningKey` (`from_pem` for PKCS#8, PKCS#1 and SEC 1 keys such as Apple `.p8` files, `from_jwk`, `hmac`, `generate_ed25519`, `generate_es256`, `with_kid`, `with_thumbprint_kid`, `with_algorithm`, `sign_jwt`, `sign_json`, `sign_jws`, `to_pkcs8_pem`, `public_jwk`), `VerifyingKey` (`from_pem`, `from_jwk`, `rsa`, `ec`, `ed25519`, `hmac`, `verify_der`), `Jws::parse`, `verify`, `verify_with(&JwkSet)` and `claims::<T>()`, `Jwk` and `JwkSet` (thumbprints, `to_public`), the algorithms HS256/384/512, EdDSA, ES256/384, RS256/384/512 and PS256/384/512, and `JoseError`. Use when signing a JWT another service verifies (a partner assertion, Apple's client secret, a service account's token), verifying a token another service signed (ID tokens against a provider's JWKS, OIDC push tokens, a partner's callback), publishing a JWKS endpoint, loading or generating a private key, or debugging `NoKey`, `BadSignature`, `UnsupportedAlgorithm` or `InvalidKey`."
+description: "JSON Web Signatures and JSON Web Keys with `navree::crypto::jose` (crate navree-crypto, facade feature `crypto`, in `full`): `SigningKey` (`from_pem` for PKCS#8, PKCS#1 and SEC 1 keys such as Apple `.p8` files, `from_jwk`, `hmac`, `generate_ed25519`, `generate_es256`, `with_kid`, `with_thumbprint_kid`, `with_algorithm`, `sign_jwt`, `sign_json`, `sign_jws`, `to_pkcs8_pem`, `public_jwk`), `VerifyingKey` (`from_pem`, `from_certificate_der`, `from_jwk`, `rsa`, `ec`, `ed25519`, `hmac`, `verify_der`, `verify_legacy_sha1`), `Jws::parse`, `verify`, `verify_with(&JwkSet)` and `claims::<T>()`, `Jwk` and `JwkSet` (thumbprints, `to_public`), the algorithms HS256/384/512, EdDSA, ES256/384, RS256/384/512 and PS256/384/512, and `JoseError`. Use when signing a JWT another service verifies (a partner assertion, Apple's client secret, a service account's token), verifying a token another service signed (ID tokens against a provider's JWKS, OIDC push tokens, a partner's callback), publishing a JWKS endpoint, loading or generating a private key, or debugging `NoKey`, `BadSignature`, `UnsupportedAlgorithm` or `InvalidKey`."
 ---
 
 # Signatures and keys
@@ -52,9 +52,11 @@ pub fn partner_assertion(pem: &str, key_id: &str, now: i64) -> Result<String, Jo
 
 ## Steps: verify a token
 
-1. Get the trusted key: `VerifyingKey::from_pem` (`PUBLIC KEY` or
-   `RSA PUBLIC KEY`), `from_jwk`, `rsa(n, e)`, `ec(Algorithm::ES256, x, y)`,
-   `ed25519(bytes)` or `hmac(alg, secret)`.
+1. Get the trusted key: `VerifyingKey::from_pem` (`PUBLIC KEY`,
+   `RSA PUBLIC KEY` or the key of a `CERTIFICATE`), `from_certificate_der`,
+   `from_jwk`, `rsa(n, e)`, `ec(Algorithm::ES256, x, y)`, `ed25519(bytes)`
+   or `hmac(alg, secret)`. A certificate's own signature and validity are
+   not checked: trust it for where it came from.
 2. Parse, verify, then read the claims, in that order:
 
 ```rust
@@ -112,6 +114,9 @@ elsewhere.
   keys cannot be generated here.
 - WebAuthn ES256 signatures are DER: verify them with
   `verifying_key.verify_der(Algorithm::ES256, message, signature)`.
+- RSA PKCS#1 v1.5 with SHA-1 (AWS SNS signature version 1) is no JWS
+  algorithm: `verifying_key.verify_legacy_sha1(message, signature)`, RSA
+  keys not pinned to an algorithm only.
 
 ## Checks
 
