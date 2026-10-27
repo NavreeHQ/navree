@@ -7,17 +7,15 @@ use std::sync::Arc;
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_db::{
-    ChangeEvent, ChangeObserver, ChangeOp, Db, Page, PageQuery, Uow, paginate, prune_time_series,
+    ChangeEvent, ChangeObserver, ChangeOp, Db, Page, PageQuery, Uow, prune_time_series,
 };
 use navree_kernel::{BoxError, BoxFuture};
-use sea_orm::{
-    ActiveValue::Set, ConnectionTrait, DatabaseTransaction, DbErr, EntityTrait, QueryOrder,
-};
+use navree_orm::{Executor, Model as _, Record};
+use sea_orm::{DatabaseTransaction, DbErr};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::audit_log::{self, ActiveModel};
 use crate::naming::snake_case;
 use crate::policy::{AUDIT_TABLE, Policy, changed_fields};
 use crate::{AuditFilter, AuditOptions, AuditRecord};
@@ -72,7 +70,7 @@ pub struct AuditLog {
 /// What the background writer receives.
 enum Message {
     /// An entry to write.
-    Entry(Box<ActiveModel>),
+    Entry(Box<AuditRecord>),
     /// Answer once every earlier entry is written.
     Flush(oneshot::Sender<()>),
 }
@@ -139,7 +137,7 @@ impl AuditLog {
         match self.queue.try_send(Message::Entry(Box::new(row))) {
             Ok(()) => Ok(()),
             Err(mpsc::error::TrySendError::Full(Message::Entry(row))) => {
-                let action = action_of(&row);
+                let action = row.action;
                 tracing::warn!(target: "navree::audit", %action, "the audit queue is full; entry dropped");
                 Err(AuditError::QueueFull { action })
             }
@@ -183,17 +181,21 @@ impl AuditLog {
         }
     }
 
-    /// One page of entries matching `filter`, newest first.
+    /// One page of entries matching `filter`, newest first, read on the
+    /// log's own connection (the one [`record`](AuditLog::record) writes
+    /// on).
     pub async fn list(
         &self,
         filter: &AuditFilter,
         page: PageQuery,
     ) -> Result<Page<AuditRecord>, DbErr> {
-        let select = filter
-            .apply(audit_log::Entity::find())
-            .order_by_desc(audit_log::Column::CreatedAt)
-            .order_by_desc(audit_log::Column::Id);
-        paginate(select, self.db.conn(), page).await
+        let page = filter
+            .query()
+            .order_by_desc(AuditRecord::CREATED_AT)
+            .order_by_desc(AuditRecord::ID)
+            .paginate(self.db.conn(), page)
+            .await?;
+        Ok(page.map(Record::into_inner))
     }
 
     /// Deletes entries older than `days` days; returns how many.
@@ -215,29 +217,29 @@ impl AuditLog {
     }
 
     /// The row for `entry`, without skipped fields, stamped now.
-    fn row(&self, entry: AuditEntry) -> ActiveModel {
+    fn row(&self, entry: AuditEntry) -> AuditRecord {
         let owner = entry.subject_type.clone();
         let strip = |v: Value| self.policy.strip(owner.as_deref(), v);
-        ActiveModel {
-            id: Set(Uuid::now_v7()),
-            kind: Set(kind_str(entry.kind).to_owned()),
-            action: Set(entry.action),
-            actor_id: Set(entry.actor_id),
-            impersonator_id: Set(entry.impersonator_id),
-            subject_type: Set(entry.subject_type),
-            subject_id: Set(entry.subject_id),
-            old_values: Set(entry.old_values.map(strip)),
-            new_values: Set(entry.new_values.map(strip)),
-            request_id: Set(entry.request_id),
-            ip: Set(entry.ip),
-            user_agent: Set(entry.user_agent),
-            metadata: Set(strip(entry.metadata)),
-            created_at: Set(self.clock.now()),
+        AuditRecord {
+            id: Uuid::now_v7(),
+            kind: kind_str(entry.kind).to_owned(),
+            action: entry.action,
+            actor_id: entry.actor_id,
+            impersonator_id: entry.impersonator_id,
+            subject_type: entry.subject_type,
+            subject_id: entry.subject_id,
+            old_values: entry.old_values.map(strip),
+            new_values: entry.new_values.map(strip),
+            request_id: entry.request_id,
+            ip: entry.ip,
+            user_agent: entry.user_agent,
+            metadata: strip(entry.metadata),
+            created_at: self.clock.now(),
         }
     }
 
     /// The `data` row for one change, or `None` when it is not audited.
-    fn data_row(&self, change: &ChangeEvent, uow: &Uow) -> Option<ActiveModel> {
+    fn data_row(&self, change: &ChangeEvent, uow: &Uow) -> Option<AuditRecord> {
         let table = change.entity.as_str();
         if self.policy.skips_entity(table) {
             return None;
@@ -257,21 +259,21 @@ impl AuditLog {
         };
         let strip = |v: Value| self.policy.strip(Some(table), v);
         let subject_type = self.policy.subject_type(table);
-        Some(ActiveModel {
-            id: Set(Uuid::now_v7()),
-            kind: Set(kind_str(AuditKind::Data).to_owned()),
-            action: Set(format!("{}.{}", snake_case(&subject_type), change.op)),
-            actor_id: Set(uow.actor()),
-            impersonator_id: Set(uow.impersonator()),
-            subject_type: Set(Some(subject_type)),
-            subject_id: Set(Some(change.id.clone())),
-            old_values: Set(old.map(strip)),
-            new_values: Set(new.map(strip)),
-            request_id: Set(uow.request_id().map(str::to_owned)),
-            ip: Set(None),
-            user_agent: Set(None),
-            metadata: Set(Value::Object(Default::default())),
-            created_at: Set(self.clock.now()),
+        Some(AuditRecord {
+            id: Uuid::now_v7(),
+            kind: kind_str(AuditKind::Data).to_owned(),
+            action: format!("{}.{}", snake_case(&subject_type), change.op),
+            actor_id: uow.actor(),
+            impersonator_id: uow.impersonator(),
+            subject_type: Some(subject_type),
+            subject_id: Some(change.id.clone()),
+            old_values: old.map(strip),
+            new_values: new.map(strip),
+            request_id: uow.request_id().map(str::to_owned),
+            ip: None,
+            user_agent: None,
+            metadata: Value::Object(Default::default()),
+            created_at: self.clock.now(),
         })
     }
 }
@@ -287,7 +289,7 @@ impl ChangeObserver for AuditLog {
             if !self.policy.enabled {
                 return Ok(());
             }
-            let rows: Vec<ActiveModel> = changes
+            let rows: Vec<AuditRecord> = changes
                 .iter()
                 .filter_map(|change| self.data_row(change, uow))
                 .collect();
@@ -337,7 +339,7 @@ async fn write_until(
 async fn handle(db: &Db, message: Message) {
     match message {
         Message::Entry(row) => {
-            let action = action_of(&row);
+            let action = row.action.clone();
             if let Err(error) = insert(db.conn(), vec![*row]).await {
                 tracing::warn!(target: "navree::audit", %action, %error, "could not write an audit entry");
             }
@@ -348,20 +350,12 @@ async fn handle(db: &Db, message: Message) {
     }
 }
 
-async fn insert<C: ConnectionTrait>(conn: &C, rows: Vec<ActiveModel>) -> Result<(), DbErr> {
-    audit_log::Entity::insert_many(rows)
-        .exec_without_returning(conn)
-        .await?;
+/// Inserts `rows` in one statement through `exec`: the log's own
+/// connection, or the transaction it is handed. A plain insert records no
+/// change events, so audit rows are never audited themselves.
+async fn insert<E: Executor + ?Sized>(exec: &E, rows: Vec<AuditRecord>) -> Result<(), DbErr> {
+    AuditRecord::insert(exec, rows).await?;
     Ok(())
-}
-
-fn action_of(row: &ActiveModel) -> String {
-    match &row.action {
-        sea_orm::ActiveValue::Set(action) | sea_orm::ActiveValue::Unchanged(action) => {
-            action.clone()
-        }
-        sea_orm::ActiveValue::NotSet => String::new(),
-    }
 }
 
 fn is_empty(value: &Value) -> bool {

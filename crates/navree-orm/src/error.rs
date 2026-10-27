@@ -369,6 +369,36 @@ impl OrmError {
     }
 }
 
+/// An ORM error as a SeaORM [`DbErr`], for code whose API speaks `DbErr`
+/// (navree-db's repositories, the framework crates' services) and runs ORM
+/// operations inside: `?` converts.
+///
+/// The database's own error comes back as it was, so a unique or
+/// foreign-key violation still answers 409 over HTTP; a missing record is
+/// `DbErr::RecordNotFound` (a 404); a timeout is the database's error;
+/// anything else (a column that does not decode, a cast that fails, an
+/// invalid query) is `DbErr::Custom` with the ORM's message.
+///
+/// ```
+/// use navree_orm::OrmError;
+/// use sea_orm::DbErr;
+///
+/// let missing = DbErr::from(OrmError::not_found("Deal", vec!["42".to_owned()]));
+/// assert!(matches!(missing, DbErr::RecordNotFound(message) if message == "no Deal found for key 42"));
+/// let refused = DbErr::from(OrmError::from(DbErr::Custom("UNIQUE constraint failed".into())));
+/// assert!(matches!(refused, DbErr::Custom(message) if message == "UNIQUE constraint failed"));
+/// ```
+impl From<OrmError> for DbErr {
+    fn from(error: OrmError) -> Self {
+        match error {
+            OrmError::Db(source)
+            | OrmError::ModelNotFound { source, .. }
+            | OrmError::Timeout { source, .. } => source,
+            other => DbErr::Custom(other.to_string()),
+        }
+    }
+}
+
 /// Whether `error` says the connection under a statement was lost.
 pub(crate) fn lost_connection(error: &DbErr) -> bool {
     if matches!(
@@ -593,5 +623,36 @@ mod tests {
         assert!(error.source().unwrap().downcast_ref::<DbErr>().is_some());
         assert!(!error.is_unique_violation());
         assert!(!error.is_not_found());
+    }
+
+    #[test]
+    fn orm_errors_become_db_errors_keeping_the_database_s_own() {
+        assert!(matches!(
+            DbErr::from(OrmError::from(DbErr::RecordNotUpdated)),
+            DbErr::RecordNotUpdated
+        ));
+        assert!(matches!(
+            DbErr::from(OrmError::not_found("Deal", Vec::new())),
+            DbErr::RecordNotFound(message) if message == "no Deal found"
+        ));
+        let timeout = OrmError::from(DbErr::Custom(
+            "canceling statement due to statement timeout".into(),
+        ))
+        .timed_out(std::time::Duration::from_secs(1));
+        assert!(matches!(
+            DbErr::from(timeout),
+            DbErr::Custom(message) if message.contains("statement timeout")
+        ));
+        let decode = OrmError::Decode {
+            model: "Deal".into(),
+            column: "amount".into(),
+            expected: "i64".into(),
+            message: "not a number".into(),
+        };
+        assert!(matches!(
+            DbErr::from(decode),
+            DbErr::Custom(message)
+                if message == "cannot read column `amount` of Deal as i64: not a number"
+        ));
     }
 }

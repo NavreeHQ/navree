@@ -3,13 +3,14 @@
 //! `AuditModule`: an audit trail of data changes, sign-ins and permission
 //! changes, in the table `audit_logs`.
 //!
-//! - **Data changes** made through a `navree_db::Uow` (with `navree_db::Repo`)
-//!   are written as `data` entries by a `dyn ChangeObserver` inside the
-//!   unit of work's transaction, so a rolled-back change leaves no audit
-//!   row. Entries carry the unit of work's actor and request id, the
-//!   subject type and id (`Deal`, `0199...`), the action
-//!   (`deal.created`, `deal.updated`, `deal.deleted`) and the old and new
-//!   values (only the changed fields for updates).
+//! - **Data changes** made through a `navree_db::Uow` (navree-orm models
+//!   saved in it, or `navree_db::Repo`) are written as `data` entries by a
+//!   `dyn ChangeObserver` inside the unit of work's transaction, so a
+//!   rolled-back change leaves no audit row. Entries carry the unit of
+//!   work's actor and request id, the subject type and id (`Deal`,
+//!   `0199...`), the action (`deal.created`, `deal.updated`,
+//!   `deal.deleted`) and the old and new values (only the changed fields
+//!   for updates).
 //! - **Security, sign-in and permission events** come in through
 //!   `dyn AuditSink` (navree-access, navree-auth, navree-http's route `audit`
 //!   actions) and are written on the module's own connection, outside the
@@ -22,6 +23,9 @@
 //!   `action` and `kind`, paginated (permission `audit.read`); `audit:prune
 //!   [--days N]` deletes entries older than the retention period (365 days
 //!   by default).
+//! - **Entries are models:** [`AuditRecord`] is a navree-orm model, so code
+//!   reads the trail with the query builder (`AuditRecord::query()`, or an
+//!   [`AuditFilter`]'s [`query`](AuditFilter::query)).
 //!
 //! ```no_run
 //! use navree_audit::AuditModule;
@@ -69,5 +73,7 @@ pub use naming::subject_type_of;
 pub use options::{AuditOptions, DEFAULT_SKIP_FIELDS};
 pub use policy::AUDIT_TABLE;
 
-/// One stored audit entry (a row of `audit_logs`).
+/// One stored audit entry (a row of `audit_logs`): a navree-orm model
+/// (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`),
+/// and the `Model` of the SeaORM entity [`audit_log`].
 pub type AuditRecord = audit_log::Model;
