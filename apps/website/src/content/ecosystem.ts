@@ -149,7 +149,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-cli",
     command: "navree new acme --kit saas",
     href: "/docs/getting-started/starter-kits/",
-    status: "planned",
+    status: "stable",
     signature: "navree new acme --kit saas",
     mount: "navree new",
   },

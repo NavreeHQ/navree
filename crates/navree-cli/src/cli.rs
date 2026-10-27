@@ -144,8 +144,10 @@ pub struct NewArgs {
     /// alone) or `micro` (a microservice); default: the minimal app.
     #[arg(long, value_enum, value_name = "KIT")]
     pub kit: Option<Kit>,
-    /// The front end to create next to the API (the minimal app only).
-    #[arg(long, value_enum, default_value_t = Ui::None, conflicts_with = "kit")]
+    /// The front end to create next to the API. With a kit, only `saas`
+    /// has one, and it is Next.js (`--kit saas --ui next` is the same as
+    /// `--kit saas`).
+    #[arg(long, value_enum, default_value_t = Ui::None)]
     pub ui: Ui,
     /// A local navree checkout (the repository or its crates/navree) to depend
     /// on; default: the checkout this navree was built from, else the
@@ -365,11 +367,12 @@ mod tests {
         };
         assert_eq!(args.kit, Some(Kit::Saas));
         assert!(args.navree_path.is_some());
-        // A kit brings its own front end (or none).
-        let error =
-            Cli::try_parse_from(["navree", "new", "acme", "--kit", "api", "--ui", "next"])
-                .unwrap_err();
-        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+        // The SaaS kit's front end is Next.js; `create_app` refuses a
+        // front end for the other kits.
+        let Command::New(args) = parse(&["new", "acme", "--kit", "saas", "--ui", "next"]) else {
+            panic!("expected new");
+        };
+        assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Ui::Next));
         let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
     }

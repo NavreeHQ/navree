@@ -327,6 +327,14 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
 /// Creates the app in `parent/<name>` and returns its directory. The
 /// directory must not exist or be empty.
 pub fn create_app(parent: &Path, app: &NewApp, now: Timestamp) -> anyhow::Result<PathBuf> {
+    if let Some(kit) = app.kit
+        && app.ui == Ui::Next
+        && !kit.has_web()
+    {
+        bail!(
+            "the {kit} kit has no front end: --ui next goes with --kit saas (whose front end is Next.js) or with no kit"
+        );
+    }
     let root = parent.join(app.name.package());
     if root.exists() {
         let mut entries =

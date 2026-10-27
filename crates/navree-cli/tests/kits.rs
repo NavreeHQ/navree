@@ -175,8 +175,38 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     // Harbor ships the web app in the same release.
     let harbor = navree_harbor::HarborConfig::parse(&read(&root, "harbor.toml"), Path::new("harbor.toml")).unwrap();
     assert_eq!(harbor.frontend.as_ref().map(|f| f.path.as_str()), Some("web"));
-    // CI covers the web app.
+    // CI covers the web app, from a committed lockfile.
     assert!(read(&root, ".github/workflows/ci.yml").contains("pnpm build"));
+    assert!(read(&root, "web/pnpm-lock.yaml").starts_with("lockfileVersion:"));
+    // The browser's types come from the committed OpenAPI document.
+    let schema = read(&root, "web/lib/api/schema.d.ts");
+    assert!(schema.contains("\"/api/v1/projects\""));
+    assert!(schema.contains("ProjectPage: {"));
+}
+
+#[test]
+fn saas_and_api_kits_ship_their_openapi_document() {
+    for kit in [Kit::Saas, Kit::Api] {
+        let (_dir, root) = generate("acme-cloud", kit);
+        let document: serde_json::Value = serde_json::from_str(&read(&root, "openapi.json")).unwrap();
+        assert_eq!(document["info"]["title"], "Acme cloud API", "{kit}");
+        for path in [
+            "/api/auth/register",
+            "/api/auth/login",
+            "/api/workspaces",
+            "/api/billing/checkout",
+            "/api/v1/projects",
+            "/api/v1/projects/{id}",
+            "/api/v1/settings/workspace",
+            "/api/v1/account/sessions",
+        ] {
+            assert!(document["paths"].get(path).is_some(), "{kit}: {path}");
+        }
+        // CI fails when it no longer matches the code.
+        let ci = read(&root, ".github/workflows/ci.yml");
+        assert!(ci.contains("openapi:export openapi.json"));
+        assert!(ci.contains("git diff --exit-code -- openapi.json"));
+    }
 }
 
 #[test]
@@ -441,6 +471,38 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     let api = created_message(&app("acme", Kit::Api), &root);
     assert!(api.contains("(kit: api)"));
     assert!(!api.contains("pnpm"));
+}
+
+#[test]
+fn ui_next_goes_with_the_saas_kit_only() {
+    // The SaaS kit's front end is Next.js: saying so changes nothing.
+    let (_dir, saas) = generate("acme", Kit::Saas);
+    let dir = tempfile::tempdir().unwrap();
+    let explicit = create_app(
+        dir.path(),
+        &NewApp {
+            ui: Ui::Next,
+            ..app("acme", Kit::Saas)
+        },
+        now(),
+    )
+    .unwrap();
+    assert_eq!(tree(&explicit), tree(&saas));
+    // The other kits have no front end.
+    for kit in [Kit::Api, Kit::Micro] {
+        let dir = tempfile::tempdir().unwrap();
+        let error = create_app(
+            dir.path(),
+            &NewApp {
+                ui: Ui::Next,
+                ..app("acme", kit)
+            },
+            now(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("has no front end"), "{error}");
+        assert!(!dir.path().join("acme").exists());
+    }
 }
 
 #[test]
