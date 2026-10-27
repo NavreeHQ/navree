@@ -11,7 +11,8 @@ use navree_contracts::{AuthState, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
 use navree_telemetry::TelemetryContext;
-use sea_orm::{DbErr, SqlErr};
+use sea_orm::sqlx::error::ErrorKind;
+use sea_orm::{DbErr, RuntimeErr, SqlErr};
 use tokio::sync::OnceCell;
 
 use crate::{Db, Uow};
@@ -99,17 +100,160 @@ async fn finish(uow: &Uow, response: Response) -> Response {
 /// errors returned from handlers with `?`: `RecordNotFound` and
 /// `RecordNotUpdated` → 404, unique and foreign-key violations → 409,
 /// anything else stays a 500. No SQL detail reaches the client.
+///
+/// Violations are recognised on every database: MySQL and MariaDB error
+/// numbers (1062 duplicate entry; 1451 and 1452 foreign key failures, and
+/// their relatives), PostgreSQL SQLSTATEs (`23505`, `23503`) and SQLite's
+/// extended codes.
+///
+/// ```
+/// use navree_db::map_db_error;
+/// use sea_orm::DbErr;
+///
+/// let error = map_db_error(&DbErr::RecordNotFound("deals 42".into())).unwrap();
+/// assert_eq!(error.status.as_u16(), 404);
+/// assert!(map_db_error(&DbErr::Custom("boom".into())).is_none());
+/// ```
 pub fn map_db_error(error: &DbErr) -> Option<AppError> {
     match error {
         DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => Some(AppError::not_found()),
-        _ => match error.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => Some(AppError::conflict(
+        _ => match violation(error)? {
+            Violation::Unique => Some(AppError::conflict(
                 "A record with the same unique value already exists.",
             )),
-            Some(SqlErr::ForeignKeyConstraintViolation(_)) => Some(AppError::conflict(
+            Violation::ForeignKey => Some(AppError::conflict(
                 "The change conflicts with a related record.",
             )),
-            _ => None,
         },
+    }
+}
+
+/// A constraint a write broke.
+enum Violation {
+    Unique,
+    ForeignKey,
+}
+
+/// The constraint `error` broke: SeaORM's reading of the driver's error
+/// code, else SQLx's (`DatabaseError::kind`), which knows a few codes
+/// SeaORM's list leaves out (MySQL's 1859, a duplicate found while
+/// `ALTER TABLE` builds a unique index).
+fn violation(error: &DbErr) -> Option<Violation> {
+    match error.sql_err() {
+        Some(SqlErr::UniqueConstraintViolation(_)) => return Some(Violation::Unique),
+        Some(SqlErr::ForeignKeyConstraintViolation(_)) => return Some(Violation::ForeignKey),
+        _ => {}
+    }
+    let (DbErr::Exec(RuntimeErr::SqlxError(error)) | DbErr::Query(RuntimeErr::SqlxError(error))) =
+        error
+    else {
+        return None;
+    };
+    match error.as_database_error()?.kind() {
+        ErrorKind::UniqueViolation => Some(Violation::Unique),
+        ErrorKind::ForeignKeyViolation => Some(Violation::ForeignKey),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::sync::Arc;
+
+    use sea_orm::RuntimeErr;
+    use sea_orm::sqlx::error::{DatabaseError, ErrorKind};
+
+    use super::*;
+
+    /// A driver error SeaORM does not recognise, classified by SQLx: MySQL's
+    /// 1859, a duplicate found while `ALTER TABLE` builds a unique index.
+    #[derive(Debug)]
+    struct DriverError {
+        message: &'static str,
+        kind: ErrorKind,
+    }
+
+    impl std::fmt::Display for DriverError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.message)
+        }
+    }
+
+    impl std::error::Error for DriverError {}
+
+    impl DatabaseError for DriverError {
+        fn message(&self) -> &str {
+            self.message
+        }
+
+        fn code(&self) -> Option<Cow<'_, str>> {
+            Some(Cow::Borrowed("23000"))
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> ErrorKind {
+            match self.kind {
+                ErrorKind::UniqueViolation => ErrorKind::UniqueViolation,
+                ErrorKind::ForeignKeyViolation => ErrorKind::ForeignKeyViolation,
+                _ => ErrorKind::Other,
+            }
+        }
+    }
+
+    fn driver_error(kind: ErrorKind, wrap: fn(RuntimeErr) -> DbErr) -> DbErr {
+        let error = DriverError {
+            message: "Duplicate entry 'x' found while adding the unique index",
+            kind,
+        };
+        wrap(RuntimeErr::SqlxError(Arc::new(
+            sea_orm::sqlx::Error::Database(Box::new(error)),
+        )))
+    }
+
+    fn message(error: &DbErr) -> Option<(u16, serde_json::Value)> {
+        map_db_error(error).map(|app| (app.status.as_u16(), app.body()["message"].clone()))
+    }
+
+    #[test]
+    fn violations_the_driver_classifies_are_conflicts() {
+        for wrap in [DbErr::Exec as fn(RuntimeErr) -> DbErr, DbErr::Query] {
+            assert_eq!(
+                message(&driver_error(ErrorKind::UniqueViolation, wrap)),
+                Some((
+                    409,
+                    "A record with the same unique value already exists.".into()
+                ))
+            );
+            assert_eq!(
+                message(&driver_error(ErrorKind::ForeignKeyViolation, wrap)),
+                Some((409, "The change conflicts with a related record.".into()))
+            );
+            assert_eq!(message(&driver_error(ErrorKind::Other, wrap)), None);
+        }
+    }
+
+    #[test]
+    fn missing_records_are_not_found_and_other_errors_stay_500s() {
+        assert_eq!(
+            message(&DbErr::RecordNotFound("notes 1".into())),
+            Some((404, "Not Found".into()))
+        );
+        assert_eq!(
+            message(&DbErr::RecordNotUpdated),
+            Some((404, "Not Found".into()))
+        );
+        assert_eq!(message(&DbErr::Custom("boom".into())), None);
     }
 }

@@ -5,6 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
+use navree_config::ConfigSection;
 use navree_kernel::WeakAppContext;
 use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
 use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
@@ -12,7 +13,7 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbBackend, DbErr};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-use crate::options::url_password;
+use crate::options::{driver_url, scheme, url_password};
 use crate::{ChangeObserver, DbOptions, Reader, Uow};
 
 /// How long SQLite waits for a lock before failing with `SQLITE_BUSY`.
@@ -22,7 +23,11 @@ const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
 ///
 /// Provided (and exported) by `DatabaseModule`; inject `Arc<Db>` or take a
 /// [`Uow`](crate::Uow) per request. SQLite connections use WAL,
-/// `busy_timeout = 5000` and `foreign_keys = ON`.
+/// `busy_timeout = 5000` and `foreign_keys = ON`. MySQL and MariaDB
+/// connections (`mysql://` or `mariadb://`, the `mysql` feature) run in
+/// the UTC time zone with `utf8mb4`, over TLS when the server offers it,
+/// in strict SQL mode unless `database.mysql` says otherwise, and at its
+/// `isolation_level` when set (see [`MySqlOptions`](crate::MySqlOptions)).
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<DbInner>,
@@ -39,6 +44,27 @@ struct DbInner {
 
 impl Db {
     /// Opens a pool for `options` (creating the directory of a SQLite file).
+    ///
+    /// The URL's scheme picks the driver: `sqlite:`, `postgres://` (the
+    /// `postgres` feature), `mysql://` or `mariadb://` (the `mysql`
+    /// feature). A URL whose driver is not compiled in fails with a message
+    /// naming the feature to turn on. `options` are checked first, as the
+    /// `database` configuration section is (an invalid pool size or SQL
+    /// mode fails before anything connects), so options built in code get
+    /// the same errors as configured ones.
+    ///
+    /// ```no_run
+    /// # async fn demo() -> Result<(), sea_orm::DbErr> {
+    /// use navree_db::{Db, DbOptions};
+    ///
+    /// let db = Db::connect(&DbOptions {
+    ///     url: "mariadb://crm:secret@127.0.0.1:3306/crm".into(),
+    ///     ..DbOptions::default()
+    /// })
+    /// .await?;
+    /// assert_eq!(db.backend(), sea_orm::DbBackend::MySql);
+    /// # Ok(()) }
+    /// ```
     pub async fn connect(options: &DbOptions) -> Result<Db, DbErr> {
         Self::connect_with_telemetry(options, Telemetry::disabled()).await
     }
@@ -52,7 +78,10 @@ impl Db {
         options: &DbOptions,
         telemetry: Telemetry,
     ) -> Result<Db, DbErr> {
-        let mut connect = ConnectOptions::new(options.url.clone());
+        options
+            .validate()
+            .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
+        let mut connect = ConnectOptions::new(driver_url(&options.url).into_owned());
         connect
             .max_connections(options.max_connections)
             .min_connections(options.min_connections)
@@ -66,6 +95,10 @@ impl Db {
                     .busy_timeout(SQLITE_BUSY_TIMEOUT)
                     .foreign_keys(true)
             });
+        }
+        #[cfg(feature = "mysql")]
+        if crate::options::is_mysql_url(&options.url) {
+            crate::mysql::configure(&mut connect, &options.mysql);
         }
         let mut conn = Database::connect(connect)
             .await
@@ -265,24 +298,40 @@ fn install_query_log(
     });
 }
 
+/// What SQLx says when a MySQL account's password must go over a
+/// connection without TLS. SQLx's RSA password exchange stays off: the
+/// crypto policy keeps the `rsa` crate out of the tree.
+const MYSQL_RSA_DISABLED: &str = "RSA auth backend disabled";
+
 /// A connection error that names the database without its password (the
-/// driver's own message may echo the URL).
+/// driver's own message may echo the URL), with the feature to turn on
+/// when the URL's driver is not compiled in, or how to sign in when a MySQL
+/// account needs TLS.
 fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
+    let redacted = options.redacted_url();
     let mut message = error
         .to_string()
-        .replace(&options.url, &options.redacted_url());
+        .replace(&options.url, &redacted)
+        .replace(driver_url(&options.url).as_ref(), &redacted);
     if let Some(password) = url_password(&options.url) {
         message = message.replace(password, "***");
     }
-    let hint = if options.url.starts_with("postgres") && !cfg!(feature = "postgres") {
-        " (enable the `postgres` feature of navree-db)"
-    } else {
-        ""
+    let hint = match scheme(&options.url).as_deref() {
+        Some("postgres" | "postgresql") if !cfg!(feature = "postgres") => {
+            " (enable the `postgres` feature of navree-db)"
+        }
+        Some("mysql" | "mariadb") if !cfg!(feature = "mysql") => {
+            " (enable the `mysql` feature of navree-db)"
+        }
+        // The server has no cached hash of the password yet, so the
+        // password itself must travel, which takes TLS.
+        Some("mysql" | "mariadb") if message.contains(MYSQL_RSA_DISABLED) => {
+            " (this caching_sha2_password account needs TLS: use `ssl-mode=PREFERRED`, \
+             the default, or `REQUIRED` against a server that offers TLS)"
+        }
+        _ => "",
     };
-    DbErr::Custom(format!(
-        "cannot connect to {}: {message}{hint}",
-        options.redacted_url()
-    ))
+    DbErr::Custom(format!("cannot connect to {redacted}: {message}{hint}"))
 }
 
 fn is_sqlite_url(url: &str) -> bool {

@@ -199,6 +199,8 @@ mcp = [
 ]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
+## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
+mysql = ["db", "navree-db/mysql"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]

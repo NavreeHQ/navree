@@ -50,11 +50,12 @@
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
 //! `mcp`, `dock`, `otel`). A feature also turns on the features of the
 //! crates its crate builds on (`auth` turns on `access`, `db`, `http`, ...).
-//! The `postgres` feature adds navree-db's PostgreSQL driver, and the opt-in
-//! `otel` feature adds navree-observe's OTLP span exporter. `search-tantivy`
-//! adds search's embedded Tantivy engine. `axum` is re-exported with `http`.
-//! `dock` is a development tool (`navree dock`), for tools and tests that
-//! read `dock.toml`.
+//! SQLite is built in; the `postgres` feature adds navree-db's PostgreSQL
+//! driver and the `mysql` feature its MySQL and MariaDB driver, and the
+//! opt-in `otel` feature adds navree-observe's OTLP span exporter. `search-tantivy` adds search's
+//! embedded Tantivy engine. `axum` is re-exported with `http`. `dock` is a
+//! development tool (`navree dock`), for tools and tests that read
+//! `dock.toml`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],

@@ -1,6 +1,6 @@
 //! Options and connecting.
 
-use navree_db::{Db, DbOptions};
+use navree_db::{Db, DbOptions, MySqlOptions};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
 use crate::support::TempDb;
@@ -78,6 +78,79 @@ async fn slow_queries_are_logged_at_warn_without_bound_values() {
     assert!(
         !text.contains("secret-binding"),
         "bound values are not logged: {text}"
+    );
+}
+
+/// A MySQL or MariaDB URL without the `mysql` feature names the feature;
+/// with it, the error is the driver's. The password never shows.
+#[tokio::test]
+async fn mysql_urls_name_the_feature_they_need() {
+    let connect = |url: &str| {
+        let options = DbOptions {
+            url: url.to_owned(),
+            connect_timeout_secs: 1,
+            ..DbOptions::default()
+        };
+        async move { Db::connect(&options).await.unwrap_err().to_string() }
+    };
+    let mysql = "mysql://navree:hunter2@127.0.0.1:1/app";
+    let mariadb = "mariadb://navree:hunter2@127.0.0.1:1/app";
+    // Concurrently: with the driver, each waits for the pool's timeout.
+    let (mysql_error, mariadb_error) = tokio::join!(connect(mysql), connect(mariadb));
+    for (url, error) in [(mysql, mysql_error), (mariadb, mariadb_error)] {
+        assert!(
+            error.contains(&format!(
+                "cannot connect to {}",
+                url.replace("hunter2", "***")
+            )),
+            "{error}"
+        );
+        assert!(!error.contains("hunter2"), "{error}");
+        assert_eq!(
+            error.contains("(enable the `mysql` feature of navree-db)"),
+            !cfg!(feature = "mysql"),
+            "{error}"
+        );
+    }
+}
+
+/// Options built in code (`DatabaseModule::for_root`, `Db::connect`) are
+/// checked like a configuration section is, before anything connects: an
+/// SQL mode that is not a mode name never reaches the server.
+#[tokio::test]
+async fn invalid_options_fail_before_connecting() {
+    let options = DbOptions {
+        url: "mysql://navree:hunter2@127.0.0.1:1/app".to_owned(),
+        connect_timeout_secs: 1,
+        mysql: MySqlOptions {
+            modes: Some(vec![
+                "STRICT_ALL_TABLES".to_owned(),
+                "NO_ZERO_DATE'; DROP TABLE users; --".to_owned(),
+            ]),
+            ..MySqlOptions::default()
+        },
+        ..DbOptions::default()
+    };
+    let error = Db::connect(&options).await.unwrap_err().to_string();
+    assert!(
+        error.ends_with(
+            "invalid database options: mysql.modes: `NO_ZERO_DATE'; DROP TABLE users; --` \
+             is not an SQL mode name (letters, digits and underscores, e.g. STRICT_ALL_TABLES)"
+        ),
+        "{error}"
+    );
+
+    let temp = TempDb::new();
+    let error = Db::connect(&DbOptions {
+        max_connections: 0,
+        ..temp.options()
+    })
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.ends_with("invalid database options: max_connections must be at least 1"),
+        "{error}"
     );
 }
 

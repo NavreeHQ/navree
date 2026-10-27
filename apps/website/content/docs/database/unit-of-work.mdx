@@ -71,6 +71,7 @@ How the transaction begins depends on the database:
 
 - **SQLite**: `BEGIN IMMEDIATE`, which takes the write lock at once ([SQLite and concurrency](#sqlite-and-concurrency)).
 - **PostgreSQL**: `BEGIN`, then `set_config` makes the actor and request id available to SQL as `current_setting('navree.actor', true)` and `current_setting('navree.request_id', true)` for the rest of the transaction.
+- **MySQL and MariaDB**: `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?` makes them available as session variables. Session variables outlive the transaction on the pooled connection, so Navree clears them right before `COMMIT` or `ROLLBACK` ([how Navree behaves on MySQL](/docs/database/getting-started/#how-navree-behaves-on-mysql)).
 
 Besides your own calls, `Repo` functions and the record checks of `#[can(.., from = "id")]` routes begin the transaction too.
 
@@ -222,9 +223,9 @@ Committing or rolling back a finished unit of work does nothing. Committing one 
 Two requests that read a row and then write it can overwrite each other's work. The databases prevent it differently:
 
 - **SQLite** serialises writers: every unit of work starts with `BEGIN IMMEDIATE`, so a second writer waits until the first commits. There is nothing to lock.
-- **PostgreSQL** runs units of work side by side, so read the rows you're about to change with `SELECT ... FOR UPDATE`.
+- **PostgreSQL** and **MySQL** run units of work side by side, so read the rows you're about to change with `SELECT ... FOR UPDATE`.
 
-`uow.lock_for_update()` tells you which case you're in (true on PostgreSQL, false on SQLite). Add SeaORM's `lock_exclusive()` to a query only when it's true:
+`uow.lock_for_update()` tells you which case you're in (true on PostgreSQL and MySQL, false on SQLite). Add SeaORM's `lock_exclusive()` to a query only when it's true:
 
 ```rust
 use sea_orm::QuerySelect;
@@ -241,7 +242,7 @@ pub async fn column(uow: &Uow, stage: Stage) -> Result<Vec<deal::Model>, DbErr> 
 }
 ```
 
-The CRM locks a pipeline column this way before it renumbers the deals in it. `Repo::find_for_update(&uow, id)` loads one record the same way, and `Repo::update` locks the row it reads before updating. The PostgreSQL side of these paths hasn't run against a real server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql).
+The CRM locks a pipeline column this way before it renumbers the deals in it. `Repo::find_for_update(&uow, id)` loads one record the same way, and `Repo::update` locks the row it reads before updating. The PostgreSQL side of these paths hasn't run against a real server yet; see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql). On MySQL it has: a second unit of work locking the same row waits until the first commits, then reads its change.
 
 ## Change events and observers
 
