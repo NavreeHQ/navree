@@ -36,9 +36,9 @@
 //!   (numbers, numeric strings, RFC 3339 text...), through the field's cast
 //!   (an encrypted field takes the plain text) and mutator
 //!   (`#[model(set_with = ..)]`).
-//! - Keys `fill` may not set are left out silently, unless the app refuses
-//!   to discard them ([`set_discard_policy`], the `[orm]
-//!   prevent_discarding_attributes` setting): then `fill` fails with
+//! - Keys `fill` may not set are left out silently, unless the process or
+//!   the task refuses to discard them ([`set_discard_policy`],
+//!   [`with_discard_policy`]): then `fill` fails with
 //!   [`OrmError::MassAssignment`] before changing anything.
 //! - [`unguarded`] turns guarding off for a task; `#[model(unguarded)]` for
 //!   a model.
@@ -49,9 +49,10 @@ use std::sync::{Arc, RwLock};
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, Serializer};
 
+use crate::attributes::CastContext;
 use crate::column::ColumnName;
 use crate::error::{OrmError, Result};
-use crate::exec::Executor;
+use crate::exec::{Access, Executor};
 use crate::model::{Model, ModelMeta};
 use crate::query::Builder;
 use crate::record::Record;
@@ -399,8 +400,7 @@ pub enum DiscardPolicy {
     /// Leave them out (the default).
     #[default]
     Ignore,
-    /// Fail with [`OrmError::MassAssignment`], changing nothing (the
-    /// `[orm] prevent_discarding_attributes` setting).
+    /// Fail with [`OrmError::MassAssignment`], changing nothing.
     Fail,
     /// Leave them out and call the handler (log them, count them).
     Report(DiscardHandler),
@@ -423,7 +423,7 @@ tokio::task_local! {
 }
 
 /// Sets what `fill` does with keys it may not set, for the whole process
-/// (the ORM module sets it at boot from the `[orm]` options).
+/// (at boot, from the app's strictness settings).
 pub fn set_discard_policy(policy: DiscardPolicy) {
     *DISCARD_POLICY
         .write()
@@ -508,28 +508,42 @@ fn fill_record<M: Model>(record: &mut Record<M>, attributes: Attributes, guard: 
     // Convert on a copy, so a value that does not fit changes nothing. The
     // columns of a field stored across several columns are set together,
     // so the field is checked whole.
-    let mut model = record.model.clone();
-    let mut groups: Vec<(&'static str, Vec<(String, serde_json::Value)>)> = Vec::new();
-    for (key, value) in attributes {
-        if refused.contains(&key) {
-            continue;
-        }
-        match split_key(&key) {
-            (column, Some(path)) => set_json_path_on(&mut model, column, path, value)?,
-            (column, None) => match multi_column_field(meta, column) {
-                Some(field) => match groups.iter_mut().find(|(known, _)| *known == field) {
-                    Some((_, inputs)) => inputs.push((column.to_owned(), value)),
-                    None => groups.push((field, vec![(column.to_owned(), value)])),
+    let model = record.in_cast_context(|| -> Result<M> {
+        let mut model = record.model.clone();
+        let mut groups: Vec<(&'static str, Vec<(String, serde_json::Value)>)> = Vec::new();
+        for (key, value) in attributes {
+            if refused.contains(&key) {
+                continue;
+            }
+            match split_key(&key) {
+                (column, Some(path)) => set_json_path_on(&mut model, column, path, value)?,
+                (column, None) => match multi_column_field(meta, column) {
+                    Some(field) => match groups.iter_mut().find(|(known, _)| *known == field) {
+                        Some((_, inputs)) => inputs.push((column.to_owned(), value)),
+                        None => groups.push((field, vec![(column.to_owned(), value)])),
+                    },
+                    None => model.set_attribute(column, value)?,
                 },
-                None => model.set_attribute(column, value)?,
-            },
+            }
         }
-    }
-    for (field, inputs) in groups {
-        model.set_attribute_parts(field, inputs)?;
-    }
+        for (field, inputs) in groups {
+            model.set_attribute_parts(field, inputs)?;
+        }
+        Ok(model)
+    })?;
     record.model = model;
     Ok(())
+}
+
+/// The cast context `M`'s records get on `exec` (for models whose casts use
+/// one), so a record filled before it is first saved converts its input
+/// with the app's services.
+async fn context_for<M: Model, E: Executor + ?Sized>(exec: &E) -> Result<Option<Arc<CastContext>>> {
+    if !M::meta().uses_cast_context() {
+        return Ok(None);
+    }
+    let target = exec.target(Access::Write).await?;
+    Ok(CastContext::for_model::<M>(&target.context()).await?.map(Arc::new))
 }
 
 /// The field `column` belongs to, when that field is stored across several
@@ -677,8 +691,11 @@ impl<M: Model> Record<M> {
             column: Some(column.to_string()),
             message: error.to_string(),
         })?;
-        let mut model = self.model.clone();
-        set_json_path_on(&mut model, &column, path, value)?;
+        let model = self.in_cast_context(|| -> Result<M> {
+            let mut model = self.model.clone();
+            set_json_path_on(&mut model, &column, path, value)?;
+            Ok(model)
+        })?;
         self.model = model;
         Ok(self)
     }
@@ -687,10 +704,12 @@ impl<M: Model> Record<M> {
     /// mutator (unguarded: [`fill`](Record::fill) applies the guards).
     pub fn set_attribute(&mut self, column: impl ColumnName, input: impl Into<serde_json::Value>) -> Result<&mut Self> {
         let column = column.column_name();
-        match split_key(&column) {
-            (column, Some(path)) => set_json_path_on(&mut self.model, column, path, input.into())?,
-            (column, None) => self.model.set_attribute(column, input.into())?,
-        }
+        let input = input.into();
+        let context = self.attributes.context.clone();
+        CastContext::with_record(context.as_ref(), || match split_key(&column) {
+            (column, Some(path)) => set_json_path_on(&mut self.model, column, path, input),
+            (column, None) => self.model.set_attribute(column, input),
+        })?;
         Ok(self)
     }
 
@@ -718,7 +737,9 @@ impl<M: Model + Default> Builder<M> {
         exec: &E,
         attributes: impl Into<Attributes>,
     ) -> Result<Record<M>> {
+        let attributes = attributes.into();
         let mut record = Record::new(M::default());
+        record.attributes.context = context_for::<M, E>(exec).await?;
         record.fill(attributes)?;
         record.save(exec).await?;
         Ok(record)
@@ -731,7 +752,9 @@ impl<M: Model + Default> Builder<M> {
         exec: &E,
         attributes: impl Into<Attributes>,
     ) -> Result<Record<M>> {
+        let attributes = attributes.into();
         let mut record = Record::new(M::default());
+        record.attributes.context = context_for::<M, E>(exec).await?;
         record.force_fill(attributes)?;
         record.save(exec).await?;
         Ok(record)

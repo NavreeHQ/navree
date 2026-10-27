@@ -6,6 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use serde::{Serialize, Serializer};
 
+use crate::attributes::CastContext;
 use crate::attributes::state::RecordState;
 use crate::column::{Assignment, Column, ColumnName};
 use crate::error::{OrmError, Result};
@@ -87,9 +88,30 @@ impl<M: Model> Record<M> {
             relations: Relations::new(),
             attributes: RecordState {
                 stale: M::stale_columns(row),
+                context: if meta.uses_cast_context() {
+                    CastContext::scoped()
+                } else {
+                    None
+                },
                 ..RecordState::default()
             },
         })
+    }
+
+    /// Runs `f` with the cast context the record was read or saved under,
+    /// when no scope is running (see [`CastContext`]).
+    pub(crate) fn in_cast_context<R>(&self, f: impl FnOnce() -> R) -> R {
+        CastContext::with_record(self.attributes.context.as_ref(), f)
+    }
+
+    /// Keeps the running scope's cast context as the record's (after a
+    /// save), for models whose casts use one.
+    pub(crate) fn keep_cast_context(&mut self) {
+        if M::meta().uses_cast_context()
+            && let Some(context) = CastContext::scoped()
+        {
+            self.attributes.context = Some(context);
+        }
     }
 
     /// The model.
@@ -153,19 +175,21 @@ impl<M: Model> Record<M> {
     /// value). An encrypted column read under a previous key is dirty until
     /// it is saved again (and so re-encrypted with the current key).
     pub fn get_dirty(&self) -> Result<Vec<(&'static str, Value)>> {
-        let columns = match &self.original {
-            Some(_) => self.dirty_columns()?,
-            None => return self.model.values(),
-        };
-        columns
-            .into_iter()
-            .map(|column| {
-                let value = self.model.value(column)?.ok_or_else(|| {
-                    crate::model::derive_support::unknown_column::<M>(column)
-                })?;
-                Ok((column, value))
-            })
-            .collect()
+        self.in_cast_context(|| {
+            let columns = match &self.original {
+                Some(_) => self.dirty_columns()?,
+                None => return self.model.values(),
+            };
+            columns
+                .into_iter()
+                .map(|column| {
+                    let value = self.model.value(column)?.ok_or_else(|| {
+                        crate::model::derive_support::unknown_column::<M>(column)
+                    })?;
+                    Ok((column, value))
+                })
+                .collect()
+        })
     }
 
     /// The dirty columns, in field order, without encoding their values.
@@ -173,7 +197,7 @@ impl<M: Model> Record<M> {
         let Some(original) = &self.original else {
             return Ok(M::meta().all_columns().iter().map(|c| c.name()).collect());
         };
-        let mut columns = self.model.changed_columns(original)?;
+        let mut columns = self.in_cast_context(|| self.model.changed_columns(original))?;
         if !self.attributes.stale.is_empty() {
             for &column in &self.attributes.stale {
                 if !columns.contains(&column) {
@@ -246,7 +270,7 @@ impl<M: Model> Record<M> {
     /// or saved; `None` for a new record or a column the model lacks.
     pub fn get_original_value(&self, column: impl ColumnName) -> Result<Option<Value>> {
         match &self.original {
-            Some(original) => original.value(&column.column_name()),
+            Some(original) => self.in_cast_context(|| original.value(&column.column_name())),
             None => Ok(None),
         }
     }
@@ -266,11 +290,15 @@ impl<M: Model> Record<M> {
         let Some(original) = &mut self.original else {
             return Ok(());
         };
+        let context = self.attributes.context.clone();
         for column in columns {
             let name = column.column_name();
-            if let Some(value) = self.model.value(&name)? {
-                original.set_value(&name, value)?;
-            }
+            CastContext::with_record(context.as_ref(), || -> Result<()> {
+                if let Some(value) = self.model.value(&name)? {
+                    original.set_value(&name, value)?;
+                }
+                Ok(())
+            })?;
             self.attributes.stale.retain(|stale| *stale != name);
         }
         Ok(())

@@ -1,14 +1,17 @@
-//! Encrypted and hashed attributes: the app's encrypter and hasher reach
-//! the casts, key rotation rewrites old payloads, models can name their
-//! encrypter, and code outside an app sets the services explicitly.
+//! Encrypted and hashed attributes and other casts that use app services:
+//! the app's encrypter and hasher reach the casts, key rotation rewrites
+//! old payloads, models can name their encrypter, custom casts read the
+//! app's clock and configuration, and code outside an app sets the
+//! services explicitly.
 
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use navree_contracts::{Clock, FixedClock};
 use navree_crypto::{AppKey, Encrypter, Hasher, generate_key};
 use navree_kernel::{Factory, Module, ModuleBuilder};
 use navree_orm::attributes::CastContext;
-use navree_orm::cast::is_password_hash;
+use navree_orm::cast::{Cast, CastError, is_password_hash};
 use navree_orm::{Model, OrmError, Record, attrs};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -286,4 +289,141 @@ async fn without_an_app_the_services_come_from_explicit_scopes() {
     assert_eq!(pinned.decrypt_string(&payload).unwrap(), "078-05-1120");
     let record = Record::new(patient());
     assert!(record.is_dirty(), "a new record is dirty without any service");
+}
+
+const INVOICES: &str = r#"
+CREATE TABLE invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    number TEXT NOT NULL,
+    due_at TEXT NOT NULL
+)
+"#;
+
+/// The app's invoice prefix (`billing.prefix`).
+fn invoice_prefix(context: &CastContext) -> Result<String, CastError> {
+    context
+        .config()
+        .and_then(|config| config.get_string("billing.prefix"))
+        .ok_or_else(|| CastError::new("set billing.prefix in the configuration"))
+}
+
+/// Invoice numbers stored with the app's prefix.
+pub struct Prefixed;
+
+impl Cast<String> for Prefixed {
+    type Stored = String;
+
+    const CONTEXT: bool = true;
+
+    fn get(stored: String) -> Result<String, CastError> {
+        CastContext::with_current(|context| Self::get_with(stored, context))
+    }
+
+    fn set(value: &String) -> Result<String, CastError> {
+        CastContext::with_current(|context| Self::set_with(value, context))
+    }
+
+    fn get_with(stored: String, context: &CastContext) -> Result<String, CastError> {
+        let prefix = invoice_prefix(context)?;
+        stored
+            .strip_prefix(&prefix)
+            .map(str::to_owned)
+            .ok_or_else(|| CastError::new(format!("`{stored}` does not start with `{prefix}`")))
+    }
+
+    fn set_with(value: &String, context: &CastContext) -> Result<String, CastError> {
+        Ok(format!("{}{value}", invoice_prefix(context)?))
+    }
+
+    /// Forms send the number without the prefix.
+    fn from_json(input: serde_json::Value, context: &CastContext) -> Result<String, CastError> {
+        let _ = context;
+        <String as navree_orm::Field>::from_json(input).map_err(CastError::from)
+    }
+}
+
+/// Minutes left until a deadline stored as an instant, on the app's clock.
+pub struct MinutesLeft;
+
+impl Cast<i64> for MinutesLeft {
+    type Stored = DateTime<Utc>;
+
+    const CONTEXT: bool = true;
+
+    fn get(stored: DateTime<Utc>) -> Result<i64, CastError> {
+        CastContext::with_current(|context| Self::get_with(stored, context))
+    }
+
+    fn set(value: &i64) -> Result<DateTime<Utc>, CastError> {
+        CastContext::with_current(|context| Self::set_with(value, context))
+    }
+
+    fn get_with(stored: DateTime<Utc>, context: &CastContext) -> Result<i64, CastError> {
+        Ok((stored - context.now()).num_minutes())
+    }
+
+    fn set_with(value: &i64, context: &CastContext) -> Result<DateTime<Utc>, CastError> {
+        Ok(context.now() + chrono::Duration::minutes(*value))
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "invoices", unguarded)]
+pub struct Invoice {
+    pub id: i64,
+    #[model(cast = Prefixed)]
+    pub number: String,
+    #[model(column = "due_at", cast = MinutesLeft)]
+    pub minutes_left: i64,
+}
+
+#[tokio::test]
+async fn custom_casts_read_the_apps_clock_and_configuration() {
+    let now = Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap();
+    let clock = Arc::new(FixedClock::new(now));
+    let app = navree_testing::TestApp::builder()
+        .temp_database()
+        .config("billing.prefix", "INV-")
+        .override_value::<dyn Clock>(clock.clone())
+        .module(navree_db::DatabaseModule::from_config())
+        .build()
+        .await;
+    let db = app.get::<navree_db::Db>().await;
+    super::support::create(&db, INVOICES).await;
+
+    let created = Invoice::create(&*db, Invoice { number: "7".into(), minutes_left: 90, ..Invoice::default() })
+        .await
+        .unwrap();
+    assert_eq!(stored_text(&db, "invoices", "number").await.as_deref(), Some("INV-7"));
+    let row = navree_orm::table("invoices").first(&*db).await.unwrap().unwrap();
+    assert_eq!(row.get::<DateTime<Utc>>("due_at").unwrap(), now + chrono::Duration::minutes(90));
+
+    clock.advance(std::time::Duration::from_secs(30 * 60));
+    let mut stored = Invoice::find_or_fail(&*db, created.id).await.unwrap();
+    assert_eq!((stored.number.as_str(), stored.minutes_left), ("7", 60), "read on the app's clock");
+    assert!(stored.is_clean(), "outside any scope, the record compares with the services it was read with");
+    stored.fill(attrs! { "number" => "8" }).unwrap();
+    stored.save(&*db).await.unwrap();
+    assert_eq!(stored_text(&db, "invoices", "number").await.as_deref(), Some("INV-8"));
+
+    // Untyped input reaches the casts with the app's services before the
+    // record is first saved (the deadline is read on the app's clock).
+    let filled = Invoice::create_from(&*db, attrs! { "number" => "9", "due_at" => "2026-10-27T11:30:00Z" })
+        .await
+        .unwrap();
+    assert_eq!(filled.minutes_left, 120);
+    assert!(filled.is_clean());
+    assert_eq!(filled.to_value().unwrap(), json!({"id": 2, "number": "9", "minutes_left": 120}));
+
+    // Conditions are encoded where they are built, so a condition on a cast
+    // that reads services is built inside a scope that has them.
+    let config = app.get::<navree_config::Config>().await;
+    let count = CastContext::new()
+        .with_config(config)
+        .scope(async { Invoice::query().where_(Invoice::NUMBER.eq("8")).count(&*db).await })
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    let error = Invoice::query().where_(Invoice::NUMBER.eq("8")).count(&*db).await.unwrap_err();
+    assert!(error.to_string().contains("set billing.prefix"), "{error}");
 }

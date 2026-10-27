@@ -118,6 +118,7 @@ async fn save_in_scope<M: Model>(
     }
     hooks.after(ModelEvent::Saved, &ctx, record).await?;
     record.sync_original();
+    record.keep_cast_context();
     Ok(true)
 }
 
@@ -360,6 +361,9 @@ pub(crate) async fn refresh<M: Model>(target: &Target<'_>, record: &mut Record<M
     record.extras = fresh.extras;
     record.sync_original();
     record.attributes.stale = fresh.attributes.stale;
+    if fresh.attributes.context.is_some() {
+        record.attributes.context = fresh.attributes.context;
+    }
     Ok(())
 }
 

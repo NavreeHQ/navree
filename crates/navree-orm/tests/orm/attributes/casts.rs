@@ -42,8 +42,54 @@ CREATE TABLE ledgers (
     visits INTEGER NOT NULL,
     code TEXT NOT NULL,
     embedding BLOB NULL
+);
+CREATE TABLE contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL
 )
 "#;
+
+/// An email address, lower-cased: a newtype that is a column type itself
+/// (`Field`), so its fields need no cast.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Email(String);
+
+impl Email {
+    pub fn new(address: &str) -> Self {
+        Email(address.trim().to_lowercase())
+    }
+}
+
+impl navree_orm::Field for Email {
+    const KIND: navree_orm::FieldKind = navree_orm::FieldKind::Text;
+
+    fn to_value(&self) -> navree_orm::Value {
+        <String as navree_orm::Field>::to_value(&self.0)
+    }
+
+    fn null() -> navree_orm::Value {
+        <String as navree_orm::Field>::null()
+    }
+
+    fn from_sql(row: &navree_db::sea_orm::QueryResult, column: &str) -> Result<Self, navree_orm::FieldError> {
+        <String as navree_orm::Field>::from_sql(row, column).map(|text| Email::new(&text))
+    }
+
+    fn from_value(value: navree_orm::Value) -> Result<Self, navree_orm::FieldError> {
+        <String as navree_orm::Field>::from_value(value).map(|text| Email::new(&text))
+    }
+
+    fn type_name() -> std::borrow::Cow<'static, str> {
+        "Email".into()
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "contacts", unguarded)]
+pub struct Contact {
+    pub id: i64,
+    pub email: Email,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -569,4 +615,24 @@ async fn query_time_casts_type_extra_columns() {
         .await
         .unwrap_err();
     assert_eq!(error.to_string(), "cannot cast column `rich` of Ledger: `x` is not a boolean");
+}
+
+#[tokio::test]
+async fn newtypes_that_are_fields_need_no_cast() {
+    let t = sqlite(SCHEMA).await;
+    let contact = Contact::create(&t.db, Contact { email: Email::new(" Ada@Example.com "), ..Contact::default() })
+        .await
+        .unwrap();
+    assert_eq!(stored_text(&t.db, "contacts", "email").await.as_deref(), Some("ada@example.com"));
+    let found = Contact::query()
+        .where_(Contact::EMAIL.eq(Email::new("ADA@example.com")))
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(found.email, contact.email);
+    let mut filled = Record::new(Contact::default());
+    filled.fill(attrs! { "email" => "Grace@Example.com" }).unwrap();
+    assert_eq!(filled.email, Email::new("grace@example.com"));
+    assert_eq!(filled.to_value().unwrap()["email"], "grace@example.com");
 }

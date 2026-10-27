@@ -12,9 +12,15 @@
 //!   resolve the context from the app of the `Db` or `Uow` they run on
 //!   ([`CastContext::for_model`]), for models whose casts declare that they
 //!   need one ([`Cast::CONTEXT`](crate::cast::Cast::CONTEXT));
+//! - a record keeps the context it was read or saved under, and its dirty
+//!   checks, fills and serialization use it when no scope is running
+//!   (`create_from` and `force_create` resolve it before they fill);
 //! - code that encodes or decodes outside those operations (a test, a
 //!   script on a `Db` opened by hand) sets one itself with
 //!   [`CastContext::scope`] or [`CastContext::sync_scope`];
+//! - conditions are encoded where they are built (`Deal::CODE.eq(..)`),
+//!   before the query runs: a condition on a cast that reads services is
+//!   built inside such a scope (or under the process default);
 //! - a process can install a fallback with [`CastContext::set_default`].
 //!
 //! A context set explicitly with `scope` / `sync_scope` wins over the app's
@@ -373,6 +379,23 @@ impl CastContext {
     pub fn with_current<R>(f: impl FnOnce(&CastContext) -> R) -> R {
         let context = CastContext::current_arc();
         f(&context)
+    }
+
+    /// The running scope's context (an operation's or an explicit one), for
+    /// a record read or saved in it to keep.
+    pub(crate) fn scoped() -> Option<Arc<CastContext>> {
+        CURRENT.try_with(Arc::clone).ok()
+    }
+
+    /// Runs `f` with `context` (the one a record was read or saved under)
+    /// as the current one when no scope is running; a running scope wins.
+    pub(crate) fn with_record<R>(context: Option<&Arc<CastContext>>, f: impl FnOnce() -> R) -> R {
+        match context {
+            Some(context) if CURRENT.try_with(|_| ()).is_err() => {
+                CURRENT.sync_scope(Arc::clone(context), f)
+            }
+            _ => f(),
+        }
     }
 }
 
