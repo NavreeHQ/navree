@@ -167,6 +167,8 @@ fn messages(messages: &[Message]) -> Vec<Value> {
                     text_blocks.push(json!({ "type": "text", "text": text }));
                 }
                 Part::Text { .. } => {}
+                // The API takes images and documents from the user only.
+                Part::Attachment(_) if message.role == Role::Assistant => {}
                 Part::Attachment(attachment) => {
                     let source = json!({
                         "type": "base64",
@@ -520,6 +522,42 @@ mod tests {
         assert_eq!(result["tool_use_id"], "toolu_1");
         assert_eq!(result["content"], "[{\"id\":1}]");
         assert_eq!(body["stream"], true);
+    }
+
+    #[test]
+    fn attachments_go_in_user_turns_only() {
+        use crate::message::Attachment;
+
+        let mut request = request();
+        request.messages = vec![
+            Message::new(
+                Role::User,
+                vec![
+                    Part::Text {
+                        text: "Summarize.".into(),
+                    },
+                    Part::Attachment(Attachment::pdf(&b"%PDF-1.7"[..])),
+                ],
+            ),
+            Message::new(
+                Role::Assistant,
+                vec![
+                    Part::Attachment(Attachment::image(&b"png"[..], "image/png")),
+                    Part::Text {
+                        text: "Done.".into(),
+                    },
+                ],
+            ),
+        ];
+        let body = body(&request, false);
+        let user = &body["messages"][0]["content"];
+        assert_eq!(user[0]["type"], "document", "attachments before text");
+        assert_eq!(user[0]["source"]["media_type"], "application/pdf");
+        assert_eq!(user[1]["type"], "text");
+        assert_eq!(
+            body["messages"][1]["content"],
+            json!([{ "type": "text", "text": "Done." }])
+        );
     }
 
     #[test]
