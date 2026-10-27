@@ -430,7 +430,10 @@ mod with_billing {
             .config("app.key", navree::crypto::generate_key())
             .config("billing.provider", "fake")
             .config("billing.plans.pro.prices.monthly", "price_pro")
-            .config("billing.return_url", "https://app.acme.test/settings/billing")
+            .config(
+                "billing.return_url",
+                "https://app.acme.test/settings/billing",
+            )
             .config("queue.driver", "memory")
             .module(CryptoModule::from_config())
             .module(DatabaseModule::from_config())
