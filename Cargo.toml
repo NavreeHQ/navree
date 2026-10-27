@@ -115,6 +115,9 @@ async-nats = { version = "0.50.0", default-features = false, features = ["ring",
 redis = { version = "1.8.0", default-features = false, features = ["tokio-comp", "connection-manager", "tokio-rustls-comp", "tls-rustls-webpki-roots"] }
 lapin = { version = "4.12.3", default-features = false, features = ["rustls--ring", "rustls-native-certs", "default-runtime"] }
 rumqttc = { version = "0.25.1", default-features = false }
+# Kafka's wire protocol, for navree-micro's Kafka client (gzip and snappy
+# batches; lz4 and zstd need C libraries).
+kafka-protocol = { version = "0.18.0", default-features = false, features = ["client", "broker", "gzip", "snappy"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
 
