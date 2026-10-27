@@ -71,7 +71,9 @@ impl Templates {
 
     /// The embedded files, by path.
     pub fn embedded(&self) -> impl Iterator<Item = (&str, &Bytes)> {
-        self.embedded.iter().map(|(path, bytes)| (path.as_str(), bytes))
+        self.embedded
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), bytes))
     }
 
     /// Whether a file exists at `path`.

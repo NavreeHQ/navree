@@ -28,7 +28,9 @@ async fn a_template_renders_with_its_data_and_shared_imports() {
     let text = pdf.text().unwrap();
     assert!(text.contains("Certificate of completion"), "{text}");
     assert!(
-        text.contains("This certifies that Ada Lovelace completed Analytical Engines on 26 October 2026."),
+        text.contains(
+            "This certifies that Ada Lovelace completed Analytical Engines on 26 October 2026."
+        ),
         "{text}"
     );
     // The sample data.json in the directory is replaced by the render's.
@@ -78,8 +80,14 @@ async fn an_unknown_template_is_not_found() {
         }
         other => panic!("{other:?}"),
     }
-    let error = engine().render(&Render::template("../escape")).await.unwrap_err();
-    assert!(matches!(error, DocumentsError::TemplateNotFound { .. }), "{error:?}");
+    let error = engine()
+        .render(&Render::template("../escape"))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, DocumentsError::TemplateNotFound { .. }),
+        "{error:?}"
+    );
 }
 
 #[tokio::test]
@@ -102,7 +110,10 @@ async fn a_broken_template_names_the_file_line_and_column() {
         }
         other => panic!("{other:?}"),
     }
-    assert!(error.to_string().starts_with("broken.typ:3:13: "), "{error}");
+    assert!(
+        error.to_string().starts_with("broken.typ:3:13: "),
+        "{error}"
+    );
 
     let error = engine()
         .render(&Render::typst("#let x = \n= Title\n#(1 + )"))
@@ -123,7 +134,10 @@ async fn files_outside_the_template_tree_cannot_be_read() {
         .render(&Render::typst("#read(\"../../Cargo.toml\")"))
         .await
         .unwrap_err();
-    assert!(matches!(error, DocumentsError::Template { .. }), "{error:?}");
+    assert!(
+        matches!(error, DocumentsError::Template { .. }),
+        "{error:?}"
+    );
     let error = engine()
         .render(&Render::typst("#read(\"/missing.txt\")"))
         .await
@@ -147,10 +161,16 @@ async fn packages_come_from_the_packages_directory_only() {
         "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nentrypoint = \"lib.typ\"\n",
     )
     .unwrap();
-    std::fs::write(package.join("lib.typ"), "#let greet(name) = [Hello, #name!]").unwrap();
+    std::fs::write(
+        package.join("lib.typ"),
+        "#let greet(name) = [Hello, #name!]",
+    )
+    .unwrap();
     let pdf = engine()
         .packages_dir(Some(packages.path().to_path_buf()))
-        .render(&Render::typst("#import \"@preview/greet:0.1.0\": greet\n#greet(\"Ada\")"))
+        .render(&Render::typst(
+            "#import \"@preview/greet:0.1.0\": greet\n#greet(\"Ada\")",
+        ))
         .await
         .unwrap();
     assert!(pdf.text().unwrap().contains("Hello, Ada!"));
@@ -161,7 +181,10 @@ async fn embedded_templates_render_and_files_override_them() {
     let templates = Templates::new(
         vec![crate::support::fixtures_dir()],
         [
-            ("receipts/simple.typ", "Receipt for #json(\"/data.json\").name"),
+            (
+                "receipts/simple.typ",
+                "Receipt for #json(\"/data.json\").name",
+            ),
             ("certificates/classic.typ", "EMBEDDED"),
         ],
     );
@@ -193,7 +216,9 @@ async fn the_locale_sets_the_language_direction_and_inputs() {
     assert!(text.contains("ar"), "{text}");
     assert!(text.contains("rtl"), "{text}");
     let pdf = engine()
-        .render(&Render::typst("#sys.inputs.at(\"locale\", default: \"none\")"))
+        .render(&Render::typst(
+            "#sys.inputs.at(\"locale\", default: \"none\")",
+        ))
         .await
         .unwrap();
     assert!(pdf.text().unwrap().contains("none"));
@@ -266,7 +291,10 @@ fn font_directories_add_families_and_skip_other_files() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("nested")).unwrap();
     std::fs::copy(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/NotoSansArabic-Regular.ttf"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fonts/NotoSansArabic-Regular.ttf"
+        ),
         dir.path().join("nested/Arabic.ttf"),
     )
     .unwrap();
@@ -281,10 +309,14 @@ fn font_directories_add_families_and_skip_other_files() {
 
 #[tokio::test]
 async fn today_and_the_creation_date_come_from_the_clock() {
-    let clock = Arc::new(FixedClock::new(Utc.with_ymd_and_hms(2026, 3, 14, 9, 26, 53).unwrap()));
+    let clock = Arc::new(FixedClock::new(
+        Utc.with_ymd_and_hms(2026, 3, 14, 9, 26, 53).unwrap(),
+    ));
     let pdf = engine()
         .clock(clock)
-        .render(&Render::typst("#datetime.today().display(\"[year]-[month]-[day]\")"))
+        .render(&Render::typst(
+            "#datetime.today().display(\"[year]-[month]-[day]\")",
+        ))
         .await
         .unwrap();
     assert!(pdf.text().unwrap().contains("2026-03-14"));
@@ -296,7 +328,10 @@ async fn the_title_goes_into_the_metadata() {
         .render(&Render::typst("Body").title("Quarterly audit report"))
         .await
         .unwrap();
-    assert_eq!(pdf.title().unwrap().as_deref(), Some("Quarterly audit report"));
+    assert_eq!(
+        pdf.title().unwrap().as_deref(),
+        Some("Quarterly audit report")
+    );
 }
 
 #[tokio::test]
@@ -314,7 +349,16 @@ async fn data_that_is_not_json_fails_before_compiling() {
 #[tokio::test]
 async fn html_is_not_typst() {
     let error = engine().render(&Render::html("<p>")).await.unwrap_err();
-    assert!(matches!(error, DocumentsError::EngineUnavailable { engine: "typst", .. }), "{error:?}");
+    assert!(
+        matches!(
+            error,
+            DocumentsError::EngineUnavailable {
+                engine: "typst",
+                ..
+            }
+        ),
+        "{error:?}"
+    );
 }
 
 #[tokio::test]

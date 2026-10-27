@@ -72,7 +72,12 @@ impl QueuedDocument {
         Self::with_id(Uuid::now_v7(), disk, path, job_id)
     }
 
-    pub(crate) fn with_id(id: Uuid, disk: impl Into<String>, path: String, job_id: Option<String>) -> Self {
+    pub(crate) fn with_id(
+        id: Uuid,
+        disk: impl Into<String>,
+        path: String,
+        job_id: Option<String>,
+    ) -> Self {
         Self {
             id,
             disk: disk.into(),

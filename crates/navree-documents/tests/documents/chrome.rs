@@ -44,10 +44,17 @@ async fn a_template_renders_with_its_data_and_prints() {
     // The document was served escaped, from the private origin (the mock
     // prints Latin-1 text only, so the euro sign is checked here).
     let documents = mock.seen().documents.clone();
-    assert!(documents[0].contains("Billed to Ada &amp; Co"), "{}", documents[0]);
+    assert!(
+        documents[0].contains("Billed to Ada &amp; Co"),
+        "{}",
+        documents[0]
+    );
     assert!(documents[0].contains("Total €1,234.56"), "{}", documents[0]);
     let navigate = &mock.params_of("Page.navigate")[0];
-    assert_eq!(navigate["url"], format!("{DOCUMENT_ORIGIN}/invoices/show.html"));
+    assert_eq!(
+        navigate["url"],
+        format!("{DOCUMENT_ORIGIN}/invoices/show.html")
+    );
     // A4 portrait with 10 mm margins, in inches.
     let print = &mock.params_of("Page.printToPDF")[0];
     assert!((print["paperWidth"].as_f64().unwrap() - 8.2677).abs() < 0.001);
@@ -87,7 +94,11 @@ async fn inline_html_prints_as_it_is_with_the_render_s_page_settings() {
         .margin(Margins::all(25.4))
         .footer("<span class=\"pageNumber\"></span>");
     let pdf = engine(&mock)
-        .render(&Render::html("<h1>{{ not a template }}</h1>").print(print).title("Inline"))
+        .render(
+            &Render::html("<h1>{{ not a template }}</h1>")
+                .print(print)
+                .title("Inline"),
+        )
         .await
         .unwrap();
     assert!(pdf.text().unwrap().contains("{{ not a template }}"));
@@ -135,8 +146,16 @@ async fn assets_come_from_the_template_tree_and_other_origins_are_blocked() {
     let missing = format!("{DOCUMENT_ORIGIN}/reports/missing.png");
     assert!(fulfilled.contains(&(css.as_str(), 200)), "{fulfilled:?}");
     assert!(fulfilled.contains(&(logo.as_str(), 200)), "{fulfilled:?}");
-    assert!(fulfilled.contains(&(missing.as_str(), 404)), "{fulfilled:?}");
-    let png = &seen.fulfilled.iter().find(|(url, ..)| *url == logo).unwrap().2;
+    assert!(
+        fulfilled.contains(&(missing.as_str(), 404)),
+        "{fulfilled:?}"
+    );
+    let png = &seen
+        .fulfilled
+        .iter()
+        .find(|(url, ..)| *url == logo)
+        .unwrap()
+        .2;
     assert!(png.starts_with(b"\x89PNG"));
     assert_eq!(seen.blocked, vec!["https://tracker.example.com/pixel.png"]);
     assert!(seen.continued.is_empty());
@@ -161,7 +180,10 @@ async fn the_bundled_fonts_are_served_from_the_reserved_prefix() {
     assert_eq!(*status, 200);
     let css = String::from_utf8(css.clone()).unwrap();
     assert!(css.contains("font-family: \"Noto Sans Arabic\""), "{css}");
-    assert!(css.contains("url(\"/_navree/fonts/NotoSansDevanagari-Bold.ttf\")"), "{css}");
+    assert!(
+        css.contains("url(\"/_navree/fonts/NotoSansDevanagari-Bold.ttf\")"),
+        "{css}"
+    );
 }
 
 #[tokio::test]
@@ -177,14 +199,20 @@ async fn the_network_can_be_allowed() {
         .unwrap();
     let seen = mock.seen();
     assert!(seen.blocked.is_empty());
-    assert_eq!(seen.continued, vec!["https://tracker.example.com/pixel.png"]);
+    assert_eq!(
+        seen.continued,
+        vec!["https://tracker.example.com/pixel.png"]
+    );
 }
 
 #[tokio::test]
 async fn hidden_files_and_paths_outside_the_tree_are_not_served() {
     let mock = MockChrome::start(Behavior::default()).await;
     let templates = Templates::from_files([
-        ("doc.html", "<img src=\"/.env\"><img src=\"../secret.txt\"><p>ok</p>"),
+        (
+            "doc.html",
+            "<img src=\"/.env\"><img src=\"../secret.txt\"><p>ok</p>",
+        ),
         (".env", "SECRET=1"),
     ]);
     ChromeEngine::new(templates, options(&mock))
@@ -214,7 +242,9 @@ async fn the_locale_sets_the_direction_and_the_browser_locale() {
     );
     // Without a locale: English, left to right, no override.
     let html = engine
-        .render_html(&Render::template("reports/summary").data(json!({"title": "t", "summary": "s"})))
+        .render_html(
+            &Render::template("reports/summary").data(json!({"title": "t", "summary": "s"})),
+        )
         .await
         .unwrap();
     assert!(html.contains(r#"<html lang="en" dir="ltr">"#), "{html}");
@@ -282,9 +312,18 @@ async fn a_slow_render_times_out_and_its_context_is_disposed_of() {
             ..options(&mock)
         },
     );
-    let error = engine.render(&Render::html("<p>slow</p>")).await.unwrap_err();
+    let error = engine
+        .render(&Render::html("<p>slow</p>"))
+        .await
+        .unwrap_err();
     assert!(
-        matches!(error, DocumentsError::Timeout { engine: "chrome", secs: 1 }),
+        matches!(
+            error,
+            DocumentsError::Timeout {
+                engine: "chrome",
+                secs: 1
+            }
+        ),
         "{error:?}"
     );
     assert_eq!(error.status(), http::StatusCode::SERVICE_UNAVAILABLE);
@@ -299,9 +338,18 @@ async fn a_lost_browser_is_reconnected_on_the_next_render() {
     })
     .await;
     let engine = engine(&mock);
-    let error = engine.render(&Render::html("<p>one</p>")).await.unwrap_err();
+    let error = engine
+        .render(&Render::html("<p>one</p>"))
+        .await
+        .unwrap_err();
     assert!(
-        matches!(&error, DocumentsError::Engine { engine: "chrome", .. }),
+        matches!(
+            &error,
+            DocumentsError::Engine {
+                engine: "chrome",
+                ..
+            }
+        ),
         "{error:?}"
     );
     let pdf = engine.render(&Render::html("<p>two</p>")).await.unwrap();
@@ -343,7 +391,12 @@ async fn template_errors_name_the_template() {
         .render(&Render::template("invoices/show").data(json!({"number": 1})))
         .await
     {
-        Err(DocumentsError::Template { file, line, message, .. }) => {
+        Err(DocumentsError::Template {
+            file,
+            line,
+            message,
+            ..
+        }) => {
             assert_eq!(file, "invoices/show.html");
             assert_eq!(line, Some(13));
             assert!(message.contains("undefined"), "{message}");
@@ -351,7 +404,9 @@ async fn template_errors_name_the_template() {
         other => panic!("{other:?}"),
     }
     match engine.render(&Render::typst("= Typst")).await {
-        Err(DocumentsError::EngineUnavailable { engine: "chrome", .. }) => {}
+        Err(DocumentsError::EngineUnavailable {
+            engine: "chrome", ..
+        }) => {}
         other => panic!("{other:?}"),
     }
     // Nothing reached the browser.

@@ -1,11 +1,14 @@
 //! `Documents`: engine selection, saving, queueing and the queued job.
 
+// Most of these tests need the Typst engine.
+#![cfg_attr(not(feature = "typst"), allow(unused_imports, dead_code))]
+
 use std::sync::Arc;
 
-use navree_contracts::{Dispatcher, Job, JobEnvelope};
+use navree_contracts::{Dispatcher, JobEnvelope};
 use navree_documents::{
-    DocumentStatus, Documents, DocumentsError, DocumentsOptions, EngineKind, FAILED_SUFFIX,
-    Render, RenderDocument, Templates,
+    DocumentStatus, Documents, DocumentsError, DocumentsOptions, EngineKind, FAILED_SUFFIX, Render,
+    RenderDocument, Templates,
 };
 use navree_kernel::{BoxError, BoxFuture};
 use navree_storage::{DiskConfig, Storage, StorageOptions};
@@ -14,11 +17,15 @@ use serde_json::json;
 use crate::support::fixture_templates;
 
 fn memory_storage() -> Arc<Storage> {
-    let mut options = StorageOptions::default();
-    options.default = "local".into();
-    options.disks.clear();
-    options.disks.insert("local".into(), DiskConfig::Memory);
-    options.disks.insert("exports".into(), DiskConfig::Memory);
+    let options = StorageOptions {
+        default: "local".into(),
+        disks: [
+            ("local".to_owned(), DiskConfig::Memory),
+            ("exports".to_owned(), DiskConfig::Memory),
+        ]
+        .into(),
+        ..StorageOptions::default()
+    };
     Arc::new(Storage::new(&options, b"signing key").unwrap())
 }
 
@@ -28,10 +35,19 @@ fn the_template_picks_the_engine_and_the_option_breaks_ties() {
     let engine = |render: Render| documents.engine_for(&render).unwrap();
     // Only .typ, only .html, both (Typst by default).
     assert_eq!(engine(Render::template("shared/layout")), EngineKind::Typst);
-    assert_eq!(engine(Render::template("invoices/show")), EngineKind::Chrome);
-    assert_eq!(engine(Render::template("certificates/classic")), EngineKind::Typst);
+    assert_eq!(
+        engine(Render::template("invoices/show")),
+        EngineKind::Chrome
+    );
+    assert_eq!(
+        engine(Render::template("certificates/classic")),
+        EngineKind::Typst
+    );
     // An extension or the render decides.
-    assert_eq!(engine(Render::template("certificates/classic.html")), EngineKind::Chrome);
+    assert_eq!(
+        engine(Render::template("certificates/classic.html")),
+        EngineKind::Chrome
+    );
     assert_eq!(
         engine(Render::template("certificates/classic").engine(EngineKind::Chrome)),
         EngineKind::Chrome
@@ -66,7 +82,11 @@ async fn pdf_renders_a_template_with_data() {
         )
         .await
         .unwrap();
-    assert!(pdf.text().unwrap().contains("Ada Lovelace completed Engines on today."));
+    assert!(
+        pdf.text()
+            .unwrap()
+            .contains("Ada Lovelace completed Engines on today.")
+    );
     assert!(documents.engine(EngineKind::Typst).is_some());
 }
 
@@ -79,15 +99,21 @@ async fn options_configure_the_engines() {
     assert!(documents.font_families().await.unwrap().is_empty());
     let documents = Documents::new(fixture_templates());
     let families = documents.font_families().await.unwrap();
-    assert!(families.contains(&"Noto Sans Arabic".to_owned()), "{families:?}");
+    assert!(
+        families.contains(&"Noto Sans Arabic".to_owned()),
+        "{families:?}"
+    );
 }
 
 #[tokio::test]
 async fn a_replaced_engine_renders_its_kind() {
     let fake = navree_documents::DocumentsFake::new();
-    let documents = Documents::new(fixture_templates())
-        .with_engine(Arc::new(fake.engine(EngineKind::Chrome)));
-    let pdf = documents.pdf("invoices/show", json!({"number": 1})).await.unwrap();
+    let documents =
+        Documents::new(fixture_templates()).with_engine(Arc::new(fake.engine(EngineKind::Chrome)));
+    let pdf = documents
+        .pdf("invoices/show", json!({"number": 1}))
+        .await
+        .unwrap();
     assert!(pdf.text().unwrap().starts_with("invoices/show"));
     fake.assert_rendered("invoices/show");
 }
@@ -96,20 +122,29 @@ async fn a_replaced_engine_renders_its_kind() {
 #[tokio::test]
 async fn save_writes_the_pdf_to_the_documents_disk() {
     let storage = memory_storage();
-    let documents = Documents::new(fixture_templates()).storage(storage.clone(), Some("exports".into()));
+    let documents =
+        Documents::new(fixture_templates()).storage(storage.clone(), Some("exports".into()));
     let stored = documents
         .save(&Render::typst("Quarterly report"), "reports/q3.pdf")
         .await
         .unwrap();
     assert_eq!(stored.path, "reports/q3.pdf");
     assert_eq!(stored.disk().name(), "exports");
-    let bytes = storage.disk("exports").unwrap().get("reports/q3.pdf").await.unwrap();
+    let bytes = storage
+        .disk("exports")
+        .unwrap()
+        .get("reports/q3.pdf")
+        .await
+        .unwrap();
     assert_eq!(bytes.len() as u64, stored.size);
     assert!(bytes.starts_with(b"%PDF-"));
     let link = stored
         .temporary_url(chrono::Utc::now() + chrono::Duration::minutes(5))
         .unwrap();
-    assert!(link.starts_with("/storage/exports/reports/q3.pdf?expires="), "{link}");
+    assert!(
+        link.starts_with("/storage/exports/reports/q3.pdf?expires="),
+        "{link}"
+    );
     // The default disk without a configured one.
     let documents = Documents::new(fixture_templates()).storage(storage.clone(), None);
     assert_eq!(documents.disk().unwrap().name(), "local");
@@ -155,14 +190,20 @@ async fn queue_dispatches_the_render_job() {
         .unwrap();
     assert_eq!(queued.job_id.as_deref(), Some("job-1"));
     assert_eq!(queued.disk, "local");
-    assert_eq!(documents.status(&queued).await.unwrap(), DocumentStatus::Pending);
+    assert_eq!(
+        documents.status(&queued).await.unwrap(),
+        DocumentStatus::Pending
+    );
     let envelope = recorder.0.lock().unwrap()[0].clone();
     assert_eq!(envelope.job_type, "documents.render");
     assert_eq!(envelope.options.timeout_secs, 300);
     let job: RenderDocument = serde_json::from_value(envelope.payload).unwrap();
     assert_eq!(job.id, queued.id);
     assert_eq!(job.path, "exports/ada.pdf");
-    assert_eq!(RenderDocument::NAME, "documents.render");
+    assert_eq!(
+        <RenderDocument as navree_contracts::Job>::NAME,
+        "documents.render"
+    );
     // An invalid path fails before anything is queued.
     let error = documents
         .queue(Render::typst("x"), "../escape.pdf")
@@ -206,11 +247,22 @@ async fn without_a_dispatcher_a_failed_render_fails_the_call() {
     let storage = memory_storage();
     let documents = Documents::new(fixture_templates()).storage(storage.clone(), None);
     let error = documents
-        .queue(Render::template("broken").data(json!({"name": "x"})), "exports/broken.pdf")
+        .queue(
+            Render::template("broken").data(json!({"name": "x"})),
+            "exports/broken.pdf",
+        )
         .await
         .unwrap_err();
-    assert!(matches!(error, DocumentsError::Template { .. }), "{error:?}");
+    assert!(
+        matches!(error, DocumentsError::Template { .. }),
+        "{error:?}"
+    );
     let disk = storage.default_disk();
     assert!(!disk.exists("exports/broken.pdf").await.unwrap());
-    assert!(!disk.exists(&format!("exports/broken.pdf{FAILED_SUFFIX}")).await.unwrap());
+    assert!(
+        !disk
+            .exists(&format!("exports/broken.pdf{FAILED_SUFFIX}"))
+            .await
+            .unwrap()
+    );
 }

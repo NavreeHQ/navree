@@ -53,7 +53,11 @@ fn right_to_left_documents_set_every_paragraph_s_direction() {
         .font("Noto Sans Arabic")
         .heading(1, "تقرير التدقيق")
         .paragraph("كل الضوابط ناجحة")
-        .table(Table::new().header(["الضابط", "الحالة"]).row(["المصادقة", "ناجح"]))
+        .table(
+            Table::new()
+                .header(["الضابط", "الحالة"])
+                .row(["المصادقة", "ناجح"]),
+        )
         .footer("سري")
         .build()
         .unwrap();
@@ -63,7 +67,10 @@ fn right_to_left_documents_set_every_paragraph_s_direction() {
     let xml = document_xml(file.bytes());
     assert_eq!(xml.matches("<w:bidi />").count(), 6, "{xml}");
     assert!(xml.contains("<w:tblPr><w:bidiVisual />"), "{xml}");
-    assert!(xml.contains(r#"w:cs="Noto Sans Arabic""#) || styles_xml(file.bytes()).contains(r#"w:cs="Noto Sans Arabic""#));
+    assert!(
+        xml.contains(r#"w:cs="Noto Sans Arabic""#)
+            || styles_xml(file.bytes()).contains(r#"w:cs="Noto Sans Arabic""#)
+    );
     let ltr = Docx::new().paragraph("Left to right").build().unwrap();
     assert!(!document_xml(ltr.bytes()).contains("<w:bidi />"));
     assert!(!document_xml(ltr.bytes()).contains("bidiVisual"));
@@ -78,7 +85,10 @@ fn the_title_and_author_go_into_the_properties() {
         .build()
         .unwrap();
     let core = part(file.bytes(), "docProps/core.xml");
-    assert!(core.contains("<dc:title>Audit &lt;Q3&gt; &amp; more</dc:title>"), "{core}");
+    assert!(
+        core.contains("<dc:title>Audit &lt;Q3&gt; &amp; more</dc:title>"),
+        "{core}"
+    );
     assert!(core.contains("<dc:creator>Navree</dc:creator>"), "{core}");
     // Still a valid document.
     DocxFile::from_bytes(file.into_bytes()).unwrap();
@@ -107,7 +117,10 @@ fn an_image_that_is_not_png_or_jpeg_is_an_error() {
         .image(Image::new(&b"GIF89a"[..]))
         .build()
         .unwrap_err();
-    assert!(matches!(&error, DocumentsError::Docx(message) if message.contains("PNG")), "{error:?}");
+    assert!(
+        matches!(&error, DocumentsError::Docx(message) if message.contains("PNG")),
+        "{error:?}"
+    );
 }
 
 #[test]

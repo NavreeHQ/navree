@@ -1,16 +1,18 @@
 //! `DocumentsModule` in an app: the service, responses, error mapping,
 //! embedded templates, queued renders on a worker and the commands.
 
+// Most of these tests need the Typst engine.
+#![cfg_attr(not(feature = "typst"), allow(unused_imports, dead_code))]
+
 use std::sync::Arc;
 
 use http::Method;
 use navree_documents::{
-    DocumentStatus, Documents, DocumentsModule, DocumentsOptions, ModuleBuilderDocumentsExt, Pdf,
-    QueuedDocument, Render,
+    Documents, DocumentsModule, DocumentsOptions, ModuleBuilderDocumentsExt, Pdf, QueuedDocument,
+    Render,
 };
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use navree_queue::{Queue, QueueDriver, QueueModule, QueueOptions};
 use navree_storage::{DiskConfig, StorageModule, StorageOptions};
 use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Value, json};
@@ -152,9 +154,18 @@ async fn handlers_render_and_download_documents() {
     );
     assert_eq!(response.header("cache-control"), Some("private, no-store"));
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
-    assert!(pdf.text().unwrap().contains("Ada Lovelace completed Engines on today."));
+    assert!(
+        pdf.text()
+            .unwrap()
+            .contains("Ada Lovelace completed Engines on today.")
+    );
 
-    let response = app.client().get("/documents/inline").send().await.assert_status(200);
+    let response = app
+        .client()
+        .get("/documents/inline")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(response.header("content-disposition"), Some("inline"));
 }
 
@@ -169,7 +180,11 @@ async fn template_errors_are_500s_without_details() {
         .await
         .assert_error(500, None);
     // The template's file and message stay in the logs.
-    assert!(!response.text().contains("broken.typ"), "{}", response.text());
+    assert!(
+        !response.text().contains("broken.typ"),
+        "{}",
+        response.text()
+    );
 }
 
 #[cfg(feature = "chrome")]
@@ -189,7 +204,13 @@ async fn an_unavailable_engine_is_a_503() {
         .await
         .unwrap_err();
     assert!(
-        matches!(error, navree_documents::DocumentsError::EngineUnavailable { engine: "chrome", .. }),
+        matches!(
+            error,
+            navree_documents::DocumentsError::EngineUnavailable {
+                engine: "chrome",
+                ..
+            }
+        ),
         "{error:?}"
     );
     assert_eq!(error.status(), http::StatusCode::SERVICE_UNAVAILABLE);
@@ -199,10 +220,20 @@ async fn an_unavailable_engine_is_a_503() {
 #[tokio::test]
 async fn modules_embed_templates() {
     let app = app().build().await;
-    let response = app.client().get("/documents/embedded").send().await.assert_status(200);
+    let response = app
+        .client()
+        .get("/documents/embedded")
+        .send()
+        .await
+        .assert_status(200);
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
     assert!(pdf.text().unwrap().contains("Receipt for Grace"));
-    assert!(!app.get::<Documents>().await.templates().exists("../outside.typ"));
+    assert!(
+        !app.get::<Documents>()
+            .await
+            .templates()
+            .exists("../outside.typ")
+    );
 }
 
 #[test]
@@ -217,6 +248,9 @@ fn for_root_takes_the_options() {
 #[cfg(feature = "typst")]
 #[tokio::test]
 async fn queued_renders_run_on_a_worker() {
+    use navree_documents::DocumentStatus;
+    use navree_queue::{Queue, QueueDriver, QueueModule, QueueOptions};
+
     let app = app()
         .module(QueueModule::for_root(QueueOptions {
             driver: QueueDriver::Memory,
@@ -300,9 +334,16 @@ async fn documents_render_writes_a_pdf_file() {
     .await
     .unwrap();
     let pdf = Pdf::from_bytes(std::fs::read(&out).unwrap()).unwrap();
-    assert!(pdf.text().unwrap().contains("Grace Hopper completed Compilers"));
+    assert!(
+        pdf.text()
+            .unwrap()
+            .contains("Grace Hopper completed Compilers")
+    );
     let error = app
-        .run_command("documents:render", &["certificates/missing", "--out", out.to_str().unwrap()])
+        .run_command(
+            "documents:render",
+            &["certificates/missing", "--out", out.to_str().unwrap()],
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains("not found"), "{error}");

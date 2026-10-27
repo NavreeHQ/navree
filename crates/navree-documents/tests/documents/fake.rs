@@ -1,9 +1,7 @@
 //! `DocumentsFake`: rendering without engines, recording, assertions and
 //! failures.
 
-use navree_documents::{
-    DocumentsError, DocumentsFake, EngineKind, Render, Templates,
-};
+use navree_documents::{DocumentsError, DocumentsFake, EngineKind, Render, Templates};
 use serde_json::json;
 
 #[tokio::test]
@@ -11,7 +9,10 @@ async fn the_fake_renders_any_name_and_records_it() {
     let fake = DocumentsFake::new();
     let documents = fake.documents();
     let pdf = documents
-        .pdf("certificates/classic", json!({"name": "Ada", "score": 98, "passed": true}))
+        .pdf(
+            "certificates/classic",
+            json!({"name": "Ada", "score": 98, "passed": true}),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -22,7 +23,10 @@ async fn the_fake_renders_any_name_and_records_it() {
         .render(&Render::html("<p>x</p>").locale("ar").title("Inline"))
         .await
         .unwrap();
-    assert_eq!(fake.rendered_names(), vec!["certificates/classic", "inline"]);
+    assert_eq!(
+        fake.rendered_names(),
+        vec!["certificates/classic", "inline"]
+    );
     fake.assert_rendered("certificates/classic");
     fake.assert_rendered("certificates/classic.typ");
     fake.assert_rendered_with("certificates/classic", |render| render.data["score"] == 98);
@@ -46,7 +50,9 @@ async fn assert_rendered_with_fails_when_no_render_matches() {
         .pdf("certificates/classic", json!({"name": "Ada"}))
         .await
         .unwrap();
-    fake.assert_rendered_with("certificates/classic", |render| render.data["name"] == "Grace");
+    fake.assert_rendered_with("certificates/classic", |render| {
+        render.data["name"] == "Grace"
+    });
 }
 
 #[tokio::test]
@@ -64,7 +70,10 @@ async fn a_fake_with_templates_knows_which_exist() {
         ("invoices/show.html", "x"),
     ]));
     let documents = fake.documents();
-    documents.pdf("certificates/classic", json!({})).await.unwrap();
+    documents
+        .pdf("certificates/classic", json!({}))
+        .await
+        .unwrap();
     documents.pdf("invoices/show", json!({})).await.unwrap();
     assert_eq!(
         documents

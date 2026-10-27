@@ -220,9 +220,10 @@ mod tests {
         assert_eq!(options.margin.top, 20.0);
         assert_eq!(options.margin.left, 10.0);
         assert!(options.print_background);
-        let custom: Paper =
-            serde_json::from_value(serde_json::json!({"custom": {"width_mm": 90, "height_mm": 50}}))
-                .unwrap();
+        let custom: Paper = serde_json::from_value(
+            serde_json::json!({"custom": {"width_mm": 90, "height_mm": 50}}),
+        )
+        .unwrap();
         assert_eq!(custom.size_mm(), (90.0, 50.0));
     }
 

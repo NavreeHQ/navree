@@ -18,9 +18,9 @@ use typst::{Library, LibraryExt, World, WorldExt};
 use typst_layout::PagedDocument;
 
 use self::fonts::FontSet;
-use crate::fonts::DEFAULT_FAMILIES;
 use self::world::{DATA_PATH, INLINE_PATH, RenderWorld, project_file};
 use crate::engine::{EngineKind, PdfEngine};
+use crate::fonts::DEFAULT_FAMILIES;
 use crate::render::{Render, TemplateSource};
 use crate::templates::{TYPST_EXTENSION, Templates};
 use crate::{DocumentsError, Pdf};
@@ -191,14 +191,13 @@ impl TypstEngine {
                         name: name.clone(),
                         tried: vec![path.clone()],
                     })?;
-                let text = String::from_utf8(bytes.to_vec()).map_err(|_| {
-                    DocumentsError::Template {
+                let text =
+                    String::from_utf8(bytes.to_vec()).map_err(|_| DocumentsError::Template {
                         file: path.clone(),
                         line: None,
                         column: None,
                         message: "the file is not valid UTF-8".into(),
-                    }
-                })?;
+                    })?;
                 (format!("/{path}"), text)
             }
             TemplateSource::Typst(source) => (INLINE_PATH.to_owned(), source.clone()),
@@ -209,7 +208,10 @@ impl TypstEngine {
                 });
             }
         };
-        let text = text.strip_prefix('\u{feff}').map(str::to_owned).unwrap_or(text);
+        let text = text
+            .strip_prefix('\u{feff}')
+            .map(str::to_owned)
+            .unwrap_or(text);
         let main = project_file(&main_path).ok_or_else(|| DocumentsError::TemplateNotFound {
             name: render.name().to_owned(),
             tried: vec![main_path.clone()],
@@ -312,7 +314,12 @@ fn build_library(locale: Option<&str>) -> Library {
     let mut library = builder.build();
     library.styles.set(
         TextElem::font,
-        FontList(DEFAULT_FAMILIES.iter().map(|f| FontFamily::new(f)).collect()),
+        FontList(
+            DEFAULT_FAMILIES
+                .iter()
+                .map(|f| FontFamily::new(f))
+                .collect(),
+        ),
     );
     if let Some(locale) = locale {
         let mut parts = locale.split(['-', '_']);

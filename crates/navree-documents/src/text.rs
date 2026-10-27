@@ -13,8 +13,8 @@
 
 use std::collections::HashMap;
 
-use lopdf::content::Content;
 use lopdf::Encoding;
+use lopdf::content::Content;
 use lopdf::{Dictionary, Document, Object, ObjectId};
 
 use crate::DocumentsError;
@@ -150,7 +150,12 @@ impl<'a> Walker<'a> {
         let mut marks: Vec<Mark> = Vec::new();
         for op in &content.operations {
             let operands = &op.operands;
-            let number = |i: usize| operands.get(i).and_then(|o| o.as_float().ok()).unwrap_or(0.0);
+            let number = |i: usize| {
+                operands
+                    .get(i)
+                    .and_then(|o| o.as_float().ok())
+                    .unwrap_or(0.0)
+            };
             match op.operator.as_str() {
                 "q" => stack.push((ctm, state.clone())),
                 "Q" => {
@@ -160,7 +165,14 @@ impl<'a> Walker<'a> {
                     }
                 }
                 "cm" => {
-                    let m = [number(0), number(1), number(2), number(3), number(4), number(5)];
+                    let m = [
+                        number(0),
+                        number(1),
+                        number(2),
+                        number(3),
+                        number(4),
+                        number(5),
+                    ];
                     ctm = multiply(m, ctm);
                 }
                 "BT" => {
@@ -168,7 +180,10 @@ impl<'a> Walker<'a> {
                     tlm = IDENTITY;
                 }
                 "Tf" => {
-                    state.font = operands.first().and_then(|o| o.as_name().ok()).map(<[u8]>::to_vec);
+                    state.font = operands
+                        .first()
+                        .and_then(|o| o.as_name().ok())
+                        .map(<[u8]>::to_vec);
                     state.size = number(1);
                 }
                 "Tc" => state.char_spacing = number(0),
@@ -186,7 +201,14 @@ impl<'a> Walker<'a> {
                     tm = tlm;
                 }
                 "Tm" => {
-                    tlm = [number(0), number(1), number(2), number(3), number(4), number(5)];
+                    tlm = [
+                        number(0),
+                        number(1),
+                        number(2),
+                        number(3),
+                        number(4),
+                        number(5),
+                    ];
                     tm = tlm;
                 }
                 "T*" => {
@@ -211,7 +233,15 @@ impl<'a> Walker<'a> {
                         "\"" => operands.get(2).into_iter().collect(),
                         _ => operands.first().into_iter().collect(),
                     };
-                    self.show(&shown, resources, resources_key, &state, &mut tm, ctm, &mut marks);
+                    self.show(
+                        &shown,
+                        resources,
+                        resources_key,
+                        &state,
+                        &mut tm,
+                        ctm,
+                        &mut marks,
+                    );
                 }
                 // `/ReversedChars` needs no handling: glyphs are ordered by
                 // where they are drawn, not by the order they are shown in.
@@ -370,7 +400,11 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn properties(&self, operand: &'a Object, resources: Option<&'a Dictionary>) -> Option<&'a Dictionary> {
+    fn properties(
+        &self,
+        operand: &'a Object,
+        resources: Option<&'a Dictionary>,
+    ) -> Option<&'a Dictionary> {
         match operand {
             Object::Dictionary(dict) => Some(dict),
             Object::Name(name) => resources
@@ -476,7 +510,10 @@ impl FontInfo<'_> {
         if self.standard {
             return crate::stamp::standard_width(code) as f32;
         }
-        self.widths.get(&code).copied().unwrap_or(self.default_width)
+        self.widths
+            .get(&code)
+            .copied()
+            .unwrap_or(self.default_width)
     }
 }
 
@@ -499,7 +536,8 @@ fn parse_cid_widths(doc: &Document, w: &[Object], widths: &mut HashMap<u32, f32>
                 i += 2;
             }
             Some(Ok(_)) => {
-                let (Some(last), Some(width)) = (w.get(i + 1).and_then(value), w.get(i + 2).and_then(value))
+                let (Some(last), Some(width)) =
+                    (w.get(i + 1).and_then(value), w.get(i + 2).and_then(value))
                 else {
                     break;
                 };
@@ -517,7 +555,10 @@ fn page_resources(document: &Document, page_id: ObjectId) -> Option<&Dictionary>
     let mut node = document.get_dictionary(page_id).ok()?;
     for _ in 0..64 {
         if let Ok(resources) = node.get(b"Resources") {
-            return document.dereference(resources).ok().and_then(|(_, o)| o.as_dict().ok());
+            return document
+                .dereference(resources)
+                .ok()
+                .and_then(|(_, o)| o.as_dict().ok());
         }
         let parent = node.get(b"Parent").and_then(Object::as_reference).ok()?;
         node = document.get_dictionary(parent).ok()?;
@@ -530,8 +571,10 @@ fn page_resources(document: &Document, page_id: ObjectId) -> Option<&Dictionary>
 pub(crate) fn decode_text_string(bytes: &[u8]) -> String {
     if let Some(rest) = bytes.strip_prefix(&[0xfe, 0xff]) {
         let units: Vec<u16> = rest
-            .chunks_exact(2)
-            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_be_bytes(*pair))
             .collect();
         String::from_utf16_lossy(&units)
     } else if let Some(rest) = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]) {
@@ -760,7 +803,17 @@ mod tests {
         // "مرحبا Ada Lovelace في الدورة 2026": mostly Arabic, so read from
         // the right; the name and the year stay left to right.
         let visual = strings(&[
-            "2026", " ", "الدورة", " ", "في", " ", "Ada", " ", "Lovelace", " ", "مرحبا",
+            "2026",
+            " ",
+            "الدورة",
+            " ",
+            "في",
+            " ",
+            "Ada",
+            " ",
+            "Lovelace",
+            " ",
+            "مرحبا",
         ]);
         assert_eq!(
             reading_order(visual).concat(),
@@ -771,8 +824,21 @@ mod tests {
     #[test]
     fn right_to_left_runs_are_reversed_in_left_to_right_lines() {
         // "Invoice for مرحبا عالم today": mostly Latin.
-        let visual = strings(&["Invoice", " ", "for", " ", "عالم", " ", "مرحبا", " ", "today"]);
-        assert_eq!(reading_order(visual).concat(), "Invoice for مرحبا عالم today");
+        let visual = strings(&[
+            "Invoice",
+            " ",
+            "for",
+            " ",
+            "عالم",
+            " ",
+            "مرحبا",
+            " ",
+            "today",
+        ]);
+        assert_eq!(
+            reading_order(visual).concat(),
+            "Invoice for مرحبا عالم today"
+        );
         let plain = strings(&["Hello", " ", "world"]);
         assert_eq!(reading_order(plain).concat(), "Hello world");
     }

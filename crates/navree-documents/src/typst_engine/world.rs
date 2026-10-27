@@ -83,10 +83,7 @@ impl RenderWorld {
                 if !root.is_dir() {
                     return Err(FileError::Package(PackageError::NotFound(spec.clone())));
                 }
-                let file = id
-                    .vpath()
-                    .realize(&root)
-                    .map_err(FileError::Realize)?;
+                let file = id.vpath().realize(&root).map_err(FileError::Realize)?;
                 std::fs::read(&file)
                     .map(Bytes::new)
                     .map_err(|error| FileError::from_io(error, &file))

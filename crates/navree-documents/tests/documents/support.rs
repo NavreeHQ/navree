@@ -26,7 +26,10 @@ pub fn assert_golden(name: &str, actual: &str) {
     if std::env::var_os("UPDATE_GOLDEN").is_some() || !path.exists() {
         std::fs::write(&path, &actual).unwrap();
         if std::env::var_os("UPDATE_GOLDEN").is_none() {
-            panic!("wrote the missing golden file {}; check it and run again", path.display());
+            panic!(
+                "wrote the missing golden file {}; check it and run again",
+                path.display()
+            );
         }
         return;
     }

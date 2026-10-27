@@ -63,26 +63,42 @@ fn a_stamp_can_go_on_selected_pages_and_corners() {
     let pdf = Pdf::from_lines((0..130).map(|i| format!("Line {i}")));
     assert_eq!(pdf.page_count().unwrap(), 3);
     let stamped = pdf
-        .stamp(&Stamp::text("Copy 1 of 2").at(Position::TopRight).pages(Pages::First))
+        .stamp(
+            &Stamp::text("Copy 1 of 2")
+                .at(Position::TopRight)
+                .pages(Pages::First),
+        )
         .unwrap()
-        .stamp(&Stamp::text("Confidential").at(Position::Bottom).pages(Pages::Last))
+        .stamp(
+            &Stamp::text("Confidential")
+                .at(Position::Bottom)
+                .pages(Pages::Last),
+        )
         .unwrap();
     let pages = stamped.page_texts().unwrap();
     assert!(pages[0].contains("Copy 1 of 2"));
     assert!(!pages[1].contains("Copy 1 of 2") && !pages[1].contains("Confidential"));
     assert!(pages[2].contains("Confidential"));
     // Top-right: the stamp's line comes first, at the top of the page.
-    assert!(pages[0].starts_with("Copy 1 of 2") || pages[0].lines().next().unwrap().contains("Copy"), "{}", pages[0]);
+    assert!(
+        pages[0].starts_with("Copy 1 of 2") || pages[0].lines().next().unwrap().contains("Copy"),
+        "{}",
+        pages[0]
+    );
     // Bottom: the last line of the page.
     assert_eq!(pages[2].lines().last(), Some("Confidential"));
-    let only = pdf.stamp(&Stamp::text("X").pages(Pages::Only(vec![2]))).unwrap();
+    let only = pdf
+        .stamp(&Stamp::text("X").pages(Pages::Only(vec![2])))
+        .unwrap();
     let pages = only.page_texts().unwrap();
     assert!(!pages[0].contains('X') && pages[1].contains('X') && !pages[2].contains('X'));
 }
 
 #[test]
 fn a_stamp_in_another_script_points_to_overlays() {
-    let error = Pdf::from_lines(["x"]).stamp(&Stamp::text("مدفوع")).unwrap_err();
+    let error = Pdf::from_lines(["x"])
+        .stamp(&Stamp::text("مدفوع"))
+        .unwrap_err();
     assert!(error.to_string().contains("Pdf::overlay"), "{error}");
 }
 
@@ -127,7 +143,9 @@ async fn an_overlay_of_another_size_is_scaled_to_fit() {
 
 #[test]
 fn metadata_and_conversions() {
-    let pdf = Pdf::from_lines(["x"]).with_metadata("Audit report", Some("Navree")).unwrap();
+    let pdf = Pdf::from_lines(["x"])
+        .with_metadata("Audit report", Some("Navree"))
+        .unwrap();
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Audit report"));
     let bytes: bytes::Bytes = pdf.clone().into();
     assert_eq!(&bytes[..], &pdf[..]);
