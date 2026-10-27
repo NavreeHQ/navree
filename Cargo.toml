@@ -58,6 +58,7 @@ navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
 navree-ui = { path = "crates/navree-ui", version = "0.1.0" }
+navree-mcp = { path = "crates/navree-mcp", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -272,6 +273,14 @@ tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compr
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "2.7.0"
+# The official Rust MCP SDK (navree-mcp): the server, stdio and the
+# streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
+rmcp = { version = "3.7.0", default-features = false, features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+async-trait = "0.1.92"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

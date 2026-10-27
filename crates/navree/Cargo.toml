@@ -185,6 +185,18 @@ billing = [
     "auth",
     "workspace",
 ]
+## L6 (ecosystem, opt-in: not in `full`)
+## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
+mcp = [
+    "dep:navree-mcp",
+    "http",
+    "cache",
+    "db",
+    "testing",
+    "validation",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -220,6 +232,7 @@ navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
+navree-mcp = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
 navree-queue = { workspace = true, optional = true }

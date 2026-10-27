@@ -7,9 +7,11 @@ use std::time::Duration;
 
 use moka::future::Cache;
 use navree_contracts::Principal;
-use navree_db::Db;
+use navree_db::{Db, Uow};
+use navree_http::{AccessSpec, AppError};
 use uuid::Uuid;
 
+use crate::authorizer::AuthorizedRecord;
 use crate::context::{AbilityCtx, AccessUser};
 use crate::engine::{ALL, Ability, MANAGE, Rules};
 use crate::error::AccessError;
@@ -142,6 +144,77 @@ impl AbilityFactory {
     /// Permission prefix → subject type, from every registered subject.
     pub fn permission_subjects(&self) -> &Arc<BTreeMap<String, String>> {
         &self.subjects.prefixes
+    }
+
+    /// The (action, subject type) a permission string checks:
+    /// `posts.publish` → (`publish`, `Post`), `posts.*` → (`manage`,
+    /// `Post`); an unregistered prefix stands for itself (`reports.view` →
+    /// (`view`, `reports`)).
+    pub fn permission_target<'a>(&'a self, permission: &'a str) -> (&'a str, &'a str) {
+        self.subjects.permission_target(permission)
+    }
+
+    /// Whether `access` passes the roles, permissions and type-level `can`
+    /// of an access declaration, as the route authorizer checks them before
+    /// it loads a record: any of the roles (the super-admin role passes),
+    /// every permission as an unconditional rule, and the ability on the
+    /// subject type. `public` and `authenticated` are the caller's to
+    /// check; a `can` with `from` needs
+    /// [`authorize_record`](AbilityFactory::authorize_record) as well. For
+    /// checks outside an HTTP request (MCP tools, agent tools, jobs).
+    pub fn allows(&self, access: &PrincipalAccess, spec: &AccessSpec) -> bool {
+        if !spec.roles.is_empty()
+            && !access.super_admin
+            && !spec.roles.iter().any(|role| access.has_role(role))
+        {
+            return false;
+        }
+        let permissions = spec.permissions.iter().all(|permission| {
+            let (action, subject) = self.permission_target(permission);
+            access.ability.has_unconditional(action, subject)
+        });
+        permissions
+            && spec
+                .can
+                .as_ref()
+                .is_none_or(|can| access.ability.can(&can.action, &can.subject, None))
+    }
+
+    /// Loads the record of `subject` whose id is `id` in `uow` (`FOR UPDATE`
+    /// where supported), with the loader registered by
+    /// [`AccessModule::for_feature`](crate::AccessModule::for_feature), and
+    /// checks `action` on it: what a `can(action, subject, from = "id")`
+    /// route does, outside an HTTP request. A 404 when there is no such
+    /// record, a 403 when `access` does not allow `action` on it, a 500 when
+    /// the subject has no loader.
+    pub async fn authorize_record(
+        &self,
+        access: &PrincipalAccess,
+        uow: &Uow,
+        action: &str,
+        subject: &str,
+        id: &str,
+    ) -> Result<AuthorizedRecord, AppError> {
+        let loader = self.subjects.loader(subject).ok_or_else(|| {
+            AppError::internal(format!(
+                "no record loader for subject `{subject}`: import `AccessModule::for_feature::<E>()` for its entity"
+            ))
+        })?;
+        let record = loader
+            .load(uow, id)
+            .await
+            .map_err(AppError::internal)?
+            .ok_or_else(AppError::not_found)?;
+        if !access.ability.can(action, subject, Some(&record.json)) {
+            return Err(AppError::forbidden());
+        }
+        Ok(AuthorizedRecord {
+            subject: subject.to_owned(),
+            action: action.to_owned(),
+            json: Arc::new(record.json),
+            model: record.model,
+            ability: access.ability.clone(),
+        })
     }
 
     pub(crate) fn subjects(&self) -> &Subjects {

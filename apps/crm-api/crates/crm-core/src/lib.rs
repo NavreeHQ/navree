@@ -50,5 +50,7 @@ pub use enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
 pub use module::CrmCoreModule;
 pub use notify::{NotifiableUser, NotificationData};
 pub use ownership::owner_for;
-pub use platform::{DEAL_UPDATED, DEALS_CHANNEL, REALTIME_KEY, TRUSTED_PROXIES, platform};
+pub use platform::{
+    DEAL_UPDATED, DEALS_CHANNEL, MCP_INSTRUCTIONS, REALTIME_KEY, TRUSTED_PROXIES, platform,
+};
 pub use roles::UserRole;

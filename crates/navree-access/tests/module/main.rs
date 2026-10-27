@@ -8,6 +8,7 @@ mod routes;
 mod commands;
 mod endpoints;
 mod field_checks;
+mod outside;
 mod parity;
 mod service;
 mod wiring;

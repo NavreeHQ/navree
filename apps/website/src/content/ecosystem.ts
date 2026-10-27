@@ -432,7 +432,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-mcp",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features mcp",
     href: "/docs/ai/mcp-servers/",
-    status: "planned",
+    status: "stable",
     signature: "#[mcp_tool(read_only)]",
   },
   // Testing

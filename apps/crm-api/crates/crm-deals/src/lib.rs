@@ -28,11 +28,18 @@
 //! mail) whose data is `{title, message, url, deal_id}` (spec §9.7).
 //! After every change commits, the deal is broadcast as `deal.updated`
 //! `{deal}` on `private-crm.deals` through `dyn Broadcaster`.
+//!
+//! MCP ([`DealsMcp`], served at `/mcp` when the app has `McpModule`): the
+//! tools `list_deals` (`read Deal`; [`ListDeals`]) and `move_deal`
+//! (`move` that deal; [`MoveDealArgs`]), the resources `crm://deals/{id}`
+//! (`read` that deal) and `crm://pipeline` (the board), and the prompt
+//! `follow-up-email` ([`FollowUpArgs`]).
 #![forbid(unsafe_code)]
 
 mod controller;
 mod dto;
 mod events;
+mod mcp;
 mod notification;
 mod positions;
 mod resource;
@@ -45,6 +52,7 @@ use navree::prelude::*;
 pub use controller::DealsController;
 pub use dto::{BoardFilter, CreateDeal, DealFilter, MAX_AMOUNT_CENTS, MoveDeal, UpdateDeal};
 pub use events::{DealAssigned, DealWon};
+pub use mcp::{DealsMcp, FollowUpArgs, ListDeals, MoveDealArgs};
 pub use notification::{
     Assigned, DealNotice, DealNotification, MAIL_TEMPLATE, NotifyDealOwner, Won,
 };
@@ -62,11 +70,12 @@ pub use service::{DEFAULT_CURRENCY, DealService};
 pub struct DealsModule;
 
 impl DealsModule {
-    /// The owner notifications (a queued listener of both events) and
-    /// their mail template.
+    /// The owner notifications (a queued listener of both events), their
+    /// mail template and the deals part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.listen::<DealAssigned, NotifyDealOwner>()
             .on::<DealWon, NotifyDealOwner>()
             .templates(notification::TEMPLATES);
+        m.mcp_server::<DealsMcp>();
     }
 }

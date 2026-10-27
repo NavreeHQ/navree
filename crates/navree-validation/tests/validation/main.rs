@@ -7,4 +7,5 @@ mod json;
 mod module;
 mod rules;
 mod support;
+mod value;
 mod values;

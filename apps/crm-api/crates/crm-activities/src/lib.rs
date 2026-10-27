@@ -26,12 +26,16 @@
 //!   ([`TasksDueToday`]: database, broadcast and mail; data `{title,
 //!   message, url}`). `ActivitiesModule` schedules it daily at 08:00 UTC and
 //!   `audit:prune` daily at 03:00 UTC (both without overlapping).
+//! - MCP ([`ActivitiesMcp`], served at `/mcp` when the app has
+//!   `McpModule`): the tool `log_activity` (`create Activity`;
+//!   [`LogActivity`]) logs an activity on a deal, as the user calling it.
 #![forbid(unsafe_code)]
 
 mod controller;
 mod dashboard;
 mod dto;
 mod due;
+mod mcp;
 mod reminders;
 mod resource;
 mod service;
@@ -46,6 +50,7 @@ pub use dashboard::{
 };
 pub use dto::{ActivityFilter, CreateActivity, UpdateActivity};
 pub use due::{Due, Today};
+pub use mcp::{ActivitiesMcp, LogActivity};
 pub use reminders::{
     DueTask, REMINDER_TEMPLATE, RemindersSent, TASK_REMINDERS_AT, TASK_REMINDERS_COMMAND,
     TASKS_TODAY_URL, TaskReminders, TasksDueToday,
@@ -70,8 +75,10 @@ pub const AUDIT_PRUNE_AT: &str = "03:00";
 pub struct ActivitiesModule;
 
 impl ActivitiesModule {
-    /// The reminder command, its mail templates and the schedule.
+    /// The reminder command, its mail templates, the schedule and the
+    /// activities part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
+        m.mcp_server::<ActivitiesMcp>();
         m.command(reminders::reminders_command());
         m.templates(&reminders::TEMPLATES);
         m.schedule(|s| {

@@ -55,5 +55,17 @@ relay_url = "auto"
 [api]
 title = "Navree CRM API"
 
+[mcp]
+# The MCP server at /mcp (and `crm-api mcp:serve --user <email>` for stdio
+# clients): the deals and activities tools, resources and prompts. Clients
+# send `Authorization: Bearer <access token>`.
+name = "navree-crm"
+title = "Navree CRM"
+instructions = """
+Tools for the Navree CRM. Deals move through the stages lead, qualified, \
+proposal, negotiation, won and lost. Amounts are in cents.\
+"""
+auth = "bearer"
+
 [log]
 level = "info"
