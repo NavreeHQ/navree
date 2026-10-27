@@ -32,6 +32,7 @@ full = [
     "queue",
     "realtime",
     "schedule",
+    "schema",
     "session",
     "storage",
     "telemetry",
@@ -54,8 +55,11 @@ events = ["dep:navree-events"]
 view = ["dep:navree-view"]
 cache = ["dep:navree-cache", "telemetry"]
 http-client = ["dep:navree-http-client", "telemetry"]
+## The schema builder: tables, columns, indexes and foreign keys in Rust for
+## PostgreSQL (with TimescaleDB), MySQL and SQLite; hypertables; schema dumps.
+schema = ["dep:navree-schema"]
 ## L3
-db = ["dep:navree-db", "http"]
+db = ["dep:navree-db", "http", "schema"]
 testing = ["dep:navree-testing", "http"]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
@@ -207,6 +211,7 @@ navree-observe = { workspace = true, optional = true }
 navree-queue = { workspace = true, optional = true }
 navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
+navree-schema = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }

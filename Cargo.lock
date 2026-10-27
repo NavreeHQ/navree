@@ -3073,6 +3073,7 @@ dependencies = [
  "navree-queue",
  "navree-realtime",
  "navree-schedule",
+ "navree-schema",
  "navree-session",
  "navree-social",
  "navree-storage",
