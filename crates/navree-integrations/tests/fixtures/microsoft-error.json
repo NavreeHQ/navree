@@ -1,0 +1,11 @@
+{
+  "error": "unauthorized_client",
+  "error_description": "AADSTS700016: Application with identifier '0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f' was not found in the directory 'Contoso'. This can happen if the application has not been installed by the administrator of the tenant or consented to by any user in the tenant.",
+  "error_codes": [
+    700016
+  ],
+  "timestamp": "2026-10-27 08:00:00Z",
+  "trace_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+  "correlation_id": "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7",
+  "error_uri": "https://login.microsoftonline.com/error?code=700016"
+}
