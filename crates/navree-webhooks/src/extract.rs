@@ -27,6 +27,9 @@ use crate::{WebhooksError, WebhooksOptions};
 /// The message every failed verification answers with (400).
 pub const INVALID_SIGNATURE: &str = "Invalid webhook signature";
 
+/// The `code` every failed verification answers with.
+pub const INVALID_SIGNATURE_CODE: &str = "invalid_webhook_signature";
+
 /// An incoming webhook from source `S` whose signature (and, when the
 /// scheme signs one, timestamp) has been checked. Take it instead of
 /// `Json<T>`, as the last argument of a handler on a `#[public]` route:
@@ -196,7 +199,7 @@ impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
                     %error,
                     "incoming webhook failed verification"
                 );
-                AppError::bad_request(INVALID_SIGNATURE)
+                AppError::bad_request(INVALID_SIGNATURE).with_code(INVALID_SIGNATURE_CODE)
             })?;
         let id = verified
             .id

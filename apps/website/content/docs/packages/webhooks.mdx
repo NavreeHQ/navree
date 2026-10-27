@@ -303,7 +303,7 @@ impl GitHubHookController {
 A request that fails verification never reaches the handler:
 
 ```json
-{ "statusCode": 400, "message": "Invalid webhook signature", "error": "Bad Request" }
+{ "statusCode": 400, "message": "Invalid webhook signature", "error": "Bad Request", "code": "invalid_webhook_signature" }
 ```
 
 A body larger than `webhooks.incoming.max_body_bytes` is answered with 413.

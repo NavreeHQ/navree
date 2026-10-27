@@ -70,7 +70,7 @@ pub use controller::{
 pub use error::WebhooksError;
 pub use event::{WebhookContext, WebhookEvent};
 pub use events::{WebhookDeliveryFailed, WebhookEndpointDisabled};
-pub use extract::{INVALID_SIGNATURE, VerifiedWebhook};
+pub use extract::{INVALID_SIGNATURE, INVALID_SIGNATURE_CODE, VerifiedWebhook};
 pub use jobs::{Deliver, FanOut, MAX_ATTEMPTS, RETRY_SCHEDULE, retry_delay};
 pub use migration::WEBHOOKS_MIGRATIONS;
 pub use module::{ModuleBuilderWebhooksExt, WebhooksModule};

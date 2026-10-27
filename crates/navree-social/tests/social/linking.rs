@@ -143,10 +143,13 @@ async fn an_unverified_email_never_links() {
         "code",
         github("1", Some("ada@example.com"), false),
     );
-    sign_in(&app, "github", "code").await.assert_error(
-        409,
-        "An account with this email already exists. Sign in, then connect GitHub in your settings.",
-    );
+    sign_in(&app, "github", "code")
+        .await
+        .assert_error(
+            409,
+            "An account with this email already exists. Sign in, then connect GitHub in your settings.",
+        )
+        .assert_error_code(409, "email_taken");
     assert!(accounts(&app).await.is_empty());
 }
 
@@ -217,7 +220,8 @@ async fn registration_follows_auth_registration_unless_set() {
     fake.on_code("github", "code", github("1", Some("ada@example.com"), true));
     sign_in(&closed, "github", "code")
         .await
-        .assert_error(403, "Registration is closed");
+        .assert_error(403, "Registration is closed")
+        .assert_error_code(403, "registration_closed");
 
     let (open, fake) = fake_app(|b| {
         b.config("auth.registration", false)
@@ -259,7 +263,8 @@ async fn allowed_email_domains_limit_sign_ins() {
     fake.on_code("github", "member", github("3", Some("ada@ACME.test"), true));
     sign_in(&app, "github", "outsider")
         .await
-        .assert_error(403, "Your email address may not sign in here");
+        .assert_error(403, "Your email address may not sign in here")
+        .assert_error_code(403, "sign_in_not_allowed");
     sign_in(&app, "github", "unverified")
         .await
         .assert_status(403);
@@ -479,12 +484,14 @@ async fn an_account_links_to_one_user_and_a_user_to_one_account_per_provider() {
     let state = link_state(&app, "github", &grace_token).await;
     link(&app, "github", &grace_token, "ada", &state)
         .await
-        .assert_error(409, "This GitHub account is linked to another user");
+        .assert_error(409, "This GitHub account is linked to another user")
+        .assert_error_code(409, "account_already_linked");
     // A second GitHub account for Ada: 409.
     let state = link_state(&app, "github", &ada_token).await;
     link(&app, "github", &ada_token, "other", &state)
         .await
-        .assert_error(409, "GitHub is already connected. Disconnect it first.");
+        .assert_error(409, "GitHub is already connected. Disconnect it first.")
+        .assert_error_code(409, "provider_already_connected");
 }
 
 #[tokio::test]
@@ -510,7 +517,8 @@ async fn the_last_way_to_sign_in_cannot_be_disconnected() {
         .assert_error(
             409,
             "Set a password or connect another provider before disconnecting GitHub",
-        );
+        )
+        .assert_error_code(409, "last_sign_in_method");
 
     let state = link_state(&app, "google", &token).await;
     link(&app, "google", &token, "code", &state)
