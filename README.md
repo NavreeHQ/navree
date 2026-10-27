@@ -107,7 +107,7 @@ each test run.
 
 ```
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
+L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock and navree-harbor)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
@@ -115,7 +115,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock (dev tool; no navree deps)
+L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -123,6 +123,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
+| L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines, app events) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
@@ -167,7 +168,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L7 | `navree-fleet` | Fleet: a supervisor of queue worker processes (`fleet`) with auto-balancing, recycling and graceful restarts; throughput, wait and runtime metrics; failed jobs; pause and continue; long-wait alerts; a dashboard at `/_fleet` (facade feature `fleet`, in `full`) |
 | L7 | `navree-helm` | Helm: the admin panel at `/admin` generated from your entities (resources with fields, filters, search, actions and metrics), checked against your access rules, audited, server-rendered with an embedded stylesheet and script, plus its JSON API |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree harbor:*`, `navree deploy`, `navree build:image` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),

@@ -227,7 +227,7 @@ By default, gRPC shares the HTTP server's port. The server speaks HTTP/1.1 and H
 
 `serve` starts it all, and Ctrl-C or SIGTERM stops new calls, lets unary calls in flight finish, and ends open streams with `UNAVAILABLE`.
 
-gRPC needs HTTP/2 end to end. Plain-text HTTP/2 (h2c) works in development and between services on a private network. Behind a reverse proxy, the proxy must speak HTTP/2 to the app: with Caddy, `reverse_proxy h2c://127.0.0.1:8080`, which is what [Harbor](/docs/tools/harbor/) configures when the app has `GrpcModule`.
+gRPC needs HTTP/2 end to end. Plain-text HTTP/2 (h2c) works in development and between services on a private network. Behind a reverse proxy, the proxy must speak HTTP/2 to the app: with Caddy, `reverse_proxy h2c://127.0.0.1:8080`, which is what [Harbor](/docs/tools/harbor/) configures when the app's `Cargo.toml` turns on navree's `grpc` feature or depends on `navree-grpc`.
 
 To serve gRPC on a port of its own, set `grpc.addr`:
 

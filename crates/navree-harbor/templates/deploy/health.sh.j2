@@ -1,0 +1,14 @@
+# harbor: health of 127.0.0.1:{{ port }} on {{ server.name }}
+url='http://127.0.0.1:{{ port }}{{ path }}'
+start=$(date +%s%N)
+deadline=$(($(date +%s) + {{ timeout }}))
+status=none
+while :; do
+	status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" || true)"
+	if [ "$status" = 200 ] || [ "$(date +%s)" -ge "$deadline" ]; then
+		break
+	fi
+	sleep 0.5
+done
+echo "status=$status"
+echo "millis=$((($(date +%s%N) - start) / 1000000))"

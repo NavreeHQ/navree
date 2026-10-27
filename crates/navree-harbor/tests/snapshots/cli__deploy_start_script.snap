@@ -1,0 +1,19 @@
+---
+source: crates/navree-harbor/tests/cli.rs
+expression: "ssh[5].stdin_text()"
+---
+set -euo pipefail
+{
+# harbor: start web green on app-1
+cd /srv/crm-api
+ln -sfn releases/20261026-091512-3f2a9c1 green.new
+mv -Tf green.new green
+umask 077
+cat > /etc/crm-api/green.env.new <<'HARBOR_EOF'
+# crm-api-web@green: written by navree deploy.
+APP_HTTP__ADDR='127.0.0.1:8082'
+APP_LIGHTHOUSE__RELEASE='20261026-091512-3f2a9c1'
+HARBOR_EOF
+mv -f /etc/crm-api/green.env.new /etc/crm-api/green.env
+sudo -n systemctl restart crm-api-web@green
+} < /dev/null

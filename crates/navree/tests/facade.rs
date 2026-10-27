@@ -266,14 +266,15 @@ struct Features {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`), and ecosystem libraries and packages an app
-/// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
-/// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
-/// `features = ["billing"]`, `features = ["search"]`, `features = ["mcp"]`,
-/// `features = ["ai"]`, `features = ["redis"]`, `features = ["micro"]`).
+/// runtime never needs (`dock`, `harbor`), and ecosystem libraries and
+/// packages an app turns on by name (`features = ["social"]`,
+/// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
+/// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
+/// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
+/// `features = ["micro"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp", "ai",
-    "redis", "micro",
+    "dock", "harbor", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp",
+    "ai", "redis", "micro",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -530,6 +531,21 @@ fn phone_and_safe_html_are_reexported() {
     assert_eq!(phone.as_str(), "+447400123456");
     let html = navree::validation::SafeHtml::new("<b onclick=\"x()\">bold</b>");
     assert_eq!(html.as_str(), "<b>bold</b>");
+}
+
+/// `navree::harbor` is navree-harbor, with `--features harbor`.
+#[cfg(feature = "harbor")]
+#[test]
+fn harbor_is_reexported_with_its_feature() {
+    let config = navree::harbor::HarborConfig::parse(
+        "app = \"shop\"\n\n[servers.app-1]\nhost = \"203.0.113.10\"\n",
+        std::path::Path::new("harbor.toml"),
+    );
+    assert!(config.is_ok(), "{config:?}");
+    assert!(same::<
+        navree::harbor::cli::HarborCommand,
+        navree::harbor::HarborCommand,
+    >());
 }
 
 /// The opt-in ecosystem libraries are re-exported whole too.

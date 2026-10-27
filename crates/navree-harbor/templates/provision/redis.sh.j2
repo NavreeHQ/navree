@@ -1,0 +1,14 @@
+# harbor: redis on {{ server.name }}
+{% include "provision/prelude.sh" %}
+harbor_installed redis-server || harbor_apt install redis-server
+harbor_file /etc/redis/harbor.conf 0640 redis:redis <<'HARBOR_EOF'
+{{ files.redis }}HARBOR_EOF
+restart="$HARBOR_CHANGED"
+if ! grep -qx 'include /etc/redis/harbor.conf' /etc/redis/redis.conf; then
+	echo 'include /etc/redis/harbor.conf' >> /etc/redis/redis.conf
+	restart=1
+fi
+systemctl enable --now redis-server > /dev/null 2>&1
+if [ "$restart" = 1 ]; then
+	systemctl restart redis-server
+fi
