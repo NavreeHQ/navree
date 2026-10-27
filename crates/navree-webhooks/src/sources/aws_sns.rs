@@ -18,7 +18,8 @@ use crate::verify::{Tolerance, Verified, VerifyError, WebhookSource, WebhookVeri
 /// them). SNS signs each message with RSA, SHA-1 for signature version 1
 /// and SHA-256 for version 2, using the certificate at `SigningCertURL`. The
 /// URL must be HTTPS on an SNS host (`sns.<region>.amazonaws.com`, or
-/// `.amazonaws.com.cn`) and end in `.pem`; the certificate is fetched once
+/// `.amazonaws.com.cn`) with a path ending in `.pem` and no query; the
+/// certificate is fetched once
 /// and cached ([`SenderKeys`](crate::SenderKeys)). The message's
 /// `TopicArn` must be one of the source's `topics`: SNS signs every topic's
 /// messages with the same keys.
@@ -104,7 +105,9 @@ impl WebhookVerifier for AwsSns {
             ));
         }
         let certificate_url = message.signing_cert_url.trim();
-        if !Self::is_sns_url(certificate_url) || !certificate_url.ends_with(".pem") {
+        let is_pem = url::Url::parse(certificate_url)
+            .is_ok_and(|url| url.path().ends_with(".pem") && url.query().is_none());
+        if !Self::is_sns_url(certificate_url) || !is_pem {
             return Err(VerifyError::Rejected(
                 "`SigningCertURL` is not an SNS certificate URL".to_owned(),
             ));
@@ -407,6 +410,7 @@ mod tests {
             "https://sns.us-east-1.amazonaws.com.evil.example/cert.pem",
             "http://sns.us-east-1.amazonaws.com/cert.pem",
             "https://sns.us-east-1.amazonaws.com/cert.txt",
+            "https://sns.us-east-1.amazonaws.com/?Action=Publish&x=.pem",
             "https://attacker.example/sns.us-east-1.amazonaws.com.pem",
         ] {
             let mut message = fixture("notification_v1");

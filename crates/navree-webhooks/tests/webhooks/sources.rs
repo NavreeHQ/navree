@@ -364,6 +364,7 @@ async fn graph_validation_tokens_are_echoed_and_notifications_checked() {
         "{:?}",
         validation.header("content-type")
     );
+    assert_eq!(validation.header("x-content-type-options"), Some("nosniff"));
 
     let batch = |state: &str| {
         json!({ "value": [{
