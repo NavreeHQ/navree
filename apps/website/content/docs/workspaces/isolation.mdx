@@ -164,7 +164,16 @@ Two more settings widen and narrow the policy when [organizations](/docs/workspa
 let sql = RlsPolicy::new("contacts").organizations().partitioned().create_sql();
 ```
 
-With `.organizations()`, the `USING` clause becomes `workspace_id = navree.workspace OR workspace_id IN (SELECT id FROM workspaces WHERE organization_id = navree.organization)`, and `WITH CHECK` stays the workspace check: an organization request reads across its workspaces and writes only into a workspace it has also resolved. The policy covers the whole organization; a member limited to some of its workspaces is narrowed by `OrgRepo` with `CurrentOrganization::workspace_ids()`. In code, `OrgRepo::<E>` reads across workspaces and `PartitionRepo::<E>` narrows `WorkspaceRepo` to partitions, on every database.
+`.organizations()` adds a second policy, for `SELECT` only:
+
+```sql
+CREATE POLICY "contacts_organization_read" ON "contacts" FOR SELECT
+    USING ("workspace_id" IN (SELECT "id" FROM "workspaces" WHERE "organization_id" = NULLIF(current_setting('navree.organization', true), '')::uuid));
+```
+
+PostgreSQL combines the two policies with `OR` for reads, and only the workspace policy applies to inserts, updates and deletes: an organization request reads across its workspaces, and changes rows only in a workspace it has also resolved. The read policy covers the whole organization; a member limited to some of its workspaces is narrowed by `OrgRepo` with `CurrentOrganization::workspace_ids()`. With `.partitioned()` as well, the partition condition narrows both policies. `drop_sql()` drops both.
+
+In code, `OrgRepo::<E>` reads across workspaces and `PartitionRepo::<E>` narrows `WorkspaceRepo` to partitions, on every database.
 
 ### Migrations
 
