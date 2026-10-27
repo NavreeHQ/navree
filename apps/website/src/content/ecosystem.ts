@@ -349,6 +349,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "Download::csv(\"contacts\", rows)",
   },
   {
+    slug: "workflows",
+    name: "Workflows",
+    kind: "library",
+    category: "capabilities",
+    tagline: "Durable workflows in code and automations people build",
+    summary:
+      "Write long-running sequences as async functions whose steps are stored and replayed on resume, with retries, sleeps of minutes or months and event waits. Let people build their own automations from your triggers, conditions and actions, with versions, enrollments and simulation.",
+    features: ["#[workflow] with steps, sleeps and event waits", "Runs that survive crashes and keep their version", "#[trigger], #[condition] and #[action] blocks with JSON Schemas", "Versioned automations per workspace", "Enrollment policies, simulation and templates"],
+    crate: "navree-workflows",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features workflows",
+    href: "/docs/packages/workflows/",
+    status: "stable",
+    signature: "ctx.wait_for::<CourseCompleted>(filter, 7 * DAY).await?",
+  },
+  {
     slug: "i18n",
     name: "Localization",
     kind: "library",
