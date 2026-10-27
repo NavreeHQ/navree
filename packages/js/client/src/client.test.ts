@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import type { components, paths } from "../test/fixtures/schema";
-import { createNavreeClient, unwrap, type NavreeClientOptions, type WithQuery } from "./client";
-import { NavreeError } from "./errors";
-import { listQuery, type ListQuery } from "./list-query";
+import type { components, paths } from "../test/fixtures/schema.js";
+import { createNavreeClient, unwrap, type NavreeClientOptions, type WithQuery } from "./client.js";
+import { NavreeError } from "./errors.js";
+import { listQuery, type ListQuery } from "./list-query.js";
 
 const BASE = "http://app.test";
 

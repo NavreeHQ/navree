@@ -11,7 +11,7 @@
  * {"data": [...], "next_cursor": "eyJpZCI6NDJ9"}
  * ```
  */
-import type { ListQuery } from "./list-query";
+import type { ListQuery } from "./list-query.js";
 
 /** A facet value and how many rows have it. */
 export interface FacetCount {

@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { queryKeys } from "./query-keys";
+import { queryKeys } from "./query-keys.js";
 
 describe("queryKeys", () => {
   const deals = queryKeys("deals");

@@ -3,8 +3,8 @@
  * generates from the app's OpenAPI document (`navree openapi:client`).
  */
 import createClient, { type Client } from "openapi-fetch";
-import { NavreeError } from "./errors";
-import { listQuerySerializer } from "./list-query";
+import { NavreeError } from "./errors.js";
+import { listQuerySerializer } from "./list-query.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -68,7 +68,7 @@ export type NavreeClient<Paths extends object> = Client<Paths> & {
  *
  * ```ts
  * import { createNavreeClient, unwrap } from "@navree/client";
- * import type { paths } from "./schema";
+ * import type { paths } from "./schema.js";
  *
  * export const api = createNavreeClient<paths>({ workspace: () => currentWorkspace() });
  * const deal = await unwrap(api.GET("/api/v1/deals/{id}", { params: { path: { id } } }));
