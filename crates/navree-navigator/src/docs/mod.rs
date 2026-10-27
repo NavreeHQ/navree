@@ -275,6 +275,13 @@ pub fn cache_file(home: &Path, version: &str) -> PathBuf {
 impl DocsLibrary {
     /// Loads the docs of `version` (the app's Navree version, if known).
     pub async fn load(version: Option<&str>, settings: &DocsSettings) -> DocsLibrary {
+        // A version names a cache directory and a URL path: plain versions only.
+        let version = version.filter(|v| {
+            !v.is_empty()
+                && !v.starts_with('.')
+                && v.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+        });
         let Some(version) = version else {
             return Self::embedded(Some(format!(
                 "The app's Cargo.lock doesn't pin navree, so these are the docs of Navree {EMBEDDED_VERSION}, which Navigator ships with."
@@ -499,6 +506,12 @@ mod tests {
 
         let library = DocsLibrary::load(None, &settings).await;
         assert!(library.note.unwrap().contains("doesn't pin navree"));
+
+        // A version that isn't a plain version never names a path or URL.
+        let (settings, fetcher) = settings_404(home.path());
+        let library = DocsLibrary::load(Some("../../escape"), &settings).await;
+        assert_eq!(library.source, DocsSource::Embedded);
+        assert!(fetcher.asked.lock().unwrap().is_empty());
     }
 
     fn settings_404(home: &Path) -> (DocsSettings, Arc<StubFetcher>) {

@@ -238,7 +238,7 @@ Migrations run through commands that `DatabaseModule` registers on your app. The
 | Command | What it does |
 |---|---|
 | `migrate` | Runs every pending migration, as one new batch. |
-| `migrate:status` | Lists every migration in run order, with its batch, and whether it ran. |
+| `migrate:status` | Lists every migration in run order, with its batch, and whether it ran (`--json` prints them as JSON: `module`, `name`, `applied`, `batch`, `applied_at`). |
 | `migrate:rollback` | Reverts the last batch, newest migration first. |
 | `migrate:fresh` | Drops every table, then runs every migration as batch 1. |
 | `migrate:fresh --seed` | The same, then runs the [seeders](/docs/database/seeding-and-factories/). |

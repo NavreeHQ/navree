@@ -317,18 +317,22 @@ impl LogFilter {
         if let Ok(time) = DateTime::parse_from_rfc3339(since) {
             return Ok(Some(time.with_timezone(&Utc)));
         }
-        let (number, unit) = since.split_at(since.len().saturating_sub(1));
-        let amount: i64 = number.parse().map_err(|_| {
-            format!("`since` must be an RFC 3339 time or a duration such as 15m, got `{since}`")
-        })?;
+        let invalid =
+            || format!("`since` must be an RFC 3339 time or a duration such as 15m, got `{since}`");
+        let unit_at = since.char_indices().last().map_or(0, |(i, _)| i);
+        let (number, unit) = since.split_at(unit_at);
+        let amount: i64 = number.parse().map_err(|_| invalid())?;
         let delta = match unit {
-            "s" => TimeDelta::seconds(amount),
-            "m" => TimeDelta::minutes(amount),
-            "h" => TimeDelta::hours(amount),
-            "d" => TimeDelta::days(amount),
+            "s" => TimeDelta::try_seconds(amount),
+            "m" => TimeDelta::try_minutes(amount),
+            "h" => TimeDelta::try_hours(amount),
+            "d" => TimeDelta::try_days(amount),
             _ => return Err(format!("`since` must end in s, m, h or d, got `{since}`")),
         };
-        Ok(Some(now - delta))
+        delta
+            .and_then(|delta| now.checked_sub_signed(delta))
+            .map(Some)
+            .ok_or_else(invalid)
     }
 
     fn matches(&self, line: &LogLine, since: Option<DateTime<Utc>>) -> bool {
@@ -523,6 +527,14 @@ mod tests {
         assert_eq!(quoted.target.as_deref(), Some("crm::jobs"));
         assert_eq!(quoted.message, "slow");
 
+        let colons = parse_line("2026-10-20T09:00:00Z ERROR navree::http: error: boom: twice");
+        assert_eq!(colons.target.as_deref(), Some("navree::http"));
+        assert_eq!(colons.message, "error: boom: twice");
+
+        let crate_root = parse_line("2026-10-20T09:00:00Z  INFO crm_api: started");
+        assert_eq!(crate_root.target.as_deref(), Some("crm_api"));
+        assert_eq!(crate_root.message, "started");
+
         let odd = parse_line("not a log line: at all");
         assert_eq!(odd.level, None);
         assert_eq!(odd.message, "not a log line: at all");
@@ -663,16 +675,19 @@ mod tests {
             ["noisy", "last"]
         );
 
-        assert!(
-            read_logs(
-                &files,
-                &LogFilter {
-                    since: Some("yesterday".into()),
-                    ..Default::default()
-                }
-            )
-            .is_err()
-        );
+        for bad in ["yesterday", "15µ", "9999999999999d", "m"] {
+            assert!(
+                read_logs(
+                    &files,
+                    &LogFilter {
+                        since: Some(bad.into()),
+                        ..Default::default()
+                    }
+                )
+                .is_err(),
+                "{bad}"
+            );
+        }
         let recent = read_logs(
             &files,
             &LogFilter {

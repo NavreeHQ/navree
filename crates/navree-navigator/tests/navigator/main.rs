@@ -8,4 +8,5 @@ mod app_tools;
 mod database;
 mod docs;
 mod files;
+mod postgres;
 mod protocol;

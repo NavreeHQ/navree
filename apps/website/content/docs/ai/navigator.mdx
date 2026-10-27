@@ -192,6 +192,8 @@ The configuration tree your app sees, merged from `.env`, `config/app.toml` and 
 
 `search_docs` searches these docs for the Navree version in your `Cargo.lock` and returns the best sections with an excerpt each, their address on navree.com and the slug `read_doc` takes. `read_doc` returns one page as Markdown: give it a slug (`basics/validation`), a `/docs/...` path or a navree.com URL, and optionally a `section` (its heading or anchor) to read only that part. An agent working on an app pinned to an older Navree reads the docs of that version, not of the latest release, so the APIs it finds are the APIs it has. When those docs can't be had (offline and not cached), Navigator answers from the docs it ships with and says so in a `note`.
 
+A version's docs are one JSON file, `docs.json`: `{"version": "0.1.0", "pages": [{"slug": "ai/navigator", "title": "Navigator", "description": "...", "planned": false, "sections": [{"heading": "Options", "anchor": "options", "markdown": "..."}]}]}`, each page split at its `##` headings, the site's components written as plain Markdown.
+
 ## Working with Navigator
 
 Agents use tools they know about. Two things help them reach for Navigator at the right moments:
