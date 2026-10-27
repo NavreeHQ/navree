@@ -135,6 +135,46 @@ async fn finished_requests_are_reported_without_their_query_string() {
 }
 
 #[tokio::test]
+async fn streaming_requests_carry_the_trace_and_are_reported() {
+    let (telemetry, recorder) = recording();
+    let (client, server) = HttpClient::fake();
+    let client = client.with_telemetry(telemetry);
+    server.on(
+        Method::POST,
+        "*",
+        FakeResponse::new(200).body("data: hi\n\n"),
+    );
+
+    TelemetryContext::new(Telemetry::disabled())
+        .with_trace(TraceContext::root(true))
+        .scope(async {
+            let response = client
+                .post("https://api.example.com/v1/stream?key=secret")
+                .send_streaming()
+                .await
+                .unwrap();
+            assert_eq!(response.bytes().await.unwrap(), "data: hi\n\n");
+        })
+        .await;
+
+    let requests = recorder.http_client_requests();
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.method, "POST");
+    assert_eq!(request.url, "https://api.example.com/v1/stream");
+    assert_eq!(request.status, Some(200));
+    assert_eq!(request.attempts, 1, "streaming requests are sent once");
+    let sent = server.recorded()[0]
+        .header("traceparent")
+        .expect("a traceparent")
+        .to_owned();
+    assert_eq!(
+        request.span_id.map(|id| id.to_string()).as_deref(),
+        sent.split('-').nth(2)
+    );
+}
+
+#[tokio::test]
 async fn failures_are_reported_with_the_error_and_attempts() {
     let (telemetry, recorder) = recording();
     let (client, server) = HttpClient::fake_with(HttpClientOptions {
