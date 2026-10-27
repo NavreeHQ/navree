@@ -174,7 +174,8 @@ pub enum SmsDriverKind {
     Twilio,
     /// Vonage's Messages API (`notify.vonage`).
     Vonage,
-    /// Amazon SNS `Publish` (`notify.sns`).
+    /// Amazon SNS `Publish` (`notify.sns`); `aws_sns` is accepted too.
+    #[serde(alias = "aws_sns")]
     Sns,
     /// Writes each message to the log (development).
     Log,
@@ -531,6 +532,16 @@ mod tests {
         assert!(options.validate().unwrap_err().contains("subject"));
         options.web_push.subject = "mailto:ops@acme.test".to_owned();
         assert!(options.validate().is_ok());
+    }
+
+    #[test]
+    fn the_sns_driver_is_also_spelled_aws_sns() {
+        let sources =
+            ConfigSources::new().env_vars("APP_", [("APP_NOTIFY__SMS__DRIVER", "aws_sns")]);
+        let options = Config::load(&sources).unwrap().typed::<NotifyOptions>();
+        // The driver parses; its credentials are missing.
+        let error = options.unwrap_err().to_string();
+        assert!(error.contains("notify.sns.region"), "{error}");
     }
 
     #[test]
