@@ -143,6 +143,8 @@ settings = [
     "audit",
     "access",
     "workspace",
+    # With `helm` on too, the panel's Settings screens.
+    "navree-helm?/settings",
 ]
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,
 ## verified incoming webhooks (pure Rust; in `full`).
