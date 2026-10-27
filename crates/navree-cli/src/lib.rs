@@ -13,6 +13,7 @@
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
+//! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -25,6 +26,7 @@
 //! edited safely becomes a printed hint.
 #![forbid(unsafe_code)]
 
+pub mod browser;
 pub mod cli;
 pub mod clock;
 pub mod commands;
