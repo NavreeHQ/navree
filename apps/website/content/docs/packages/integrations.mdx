@@ -384,6 +384,16 @@ SlackRoute::channel("C0123456789").connection(slack_connection.id);
 TeamsRoute::conversation(service_url, conversation_id).connection(teams_connection.id);
 ```
 
+### Watched mailboxes
+
+With [inbound mail](/docs/digging-deeper/inbound-mail/) in the app too (the `mail-inbound` feature; both are in `full`), `IntegrationsModule` provides `MailboxWatches`. It watches the Microsoft 365 and Gmail mailboxes of a connection, through a Graph subscription or Gmail's `users.watch` and a Pub/Sub push, and hands every new message to the inbound pipeline, where your mailboxes handle it like mail from any other source:
+
+```rust
+let watch = watches.watch(microsoft.id, "security@contoso.example").await?;
+```
+
+The watches are `integration_mailbox_watches` rows in the `integrations` migration set, renewed hourly by `integrations:mailboxes --renew`. The [inbound mail page](/docs/digging-deeper/inbound-mail/#microsoft-365-and-gmail-mailboxes) covers the configuration (`integrations.mailboxes`), the routes and the scopes a connection needs.
+
 ## Health checks
 
 A connection stops working without telling you: an admin removes your app from their tenant, a key is rotated, a service account is deleted. `integrations:check` finds out before your users do. For each connection it asks the provider for a new token (OAuth, app-only and service-account connections) and gets the provider's health probe (`health_url`, or Slack's `auth.test`). Then:
@@ -568,6 +578,7 @@ async fn the_directory_is_read_from_the_connected_tenant() {
 | `integrations.providers.<key>.authority_url` | `https://login.microsoftonline.com` | Microsoft's sign-in host |
 | `integrations.providers.<key>.health_url` | none | A path under the API root that checks get; any 2xx is healthy |
 | `integrations.providers.<key>.header`, `.scheme` | `Authorization`, `Bearer` | `api_key`: where the key goes |
+| `integrations.mailboxes.graph_notification_url`, `.gmail_topic`, `.gmail_token`, `.renew_before_hours` | none, none, none, `24` | [Watched mailboxes](/docs/digging-deeper/inbound-mail/#microsoft-365-and-gmail-mailboxes), with `mail-inbound` |
 
 | Route | Answer |
 |---|---|
@@ -587,6 +598,7 @@ Every route requires the `integrations.manage` permission, in the request's work
 |---|---|
 | `integrations:check` | Checks every connection; `--due` the ones due (what the scheduler runs); `--id <uuid>` one |
 | `integrations:list` | Lists the connections with their owner, kind and health |
+| `integrations:mailboxes` | Lists watched mailboxes; `--renew` renews the due ones (hourly on the scheduler); `--sync <id>` catches one up (with `mail-inbound`) |
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/http-client/" title="HTTP client">
