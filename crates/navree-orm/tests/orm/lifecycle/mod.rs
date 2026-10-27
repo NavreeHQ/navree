@@ -6,3 +6,4 @@ mod models;
 
 mod dispatch;
 mod observers;
+mod quiet;
