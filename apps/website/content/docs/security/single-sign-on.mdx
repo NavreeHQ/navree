@@ -563,7 +563,7 @@ OpenID Connect connections talk to a provider over HTTP; point a connection's `i
 - Directory sync (SCIM) is not part of the module: users are created and their roles updated at sign-in.
 - States, used assertion ids and one-time codes are kept in the cache: give it a shared store with several instances.
 - Only the JSON form of the login route binds a sign-in to the browser (through `state` at the exchange); IdP-initiated sign-ins can't be bound at all, which is why they are off by default.
-- Social sign-in providers (`navree-social`) are separate; a password refusal for a verified domain doesn't stop a social provider that you also offer from signing the same person in.
+- Enforcement refuses passwords only: a social sign-in provider (`navree-social`) or a [passwordless](/docs/security/passwordless/) magic link or code that you also offer still signs the same person in. Leave those off for apps whose customers enforce single sign-on.
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
