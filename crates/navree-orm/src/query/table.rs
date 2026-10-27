@@ -365,8 +365,13 @@ impl TableBuilder {
     /// with the same columns) in one statement; returns how many were
     /// inserted.
     ///
-    /// ```ignore
-    /// table("deal_tag").insert(&uow, [[("deal_id", Value::from(deal)), ("tag_id", Value::from(tag))]]).await?;
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow, deal: Uuid, tag: i64) -> Result<()> {
+    /// table("deal_tag")
+    ///     .insert(&uow, [[("deal_id", Value::from(deal)), ("tag_id", Value::from(tag))]])
+    ///     .await?;
+    /// # Ok(()) }
     /// ```
     pub async fn insert<E, R, C, V>(
         self,

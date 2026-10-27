@@ -469,8 +469,11 @@ pub fn col(name: impl Into<Cow<'static, str>>) -> Column<Untyped, Value> {
 /// An untyped column whose values are read as `T`: for plucks and single
 /// values of tables without a model.
 ///
-/// ```ignore
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db) -> Result<()> {
 /// let titles: Vec<String> = table("deals").pluck(&db, col_as::<String>("title")).await?;
+/// # Ok(()) }
 /// ```
 pub fn col_as<T: Field>(name: impl Into<Cow<'static, str>>) -> Column<Untyped, T> {
     let untyped = col(name);

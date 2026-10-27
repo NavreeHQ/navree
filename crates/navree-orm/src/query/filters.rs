@@ -35,8 +35,12 @@ macro_rules! filters {
     () => {
         /// Adds a condition (`AND`).
         ///
-        /// ```ignore
-        /// Deal::query().where_(Deal::STAGE.eq(Stage::Won)).where_(Deal::AMOUNT_CENTS.gte(10_000))
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let big_wins = Deal::query()
+        ///     .where_(Deal::STAGE.eq(Stage::Won))
+        ///     .where_(Deal::AMOUNT_CENTS.gte(10_000));
+        /// # let _ = big_wins;
         /// ```
         pub fn where_(mut self, filter: impl Into<$crate::Filter>) -> Self {
             $crate::query::filters::HasWheres::push_where(
@@ -560,8 +564,10 @@ macro_rules! filters {
         /// by default), on MySQL `MATCH (...) AGAINST (...)` over a
         /// `FULLTEXT` index. SQLite has no full-text conditions.
         ///
-        /// ```ignore
-        /// Deal::query().where_full_text([Deal::TITLE, Deal::NOTES], "renewal pricing")
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().where_full_text([Deal::TITLE.expr(), Deal::NOTES.expr()], "renewal pricing");
+        /// # let _ = deals;
         /// ```
         pub fn where_full_text(
             self,
@@ -579,8 +585,10 @@ macro_rules! filters {
         /// `websearch`, `boolean`), PostgreSQL's text search language,
         /// MySQL's query expansion.
         ///
-        /// ```ignore
-        /// Deal::query().where_full_text_with([Deal::TITLE], "\"net 30\" -draft", FullText::websearch())
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().where_full_text_with([Deal::TITLE], "\"net 30\" -draft", FullText::websearch());
+        /// # let _ = deals;
         /// ```
         pub fn where_full_text_with(
             self,
@@ -625,8 +633,11 @@ macro_rules! filters {
 
         /// Applies `then` when `condition` holds.
         ///
-        /// ```ignore
-        /// Deal::query().when(filter.mine, |q| q.where_(Deal::OWNER_ID.eq(me)))
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// # let (only_mine, me) = (true, 7_i64);
+        /// let deals = Deal::query().when(only_mine, |q| q.where_(Deal::OWNER_ID.eq(me)));
+        /// # let _ = deals;
         /// ```
         pub fn when(self, condition: bool, then: impl FnOnce(Self) -> Self) -> Self {
             if condition { then(self) } else { self }
@@ -648,8 +659,11 @@ macro_rules! filters {
 
         /// Applies `then` with the value when `value` is `Some`.
         ///
-        /// ```ignore
-        /// Deal::query().when_some(filter.stage, |q, stage| q.where_(Deal::STAGE.eq(stage)))
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// # let stage: Option<Stage> = Some(Stage::Won);
+        /// let deals = Deal::query().when_some(stage, |q, stage| q.where_(Deal::STAGE.eq(stage)));
+        /// # let _ = deals;
         /// ```
         pub fn when_some<V>(self, value: Option<V>, then: impl FnOnce(Self, V) -> Self) -> Self {
             match value {

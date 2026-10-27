@@ -112,8 +112,16 @@ impl<M: Model> Builder<M> {
     /// update timestamp); returns how many rows changed. No hooks run and
     /// no change events are recorded.
     ///
-    /// ```ignore
-    /// Deal::query().where_(Deal::CLOSED_AT.lt(cutoff)).update(&uow, [Deal::STAGE.set(Stage::Lost)]).await?;
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow) -> Result<()> {
+    /// let cutoff = Utc::now() - Duration::days(90);
+    /// let lost = Deal::query()
+    ///     .where_(Deal::STAGE.eq(Stage::Open))
+    ///     .where_(Deal::CREATED_AT.lt(cutoff))
+    ///     .update(&uow, [Deal::STAGE.set(Stage::Lost)])
+    ///     .await?;
+    /// # Ok(()) }
     /// ```
     pub async fn update<E: Executor + ?Sized>(
         self,
@@ -280,9 +288,12 @@ impl<M: Model> Builder<M> {
     /// The first record matching `attributes`, or a new, unsaved one with
     /// them (and whatever `fill` sets on it).
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// let tag = Tag::query().first_or_new(&db, [Tag::NAME.set("vip")], |t| t.color = "gold".into()).await?;
-    /// assert!(!tag.exists() || tag.color == "gold");
+    /// assert!(tag.exists() || tag.color == "gold"); // a new tag got the fill
+    /// # Ok(()) }
     /// ```
     pub async fn first_or_new<E: Executor + ?Sized>(
         self,
@@ -343,8 +354,13 @@ impl<M: Model> Builder<M> {
     /// Updates the first record matching `attributes` with `fill` (and
     /// saves it), or creates one with both.
     ///
-    /// ```ignore
-    /// Setting::query().update_or_create(&uow, [Setting::KEY.set("theme")], |s| s.value = "dark".into()).await?;
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow) -> Result<()> {
+    /// Setting::query()
+    ///     .update_or_create(&uow, [Setting::KEY.set("theme")], |s| s.value = "dark".into())
+    ///     .await?;
+    /// # Ok(()) }
     /// ```
     pub async fn update_or_create<E: Executor + ?Sized>(
         self,

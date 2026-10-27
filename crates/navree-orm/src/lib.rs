@@ -148,3 +148,9 @@ pub mod __private {
     pub use chrono::{DateTime, Utc};
     pub use std::sync::Arc;
 }
+
+/// The models the documentation examples use, so every example compiles.
+/// Not part of the API.
+#[doc(hidden)]
+#[path = "doc_models.rs"]
+pub mod __doc_models;

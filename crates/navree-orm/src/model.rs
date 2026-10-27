@@ -486,11 +486,14 @@ impl ModelMeta {
 /// The derive implements the required methods; the provided ones are the
 /// model API, all taking the executor first:
 ///
-/// ```ignore
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db, uow: Uow) -> Result<()> {
 /// let deal = Deal::create(&uow, Deal { title: "Renewal".into(), ..Default::default() }).await?;
 /// let found = Deal::find(&db, deal.id).await?;
 /// let open = Deal::query().where_(Deal::CLOSED_AT.is_null()).latest().get(&db).await?;
 /// let removed = Deal::destroy(&uow, [deal.id]).await?;
+/// # Ok(()) }
 /// ```
 ///
 /// Records come back as [`Record<Self>`](Record), which dereferences to

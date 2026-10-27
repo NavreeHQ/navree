@@ -135,9 +135,11 @@ macro_rules! clauses {
     () => {
         /// Selects `items`, replacing the select list.
         ///
-        /// ```ignore
-        /// Deal::query().select([Deal::ID, Deal::TITLE])
-        /// table("deals").select(["id", "title as name"])
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().select([Deal::ID.expr(), Deal::TITLE.expr()]);
+        /// let rows = table("deals").select(["id", "title as name"]);
+        /// # let _ = (deals, rows);
         /// ```
         pub fn select<S: $crate::IntoSelect>(mut self, items: impl IntoIterator<Item = S>) -> Self {
             $crate::query::clauses::HasQuery::query_mut(&mut self).columns = items
@@ -175,8 +177,10 @@ macro_rules! clauses {
         /// Adds raw SQL to the select list, with `?` placeholders for
         /// `values` (name the result with `AS`).
         ///
-        /// ```ignore
-        /// Deal::query().select_raw("amount_cents * ? AS with_tax", [1.2])
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().select_raw("amount_cents * ? AS with_tax", [1.2]);
+        /// # let _ = deals;
         /// ```
         pub fn select_raw(
             mut self,
@@ -277,8 +281,10 @@ macro_rules! clauses {
         /// `INNER JOIN table ON first op second`. `table` may carry an
         /// alias: `"companies as c"`.
         ///
-        /// ```ignore
-        /// Deal::query().join("companies", Deal::COMPANY_ID, "=", Company::ID)
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().join("companies", Deal::COMPANY_ID, "=", Company::ID);
+        /// # let _ = deals;
         /// ```
         pub fn join(
             self,
@@ -296,8 +302,12 @@ macro_rules! clauses {
 
         /// `INNER JOIN table ON ...` with the conditions built in `on`.
         ///
-        /// ```ignore
-        /// Deal::query().join_on("companies", |j| j.on(Deal::COMPANY_ID, "=", Company::ID).where_(Company::ACTIVE.eq(true)))
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().join_on("companies", |j| {
+        ///     j.on(Deal::COMPANY_ID, "=", Company::ID).where_(Company::ACTIVE.eq(true))
+        /// });
+        /// # let _ = deals;
         /// ```
         pub fn join_on(
             self,
@@ -378,9 +388,17 @@ macro_rules! clauses {
 
         /// `INNER JOIN (subquery) AS alias ON first op second`.
         ///
-        /// ```ignore
-        /// let latest = Activity::query().select_expr(Expr::max(Activity::CREATED_AT), "at").add_select([Activity::DEAL_ID]).group_by([Activity::DEAL_ID]);
-        /// Deal::query().join_sub(latest, "latest", Deal::ID, "=", "latest.deal_id")
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// // Each deal with the time of its latest activity.
+        /// let latest = Activity::query()
+        ///     .select([Activity::DEAL_ID])
+        ///     .select_expr(Expr::max(Activity::CREATED_AT), "at")
+        ///     .group_by([Activity::DEAL_ID]);
+        /// let deals = Deal::query()
+        ///     .join_sub(latest, "latest", Deal::ID, "=", "latest.deal_id")
+        ///     .add_select(["latest.at"]);
+        /// # let _ = deals;
         /// ```
         pub fn join_sub(
             self,

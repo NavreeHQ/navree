@@ -38,13 +38,16 @@ use self::filters::filters;
 /// orders, limits, scopes, and the retrieval, aggregate, pagination and
 /// mass-write methods that run it.
 ///
-/// ```ignore
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db, me: i64, page: PageQuery) -> Result<()> {
 /// let won = Deal::query()
 ///     .where_(Deal::STAGE.eq(Stage::Won))
 ///     .where_group(|g| g.where_(Deal::OWNER_ID.eq(me)).or_where_null(Deal::OWNER_ID))
 ///     .latest()
 ///     .paginate(&db, page)
 ///     .await?;
+/// # Ok(()) }
 /// ```
 ///
 /// A query selects the model's columns (qualified by its table, so joins
@@ -125,11 +128,15 @@ impl<M: Model> Builder<M> {
     /// conditions around it. `#[scopes]` turns scope functions into builder
     /// methods; this is the plain form.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// fn open(query: Builder<Deal>) -> Builder<Deal> {
     ///     query.where_null(Deal::CLOSED_AT)
     /// }
-    /// Deal::query().scope(open).get(&db).await?;
+    ///
+    /// let open_deals = Deal::query().scope(open).get(&db).await?;
+    /// # Ok(()) }
     /// ```
     pub fn scope(mut self, scope: impl FnOnce(Self) -> Self) -> Self {
         let before = self.ir.wheres.len();
@@ -206,9 +213,16 @@ impl<M: Model> Builder<M> {
     /// The statement the query compiles to for `dialect` (global scopes
     /// applied), without running it.
     ///
-    /// ```ignore
-    /// let sql = Deal::query().where_(Deal::STAGE.eq(Stage::Won)).to_sql(Dialect::Postgres)?;
-    /// assert_eq!(sql.sql, r#"SELECT "deals"."id", ... FROM "deals" WHERE "deals"."stage" = $1"#);
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// # fn main() -> Result<()> {
+    /// let sql = Company::query().where_(Company::ACTIVE.eq(true)).to_sql(Dialect::Postgres)?;
+    /// assert_eq!(
+    ///     sql.sql,
+    ///     r#"SELECT "companies"."id", "companies"."name", "companies"."active" FROM "companies" WHERE "companies"."active" = $1"#
+    /// );
+    /// assert_eq!(sql.values, [Value::from(true)]);
+    /// # Ok(()) }
     /// ```
     pub fn to_sql(&self, dialect: Dialect) -> Result<Statement> {
         compile_select(&self.clone().into_ir(), dialect)
