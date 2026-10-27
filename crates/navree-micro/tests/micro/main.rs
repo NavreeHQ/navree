@@ -11,6 +11,10 @@ mod transports;
 mod nats;
 #[cfg(feature = "nats")]
 mod nats_server;
+#[cfg(feature = "kafka")]
+mod kafka;
+#[cfg(feature = "kafka")]
+mod kafka_server;
 #[cfg(feature = "mqtt")]
 mod mqtt;
 #[cfg(feature = "mqtt")]

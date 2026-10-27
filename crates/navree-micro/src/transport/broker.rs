@@ -18,6 +18,7 @@ use crate::options::TlsOptions;
 
 /// A broker address from a URL such as `mqtts://user:secret@host:8883`.
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(not(feature = "mqtt"), allow(dead_code))]
 pub(crate) struct BrokerUrl {
     /// Whether the scheme asks for TLS.
     pub(crate) tls: bool,
@@ -38,6 +39,7 @@ impl fmt::Debug for BrokerUrl {
     }
 }
 
+#[cfg_attr(not(feature = "mqtt"), allow(dead_code))]
 impl BrokerUrl {
     /// Parses `url`. `schemes` lists the plain and TLS schemes with their
     /// default ports, e.g. `[("mqtt", false, 1883), ("mqtts", true, 8883)]`;
@@ -101,6 +103,7 @@ impl BrokerUrl {
 }
 
 /// `host`, `host:port`, `[v6]` or `[v6]:port`.
+#[cfg_attr(not(feature = "mqtt"), allow(dead_code))]
 fn split_host_port(address: &str) -> Option<(String, Option<u16>)> {
     if let Some(rest) = address.strip_prefix('[') {
         let (host, after) = rest.split_once(']')?;

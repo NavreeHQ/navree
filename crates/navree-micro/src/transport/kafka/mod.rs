@@ -473,6 +473,7 @@ struct Replies(Mutex<HashMap<String, oneshot::Sender<Envelope>>>);
 struct Reader {
     cluster: Arc<Cluster>,
     positions: Vec<(String, i32, i64)>,
+    lane: u64,
 }
 
 impl Reader {
@@ -488,7 +489,12 @@ impl Reader {
                 positions.push((topic.clone(), partition, offsets.get(&partition).copied().unwrap_or(0)));
             }
         }
-        Ok(Reader { cluster, positions })
+        let lane = cluster.lane();
+        Ok(Reader {
+            cluster,
+            positions,
+            lane,
+        })
     }
 
     /// The next records, per topic and partition.
@@ -505,7 +511,8 @@ impl Reader {
             .into_iter()
             .map(|(leader, positions)| {
                 let cluster = self.cluster.clone();
-                async move { (positions.clone(), cluster.fetch(leader, &positions, FETCH_WAIT).await) }
+                let lane = self.lane;
+                async move { (positions.clone(), cluster.fetch(leader, &positions, FETCH_WAIT, lane).await) }
             })
             .collect::<Vec<_>>();
         let mut out = Vec::new();
@@ -656,6 +663,8 @@ struct GroupConsumer {
     start: HashMap<(String, i32), i64>,
     deliveries: mpsc::Sender<Delivery>,
     state: Mutex<GroupState>,
+    /// The connections this consumer fetches on.
+    lane: u64,
 }
 
 impl GroupConsumer {
@@ -691,6 +700,7 @@ impl GroupConsumer {
                 member_id: Uuid::new_v4().simple().to_string(),
                 ..GroupState::default()
             }),
+            lane: transport.cluster.lane(),
         })
     }
 
@@ -1118,7 +1128,8 @@ impl GroupConsumer {
             .into_iter()
             .map(|(leader, asked)| {
                 let cluster = self.cluster.clone();
-                async move { cluster.fetch(leader, &asked, FETCH_WAIT).await }
+                let lane = self.lane;
+                async move { cluster.fetch(leader, &asked, FETCH_WAIT, lane).await }
             })
             .collect::<Vec<_>>();
         let mut out = Vec::new();

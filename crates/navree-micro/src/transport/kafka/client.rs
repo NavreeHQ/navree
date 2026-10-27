@@ -3,7 +3,7 @@
 //! group coordinator's APIs.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -244,12 +244,19 @@ struct Meta {
 }
 
 /// The brokers, their connections and the cluster's metadata.
+///
+/// A broker handles the requests of one connection one at a time, so a
+/// fetch that waits for records holds up everything behind it: each
+/// reader fetches on connections of its own ([`lane`](Cluster::lane)), and
+/// produce, metadata and group requests share the others.
 pub(crate) struct Cluster {
     bootstrap: Vec<String>,
     settings: ConnSettings,
     conns: tokio::sync::Mutex<HashMap<String, Arc<Conn>>>,
+    fetch_conns: tokio::sync::Mutex<HashMap<(String, u64), Arc<Conn>>>,
     meta: Mutex<Meta>,
     round_robin: AtomicUsize,
+    lanes: AtomicU64,
 }
 
 impl Cluster {
@@ -258,9 +265,30 @@ impl Cluster {
             bootstrap,
             settings,
             conns: tokio::sync::Mutex::new(HashMap::new()),
+            fetch_conns: tokio::sync::Mutex::new(HashMap::new()),
             meta: Mutex::new(Meta::default()),
             round_robin: AtomicUsize::new(0),
+            lanes: AtomicU64::new(1),
         }
+    }
+
+    /// A new fetch lane: the connections one reader fetches on.
+    pub(crate) fn lane(&self) -> u64 {
+        self.lanes.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// A live connection to `addr` for the fetches of `lane`.
+    async fn fetch_conn(&self, addr: &str, lane: u64) -> Result<Arc<Conn>, MicroError> {
+        let mut conns = self.fetch_conns.lock().await;
+        let key = (addr.to_owned(), lane);
+        if let Some(conn) = conns.get(&key)
+            && conn.is_alive()
+        {
+            return Ok(conn.clone());
+        }
+        let conn = Conn::open(addr, &self.settings).await?;
+        conns.insert(key, conn.clone());
+        Ok(conn)
     }
 
     /// A live connection to `addr`.
@@ -504,10 +532,22 @@ impl Cluster {
         Ok(offsets)
     }
 
-    /// Fetches from one leader: `positions` lists topic, partition and
-    /// offset. Waits up to `max_wait` for records.
-    pub(crate) async fn fetch(&self, leader: i32, positions: &[(String, i32, i64)], max_wait: Duration) -> Result<FetchResponse, MicroError> {
-        let conn = self.broker(leader).await?;
+    /// Fetches from one leader, on a connection of `lane`: `positions`
+    /// lists topic, partition and offset. Waits up to `max_wait` for
+    /// records.
+    pub(crate) async fn fetch(
+        &self,
+        leader: i32,
+        positions: &[(String, i32, i64)],
+        max_wait: Duration,
+        lane: u64,
+    ) -> Result<FetchResponse, MicroError> {
+        let addr = lock(&self.meta)
+            .brokers
+            .get(&leader)
+            .cloned()
+            .ok_or_else(|| MicroError::transport(format!("Kafka broker {leader} is unknown")))?;
+        let conn = self.fetch_conn(&addr, lane).await?;
         let mut topics: Vec<FetchTopic> = Vec::new();
         for (topic, partition, offset) in positions {
             let entry = FetchPartition::default()
