@@ -1,0 +1,3 @@
+{"timestamp":"2026-10-20T09:12:00.000000Z","level":"INFO","target":"navree::http","fields":{"message":"server listening","addr":"127.0.0.1:8080"}}
+{"timestamp":"2026-10-20T09:12:01.000000Z","level":"ERROR","target":"navree::http","fields":{"message":"handler failed","error":"no such column: notes.pinned"},"span":{"name":"request","method":"GET","path":"/api/notes","request_id":"0199c4b1-aaaa"},"spans":[{"name":"request","method":"GET","path":"/api/notes","request_id":"0199c4b1-aaaa"}]}
+{"timestamp":"2026-10-20T09:12:01.010000Z","level":"INFO","target":"navree::request","fields":{"message":"request completed","method":"GET","route":"/api/notes","status":500,"latency_ms":2.5,"request_id":"0199c4b1-aaaa"}}

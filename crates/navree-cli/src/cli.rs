@@ -84,6 +84,11 @@ pub enum Command {
     /// Stop a service and remove it from dock.toml.
     #[command(name = "dock:remove")]
     DockRemove(DockRemoveArgs),
+    /// Start Navigator, the MCP server for your coding agent, on stdin/stdout.
+    Mcp(McpArgs),
+    /// Install the Navree agent skills into .claude/skills and .agents/skills.
+    #[command(name = "skills:install")]
+    SkillsInstall(SkillsInstallArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -224,6 +229,31 @@ pub enum DockCommand {
 pub struct DockAddArgs {
     /// postgres, redis, meilisearch, mailpit, minio or nats.
     pub service: String,
+}
+
+/// `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]`.
+#[derive(Debug, Args, PartialEq, Eq)]
+pub struct McpArgs {
+    /// The app to serve, instead of the current directory.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
+    /// Never run `cargo build`; use the last built binary, or answer without one.
+    #[arg(long)]
+    pub no_build: bool,
+    /// Let query_database and describe_schema connect to a database that isn't on this machine.
+    #[arg(long)]
+    pub allow_remote_database: bool,
+    /// Never download docs; use the cache or the docs built into Navigator.
+    #[arg(long)]
+    pub docs_offline: bool,
+}
+
+/// `navree skills:install [--path <dir>]`.
+#[derive(Debug, Args, PartialEq, Eq)]
+pub struct SkillsInstallArgs {
+    /// The project to install into, instead of the current directory.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
 }
 
 /// `navree dock:remove <service> [--volumes]`.
@@ -410,6 +440,49 @@ mod tests {
             panic!("expected dock:remove");
         };
         assert!(!args.volumes);
+    }
+
+    #[test]
+    fn mcp_options() {
+        let Command::Mcp(args) = parse(&["mcp"]) else {
+            panic!("expected mcp");
+        };
+        assert_eq!(
+            args,
+            McpArgs {
+                path: None,
+                no_build: false,
+                allow_remote_database: false,
+                docs_offline: false
+            }
+        );
+        let Command::Mcp(args) = parse(&[
+            "mcp",
+            "--path",
+            "/home/ada/code/crm",
+            "--no-build",
+            "--allow-remote-database",
+            "--docs-offline",
+        ]) else {
+            panic!("expected mcp");
+        };
+        assert_eq!(
+            args.path.as_deref(),
+            Some(std::path::Path::new("/home/ada/code/crm"))
+        );
+        assert!(args.no_build && args.allow_remote_database && args.docs_offline);
+    }
+
+    #[test]
+    fn skills_install_options() {
+        let Command::SkillsInstall(args) = parse(&["skills:install"]) else {
+            panic!("expected skills:install");
+        };
+        assert_eq!(args, SkillsInstallArgs { path: None });
+        let Command::SkillsInstall(args) = parse(&["skills:install", "--path", "../crm"]) else {
+            panic!("expected skills:install");
+        };
+        assert_eq!(args.path.as_deref(), Some(std::path::Path::new("../crm")));
     }
 
     #[test]

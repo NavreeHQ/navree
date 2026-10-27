@@ -106,13 +106,13 @@ each test run.
 
 ```
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
+L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock and navree-navigator)
 L7  navree-billing  navree-search (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
-L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
 L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock (dev tool; no navree deps)
 ```
@@ -132,6 +132,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
 | L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
+| L2 | `navree-navigator` | Navigator, the MCP server for coding agents behind `navree mcp`: routes, the module graph and providers, the schema, read-only SQL, logs and the last error, redacted configuration and the docs of the app's Navree version; and the agent skills of `navree skills:install` (a dev tool; opt-in facade feature `navigator`) |
 | L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
@@ -158,7 +159,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
 | L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue (facade feature `search`, opt-in) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree mcp`, `navree skills:install` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
