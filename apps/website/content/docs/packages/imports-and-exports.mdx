@@ -7,7 +7,7 @@ description: "CSV and Excel exports from typed rows, streamed or queued to a dis
 
 <Badge feature="sheets" /> Business apps live on spreadsheets. Customers export their contacts to Excel every Monday, and import ten thousand employees from a file someone saved in Excel on a Windows laptop set to Arabic. `navree-sheets` handles both directions.
 
-**Exports.** You describe a row with `#[derive(Exportable)]` and return a `Download` from a handler. CSV files start with a byte-order mark, so Excel opens Arabic, accented and Japanese text correctly, and text that a spreadsheet would run as a formula is escaped. XLSX files have typed cells, date formats and a bold, frozen, filtered header row. A named export can also run on the [queue](/docs/digging-deeper/queues/): it writes the file to a [disk](/docs/digging-deeper/file-storage/) and hands back a signed link.
+**Exports.** You describe a row with `#[derive(Exportable)]` and return a `Download` from a handler. CSV files start with a byte-order mark, so Excel opens Arabic, accented and Japanese text correctly, and text that a spreadsheet would run as a formula is escaped. XLSX files have typed cells, date formats and a bold, frozen, filtered header row. A named export can also run on the [queue](/docs/digging-deeper/queues/): it writes the file to a [disk](/docs/digging-deeper/storage/) and hands back a signed link.
 
 **Imports.** You describe a row with `#[derive(Deserialize, Validate, Importable)]` and say how a row is saved. Navree does the rest:
 
@@ -257,7 +257,7 @@ Content-Type: application/json
 { "format": "xlsx", "params": { "vip": true } }
 ```
 
-The answer is `202` with an [operation](/docs/digging-deeper/queues/#operations) of kind `export.contacts`. The client follows it at `GET /api/operations/{id}/events`. Its job (`sheets.export`) writes the file to `sheets.exports.disk` under `exports/<date>/<operation id>/`, and the operation finishes with an `ExportResult`:
+The answer is `202` with an [operation](/docs/digging-deeper/batches-and-operations/#operations) of kind `export.contacts`. The client follows it at `GET /api/operations/{id}/events`. Its job (`sheets.export`) writes the file to `sheets.exports.disk` under `exports/<date>/<operation id>/`, and the operation finishes with an `ExportResult`:
 
 ```json title="result"
 {
@@ -521,7 +521,7 @@ Content-Type: application/json
 | `update` | Saved with `update` |
 | `fail` | Refused: applying is `409 import_has_duplicates` while the file has duplicates or repeated rows |
 
-The answer is `202` (status `applying`) with a new operation. The rows to save are cut into jobs of `sheets.imports.chunk_size` rows (`sheets.import.apply`), dispatched as one [batch](/docs/digging-deeper/queues/#batches) whose progress is the operation's. Each row is saved in its own unit of work, as the user who uploaded the file, so one failing row never rolls back another, and the row's new status commits with it. Repeated rows are never applied, whatever the mode.
+The answer is `202` (status `applying`) with a new operation. The rows to save are cut into jobs of `sheets.imports.chunk_size` rows (`sheets.import.apply`), dispatched as one [batch](/docs/digging-deeper/batches-and-operations/#batches) whose progress is the operation's. Each row is saved in its own unit of work, as the user who uploaded the file, so one failing row never rolls back another, and the row's new status commits with it. Repeated rows are never applied, whatever the mode.
 
 When the batch is done, its last job (`sheets.import.finish`) counts the rows, writes the error file, marks the import `completed` and calls `completed`. Cancelling the operation (`DELETE /api/operations/{id}`) stops it between rows: the import goes back to `staged` with an `error` saying how many rows were saved, and applying it again saves the rest.
 
@@ -674,7 +674,7 @@ Over HTTP, post a `multipart/form-data` body with `importer` and `file` fields. 
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
     The workers, batches and operations imports and exports run on.
   </LinkCard>
-  <LinkCard href="/docs/digging-deeper/file-storage/" title="File storage">
+  <LinkCard href="/docs/digging-deeper/storage/" title="File storage">
     The disks uploads and export files live on, and signed links.
   </LinkCard>
   <LinkCard href="/docs/basics/validation/" title="Validation">
