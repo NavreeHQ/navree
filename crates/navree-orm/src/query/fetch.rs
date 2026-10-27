@@ -112,9 +112,10 @@ impl<M: Model> Builder<M> {
     /// The rows of the query with `items` as its select list (global scopes
     /// applied).
     async fn select_rows(self, target: &Target<'_>, items: Vec<SelectItem>) -> Result<Vec<Row>> {
-        let mut builder = self.apply_global_scopes();
-        builder.ir.columns = items;
-        target.fetch(&builder.ir).await
+        let builder = self.apply_global_scopes();
+        let defaults = crate::query::model_columns::<M>(builder.ir.table.qualifier());
+        let query = crate::query::reading_values(builder.ir, items, defaults);
+        target.fetch(&query).await
     }
 
     /// The query's records.

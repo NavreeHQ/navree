@@ -43,6 +43,19 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_compound_queries() {
+    run(Server::Postgres, |db| {
+        scenarios::compound(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_compound_queries() {
+    run(Server::MySql, |db| scenarios::compound(db, Server::MySql)).await;
+}
+
+#[tokio::test]
 async fn postgres_locks() {
     run(Server::Postgres, scenarios::locks).await;
 }

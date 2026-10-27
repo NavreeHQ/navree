@@ -664,16 +664,20 @@ pub enum InValues {
     Subquery(Box<QueryIr>),
 }
 
-/// A table, optionally aliased, or a subquery used as a table (`FROM
-/// (SELECT ...) AS alias`, `JOIN (SELECT ...) AS alias`).
+/// A table, optionally aliased, a subquery used as a table (`FROM
+/// (SELECT ...) AS alias`, `JOIN (SELECT ...) AS alias`), or the rows of a
+/// set-returning function (`FROM generate_series(1, 10) AS n`).
 #[derive(Clone, Debug)]
 pub struct TableRef {
-    /// The table name (for a subquery, its alias).
+    /// The table name (for a subquery or a function, its alias).
     pub name: Cow<'static, str>,
     /// The alias.
     pub alias: Option<Cow<'static, str>>,
     /// The subquery the rows come from, when the table is a subquery.
     pub subquery: Option<Box<QueryIr>>,
+    /// The function call (an [`Expr::Function`]) the rows come from, when
+    /// the table is a set-returning function. SQL drivers only.
+    pub function: Option<Box<Expr>>,
 }
 
 impl TableRef {
@@ -683,6 +687,7 @@ impl TableRef {
             name: name.into(),
             alias: None,
             subquery: None,
+            function: None,
         }
     }
 
@@ -695,6 +700,7 @@ impl TableRef {
             name: name.into(),
             alias: Some(alias.into()),
             subquery: None,
+            function: None,
         }
     }
 
@@ -705,6 +711,19 @@ impl TableRef {
             name: alias.clone(),
             alias: Some(alias),
             subquery: Some(Box::new(query)),
+            function: None,
+        }
+    }
+
+    /// The rows the set-returning function call `call` (an
+    /// [`Expr::Function`]) returns, named `alias`.
+    pub fn function(call: Expr, alias: impl Into<Cow<'static, str>>) -> Self {
+        let alias = alias.into();
+        TableRef {
+            name: alias.clone(),
+            alias: Some(alias),
+            subquery: None,
+            function: Some(Box::new(call)),
         }
     }
 
@@ -749,6 +768,25 @@ pub enum JoinKind {
     Right,
     /// `CROSS JOIN`.
     Cross,
+    /// `INNER JOIN LATERAL (subquery) AS alias ON true`: the subquery
+    /// runs once per row and may use its columns (PostgreSQL, MySQL
+    /// 8.0.14+).
+    Lateral,
+    /// `LEFT JOIN LATERAL (subquery) AS alias ON true`.
+    LeftLateral,
+}
+
+/// At most [`limit`](GroupLimit::limit) rows per value of
+/// [`column`](GroupLimit::column) (top N per group), in the query's order:
+/// `ROW_NUMBER() OVER (PARTITION BY column ORDER BY ..)` in a derived
+/// table. The query's offset skips rows per group; its limit caps the whole
+/// result.
+#[derive(Clone, Debug)]
+pub struct GroupLimit {
+    /// The most rows per group.
+    pub limit: u64,
+    /// The column (or expression) whose values form the groups.
+    pub column: Expr,
 }
 
 /// A join.
@@ -980,6 +1018,8 @@ pub struct QueryIr {
     pub lock: Option<Lock>,
     /// `UNION`s.
     pub unions: Vec<Union>,
+    /// At most so many rows per group (top N per parent).
+    pub group_limit: Option<GroupLimit>,
     /// Problems found while building the query; it fails with them when
     /// it runs.
     pub errors: Vec<String>,
@@ -1001,6 +1041,7 @@ impl QueryIr {
             offset: None,
             lock: None,
             unions: Vec::new(),
+            group_limit: None,
             errors: Vec::new(),
         }
     }
