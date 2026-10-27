@@ -49,6 +49,19 @@ pub(crate) fn hook_entries(lifecycle: &Lifecycle, krate: &TokenStream) -> Vec<To
         .collect()
 }
 
+/// The capability traits a model's declarations give it:
+/// `SoftDeleting` for `soft_deletes`.
+pub(crate) fn capability_impls(model: &Ident, soft_deletes: bool, krate: &TokenStream) -> TokenStream {
+    let mut impls = TokenStream::new();
+    if soft_deletes {
+        impls.extend(quote! {
+            #[automatically_derived]
+            impl #krate::SoftDeleting for #model {}
+        });
+    }
+    impls
+}
+
 /// `fn hooks()`, built once per model (in a `static`) from `entries`.
 pub(crate) fn hooks_fn(model: &Ident, entries: &[TokenStream], krate: &TokenStream) -> TokenStream {
     if entries.is_empty() {

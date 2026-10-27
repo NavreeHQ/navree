@@ -1,5 +1,5 @@
 //! The models the documentation examples use (`Deal`, `Company`,
-//! `Activity`, `Tag`, `Setting`, `Event`), with every name the examples
+//! `Activity`, `Tag`, `Setting`, `Note`, `Event`), with every name the examples
 //! need in scope, so that each example compiles. Not API: hidden from the
 //! docs, and it may change at any time.
 
@@ -106,6 +106,22 @@ pub struct Setting {
     pub key: String,
     /// Its value.
     pub value: String,
+}
+
+/// A note that goes to the trash before it is gone.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(timestamps, soft_deletes)]
+pub struct Note {
+    /// The key (assigned by the database).
+    pub id: i64,
+    /// The text.
+    pub body: String,
+    /// When it was written.
+    pub created_at: DateTime<Utc>,
+    /// When it last changed.
+    pub updated_at: DateTime<Utc>,
+    /// When it was trashed.
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// Something that happened, for a feed.

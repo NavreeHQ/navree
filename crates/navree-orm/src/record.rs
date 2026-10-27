@@ -43,6 +43,8 @@ pub struct Record<M: Model> {
     pub(crate) previous: Vec<(&'static str, Value)>,
     pub(crate) extras: Vec<(String, Value)>,
     pub(crate) relations: Relations,
+    /// Set while `force_delete` runs (see `is_force_deleting`).
+    pub(crate) force_deleting: bool,
 }
 
 impl<M: Model> Record<M> {
@@ -58,6 +60,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras: Vec::new(),
             relations: Relations::new(),
+            force_deleting: false,
         }
     }
 
@@ -82,6 +85,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras,
             relations: Relations::new(),
+            force_deleting: false,
         })
     }
 
@@ -569,6 +573,7 @@ impl<M: Model> Clone for Record<M> {
             previous: self.previous.clone(),
             extras: self.extras.clone(),
             relations: self.relations.clone(),
+            force_deleting: self.force_deleting,
         }
     }
 }
