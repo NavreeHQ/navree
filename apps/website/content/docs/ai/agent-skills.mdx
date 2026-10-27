@@ -54,6 +54,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-events-and-broadcasting` | Events and listeners, and live updates over the Pusher-protocol WebSocket server |
 | `navree-mail-and-notifications` | Mail with templates and transports, and notifications over the database, mail and broadcast channels |
 | `navree-mail-delivery` | Email API transports, transports per domain, workspace and organization, the delivery log fed by provider webhooks, suppressions, hold for approval, tracking, DKIM signing and sending-domain checks |
+| `navree-inbound-mail` | Mailboxes routed by address with `m.mailbox`, `InboundMail` and forwarded messages, signed reply addresses with `ReplyTokens`, raw `.eml` files on a disk, the SES, Mailgun, Postmark and raw MIME sources, Microsoft 365 and Gmail mailboxes watched through integration connections, and `MailFake::receive` in tests |
 | `navree-notification-preferences` | What people and workspaces receive: channels per category with `#[notification]`, digests that batch mail, quiet hours and send windows on the recipient's clock, `notify:release`, the preference routes and per-workspace mail templates |
 | `navree-storage` | Disks, uploads checked by content, downloads and signed temporary URLs |
 | `navree-cache-and-http-client` | The cache and locks, and outgoing HTTP with retries, the SSRF guard and `HttpClient::fake()` |

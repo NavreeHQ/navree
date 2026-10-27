@@ -45,7 +45,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
-| L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks |
+| L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks; [inbound mail](/docs/digging-deeper/inbound-mail/) parsed and routed to mailboxes by address, with signed reply addresses |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L3 | `navree-time` | [Time zones](/docs/digging-deeper/time-zones/): the request's zone, local days, send windows, holidays, local-time SQL |
@@ -95,7 +95,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-cache`, `navree-http-client`, `navree-schema` | kernel, contracts, config |
 | `navree-db` | kernel, contracts, config, http, schema |
 | `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
-| `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables) |
+| `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables), storage (a same-layer edge, feature `inbound`: raw messages on disks) |
 | `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
 | `navree-time` | kernel, contracts, config, http |
 | `navree-session` | kernel, contracts, config, http, crypto, db |
@@ -113,7 +113,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-sso` | kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
-| `navree-integrations` | kernel, contracts, config, http, crypto, cache, events, http-client, db, schedule, workspace, orm |
+| `navree-integrations` | kernel, contracts, config, http, crypto, cache, events, http-client, db, schedule, workspace, orm, notify (feature `notify`), mail (feature `mail`: watched mailboxes) |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
