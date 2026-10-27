@@ -230,7 +230,31 @@ async fn handlers_see_the_message_context() {
     assert_eq!(body["attempt"], 1);
     assert_eq!(body["deadline"], true);
     assert!(body["message_id"].as_str().is_some_and(|id| id.len() == 36));
-    assert!(body["traceparent"].as_str().is_some_and(|t| t.starts_with("00-")));
+    let traceparent = body["traceparent"].as_str().expect("a traceparent");
+    let mut fields = traceparent.split('-').skip(1);
+    let (trace_id, span_id) = (fields.next().unwrap(), fields.next().unwrap());
+    assert_eq!(body["trace_id"], trace_id, "the handler continues the sender's trace");
+    assert_eq!(body["parent_span_id"], span_id, "under the sender's span");
+    assert_eq!(body["request_id_seen"], body["request_id"]);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_message_sent_from_a_handler_stays_in_the_trace() {
+    let micro = MicroFake::new();
+    let (app, _) = deals_app(&micro).await;
+    micro.on("companies.get", Reply::json(&json!({ "ok": true })));
+    let _: Value = micro
+        .client()
+        .send("deals.relay", &"companies.get")
+        .header("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+        .await
+        .unwrap();
+    let relayed = &micro.sent_envelopes("companies.get")[0];
+    let traceparent = relayed.header("traceparent").expect("a traceparent");
+    assert!(traceparent.starts_with("00-0af7651916cd43dd8448eb211c80319c-"), "{traceparent}");
+    assert!(!traceparent.contains("b7ad6b7169203331"), "a span of its own: {traceparent}");
+    assert!(traceparent.ends_with("-01"), "the sampling decision travels: {traceparent}");
     app.shutdown().await.unwrap();
 }
 

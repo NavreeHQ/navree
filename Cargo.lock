@@ -4254,6 +4254,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-macros",
+ "navree-telemetry",
  "navree-testing",
  "navree-validation",
  "percent-encoding",

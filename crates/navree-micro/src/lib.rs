@@ -24,8 +24,9 @@
 //!   features `nats`, `kafka`, `rabbitmq`, `redis` and `mqtt` (facade:
 //!   `micro-nats`, ...). Write your own with [`MicroTransport`].
 //! - **Context.** The request id, the caller's `Authorization`, the
-//!   workspace (`x-workspace`) and the W3C trace context
-//!   ([`TraceContext`]) follow every message.
+//!   workspace (`x-workspace`) and the W3C trace context follow every
+//!   message: a handler runs in a navree-telemetry `TelemetryContext` that
+//!   continues the sender's trace, and what it sends continues it again.
 //! - **Tests.** [`MicroFake`] stubs other services ([`Reply`]), records
 //!   what the app sends and emits, and sends into the app's handlers.
 //!
@@ -58,7 +59,6 @@ mod payload;
 mod pipeline;
 mod runtime;
 mod store;
-mod trace;
 mod transport;
 
 pub mod conformance;
@@ -80,7 +80,6 @@ pub use options::{
 pub use pattern::{check_pattern, has_wildcard, pattern_matches};
 pub use payload::Payload;
 pub use store::{DEAD_LETTERS_TABLE, DeadLetter, INBOX_TABLE, OUTBOX_TABLE};
-pub use trace::TraceContext;
 pub use transport::{
     Delivery, DeliveryActions, Group, MemoryTransport, MicroTransport, PatternKind, Subscription,
     TcpTransport, Transport, TransportKind,

@@ -15,10 +15,11 @@ use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::{AppError, GlobalLayer, LayerSlot};
+use navree_telemetry::{TelemetryContext, TraceContext};
 use uuid::Uuid;
 
 use crate::envelope::headers;
-use crate::{PatternKind, TraceContext};
+use crate::PatternKind;
 
 /// What a handler knows about the message it handles: the pattern, the
 /// message id, the sending service, the deadline, the headers, the actor
@@ -127,6 +128,7 @@ impl<S: Send + Sync> FromRequestParts<S> for MessageContext {
 pub(crate) struct CallContext {
     pub(crate) authorization: Option<String>,
     pub(crate) request_id: Option<String>,
+    /// The span the work runs in: what a message sent from it continues.
     pub(crate) trace: Option<TraceContext>,
     pub(crate) workspace: Option<String>,
     pub(crate) actor: Option<Uuid>,
@@ -158,7 +160,10 @@ impl CallContext {
         CURRENT.scope(self, future).await
     }
 
-    /// The context of an HTTP request (or a message's request parts).
+    /// The context of an HTTP request (or a message's request parts). The
+    /// trace is the current `TelemetryContext`'s (what navree-http and the
+    /// message pipeline set), else the one the `traceparent` header
+    /// continues.
     pub(crate) fn of_parts(parts: &Parts) -> CallContext {
         let header = |name: &str| {
             parts
@@ -167,9 +172,13 @@ impl CallContext {
                 .and_then(|value| value.to_str().ok())
                 .map(str::to_owned)
         };
-        let trace = header(headers::TRACEPARENT).and_then(|traceparent| {
-            TraceContext::parse(&traceparent, header(headers::TRACESTATE).as_deref())
-        });
+        let trace = TelemetryContext::with_current(|context| context.trace().cloned())
+            .flatten()
+            .or_else(|| {
+                header(headers::TRACEPARENT).and_then(|traceparent| {
+                    TraceContext::continue_from(&traceparent, header(headers::TRACESTATE).as_deref())
+                })
+            });
         CallContext {
             authorization: header(AUTHORIZATION.as_str()),
             request_id: parts
@@ -254,12 +263,28 @@ mod tests {
         let context = CallContext::of_parts(&parts);
         assert_eq!(context.authorization.as_deref(), Some("Bearer t0k3n"));
         assert_eq!(context.request_id.as_deref(), Some("req-1"));
+        let trace = context.trace.unwrap();
+        assert_eq!(trace.trace_id.to_string(), "4bf92f3577b34da6a3ce929d0e0e4736");
         assert_eq!(
-            context.trace.unwrap().trace_id(),
-            "4bf92f3577b34da6a3ce929d0e0e4736"
+            trace.parent_span_id.map(|span| span.to_string()).as_deref(),
+            Some("00f067aa0ba902b7"),
+            "the header's span is the parent"
         );
         assert_eq!(context.workspace.as_deref(), Some("acme"));
         assert_eq!(context.actor, Some(user));
+    }
+
+    #[test]
+    fn the_telemetry_context_trace_wins_over_the_header() {
+        let request = http::Request::builder()
+            .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+            .body(())
+            .unwrap();
+        let (parts, ()) = request.into_parts();
+        let span = TraceContext::root(true);
+        let context = TelemetryContext::new(navree_telemetry::Telemetry::disabled()).with_trace(span.clone());
+        let call = context.sync_scope(|| CallContext::of_parts(&parts));
+        assert_eq!(call.trace, Some(span));
     }
 
     #[tokio::test]

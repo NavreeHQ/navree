@@ -24,6 +24,7 @@ use navree_http::{
     AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, RouteAuthorizer, RouteMeta,
 };
 use navree_kernel::{AppContext, BoxError, RequestScope};
+use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -32,7 +33,7 @@ use crate::context::{CallContext, MICRO_CONTEXT_LAYER, MessageContext, MessageIn
 use crate::envelope::headers;
 use crate::handlers::{HandlerRegistration, PatternMeta};
 use crate::store::{Store, StoredReply};
-use crate::{Codec, Envelope, PatternKind, TraceContext, check_pattern, has_wildcard};
+use crate::{Codec, Envelope, PatternKind, check_pattern, has_wildcard};
 
 /// The method recorded in a pattern's `RouteMeta` (audit entries and denial
 /// logs name the pattern in place of the route).
@@ -89,6 +90,9 @@ pub(crate) struct PipelineSettings {
     /// Whether the transport supports wildcards, and its name.
     pub(crate) wildcards: bool,
     pub(crate) transport: &'static str,
+    /// `observe.tracing`.
+    pub(crate) trace: TracePolicy,
+    pub(crate) telemetry: Telemetry,
 }
 
 /// The app's message handlers behind their pipeline.
@@ -96,6 +100,8 @@ pub(crate) struct MessageRouter {
     router: Router,
     pub(crate) patterns: Vec<Arc<Registered>>,
     mappers: Vec<ErrorMapper>,
+    trace: TracePolicy,
+    telemetry: Telemetry,
 }
 
 impl fmt::Debug for MessageRouter {
@@ -237,7 +243,24 @@ impl MessageRouter {
             router,
             patterns,
             mappers,
+            trace: settings.trace,
+            telemetry: settings.telemetry.clone(),
         })
+    }
+
+    /// The span a message is handled in: it continues the sender's trace
+    /// (`traceparent`, `tracestate`), or starts one sampled as
+    /// `observe.tracing.sample_ratio` says; none when tracing is off.
+    /// Messages come from the app's own services, so the sender's trace is
+    /// continued whatever `trust_incoming` says, as a queued job's is.
+    pub(crate) fn trace_of(&self, envelope: &Envelope) -> Option<TraceContext> {
+        if !self.trace.enabled {
+            return None;
+        }
+        envelope
+            .header(headers::TRACEPARENT)
+            .and_then(|traceparent| TraceContext::continue_from(traceparent, envelope.header(headers::TRACESTATE)))
+            .or_else(|| Some(TraceContext::root_sampled(self.trace.sample_ratio)))
     }
 
     /// Runs `envelope` through the handler of pattern `index` and returns
@@ -257,22 +280,23 @@ impl MessageRouter {
             Ok(request) => request,
             Err(error) => return Outcome::error(&error),
         };
+        let trace = self.trace_of(envelope);
         let span = tracing::info_span!(
             "message",
             pattern = %envelope.pattern(),
             kind = %registered.kind,
             request_id = %request_id,
-            trace_id = envelope
-                .header(headers::TRACEPARENT)
-                .and_then(|t| TraceContext::parse(t, None))
-                .map(|t| t.trace_id())
+            trace_id = trace
+                .as_ref()
+                .map(|trace| trace.trace_id.to_string())
                 .unwrap_or_default(),
         );
-        let call = self.router.clone().oneshot(request);
-        let mut response = match AssertUnwindSafe(tracing::Instrument::instrument(call, span))
-            .catch_unwind()
-            .await
-        {
+        let mut telemetry = TelemetryContext::new(self.telemetry.clone()).with_request_id(request_id.as_str());
+        if let Some(trace) = trace {
+            telemetry = telemetry.with_trace(trace);
+        }
+        let call = telemetry.scope(tracing::Instrument::instrument(self.router.clone().oneshot(request), span));
+        let mut response = match AssertUnwindSafe(call).catch_unwind().await {
             Ok(Ok(response)) => response,
             Ok(Err(never)) => match never {},
             Err(panic) => {
