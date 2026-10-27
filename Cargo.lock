@@ -3467,6 +3467,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-browser"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
 name = "navree-cache"
 version = "0.1.0"
 dependencies = [
