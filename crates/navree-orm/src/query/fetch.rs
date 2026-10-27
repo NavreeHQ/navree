@@ -89,26 +89,31 @@ const KEY: &str = "key";
 
 impl<M: Model> Builder<M> {
     /// Runs the query on `target` and reads its records (with the strict
-    /// modes of the executor's app, running the `Retrieved` hooks).
+    /// modes of the executor's app, running the `Retrieved` hooks), then
+    /// loads its eager loads into them (an empty result still checks the
+    /// names of the first level).
     pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
-        let ir = self.into_ir();
+        let mut query = self.with_pending_default_counts();
+        let eager = query.take_eager();
+        let ir = query.into_ir();
         let rows = target.fetch(&ir).await?;
-        if rows.is_empty() {
-            return Ok(Collection::new());
-        }
-        let ctx = target.context();
-        let strictness = ctx.strictness().await;
-        let mut records = crate::strict::sync_scope(strictness, || {
-            rows.iter()
-                .map(Record::<M>::from_row)
-                .collect::<Result<Vec<_>>>()
-        })?;
-        let hooks = Hooks::<M>::resolve(&ctx).await?;
-        if !hooks.is_empty() {
-            for record in &mut records {
-                hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+        let mut records = Vec::new();
+        if !rows.is_empty() {
+            let ctx = target.context();
+            let strictness = ctx.strictness().await;
+            records = crate::strict::sync_scope(strictness, || {
+                rows.iter()
+                    .map(Record::<M>::from_row)
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            let hooks = Hooks::<M>::resolve(&ctx).await?;
+            if !hooks.is_empty() {
+                for record in &mut records {
+                    hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+                }
             }
         }
+        crate::relations::eager::after_fetch(target, &mut records, &eager).await?;
         Ok(Collection::from(records))
     }
 

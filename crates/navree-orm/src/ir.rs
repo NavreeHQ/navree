@@ -228,6 +228,19 @@ pub enum Expr {
         /// The table, for `table.*`.
         table: Option<Cow<'static, str>>,
     },
+    /// `EXISTS (subquery)` as a value: true when the subquery has a row
+    /// (relation existence flags, `with_exists`).
+    Exists(Box<QueryIr>),
+    /// `ROW_NUMBER() OVER (PARTITION BY .. ORDER BY ..)`: the row's
+    /// position within its partition (the per-parent limits of eager
+    /// loads). SQL databases with window functions: PostgreSQL, MySQL 8,
+    /// MariaDB 10.2, SQLite 3.25.
+    RowNumber {
+        /// The partition expressions.
+        partition: Vec<Expr>,
+        /// The order within each partition.
+        order: Vec<Order>,
+    },
 }
 
 /// An aggregate function.

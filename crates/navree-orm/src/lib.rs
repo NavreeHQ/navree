@@ -14,6 +14,12 @@
 //!   `last`. [`TableBuilder`] queries tables without a model.
 //! - **Records** ([`Record`]) carry dirty tracking, extras and loaded
 //!   relations; saving inserts or updates, with lifecycle [`hooks`].
+//! - **Relationships** ([`relations`](mod@relations)) are methods of a
+//!   `#[relations]` impl block (belongs to, has one/many, many to many
+//!   with pivots, through, polymorphic): query them like builders, eager
+//!   load them in batches (`with("company.owner")`), check their existence
+//!   (`where_has`), aggregate them (`with_count`), and write through them
+//!   (`attach`, `sync`, `associate`).
 //! - **The lifecycle**: model [`events`] heard by observers, closures,
 //!   typed application events and [`broadcast`]s (after the commit inside a
 //!   unit of work), quiet operations, soft deletes (`restore`,
@@ -161,16 +167,18 @@ pub use value::{
     Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]` and `#[scopes]` (see their documentation in
-/// navree-orm-macros).
-pub use navree_orm_macros::{Model, scopes};
+/// `#[derive(Model)]`, `#[scopes]` and `#[relations]` (see their
+/// documentation in navree-orm-macros).
+pub use navree_orm_macros::{Model, relations, scopes};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
+    pub use crate::relations::derive_support as relations;
     pub use chrono::{DateTime, Utc};
+    pub use serde;
     pub use std::sync::{Arc, OnceLock};
 }
 

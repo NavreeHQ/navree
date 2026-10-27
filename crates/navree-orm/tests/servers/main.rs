@@ -7,6 +7,7 @@
 
 mod lifecycle;
 mod models;
+mod relations;
 mod scenarios;
 mod support;
 
@@ -60,8 +61,21 @@ async fn postgres_lifecycle() {
 }
 
 #[tokio::test]
+async fn postgres_relations() {
+    run(Server::Postgres, |db| {
+        relations::relations(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn mysql_lifecycle() {
     run(Server::MySql, |db| lifecycle::scenario(db, Server::MySql)).await;
+}
+
+#[tokio::test]
+async fn mysql_relations() {
+    run(Server::MySql, |db| relations::relations(db, Server::MySql)).await;
 }
 
 #[tokio::test]

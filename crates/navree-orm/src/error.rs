@@ -147,15 +147,46 @@ pub enum OrmError {
         columns: Vec<String>,
     },
     /// A relation was loaded lazily for a record that came with others (one
-    /// query per record), and the strict mode `prevent_lazy_loading` is on.
+    /// query per record), and the strict mode `prevent_lazy_loading` is on
+    /// (or [`LazyLoading`](crate::relations::LazyLoading) prevents it).
     #[error(
-        "relation `{relation}` of {model} was loaded lazily, one record at a time: eager load it (with(\"{relation}\")) on the query that read the records"
+        "relation `{relation}` of {model} was loaded lazily, one record at a time: eager load it (with(\"{relation}\")) on the query that read the records, or on the collection (load)"
     )]
     LazyLoading {
         /// The model.
         model: Cow<'static, str>,
         /// The relation.
         relation: Cow<'static, str>,
+    },
+    /// A relation path (`with("company.owner")`, `has("activities")`, ...)
+    /// names a relation the model does not declare.
+    #[error("{model} has no relation `{relation}`{}", known_relations(known))]
+    RelationNotFound {
+        /// The model the relation was looked up on.
+        model: Cow<'static, str>,
+        /// The relation name that was asked for.
+        relation: String,
+        /// The relations the model does declare.
+        known: Vec<String>,
+    },
+    /// A model was used in a polymorphic relation without an entry in the
+    /// morph map while the map is required (see
+    /// [`MorphMap`](crate::relations::MorphMap)).
+    #[error(
+        "{model} has no entry in the morph map, which is required: register it with MorphMap::register::<{model}>()"
+    )]
+    MorphNotMapped {
+        /// The model.
+        model: Cow<'static, str>,
+    },
+    /// A polymorphic type column holds a name no model is registered
+    /// under.
+    #[error(
+        "no model is registered under the morph name `{name}`: register the model with MorphMap::register, or list it on the morph_to relation with `.types::<..>()`"
+    )]
+    UnknownMorph {
+        /// The stored type name.
+        name: String,
     },
 }
 
@@ -166,6 +197,13 @@ fn quoted(columns: &[String]) -> String {
         .map(|column| format!("`{column}`"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn known_relations(known: &[String]) -> String {
+    match known {
+        [] => " (it declares no relations: add them in a #[relations] impl block)".to_owned(),
+        known => format!(" (it has: {})", known.join(", ")),
+    }
 }
 
 impl OrmError {

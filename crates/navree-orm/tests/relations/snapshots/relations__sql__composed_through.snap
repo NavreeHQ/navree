@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: per_dialect(|dialect| deal().contacts().to_sql(dialect))
+---
+PostgreSQL: SELECT "contacts"."id", "contacts"."company_id", "contacts"."company_code", "contacts"."name", "contacts"."email", "companies"."id" AS "navree_through_key" FROM "contacts" INNER JOIN "companies" ON "companies"."id" = "contacts"."company_id" WHERE "companies"."id" = $1 AND (("contacts"."email"::text) NOT ILIKE $2)
+  values: [BigInt(Some(3)), String(Some("%@hidden.test"))]
+MySQL: SELECT `contacts`.`id`, `contacts`.`company_id`, `contacts`.`company_code`, `contacts`.`name`, `contacts`.`email`, `companies`.`id` AS `navree_through_key` FROM `contacts` INNER JOIN `companies` ON `companies`.`id` = `contacts`.`company_id` WHERE `companies`.`id` = ? AND `contacts`.`email` NOT LIKE ?
+  values: [BigInt(Some(3)), String(Some("%@hidden.test"))]
+SQLite: SELECT "contacts"."id", "contacts"."company_id", "contacts"."company_code", "contacts"."name", "contacts"."email", "companies"."id" AS "navree_through_key" FROM "contacts" INNER JOIN "companies" ON "companies"."id" = "contacts"."company_id" WHERE "companies"."id" = ? AND "contacts"."email" NOT LIKE ?
+  values: [BigInt(Some(3)), String(Some("%@hidden.test"))]

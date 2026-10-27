@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "query(Deal::query().doesnt_have(\"tags\").or_where_relation(\"owner\",\nUser::NAME.eq(\"Ada\")))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE ((NOT EXISTS(SELECT 1 FROM "tags" INNER JOIN "deal_tag" ON "tags"."id" = "deal_tag"."tag_id" WHERE "deals"."id" = "deal_tag"."deal_id")) OR EXISTS(SELECT 1 FROM "users" WHERE "deals"."owner_id" = "users"."id" AND "users"."name" = $1 AND "users"."deleted_at" IS NULL)) AND "deals"."deleted_at" IS NULL
+  values: [String(Some("Ada"))]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`owner_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE ((NOT EXISTS(SELECT 1 FROM `tags` INNER JOIN `deal_tag` ON `tags`.`id` = `deal_tag`.`tag_id` WHERE `deals`.`id` = `deal_tag`.`deal_id`)) OR EXISTS(SELECT 1 FROM `users` WHERE `deals`.`owner_id` = `users`.`id` AND `users`.`name` = ? AND `users`.`deleted_at` IS NULL)) AND `deals`.`deleted_at` IS NULL
+  values: [String(Some("Ada"))]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE ((NOT EXISTS(SELECT 1 FROM "tags" INNER JOIN "deal_tag" ON "tags"."id" = "deal_tag"."tag_id" WHERE "deals"."id" = "deal_tag"."deal_id")) OR EXISTS(SELECT 1 FROM "users" WHERE "deals"."owner_id" = "users"."id" AND "users"."name" = ? AND "users"."deleted_at" IS NULL)) AND "deals"."deleted_at" IS NULL
+  values: [String(Some("Ada"))]
