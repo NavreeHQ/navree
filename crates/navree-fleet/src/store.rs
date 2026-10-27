@@ -460,6 +460,7 @@ pub(crate) fn parse_outcome(text: &str) -> Result<AttemptOutcome, FleetError> {
         "succeeded" => Ok(AttemptOutcome::Succeeded),
         "released" => Ok(AttemptOutcome::Released),
         "failed" => Ok(AttemptOutcome::Failed),
+        "cancelled" => Ok(AttemptOutcome::Cancelled),
         other => Err(FleetError::Corrupt(format!(
             "unknown job outcome `{other}`"
         ))),
@@ -529,6 +530,10 @@ mod tests {
     #[test]
     fn outcomes_and_needles_parse() {
         assert_eq!(parse_outcome("released").unwrap(), AttemptOutcome::Released);
+        assert_eq!(
+            parse_outcome("cancelled").unwrap(),
+            AttemptOutcome::Cancelled
+        );
         assert!(parse_outcome("odd").is_err());
         assert_eq!(needle(Some("  Mail ")).as_deref(), Some("mail"));
         assert_eq!(needle(Some("  ")), None);

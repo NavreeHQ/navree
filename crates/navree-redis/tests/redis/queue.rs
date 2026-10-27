@@ -13,7 +13,7 @@ use navree_contracts::{
 use navree_db::{DatabaseModule, Db};
 use navree_kernel::{Module, ModuleBuilder, Navree};
 use navree_queue::{
-    NewJob, Queue, QueueDriver, QueueModule, QueueOptions, QueueStore, RetryTarget,
+    Membership, NewJob, Queue, QueueDriver, QueueModule, QueueOptions, QueueStore, RetryTarget,
     STALE_RESERVATION_GRACE_SECS, WorkOptions,
 };
 use navree_redis::{RedisModule, RedisQueueStore};
@@ -40,6 +40,7 @@ fn job(id: &str, queue: &str, available_at: i64) -> NewJob {
         unique_key: None,
         unique_for_ms: None,
         trace_parent: Some("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_owned()),
+        membership: Membership::default(),
     }
 }
 

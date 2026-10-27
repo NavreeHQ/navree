@@ -56,7 +56,14 @@ fn snapshot_of(
         processed: jobs.len() as u64,
         failed: jobs
             .iter()
-            .filter(|job| job.outcome != AttemptOutcome::Succeeded)
+            // Failed attempts (retried or not); a job skipped or stopped
+            // because its batch or operation was cancelled did not fail.
+            .filter(|job| {
+                matches!(
+                    job.outcome,
+                    AttemptOutcome::Released | AttemptOutcome::Failed
+                )
+            })
             .count() as u64,
         runtime_avg_ms: average(&runtimes),
         runtime_p95_ms: percentile(&mut runtimes, 95),

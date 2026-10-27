@@ -12,5 +12,6 @@ mod endpoints;
 mod field_checks;
 mod outside;
 mod parity;
+mod permission_check;
 mod service;
 mod wiring;

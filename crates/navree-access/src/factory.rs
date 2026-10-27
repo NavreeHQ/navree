@@ -122,6 +122,20 @@ impl AbilityFactory {
         })
     }
 
+    /// Whether `principal` holds `permission` (`<prefix>.<action>`) app-wide,
+    /// checked the way a route's `permissions` declaration checks it: an
+    /// unconditional rule grants it (`prefix.*` and the super-admin role
+    /// grant every action).
+    pub async fn has_permission(
+        &self,
+        principal: &Principal,
+        permission: &str,
+    ) -> Result<bool, AccessError> {
+        let access = self.access_for(Some(principal)).await?;
+        let (action, subject) = self.subjects.permission_target(permission);
+        Ok(access.ability.has_unconditional(action, subject))
+    }
+
     /// Forgets every cached ability (they are rebuilt on next use). Changes
     /// made through [`AccessService`](crate::AccessService) never need this.
     pub fn clear_cache(&self) {

@@ -112,6 +112,7 @@ impl QueueStore for ReferenceStore {
                 options: stored.job.options.clone(),
                 attempts: stored.attempts,
                 trace_parent: stored.job.trace_parent.clone(),
+                membership: stored.job.membership.clone(),
             }))
         })
     }

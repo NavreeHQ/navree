@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use futures_util::FutureExt;
-use navree_contracts::{JobContext, JobRegistration};
+use navree_contracts::{JobCancelled, JobContext, JobRegistration};
 use navree_kernel::AppContext;
 use navree_telemetry::{EventKind, JobFailed, JobProcessed, TelemetryContext, TelemetryEvent};
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::batch::{BatchRow, Finish, Finished};
 use crate::record::ReservedJob;
 use crate::store::Store;
 use crate::{Queue, QueueError};
@@ -55,6 +56,9 @@ pub struct WorkStats {
     pub released: u64,
     /// Jobs moved to the failed jobs.
     pub failed: u64,
+    /// Jobs skipped, or stopped with `JobCancelled`, because their batch or
+    /// operation was cancelled.
+    pub cancelled: u64,
 }
 
 impl AddAssign for WorkStats {
@@ -63,6 +67,7 @@ impl AddAssign for WorkStats {
         self.succeeded += other.succeeded;
         self.released += other.released;
         self.failed += other.failed;
+        self.cancelled += other.cancelled;
     }
 }
 
@@ -76,15 +81,20 @@ pub enum AttemptOutcome {
     Released,
     /// It failed for good and moved to the failed jobs.
     Failed,
+    /// Skipped, or stopped with `JobCancelled`, because its batch or
+    /// operation was cancelled.
+    Cancelled,
 }
 
 impl AttemptOutcome {
-    /// The name in logs and reports: `succeeded`, `released` or `failed`.
+    /// The name in logs and reports: `succeeded`, `released`, `failed` or
+    /// `cancelled`.
     pub fn as_str(self) -> &'static str {
         match self {
             AttemptOutcome::Succeeded => "succeeded",
             AttemptOutcome::Released => "released",
             AttemptOutcome::Failed => "failed",
+            AttemptOutcome::Cancelled => "cancelled",
         }
     }
 
@@ -97,6 +107,7 @@ impl AttemptOutcome {
             AttemptOutcome::Succeeded => stats.succeeded = 1,
             AttemptOutcome::Released => stats.released = 1,
             AttemptOutcome::Failed => stats.failed = 1,
+            AttemptOutcome::Cancelled => stats.cancelled = 1,
         }
         stats
     }
@@ -156,6 +167,16 @@ impl fmt::Debug for Supervision {
             .field("stopped", &self.stop.is_cancelled())
             .finish_non_exhaustive()
     }
+}
+
+/// How a job's handler ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Ran {
+    Succeeded,
+    /// It returned [`JobCancelled`].
+    Cancelled,
+    /// An error, a panic or a timeout.
+    Failed(String),
 }
 
 /// The jobs the workers of one `work` call may still take.
@@ -366,15 +387,27 @@ impl Queue {
             self.fail(&job, worker, &error, started).await?;
             return Ok(AttemptOutcome::Failed);
         };
+        if self.is_skipped(ctx, &job).await? {
+            self.finish(&job, worker, Finish::Skipped, "").await?;
+            log_cancelled(
+                &job,
+                started,
+                "the job's batch or operation was cancelled; skipped",
+            );
+            return Ok(AttemptOutcome::Cancelled);
+        }
         let job_ctx = JobContext {
             app: ctx.clone(),
             job_id: job.id.clone(),
             attempt: job.attempts,
         };
         let limit = Duration::from_secs(job.options.timeout_secs);
-        match execute(registration, job.payload.clone(), job_ctx, limit).await {
-            Ok(()) => {
-                self.inner.store.complete(&job).await?;
+        let running = self.begin(ctx, &job).await;
+        let ran = execute(registration, job.payload.clone(), job_ctx, limit).await;
+        self.end(running).await;
+        match ran {
+            Ran::Succeeded => {
+                self.finish(&job, worker, Finish::Succeeded, "").await?;
                 self.inner.telemetry.emit_with(EventKind::JobProcessed, || {
                     TelemetryEvent::JobProcessed(JobProcessed {
                         queue: job.queue.clone(),
@@ -396,14 +429,98 @@ impl Queue {
                 );
                 Ok(AttemptOutcome::Succeeded)
             }
-            Err(error) if job.attempts >= job.options.max_attempts.max(1) => {
+            Ran::Cancelled => {
+                self.finish(&job, worker, Finish::Skipped, "").await?;
+                log_cancelled(
+                    &job,
+                    started,
+                    "the job stopped: its batch or operation was cancelled",
+                );
+                Ok(AttemptOutcome::Cancelled)
+            }
+            Ran::Failed(error) if job.attempts >= job.options.max_attempts.max(1) => {
                 self.fail(&job, worker, &error, started).await?;
                 Ok(AttemptOutcome::Failed)
             }
-            Err(error) => {
+            Ran::Failed(error) => {
                 self.release(&job, worker, &error, started).await?;
                 Ok(AttemptOutcome::Released)
             }
+        }
+    }
+
+    /// Whether `job` must not run: one of a cancelled batch's jobs, or the
+    /// work of a cancelled operation.
+    async fn is_skipped(&self, ctx: &AppContext, job: &ReservedJob) -> Result<bool, QueueError> {
+        if let Some(batch_id) = job.membership.in_batch()
+            && let Some(row) = self.inner.store.find_batch(batch_id).await?
+            && row.cancelled_at.is_some()
+        {
+            return Ok(true);
+        }
+        crate::operations::skips(ctx, job).await
+    }
+
+    /// Records the end of `job`: deleted (or moved to the failed jobs), and
+    /// for a batch's job or callback, its batch updated and the callbacks
+    /// that became due queued, in one step. Then the effect on its
+    /// operation. Returns false when the worker no longer held the job.
+    async fn finish(
+        &self,
+        job: &ReservedJob,
+        worker: &str,
+        finish: Finish,
+        error: &str,
+    ) -> Result<bool, QueueError> {
+        let now = self.now_ms();
+        let mut step = None;
+        if job.membership.batch_id.is_some() {
+            let prepare = |envelope, row: &BatchRow| self.prepare_callback(envelope, row);
+            match self
+                .inner
+                .store
+                .finish_batch_job(job, worker, finish, error, now, &prepare)
+                .await?
+            {
+                Finished::Lost => return Ok(false),
+                Finished::Done(done) => step = done,
+            }
+        } else {
+            match finish {
+                Finish::Succeeded | Finish::Skipped => self.inner.store.complete(job).await?,
+                Finish::Failed => {
+                    if !self.inner.store.fail(job, worker, error, now).await? {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+        if let Ok(app) = self.app() {
+            let batch = step.as_ref().map(|step| &step.batch);
+            crate::operations::job_finished(&app, job, finish, batch).await;
+        }
+        if let Some(step) = step
+            && step.settled_now
+        {
+            self.batch_settled(&step.batch).await;
+        }
+        Ok(true)
+    }
+
+    /// A batch and every callback it dispatched have finished: log it and
+    /// finish its operation.
+    async fn batch_settled(&self, row: &BatchRow) {
+        tracing::info!(
+            target: "navree::job",
+            batch_id = %row.id,
+            name = %row.name,
+            total_jobs = row.total_jobs,
+            failed_jobs = row.failed_jobs,
+            cancelled = row.cancelled_at.is_some(),
+            "batch finished"
+        );
+        if let Ok(app) = self.app() {
+            crate::operations::batch_settled(&app, row).await;
         }
     }
 
@@ -447,11 +564,7 @@ impl Queue {
         error: &str,
         started: Instant,
     ) -> Result<(), QueueError> {
-        let moved = self
-            .inner
-            .store
-            .fail(job, worker, error, self.now_ms())
-            .await?;
+        let moved = self.finish(job, worker, Finish::Failed, error).await?;
         if moved {
             self.report_failure(job, error, started, false);
             tracing::error!(
@@ -609,7 +722,7 @@ async fn execute(
     payload: Value,
     ctx: JobContext,
     limit: Duration,
-) -> Result<(), String> {
+) -> Ran {
     let run = registration.run;
     let attempt = AssertUnwindSafe(async move { run(payload, ctx).await }).catch_unwind();
     let result = if limit.is_zero() {
@@ -618,15 +731,29 @@ async fn execute(
         match tokio::time::timeout(limit, attempt).await {
             Ok(result) => result,
             Err(_) => {
-                return Err(format!("the job timed out after {} s", limit.as_secs()));
+                return Ran::Failed(format!("the job timed out after {} s", limit.as_secs()));
             }
         }
     };
     match result {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(error)) => Err(error_chain(&*error)),
-        Err(panic) => Err(format!("the job panicked: {}", panic_message(&*panic))),
+        Ok(Ok(())) => Ran::Succeeded,
+        Ok(Err(error)) if error.downcast_ref::<JobCancelled>().is_some() => Ran::Cancelled,
+        Ok(Err(error)) => Ran::Failed(error_chain(&*error)),
+        Err(panic) => Ran::Failed(format!("the job panicked: {}", panic_message(&*panic))),
     }
+}
+
+fn log_cancelled(job: &ReservedJob, started: Instant, message: &str) {
+    tracing::info!(
+        target: "navree::job",
+        name = %job.job_type,
+        job_id = %job.id,
+        queue = %job.queue,
+        attempt = job.attempts,
+        duration_ms = elapsed_ms(started),
+        outcome = "cancelled",
+        "{message}"
+    );
 }
 
 /// `error: source: source…`.

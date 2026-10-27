@@ -1,7 +1,8 @@
 //! # navree-queue
 //!
 //! `QueueModule`: database and memory job queues, workers, retries with
-//! backoff, unique and delayed jobs.
+//! backoff, unique and delayed jobs, job batches, and operations
+//! (user-visible long work with progress).
 //!
 //! - [`QueueModule`] is global. It provides [`Queue`] and registers it as the
 //!   app's `dyn Dispatcher`, so navree-mail, navree-events, navree-notify and
@@ -33,9 +34,28 @@
 //!   queued if it rolls back. Plain dispatches (and `dyn Dispatcher`) do
 //!   the same with the current unit of work (`navree_db::Uow::current`, e.g.
 //!   the request's while a handler runs) when there is an unfinished one.
+//! - Batches ([`Batch`], table `job_batches`): jobs dispatched together
+//!   and followed as one, with `then`, `catch` and `finally` callbacks;
+//!   the first failure cancels the rest unless the batch
+//!   [`allow_failures`](Batch::allow_failures). A job reports progress
+//!   with `ctx.progress(done, total, note)` and sees a cancelled batch
+//!   through it ([`JobCancelled`](navree_contracts::JobCancelled)).
+//! - Operations ([`Operations`], table `operations`): user-visible long
+//!   work with an owner, a workspace, a status, progress, a result and a
+//!   heartbeat, driven by its job or batch. Routes `GET /api/operations`,
+//!   `GET /api/operations/{id}`, the SSE stream
+//!   `GET /api/operations/{id}/events` and the cooperative cancel
+//!   `DELETE /api/operations/{id}` ([`OperationsController`]); every
+//!   change is broadcast as `operation.updated` on the private channel
+//!   `operations.{id}`. The owner and holders of `operations.view` (app-wide
+//!   or in the operation's workspace) may see one. A watchdog
+//!   ([`Operations::sweep`]) fails or restarts operations that stopped
+//!   responding: scheduled every minute in apps with `ScheduleModule`,
+//!   or `queue:watchdog` from system cron.
 //! - Every attempt is logged at target `navree::job` with the job type
 //!   (`name`), id, queue, attempt, `duration_ms` and `outcome`
-//!   (`succeeded`, `released` or `failed`); payloads are never logged.
+//!   (`succeeded`, `released`, `failed` or `cancelled`); payloads are never
+//!   logged.
 //! - Introspection: [`Queue::status`] (a queue's waiting, delayed and
 //!   running jobs and how long its oldest job has waited),
 //!   [`Queue::pending_jobs`] and [`Queue::pending_job`], [`Queue::failed_job`]
@@ -44,10 +64,12 @@
 //!   (navree-fleet): its own concurrency and stop token, and [`WorkHooks`]
 //!   asked before each reservation (pause) and told every [`Attempt`].
 //! - Commands: `queue:work [--queue a,b] [--once] [--stop-when-empty]
-//!   [--max-jobs N]`, `queue:failed`, `queue:retry <id|all>` and
-//!   `queue:flush`.
-//! - Testing: [`QueueFake`] records dispatched jobs for assertions;
-//!   [`Queue::run_pending`] runs every available job before returning.
+//!   [--max-jobs N]`, `queue:failed`, `queue:retry <id|all>`,
+//!   `queue:flush`, `queue:batches [--limit N]`, `queue:watchdog` and
+//!   `queue:prune [--hours N]`.
+//! - Testing: [`QueueFake`] records dispatched jobs and batches for
+//!   assertions; [`Queue::run_pending`] runs every available job before
+//!   returning.
 //!
 //! ```no_run
 //! use navree_contracts::{BoxError, Job, JobContext, JobOptions, ModuleBuilderJobsExt};
@@ -107,26 +129,34 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod batch;
 mod commands;
 mod error;
 mod fake;
 mod migration;
 mod module;
+mod operations;
 mod options;
 mod queue;
 mod record;
 mod store;
 mod worker;
 
+pub use batch::{Batch, JobBatch};
 pub use error::QueueError;
-pub use fake::QueueFake;
-pub use migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
+pub use fake::{QueueFake, RecordedBatch};
+pub use migration::{FAILED_JOBS_TABLE, JOB_BATCHES_TABLE, JOBS_TABLE, OPERATIONS_TABLE};
 pub use module::QueueModule;
-pub use options::{QueueDriver, QueueOptions};
+pub use operations::{
+    FAILED_MESSAGE, OPERATION_EVENT, OPERATION_UPDATED_EVENT, Operation, OperationProgress,
+    OperationRecord, OperationStatus, Operations, OperationsController, STALLED_MESSAGE,
+    SweepReport,
+};
+pub use options::{OperationsOptions, QueueDriver, QueueOptions};
 pub use queue::Queue;
 pub use record::{
-    FailedJob, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus, ReservedJob,
-    RetryTarget,
+    FailedJob, Membership, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus,
+    ReservedJob, RetryTarget,
 };
 pub use store::QueueStore;
 /// The cancellation token [`Supervision::stop`] takes (tokio-util's).

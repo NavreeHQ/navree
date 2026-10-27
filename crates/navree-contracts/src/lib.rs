@@ -4,7 +4,9 @@
 //! cooperate without depending on each other: [`Secret`], [`RequestId`],
 //! [`Principal`] and [`AuthState`], the audit, event, broadcast, health and
 //! session sinks, the job contract ([`Job`], [`Dispatcher`],
-//! [`JobRegistration`]), [`Clock`], and the conformity checks behind
+//! [`JobRegistration`], with progress and cancellation through
+//! [`JobMonitor`]), permission checks outside routes ([`PermissionCheck`],
+//! [`permitted`]), [`Clock`], and the conformity checks behind
 //! `navree check` ([`ConformityCheck`], [`ConformityModule`]).
 //!
 //! A module that needs, say, auditing resolves `Arc<dyn AuditSink>` (usually
@@ -18,6 +20,7 @@ mod conformity;
 mod events;
 mod health;
 mod jobs;
+mod permissions;
 mod principal;
 mod request_id;
 mod secret;
@@ -34,10 +37,11 @@ pub use conformity::{
 pub use events::EventSink;
 pub use health::{HealthCheck, HealthStatus};
 pub use jobs::{
-    Backoff, Dispatcher, Job, JobContext, JobEnvelope, JobOptions, JobRegistration,
-    ModuleBuilderJobsExt,
+    Backoff, Dispatcher, Job, JobCancelled, JobContext, JobEnvelope, JobMonitor, JobOptions,
+    JobProgress, JobRegistration, ModuleBuilderJobsExt,
 };
 pub use navree_kernel::{BoxError, BoxFuture};
+pub use permissions::{PermissionCheck, permitted};
 pub use principal::{AuthState, AuthVia, Principal};
 pub use request_id::RequestId;
 pub use secret::Secret;

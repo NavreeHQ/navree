@@ -8,14 +8,17 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{
-    Backoff, BoxError, Clock, FixedClock, Job, JobContext, JobOptions, ModuleBuilderJobsExt,
+    Backoff, BoxError, BoxFuture, Broadcaster, Clock, FixedClock, Job, JobContext, JobOptions,
+    ModuleBuilderJobsExt, PermissionCheck, Principal,
 };
 use navree_db::DatabaseModule;
-use navree_kernel::{Module, ModuleBuilder};
-use navree_queue::{Queue, QueueDriver, QueueModule, QueueOptions, WorkOptions};
+use navree_kernel::{Factory, Module, ModuleBuilder};
+use navree_queue::{Operations, Queue, QueueDriver, QueueModule, QueueOptions, WorkOptions};
 use navree_testing::{TestApp, TestAppBuilder};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::sync::Notify;
+use uuid::Uuid;
 
 /// The fixed clock's starting time.
 pub fn start() -> DateTime<Utc> {
@@ -26,8 +29,99 @@ pub fn start() -> DateTime<Utc> {
 pub struct Harness {
     pub app: TestApp,
     pub queue: Arc<Queue>,
+    pub operations: Arc<Operations>,
     pub clock: Arc<FixedClock>,
     pub journal: Arc<Journal>,
+    pub broadcasts: Arc<Broadcasts>,
+    /// The test's own PostgreSQL database, dropped with the harness (last,
+    /// after the app's connections).
+    database: Option<postgres::Scratch>,
+}
+
+/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set (a URL
+/// whose user may create databases), every harness runs on its own fresh
+/// PostgreSQL database instead of a SQLite file:
+/// `cargo test -p navree-queue --features postgres`.
+#[cfg(feature = "postgres")]
+mod postgres {
+    use sea_orm::{ConnectionTrait, Database};
+    use uuid::Uuid;
+
+    /// A database created for one test; dropped when this is.
+    pub struct Scratch {
+        admin: String,
+        name: String,
+        pub url: String,
+    }
+
+    impl Scratch {
+        /// `None` when `NAVREE_TEST_POSTGRES_URL` is not set.
+        pub async fn new() -> Option<Scratch> {
+            let admin = std::env::var("NAVREE_TEST_POSTGRES_URL").ok()?;
+            let name = format!("navree_queue_{}", Uuid::now_v7().simple());
+            let conn = Database::connect(&admin)
+                .await
+                .expect("PostgreSQL is reachable");
+            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+                .await
+                .expect("the test user may create databases");
+            conn.close().await.expect("closes");
+            let base = admin.split('?').next().unwrap_or(&admin);
+            let server = base.rsplit_once('/').map_or(base, |(server, _)| server);
+            let url = format!("{server}/{name}");
+            Some(Scratch { admin, name, url })
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let admin = self.admin.clone();
+            let name = self.name.clone();
+            // A runtime of its own: the test's runtime may be shutting down.
+            let _ = std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("runtime");
+                runtime.block_on(async move {
+                    if let Ok(conn) = Database::connect(&admin).await {
+                        let _ = conn
+                            .execute_unprepared(&format!(
+                                "DROP DATABASE IF EXISTS {name} WITH (FORCE)"
+                            ))
+                            .await;
+                        let _ = conn.close().await;
+                    }
+                });
+            })
+            .join();
+        }
+    }
+}
+
+#[cfg(not(feature = "postgres"))]
+mod postgres {
+    /// Without the `postgres` feature every harness uses SQLite.
+    pub struct Scratch;
+
+    impl Scratch {
+        pub async fn new() -> Option<Scratch> {
+            None
+        }
+    }
+}
+
+/// `builder` on a fresh database: the test's own PostgreSQL database (see
+/// [`postgres`]) or a temporary SQLite file.
+async fn with_database(builder: TestAppBuilder) -> (TestAppBuilder, Option<postgres::Scratch>) {
+    #[cfg(feature = "postgres")]
+    if let Some(scratch) = postgres::Scratch::new().await {
+        let builder = builder
+            .config("database.url", scratch.url.clone())
+            .config("database.migrate_on_boot", true);
+        return (builder, Some(scratch));
+    }
+    (builder.temp_database(), None)
 }
 
 impl Harness {
@@ -57,13 +151,32 @@ pub fn options(driver: QueueDriver) -> QueueOptions {
     }
 }
 
+/// [`options`] with one worker (jobs run one at a time, in order) and
+/// progress written at every report.
+pub fn one_worker(driver: QueueDriver) -> QueueOptions {
+    let mut options = options(driver);
+    options.workers = 1;
+    options.operations.progress_interval_ms = 0;
+    options
+}
+
 pub async fn harness(driver: QueueDriver) -> Harness {
     harness_with(options(driver)).await
 }
 
 pub async fn harness_with(options: QueueOptions) -> Harness {
+    harness_using(options, |builder| builder).await
+}
+
+/// [`harness_with`], with `extra` adding to the app (modules, `fake_auth`).
+/// Broadcasts are recorded in [`Harness::broadcasts`].
+pub async fn harness_using(
+    options: QueueOptions,
+    extra: impl FnOnce(TestAppBuilder) -> TestAppBuilder,
+) -> Harness {
     let clock = Arc::new(FixedClock::new(start()));
     let journal = Arc::new(Journal::default());
+    let broadcasts = Arc::new(Broadcasts::default());
     let mut builder = TestApp::builder();
     if options.driver == QueueDriver::Redis {
         // The `redis` driver name resolves the reference store, which
@@ -72,21 +185,25 @@ pub async fn harness_with(options: QueueOptions) -> Harness {
             crate::reference_store::ReferenceStore::default(),
         ));
     }
-    let app = builder
-        .temp_database()
+    let (builder, database) = with_database(builder).await;
+    let builder = builder
         .module(DatabaseModule)
         .module(QueueModule::for_root(options))
         .module(JobsModule)
+        .module(BroadcastsModule(broadcasts.clone()))
         .override_value(clock.clone() as Arc<dyn Clock>)
-        .override_value(journal.clone())
-        .build()
-        .await;
+        .override_value(journal.clone());
+    let app = extra(builder).build().await;
     let queue = app.get::<Queue>().await;
+    let operations = app.get::<Operations>().await;
     Harness {
         app,
         queue,
+        operations,
         clock,
         journal,
+        broadcasts,
+        database,
     }
 }
 
@@ -145,6 +262,8 @@ pub struct Journal {
     pub failing: AtomicBool,
     /// Notified when a [`Hang`] job starts hanging.
     pub hanging: Notify,
+    /// Notified when a [`Cooperative`] job starts.
+    pub started: Notify,
 }
 
 impl Journal {
@@ -433,6 +552,159 @@ impl Job for Unregistered {
     }
 }
 
+/// Reports progress every 10 ms until its batch or operation is cancelled
+/// (then stops with `JobCancelled`); gives up with an error after 10 s.
+/// Notifies the journal's `started` after its first report.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Cooperative {
+    pub label: String,
+}
+
+impl Job for Cooperative {
+    const NAME: &'static str = "test.cooperative";
+
+    fn options() -> JobOptions {
+        JobOptions {
+            max_attempts: 1,
+            timeout_secs: 30,
+            ..JobOptions::default()
+        }
+    }
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let journal = journal(&ctx).await?;
+        for step in 1..=1000 {
+            ctx.progress(step, 1000, format!("step {step}")).await?;
+            if step == 1 {
+                journal.started.notify_one();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        journal.record(Self::NAME, &self.label, ctx.attempt);
+        Err("never cancelled".into())
+    }
+}
+
+/// Exports `rows` rows for operation `operation`: progress after each row,
+/// then completes the operation with `{"rows": rows}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Export {
+    pub operation: Uuid,
+    pub rows: u64,
+}
+
+impl Job for Export {
+    const NAME: &'static str = "test.export";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        for row in 1..=self.rows {
+            ctx.progress(row, self.rows, format!("Exported {row} of {}", self.rows))
+                .await?;
+        }
+        let operations = ctx.app.get::<Operations>().await?;
+        operations
+            .complete(self.operation, json!({ "rows": self.rows }))
+            .await?;
+        journal(&ctx)
+            .await?
+            .record(Self::NAME, &self.operation.to_string(), ctx.attempt);
+        Ok(())
+    }
+}
+
+/// Completes operation `operation` with `result` (a batch's `then`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompleteOperation {
+    pub operation: Uuid,
+    pub result: serde_json::Value,
+}
+
+impl Job for CompleteOperation {
+    const NAME: &'static str = "test.complete_operation";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let operations = ctx.app.get::<Operations>().await?;
+        operations.complete(self.operation, self.result).await?;
+        journal(&ctx)
+            .await?
+            .record(Self::NAME, "complete", ctx.attempt);
+        Ok(())
+    }
+}
+
+/// Every broadcast, recorded (registered as the app's `dyn Broadcaster`).
+#[derive(Default)]
+pub struct Broadcasts(Mutex<Vec<(Vec<String>, String, serde_json::Value)>>);
+
+impl Broadcasts {
+    pub fn all(&self) -> Vec<(Vec<String>, String, serde_json::Value)> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl Broadcaster for Broadcasts {
+    fn broadcast(
+        &self,
+        channels: Vec<String>,
+        event: String,
+        data: serde_json::Value,
+    ) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.0.lock().unwrap().push((channels, event, data));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// Registers [`Broadcasts`] as the app's `dyn Broadcaster`.
+pub struct BroadcastsModule(pub Arc<Broadcasts>);
+
+impl Module for BroadcastsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.global()
+            .value_arc(self.0.clone() as Arc<dyn Broadcaster>)
+            .exports::<dyn Broadcaster>();
+    }
+}
+
+/// Grants `permission` to `user`, app-wide or in `workspace` (a
+/// `dyn PermissionCheck` multi-binding).
+pub struct Grant {
+    pub user: Uuid,
+    pub permission: &'static str,
+    pub workspace: Option<Uuid>,
+}
+
+impl PermissionCheck for Grant {
+    fn check<'a>(
+        &'a self,
+        principal: &'a Principal,
+        permission: &'a str,
+        workspace: Option<Uuid>,
+    ) -> BoxFuture<'a, Result<Option<bool>, BoxError>> {
+        Box::pin(async move {
+            Ok(Some(
+                principal.user_id == self.user
+                    && permission == self.permission
+                    && (self.workspace.is_none() || workspace == self.workspace),
+            ))
+        })
+    }
+}
+
+/// Registers the grants as `dyn PermissionCheck` multi-bindings.
+pub struct GrantsModule(pub Vec<Arc<Grant>>);
+
+impl Module for GrantsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        for grant in &self.0 {
+            let grant = grant.clone();
+            m.multi(Factory::<dyn PermissionCheck>::new(move |_| {
+                let grant = grant.clone();
+                async move { Ok(grant as Arc<dyn PermissionCheck>) }
+            }));
+        }
+    }
+}
+
 /// Registers the test jobs (except [`Unregistered`]).
 pub struct JobsModule;
 
@@ -447,6 +719,9 @@ impl Module for JobsModule {
             .job::<HangLast>()
             .job::<Toggle>()
             .job::<Panics>()
-            .job::<HideJobsTable>();
+            .job::<HideJobsTable>()
+            .job::<Cooperative>()
+            .job::<Export>()
+            .job::<CompleteOperation>();
     }
 }

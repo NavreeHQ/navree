@@ -185,6 +185,49 @@ impl FailedJob {
             unique_key: None,
             unique_for_ms: None,
             trace_parent: None,
+            membership: Membership::default(),
+        }
+    }
+}
+
+/// What a job belongs to: a batch (as one of its jobs or as one of its
+/// callbacks) and an operation. The default belongs to neither.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Membership {
+    /// The batch the job belongs to.
+    pub batch_id: Option<String>,
+    /// Whether the job is a `then`, `catch` or `finally` callback of its
+    /// batch rather than one of its jobs.
+    pub callback: bool,
+    /// The operation the job does the work of.
+    pub operation_id: Option<String>,
+}
+
+impl Membership {
+    /// One of the jobs of batch `batch_id`.
+    pub(crate) fn batch_job(batch_id: &str, operation_id: Option<&str>) -> Self {
+        Self {
+            batch_id: Some(batch_id.to_owned()),
+            callback: false,
+            operation_id: operation_id.map(str::to_owned),
+        }
+    }
+
+    /// A callback of batch `batch_id`.
+    pub(crate) fn batch_callback(batch_id: &str, operation_id: Option<&str>) -> Self {
+        Self {
+            batch_id: Some(batch_id.to_owned()),
+            callback: true,
+            operation_id: operation_id.map(str::to_owned),
+        }
+    }
+
+    /// One of a batch's jobs (not a callback).
+    pub(crate) fn in_batch(&self) -> Option<&str> {
+        match (&self.batch_id, self.callback) {
+            (Some(batch), false) => Some(batch),
+            _ => None,
         }
     }
 }
@@ -216,6 +259,11 @@ pub struct NewJob {
     /// The W3C `traceparent` of the span that dispatched the job, so its
     /// attempts continue that trace.
     pub trace_parent: Option<String>,
+    /// The batch and operation the job belongs to (none for a plain
+    /// dispatch). A driver stores it with the job and hands it back on
+    /// the [`ReservedJob`].
+    #[serde(default)]
+    pub membership: Membership,
 }
 
 impl NewJob {
@@ -253,6 +301,10 @@ pub struct ReservedJob {
     pub attempts: u32,
     /// The `traceparent` recorded at dispatch (see [`NewJob::trace_parent`]).
     pub trace_parent: Option<String>,
+    /// The batch and operation the job belongs to (see
+    /// [`NewJob::membership`]).
+    #[serde(default)]
+    pub membership: Membership,
 }
 
 /// How long a reservation of a job without a time limit (`timeout_secs`

@@ -39,6 +39,7 @@ mod factory;
 mod migration;
 mod module;
 mod options;
+mod permission_check;
 mod service;
 mod store;
 mod subject;

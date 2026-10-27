@@ -111,6 +111,98 @@ pub struct JobContext {
     pub attempt: u32,
 }
 
+impl JobContext {
+    /// Reports how far the job got: `done` of `total` units, with a note
+    /// for people (`"Importing rows"`). The app's [`JobMonitor`]
+    /// (navree-queue's, which moves the job's operation along) records it;
+    /// without one this does nothing.
+    ///
+    /// Returns [`JobCancelled`] once the job's operation or batch has been
+    /// cancelled, so `ctx.progress(..).await?` stops a cancelled job at its
+    /// next report. Failing to record progress is never an error.
+    pub async fn progress(
+        &self,
+        done: u64,
+        total: u64,
+        note: impl Into<String>,
+    ) -> Result<(), JobCancelled> {
+        let Some(monitor) = self.app.try_get::<dyn JobMonitor>().await else {
+            return Ok(());
+        };
+        let progress = JobProgress {
+            done,
+            total,
+            note: note.into(),
+        };
+        monitor.progress(&self.job_id, progress).await
+    }
+
+    /// Whether the job's operation or batch has been cancelled (false
+    /// without a [`JobMonitor`]).
+    pub async fn is_cancelled(&self) -> bool {
+        match self.app.try_get::<dyn JobMonitor>().await {
+            Some(monitor) => monitor.is_cancelled(&self.job_id).await,
+            None => false,
+        }
+    }
+
+    /// [`JobCancelled`] once the job's operation or batch has been
+    /// cancelled: `ctx.check_cancelled().await?` between steps.
+    pub async fn check_cancelled(&self) -> Result<(), JobCancelled> {
+        if self.is_cancelled().await {
+            Err(JobCancelled)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// A progress report of a running job (see [`JobContext::progress`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobProgress {
+    /// Units done.
+    pub done: u64,
+    /// Units in all (0 when unknown).
+    pub total: u64,
+    /// What the job is doing, for people.
+    pub note: String,
+}
+
+impl JobProgress {
+    /// `done` as a whole percentage of `total`, rounded down, at most 100
+    /// (0 when `total` is 0).
+    pub fn percent(&self) -> u8 {
+        if self.total == 0 {
+            return 0;
+        }
+        let percent = u128::from(self.done.min(self.total)) * 100 / u128::from(self.total);
+        u8::try_from(percent).unwrap_or(100)
+    }
+}
+
+/// The error a cancelled job stops with: [`JobContext::progress`] and
+/// [`JobContext::check_cancelled`] return it once the job's operation or
+/// batch was cancelled. A worker that gets it back from a job finishes the
+/// job without retrying it or counting it as failed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, thiserror::Error)]
+#[error("the job was cancelled")]
+pub struct JobCancelled;
+
+/// Records progress and answers cancellation for running jobs (implemented
+/// by navree-queue, registered as `dyn JobMonitor`).
+pub trait JobMonitor: Send + Sync + 'static {
+    /// Records `progress` for the running job `job_id`; [`JobCancelled`]
+    /// when its operation or batch was cancelled.
+    fn progress<'a>(
+        &'a self,
+        job_id: &'a str,
+        progress: JobProgress,
+    ) -> BoxFuture<'a, Result<(), JobCancelled>>;
+
+    /// Whether the operation or batch of job `job_id` was cancelled.
+    fn is_cancelled<'a>(&'a self, job_id: &'a str) -> BoxFuture<'a, bool>;
+}
+
 /// A serialized job as handed to a [`Dispatcher`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JobEnvelope {
