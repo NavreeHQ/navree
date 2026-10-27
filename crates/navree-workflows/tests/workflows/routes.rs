@@ -5,6 +5,9 @@
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{AuthVia, Principal};
 use navree_testing::TestClient;
+use navree_workflows::{RunStatus, StartOptions};
+use navree_workspace::events::WorkspaceDeleted;
+use navree_workspace::{NewWorkspace, WorkspaceModule, Workspaces};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -14,6 +17,8 @@ use crate::support::{DAY, Flaky, Greet, Harness, Onboarding, follow_up, harness}
 const ADMIN: Uuid = Uuid::from_u128(1);
 /// Holds the view permissions only.
 const VIEWER: Uuid = Uuid::from_u128(2);
+/// Owns the workspaces of the workspace test.
+const OWNER: Uuid = Uuid::from_u128(3);
 
 fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     let Some(user) = &ctx.user else {
@@ -396,6 +401,128 @@ async fn a_template_starts_a_draft_over_http() {
         .send()
         .await
         .assert_error_code(404, "automation_template_not_found");
+}
+
+#[tokio::test]
+async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
+    let h = harness(|b| {
+        b.config("workflows.routes", true)
+            .config("workflows.automation_routes", true)
+            .config("workspace.users_table", "")
+            .module(AccessModule::for_root(AccessOptions {
+                abilities: |ctx, rules| ctx.grant_permissions(rules),
+                ..AccessOptions::default()
+            }))
+            .module(WorkspaceModule::from_config())
+    })
+    .await;
+    let workspaces = h.app.get::<Workspaces>().await;
+    let (acme, globex) = h
+        .in_uow(|uow| async move {
+            let mut created = Vec::new();
+            for slug in ["acme", "globex"] {
+                let workspace = workspaces
+                    .create(
+                        &uow,
+                        OWNER,
+                        NewWorkspace {
+                            name: slug.to_owned(),
+                            slug: Some(slug.to_owned()),
+                        },
+                    )
+                    .await
+                    .unwrap();
+                created.push(workspace.id);
+            }
+            (created[0], created[1])
+        })
+        .await;
+    // OWNER owns both workspaces: every permission in them.
+    let owner = as_user(&h, OWNER);
+
+    let created = owner
+        .post("/api/automations")
+        .header("X-Workspace", "acme")
+        .json(&json!({"name": "Acme follow-up", "definition": follow_up()}))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    assert_eq!(created["workspace_id"], acme.to_string());
+    let id = created["id"].as_str().unwrap().to_owned();
+    let in_globex = owner
+        .get("/api/automations")
+        .header("X-Workspace", "globex")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(in_globex["data"], json!([]));
+    owner
+        .get(&format!("/api/automations/{id}"))
+        .header("X-Workspace", "globex")
+        .send()
+        .await
+        .assert_error_code(404, "automation_not_found");
+    owner
+        .get(&format!("/api/automations/{id}"))
+        .header("X-Workspace", "acme")
+        .send()
+        .await
+        .assert_status(200);
+
+    // Runs too: a run of acme is listed and shown in acme only.
+    let run = h
+        .workflows()
+        .await
+        .spawn_with(
+            Onboarding { user_id: 1 },
+            StartOptions::new().workspace(acme),
+        )
+        .await
+        .unwrap();
+    let listed = owner
+        .get("/api/workflows/runs")
+        .header("X-Workspace", "acme")
+        .send()
+        .await
+        .json_value();
+    assert_eq!(ids(&listed), [run.to_string()]);
+    let listed = owner
+        .get("/api/workflows/runs")
+        .header("X-Workspace", "globex")
+        .send()
+        .await
+        .json_value();
+    assert_eq!(listed["data"], json!([]));
+    owner
+        .post(&format!("/api/workflows/runs/{run}/cancel"))
+        .header("X-Workspace", "globex")
+        .send()
+        .await
+        .assert_error_code(404, "workflow_run_not_found");
+    // A workspace is required; a stranger is refused.
+    owner
+        .get("/api/workflows/runs")
+        .send()
+        .await
+        .assert_status(400);
+    as_user(&h, VIEWER)
+        .get("/api/automations")
+        .header("X-Workspace", "acme")
+        .send()
+        .await
+        .assert_status(403);
+
+    // Deleting acme cancels its runs and deletes its automations.
+    h.emit(WorkspaceDeleted {
+        workspace_id: acme,
+        slug: "acme".to_owned(),
+    })
+    .await;
+    assert_eq!(h.status(run).await, RunStatus::Cancelled);
+    assert!(h.automations().await.get(id.parse().unwrap()).await.is_err());
+    let _ = globex;
 }
 
 #[tokio::test]
