@@ -70,6 +70,7 @@ navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
 navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
+navree-mongo = { path = "crates/navree-mongo", version = "0.1.0" }
 navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
 navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
@@ -175,6 +176,16 @@ redis = { version = "1.8.0", default-features = false, features = [
     "tokio-comp",
     "tokio-rustls-comp",
 ] }
+# MongoDB (navree-mongo): the official driver on Tokio, TLS through rustls
+# with ring (never aws-lc or OpenSSL), SRV lookups for mongodb+srv:// URLs,
+# and BSON 3 with its chrono, uuid and Extended JSON conversions.
+mongodb = { version = "3.9.1", default-features = false, features = [
+    "bson-3",
+    "compat-3-3-0",
+    "dns-resolver",
+    "rustls-tls",
+] }
+bson = { version = "3.1.0", features = ["chrono-0_4", "serde", "serde_json-1", "uuid-1"] }
 
 # ---------------------------------------------------------------------------
 # Serialization, errors, ids, time

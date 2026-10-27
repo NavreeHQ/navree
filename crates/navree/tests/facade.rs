@@ -374,8 +374,8 @@ struct Features {
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
 /// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
 /// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
-/// `features = ["micro"]`, `features = ["i18n"]`), and test-only crates
-/// (`features = ["browser"]` in `[dev-dependencies]`).
+/// `features = ["micro"]`, `features = ["i18n"]`, `features = ["mongodb"]`),
+/// and test-only crates (`features = ["browser"]` in `[dev-dependencies]`).
 const OPT_IN: &[&str] = &[
     "dock",
     "harbor",
@@ -393,6 +393,8 @@ const OPT_IN: &[&str] = &[
     "micro",
     "i18n",
     "browser",
+    "mongo",
+    "mongodb",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -759,6 +761,21 @@ fn opt_in_libraries_are_reexported_whole() {
     assert!(same::<navree::social::SocialModule, SocialModule>());
     let (_social, _fake): (navree::social::Social, navree::social::SocialFake) =
         navree::social::Social::fake();
+}
+
+/// `navree::mongo` is navree-mongo re-exported whole, and the `mongo`
+/// feature (also called `mongodb`) puts `MongoModule` and `MongoDb` in the
+/// prelude (`cargo test -p navree --features mongodb --test facade`).
+#[cfg(feature = "mongo")]
+#[test]
+fn mongo_is_reexported_with_its_feature() {
+    assert!(same::<navree::mongo::MongoModule, MongoModule>());
+    assert!(same::<navree::mongo::MongoDb, MongoDb>());
+    assert_eq!(
+        navree::mongo::MongoOptions::default().url,
+        "mongodb://127.0.0.1:27017/navree"
+    );
+    assert!(!navree::mongo::ObjectId::new().is_nil());
 }
 
 /// `navree::redis` is navree-redis re-exported whole, and the `redis`

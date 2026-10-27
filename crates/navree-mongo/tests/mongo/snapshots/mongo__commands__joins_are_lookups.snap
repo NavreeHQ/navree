@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").join(\"companies\", \"companies._id\", \"=\",\n\"deals.company_id\").select([\"deals.title\",\n\"companies.name\"]).where_(col(\"companies.country\").eq(\"US\")))"
+---
+db.deals.aggregate([
+  {"$lookup": {"from": "companies", "localField": "company_id", "foreignField": "_id", "as": "companies"}},
+  {"$unwind": "$companies"},
+  {"$match": {"companies.country": "US"}},
+  {"$project": {"title": 1, "name": "$companies.name", "_id": 0}}
+])

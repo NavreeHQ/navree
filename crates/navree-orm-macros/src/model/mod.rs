@@ -56,6 +56,7 @@ pub(crate) struct Model {
     /// Observers, typed events, broadcasting and pruning.
     pub(crate) lifecycle: lifecycle::Lifecycle,
     pub(crate) connection: Option<LitStr>,
+    pub(crate) driver: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
     /// The name polymorphic type columns store for the model.
@@ -135,8 +136,8 @@ fn option_inner(ty: &Type) -> Option<Type> {
 }
 
 /// The key type a key field's type implies: integers are assigned by the
-/// database, a `Uuid` gets a UUID v7, a `Ulid` a ULID, anything else is set
-/// by the application.
+/// database, a `Uuid` gets a UUID v7, a `Ulid` a ULID, an `ObjectId` a
+/// MongoDB ObjectId, anything else is set by the application.
 fn inferred_key_type(ty: &Type) -> KeyType {
     let Type::Path(path) = ty else {
         return KeyType::Manual;
@@ -151,6 +152,7 @@ fn inferred_key_type(ty: &Type) -> KeyType {
         Some("i16" | "i32" | "i64" | "u32" | "u64") => KeyType::Increments,
         Some("Uuid") => KeyType::UuidV7,
         Some("Ulid") => KeyType::Ulid,
+        Some("ObjectId") => KeyType::ObjectId,
         _ => KeyType::Manual,
     }
 }
@@ -232,11 +234,24 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
     let mut errors = Errors::default();
     let attrs = container::parse(&input.attrs, &mut errors);
     let serde_container = attributes::serde_container(&input.attrs);
+    let mongodb = attrs
+        .driver
+        .as_ref()
+        .is_some_and(|driver| driver.value() == container::MONGODB);
     let mut columns: Vec<Column> = Vec::new();
     let mut skipped = Vec::new();
     let mut skipped_hidden = Vec::new();
     let mut field_names = Vec::new();
     let mut flags: Vec<(String, attributes::FieldAttrs)> = Vec::new();
+    // On MongoDB the key is the document's `_id`: unless the key column is
+    // named, a field `id` without a `column` of its own is stored as `_id`.
+    let id_as_document_key = mongodb
+        && attrs.primary_key.is_none()
+        && !fields.named.iter().any(|field| {
+            let attrs = field::peek_column(&field.attrs);
+            let name = field.ident.as_ref().map(plain_name);
+            attrs.as_deref() == Some("_id") || (attrs.is_none() && name.as_deref() == Some("_id"))
+        });
     for field in &fields.named {
         let Some(field_ident) = field.ident.clone() else {
             continue;
@@ -302,10 +317,11 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
                 &mut errors,
             )
         } else {
-            let name = field_attrs
-                .column
-                .as_ref()
-                .map_or_else(|| plain_name(&field_ident), LitStr::value);
+            let name = match &field_attrs.column {
+                Some(column) => column.value(),
+                None if id_as_document_key && plain_name(&field_ident) == "id" => "_id".to_owned(),
+                None => plain_name(&field_ident),
+            };
             vec![Column {
                 ident: field_ident.clone(),
                 ty: field.ty.clone(),
@@ -342,13 +358,14 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         .pivot
         .as_ref()
         .map(|(foreign, related)| (foreign.value(), related.value()));
+    let default_key = if mongodb { "_id" } else { "id" };
     let keyed_by_pivot = attrs.primary_key.is_none()
         && pivot.is_some()
-        && !columns.iter().any(|column| column.name == "id");
+        && !columns.iter().any(|column| column.name == default_key);
     let key_name = match (&attrs.primary_key, &pivot) {
         (Some(key), _) => key.value(),
         (None, Some((_, related))) if keyed_by_pivot => related.clone(),
-        _ => "id".to_owned(),
+        _ => default_key.to_owned(),
     };
     if let Some((foreign_key, related_key)) = &attrs.relations.pivot {
         for column in [foreign_key, related_key] {
@@ -545,6 +562,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         deleted_at,
         lifecycle: attrs.lifecycle,
         connection: attrs.connection,
+        driver: attrs.driver,
         per_page: attrs.per_page,
         global_scopes: attrs.global_scopes,
         morph_name,

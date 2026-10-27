@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"companies\").left_join(\"deals\", \"deals.company_id\", \"=\",\n\"companies._id\").where_null(\"deals._id\").select([\"companies.name\"]))"
+---
+db.companies.aggregate([
+  {"$lookup": {"from": "deals", "localField": "_id", "foreignField": "company_id", "as": "deals"}},
+  {"$unwind": {"path": "$deals", "preserveNullAndEmptyArrays": true}},
+  {"$match": {"deals._id": null}},
+  {"$project": {"name": 1, "_id": 0}}
+])

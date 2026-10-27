@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").select([\"stage\"]).distinct().order_by(\"stage\"))"
+---
+db.deals.aggregate([
+  {"$project": {"stage": 1, "_id": 0}},
+  {"$group": {"_id": {"stage": "$stage"}}},
+  {"$replaceWith": "$_id"},
+  {"$sort": {"stage": 1}}
+])

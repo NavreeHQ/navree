@@ -110,7 +110,7 @@ L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n (ecosystem libraries)
-L5  navree-auth  navree-workspace  navree-redis
+L5  navree-auth  navree-workspace  navree-redis  navree-mongo
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
@@ -159,6 +159,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA and two-factor policy, sessions, step-up, impersonation, magic links and email codes, platform sign-in, token exchange, passkeys |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, time zones and countries, row, schema or database isolation; organizations above workspaces and partitions inside them; entity classification and isolation checks, workspace isolation suites (feature `testing`) |
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
+| L5 | `navree-mongo` | MongoDB on the official driver: `MongoModule` (connections from `[database.mongodb]`, pools, readiness), the ORM's document driver (filters, aggregation pipelines, `$lookup` joins and subqueries, time buckets, ObjectId keys, bulk writes), sessions and units of work with change events, the schema builder on collections (JSON-schema validators, indexes, time-series collections) and migrations (facade feature `mongo` or `mongodb`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark) with their handshakes answered |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
