@@ -108,6 +108,9 @@ pub struct Minted {
     pub scope_set: String,
     /// The user a service account acted as, or the Microsoft tenant.
     pub subject: Option<String>,
+    /// The client id the grant authenticated with (`None` for service
+    /// accounts).
+    pub client_id: Option<String>,
 }
 
 /// How a provider's token endpoint answers grants other than codes.
@@ -297,15 +300,18 @@ impl TokenBackend for FakeState {
                 }
                 _ => (None, None, None),
             };
-            if !matches!(exchange, Exchange::JwtBearer { .. }) {
-                // Every other grant authenticates the client, as for real.
-                entry.client(scope_set)?;
-            }
+            // Every other grant authenticates the client, as for real.
+            let client_id = if matches!(exchange, Exchange::JwtBearer { .. }) {
+                None
+            } else {
+                Some(entry.client(scope_set)?.0)
+            };
             lock(&self.minted).push(Minted {
                 provider: provider.clone(),
                 grant_type: exchange.grant_type().to_owned(),
                 scope_set: scope_set.to_owned(),
                 subject,
+                client_id,
             });
             let mode = lock(&self.tokens).get(&provider).cloned();
             match mode {

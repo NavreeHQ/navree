@@ -245,8 +245,8 @@ impl ApiRequest {
 
     /// Adds query parameters (a map, a struct or a list of pairs).
     pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> Self {
-        match self.serialized(query) {
-            Some(value) => self.op(move |request| request.query(&value)),
+        match self.serialized(query).map(pairs) {
+            Some(pairs) => self.op(move |request| request.query(&pairs)),
             None => self,
         }
     }
@@ -261,8 +261,8 @@ impl ApiRequest {
 
     /// Sends `form` as `application/x-www-form-urlencoded`.
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> Self {
-        match self.serialized(form) {
-            Some(value) => self.op(move |request| request.form(&value)),
+        match self.serialized(form).map(pairs) {
+            Some(pairs) => self.op(move |request| request.form(&pairs)),
             None => self,
         }
     }
@@ -321,6 +321,43 @@ impl ApiRequest {
                 message: error.to_string(),
             })
     }
+}
+
+/// Name-value pairs of a serialized map, struct or list of pairs (a list
+/// value repeats its name; `null` leaves the pair out).
+fn pairs(value: Value) -> Vec<(String, String)> {
+    fn text(value: &Value) -> Option<String> {
+        match value {
+            Value::Null => None,
+            Value::String(s) => Some(s.clone()),
+            other => Some(other.to_string()),
+        }
+    }
+    let mut pairs = Vec::new();
+    match value {
+        Value::Object(map) => {
+            for (name, value) in map {
+                match value {
+                    Value::Array(items) => {
+                        pairs.extend(items.iter().filter_map(text).map(|v| (name.clone(), v)));
+                    }
+                    other => pairs.extend(text(&other).map(|v| (name, v))),
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                if let Value::Array(pair) = item
+                    && let [name, value] = pair.as_slice()
+                    && let (Some(name), Some(value)) = (text(name), text(value))
+                {
+                    pairs.push((name, value));
+                }
+            }
+        }
+        _ => {}
+    }
+    pairs
 }
 
 impl fmt::Debug for ApiRequest {

@@ -1,0 +1,4 @@
+{
+  "error": "unauthorized_client",
+  "error_description": "Client is unauthorized to retrieve access tokens using this method, or client not authorized for any of the scopes requested."
+}
