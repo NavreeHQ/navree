@@ -30,7 +30,7 @@ macro_rules! in_context {
         match $context.attempt($f) {
             Some(result) => result,
             None => {
-                $context.resolve($parts).await;
+                $context.resolve(Some(&mut *$parts)).await;
                 $context.resolved($f)
             }
         }
@@ -203,10 +203,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Resolves the context from the app and the request head.
-    async fn resolve(&mut self, parts: &mut Parts) {
+    /// Resolves the context from the app and the request head (`None`
+    /// outside a request: the app's context as configured).
+    async fn resolve(&mut self, parts: Option<&mut Parts>) {
         if self.resolved.is_none() {
-            self.resolved = Some(InputContext::for_request(self.app, parts).await);
+            self.resolved = Some(InputContext::resolve(self.app, parts).await);
         }
     }
 
@@ -240,7 +241,7 @@ where
             // Resolving the context needs the request head, so the input is
             // copied, only in this case.
             let input = input.to_owned();
-            context.resolve(parts).await;
+            context.resolve(Some(&mut *parts)).await;
             context.resolved(|| urlencoded::<T>(&input))
         }
     };
@@ -436,7 +437,8 @@ pub(crate) async fn messages(ctx: Option<&AppContext>) -> Arc<Messages> {
 /// as the extractors do: fields are dotted paths (`items.0.sku`), a rule on
 /// the value as a whole is reported under `root`, and `input`, the value as
 /// JSON when it is at hand, picks the `array` variant of the length
-/// messages.
+/// messages. Rules that read the [`InputContext`] (`rules::phone`) use the
+/// defaults, unless the call runs in an [`InputContext::scope`].
 ///
 /// ```
 /// use garde::Validate;
@@ -469,11 +471,23 @@ pub fn validate<T: Validate<Context = ()>>(
 /// body, for values that arrive another way (navree-grpc validates gRPC
 /// messages with it). Fields are keyed by dotted path; rules on the value
 /// as a whole are keyed `input`.
+///
+/// Rules that read the [`InputContext`] (`rules::phone` on a number
+/// without a country code) get the app's, as configured: there is no
+/// request for a [`RegionSource`](crate::RegionSource) to look at.
 pub async fn validate_in<T: Validate<Context = ()>>(
     value: &T,
     ctx: Option<&AppContext>,
 ) -> Result<(), crate::ValidationErrors> {
-    match check(value) {
+    let mut context = Context::new(ctx);
+    let checked = match context.attempt(|| check(value)) {
+        Some(checked) => checked,
+        None => {
+            context.resolve(None).await;
+            context.resolved(|| check(value))
+        }
+    };
+    match checked {
         Ok(()) => Ok(()),
         Err(failures) => {
             let messages = messages(ctx).await;
