@@ -1,0 +1,241 @@
+---
+title: "Events and observers"
+description: "Model events from `retrieved` to `restored`: observers, closure listeners, typed application events and real-time broadcasts, when each hears an event inside a unit of work, cancelling writes, quiet operations, custom events and testing with `ModelEventFake`."
+---
+
+Every save, delete and read of a record goes through a fixed series of steps, and each step is a **model event** your code can hear: `creating` before a new record is inserted, `created` after, `saving` around both inserts and updates, and so on. Listeners use them to keep data tidy, refuse a write, notify someone after a deal is won, or push the change to open browsers.
+
+```rust
+/// Keeps titles tidy and refuses deals without one.
+#[derive(Default)]
+pub struct DealObserver;
+
+impl Observer<Deal> for DealObserver {
+    async fn saving(&self, deal: &mut Record<Deal>, _ctx: &ExecContext) -> Result<Flow> {
+        deal.title = deal.title.trim().to_owned();
+        Ok(if deal.title.is_empty() { Flow::Cancel } else { Flow::Continue })
+    }
+
+    async fn updated(&self, deal: &Record<Deal>, _ctx: &ExecContext) -> Result<()> {
+        if deal.was_changed_on([Deal::STAGE]) && deal.stage == Stage::Won {
+            tracing::info!(deal = %deal.id, "deal won");
+        }
+        Ok(())
+    }
+}
+```
+
+## The events
+
+| Event | Fired by | Can cancel |
+|---|---|---|
+| `retrieved` | every record a query reads | |
+| `saving`, `saved` | every save (also of a record with no change), `create`, `update`, `touch`, `restore` | `saving` |
+| `creating`, `created` | inserting a new record | `creating` |
+| `updating`, `updated` | updating a changed record, `increment`, `decrement` | `updating` |
+| `deleting`, `deleted` | `delete`, `force_delete`, `destroy` | `deleting` |
+| `trashed` | a soft delete | |
+| `force_deleting`, `force_deleted` | `force_delete` of a soft-deleting model | `force_deleting` |
+| `restoring`, `restored` | `restore` | `restoring` |
+| `replicating` | `replicate_on` | |
+
+A new record runs `saving`, `creating`, the `INSERT`, `created`, `saved`; a changed one `saving`, `updating`, the `UPDATE`, `updated`, `saved`. A soft delete runs `deleting`, `trashed`, `deleted`.
+
+The `-ing` events run before the database is touched. Their listeners may change the record (fill a column, normalize a value) or cancel the operation by returning `Flow::Cancel`: `save` and `delete` then return `false` and write nothing. An error from an `-ing` listener stops the operation with that error.
+
+### Inside a unit of work
+
+Most writes happen inside a [unit of work](/docs/database/unit-of-work/), the request's or one you open. There, the `-ing` events run at once, in the transaction, so a listener can still change or refuse the write. Listeners hear the write events (`created`, `updated`, `saved`, `deleted`, `trashed`, `force_deleted`, `restored`) **after the unit of work commits**, on a snapshot of the record as it was when the event happened, so `get_changes`, `was_changed` and `get_original` describe that write. A write that rolls back is never announced: a "deal won" mail can't go out for a deal that wasn't won.
+
+An after-commit listener's error is logged and reported to the app's telemetry; it can't undo the commit. Outside a unit of work, every listener hears every event at once. Listeners run with the operation's unit of work as `Uow::current()`, so a job or event they dispatch joins it.
+
+## Observers
+
+An observer implements `Observer<M>`: one async method per event, all optional (`retrieved`, `saving`, `creating`, `created`, `updating`, `updated`, `saved`, `deleting`, `deleted`, `trashed`, `force_deleting`, `force_deleted`, `restoring`, `restored`, `replicating`, and `custom` for [custom events](#custom-events)). The `-ing` methods return `Result<Flow>`; the others `Result<()>`.
+
+A stateless observer can be declared on the model, where it runs on every pool, even one opened without an app:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, observers(DealObserver))]
+pub struct Deal { /* .. */ }
+```
+
+A module registers observers too. `observe` takes a value; `observer` lets the container build it, so it can inject services:
+
+```rust
+/// Mails the owner when a deal is won.
+#[injectable]
+pub struct WonDealMailer {
+    mailer: Arc<Mailer>,
+}
+
+impl Observer<Deal> for WonDealMailer {
+    async fn updated(&self, deal: &Record<Deal>, _ctx: &ExecContext) -> Result<()> {
+        if deal.was_changed_on([Deal::STAGE]) && deal.stage == Stage::Won {
+            // queue the mail with self.mailer
+        }
+        Ok(())
+    }
+}
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.model::<Deal>()
+            .observe::<Deal>(StageHistory)
+            .observer::<Deal, WonDealMailer>();
+    }
+}
+```
+
+An observer whose "-ed" methods must write in the same transaction as the change, such as a history table that commits or rolls back with it, sets `const IN_TRANSACTION: bool = true`: its methods then run at once, inside the unit of work.
+
+## Closure listeners
+
+For one event, a closure is enough:
+
+```rust
+m.on_model::<Deal, _>(ModelEvent::Creating, |deal, _ctx| {
+    Box::pin(async move {
+        if deal.owner_id.is_none() {
+            deal.owner_id = Uow::current().and_then(|uow| uow.actor());
+        }
+        Ok(())
+    })
+})
+.on_model::<Deal, _>(ModelEvent::Deleting, |deal, _ctx| {
+    Box::pin(async move {
+        Ok(if deal.stage == Stage::Won { Flow::Cancel } else { Flow::Continue })
+    })
+});
+```
+
+The second type parameter is what the closure returns: `()`, or `Flow` to cancel. Closure listeners follow the same timing as observers.
+
+## Application events
+
+A model can turn its events into typed application events, which [navree-events](/docs/digging-deeper/events/) delivers to their listeners (queued ones included):
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, dispatches(created = DealCreated, updated = DealUpdated))]
+pub struct Deal { /* .. */ }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DealCreated {
+    pub id: Uuid,
+    pub title: String,
+}
+
+impl navree::events::Event for DealCreated {
+    const NAME: &'static str = "deal.created";
+}
+
+impl From<&Record<Deal>> for DealCreated {
+    fn from(deal: &Record<Deal>) -> Self {
+        DealCreated { id: deal.id, title: deal.title.clone() }
+    }
+}
+```
+
+`dispatches(..)` maps any model event to an event type built `From<&Record<M>>`. "-ed" events are emitted after the commit; an `-ing` event at once, and a failing listener then refuses the write. An app without `EventsModule` dispatches nothing, and logs a warning saying so once.
+
+## Broadcasting changes
+
+A model marked `broadcasts` pushes its changes to [real-time channels](/docs/digging-deeper/broadcasting/) after each commit, on `created`, `updated` and `deleted` (and `trashed` and `restored` for soft-deleting models):
+
+```rust
+use navree::orm::broadcast::Broadcasts;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, broadcasts)]
+pub struct Deal { /* .. */ }
+
+impl Broadcasts for Deal {
+    /// Every pipeline board shows every deal.
+    fn broadcast_on(_deal: &Record<Self>, _event: ModelEvent) -> Vec<String> {
+        vec!["private-crm.deals".to_owned()]
+    }
+}
+```
+
+| | Default | Change it with |
+|---|---|---|
+| Channels | the record's private channel, `private-deal.{key}` | `broadcast_on` (no channels: no broadcast) |
+| Event name | `deal.created`, `deal.updated`, ... | `broadcast_as` |
+| Data | `{"deal": <the record's JSON>}` | `broadcast_with` |
+| Delivery | right after the commit | `broadcast_queue`: a job on that queue |
+
+Every method has a default, so `impl Broadcasts for Deal {}` broadcasts on the record's channel. The app needs `RealtimeModule` (a `dyn Broadcaster`). `without_broadcasting(future)` silences broadcasts while the rest of the listeners run.
+
+## Quiet operations
+
+A data fix or an import often must not notify anyone. `without_events` runs a future with every listener silenced:
+
+```rust
+use navree::orm::without_events;
+
+without_events(async {
+    deal.stage = Stage::Lost;
+    deal.save(&uow).await
+})
+.await?;
+```
+
+Observers, closure listeners, application events and broadcasts hear nothing; the write still records its change event for the [audit log](/docs/security/audit-log/). The silence belongs to the task, so concurrent requests are unaffected. The `_quietly` methods do the same for one call: `save_quietly`, `update_quietly`, `delete_quietly`, `touch_quietly`, `increment_quietly`, `decrement_quietly`, `create_quietly`, `restore_quietly`, `force_delete_quietly`, and the relations' `create_quietly` and `save_quietly`.
+
+[Mass updates and deletes](/docs/orm/query-builder/#updating-and-deleting-many-records) never fire events: they write rows without reading them.
+
+## Behaviours
+
+A type that implements `ModelHook<M>` directly, with `before` and `after` methods taking the event, is a **behaviour**: it runs at once for every event, in quiet operations too. The ORM's own features are behaviours (touching parents, filling a [workspace](/docs/orm/workspaces-and-access/#workspace-scoping) column), so they hold however a write happens. Write one when a rule must never be skipped; write an observer otherwise.
+
+## Custom events
+
+A record can fire events of its own, which observers hear in `custom` and closure listeners under `ModelEvent::Custom(name)`:
+
+```rust
+if deal.fire(&uow, "archiving").await? == Flow::Continue {
+    deal.update(&uow, |d| d.stage = Stage::Lost).await?;
+    deal.fire(&uow, "archived").await?;
+}
+```
+
+Custom events run where they are fired, at once; a listener may cancel. Built-in names are refused. `record.replicate_on(&uow)` copies a record (like `replicate`) after its listeners heard `replicating`.
+
+## Testing
+
+`ModelEventFake` stands in for every listener: put it in the test app, and the events listeners would have heard are recorded instead, at the moment they would have heard them. Behaviours still run.
+
+```rust
+use navree::orm::events::ModelEventFake;
+
+let fake = Arc::new(ModelEventFake::new());
+let app = TestApp::builder()
+    .temp_database()
+    .override_value(fake.clone())
+    .module(DatabaseModule::from_config())
+    .module(DealsModule)
+    .build()
+    .await;
+
+// ... create and update a deal through the API ...
+
+fake.assert_fired::<Deal>(ModelEvent::Created);
+fake.assert_fired_times::<Deal>(ModelEvent::Updated, 1);
+fake.assert_not_fired::<Deal>(ModelEvent::Deleted);
+```
+
+`fired()` lists every recorded event with its model and key, `keys::<M>(event)` the keys an event fired for, `assert_nothing_fired()` checks silence, and `clear()` starts over.
+
+<LinkCards>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    Transactions, after-commit hooks and change events.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    Typed application events and their listeners.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Broadcasting">
+    Channels, authorization and clients.
+  </LinkCard>
+</LinkCards>
