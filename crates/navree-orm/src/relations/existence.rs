@@ -573,7 +573,10 @@ impl<M: Model> Builder<M> {
     }
 
     /// Only records that belong to `owner`, through the `belongs_to`
-    /// relation named after `owner`'s model (`company` for a `Company`).
+    /// relation to `owner`'s model: the one named after the model
+    /// (`company` for a `Company`), else the only one (an error names the
+    /// candidates when there are several; pick one with
+    /// [`where_belongs_to_named`](Builder::where_belongs_to_named)).
     ///
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
@@ -582,8 +585,18 @@ impl<M: Model> Builder<M> {
     /// # Ok(()) }
     /// ```
     pub fn where_belongs_to<R: Model>(self, owner: &Record<R>) -> Self {
-        let name = snake_case(R::meta().name());
-        self.push_belongs_to(Boolean::And, &name, std::slice::from_ref(owner))
+        self.push_belongs_to_default(Boolean::And, std::slice::from_ref(owner))
+    }
+
+    fn push_belongs_to_default<R: Model>(self, boolean: Boolean, owners: &[Record<R>]) -> Self {
+        match relation_to::<M, R>(
+            &snake_case(R::meta().name()),
+            &[RelationKind::BelongsTo],
+            "where_belongs_to",
+        ) {
+            Ok(name) => self.push_belongs_to(boolean, &name, owners),
+            Err(error) => self.with_error(error.to_string()),
+        }
     }
 
     /// Only records that belong to `owner` through relation `path` (a
@@ -598,16 +611,14 @@ impl<M: Model> Builder<M> {
     }
 
     /// Only records that belong to one of `owners` (through the relation
-    /// named after their model).
+    /// [`where_belongs_to`](Builder::where_belongs_to) picks).
     pub fn where_belongs_to_any<R: Model>(self, owners: &Collection<R>) -> Self {
-        let name = snake_case(R::meta().name());
-        self.push_belongs_to(Boolean::And, &name, owners)
+        self.push_belongs_to_default(Boolean::And, owners)
     }
 
     /// `OR` records that belong to `owner`.
     pub fn or_where_belongs_to<R: Model>(self, owner: &Record<R>) -> Self {
-        let name = snake_case(R::meta().name());
-        self.push_belongs_to(Boolean::Or, &name, std::slice::from_ref(owner))
+        self.push_belongs_to_default(Boolean::Or, std::slice::from_ref(owner))
     }
 
     fn push_belongs_to<R: Model>(
@@ -626,9 +637,26 @@ impl<M: Model> Builder<M> {
     }
 
     /// Only records attached to `related` (many to many), through the
-    /// relation named after `related`'s table (`tags` for a `Tag`).
+    /// many-to-many relation to `related`'s model: the one named after its
+    /// table (`tags` for a `Tag`), else the only one (pick one with
+    /// [`where_attached_to_named`](Builder::where_attached_to_named)).
     pub fn where_attached_to<R: Model>(self, related: &Record<R>) -> Self {
-        self.push_attached(Boolean::And, R::meta().table(), std::slice::from_ref(related))
+        self.push_attached_default(Boolean::And, std::slice::from_ref(related))
+    }
+
+    fn push_attached_default<R: Model>(self, boolean: Boolean, related: &[Record<R>]) -> Self {
+        match relation_to::<M, R>(
+            R::meta().table(),
+            &[
+                RelationKind::BelongsToMany,
+                RelationKind::MorphToMany,
+                RelationKind::MorphedByMany,
+            ],
+            "where_attached_to",
+        ) {
+            Ok(name) => self.push_attached(boolean, &name, related),
+            Err(error) => self.with_error(error.to_string()),
+        }
     }
 
     /// Only records attached to `related` through relation `path`.
@@ -643,12 +671,12 @@ impl<M: Model> Builder<M> {
 
     /// Only records attached to one of `related`.
     pub fn where_attached_to_any<R: Model>(self, related: &Collection<R>) -> Self {
-        self.push_attached(Boolean::And, R::meta().table(), related)
+        self.push_attached_default(Boolean::And, related)
     }
 
     /// `OR` records attached to `related`.
     pub fn or_where_attached_to<R: Model>(self, related: &Record<R>) -> Self {
-        self.push_attached(Boolean::Or, R::meta().table(), std::slice::from_ref(related))
+        self.push_attached_default(Boolean::Or, std::slice::from_ref(related))
     }
 
     fn push_attached<R: Model>(self, boolean: Boolean, name: &str, related: &[Record<R>]) -> Self {
@@ -696,6 +724,47 @@ impl<M: Model> Builder<M> {
 /// An eager constraint adding `filter`.
 fn eager_filter(filter: Filter) -> crate::relations::eager::Constraint {
     crate::relations::eager::Constraint::new_filter(filter)
+}
+
+/// The relation of `M` to `R` of one of `kinds` that `method` uses without
+/// a name: `preferred` when it is one, else the only one.
+fn relation_to<M: Model, R: Model>(
+    preferred: &str,
+    kinds: &[RelationKind],
+    method: &str,
+) -> Result<String> {
+    let fits = |name: &str| {
+        M::relation_meta(name)
+            .is_some_and(|meta| kinds.contains(&meta.kind) && meta.related == Some(R::meta().name()))
+    };
+    if fits(preferred) {
+        return Ok(preferred.to_owned());
+    }
+    let candidates: Vec<String> = M::relation_names()
+        .into_iter()
+        .filter(|name| fits(name))
+        .map(Cow::into_owned)
+        .collect();
+    let kind = kinds[0].name();
+    match candidates.as_slice() {
+        [only] => Ok(only.clone()),
+        [] => Err(OrmError::invalid(format!(
+            "{method} needs a {kind} relation of {} to {}, and {} has none",
+            M::meta().name(),
+            R::meta().name(),
+            M::meta().name()
+        ))),
+        several => Err(OrmError::invalid(format!(
+            "{method} found several {kind} relations of {} to {} ({}): name one with {method}_named",
+            M::meta().name(),
+            R::meta().name(),
+            several
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
 }
 
 /// `foreign_key IN (owner keys)` for `belongs_to` relation `name` of `M`
