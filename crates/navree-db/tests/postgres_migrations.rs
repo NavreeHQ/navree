@@ -318,3 +318,80 @@ async fn the_migrator_on_postgres() {
     app.shutdown().await.unwrap();
     scratch.drop().await;
 }
+
+/// The `database.postgres` session settings shape every pooled
+/// connection, and the server counts the open connections.
+#[tokio::test]
+async fn session_settings_apply_to_every_connection() {
+    use navree_db::{IsolationLevel, PostgresOptions};
+
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let admin = Database::connect(&scratch.url).await.unwrap();
+    admin
+        .execute_unprepared("CREATE SCHEMA app")
+        .await
+        .unwrap();
+    admin.close().await.unwrap();
+    let db = Db::connect(&DbOptions {
+        url: scratch.url.clone(),
+        max_connections: 3,
+        postgres: PostgresOptions {
+            search_path: vec!["app".into(), "public".into()],
+            timezone: Some("Europe/Berlin".into()),
+            application_name: Some("navree-session-test".into()),
+            synchronous_commit: Some("off".into()),
+            isolation_level: Some(IsolationLevel::RepeatableRead),
+            ssl_mode: Some("prefer".into()),
+        },
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    let show = |setting: &'static str| {
+        let db = db.clone();
+        async move {
+            db.conn()
+                .query_one_raw(Statement::from_string(
+                    sea_orm::DbBackend::Postgres,
+                    format!("SELECT current_setting('{setting}') AS value"),
+                ))
+                .await
+                .unwrap()
+                .unwrap()
+                .try_get::<String>("", "value")
+                .unwrap()
+        }
+    };
+    assert_eq!(show("search_path").await, "app,public");
+    assert_eq!(show("TimeZone").await, "Europe/Berlin");
+    assert_eq!(show("application_name").await, "navree-session-test");
+    assert_eq!(show("synchronous_commit").await, "off");
+    assert_eq!(
+        show("default_transaction_isolation").await,
+        "repeatable read"
+    );
+    // Unqualified names resolve in `app` first.
+    db.conn()
+        .execute_unprepared("CREATE TABLE notes (id INT)")
+        .await
+        .unwrap();
+    let schema = db
+        .conn()
+        .query_one_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            "SELECT table_schema AS value FROM information_schema.tables WHERE table_name = 'notes'",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<String>("", "value")
+        .unwrap();
+    assert_eq!(schema, "app");
+    assert!(db.open_connections().await.unwrap().unwrap() >= 1);
+    assert!(db.server_version().await.unwrap().starts_with(char::is_numeric));
+    assert_eq!(db.database_name().await.unwrap(), scratch.name);
+    db.close().await.unwrap();
+    scratch.drop().await;
+}
