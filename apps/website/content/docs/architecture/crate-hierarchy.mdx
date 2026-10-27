@@ -57,7 +57,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
-| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation, [demo workspaces](/docs/workspaces/demo-workspaces/) |
 | L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
 | L6 | `navree-sso` | [Single sign-on](/docs/security/single-sign-on/): SAML 2.0 and OpenID Connect connections per organization or workspace, verified domains, just-in-time provisioning |
@@ -98,7 +98,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
-| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access, time |
+| `navree-workspace` | kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-sso` | kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace |

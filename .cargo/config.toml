@@ -1,4 +1,0 @@
-# Shared compilation cache: every agent uses its own CARGO_TARGET_DIR, so
-# sccache is what lets them share dependency builds.
-[build]
-rustc-wrapper = "sccache"

@@ -159,7 +159,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L4 | `navree-orm` | The ORM: `#[derive(Model)]` models with typed columns and keys (integers, UUID v7, ULID), a query builder with every where variant, joins, groups, subqueries, unions, locks and TimescaleDB's `time_bucket`/`first`/`last`, records with dirty tracking, casts, scopes, lifecycle hooks, collections and offset, simple and cursor pagination, on PostgreSQL/TimescaleDB, MySQL and SQLite through the unit of work, and a document-driver interface (facade feature `orm`) |
 | L4 | `navree-browser` | Browser testing: Chrome, Chromium or Edge over the DevTools Protocol, actions and assertions that wait, failure screenshots, `TestServer` on a real port and `FrontEnd` sessions (a dev-dependency; opt-in facade feature `browser`; `navree browser:install` downloads Chrome for Testing) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA and two-factor policy, sessions, step-up, impersonation, magic links and email codes, platform sign-in, token exchange, passkeys |
-| L5 | `navree-workspace` | Workspaces: members, roles, invitations, time zones and countries, row, schema or database isolation; organizations above workspaces and partitions inside them; entity classification and isolation checks, workspace isolation suites (feature `testing`) |
+| L5 | `navree-workspace` | Workspaces: members, roles, invitations, time zones and countries, row, schema or database isolation; organizations above workspaces and partitions inside them; entity classification and isolation checks, workspace isolation suites (feature `testing`); demo workspaces seeded from fixtures, read-only or reset nightly |
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
 | L5 | `navree-mongo` | MongoDB on the official driver: `MongoModule` (connections from `[database.mongodb]`, pools, readiness), the ORM's document driver (filters, aggregation pipelines, `$lookup` joins and subqueries, time buckets, ObjectId keys, bulk writes), sessions and units of work with change events, the schema builder on collections (JSON-schema validators, indexes, time-series collections) and migrations (facade feature `mongo` or `mongodb`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
@@ -204,8 +204,11 @@ abilities, platform modules), `crm-companies` (companies and contacts),
 - Rust 1.95 or newer (edition 2024; the build machine uses 1.99.1). On
   Windows, the MSVC build tools (SQLite is compiled from source through the
   bundled `libsqlite3-sys`).
-- [sccache](https://github.com/mozilla/sccache): `.cargo/config.toml` sets
-  `rustc-wrapper = "sccache"`. Remove that line if you don't want it.
+- Optional: [sccache](https://github.com/mozilla/sccache), to share compiled
+  dependencies between target directories. The repository doesn't set a
+  compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper =
+  "sccache"` under `[build]` in a Cargo config outside the repository (for
+  example `~/.cargo/config.toml`).
 - For the web app: Node.js 20.9 or newer (the build machine uses 24) and
   pnpm 11.
 
@@ -228,8 +231,8 @@ including the CRM API's feature tests and the dependency-graph test. Each
 test that touches a database gets its own temporary SQLite file.
 
 Several builds (people, CI jobs or agents) often run at the same time. Cargo
-locks the target directory, so give each one its own and let sccache share
-the compiled dependencies:
+locks the target directory, so give each one its own (and, if you use it, let
+sccache share the compiled dependencies):
 
 ```sh
 CARGO_TARGET_DIR=target/agents/<label> cargo test -p <crate>

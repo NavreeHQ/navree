@@ -116,6 +116,7 @@ export const sections: DocsSection[] = [
       "isolation",
       "organizations",
       "partitions",
+      "demo-workspaces",
     ],
   },
   {

@@ -3,6 +3,10 @@
 # advisory databases and the OpenSSF list of malicious packages. Runs on every
 # push and pull request, and weekly so newly published advisories show up even
 # when nothing changes here.
+#
+# A finding that can't be fixed yet is ignored in an osv-scanner.toml next to
+# its lockfile, with the reason and an expiry date. The scanner's version is
+# pinned so a new release can't change the result without a change here.
 name: Vulnerabilities
 
 on:
@@ -24,5 +28,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Scan lockfiles with OSV-Scanner
         run: |
-          docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:latest \
+          docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:v2.7.0 \
             scan source --recursive --format table /src

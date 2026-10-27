@@ -7,7 +7,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use async_graphql::dataloader::Loader;
 use async_graphql::futures_util::{Stream, StreamExt};
 use async_graphql::{ComplexObject, InputObject, SimpleObject};
 use garde::Validate;
@@ -19,7 +18,7 @@ use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_graphql::{
-    Context, ContextExt, EventStream, GraphqlModule, ModuleBuilderGraphqlExt, Result,
+    Context, ContextExt, EventStream, GraphqlModule, Loader, ModuleBuilderGraphqlExt, Result,
 };
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::ModuleBuilder;

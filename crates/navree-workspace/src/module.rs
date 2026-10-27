@@ -5,25 +5,28 @@ use std::sync::Arc;
 use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
+use chrono::Timelike;
+use http::{HeaderName, HeaderValue};
 use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
-use navree_contracts::ModuleBuilderConformityExt;
-use navree_contracts::PermissionCheck;
-use navree_contracts::ZoneSource;
+use navree_contracts::{Clock, ModuleBuilderConformityExt, PermissionCheck, ZoneSource};
 use navree_db::{Db, DbOptions, MigrationSet, ModuleBuilderDbExt};
 use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Injectable, Lifecycle, Module, ModuleBuilder,
+    ModuleId, ProviderKey, Resolver,
 };
+use navree_schedule::ModuleBuilderScheduleExt;
 use sea_orm::{DbBackend, EntityTrait, IntoActiveModel};
 use serde::Serialize;
 
-use crate::commands::commands;
+use crate::DemoMode;
+use crate::commands::{DEMO_RESET_COMMAND, commands};
 use crate::conformity::{self, EntityClass};
 use crate::controller::{InvitationController, WorkspaceController};
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
+use crate::demo::{DEMO_HEADER, DemoSeeder, DemoWorkspaces};
 use crate::directory::{TableUserDirectory, UserDirectory};
 use crate::entity::{
     access_request, invitation, member, organization, organization_member, partition, workspace,
@@ -42,11 +45,11 @@ use crate::{
 /// Multi-tenancy at the workspace level.
 ///
 /// Global; provides and exports [`Workspaces`], [`Members`],
-/// [`Invitations`], [`WorkspaceDatabases`], the `dyn`
+/// [`Invitations`], [`DemoWorkspaces`], [`WorkspaceDatabases`], the `dyn`
 /// [`UserDirectory`] and [`WorkspaceConfig`], and contributes:
 ///
-/// - the `workspace` migrations (`workspaces`, `workspace_members`,
-///   `workspace_invitations`, after `auth`);
+/// - the `workspace` migrations (`workspaces` with its `kind`,
+///   `workspace_members`, `workspace_invitations`, after `auth`);
 /// - the routes under `{http.api_prefix}` (default `/api`) unless
 ///   `workspace.routes` is false: `/workspaces...` and
 ///   `POST /invitations/accept` (see [`WorkspaceController`](crate::WorkspaceController));
@@ -60,8 +63,13 @@ use crate::{
 ///   of workspaces and organizations (their `timezone` and `country`) for
 ///   navree-time;
 /// - a request layer that commits the workspace database's unit of work
-///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation);
-/// - the commands `workspace:migrate` and `workspace:prune-invitations`;
+///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation) and adds
+///   the `X-Navree-Demo` header to responses about demo workspaces;
+/// - the commands `workspace:migrate`, `workspace:prune-invitations`,
+///   `workspace:demo-create` and `workspace:demo-reset`;
+/// - the scheduled task `workspace:demo-reset` (nightly at
+///   `workspace.demo.reset_at` with `workspace.demo.mode = "reset"`; runs
+///   when `ScheduleModule` is in the app);
 /// - the conformity checks `workspace.entities`, `workspace.repo` and
 ///   `workspace.tables` that `navree check` runs (see
 ///   [`ModuleBuilderWorkspaceExt::workspace_entity`]);
@@ -140,6 +148,7 @@ impl Module for ConfiguredWorkspaceModule {
 
 fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
     m.global();
+    let demo = config.as_ref().map(|config| config.demo.clone());
     match config {
         Some(config) => m.factory(Factory::<WorkspaceConfig>::new(move |_| {
             let config = config.clone();
@@ -322,18 +331,68 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             })
             .deps(vec![ProviderKey::of::<Organizations>()]),
         )
+        .factory(
+            Factory::<DemoWorkspaces>::new(|r: Resolver| async move {
+                Ok(Arc::new(DemoWorkspaces::new(
+                    r.get::<Core>().await?,
+                    r.get::<Workspaces>().await?,
+                )))
+            })
+            .deps(vec![ProviderKey::of::<Core>(), ProviderKey::of::<Workspaces>()]),
+        )
+        .exports::<DemoWorkspaces>()
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()
         .controller::<OrganizationController>()
         .migrations(migrations())
         .http_layer(tenant_layer())
-        .map_error::<WorkspaceError>(map_workspace_error);
+        .map_error::<WorkspaceError>(map_workspace_error)
+        .schedule(|s| match demo {
+            // Known now: the command, daily at `reset_at`, in reset mode.
+            Some(demo) => {
+                if let (DemoMode::Reset, Some((hour, minute))) = (demo.mode, demo.reset_time()) {
+                    s.command(DEMO_RESET_COMMAND, &[])
+                        .daily_at(&format!("{hour:02}:{minute:02}"))
+                        .without_overlapping();
+                }
+            }
+            // Read at boot: check every minute whether it is time.
+            None => {
+                s.task(DEMO_RESET_COMMAND, reset_demos_if_due)
+                    .every_minute()
+                    .without_overlapping();
+            }
+        });
     for command in commands() {
         m.command(command);
     }
     for check in conformity::checks() {
         m.conformity_check(check);
     }
+}
+
+/// The scheduled demo reset of an app configured from `workspace`: resets
+/// every demo workspace when `workspace.demo.mode` is `reset` and the
+/// app's clock shows `workspace.demo.reset_at` (UTC).
+async fn reset_demos_if_due(ctx: AppContext) -> Result<(), BoxError> {
+    let config = ctx.get::<WorkspaceConfig>().await?;
+    let demo = &config.demo;
+    let Some((hour, minute)) = demo.reset_time() else {
+        return Ok(());
+    };
+    if demo.mode != DemoMode::Reset {
+        return Ok(());
+    }
+    let now = match ctx.try_get::<dyn Clock>().await {
+        Some(clock) => clock.now(),
+        None => chrono::Utc::now(),
+    };
+    if now.hour() != hour || now.minute() != minute {
+        return Ok(());
+    }
+    let reset = ctx.get::<DemoWorkspaces>().await?.reset_all().await?;
+    tracing::info!(target: "navree::workspace", demos = reset.len(), "nightly demo reset");
+    Ok(())
 }
 
 impl Lifecycle for WorkspaceDatabases {
@@ -346,7 +405,8 @@ impl Lifecycle for WorkspaceDatabases {
 }
 
 /// The layer that commits (status below 400) or rolls back the workspace
-/// database's unit of work of a request, when one was opened.
+/// database's unit of work of a request, when one was opened, and adds the
+/// `X-Navree-Demo` header to responses about a demo workspace.
 fn tenant_layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Uow, "workspace-uow", |_ctx, router| {
         Ok(router.layer(from_fn(tenant_unit_of_work)))
@@ -357,20 +417,26 @@ async fn tenant_unit_of_work(mut request: Request, next: Next) -> Response {
     let cell = TenantCell::default();
     request.extensions_mut().insert(cell.clone());
     let response = next.run(request).await;
-    let Some(uow) = cell.0.get() else {
-        return response;
-    };
-    if response.status().as_u16() < 400 {
-        match uow.commit().await {
+    let mut response = match cell.0.uow.get() {
+        None => response,
+        Some(uow) if response.status().as_u16() < 400 => match uow.commit().await {
             Ok(()) => response,
             Err(error) => AppError::internal(error).into_response(),
+        },
+        Some(uow) => {
+            if let Err(error) = uow.rollback().await {
+                tracing::warn!(target: "navree::workspace", %error, "rolling back the workspace unit of work failed");
+            }
+            response
         }
-    } else {
-        if let Err(error) = uow.rollback().await {
-            tracing::warn!(target: "navree::workspace", %error, "rolling back the workspace unit of work failed");
-        }
-        response
+    };
+    if let Some(mode) = cell.0.demo.get() {
+        response.headers_mut().insert(
+            HeaderName::from_static(DEMO_HEADER),
+            HeaderValue::from_static(mode.as_str()),
+        );
     }
+    response
 }
 
 /// Workspace registrations on a [`ModuleBuilder`].
@@ -406,9 +472,22 @@ pub trait ModuleBuilderWorkspaceExt {
     /// Classifies `E` as a global entity: one set of rows shared by every
     /// workspace (countries, plans, the app's own settings).
     fn global_entity<E: EntityTrait>(&mut self) -> &mut Self;
+    /// Registers demo seeder `S` (a `dyn DemoSeeder` multi-binding): it
+    /// fills every demo workspace when [`DemoWorkspaces`] creates or
+    /// resets one.
+    fn demo_seeder<S: DemoSeeder + Injectable>(&mut self) -> &mut Self;
 }
 
 impl ModuleBuilderWorkspaceExt for ModuleBuilder {
+    fn demo_seeder<S: DemoSeeder + Injectable>(&mut self) -> &mut Self {
+        self.multi(
+            Factory::<dyn DemoSeeder>::new(|r: Resolver| async move {
+                Ok(Arc::new(S::construct(r).await?) as Arc<dyn DemoSeeder>)
+            })
+            .deps(S::dependencies()),
+        )
+    }
+
     fn workspace_migrations(&mut self, set: MigrationSet) -> &mut Self {
         self.contribute(WorkspaceMigrationSet(set))
     }
