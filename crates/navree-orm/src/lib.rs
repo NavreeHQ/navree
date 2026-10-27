@@ -14,6 +14,12 @@
 //!   `last`. [`TableBuilder`] queries tables without a model.
 //! - **Records** ([`Record`]) carry dirty tracking, extras and loaded
 //!   relations; saving inserts or updates, with lifecycle [`hooks`].
+//! - **Relationships** ([`relations`]) are methods of a `#[relations]` impl
+//!   block (belongs to, has one/many, many to many with pivots, through,
+//!   polymorphic): query them like builders, eager load them in batches
+//!   (`with("company.owner")`), check their existence (`where_has`),
+//!   aggregate them (`with_count`), and write through them (`attach`,
+//!   `sync`, `associate`).
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
