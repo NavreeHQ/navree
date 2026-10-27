@@ -38,7 +38,7 @@ conventions, and says which skill to load for each task.
 | [`navree-cli-generators`](navree-cli-generators/SKILL.md) | The `navree` CLI, every `make:*` generator and console commands |
 | [`navree-deployment`](navree-deployment/SKILL.md) | Release builds, processes, systemd, proxies and health checks |
 | [`navree-security-checklist`](navree-security-checklist/SKILL.md) | What to check before shipping |
-| [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level |
+| [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level, with organizations above and partitions inside |
 | [`navree-billing`](navree-billing/SKILL.md) | Subscriptions, trials, seats, metered usage, invoices and webhooks with Stripe or Paddle |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
