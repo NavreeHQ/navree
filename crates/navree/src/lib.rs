@@ -215,9 +215,6 @@ pub mod flags {
 }
 #[cfg(feature = "ai")]
 pub use navree_ai as ai;
-// L7: packages built on other packages.
-#[cfg(feature = "helm")]
-pub use navree_helm as helm;
 
 /// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
 /// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
@@ -226,6 +223,10 @@ pub mod mcp {
     pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
     pub use navree_mcp::*;
 }
+
+// L7: packages built on other packages.
+#[cfg(feature = "helm")]
+pub use navree_helm as helm;
 
 // L7 (opt-in)
 #[cfg(feature = "billing")]
