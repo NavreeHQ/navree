@@ -110,7 +110,7 @@ L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no 
 L7  navree-billing  navree-search  navree-lighthouse (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
-L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-browser
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
 L1  navree-contracts  navree-config  navree-telemetry
@@ -147,6 +147,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
+| L4 | `navree-browser` | Browser testing: Chrome, Chromium or Edge over the DevTools Protocol, actions and assertions that wait, failure screenshots, `TestServer` on a real port and `FrontEnd` sessions (a dev-dependency; opt-in facade feature `browser`; `navree browser:install` downloads Chrome for Testing) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
 | L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
@@ -162,7 +163,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue (facade feature `search`, opt-in) |
 | L7 | `navree-lighthouse` | Application monitoring inside the app: a telemetry sink grouping exceptions, slow requests and queries, failed jobs and failing outgoing calls into issues, per-minute aggregates and sampled traces in the app's database, alerts (mail, Slack, signed webhooks, your own channels) through the queue, the `/_lighthouse` dashboard and its JSON API, `lighthouse:prune` (facade feature `lighthouse`, in `full`) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree browser:install` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),
