@@ -458,6 +458,20 @@ impl Deal {
     pub fn contacts(&self) -> HasManyThrough<Deal, Contact> {
         self.through(Deal::company).has(Company::contacts)
     }
+
+    /// The deal's rows in the reporting database (another connection).
+    pub fn report_rows(&self) -> HasMany<Deal, ReportRow> {
+        self.has_many(ReportRow::DEAL_ID)
+    }
+}
+
+/// A row of the reporting database: a model on another connection.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "report_rows", connection = "analytics")]
+pub struct ReportRow {
+    pub id: i64,
+    pub deal_id: Option<i64>,
+    pub score: i64,
 }
 
 /// Something that happened on a deal; touches the deal when it changes.

@@ -429,6 +429,33 @@ async fn existence_subqueries_apply_the_related_models_global_scopes() {
 }
 
 #[tokio::test]
+async fn existence_checks_do_not_cross_connections() {
+    let t = sqlite().await;
+    seed(&t.db).await;
+    // `ReportRow` lives on the `analytics` connection: no join reaches it.
+    for error in [
+        Deal::query()
+            .has("report_rows")
+            .get(&t.db)
+            .await
+            .unwrap_err(),
+        Deal::query()
+            .with_count("report_rows")
+            .get(&t.db)
+            .await
+            .unwrap_err(),
+    ] {
+        let message = error.to_string();
+        assert!(
+            message.contains("crosses connections")
+                && message.contains("Deal (connection default)")
+                && message.contains("ReportRow (connection analytics)"),
+            "{message}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn merging_another_querys_constraints() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
