@@ -615,6 +615,20 @@ async fn row_level_security_lets_organization_requests_read_their_workspaces_onl
     .await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
+    // Nor can it update or delete the rows it reads.
+    let uow = db.uow(None, None).await;
+    organizations.enter(&uow, a.id).await.unwrap();
+    let tx = uow.tx().await.unwrap();
+    let deleted = tx.execute_unprepared("DELETE FROM notes").await.unwrap();
+    assert_eq!(deleted.rows_affected(), 0);
+    let updated = tx
+        .execute_unprepared("UPDATE notes SET body = 'changed'")
+        .await
+        .unwrap();
+    assert_eq!(updated.rows_affected(), 0);
+    drop(tx);
+    assert_eq!(every_note(&uow).await.unwrap(), json!(["a1", "a2"]));
+    uow.rollback().await.unwrap();
     // OrgRepo narrows further, to the workspaces a member reaches.
     let uow = db.uow(None, None).await;
     organizations.enter(&uow, a.id).await.unwrap();
