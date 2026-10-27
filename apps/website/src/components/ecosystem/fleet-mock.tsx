@@ -37,14 +37,15 @@ function WorkloadRows({ rows, compact }: { rows: Row[]; compact?: boolean }) {
     <div
       key={q.name}
       className={cn(
-        "grid h-10 items-center gap-3 border-b border-line px-3 last:border-b-0",
+        // Baseline-aligned, so the mono queue name and the numbers share a baseline; padded to 40px.
+        "grid h-10 items-baseline gap-3 border-b border-line px-3 py-2.5 leading-5 last:border-b-0",
         compact
           ? "grid-cols-[7.5rem_minmax(0,11rem)_minmax(3.25rem,1fr)]"
           : "grid-cols-[7.25rem_minmax(0,1fr)_3.5rem] @lg:grid-cols-[7.5rem_minmax(0,9rem)_4rem_3rem_3.5rem] @lg:justify-between",
       )}
     >
       <span className="truncate font-mono text-[0.8125rem] text-fg">{q.name}</span>
-      <ProcessSlots count={q.processes} capacity={q.capacity} />
+      <ProcessSlots count={q.processes} capacity={q.capacity} className="self-center" />
       <span className="text-right text-sm text-fg-1 tabular-nums">{q.pending}</span>
       {compact ? null : (
         <>

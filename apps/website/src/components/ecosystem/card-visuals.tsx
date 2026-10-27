@@ -17,13 +17,13 @@ export function WorkspacesVisual() {
   return (
     <div aria-hidden className="grid gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
-        <div className="rounded-lg border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
+        <div className="rounded-md border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
           <div className="text-fg-3">GET /api/v1/deals</div>
           <div className="text-fg-1">
             X-Workspace: <span className="text-accent">acme</span>
           </div>
         </div>
-        <div className="rounded-lg border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
+        <div className="rounded-md border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
           <div className="text-fg-3">CurrentWorkspace</div>
           <div className="truncate text-fg-1">acme · you are Admin</div>
         </div>
@@ -33,8 +33,8 @@ export function WorkspacesVisual() {
             <span
               key={mode}
               className={cn(
-                "rounded-md border px-2 font-mono text-xs leading-5",
-                i === 0 ? "border-accent/30 bg-accent/10 text-accent" : "border-line text-fg-2",
+                "rounded-sm border px-2 font-mono text-xs leading-5",
+                i === 0 ? "border-line-2 bg-ink-3 text-fg" : "border-line text-fg-2",
               )}
             >
               {mode}
@@ -42,7 +42,7 @@ export function WorkspacesVisual() {
           ))}
         </div>
       </div>
-      <div className="overflow-hidden rounded-lg border border-line bg-ink-0/60">
+      <div className="overflow-hidden rounded-md border border-line bg-ink-0/60">
         <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-xs leading-5">
           <span className="text-fg-1">acme · members</span>
           <span className="text-fg-3">4</span>
@@ -66,7 +66,7 @@ export function StarterKitsVisual() {
     { kit: "micro", what: "A service on a broker, with health checks and tracing" },
   ];
   return (
-    <div aria-hidden className="overflow-hidden rounded-lg border border-line bg-ink-0/60">
+    <div aria-hidden className="overflow-hidden rounded-md border border-line bg-ink-0/60">
       {kits.map((k) => (
         <div key={k.kit} className="grid grid-cols-[5.25rem_minmax(0,1fr)] gap-3 border-b border-line px-3 py-2 last:border-b-0">
           <span className="font-mono text-xs leading-5 text-accent">--kit {k.kit}</span>
@@ -85,7 +85,7 @@ export function DockVisual() {
     { name: "mailpit", image: "axllent/mailpit:v1.31", addr: "127.0.0.1:1025", ready: "0.6 s" },
   ];
   return (
-    <div aria-hidden className="rounded-lg border border-line bg-ink-0/60 px-3 py-2.5 font-mono text-xs leading-5">
+    <div aria-hidden className="rounded-md border border-line bg-ink-0/60 px-3 py-2.5 font-mono text-xs leading-5">
       <div className="text-fg">
         <span className="text-fg-3">$ </span>navree dock up
       </div>

@@ -149,17 +149,19 @@ export function LogbookMock({ className }: { className?: string }) {
           </div>
 
           <div className="min-w-0 p-4 @xl:p-5">
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-              <span className="font-mono text-[0.9375rem] font-medium text-fg">POST /api/v1/deals</span>
+            {/* Baseline-aligned: the mono path, the status and the duration share one baseline. */}
+            <div className="flex items-baseline gap-2.5">
+              <span className="min-w-0 truncate font-mono text-[0.9375rem] font-medium text-fg">POST /api/v1/deals</span>
               <Badge tone="positive" className="font-mono">
                 201
               </Badge>
-              <span className="text-[0.8125rem] text-fg-3 tabular-nums">24 ms</span>
-              <Button size="sm" icon={RotateCcwIcon} className="ml-auto">
-                Replay
+              <span className="shrink-0 text-[0.8125rem] text-fg-3 tabular-nums">24 ms</span>
+              {/* Icon only on narrow frames, so the title row never wraps. */}
+              <Button size="sm" icon={RotateCcwIcon} className="ml-auto self-center @max-md:w-7 @max-md:px-0">
+                <span className="hidden @md:inline">Replay</span>
               </Button>
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.8125rem] text-fg-3">
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[0.8125rem] text-fg-3">
               <span className="font-mono text-xs text-fg-2">DealsController::store</span>
               <span>
                 User <span className="text-fg-1">Priya Shah</span>

@@ -466,7 +466,7 @@ export function WorkspaceDemo() {
                             <Logo strokeWidth={2} />
                           </LogoTile>
                           <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                          <span className="font-mono text-xs text-fg-3">{s.role}</span>
+                          <span className="text-xs text-fg-3">{s.role}</span>
                           <CheckIcon aria-hidden className={cn("size-4 shrink-0 text-fg-2", i !== index && "invisible")} strokeWidth={2} />
                         </button>
                       </li>

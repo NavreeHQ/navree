@@ -104,11 +104,12 @@ export function SidebarItem({ item, collapsed }: { item: NavItem; collapsed?: bo
   }
   return (
     <div>
-      <div className={cn("flex h-8 items-center gap-2 rounded-sm px-2 text-sm", item.active ? "bg-ink-3 font-medium text-fg" : "text-fg-2")}>
-        <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+      {/* Baseline-aligned (the mono count sits on the label's baseline, not a box centre), padded to 32px. */}
+      <div className={cn("flex h-8 items-baseline gap-2 rounded-sm px-2 py-1.5 text-sm leading-5", item.active ? "bg-ink-3 font-medium text-fg" : "text-fg-2")}>
+        <Icon className="size-4 shrink-0 self-center" strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {item.badge ? <span className="font-mono text-xs font-normal text-fg-3 tabular-nums">{item.badge}</span> : null}
-        {item.sub ? <ChevronRightIcon className="size-4 shrink-0 rotate-90 text-fg-3" strokeWidth={1.75} /> : null}
+        {item.sub ? <ChevronRightIcon className="size-4 shrink-0 rotate-90 self-center text-fg-3" strokeWidth={1.75} /> : null}
       </div>
       {item.sub ? (
         <div className="mx-3.5 flex flex-col gap-1 border-l border-line px-2.5 py-0.5">
