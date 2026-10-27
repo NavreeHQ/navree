@@ -38,7 +38,10 @@ workspace's records. Three tools prove it:
 3. Document every route with `#[api(summary = "..", tag = "..")]` (or
    `.api(ApiMeta { .. })` on a `RouteDef`). Routes that stay undocumented
    on purpose go in `api.undocumented` (`"METHOD /path"`, `"/path"`, a
-   trailing `*`).
+   trailing `*`): the framework's pages and protocol endpoints belong
+   there, not in `#[api]` (`"/_lighthouse*"`, `"/_logbook*"`, Helm's
+   `"/admin*"`, Fleet's `"/_fleet*"`, `"/graphql*"`, `"/_navree/ui*"`, each
+   at its configured path).
 4. Give the workspace table an index that starts with `workspace_id` and,
    on PostgreSQL, `RlsPolicy::new("deals").create_sql()` in its migration.
 5. Write the module's isolation suite (below) and run it with `cargo test`.
