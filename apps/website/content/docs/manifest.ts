@@ -239,6 +239,7 @@ export const sections: DocsSection[] = [
       "webhooks",
       "integrations",
       "documents",
+      "media",
       "imports-and-exports",
       "workflows",
       "automations",

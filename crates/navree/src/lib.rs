@@ -54,6 +54,8 @@
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
 //! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from HTML templates or `PdfDocument` (native engine or Chrome), DOCX, merge and stamps |
+//! | `media` | navree-media | `media` (opt-in) | `MediaModule`: files attached to models in collections, image conversions and responsive variants, safe remote downloads, zip archives, text from PDF, DOCX and HTML |
+//! | | | `media-ffmpeg` (opt-in) | Video and audio through an FFmpeg sidecar: probe, poster frames, transcodes |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
@@ -70,8 +72,8 @@
 //! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`,
-//! `search`, `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports,
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`,
+//! `billing`, `search`, `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports,
 //! `i18n`, `dock`, `harbor`, `navigator`, `browser`, `otel`), and the
 //! `storage-s3` driver but not `storage-gcs` or `storage-azure`. A feature
 //! also turns on the features of the crates its crate builds on (`auth`
@@ -290,6 +292,10 @@ pub mod mcp {
 // L7: packages built on other packages.
 #[cfg(feature = "helm")]
 pub use navree_helm as helm;
+/// Media (the `media` feature): navree-media re-exported whole; with
+/// `media-ffmpeg`, `navree::media::video` too.
+#[cfg(feature = "media")]
+pub use navree_media as media;
 
 /// Durable workflows and end-user automations (the `workflows` feature):
 /// navree-workflows re-exported whole, with `#[workflow]`, `#[trigger]`,

@@ -115,6 +115,16 @@ fn opt_in_crates_are_reexported_with_their_feature() {
     assert_eq!(navree::oauth::pkce_challenge(&verifier), challenge);
 }
 
+/// `navree::media` is navree-media re-exported whole behind `media`
+/// (`cargo test -p navree --features media --test facade`).
+#[cfg(feature = "media")]
+#[test]
+fn media_is_reexported_with_its_feature() {
+    assert!(same::<navree::media::MediaModule, MediaModule>());
+    assert!(same::<navree::media::Media, Media>());
+    assert!(same::<navree::media::MediaFake, navree_media::MediaFake>());
+}
+
 /// `navree::ai` is navree-ai re-exported whole, and the `ai` feature puts
 /// `AiModule` in the prelude (`cargo test -p navree --features ai --test facade`).
 #[cfg(feature = "ai")]
@@ -513,7 +523,8 @@ struct Features {
 /// runtime never needs (`dock`, `harbor`, `navigator`), and ecosystem
 /// libraries and packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
-/// `features = ["grpc"]`, `features = ["documents"]`, `features = ["billing"]`,
+/// `features = ["grpc"]`, `features = ["documents"]`, `features = ["media"]`,
+/// `features = ["billing"]`,
 /// `features = ["search"]`, `features = ["mcp"]`, `features = ["ai"]`,
 /// `features = ["redis"]`, `features = ["micro"]`, `features = ["i18n"]`,
 /// `features = ["mongodb"]`), and test-only crates (`features = ["browser"]`
@@ -528,6 +539,7 @@ const OPT_IN: &[&str] = &[
     "graphql",
     "grpc",
     "documents",
+    "media",
     "billing",
     "search",
     "mcp",

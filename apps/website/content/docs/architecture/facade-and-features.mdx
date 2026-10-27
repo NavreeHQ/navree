@@ -98,6 +98,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::ai` | navree-ai, plus `#[agent]` | `ai` (opt-in) | `AiModule`: the [AI SDK](/docs/ai/ai-sdk/), [agents and tools](/docs/ai/agents-and-tools/), [embeddings and vector stores](/docs/ai/embeddings-and-rag/) |
 | `navree::micro` | navree-micro, plus `#[message_handlers]` | `micro` (opt-in), with `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis` and `micro-mqtt` | `MicroModule`, `ServiceClient`: [messages and events between services](/docs/microservices/introduction/) over TCP or a broker |
 | `navree::documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: [PDF from HTML templates or `PdfDocument`, DOCX, merge and stamps](/docs/packages/documents/) |
+| `navree::media` | navree-media | `media` (opt-in), with `media-ffmpeg` | `MediaModule`: [files attached to models](/docs/packages/media/) in collections, image conversions and responsive variants, safe remote downloads, zip archives, text from PDF, DOCX and HTML, and video through FFmpeg |
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
 | `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search](/docs/packages/search/), `#[derive(Searchable)]` |
 | `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
@@ -139,6 +140,7 @@ The facade's root also has:
 | AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 | Microservices (`micro`) | `MicroModule`, `ServiceClient`, `Payload`, `message_handlers` |
 | Documents (`documents`) | `DocumentsModule` |
+| Media (`media`) | `MediaModule`, `Media`, `HasMedia` (and `m.media_model::<M>()` through `ModuleBuilderMediaExt`) |
 | Integrations (`integrations`) | `IntegrationsModule` (and `m.integration_scope_set::<S>()` through `ModuleBuilderIntegrationsExt`) |
 | Imports and exports (`sheets`) | `SheetsModule` (and `m.export::<E>()`, `m.importer::<I>()` through `ModuleBuilderSheetsExt`) |
 | Billing (`billing`) | `BillingModule` |
@@ -160,7 +162,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, `mongo`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, `mongo`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -193,6 +195,8 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `documents` (opt-in, not in `full`) | `http`, `view`, `storage`; with `queue` on too, renders queued behind an operation |
+| `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue` |
+| `media-ffmpeg` (opt-in) | `media`, and its FFmpeg sidecar for video and audio |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
 | `search` (opt-in, not in `full`) | `http`, `http-client`, `db`, `queue`, `access`, `workspace` |
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |

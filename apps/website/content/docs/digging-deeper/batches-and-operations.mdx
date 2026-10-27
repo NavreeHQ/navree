@@ -57,6 +57,8 @@ A batch finishes when each of its jobs has succeeded, failed (used its attempts)
 
 A batch with no jobs finishes as it is dispatched: its `then` and `finally` are queued with it. Give a callback the ids it needs (`import_id` above) and look the rest up when it runs.
 
+Each job goes to the queue its type names (`JobOptions::queue`). `.on_queue("imports")` puts every job of the batch, and its callbacks, on one queue instead, the jobs added before the call and after it, so a large batch can run on workers of its own.
+
 ### Failures and cancellation
 
 By default the first failed job **cancels** the batch: the jobs that haven't started yet are skipped instead of run. Jobs that are already running keep going until they next report progress (see [stopping a cancelled job](#stopping-a-cancelled-job)). `finally` still runs; `then` doesn't.
