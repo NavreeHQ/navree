@@ -1,0 +1,491 @@
+//! `WHERE`, `HAVING` and join conditions, with the dialect rules for date
+//! parts, LIKE, null-safe equality, regular expressions and JSON.
+
+use chrono::{Datelike, Timelike};
+use sea_query::{BinOper, Condition, ExprTrait};
+
+use super::{Compiler, Dialect, json_path_literal, raw_sql};
+use crate::error::OrmError;
+use crate::ir::{Boolean, DatePart, Expr, InValues, Operator, Where, WhereClause};
+use crate::value::{Field, Value};
+
+impl Compiler {
+    /// A list of clauses with SQL's precedence: `a AND b OR c AND d` is
+    /// `(a AND b) OR (c AND d)`. The first clause's boolean is ignored.
+    pub(crate) fn clauses(&self, clauses: &[WhereClause]) -> Result<Condition, OrmError> {
+        let mut groups: Vec<Condition> = vec![Condition::all()];
+        for (i, clause) in clauses.iter().enumerate() {
+            let mut condition = self.where_(&clause.filter)?;
+            if clause.negated {
+                condition = condition.not();
+            }
+            if i > 0 && clause.boolean == Boolean::Or {
+                groups.push(Condition::all());
+            }
+            if let Some(group) = groups.pop() {
+                groups.push(group.add(condition));
+            }
+        }
+        Ok(if groups.len() == 1 {
+            groups.pop().unwrap_or_else(Condition::all)
+        } else {
+            groups
+                .into_iter()
+                .fold(Condition::any(), |any, group| any.add(group))
+        })
+    }
+
+    /// One condition.
+    pub(crate) fn where_(&self, filter: &Where) -> Result<Condition, OrmError> {
+        let expr = match filter {
+            Where::Compare { left, op, right } => self.compare(left, op, right)?,
+            Where::Null { expr, not } => {
+                let expr = self.expr(expr)?;
+                if *not { expr.is_not_null() } else { expr.is_null() }
+            }
+            Where::In { expr, values, not } => self.in_(expr, values, *not)?,
+            Where::Between {
+                expr,
+                low,
+                high,
+                not,
+            } => {
+                let (expr, low, high) = (self.expr(expr)?, self.expr(low)?, self.expr(high)?);
+                if *not {
+                    expr.not_between(low, high)
+                } else {
+                    expr.between(low, high)
+                }
+            }
+            Where::Like {
+                expr,
+                pattern,
+                case_sensitive,
+                not,
+            } => self.like(expr, pattern, *case_sensitive, *not)?,
+            Where::DatePart {
+                part,
+                expr,
+                op,
+                value,
+            } => self.date_part(*part, expr, op, value)?,
+            Where::Exists { query, not } => {
+                let mut query = (**query).clone();
+                query.orders.clear();
+                let select = self.select(&query)?;
+                if *not {
+                    sea_query::Expr::not_exists(select)
+                } else {
+                    sea_query::Expr::exists(select)
+                }
+            }
+            Where::Group(clauses) => {
+                if clauses.is_empty() {
+                    return Ok(Condition::all());
+                }
+                return self.clauses(clauses);
+            }
+            Where::JsonContains { column, value, not } => {
+                let condition = self.json_contains(column, value)?;
+                if *not {
+                    return Ok(Condition::all().add(condition).not());
+                }
+                condition
+            }
+            Where::JsonLength { column, op, length } => self.json_length(column, op, *length)?,
+            Where::Raw { sql, values } => {
+                let sql = raw_sql(sql, values.len(), self.dialect)?;
+                sea_query::Expr::cust_with_values(sql, values.iter().cloned())
+            }
+            Where::Sql(condition) => return Ok(condition.clone()),
+            Where::Invalid(message) => return Err(OrmError::invalid(message.clone())),
+            other => return Err(self.unsupported(format!("the condition {other:?}"))),
+        };
+        Ok(Condition::all().add(expr))
+    }
+
+    fn compare(&self, left: &Expr, op: &Operator, right: &Expr) -> Result<sea_query::Expr, OrmError> {
+        let l = self.expr(left)?;
+        let r = self.expr(right)?;
+        Ok(match op {
+            Operator::Eq => l.eq(r),
+            Operator::Ne => l.ne(r),
+            Operator::Lt => l.lt(r),
+            Operator::Lte => l.lte(r),
+            Operator::Gt => l.gt(r),
+            Operator::Gte => l.gte(r),
+            Operator::Like => self.text(l).binary(BinOper::Like, r),
+            Operator::NotLike => self.text(l).binary(BinOper::NotLike, r),
+            Operator::ILike => self.ilike(l, r, false),
+            Operator::NotILike => self.ilike(l, r, true),
+            Operator::NullSafeEq => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom("IS NOT DISTINCT FROM"), r),
+                Dialect::MySql => l.binary(BinOper::Custom("<=>"), r),
+                Dialect::Sqlite => l.binary(BinOper::Custom("IS"), r),
+            },
+            Operator::BitAnd => l.binary(BinOper::BitAnd, r),
+            Operator::BitOr => l.binary(BinOper::BitOr, r),
+            Operator::BitXor => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom("#"), r),
+                Dialect::MySql => l.binary(BinOper::Custom("^"), r),
+                // SQLite has no XOR: (a | b) - (a & b).
+                Dialect::Sqlite => self.custom("(({} | {}) - ({} & {}))", vec![l.clone(), r.clone(), l, r]),
+            },
+            Operator::ShiftLeft => l.binary(BinOper::LShift, r),
+            Operator::ShiftRight => l.binary(BinOper::RShift, r),
+            Operator::Regexp => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom("~"), r),
+                Dialect::MySql | Dialect::Sqlite => l.binary(BinOper::Custom("REGEXP"), r),
+            },
+            Operator::NotRegexp => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom("!~"), r),
+                Dialect::MySql | Dialect::Sqlite => l.binary(BinOper::Custom("NOT REGEXP"), r),
+            },
+            Operator::Postgres(op) => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom(op), r),
+                _ => return Err(self.unsupported(format!("the operator `{op}`"))),
+            },
+            Operator::Invalid(op) => {
+                return Err(OrmError::invalid(format!(
+                    "`{op}` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)"
+                )));
+            }
+            other => return Err(self.unsupported(format!("the operator {other:?}"))),
+        })
+    }
+
+    /// An expression compared as text (PostgreSQL's `LIKE` needs text on
+    /// the left; UUID and number columns are cast).
+    fn text(&self, expr: sea_query::Expr) -> sea_query::Expr {
+        match self.dialect {
+            Dialect::Postgres => self.custom("{}::text", vec![expr]),
+            Dialect::MySql | Dialect::Sqlite => expr,
+        }
+    }
+
+    fn ilike(&self, left: sea_query::Expr, right: sea_query::Expr, not: bool) -> sea_query::Expr {
+        match self.dialect {
+            Dialect::Postgres => self.text(left).binary(
+                BinOper::Custom(if not { "NOT ILIKE" } else { "ILIKE" }),
+                right,
+            ),
+            Dialect::MySql | Dialect::Sqlite => {
+                let left = self.custom("LOWER({})", vec![left]);
+                let right = self.custom("LOWER({})", vec![right]);
+                left.binary(if not { BinOper::NotLike } else { BinOper::Like }, right)
+            }
+        }
+    }
+
+    fn like(
+        &self,
+        expr: &Expr,
+        pattern: &Expr,
+        case_sensitive: bool,
+        not: bool,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let left = self.expr(expr)?;
+        Ok(match (self.dialect, case_sensitive) {
+            (Dialect::Postgres, false) => {
+                let right = self.expr(pattern)?;
+                self.ilike(left, right, not)
+            }
+            (Dialect::Postgres, true) | (Dialect::MySql | Dialect::Sqlite, false) => {
+                let right = self.expr(pattern)?;
+                self.text(left)
+                    .binary(if not { BinOper::NotLike } else { BinOper::Like }, right)
+            }
+            (Dialect::MySql, true) => {
+                let right = self.expr(pattern)?;
+                left.binary(
+                    BinOper::Custom(if not { "NOT LIKE BINARY" } else { "LIKE BINARY" }),
+                    right,
+                )
+            }
+            (Dialect::Sqlite, true) => {
+                // SQLite's LIKE ignores ASCII case; GLOB matches case, with
+                // its own wildcards.
+                let pattern = match pattern {
+                    Expr::Value(Value::String(Some(text))) => {
+                        Expr::Value(Value::from(like_to_glob(text)))
+                    }
+                    other => other.clone(),
+                };
+                let right = self.expr(&pattern)?;
+                left.binary(BinOper::Custom(if not { "NOT GLOB" } else { "GLOB" }), right)
+            }
+        })
+    }
+
+    fn in_(&self, expr: &Expr, values: &InValues, not: bool) -> Result<sea_query::Expr, OrmError> {
+        let left = self.expr(expr)?;
+        Ok(match values {
+            InValues::List(list) if list.is_empty() => {
+                // `IN ()` is not SQL: an empty IN matches nothing, NOT IN everything.
+                sea_query::Expr::cust(if not { "1 = 1" } else { "1 = 0" })
+            }
+            InValues::List(list) => {
+                let list = list
+                    .iter()
+                    .map(|value| self.expr(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if not { left.is_not_in(list) } else { left.is_in(list) }
+            }
+            InValues::Subquery(query) => {
+                let select = self.select(query)?;
+                if not {
+                    left.not_in_subquery(select)
+                } else {
+                    left.in_subquery(select)
+                }
+            }
+            other => return Err(self.unsupported(format!("IN with {other:?}"))),
+        })
+    }
+
+    fn date_part(
+        &self,
+        part: DatePart,
+        expr: &Expr,
+        op: &Operator,
+        value: &Expr,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let column = self.expr(expr)?;
+        let value = self.date_part_value(part, value)?;
+        let left = match (self.dialect, part) {
+            (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![column]),
+            (Dialect::Postgres, DatePart::Time) => self.custom("CAST({} AS TIME)", vec![column]),
+            (Dialect::Postgres, DatePart::Day) => self.custom("EXTRACT(DAY FROM {})", vec![column]),
+            (Dialect::Postgres, DatePart::Month) => self.custom("EXTRACT(MONTH FROM {})", vec![column]),
+            (Dialect::Postgres, DatePart::Year) => self.custom("EXTRACT(YEAR FROM {})", vec![column]),
+            (Dialect::MySql, DatePart::Date) => self.custom("DATE({})", vec![column]),
+            (Dialect::MySql, DatePart::Time) => self.custom("TIME({})", vec![column]),
+            (Dialect::MySql, DatePart::Day) => self.custom("DAY({})", vec![column]),
+            (Dialect::MySql, DatePart::Month) => self.custom("MONTH({})", vec![column]),
+            (Dialect::MySql, DatePart::Year) => self.custom("YEAR({})", vec![column]),
+            (Dialect::Sqlite, DatePart::Date) => self.custom("strftime('%Y-%m-%d', {})", vec![column]),
+            (Dialect::Sqlite, DatePart::Time) => self.custom("strftime('%H:%M:%S', {})", vec![column]),
+            (Dialect::Sqlite, DatePart::Day) => self.custom("strftime('%d', {})", vec![column]),
+            (Dialect::Sqlite, DatePart::Month) => self.custom("strftime('%m', {})", vec![column]),
+            (Dialect::Sqlite, DatePart::Year) => self.custom("strftime('%Y', {})", vec![column]),
+            (_, other) => return Err(self.unsupported(format!("the date part {other:?}"))),
+        };
+        let right = match (self.dialect, part) {
+            (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![value]),
+            (Dialect::Postgres, DatePart::Time) => self.custom("CAST({} AS TIME)", vec![value]),
+            _ => value,
+        };
+        self.compare_compiled(left, op, right)
+    }
+
+    /// `left op right` on already compiled sides (date parts).
+    fn compare_compiled(
+        &self,
+        l: sea_query::Expr,
+        op: &Operator,
+        r: sea_query::Expr,
+    ) -> Result<sea_query::Expr, OrmError> {
+        Ok(match op {
+            Operator::Eq => l.eq(r),
+            Operator::Ne => l.ne(r),
+            Operator::Lt => l.lt(r),
+            Operator::Lte => l.lte(r),
+            Operator::Gt => l.gt(r),
+            Operator::Gte => l.gte(r),
+            Operator::Invalid(op) => {
+                return Err(OrmError::invalid(format!(
+                    "`{op}` is not a known operator for a date comparison (use =, <>, <, <=, >, >=)"
+                )));
+            }
+            other => {
+                return Err(OrmError::invalid(format!(
+                    "{other:?} cannot compare dates (use =, <>, <, <=, >, >=)"
+                )));
+            }
+        })
+    }
+
+    /// The value a date part is compared with: numbers for day, month and
+    /// year (zero-padded text on SQLite, whose `strftime` returns text),
+    /// `YYYY-MM-DD` / `HH:MM:SS` text for dates and times on SQLite.
+    fn date_part_value(&self, part: DatePart, value: &Expr) -> Result<sea_query::Expr, OrmError> {
+        let Expr::Value(value) = value else {
+            return self.expr(value);
+        };
+        let normalized = match part {
+            DatePart::Day | DatePart::Month | DatePart::Year => {
+                let number = match value {
+                    Value::ChronoDate(Some(date)) => i64::from(match part {
+                        DatePart::Day => date.day() as i32,
+                        DatePart::Month => date.month() as i32,
+                        _ => date.year(),
+                    }),
+                    Value::ChronoDateTime(Some(at)) => i64::from(match part {
+                        DatePart::Day => at.day() as i32,
+                        DatePart::Month => at.month() as i32,
+                        _ => at.year(),
+                    }),
+                    Value::ChronoDateTimeUtc(Some(at)) => i64::from(match part {
+                        DatePart::Day => at.day() as i32,
+                        DatePart::Month => at.month() as i32,
+                        _ => at.year(),
+                    }),
+                    other => i64::from_value(other.clone()).map_err(|error| {
+                        OrmError::invalid(format!("a {part:?} must be a number: {error}"))
+                    })?,
+                };
+                match self.dialect {
+                    Dialect::Sqlite if part == DatePart::Year => Value::from(format!("{number:04}")),
+                    Dialect::Sqlite => Value::from(format!("{number:02}")),
+                    Dialect::Postgres | Dialect::MySql => Value::from(number),
+                }
+            }
+            DatePart::Date => match (self.dialect, value) {
+                (Dialect::Sqlite, Value::ChronoDate(Some(date))) => {
+                    Value::from(date.format("%Y-%m-%d").to_string())
+                }
+                (Dialect::Sqlite, Value::ChronoDateTime(Some(at))) => {
+                    Value::from(at.format("%Y-%m-%d").to_string())
+                }
+                (Dialect::Sqlite, Value::ChronoDateTimeUtc(Some(at))) => {
+                    Value::from(at.format("%Y-%m-%d").to_string())
+                }
+                _ => value.clone(),
+            },
+            DatePart::Time => match (self.dialect, value) {
+                (Dialect::Sqlite, Value::ChronoTime(Some(time))) => Value::from(format!(
+                    "{:02}:{:02}:{:02}",
+                    time.hour(),
+                    time.minute(),
+                    time.second()
+                )),
+                _ => value.clone(),
+            },
+            _ => value.clone(),
+        };
+        Ok(sea_query::Expr::val(normalized))
+    }
+
+    fn json_contains(
+        &self,
+        column: &crate::ir::ColumnRef,
+        value: &serde_json::Value,
+    ) -> Result<sea_query::Expr, OrmError> {
+        Ok(match self.dialect {
+            Dialect::Postgres => {
+                let target = self.json_value(column);
+                self.custom(
+                    "({})::jsonb @> {}",
+                    vec![target, sea_query::Expr::val(Value::Json(Some(Box::new(value.clone()))))],
+                )
+            }
+            Dialect::MySql => {
+                let base = self.plain_column(column);
+                let encoded = sea_query::Expr::val(Value::from(value.to_string()));
+                if column.path.is_empty() {
+                    self.custom("json_contains({}, {})", vec![base, encoded])
+                } else {
+                    self.custom(
+                        &format!("json_contains({{}}, {{}}, {})", json_path_literal(&column.path)),
+                        vec![base, encoded],
+                    )
+                }
+            }
+            Dialect::Sqlite => {
+                let scalar = match value {
+                    serde_json::Value::String(text) => Value::from(text.clone()),
+                    serde_json::Value::Bool(flag) => Value::from(i64::from(*flag)),
+                    serde_json::Value::Number(number) => match number.as_i64() {
+                        Some(int) => Value::from(int),
+                        None => Value::from(number.as_f64().unwrap_or_default()),
+                    },
+                    serde_json::Value::Null => Value::String(None),
+                    _ => {
+                        return Err(self.unsupported(
+                            "a JSON containment check for an object or array value",
+                        ));
+                    }
+                };
+                let base = self.plain_column(column);
+                let source = if column.path.is_empty() {
+                    self.custom("json_each({})", vec![base])
+                } else {
+                    self.custom(
+                        &format!("json_each({{}}, {})", json_path_literal(&column.path)),
+                        vec![base],
+                    )
+                };
+                self.custom(
+                    "EXISTS (SELECT 1 FROM {} WHERE \"json_each\".\"value\" IS {})",
+                    vec![source, sea_query::Expr::val(scalar)],
+                )
+            }
+        })
+    }
+
+    fn json_length(
+        &self,
+        column: &crate::ir::ColumnRef,
+        op: &Operator,
+        length: i64,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let left = match self.dialect {
+            Dialect::Postgres => {
+                let target = self.json_value(column);
+                self.custom("jsonb_array_length(({})::jsonb)", vec![target])
+            }
+            Dialect::MySql => {
+                let base = self.plain_column(column);
+                if column.path.is_empty() {
+                    self.custom("json_length({})", vec![base])
+                } else {
+                    self.custom(
+                        &format!("json_length({{}}, {})", json_path_literal(&column.path)),
+                        vec![base],
+                    )
+                }
+            }
+            Dialect::Sqlite => {
+                let base = self.plain_column(column);
+                if column.path.is_empty() {
+                    self.custom("json_array_length({})", vec![base])
+                } else {
+                    self.custom(
+                        &format!("json_array_length({{}}, {})", json_path_literal(&column.path)),
+                        vec![base],
+                    )
+                }
+            }
+        };
+        self.compare_compiled(left, op, sea_query::Expr::val(length))
+    }
+}
+
+/// A LIKE pattern as a GLOB pattern: `%` → `*`, `_` → `?`, and GLOB's own
+/// wildcards (`*`, `?`, `[`) matching themselves.
+fn like_to_glob(pattern: &str) -> String {
+    let mut glob = String::with_capacity(pattern.len() + 4);
+    for c in pattern.chars() {
+        match c {
+            '%' => glob.push('*'),
+            '_' => glob.push('?'),
+            '*' => glob.push_str("[*]"),
+            '?' => glob.push_str("[?]"),
+            '[' => glob.push_str("[[]"),
+            other => glob.push(other),
+        }
+    }
+    glob
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn like_patterns_become_globs() {
+        assert_eq!(like_to_glob("Acme%"), "Acme*");
+        assert_eq!(like_to_glob("a_c"), "a?c");
+        assert_eq!(like_to_glob("50*?["), "50[*][?][[]");
+    }
+}
