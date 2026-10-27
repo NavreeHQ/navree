@@ -4,6 +4,7 @@ mod archives;
 mod fake;
 mod images;
 mod models;
+mod module;
 mod remote;
 mod service;
 mod support;

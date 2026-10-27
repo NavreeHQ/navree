@@ -23,6 +23,8 @@ use crate::migration::migrations;
 use crate::options::StoreKind;
 use crate::service::{Registered, registration};
 use crate::store::{DatabaseStore, MediaStore, MemoryStore};
+#[cfg(feature = "ffmpeg")]
+use crate::video::FfmpegRunner;
 use crate::{ArchiveError, Media, MediaError, MediaOptions};
 
 /// Media: files attached to models, with conversions.
@@ -46,7 +48,9 @@ use crate::{ArchiveError, Media, MediaError, MediaOptions};
 /// is `memory`. With `QueueModule`, conversions are generated on the
 /// queue; without it, while the file is added. With `HttpClientModule`,
 /// remote files are downloaded through the app's client (a client with
-/// the default SSRF policy otherwise).
+/// the default SSRF policy otherwise). With the `ffmpeg` feature, an
+/// `Arc<dyn FfmpegRunner>` in the app (an `FfmpegFake` in tests) runs the
+/// tools instead of child processes.
 ///
 /// ```no_run
 /// use navree_config::{ConfigModule, ConfigSources};
@@ -168,6 +172,10 @@ fn register(m: &mut ModuleBuilder, options: Option<MediaOptions>) {
                     .options((*options).clone())
                     .store(store)
                     .app(app.downgrade());
+                #[cfg(feature = "ffmpeg")]
+                if let Some(runner) = app.try_get::<dyn FfmpegRunner>().await {
+                    builder = builder.ffmpeg_runner(runner);
+                }
                 for contributed in app.contributions::<MediaRegistration>() {
                     let registration = contributed.value.as_ref().clone();
                     builder = builder.registered(registration.model_type, registration.registered);
