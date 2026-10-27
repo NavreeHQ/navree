@@ -377,9 +377,7 @@ impl<E: Searchable> SearchQuery<E> {
         }
         let tags = highlight.then_some(&self.tags);
         let (hits, total) = match hybrid {
-            Some(weight) => {
-                self.run_hybrid(&plan, weight, offset, limit, tags).await?
-            }
+            Some(weight) => self.run_hybrid(&plan, weight, offset, limit, tags).await?,
             _ => {
                 let results = self
                     .search
