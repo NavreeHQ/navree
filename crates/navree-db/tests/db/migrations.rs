@@ -332,6 +332,14 @@ async fn migrate_commands_run_through_the_app() {
     app.run_command("migrate:status", vec![])
         .await
         .expect("status");
+    app.run_command("migrate:status", vec!["--json".to_owned()])
+        .await
+        .expect("status as JSON");
+    // What `--json` prints: the statuses, serialized.
+    let json = serde_json::to_value(Migrator::status(app.ctx()).await.unwrap()).unwrap();
+    assert_eq!(json[0]["applied"], true);
+    assert!(json[0]["module"].is_string() && json[0]["name"].is_string());
+    assert!(json[0]["batch"].is_i64());
     app.run_command("migrate:rollback", vec![])
         .await
         .expect("rollback");

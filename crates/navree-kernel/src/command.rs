@@ -1,4 +1,5 @@
-//! CLI commands contributed by modules, and the built-in `check` and `help`.
+//! CLI commands contributed by modules, and the built-in `check`, `help`
+//! and `introspect`.
 
 use std::fmt;
 use std::future::Future;
@@ -47,12 +48,16 @@ impl fmt::Debug for CommandSpec {
 }
 
 /// Built-in commands handled by [`AppBuilder::run_with_args`](crate::AppBuilder::run_with_args).
-const BUILT_INS: [(&str, &str); 2] = [
+pub(crate) const BUILT_INS: [(&str, &str); 3] = [
     (
         "check [--graph]",
         "Validate the module graph without constructing providers",
     ),
     ("help", "List the available commands"),
+    (
+        "introspect --json",
+        "Print the module graph and commands as JSON without constructing providers",
+    ),
 ];
 
 /// The text printed by `help`.

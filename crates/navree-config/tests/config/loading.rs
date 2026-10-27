@@ -121,6 +121,23 @@ fn defaults_read_dotenv_then_app_toml_then_app_env() {
 }
 
 #[test]
+fn defaults_in_reads_the_files_of_another_directory() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(
+        dir.path().join("config/app.toml"),
+        "[mail]\nhost = \"smtp.toml\"\nport = 25\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join(".env"), "APP_MAIL__HOST=smtp.env\nAPP_KEY=k\n").unwrap();
+    let config = Config::load(&ConfigSources::defaults_in(dir.path())).expect("load");
+    // The same order as `defaults()`: config/app.toml over .env.
+    assert_eq!(config.get_string("mail.host").as_deref(), Some("smtp.toml"));
+    assert_eq!(config.get_string("mail.port").as_deref(), Some("25"));
+    assert_eq!(config.get_string("key").as_deref(), Some("k"));
+}
+
+#[test]
 fn sources_debug_shows_keys_but_not_values() {
     let sources = ConfigSources::new()
         .env_vars("APP", [("APP_DATABASE__PASSWORD", "hunter2")])

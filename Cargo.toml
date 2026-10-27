@@ -58,6 +58,7 @@ navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
 navree-ui = { path = "crates/navree-ui", version = "0.1.0" }
+navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -214,6 +215,8 @@ sea-query = { version = "1.0.2", default-features = false, features = [
     "with-uuid",
 ] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled"] }
+# Navigator's read-only query guard: parses a statement before it is sent.
+sqlparser = { version = "0.63.0", features = ["visitor"] }
 
 # ---------------------------------------------------------------------------
 # Security and crypto (RustCrypto 2026 wave: argon2 0.6, hmac 0.13, sha2 0.11)
@@ -272,6 +275,13 @@ tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compr
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "2.7.0"
+# The official Rust MCP SDK (navree-mcp): the server, stdio and the
+# streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
+rmcp = { version = "3.7.0", default-features = false, features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI

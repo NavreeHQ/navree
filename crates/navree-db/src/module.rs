@@ -145,7 +145,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         ))
         .command(CommandSpec::new(
             "migrate:status",
-            "Show which migrations have run",
+            "Show which migrations have run ([--json])",
             status_command,
         ))
         .command(CommandSpec::new(
@@ -264,8 +264,14 @@ async fn seed_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError
     Ok(())
 }
 
-async fn status_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+async fn status_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let status = Migrator::status(&ctx).await?;
+    if args.iter().any(|a| a == "--json") {
+        // `[{"module", "name", "applied", "batch", "applied_at"}]`, for tools
+        // (Navigator's `describe_schema`).
+        println!("{}", serde_json::to_string_pretty(&status)?);
+        return Ok(());
+    }
     if status.is_empty() {
         println!("No migrations are registered.");
         return Ok(());
