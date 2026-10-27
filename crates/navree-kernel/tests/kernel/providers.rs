@@ -244,6 +244,25 @@ mod multi {
                 .expect("get_all")
                 .is_empty()
         );
+        assert_eq!(app.ctx().multi_count::<dyn Check>(), 0);
+    }
+
+    /// Counted from the module graph, without resolving anything, so a
+    /// provider's factory can decide whether anybody listens, even for
+    /// multi-bindings that depend on that provider.
+    #[tokio::test]
+    async fn multi_count_counts_registrations_from_the_graph() {
+        module!(Counted, |m| {
+            m.multi(check("counted"));
+        });
+        let app = Navree::app()
+            .module(CacheChecks)
+            .module(Counted)
+            .boot()
+            .await
+            .expect("boot");
+        assert_eq!(app.ctx().multi_count::<dyn Check>(), 4);
+        assert_eq!(app.ctx().multi_count::<dyn std::fmt::Debug>(), 0);
     }
 }
 

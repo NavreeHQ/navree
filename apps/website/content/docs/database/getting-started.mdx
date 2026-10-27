@@ -28,9 +28,13 @@ url = "sqlite://storage/app.db?mode=rwc"
 max_connections = 10
 min_connections = 0
 connect_timeout_secs = 8
+test_before_acquire = false
+idle_timeout_secs = 600
+max_lifetime_secs = 1800
 log_queries = false
 slow_query_ms = 200
 migrate_on_boot = false
+transaction_settings = true
 ```
 
 | Key | Default | What it does |
@@ -39,9 +43,13 @@ migrate_on_boot = false
 | `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
 | `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
 | `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
+| `test_before_acquire` | `false` | Pings every connection taken from the pool before handing it out, which costs one round trip per checkout. Off, only a connection that sat idle in the pool for 30 seconds or more is pinged first ([below](#the-pool)). |
+| `idle_timeout_secs` | `600` | Closes a connection idle in the pool this long, as long as `min_connections` stay open. `0` keeps idle connections. |
+| `max_lifetime_secs` | `1800` | Replaces a connection once it is this old. `0` sets no limit. |
 | `log_queries` | `false` | Logs every statement at debug level. |
 | `slow_query_ms` | `200` | Logs statements slower than this at warn level. `0` turns it off. When you leave it out, the logger's `log.slow_query_ms` applies. |
 | `migrate_on_boot` | `false` | Runs pending migrations when the app boots. Handy in development and tests; run `migrate` in deployments instead. |
+| `transaction_settings` | `true` | Makes the actor and request id of every unit of work readable in SQL: `navree.actor` and `navree.request_id` on PostgreSQL, `@navree_actor` and `@navree_request_id` on MySQL and MariaDB. Turn it off when no trigger or policy reads them: each transaction then saves the statement that sets them (and on MySQL the one that clears them). |
 
 Like every section, these keys can come from environment variables with the `APP_` prefix and `__` between levels: `APP_DATABASE__URL` sets `database.url`. Keep a production URL, and its password, in the environment rather than in `config/app.toml`. A `.env` entry only fills keys that `config/app.toml` leaves out, and a new app's `config/app.toml` sets `database.url`, so `APP_DATABASE__URL` in `.env` has no effect there. See [configuration](/docs/getting-started/configuration/) for the order in which sources apply.
 
@@ -123,7 +131,7 @@ Without the feature, the app fails to boot with "cannot connect to postgres://cr
 
 On PostgreSQL, Navree behaves differently in a few places:
 
-- Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`.
+- Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`, with one `SELECT set_config(..)` right after `BEGIN`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`. With `transaction_settings = false` the statement isn't sent and the settings stay unset.
 - `Uow::lock_for_update()` is true, so `Repo::update`, `Repo::find_for_update` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
 - `migrate:fresh` drops every table of the current schema with `CASCADE`.
 - The case-insensitive search helpers use `LOWER(..) LIKE` ([below](#searching-text)).
@@ -138,7 +146,11 @@ These PostgreSQL paths are written but have not yet run against a real server: `
 
 </Callout>
 
-Apart from its size and timeouts, the pool keeps SQLx's defaults. One of them is `test_before_acquire`: every checkout pings the connection, which costs one round trip per checkout. `navree-db` has no setting to turn it off.
+### The pool
+
+Navree doesn't ping a connection every time it takes one from the pool: on a busy app that ping is one round trip on every query. A connection that has sat idle in the pool for 30 seconds or more is pinged first, since a server, a proxy or a firewall may have dropped it in the meantime; a connection in steady use goes straight out. Set `test_before_acquire = true` to ping on every checkout instead.
+
+Connections idle for `idle_timeout_secs` are closed (down to `min_connections`), and connections older than `max_lifetime_secs` are closed and replaced with new ones as they are needed.
 
 ## MySQL and MariaDB
 
@@ -206,7 +218,7 @@ strict = true
 
 ### How Navree behaves on MySQL
 
-- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. Navree ids are `BINARY(16)` columns on MySQL, so a trigger that records who changed a row converts the text:
+- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) Navree ids are `BINARY(16)` columns on MySQL, so a trigger that records who changed a row converts the text:
 
   ```sql
   CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW

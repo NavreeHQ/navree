@@ -452,6 +452,15 @@ impl AppContext {
         self.root_resolver().get_all::<T>().await
     }
 
+    /// How many multi-bindings of `T` the app registers, read from the
+    /// module graph without resolving any (so a provider's factory can call
+    /// it even when those multi-bindings depend on the provider). A module
+    /// decides with it, once at boot, whether anybody listens: navree-db
+    /// skips preparing change events in an app with no `dyn ChangeObserver`.
+    pub fn multi_count<T: ?Sized + 'static>(&self) -> usize {
+        self.inner.graph.multi_of(std::any::TypeId::of::<T>()).len()
+    }
+
     /// Every value of type `C` contributed by any module, modules in dependency
     /// order, then in registration order.
     pub fn contributions<C: Send + Sync + 'static>(&self) -> Vec<Contributed<C>> {

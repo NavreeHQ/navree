@@ -490,6 +490,42 @@ async fn global_layers_applied_in_slot_order() {
     app.get("/api/missing").await.assert_error(404);
 }
 
+/// With no `Session` layer, navree's authentication runs as the last fixed
+/// stage; the contributed layers still see the request authenticated.
+#[tokio::test]
+async fn authentication_precedes_the_slots_without_session_layers() {
+    let app = Setup::new(vec![
+        RouteDef::new(
+            Method::GET,
+            "/trail",
+            get(|request: Request| async move {
+                request
+                    .headers()
+                    .get("x-trail")
+                    .map(|v| v.to_str().unwrap().to_owned())
+                    .unwrap_or_default()
+            }),
+        )
+        .public(),
+        RouteDef::new(Method::GET, "/private", get(|| async { "secret" })).authenticated(),
+    ])
+    .authenticated()
+    .module(LayerModule::<1>(LayerSlot::Uow, "uow"))
+    .module(LayerModule::<3>(LayerSlot::AuthContext, "auth-context"))
+    .boot()
+    .await;
+
+    assert_eq!(
+        app.get("/api/trail").await.text(),
+        "auth-context+auth,uow+auth"
+    );
+    app.get("/api/private").await.assert_error(401);
+    let response = app.send(as_user("GET", "/api/private", ALICE)).await;
+    assert_eq!(response.status, StatusCode::OK);
+    assert_eq!(response.text(), "secret");
+    app.get("/api/missing").await.assert_error(404);
+}
+
 /// A module whose `Edge` layer answers `/edge/...` itself (reporting
 /// whether the request already had a request id) and marks every other
 /// response it lets through.

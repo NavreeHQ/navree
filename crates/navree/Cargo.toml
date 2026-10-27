@@ -432,7 +432,10 @@ async-graphql = { workspace = true }
 # `tests/jose_docs.rs` builds fixture keys by hand.
 base64 = { workspace = true }
 chrono = { workspace = true }
+# The request-pipeline benchmarks (`benches/pipeline.rs`).
+criterion = { workspace = true }
 garde = { workspace = true }
+http-body-util = { workspace = true }
 metrics = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
@@ -440,6 +443,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
 # The gRPC docs example: tonic's generated code names these crates.
@@ -461,3 +465,11 @@ required-features = ["grpc"]
 [[test]]
 name = "redis"
 required-features = ["redis"]
+
+# The request-pipeline micro-benchmarks: `/json` through the whole router,
+# a pool read, a validated insert and a unit of work on SQLite
+# (`cargo bench -p navree --bench pipeline`).
+[[bench]]
+name = "pipeline"
+harness = false
+required-features = ["db", "validation"]

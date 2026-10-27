@@ -62,6 +62,7 @@ conventions, and says which skill to load for each task.
 | [`navree-navigator`](navree-navigator/SKILL.md) | Connect a coding agent to Navigator (`navree mcp`), use its tools, install the skills |
 | [`navree-i18n`](navree-i18n/SKILL.md) | Localization: Fluent files, `t!`, the request's locale, formatting, translated validation, mail and notifications (feature `i18n`) |
 | [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
+| [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
 
 ## Installing
 
