@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use navree::BoxFuture;
 use navree::db::Db;
+use navree::prelude::*;
 use navree::schedule::{ScheduleModule, Scheduler};
 use navree::testing::{TempDirGuard, TestApp, TestAppBuilder, principal};
 use navree::workspace::{
@@ -24,7 +25,7 @@ use uuid::Uuid;
 // The CRM module: a workspace-owned `companies` table and its demo seeder.
 // ---------------------------------------------------------------------------
 
-pub mod company {
+mod company {
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
 
@@ -52,7 +53,7 @@ impl Subject for company::Entity {
 
 impl WorkspaceScoped for company::Entity {}
 
-pub type Company = company::Entity;
+type Company = company::Entity;
 
 struct CreateCompanies;
 
@@ -100,7 +101,7 @@ struct CompanyFixture {
 
 /// Fills a demo workspace with the CRM's sample companies.
 #[injectable]
-pub struct CrmDemo;
+struct CrmDemo;
 
 impl DemoSeeder for CrmDemo {
     fn name(&self) -> &'static str {
@@ -135,7 +136,7 @@ impl DemoSeeder for CrmDemo {
 }
 
 #[injectable]
-pub struct CompaniesController;
+struct CompaniesController;
 
 #[controller("/companies", version = "1")]
 #[guard(InWorkspace::guard())]
@@ -171,7 +172,7 @@ impl CompaniesController {
     controllers = [CompaniesController],
     register = Self::wire,
 )]
-pub struct CrmModule;
+struct CrmModule;
 
 impl CrmModule {
     fn wire(&self, m: &mut ModuleBuilder) {
@@ -190,7 +191,7 @@ impl CrmModule {
 // ---------------------------------------------------------------------------
 
 #[injectable]
-pub struct PipelineDemo;
+struct PipelineDemo;
 
 impl DemoSeeder for PipelineDemo {
     fn name(&self) -> &'static str {
@@ -211,7 +212,7 @@ impl DemoSeeder for PipelineDemo {
 }
 
 #[module(register = Self::wire)]
-pub struct PipelineModule;
+struct PipelineModule;
 
 impl PipelineModule {
     fn wire(&self, m: &mut ModuleBuilder) {
