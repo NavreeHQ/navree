@@ -8,7 +8,8 @@ description: "Background work in Navree: `Job` types, registering and dispatchin
 `QueueModule` stores jobs (database driver by default: tables `jobs` and
 `failed_jobs`; `memory` for tests); a `queue:work` process runs them with
 retries. `ScheduleModule` runs registered commands, jobs and functions on
-cron schedules (UTC), once per tick across all servers sharing the database.
+cron schedules (UTC by default, or a zone, or each workspace's local time),
+once per tick across all servers sharing the database.
 A new app has `QueueModule`; add `ScheduleModule::for_root()` to the root
 for schedules.
 
@@ -161,9 +162,22 @@ async fn prune_exports(ctx: AppContext) -> Result<(), BoxError> {
 Frequencies: `every_minute()` (default), `every_five_minutes()`,
 `every_fifteen_minutes()`, `hourly()`, `hourly_at(17)`, `daily()`,
 `daily_at("08:00")`, `weekly()`, `cron("*/10 9-17 * * MON-FRI")` (five
-fields). All times are **UTC**. Task names must be unique (`.name("..")`
-renames). A failed task is logged and not retried; schedule a job when it
-must be retried.
+fields). Times are **UTC** unless the task says otherwise (needs
+`TimeModule`, feature `time`):
+
+```rust
+s.command("reports:close-day", &[]).daily_at("02:00").in_zone("Europe/London");
+s.command("crm:task-reminders", &[]).daily_at("08:00").in_default_zone(); // time.default_zone
+s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_default() })
+    .daily_at("09:00")
+    .per_workspace_local(); // one run per workspace, at 09:00 on its clock
+```
+
+Per-workspace runs are claimed as `<task>@<workspace id>` (names at most
+154 bytes); `LocalRun::current()` gives the owner and zone inside a run.
+Task names must be unique (`.name("..")` renames). A failed task is logged
+and not retried; schedule a job when it must be retried. See the
+`navree-time-zones` skill.
 
 ```sh
 navree schedule:work       # foreground, ticks every minute (process manager)
@@ -215,7 +229,8 @@ For schedules, override `dyn Clock` with a `FixedClock`, then
 - Large or secret payloads (they sit in the `jobs` table as JSON).
 - Renaming `NAME` (or a queued listener's type) while jobs are waiting:
   they have no handler and fail.
-- Local times in schedules: convert to UTC yourself.
+- Local times in schedules: use `in_zone(..)` or `per_workspace_local()`;
+  converting to UTC by hand breaks twice a year with DST.
 - `without_overlapping` on a job task doesn't stop two jobs running on
   workers: make the job unique.
 
