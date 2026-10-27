@@ -296,15 +296,18 @@ impl ProviderEntry {
     /// Whether a typed client may send the token to `host`.
     pub(crate) fn allows_host(&self, host: &str, extra: Option<&Url>) -> bool {
         let host = host.to_ascii_lowercase();
-        if extra.and_then(Url::host_str).is_some_and(|h| h.eq_ignore_ascii_case(&host)) {
+        if extra
+            .and_then(Url::host_str)
+            .is_some_and(|h| h.eq_ignore_ascii_case(&host))
+        {
             return true;
         }
-        self.allowed_hosts.iter().any(|allowed| {
-            match allowed.strip_prefix("*.") {
+        self.allowed_hosts
+            .iter()
+            .any(|allowed| match allowed.strip_prefix("*.") {
                 Some(suffix) => host.ends_with(&format!(".{suffix}")),
                 None => allowed.eq_ignore_ascii_case(&host),
-            }
-        })
+            })
     }
 
     /// The `api_key` header and its value for `key`.
@@ -347,7 +350,10 @@ mod tests {
             "https://login.microsoftonline.com/t-1/oauth2/v2.0/token"
         );
         assert!(!ms.pkce());
-        assert_eq!(ms.api_path("/users"), "https://graph.microsoft.com/v1.0/users");
+        assert_eq!(
+            ms.api_path("/users"),
+            "https://graph.microsoft.com/v1.0/users"
+        );
         assert!(ms.allows_host("graph.microsoft.com", None));
         assert!(!ms.allows_host("evil.test", None));
 
@@ -374,7 +380,10 @@ mod tests {
         assert!(!google.allows_host("googleapis.com.evil.test", None));
         let with_client = entry("google", |c| c.client_id = Some("g".into()));
         assert_eq!(with_client.consent_kind(), Some(CredentialKind::OAuth));
-        assert_eq!(with_client.revoke_endpoint().as_deref(), Some(GOOGLE_REVOKE));
+        assert_eq!(
+            with_client.revoke_endpoint().as_deref(),
+            Some(GOOGLE_REVOKE)
+        );
     }
 
     #[test]
@@ -410,7 +419,10 @@ mod tests {
         });
         assert_eq!(ms.client("default").unwrap().0, "main");
         assert_eq!(ms.client("directory").unwrap().0, "main");
-        assert_eq!(ms.client("mail_send").unwrap(), ("mail".into(), Some("s2".into())));
+        assert_eq!(
+            ms.client("mail_send").unwrap(),
+            ("mail".into(), Some("s2".into()))
+        );
     }
 
     #[test]

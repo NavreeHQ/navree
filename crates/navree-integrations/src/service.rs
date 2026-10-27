@@ -13,10 +13,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::client::IntegrationClient;
-use crate::model::IntegrationConnection as Row;
 use crate::entry::ProviderEntry;
 use crate::events::{IntegrationConnected, IntegrationDisconnected};
 use crate::fake::{FakeState, IntegrationsFake};
+use crate::model::IntegrationConnection as Row;
 use crate::oauth::{Exchange, Grant, authorize_url};
 use crate::provider::{DEFAULT_SCOPE_SET, ProviderInfo};
 use crate::runtime::Runtime;
@@ -176,7 +176,9 @@ impl Integrations {
         {
             return Err(IntegrationsError::InvalidState);
         }
-        let ttl = u64::try_from(state.exp.saturating_sub(now)).unwrap_or(1).max(1);
+        let ttl = u64::try_from(state.exp.saturating_sub(now))
+            .unwrap_or(1)
+            .max(1);
         let fresh = rt
             .cache
             .add(
@@ -228,12 +230,14 @@ impl Integrations {
                 )
             }
             _ => {
-                let code = callback.code.as_deref().filter(|code| !code.is_empty()).ok_or(
-                    IntegrationsError::ConsentDenied {
+                let code = callback
+                    .code
+                    .as_deref()
+                    .filter(|code| !code.is_empty())
+                    .ok_or(IntegrationsError::ConsentDenied {
                         provider: entry.name.clone(),
                         error: "missing_code".to_owned(),
-                    },
-                )?;
+                    })?;
                 let redirect_uri = rt.redirect_uri(&entry.key)?;
                 let grant = rt
                     .backend
@@ -487,7 +491,10 @@ impl Integrations {
 
     /// The connections `owner` can use: its own, then (for a workspace)
     /// its organization's.
-    pub async fn connections(&self, owner: Owner) -> Result<Vec<ConnectionInfo>, IntegrationsError> {
+    pub async fn connections(
+        &self,
+        owner: Owner,
+    ) -> Result<Vec<ConnectionInfo>, IntegrationsError> {
         let rt = self.rt()?;
         let chain = rt.owner_chain(owner).await;
         let rows = Row::query()
@@ -562,7 +569,11 @@ impl Integrations {
 
     /// The connection `id` when `owner` can use it (its own or its
     /// organization's); [`IntegrationsError::ConnectionNotFound`] otherwise.
-    pub async fn find_for(&self, owner: Owner, id: Uuid) -> Result<ConnectionInfo, IntegrationsError> {
+    pub async fn find_for(
+        &self,
+        owner: Owner,
+        id: Uuid,
+    ) -> Result<ConnectionInfo, IntegrationsError> {
         let rt = self.rt()?;
         let row = rt.load(id).await?;
         let row_owner = Owner::from_columns(&row.owner_type, row.owner_id);
@@ -624,7 +635,10 @@ impl Integrations {
             Ok(())
         })
         .await?;
-        rt.subject_tokens.lock().await.retain(|(conn, _), _| *conn != id);
+        rt.subject_tokens
+            .lock()
+            .await
+            .retain(|(conn, _), _| *conn != id);
         Ok(())
     }
 
@@ -696,7 +710,10 @@ impl Integrations {
     }
 
     /// The typed client of `owner`'s connection to `P` (default scope set).
-    pub async fn client_for<P: Provider>(&self, owner: Owner) -> Result<P::Client, IntegrationsError> {
+    pub async fn client_for<P: Provider>(
+        &self,
+        owner: Owner,
+    ) -> Result<P::Client, IntegrationsError> {
         Ok(self.client(owner, P::KEY, DEFAULT_SCOPE_SET).await?.into())
     }
 
@@ -717,10 +734,7 @@ impl Integrations {
         self.client_from_row(&row)
     }
 
-    fn client_from_row(
-        &self,
-        row: &Row,
-    ) -> Result<IntegrationClient, IntegrationsError> {
+    fn client_from_row(&self, row: &Row) -> Result<IntegrationClient, IntegrationsError> {
         let rt = self.rt()?;
         let entry = rt.provider(&row.provider)?.clone();
         let api_url = match rt.credentials(row)? {
@@ -781,9 +795,7 @@ impl Integrations {
                 rt.record(&row, Some((failure_message(&error), true)), Some(now))
                     .await
             }
-            Err(
-                error @ (IntegrationsError::Unavailable { .. } | IntegrationsError::Http(_)),
-            ) => {
+            Err(error @ (IntegrationsError::Unavailable { .. } | IntegrationsError::Http(_))) => {
                 rt.record(&row, Some((failure_message(&error), false)), Some(now))
                     .await
             }
@@ -843,12 +855,7 @@ impl Integrations {
 }
 
 /// The audit entry of a connection change.
-fn audit_entry(
-    uow: &navree_db::Uow,
-    action: &str,
-    row: &Row,
-    owner: Owner,
-) -> AuditEntry {
+fn audit_entry(uow: &navree_db::Uow, action: &str, row: &Row, owner: Owner) -> AuditEntry {
     let mut entry = AuditEntry::new(AuditKind::Custom, action)
         .subject("IntegrationConnection", row.id.to_string())
         .metadata(json!({

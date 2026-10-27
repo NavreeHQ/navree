@@ -166,7 +166,14 @@ mod tests {
         for ok in ["/", "/settings/integrations", "/s?tab=a#b"] {
             assert!(check_return_to(ok).is_ok(), "{ok}");
         }
-        for bad in ["https://evil.test", "//evil.test", "/\\evil.test", "x", "", "/a\nb"] {
+        for bad in [
+            "https://evil.test",
+            "//evil.test",
+            "/\\evil.test",
+            "x",
+            "",
+            "/a\nb",
+        ] {
             assert!(check_return_to(bad).is_err(), "{bad}");
         }
     }

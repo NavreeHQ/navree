@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use navree_http_client::{FakeServer, HttpClient};
 use navree_kernel::BoxFuture;
 
+use crate::IntegrationsError;
 use crate::entry::ProviderEntry;
 use crate::oauth::{Exchange, Grant, TokenBackend, service_account_assertion};
-use crate::IntegrationsError;
 
 /// What a fake token endpoint answers: build one with
 /// [`FakeGrant::new`] and the setters.

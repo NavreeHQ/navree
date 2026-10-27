@@ -104,7 +104,10 @@ mod tests {
         assert!(json.get("credentials").is_none());
         assert!(json.get("access_token").is_none());
         assert_eq!(json["provider"], "slack");
-        assert_eq!(IntegrationConnection::meta().table(), "integration_connections");
+        assert_eq!(
+            IntegrationConnection::meta().table(),
+            "integration_connections"
+        );
         assert!(
             IntegrationConnection::meta()
                 .hidden_names()

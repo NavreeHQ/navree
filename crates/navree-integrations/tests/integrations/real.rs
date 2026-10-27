@@ -75,9 +75,7 @@ async fn microsoft_app_only_tokens_and_graph_paging() {
         .and(path("/v1.0/users"))
         .and(query_param_is_missing("$skiptoken"))
         .and(header("authorization", format!("Bearer {token}").as_str()))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(page1, "application/json"),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(page1, "application/json"))
         .mount(&mock)
         .await;
 
@@ -107,7 +105,11 @@ async fn microsoft_app_only_tokens_and_graph_paging() {
     let mails: Vec<&str> = users.iter().map(|u| u["mail"].as_str().unwrap()).collect();
     assert_eq!(
         mails,
-        vec!["AdeleV@contoso.com", "AlexW@contoso.com", "DiegoS@contoso.com"]
+        vec![
+            "AdeleV@contoso.com",
+            "AlexW@contoso.com",
+            "DiegoS@contoso.com"
+        ]
     );
     // The token lasts an hour: one request for both pages and the check
     // below reuses nothing (checks always mint).
@@ -162,9 +164,7 @@ async fn a_tenant_that_removed_the_app_is_unhealthy_and_an_outage_is_not() {
         .await;
     Mock::given(method("POST"))
         .and(path(format!("/{TENANT}/oauth2/v2.0/token")))
-        .respond_with(
-            ResponseTemplate::new(400).set_body_json(fixture("microsoft-error.json")),
-        )
+        .respond_with(ResponseTemplate::new(400).set_body_json(fixture("microsoft-error.json")))
         .mount(&mock)
         .await;
     let integrations = h.integrations().await;
@@ -185,14 +185,20 @@ async fn a_tenant_that_removed_the_app_is_unhealthy_and_an_outage_is_not() {
         .connection;
 
     let outage = integrations.token(connection.id).await.unwrap_err();
-    assert!(matches!(outage, IntegrationsError::Unavailable { .. }), "{outage:?}");
+    assert!(
+        matches!(outage, IntegrationsError::Unavailable { .. }),
+        "{outage:?}"
+    );
     assert_eq!(
         integrations.find(connection.id).await.unwrap().status,
         ConnectionStatus::Healthy
     );
 
     let refused = integrations.token(connection.id).await.unwrap_err();
-    assert!(matches!(refused, IntegrationsError::Reauthorize { .. }), "{refused:?}");
+    assert!(
+        matches!(refused, IntegrationsError::Reauthorize { .. }),
+        "{refused:?}"
+    );
     let stored = integrations.find(connection.id).await.unwrap();
     assert_eq!(stored.status, ConnectionStatus::Unhealthy);
     assert!(
@@ -216,7 +222,9 @@ async fn a_slack_install_is_exchanged_checked_and_revoked() {
         .and(body_string_contains("code=slack-code"))
         .and(body_string_contains("client_id=4129031.6713"))
         .and(body_string_contains("client_secret=slack-secret"))
-        .and(body_string_contains("redirect_uri=https%3A%2F%2Fapp.acme.test"))
+        .and(body_string_contains(
+            "redirect_uri=https%3A%2F%2Fapp.acme.test",
+        ))
         .respond_with(json("slack-oauth-v2-access.json"))
         .expect(1)
         .mount(&mock)
@@ -238,7 +246,10 @@ async fn a_slack_install_is_exchanged_checked_and_revoked() {
     Mock::given(method("POST"))
         .and(path("/api/auth.revoke"))
         .and(header("authorization", bot))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "ok": true, "revoked": true })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({ "ok": true, "revoked": true })),
+        )
         .expect(1)
         .mount(&mock)
         .await;
@@ -260,7 +271,10 @@ async fn a_slack_install_is_exchanged_checked_and_revoked() {
         .unwrap()
         .connection;
     assert_eq!(connection.external_id.as_deref(), Some("T9TK3CUKW"));
-    assert_eq!(connection.display_name.as_deref(), Some("Slack Softball Team"));
+    assert_eq!(
+        connection.display_name.as_deref(),
+        Some("Slack Softball Team")
+    );
     assert_eq!(connection.scopes, vec!["chat:write", "users:read"]);
     assert_eq!(
         integrations.check(connection.id).await.unwrap().status,
@@ -282,7 +296,10 @@ async fn a_slack_install_is_exchanged_checked_and_revoked() {
         )
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "Slack refused the connection: invalid_code");
+    assert_eq!(
+        error.to_string(),
+        "Slack refused the connection: invalid_code"
+    );
 }
 
 /// Matches a service-account token request whose assertion is an RS256
@@ -327,8 +344,7 @@ impl Match for SignedAssertion {
             && claims["iss"] == "navree@acme-prod.iam.gserviceaccount.com"
             && claims["sub"] == self.subject
             && claims["aud"] == self.audience.as_str()
-            && claims["scope"]
-                == "https://www.googleapis.com/auth/admin.directory.user.readonly"
+            && claims["scope"] == "https://www.googleapis.com/auth/admin.directory.user.readonly"
             && claims["exp"].as_i64().unwrap() - claims["iat"].as_i64().unwrap() == 3600
     }
 }
@@ -355,8 +371,7 @@ async fn google_service_accounts_sign_their_assertions_with_rs256() {
             subject: "intern@acme.test",
         })
         .respond_with(
-            ResponseTemplate::new(400)
-                .set_body_json(fixture("google-unauthorized-client.json")),
+            ResponseTemplate::new(400).set_body_json(fixture("google-unauthorized-client.json")),
         )
         .mount(&mock)
         .await;
@@ -451,7 +466,9 @@ async fn oauth2_codes_are_exchanged_with_pkce_refreshed_and_revoked() {
             "authorization",
             "Bearer CJSP5qf1KhICAQEYs-gDIIGOBii1hQIyGQAf3xBKmlwHjX7OIpuIFEavB2-qYAGQsF4",
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "results": [] })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({ "results": [] })),
+        )
         .expect(1)
         .mount(&mock)
         .await;
@@ -472,7 +489,10 @@ async fn oauth2_codes_are_exchanged_with_pkce_refreshed_and_revoked() {
         .unwrap()
         .connection;
     h.clock.advance(Duration::from_secs(1800));
-    let hubspot = integrations.client(Owner::App, "hubspot", "default").await.unwrap();
+    let hubspot = integrations
+        .client(Owner::App, "hubspot", "default")
+        .await
+        .unwrap();
     let contacts: Value = hubspot
         .get("/crm/v3/objects/contacts")
         .send_json()

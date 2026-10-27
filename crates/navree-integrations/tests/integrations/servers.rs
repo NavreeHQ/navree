@@ -129,7 +129,10 @@ async fn flow(scratch: &Scratch) {
     assert_eq!(microsoft.kind, CredentialKind::AppOnly);
     assert_eq!(microsoft.external_id.as_deref(), Some(TENANT));
     assert_eq!(microsoft.owner(), organization);
-    assert_eq!((microsoft.created_at, microsoft.updated_at), (start(), start()));
+    assert_eq!(
+        (microsoft.created_at, microsoft.updated_at),
+        (start(), start())
+    );
     let hubspot = connect_hubspot(&h, workspace, "code-1", "first").await;
 
     // The workspace sees its own connection, then its organization's.
@@ -138,10 +141,7 @@ async fn flow(scratch: &Scratch) {
         .iter()
         .map(|info| (info.provider.as_str(), info.owner()))
         .collect();
-    assert_eq!(
-        names,
-        [("hubspot", workspace), ("microsoft", organization)]
-    );
+    assert_eq!(names, [("hubspot", workspace), ("microsoft", organization)]);
     let inherited = integrations
         .connection(workspace, "microsoft", "default")
         .await
@@ -159,7 +159,10 @@ async fn flow(scratch: &Scratch) {
     let row = integrations.find(hubspot).await.unwrap();
     assert_eq!(row.created_at, start());
     assert_eq!(row.updated_at, start() + TimeDelta::seconds(60));
-    assert_eq!(integrations.token(hubspot).await.unwrap().expose(), "second");
+    assert_eq!(
+        integrations.token(hubspot).await.unwrap().expose(),
+        "second"
+    );
 
     // The credentials and token are stored encrypted.
     let stored = IntegrationConnection::find(&*db, hubspot)

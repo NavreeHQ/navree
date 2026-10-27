@@ -9,18 +9,18 @@ use chrono::{DateTime, Utc};
 use navree_cache::{Cache, Locks};
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_crypto::Encrypter;
+use navree_db::sea_orm::DbBackend;
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
 use navree_workspace::{WorkspaceConfig, Workspaces};
-use navree_db::sea_orm::DbBackend;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::model::IntegrationConnection;
 use crate::entry::ProviderEntry;
 use crate::fake::FakeState;
+use crate::model::IntegrationConnection;
 use crate::oauth::{HttpBackend, TokenBackend};
 use crate::provider::{ScopeSetRegistration, is_scope_set_name};
 use crate::types::StoredCredentials;
@@ -109,7 +109,10 @@ impl Runtime {
                 );
             }
             (Level::Organization, Some(config)) if !config.organizations.enabled => {
-                return Err("integrations.level = \"organization\" needs workspace.organizations.enabled".into());
+                return Err(
+                    "integrations.level = \"organization\" needs workspace.organizations.enabled"
+                        .into(),
+                );
             }
             (level, _) => level,
         };
@@ -162,7 +165,12 @@ impl Runtime {
     pub(crate) async fn organization_of(&self, workspace: Uuid) -> Option<Uuid> {
         let app = self.app.upgrade()?;
         let workspaces = app.try_get::<Workspaces>().await?;
-        workspaces.find(workspace).await.ok().flatten()?.organization_id
+        workspaces
+            .find(workspace)
+            .await
+            .ok()
+            .flatten()?
+            .organization_id
     }
 
     /// The owners whose connections `owner` may use, its own first: a
@@ -255,7 +263,11 @@ impl Runtime {
     /// Runs `f` in the task's unfinished unit of work (a request's), or else
     /// in a new one committed when `f` succeeds. For changes people make:
     /// they commit with the request.
-    pub(crate) async fn write<T, F, Fut>(&self, actor: Option<Uuid>, f: F) -> Result<T, IntegrationsError>
+    pub(crate) async fn write<T, F, Fut>(
+        &self,
+        actor: Option<Uuid>,
+        f: F,
+    ) -> Result<T, IntegrationsError>
     where
         F: FnOnce(Uow) -> Fut,
         Fut: Future<Output = Result<T, IntegrationsError>>,

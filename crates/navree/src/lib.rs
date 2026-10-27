@@ -227,6 +227,8 @@ pub use navree_mongo as mongo;
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
+#[cfg(feature = "integrations")]
+pub use navree_integrations as integrations;
 /// Typed settings with inheritance (the `settings` feature): navree-settings
 /// re-exported whole, `#[derive(Settings)]` included
 /// (`use navree::settings::{Settings, Scope};`).
@@ -240,8 +242,6 @@ pub use navree_sheets as sheets;
 pub use navree_sso as sso;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
-#[cfg(feature = "integrations")]
-pub use navree_integrations as integrations;
 
 // L6 (opt-in)
 #[cfg(feature = "documents")]

@@ -75,7 +75,10 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::settings::Settings, navree::settings::Settings>());
     assert!(same::<navree::sso::SsoModule, SsoModule>());
     assert!(same::<navree::sheets::SheetsModule, SheetsModule>());
-    assert!(same::<navree::integrations::IntegrationsModule, IntegrationsModule>());
+    assert!(same::<
+        navree::integrations::IntegrationsModule,
+        IntegrationsModule,
+    >());
     assert!(same::<
         navree::integrations::Integrations,
         navree::integrations::Integrations,

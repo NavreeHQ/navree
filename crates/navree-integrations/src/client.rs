@@ -166,7 +166,11 @@ impl IntegrationClient {
                 host: target.to_owned(),
             })?;
             let host = url.host_str().unwrap_or_default();
-            if !self.inner.entry.allows_host(host, self.inner.api_url.as_ref()) {
+            if !self
+                .inner
+                .entry
+                .allows_host(host, self.inner.api_url.as_ref())
+            {
                 return Err(IntegrationsError::ForeignUrl {
                     provider: self.provider().to_owned(),
                     host: host.to_owned(),
@@ -185,9 +189,8 @@ impl IntegrationClient {
             base.trim_end_matches('/'),
             target.trim_start_matches('/')
         );
-        Url::parse(&joined).map_err(|_| {
-            IntegrationsError::Config(format!("`{joined}` is not a URL"))
-        })
+        Url::parse(&joined)
+            .map_err(|_| IntegrationsError::Config(format!("`{joined}` is not a URL")))
     }
 
     fn is_api_key(&self) -> bool {

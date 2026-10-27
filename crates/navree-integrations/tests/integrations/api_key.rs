@@ -35,7 +35,10 @@ async fn an_api_key_is_tried_on_the_health_url_then_stored_encrypted() {
 
     let credentials = integrations.api_key(connection.id).await.unwrap();
     assert_eq!(credentials.key.expose(), "edr-key-4f2a9c");
-    assert_eq!(credentials.api_url.as_deref(), Some("https://acme.edr.example/api"));
+    assert_eq!(
+        credentials.api_url.as_deref(),
+        Some("https://acme.edr.example/api")
+    );
     assert_eq!(credentials.fields["site_id"], "17");
     assert_eq!(
         integrations.token(connection.id).await.unwrap().expose(),
@@ -68,7 +71,10 @@ async fn a_refused_or_incomplete_key_is_not_stored() {
         )
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "Sentinel EDR refused the connection: http_401");
+    assert_eq!(
+        error.to_string(),
+        "Sentinel EDR refused the connection: http_401"
+    );
     // The provider has no api_url of its own, so the connection needs one.
     assert!(matches!(
         integrations
@@ -92,5 +98,11 @@ async fn a_refused_or_incomplete_key_is_not_stored() {
             .await,
         Err(IntegrationsError::Unsupported { .. })
     ));
-    assert!(integrations.connections(Owner::App).await.unwrap().is_empty());
+    assert!(
+        integrations
+            .connections(Owner::App)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }

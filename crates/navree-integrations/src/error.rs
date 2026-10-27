@@ -3,10 +3,10 @@
 use http::StatusCode;
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
+use navree_db::sea_orm::DbErr;
 use navree_http::AppError;
 use navree_http_client::HttpClientError;
 use navree_kernel::KernelError;
-use navree_db::sea_orm::DbErr;
 use navree_orm::OrmError;
 
 /// An integrations error. Returned from handlers with `?`, it becomes an
@@ -149,10 +149,8 @@ impl IntegrationsError {
             IntegrationsError::UnknownScopeSet {
                 provider,
                 scope_set,
-            } => AppError::bad_request(format!(
-                "Unknown scope set `{scope_set}` for {provider}"
-            ))
-            .with_code("unknown_scope_set"),
+            } => AppError::bad_request(format!("Unknown scope set `{scope_set}` for {provider}"))
+                .with_code("unknown_scope_set"),
             IntegrationsError::Unsupported { provider, kind } => {
                 AppError::bad_request(format!("{provider} does not connect with {kind}"))
                     .with_code("unsupported_connection")
@@ -164,10 +162,10 @@ impl IntegrationsError {
                 AppError::bad_request("return_to must be a relative path")
                     .with_code("invalid_return_to")
             }
-            IntegrationsError::ConsentDenied { provider, error } => AppError::bad_request(
-                format!("{provider} consent was not granted: {error}"),
-            )
-            .with_code("consent_denied"),
+            IntegrationsError::ConsentDenied { provider, error } => {
+                AppError::bad_request(format!("{provider} consent was not granted: {error}"))
+                    .with_code("consent_denied")
+            }
             IntegrationsError::Refused {
                 provider, error, ..
             } => AppError::bad_request(format!("{provider} refused the connection: {error}"))

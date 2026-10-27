@@ -20,8 +20,8 @@ use crate::extract::IntegrationOwner;
 use crate::provider::DEFAULT_SCOPE_SET;
 use crate::{
     CompletedConnection, ConnectCallback, ConnectOptions, ConnectRedirect, ConnectionInfo, Health,
-    Integrations, IntegrationsOptions, Level, NewApiKey, NewServiceAccount,
-    ProviderInfo, ServiceAccountKey,
+    Integrations, IntegrationsOptions, Level, NewApiKey, NewServiceAccount, ProviderInfo,
+    ServiceAccountKey,
 };
 
 /// The permission every integrations route requires.
@@ -223,31 +223,32 @@ impl Controller for IntegrationsController {
             }
         };
         let integrations = self.integrations.clone();
-        let service_account = move |IntegrationOwner(owner): IntegrationOwner,
-                                    CurrentPrincipal(principal): CurrentPrincipal,
-                                    Path(provider): Path<String>,
-                                    uri: Uri,
-                                    Json(input): Json<ServiceAccountInput>| {
-            let integrations = integrations.clone();
-            async move {
-                let key = match &input.key {
-                    Value::String(text) => ServiceAccountKey::from_json(text)?,
-                    other => ServiceAccountKey::from_value(other)?,
-                };
-                let new = NewServiceAccount {
-                    scope_set: input
-                        .scope_set
-                        .unwrap_or_else(|| DEFAULT_SCOPE_SET.to_owned()),
-                    key,
-                    subject: input.subject,
-                    connected_by: Some(principal.user_id),
-                };
-                let connection = integrations
-                    .connect_service_account(owner, &provider, new)
-                    .await?;
-                Ok::<_, AppError>(Created(created(&uri, &connection), connection))
-            }
-        };
+        let service_account =
+            move |IntegrationOwner(owner): IntegrationOwner,
+                  CurrentPrincipal(principal): CurrentPrincipal,
+                  Path(provider): Path<String>,
+                  uri: Uri,
+                  Json(input): Json<ServiceAccountInput>| {
+                let integrations = integrations.clone();
+                async move {
+                    let key = match &input.key {
+                        Value::String(text) => ServiceAccountKey::from_json(text)?,
+                        other => ServiceAccountKey::from_value(other)?,
+                    };
+                    let new = NewServiceAccount {
+                        scope_set: input
+                            .scope_set
+                            .unwrap_or_else(|| DEFAULT_SCOPE_SET.to_owned()),
+                        key,
+                        subject: input.subject,
+                        connected_by: Some(principal.user_id),
+                    };
+                    let connection = integrations
+                        .connect_service_account(owner, &provider, new)
+                        .await?;
+                    Ok::<_, AppError>(Created(created(&uri, &connection), connection))
+                }
+            };
         let integrations = self.integrations.clone();
         let api_key = move |IntegrationOwner(owner): IntegrationOwner,
                             CurrentPrincipal(principal): CurrentPrincipal,
