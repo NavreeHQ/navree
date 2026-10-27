@@ -57,11 +57,12 @@
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
+//! | `navigator` | navree-navigator | `navigator` (opt-in) | Navigator's MCP server and tools for coding agents (`navree mcp`), the embedded agent skills |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
 //! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `harbor`,
-//! `otel`), and the `storage-s3` driver but not `storage-gcs` or
+//! `navigator`, `otel`), and the `storage-s3` driver but not `storage-gcs` or
 //! `storage-azure`. A feature also turns on the features of the crates its
 //! crate builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is
 //! built in; the `postgres` feature adds navree-db's PostgreSQL driver and
@@ -73,6 +74,8 @@
 //! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
 //! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
 //! on only to read `harbor.toml` or drive deploys from its own code.
+//! `navigator` is the library behind `navree mcp` and
+//! `navree skills:install`, for tools and tests.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -270,6 +273,8 @@ pub use navree_search as search;
 pub use navree_dock as dock;
 #[cfg(feature = "harbor")]
 pub use navree_harbor as harbor;
+#[cfg(feature = "navigator")]
+pub use navree_navigator as navigator;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

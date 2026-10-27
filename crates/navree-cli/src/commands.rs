@@ -95,6 +95,22 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
         Command::Harbor(command) => {
             navree_harbor::run(command, &navree_harbor::Context::system(cwd.to_path_buf()))
         }
+        Command::Mcp(args) => {
+            navree_navigator::run_stdio(navree_navigator::NavigatorOptions {
+                path: absolute(cwd, args.path.as_deref()),
+                no_build: args.no_build,
+                allow_remote_database: args.allow_remote_database,
+                docs_offline: args.docs_offline,
+            })?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::SkillsInstall(args) => {
+            let dir = absolute(cwd, args.path.as_deref());
+            let report = navree_navigator::skills::install(&dir)
+                .with_context(|| format!("cannot install the skills into {}", dir.display()))?;
+            print_skills(&dir, &report);
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");
@@ -145,6 +161,29 @@ fn exit_code(passed: bool) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `path` resolved against `cwd`; `cwd` itself when none is given.
+fn absolute(cwd: &Path, path: Option<&Path>) -> PathBuf {
+    match path {
+        Some(path) if path.is_absolute() => path.to_path_buf(),
+        Some(path) => cwd.join(path),
+        None => cwd.to_path_buf(),
+    }
+}
+
+/// What `skills:install` did.
+fn print_skills(dir: &Path, report: &navree_navigator::skills::InstallReport) {
+    let targets: Vec<String> = report.targets.iter().map(|t| shown(dir, t)).collect();
+    println!(
+        "Installed {} Navree skills into {}.",
+        report.installed.len(),
+        targets.join(" and ")
+    );
+    for name in &report.removed {
+        println!("  removed  {name} (not a skill of this Navree version)");
+    }
+    println!("Commit them with your code so every teammate's agent has them.");
 }
 
 /// The app containing `cwd`.

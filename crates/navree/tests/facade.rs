@@ -354,15 +354,15 @@ struct Features {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`, `harbor`), and ecosystem libraries and
-/// packages an app turns on by name (`features = ["social"]`,
+/// runtime never needs (`dock`, `harbor`, `navigator`), and ecosystem
+/// libraries and packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
 /// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
 /// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
 /// `features = ["micro"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "harbor", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp",
-    "ai", "redis", "micro",
+    "dock", "harbor", "navigator", "social", "oauth", "flags", "graphql", "grpc", "billing",
+    "search", "mcp", "ai", "redis", "micro",
 ];
 
 /// Always compiled into the facade (not behind a feature).

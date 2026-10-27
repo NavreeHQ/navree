@@ -165,7 +165,7 @@ const FRESH: Spec = Spec {
 };
 const STATUS: Spec = Spec {
     command: "migrate:status",
-    options: &[("pending", Takes::Nothing)],
+    options: &[("pending", Takes::Nothing), ("json", Takes::Nothing)],
 };
 const DUMP: Spec = Spec {
     command: "schema:dump",
@@ -335,6 +335,12 @@ pub(crate) async fn status(ctx: AppContext, args: Vec<String>) -> Result<(), Box
         .iter()
         .filter(|entry| !pending_only || !entry.applied)
         .collect();
+    if parsed.flag("json") {
+        // `[{"module", "name", "applied", "batch", "applied_at"}]`, for tools
+        // (Navigator's `describe_schema`).
+        println!("{}", serde_json::to_string_pretty(&shown)?);
+        return Ok(());
+    }
     if status.is_empty() {
         println!("No migrations are registered.");
         return Ok(());
@@ -402,7 +408,7 @@ mod tests {
         };
         assert_eq!(
             message(&STATUS, &["--all"]),
-            "unknown option `--all` for migrate:status; it takes --pending"
+            "unknown option `--all` for migrate:status; it takes --pending, --json"
         );
         assert_eq!(
             message(&MIGRATE, &["now"]),

@@ -78,6 +78,12 @@ const HIERARCHY: &[Rule] = &[
     // runs its migrations, so framework crates at L4 and up can build their
     // tables (and hypertables) with it.
     rule("navree-schema", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    // Navigator: the MCP server for coding agents (`navree mcp`) and the
+    // embedded agent skills (`navree skills:install`). A tool crate the CLI
+    // runs outside the app: it reads the app's configuration with
+    // navree-config (decision D7) and Dock's settings; the facade re-exports
+    // it behind the opt-in `navigator` feature.
+    rule("navree-navigator", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-dock"]),
     // L3
     // navree-schema: migrations written with the schema builder, schema dumps.
     rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-schema"]),
@@ -253,9 +259,10 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
-    // The CLI uses no runtime crate; navree-dock runs `navree dock` and
-    // navree-harbor runs Harbor's commands.
-    rule("navree-cli", 8, &["navree-dock", "navree-harbor"]),
+    // The CLI uses no runtime crate; navree-dock runs `navree dock`,
+    // navree-harbor runs Harbor's commands and navree-navigator runs
+    // `navree mcp` and `navree skills:install`.
+    rule("navree-cli", 8, &["navree-dock", "navree-harbor", "navree-navigator"]),
     // L9 and up (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -281,13 +288,14 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
 ];
 
 /// Every runtime crate (layers 0 to 7) plus navree-macros and the tool
-/// crates navree-dock and navree-harbor: what the facade may re-export and
-/// what navree-macros tests may dev-depend on.
+/// crates navree-dock, navree-harbor and navree-navigator: what the facade
+/// may re-export and what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
     "navree-dock",
     "navree-harbor",
+    "navree-navigator",
     "navree-contracts",
     "navree-config",
     "navree-telemetry",
