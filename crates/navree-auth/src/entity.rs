@@ -1,4 +1,10 @@
-//! The auth module's tables as SeaORM entities.
+//! The auth module's tables: navree-orm models, and SeaORM entities.
+//!
+//! Each table's `Model` is one struct deriving both, so the rows are ORM
+//! models (`User::query()`, typed columns such as `User::EMAIL`) and the
+//! SeaORM entities (`Entity`, `Column`, `ActiveModel`) stay for code built
+//! on them. Secrets (password hashes, token digests, two-factor data,
+//! passkeys' keys) are never serialized, as records or as plain models.
 //!
 //! - `users(id, name, email UNIQUE, password_hash, email_verified_at,
 //!   two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at,
@@ -25,8 +31,9 @@ pub mod user {
     use serde::Serialize;
 
     /// A user account.
-    #[derive(Clone, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "users")]
+    #[model(table = "users")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -90,10 +97,12 @@ pub mod user {
 /// whole family (reuse detection).
 pub mod refresh_token {
     use sea_orm::entity::prelude::*;
+    use serde::Serialize;
 
-    /// A refresh token.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    /// A refresh token. Its digest is never serialized.
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "refresh_tokens")]
+    #[model(table = "refresh_tokens")]
     pub struct Model {
         /// The id: the part of the token before the `.`.
         #[sea_orm(primary_key, auto_increment = false)]
@@ -102,8 +111,9 @@ pub mod refresh_token {
         pub user_id: Uuid,
         /// The login session the token belongs to.
         pub family_id: Uuid,
-        /// SHA-256 of the whole token, as lower-case hex.
+        /// SHA-256 of the whole token, as lower-case hex. Never serialized.
         #[sea_orm(unique)]
+        #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the token expires.
         pub expires_at: DateTimeUtc,
@@ -137,15 +147,19 @@ pub mod refresh_token {
 /// a SHA-256 digest (used by the password reset flow).
 pub mod password_reset_token {
     use sea_orm::entity::prelude::*;
+    use serde::Serialize;
 
-    /// A pending password reset.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    /// A pending password reset, keyed by email address. Its digest is
+    /// never serialized.
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "password_reset_tokens")]
+    #[model(table = "password_reset_tokens", primary_key = "email")]
     pub struct Model {
         /// The lower-cased email address.
         #[sea_orm(primary_key, auto_increment = false)]
         pub email: String,
-        /// SHA-256 of the reset token, as lower-case hex.
+        /// SHA-256 of the reset token, as lower-case hex. Never serialized.
+        #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the reset was requested.
         pub created_at: DateTimeUtc,
@@ -164,10 +178,12 @@ pub mod password_reset_token {
 /// until `expires_at`; a code is burned after too many wrong guesses.
 pub mod login_token {
     use sea_orm::entity::prelude::*;
+    use serde::Serialize;
 
-    /// A pending passwordless sign-in.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    /// A pending passwordless sign-in. Its digest is never serialized.
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "login_tokens")]
+    #[model(table = "login_tokens")]
     pub struct Model {
         /// The id (the part of a magic link token before the `.`).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -176,7 +192,9 @@ pub mod login_token {
         pub user_id: Uuid,
         /// `magic_link` or `otp`.
         pub kind: String,
-        /// The digest of the token or code, lower-case hex.
+        /// The digest of the token or code, lower-case hex. Never
+        /// serialized.
+        #[serde(skip_serializing)]
         pub token_hash: String,
         /// Wrong guesses so far (codes).
         pub attempts: i32,
@@ -202,8 +220,9 @@ pub mod passkey {
     use serde::Serialize;
 
     /// A registered passkey. The public key is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "passkeys")]
+    #[model(table = "passkeys")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]

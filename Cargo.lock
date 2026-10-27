@@ -4449,6 +4449,7 @@ dependencies = [
  "navree-kernel",
  "navree-mail",
  "navree-observe",
+ "navree-orm",
  "navree-testing",
  "navree-validation",
  "navree-view",
