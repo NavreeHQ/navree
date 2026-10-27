@@ -3024,6 +3024,7 @@ dependencies = [
  "navree-storage",
  "navree-telemetry",
  "navree-testing",
+ "navree-ui",
  "navree-validation",
  "navree-view",
  "navree-webhooks",
@@ -3889,6 +3890,23 @@ dependencies = [
  "tokio",
  "tower",
  "uuid",
+]
+
+[[package]]
+name = "navree-ui"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "insta",
+ "navree-config",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "navree-view",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

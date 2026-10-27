@@ -17,7 +17,7 @@ L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no
 L7  navree-billing (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-flags (ecosystem libraries)
 L5  navree-auth  navree-workspace
-L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
+L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
 L1  navree-contracts  navree-config
@@ -52,6 +52,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-access` | Roles, permissions and abilities, record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
+| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
@@ -79,6 +80,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-queue`, `navree-schedule` | kernel, contracts, config, db |
 | `navree-access` | kernel, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, http, db, mail |
+| `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
 | `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |

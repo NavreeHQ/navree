@@ -1,0 +1,129 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{{ ui.dropdown(\"view\", \"View\", items, icon=\"sliders-horizontal\", align=\"end\") }}\n{{ ui.row_actions(\"row-1\", items) }}\n{% call ui.dialog(\"invite\", \"Invite a user\", \"They get an email.\") %}<div class=\"ui-dialog__body\">Form</div>{% endcall %}\n{{ ui.confirm_dialog(\"remove\", \"Remove Grace?\", \"She loses access.\", confirm=\"Remove\", action=\"/users/2/delete\", csrf={\"name\": \"_csrf\", \"value\": \"t0k\"}) }}\n{{ ui.toast(toast) }}\"#,\njson!({\n    \"items\":\n    [MenuItem::label(\"Columns\"), MenuItem::link(\"Name\", \"#\").checked(true),\n    MenuItem::link(\"Export\", \"/export\").icon(\"download\").shortcut(\"Ctrl E\"),\n    MenuItem::separator(),\n    MenuItem::dialog(\"Delete\", \"remove\").icon(\"trash-2\").danger(),], \"toast\":\n    Toast::error(\"Could not save\").description(\"Try again.\"),\n}),)"
+---
+<button type="button" class="ui-btn ui-btn--secondary" data-ui-menu-trigger aria-controls="view" data-align="end" data-side="bottom">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M10 5H3"/>
+<path d="M12 19H3"/>
+<path d="M14 3v4"/>
+<path d="M16 17v4"/>
+<path d="M21 12h-9"/>
+<path d="M21 19h-5"/>
+<path d="M21 5h-7"/>
+<path d="M8 10v4"/>
+<path d="M8 12H3"/>
+</svg>
+<span>View</span>
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m6 9 6 6 6-6"/>
+</svg>
+</button>
+<div class="ui-menu" id="view" role="menu" hidden>
+<div class="ui-menu__label" role="presentation">Columns</div>
+<a class="ui-menu__item" href="#" role="menuitemcheckbox" tabindex="-1" aria-checked="true">
+<svg class="ui-icon ui-menu__check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M20 6 9 17l-5-5"/>
+</svg>
+<span class="ui-menu__text">Name</span>
+</a>
+<a class="ui-menu__item" href="&#x2f;export" role="menuitem" tabindex="-1">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M12 15V3"/>
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+<path d="m7 10 5 5 5-5"/>
+</svg>
+<span class="ui-menu__text">Export</span>
+<span class="ui-menu__shortcut">Ctrl E</span>
+</a>
+<div class="ui-menu__sep" role="separator">
+</div>
+<button type="button" class="ui-menu__item ui-menu__item--danger" role="menuitem" tabindex="-1" data-ui-dialog-open="remove">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M10 11v6"/>
+<path d="M14 11v6"/>
+<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+<path d="M3 6h18"/>
+<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+</svg>
+<span class="ui-menu__text">Delete</span>
+</button>
+</div>
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-ui-menu-trigger aria-controls="row-1" data-align="end" aria-label="Row actions">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="1"/>
+<circle cx="19" cy="12" r="1"/>
+<circle cx="5" cy="12" r="1"/>
+</svg>
+</button>
+<div class="ui-menu" id="row-1" role="menu" aria-label="Row actions" hidden>
+<div class="ui-menu__label" role="presentation">Columns</div>
+<a class="ui-menu__item" href="#" role="menuitemcheckbox" tabindex="-1" aria-checked="true">
+<svg class="ui-icon ui-menu__check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M20 6 9 17l-5-5"/>
+</svg>
+<span class="ui-menu__text">Name</span>
+</a>
+<a class="ui-menu__item" href="&#x2f;export" role="menuitem" tabindex="-1">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M12 15V3"/>
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+<path d="m7 10 5 5 5-5"/>
+</svg>
+<span class="ui-menu__text">Export</span>
+<span class="ui-menu__shortcut">Ctrl E</span>
+</a>
+<div class="ui-menu__sep" role="separator">
+</div>
+<button type="button" class="ui-menu__item ui-menu__item--danger" role="menuitem" tabindex="-1" data-ui-dialog-open="remove">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M10 11v6"/>
+<path d="M14 11v6"/>
+<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+<path d="M3 6h18"/>
+<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+</svg>
+<span class="ui-menu__text">Delete</span>
+</button>
+</div>
+<dialog class="ui-dialog" id="invite" aria-labelledby="invite-title" aria-describedby="invite-desc">
+<header class="ui-dialog__header">
+<h2 class="ui-dialog__title" id="invite-title">Invite a user</h2>
+<p class="ui-dialog__desc" id="invite-desc">They get an email.</p>
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-dialog__close" data-ui-dialog-close aria-label="Close">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M18 6 6 18"/>
+<path d="m6 6 12 12"/>
+</svg>
+</button>
+</header>
+<div class="ui-dialog__body">Form</div>
+</dialog>
+<dialog class="ui-dialog ui-dialog--sm" id="remove" role="alertdialog" aria-labelledby="remove-title" aria-describedby="remove-desc">
+<header class="ui-dialog__header">
+<h2 class="ui-dialog__title" id="remove-title">Remove Grace?</h2>
+<p class="ui-dialog__desc" id="remove-desc">She loses access.</p>
+</header>
+<form class="ui-dialog__footer" method="post" action="&#x2f;users&#x2f;2&#x2f;delete">
+<input type="hidden" name="_csrf" value="t0k">
+<button type="button" class="ui-btn ui-btn--secondary" data-ui-dialog-close autofocus>Cancel</button>
+<button type="submit" class="ui-btn ui-btn--danger">Remove</button>
+</form>
+</dialog>
+<li class="ui-toast ui-toast--error" role="alert">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="10"/>
+<line x1="12" x2="12" y1="8" y2="12"/>
+<line x1="12" x2="12.01" y1="16" y2="16"/>
+</svg>
+<div>
+<p class="ui-toast__title">Could not save</p>
+<p class="ui-toast__desc">Try again.</p>
+</div>
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-toast__close" data-ui-toast-close aria-label="Dismiss">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M18 6 6 18"/>
+<path d="m6 6 12 12"/>
+</svg>
+</button>
+</li>
