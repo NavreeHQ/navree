@@ -47,6 +47,7 @@ pub(crate) struct Model {
     pub(crate) updated_at: Option<String>,
     pub(crate) deleted_at: Option<String>,
     pub(crate) connection: Option<LitStr>,
+    pub(crate) driver: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
 }
@@ -101,8 +102,8 @@ fn option_inner(ty: &Type) -> Option<Type> {
 }
 
 /// The key type a key field's type implies: integers are assigned by the
-/// database, a `Uuid` gets a UUID v7, a `Ulid` a ULID, anything else is set
-/// by the application.
+/// database, a `Uuid` gets a UUID v7, a `Ulid` a ULID, an `ObjectId` a
+/// MongoDB ObjectId, anything else is set by the application.
 fn inferred_key_type(ty: &Type) -> KeyType {
     let Type::Path(path) = ty else {
         return KeyType::Manual;
@@ -117,6 +118,7 @@ fn inferred_key_type(ty: &Type) -> KeyType {
         Some("i16" | "i32" | "i64" | "u32" | "u64") => KeyType::Increments,
         Some("Uuid") => KeyType::UuidV7,
         Some("Ulid") => KeyType::Ulid,
+        Some("ObjectId") => KeyType::ObjectId,
         _ => KeyType::Manual,
     }
 }
@@ -144,8 +146,21 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
 
     let mut errors = Errors::default();
     let attrs = container::parse(&input.attrs, &mut errors);
+    let mongodb = attrs
+        .driver
+        .as_ref()
+        .is_some_and(|driver| driver.value() == container::MONGODB);
     let mut columns: Vec<Column> = Vec::new();
     let mut skipped = Vec::new();
+    // On MongoDB the key is the document's `_id`: unless the key column is
+    // named, a field `id` without a `column` of its own is stored as `_id`.
+    let id_as_document_key = mongodb
+        && attrs.primary_key.is_none()
+        && !fields.named.iter().any(|field| {
+            let attrs = field::peek_column(&field.attrs);
+            let name = field.ident.as_ref().map(plain_name);
+            attrs.as_deref() == Some("_id") || (attrs.is_none() && name.as_deref() == Some("_id"))
+        });
     for field in &fields.named {
         let Some(field_ident) = field.ident.clone() else {
             continue;
@@ -161,10 +176,11 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             skipped.push(field_ident);
             continue;
         }
-        let name = field_attrs
-            .column
-            .as_ref()
-            .map_or_else(|| plain_name(&field_ident), LitStr::value);
+        let name = match &field_attrs.column {
+            Some(column) => column.value(),
+            None if id_as_document_key && plain_name(&field_ident) == "id" => "_id".to_owned(),
+            None => plain_name(&field_ident),
+        };
         if let Some(existing) = columns.iter().find(|column| column.name == name) {
             errors.push(syn::Error::new(
                 field_ident.span(),
@@ -188,10 +204,10 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
     errors.finish()?;
     let mut errors = Errors::default();
 
-    let key_name = attrs
-        .primary_key
-        .as_ref()
-        .map_or_else(|| "id".to_owned(), LitStr::value);
+    let key_name = attrs.primary_key.as_ref().map_or_else(
+        || if mongodb { "_id" } else { "id" }.to_owned(),
+        LitStr::value,
+    );
     let Some(key) = columns.iter().position(|column| column.name == key_name) else {
         return Err(errors.with(syn::Error::new(
             ident.span(),
@@ -291,6 +307,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             .flatten(),
         deleted_at,
         connection: attrs.connection,
+        driver: attrs.driver,
         per_page: attrs.per_page,
         global_scopes: attrs.global_scopes,
     })

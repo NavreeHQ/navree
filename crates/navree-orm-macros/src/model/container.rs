@@ -15,6 +15,7 @@ pub(crate) enum KeyType {
     UuidV7,
     UuidV4,
     Ulid,
+    ObjectId,
     Manual,
 }
 
@@ -25,11 +26,12 @@ impl KeyType {
             "uuid" | "uuid_v7" => Ok(KeyType::UuidV7),
             "uuid_v4" => Ok(KeyType::UuidV4),
             "ulid" => Ok(KeyType::Ulid),
+            "object_id" => Ok(KeyType::ObjectId),
             "manual" => Ok(KeyType::Manual),
             other => Err(syn::Error::new(
                 text.span(),
                 format!(
-                    "unknown key type `{other}`: use \"int\" (the database assigns it), \"uuid\" (UUID v7), \"uuid_v4\", \"ulid\" or \"manual\" (the application sets it)"
+                    "unknown key type `{other}`: use \"int\" (the database assigns it), \"uuid\" (UUID v7), \"uuid_v4\", \"ulid\", \"object_id\" (MongoDB) or \"manual\" (the application sets it)"
                 ),
             )),
         }
@@ -55,6 +57,7 @@ pub(crate) struct Container {
     pub(crate) timestamps: Timestamps,
     pub(crate) soft_deletes: Option<(String, Span)>,
     pub(crate) connection: Option<LitStr>,
+    pub(crate) driver: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
 }
@@ -62,14 +65,19 @@ pub(crate) struct Container {
 /// The keys `#[model(...)]` takes on a struct.
 const KEYS: &[&str] = &[
     "table",
+    "collection",
     "primary_key",
     "key_type",
     "timestamps",
     "soft_deletes",
     "connection",
+    "driver",
     "per_page",
     "global_scopes",
 ];
+
+/// The document driver whose key field is `_id`.
+pub(crate) const MONGODB: &str = "mongodb";
 
 /// Parses the `#[model(...)]` attributes of the struct.
 pub(crate) fn parse(attrs: &[Attribute], errors: &mut Errors) -> Container {
@@ -82,8 +90,30 @@ pub(crate) fn parse(attrs: &[Attribute], errors: &mut Errors) -> Container {
 
 fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Result<()> {
     let path = &meta.path;
-    if path.is_ident("table") {
-        container.table = Some(non_empty(meta.value()?.parse()?)?);
+    if path.is_ident("table") || path.is_ident("collection") {
+        let name = non_empty(meta.value()?.parse()?)?;
+        if container.table.is_some() {
+            return Err(syn::Error::new(
+                name.span(),
+                "the table is already named: give `table` or `collection` (its document-store name) once",
+            ));
+        }
+        container.table = Some(name);
+    } else if path.is_ident("driver") {
+        let driver: LitStr = non_empty(meta.value()?.parse()?)?;
+        let name = driver.value();
+        if !name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return Err(syn::Error::new(
+                driver.span(),
+                format!(
+                    "`{name}` is not a driver name: use the document driver's lowercase name, e.g. \"{MONGODB}\""
+                ),
+            ));
+        }
+        container.driver = Some(driver);
     } else if path.is_ident("primary_key") {
         container.primary_key = Some(non_empty(meta.value()?.parse()?)?);
     } else if path.is_ident("key_type") {
