@@ -334,6 +334,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "documents.pdf(\"certificates/classic\", &data).await?",
   },
   {
+    slug: "sheets",
+    name: "Imports and exports",
+    kind: "library",
+    category: "capabilities",
+    tagline: "CSV and Excel exports and imports from typed rows",
+    summary:
+      "Export typed rows as CSV with a byte-order mark and escaped formulas or as XLSX, streamed or queued to a disk with a signed link. Import files in any encoding with header mapping, row validation, a staging preview, duplicate handling and error files.",
+    features: ["#[derive(Exportable)] and #[derive(Importable)]", "CSV, XLSX, XLS and ODS", "Encoding detection (UTF-16, Windows-1256)", "Staging preview and duplicate modes", "Batched apply and error files"],
+    crate: "navree-sheets",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features sheets",
+    href: "/docs/packages/imports-and-exports/",
+    status: "stable",
+    signature: "Download::csv(\"contacts\", rows)",
+  },
+  {
     slug: "i18n",
     name: "Localization",
     kind: "library",
