@@ -197,6 +197,99 @@ mod timescaledb {
             .unwrap()
     }
 
+    /// The time-bucket queries of the TimescaleDB guide, on TimescaleDB:
+    /// the same buckets as on SQLite, and `first` / `last`.
+    #[tokio::test]
+    async fn the_guide_s_time_bucket_queries() {
+        use chrono::{DateTime, TimeZone};
+        use navree::db::DbOptions;
+        use navree::orm::{Expr, col, table};
+
+        let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", false).await else {
+            return;
+        };
+        let db = Db::connect(&DbOptions {
+            url: scratch.url.clone(),
+            ..DbOptions::default()
+        })
+        .await
+        .unwrap();
+        let schema = Schema::new(db.conn());
+        let target = schema.target().await.unwrap();
+        if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
+            eprintln!("TimescaleDB is not available on this server: skipping");
+            scratch.drop().await;
+            return;
+        }
+        schema
+            .create_hypertable("readings", "taken_at", |t| {
+                t.id();
+                t.double("celsius");
+                t.timestamp_tz("taken_at");
+            })
+            .await
+            .unwrap();
+        assert!(schema.is_hypertable("readings").await.unwrap());
+        let start = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+        for step in 0..9_i32 {
+            db.conn()
+                .execute_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    "INSERT INTO readings (celsius, taken_at) VALUES ($1, $2)",
+                    [
+                        (20.0 + f64::from(step)).into(),
+                        (start + TimeDelta::minutes(10 * i64::from(step))).into(),
+                    ],
+                ))
+                .await
+                .unwrap();
+        }
+        let since = start - TimeDelta::days(1);
+        let points = table("readings")
+            .select_time_bucket("15 minutes", "taken_at", "bucket")
+            .select_expr(Expr::avg(col("celsius")), "average")
+            .select_expr(Expr::count_all(), "samples")
+            .where_(col("taken_at").gte(since))
+            .group_by(["bucket"])
+            .order_by("bucket")
+            .get(&db)
+            .await
+            .unwrap();
+        let shown: Vec<String> = points
+            .iter()
+            .map(|point| {
+                let bucket: DateTime<Utc> = point.get("bucket").unwrap();
+                let average: f64 = point.get("average").unwrap();
+                let samples: i64 = point.get("samples").unwrap();
+                format!("{} {average:.1} {samples}", bucket.format("%H:%M"))
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                "08:00 20.5 2",
+                "08:15 22.0 1",
+                "08:30 23.5 2",
+                "08:45 25.0 1",
+                "09:00 26.5 2",
+                "09:15 28.0 1"
+            ]
+        );
+        let days = table("readings")
+            .select_time_bucket("1 day", "taken_at", "day")
+            .select_first("celsius", "taken_at", "opening")
+            .select_last("celsius", "taken_at", "closing")
+            .group_by(["day"])
+            .order_by("day")
+            .get(&db)
+            .await
+            .unwrap();
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].get::<f64>("opening").unwrap(), 20.0);
+        assert_eq!(days[0].get::<f64>("closing").unwrap(), 28.0);
+        scratch.drop().await;
+    }
+
     #[tokio::test]
     async fn every_time_series_table_is_a_hypertable() {
         let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", false).await else {
